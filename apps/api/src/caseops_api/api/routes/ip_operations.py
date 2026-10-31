@@ -1474,38 +1474,41 @@ async def get_ip_workspace_readiness(
     )
     features: list[dict[str, object]] = []
     for decision in decisions:
-        available = decision.available
-        reason = decision.reason
         blocked_by_incident_id = incident_kill_switches.get(decision.feature_id)
+        # ``reason`` keeps its historical precedence (incident, then the
+        # capability/entitlement/rollout gates, then workspace configuration).
+        # ``blocked_reasons`` lists every failing gate in that same order, so a
+        # missing plan entitlement can no longer hide a platform rollout pause.
+        blocked_reasons: list[str] = []
         if blocked_by_incident_id is not None:
-            available = False
-            reason = "incident_kill_switch"
-        if available:
-            if configuration is None:
-                available = False
-                reason = "workspace_not_configured"
-            elif not configuration.workspace_enabled:
-                available = False
-                reason = "tenant_disabled"
-            elif decision.feature_id in {
+            blocked_reasons.append("incident_kill_switch")
+        blocked_reasons.extend(decision.blocked_reasons)
+        if configuration is None:
+            blocked_reasons.append("workspace_not_configured")
+        else:
+            if not configuration.workspace_enabled:
+                blocked_reasons.append("tenant_disabled")
+            if decision.feature_id in {
                 "registry_sync",
                 "deadline_automation",
                 "notification_automation",
             }:
                 if decision.feature_id not in configuration.enabled_automations_json:
-                    available = False
-                    reason = "tenant_disabled"
-                elif any(
+                    blocked_reasons.append("tenant_disabled")
+                if any(
                     blocker.startswith(f"{decision.feature_id}:")
                     for blocker in configuration_status.enablement_blockers
                 ):
-                    available = False
-                    reason = "readiness_test_failed"
+                    blocked_reasons.append("readiness_test_failed")
+        blocked_reasons = list(dict.fromkeys(blocked_reasons))
+        available = not blocked_reasons
+        reason = blocked_reasons[0] if blocked_reasons else "available"
         features.append(
             {
                 "feature_id": decision.feature_id,
                 "available": available,
                 "reason": reason,
+                "blocked_reasons": blocked_reasons,
                 "owner": decision.owner,
                 "required_capabilities": list(decision.required_capabilities),
                 "missing_capabilities": list(decision.missing_capabilities),
