@@ -272,7 +272,9 @@ function GovernanceBody({ data }: { data: IpDeadlineWorkspace }) {
         </div>
       ) : null}
 
-      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+      {/* Columns only when each keeps room for its controls (the reviewer
+          picker and notes); a fixed lg split left them 160px wide at 1024px. */}
+      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-3">
         <div className="flex min-w-0 flex-col gap-2" data-testid="ip-governance-calendars">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Calendar versions</div>
           {data.calendars.map((row) => <CalendarVersionRow key={row.id} row={row} onSaved={refresh} />)}

@@ -266,7 +266,12 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     }
   }
   if (!ruleIds.length || !calendarIds.length) {
-    await expect(scope.getByText("Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.", { exact: true })).toBeVisible();
+    // 2026-10-31 BUG-006: the prerequisite names what is missing and links to governance.
+    const prerequisites = scope.locator("#ip-deadline-prerequisites");
+    await expect(prerequisites).toBeVisible();
+    if (!ruleIds.length) await expect(prerequisites).toContainText("No active deadline rule is selected for company deadlines.");
+    if (!calendarIds.length) await expect(prerequisites).toContainText("No working calendar is active.");
+    await expect(prerequisites.getByRole("link", { name: "Open rule and calendar governance" })).toHaveAttribute("href", "#ip-deadline-governance");
     await expect(scope.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
   }
   return { eligible_rule_ids: ruleIds, active_calendar_ids: calendarIds };
