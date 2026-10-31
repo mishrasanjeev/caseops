@@ -1,3 +1,4 @@
+import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -741,4 +742,12 @@ test('actual Root four-field USB transport composes with layout validation and r
   const forged = { ...x.f, androidTransport: { ...x.f.androidTransport, deviceKind: 'physical' } };
   assert.throws(() => validateAndroidTransport(forged, 'android', x.values.get(x.q.buildReceipt.path)), /ANDROID_TRANSPORT_SCHEMA_REQUIRED/);
   assert.throws(() => validateAndroidLayoutEvidence(forged, x.actual, x.values.get(x.q.deviceEvidence.path), x.values.get(x.q.installedEvidence.path)), /ANDROID_LAYOUT_PHYSICAL_PROFILE_REQUIRED/);
+});
+
+
+test('complete V1 admits separately signed QA observer identities for4K and16K without retaining transient PIDs',async t=>{
+ for(const page of[4096,16384]){const x=layoutAdmission(page),root=fs.mkdtempSync(path.join(os.tmpdir(),'caseops-v1-observer-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const r=bindObserverTestIdentity(x.actual,root,x.f.binarySourceSha);for(const f of[x.f,x.b])f.privacyObserverEvidence=r;for(const ref of[x.q.deviceEvidence,x.q.installedEvidence]){const v=x.values.get(ref.path);delete v.runAsUid;Object.assign(v,structuredClone(x.actual));}const result=await admitV1BeforeMembers(x.q,x.dependencies);assert.equal(result.installed.access,'qa-observer-service');assert.equal(result.installed.pageSizeBytes,page);assert.equal(result.installed.sixteenKEmulatorAcceptance,false);assert.equal(Object.hasOwn(result.installed,'observerPid'),false);assert.equal(x.log.filter(v=>v==='private-reader').length,2);}
+});
+test('V1 rejects changed observer signer UID or immutable reference before protected readers',async t=>{
+ for(const mutate of[v=>v.observerUid++,v=>v.signerSha256='f'.repeat(64),v=>v.runAsUid=v.packageUid]){const x=layoutAdmission(),root=fs.mkdtempSync(path.join(os.tmpdir(),'caseops-v1-observer-negative-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const r=bindObserverTestIdentity(x.actual,root,x.f.binarySourceSha);for(const f of[x.f,x.b])f.privacyObserverEvidence=r;for(const ref of[x.q.deviceEvidence,x.q.installedEvidence]){const v=x.values.get(ref.path);delete v.runAsUid;Object.assign(v,structuredClone(x.actual));}mutate(x.values.get(x.q.deviceEvidence.path));await assert.rejects(admitV1BeforeMembers(x.q,x.dependencies));assert.equal(x.log.includes('private-reader'),false);}
 });

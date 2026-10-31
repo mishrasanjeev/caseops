@@ -99,14 +99,16 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.equal(job['runs-on'], '${{ matrix.os }}');
   assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
   assert.equal(job.defaults.run.shell, 'pwsh');
-  assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only' });
+  assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
   assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
   assert.deepEqual(commands, [
-    'npm ci --no-audit --no-fund',
-    'npm ls --all --json --long > installed-dependencies.json',
-    'node --test ../../scripts/mobile/forge-security.test.mjs ../../scripts/mobile/deepmerge-installed.test.mjs',
-    'npm audit --audit-level=high --json > dependency-audit.json',
+    'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund',
+    'node ../../scripts/mobile/npm-tooling.mjs ls --all --json --long > installed-dependencies.json',
+    'node ../../scripts/mobile/npm-tooling.mjs --cli-health > npm-cli-dependencies.json',
+    'node ../../scripts/mobile/npm-tooling.mjs --audit-cli > npm-cli-audit.json',
+    'node --test ../../scripts/mobile/forge-security.test.mjs ../../scripts/mobile/deepmerge-installed.test.mjs ../../scripts/mobile/npm-tooling.test.mjs',
+    'node ../../scripts/mobile/npm-tooling.mjs audit --audit-level=high --json > dependency-audit.json',
   ]);
   for (const step of job.steps) assert.notEqual(step['continue-on-error'], true);
   const artifact = job.steps.find(step => step.uses === 'actions/upload-artifact@v4');
@@ -114,6 +116,7 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.equal(artifact.with['if-no-files-found'], 'error');
   assert.deepEqual(artifact.with.path.trim().split(/\s+/), [
     'apps/mobile/installed-dependencies.json', 'apps/mobile/dependency-audit.json',
+    'apps/mobile/npm-cli-dependencies.json', 'apps/mobile/npm-cli-audit.json',
   ]);
 });
 
@@ -128,8 +131,8 @@ test('source exports use existing loopback QA profiles after the audit without w
   assert.equal(prepare > audit, true);
   assert.deepEqual(steps[prepare].env, { ...scopedTrust, CASEOPS_MOBILE_SOURCE_EXPORT: '1' });
   assert.equal(steps[prepare].run, 'node scripts/mobile/prepare-source-exports.mjs >> "$GITHUB_ENV"');
-  const android = steps.findIndex(step => step.run === 'npm run export:android');
-  const ios = steps.findIndex(step => step.run === 'npm run export:ios');
+  const android = steps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs run export:android');
+  const ios = steps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs run export:ios');
   assert.equal(android > prepare && ios > android, true);
   assert.deepEqual(steps[android].env, {
     ...scopedTrust,
@@ -166,9 +169,9 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
-    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs'];
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -177,6 +180,7 @@ test('mobile CI selects every tooling module and audits before either platform e
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
   assert.equal(fixturePreparation?.run, 'python3 scripts/mobile/local-fixture.test.py');
   const filesFixtureCommands = [
+    ['Verify QA-only Android observer merged manifest projection', 'python3 scripts/mobile/android-observer-manifest.test.py'],
     ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
     ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
     ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
@@ -203,12 +207,12 @@ test('mobile CI selects every tooling module and audits before either platform e
   }
   const audit = steps.findIndex(step => step.name === 'Enforce the unwaived high-severity dependency gate');
   assert.ok(audit >= 0);
-  assert.equal(steps[audit].run, 'npm audit --audit-level=high');
+  assert.equal(steps[audit].run, 'node ../../scripts/mobile/npm-tooling.mjs audit --audit-level=high');
   assert.notEqual(steps[audit]['continue-on-error'], true);
   for (const [, command] of filesFixtureCommands) {
     assert.ok(steps.findIndex(step => step.run === command) < audit, 'FILES_FIXTURE_REGRESSIONS_MUST_PRECEDE_PLATFORM_EXPORT_GATE');
   }
-  for (const command of ['npm run export:android', 'npm run export:ios']) {
+  for (const command of ['node ../../scripts/mobile/npm-tooling.mjs run export:android', 'node ../../scripts/mobile/npm-tooling.mjs run export:ios']) {
     const exporting = steps.findIndex(step => step.run === command);
     assert.ok(exporting > audit, 'DEPENDENCY_AUDIT_MUST_PRECEDE_PLATFORM_EXPORT');
   }
@@ -232,11 +236,11 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const steps = workflow.jobs.source.steps;
   const isRoot = (step) => !step['working-directory'] || step['working-directory'] === '.';
-  const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'npm ci --include=dev');
-  const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm ci');
-  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'npx --no-install playwright install --with-deps chromium');
-  const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm run typecheck');
-  const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'npm test');
+  const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs ci --include=dev');
+  const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci');
+  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
+  const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs run typecheck');
+  const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs test');
   assert.ok(rootInstall >= 0 && mobileInstall >= 0 && browserInstall >= 0);
   assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
   assert.ok(rootInstall < browserInstall && browserInstall < tests);
@@ -249,6 +253,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
       assert.ok(workflow.on[event].paths.includes(dependency), `NATIVE_SHARED_INPUT_TRIGGER_REQUIRED:${event}:${dependency}`);
   }
   assert.deepEqual(workflow.jobs['browser-handoff'].env, {
+    NPM_CONFIG_UPDATE_NOTIFIER: 'false',
     NEXT_PUBLIC_API_BASE_URL: 'http://127.0.0.1:8000',
     NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
     NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
@@ -930,6 +935,9 @@ test('actual Expo Android mod compiler applies the plugin and removes QA output 
   const gradle = path.join(dir, 'android/app/build.gradle');
   mkdirSync(path.dirname(gradle), { recursive: true });
   writeFileSync(gradle, "apply plugin: 'com.android.application'\n");
+  const main=path.join(dir,'android/app/src/main/java/ai/caseops/mobile/dev/MainApplication.kt');
+  mkdirSync(path.dirname(main),{recursive:true});
+  writeFileSync(main,'package ai.caseops.mobile.dev\nclass MainApplication : Application(), ReactApplication {\n}\n');
   const run = (values) => withEnv(values, () => compileModsAsync(plugin({ name: 'CaseOps', slug: 'caseops-mobile' }), {
     projectRoot: dir, platforms: ['android'],
   }));

@@ -1,3 +1,4 @@
+import { OBSERVER_SOURCE_INPUTS } from './android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,7 @@ import { androidSessionTransport,verifyAndroidSessionTransport } from '../../app
 import { createControls,V1_CONTROL_PROTOCOL } from './queue-privacy-controls.mjs';
 import { v1PrivateReference } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
-export function qpInputPaths(root=ROOT){return [...new Set([
+export function qpInputPaths(root=ROOT){return [...new Set([...OBSERVER_SOURCE_INPUTS,
  ...fs.readdirSync(path.join(root,'apps/mobile/e2e')).filter(n=>/\.(mjs|json)$/.test(n)).map(n=>'apps/mobile/e2e/'+n),
  'scripts/mobile/run-queue-privacy.mjs','scripts/mobile/prepare-queue-privacy-fixture.mjs','scripts/mobile/queue-privacy-controls.mjs',
  'scripts/mobile/run-v1-workflows.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/android-files-privacy.mjs',

@@ -1,3 +1,4 @@
+import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -175,4 +176,9 @@ function bindPhysicalPacket(x, values, current, pageSize=4096) {
 test('complete Queue/Privacy admission binds physical4K layout and rejects changed retained page or boot before readers',async()=>{
  const good=await admissionDouble();try{const current=good.io.installed();bindPhysicalPacket(good,good.map,current);const result=await good.run();assert.equal(result.actual.pageSizeBytes,4096);assert.equal(result.actual.androidLayout.sixteenKEmulatorAcceptance,false);}finally{good.close();}
  for(const mutate of[x=>x.map.get(x.q.deviceEvidence.path).pageSizeBytes=16384,x=>x.map.get(x.q.installedEvidence.path).androidLayout=undefined,x=>x.map.get(x.q.deviceEvidence.path).bootId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee']){const x=await admissionDouble();try{bindPhysicalPacket(x,x.map,x.io.installed());mutate(x);await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}finally{x.close();}}
+});
+
+
+test('Queue/Privacy complete admission binds signed observer UID and rejects substitution before private reads',async()=>{
+ for(const wrong of[false,true]){const x=await admissionDouble(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'caseops-qp-observer-'));try{const actual=bindPhysicalPacket(x,x.map,x.io.installed());const ref=bindObserverTestIdentity(actual,dir,x.q.expectedSourceSha);for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])x.map.get(r.path).privacyObserverEvidence=ref;for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){delete x.map.get(r.path).runAsUid;Object.assign(x.map.get(r.path),structuredClone(actual));}x.io.installed=()=>structuredClone(actual);if(wrong)x.map.get(x.q.installedEvidence.path).observerUid++;if(wrong){await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}else{const r=await x.run();assert.equal(r.actual.access,'qa-observer-service');assert.equal(r.actual.sixteenKEmulatorAcceptance,false);}}finally{x.close();fs.rmSync(dir,{recursive:true,force:true});}}
 });

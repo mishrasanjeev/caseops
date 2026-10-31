@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { observeQaPrivacy, observerConfiguration } from './android-qa-observer.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
@@ -35,12 +36,14 @@ function selectedTransportMode({ androidTransportMode, environment = process.env
   }
   return androidTransportMode === undefined ? configured : androidTransportMode;
 }
+export const OBSERVER_IDENTITY = ['access', 'deviceKind', 'transportMode', 'shellUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff', 'observerAppId', 'observerUid', 'targetApkSha256', 'observerApkSha256', 'sourceSha', 'signerSha256', 'observationDomain', 'fullPackageForceStoppedStateCertified', 'observerInstallationEvidence'];
 function accessEvidence(containers) {
   if (containers.transportMode !== 'usb-reverse') return {};
+  if (containers.access === 'qa-observer-service') return Object.fromEntries(OBSERVER_IDENTITY.map(key => [key, containers[key]]));
   return Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']
     .map(key => [key, containers[key]]));
 }
-function device({ udid, appId, androidTransportMode, environment = process.env, command = execFileSync, deadline = Date.now() + 30000, budget }) {
+function device({ udid, appId, androidTransportMode, privacyObserver, environment = process.env, command = execFileSync, deadline = Date.now() + 30000, budget }) {
   const mode = selectedTransportMode({ androidTransportMode, environment });
   const profile = androidLocalProfile(udid, 'DEDICATED_ANDROID_FILES_DEVICE_REQUIRED', mode);
   const physical = mode === 'usb-reverse';
@@ -79,11 +82,12 @@ function device({ udid, appId, androidTransportMode, environment = process.env, 
       assert.ok(['CASEOPS_ANDROID_STAT_V1', 'CASEOPS_ANDROID_LIST_V1', 'CASEOPS_ANDROID_READ_FD_V1', 'CASEOPS_ANDROID_WRITE_ASSET_V1'].includes(label), 'ANDROID_FILES_REVIEWED_SCRIPT_REQUIRED');
       const file = label === 'CASEOPS_ANDROID_READ_FD_V1' ? args[1] : args[0];
       runAs = privatePath(file);
+      assert.ok(!runAs || !privacyObserver, 'QA_OBSERVER_PRIVATE_SHELL_REFUSED');
       if (label === 'CASEOPS_ANDROID_WRITE_ASSET_V1') assert.equal(runAs, false, 'ANDROID_FILES_PROVIDER_WRITE_SCOPE_REQUIRED');
     }
     return run(['shell', '-T', [...(runAs ? ['run-as', APP] : []), 'sh', '-c', `# ${label}\n${source}`, '--', ...args].map(quote).join(' ')], options);
   };
-  const readlink = file => text(['shell', ...(physical && file !== '/sdcard/Download' && privatePath(file) ? ['run-as', APP] : []), 'readlink', '-f', file]);
+  const readlink = file => { assert.ok(!privacyObserver || file === '/sdcard/Download' || !privatePath(file), 'QA_OBSERVER_PRIVATE_SHELL_REFUSED'); return text(['shell', ...(physical && file !== '/sdcard/Download' && privatePath(file) ? ['run-as', APP] : []), 'readlink', '-f', file]); };
   const stat = file => {
     const raw = script('CASEOPS_ANDROID_STAT_V1', 'if [ -L "$1" ]; then printf SYMLINK; elif [ -e "$1" ]; then stat -c "%F|%u|%d|%i|%s|%y|%z" "$1"; else printf ABSENT; fi', [file], { encoding: 'utf8' }).trim();
     if (raw === 'ABSENT') return null;
@@ -96,6 +100,7 @@ function device({ udid, appId, androidTransportMode, environment = process.env, 
   };
   const physicalStat = file => {
     const runAs = privatePath(file);
+    assert.ok(!runAs || !privacyObserver, 'QA_OBSERVER_PRIVATE_SHELL_REFUSED');
     let result;
     try {
       result = run(['shell', '-T', [...(runAs ? ['run-as', APP] : []), 'env', 'LC_ALL=C', '/system/bin/toybox', 'stat',
@@ -141,9 +146,14 @@ function identity(containers) {
   if (containers.transportMode === 'usb-reverse') {
     assert.equal(profile.deviceKind, 'physical', 'ANDROID_FILES_PHYSICAL_PROFILE_REQUIRED');
     assert.equal(containers.deviceKind, 'physical', 'ANDROID_FILES_PHYSICAL_PROFILE_REQUIRED');
-    assert.equal(containers.access, 'run-as', 'ANDROID_FILES_PHYSICAL_ACCESS_REQUIRED');
+    assert.ok(['run-as', 'qa-observer-service'].includes(containers.access), 'ANDROID_FILES_PHYSICAL_ACCESS_REQUIRED');
     assert.equal(containers.shellUid, 2000, 'ANDROID_FILES_SHELL_ACCESS_REQUIRED');
-    assert.equal(containers.runAsUid, containers.packageUid, 'ANDROID_FILES_RUN_AS_UID_REQUIRED');
+    if (containers.access === 'qa-observer-service') {
+      assert.ok(!Object.hasOwn(containers, 'runAsUid'), 'QA_OBSERVER_RUN_AS_LABEL_FORBIDDEN');
+      const d = observerConfiguration(containers.observerInstallationEvidence, containers.udid);
+      for (const key of ['observerAppId', 'observerUid', 'targetApkSha256', 'observerApkSha256', 'sourceSha', 'signerSha256']) assert.equal(containers[key], d[key], 'QA_OBSERVER_INSTALLATION_CHANGED');
+      assert.equal(containers.packageUid, d.packageUid); assert.equal(containers.observationDomain, d.domain); assert.equal(containers.fullPackageForceStoppedStateCertified, false);
+    } else assert.equal(containers.runAsUid, containers.packageUid, 'ANDROID_FILES_RUN_AS_UID_REQUIRED');
     assert.match(containers.usbDevPath || '', /^usb:[A-Za-z0-9.:_-]{1,128}$/, 'ANDROID_FILES_USB_DEVICE_REQUIRED');
     assert.equal(containers.apiLevel, 36, 'ANDROID_FILES_API36_REQUIRED');
     assert.equal(containers.abi, 'arm64-v8a', 'ANDROID_FILES_ARM64_REQUIRED');
@@ -184,27 +194,29 @@ export function attestAndroidFilesContainers(options) {
   const packageLine = io.text(['shell', 'cmd', 'package', 'list', 'packages', '-U', APP]);
   const match = new RegExp(`^package:${APP.replaceAll('.', '\\.')} uid:(\\d+)$`).exec(packageLine);
   assert.ok(match && Number(match[1]) >= 10000, 'ANDROID_FILES_EXACT_PACKAGE_UID_REQUIRED');
-  if (io.physical) {
+  let native;
+  if (io.physical && options.privacyObserver) native = observeQaPrivacy({ ...options, operation: 'attest' }, value => ({ metadata: value.metadata, epoch: observerEpoch(value) }));
+  if (io.physical && !native) {
     assert.equal(io.text(['shell', 'run-as', APP, 'id', '-u']), match[1], 'ANDROID_FILES_RUN_AS_UID_REQUIRED');
     assert.equal(io.text(['shell', 'run-as', APP, 'pwd']), `/data/user/0/${APP}`, 'ANDROID_FILES_RUN_AS_PRIVATE_ROOT_REQUIRED');
   }
-  const appPath = io.readlink(`/data/user/0/${APP}`);
+  const appPath = native ? native.metadata.appData.path : io.readlink(`/data/user/0/${APP}`);
   assert.equal(appPath, `/data/user/0/${APP}`, 'ANDROID_FILES_PRIVATE_ROOT_REQUIRED');
   const providerPath = io.readlink('/sdcard/Download');
   assert.equal(providerPath, '/storage/emulated/0/Download', 'ANDROID_FILES_PROVIDER_ROOT_REQUIRED');
-  const appData = { path: appPath, metadata: io.stat(appPath) }, provider = { path: providerPath, metadata: io.stat(providerPath) };
+  const appData = { path: appPath, metadata: native ? legacyMetadata(native.metadata.appData.frame) : io.stat(appPath) }, provider = { path: providerPath, metadata: io.stat(providerPath) };
   assert.equal(appData.metadata?.kind, 'directory', 'ANDROID_FILES_PRIVATE_DIRECTORY_REQUIRED');
   assert.equal(appData.metadata.uid, Number(match[1]), 'ANDROID_FILES_PRIVATE_OWNER_MISMATCH');
   assert.equal(provider.metadata?.kind, 'directory', 'ANDROID_FILES_PROVIDER_DIRECTORY_REQUIRED');
-  const externalPath = `/storage/emulated/0/Android/data/${APP}`, externalMetadata = io.stat(externalPath);
+  const externalPath = `/storage/emulated/0/Android/data/${APP}`, externalMetadata = native ? (native.metadata.externalAppData ? legacyMetadata(native.metadata.externalAppData.frame) : null) : io.stat(externalPath);
   if (externalMetadata) {
     assert.equal(externalMetadata.kind, 'directory', 'ANDROID_FILES_EXTERNAL_DIRECTORY_REQUIRED');
-    if (io.physical) assert.equal(io.readlink(externalPath), externalPath, 'ANDROID_FILES_EXTERNAL_ROOT_REQUIRED');
+    if (io.physical && !native) assert.equal(io.readlink(externalPath), externalPath, 'ANDROID_FILES_EXTERNAL_ROOT_REQUIRED');
   }
   const result = { schemaVersion: 1, kind: 'android-files-containers', observed: true, platform: 'android',
     udid: options.udid, appId: APP, packageUid: Number(match[1]), bootId,
     ...(io.physical ? { access: 'run-as', deviceKind: 'physical', transportMode: 'usb-reverse', shellUid: 2000,
-      runAsUid: Number(match[1]), usbDevPath, apiLevel: 36, abi: 'arm64-v8a', qemuOff: true } : { rootUid: 0, avdName: avd[0] }),
+      ...(native ? { access: 'qa-observer-service', ...Object.fromEntries(['observerAppId', 'observerUid', 'targetApkSha256', 'observerApkSha256', 'sourceSha', 'signerSha256'].map(key => [key, observerConfiguration(options.privacyObserver, options.udid)[key]])), observationDomain: 'qa-main-preserved-observer-running', fullPackageForceStoppedStateCertified: false, observerInstallationEvidence: options.privacyObserver, observationEpoch: native.epoch } : { runAsUid: Number(match[1]) }), usbDevPath, apiLevel: 36, abi: 'arm64-v8a', qemuOff: true } : { rootUid: 0, avdName: avd[0] }),
     appData, provider, externalAppData: externalMetadata ? { path: externalPath, metadata: externalMetadata } : null };
   identity(result); return result;
 }
@@ -212,11 +224,12 @@ function current(containers, options) {
   identity(containers);
   const requested = selectedTransportMode(options);
   if (requested !== undefined) assert.equal(requested, containers.transportMode ?? 'emulator', 'ANDROID_FILES_TRANSPORT_MODE_MISMATCH');
-  const bound = { ...options, udid: containers.udid, appId: containers.appId, androidTransportMode: containers.transportMode };
+  if (containers.access === 'qa-observer-service' && options.privacyObserver) assert.deepEqual(options.privacyObserver, containers.observerInstallationEvidence, 'QA_OBSERVER_INSTALLATION_CHANGED');
+  const bound = { ...options, ...(containers.access === 'qa-observer-service' ? { privacyObserver: containers.observerInstallationEvidence } : {}), udid: containers.udid, appId: containers.appId, androidTransportMode: containers.transportMode };
   const actual = attestAndroidFilesContainers(bound);
   const fields = ['udid', 'appId', 'packageUid', 'bootId', ...(containers.transportMode === 'usb-reverse'
-    ? ['access', 'deviceKind', 'transportMode', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'] : ['rootUid', 'avdName'])];
-  for (const key of fields) assert.equal(actual[key], containers[key], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
+    ? (containers.access === 'qa-observer-service' ? OBSERVER_IDENTITY : ['access', 'deviceKind', 'transportMode', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']) : ['rootUid', 'avdName'])];
+  for (const key of fields) assert.deepEqual(actual[key], containers[key], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
   for (const key of ['appData', 'provider']) {
     assert.equal(actual[key].path, containers[key].path, 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
     for (const field of ['kind', 'uid', 'device', 'inode']) assert.equal(actual[key].metadata[field], containers[key].metadata[field], 'ANDROID_FILES_CONTAINER_IDENTITY_CHANGED');
@@ -229,6 +242,10 @@ function current(containers, options) {
   }
   return device(bound);
 }
+
+function legacyMetadata(f) { return { kind: (Number(f[2]) & 61440) === 16384 ? 'directory' : 'file', uid: Number(f[3]), device: f[0], inode: f[1], sizeBytes: Number(f[6]), modified: f[7], changed: f[8] }; }
+function observerEpoch(value) { const m=value.metadata; return { schemaVersion: 1, access: value.access, domain: value.domain, packageUid: m.packageUid, callerUid: m.callerUid, callerPid: m.callerPid, observerPid: m.observerPid, mainBefore: m.mainBefore, mainAfter: m.mainAfter, lifecycleSequenceBefore: m.lifecycleSequenceBefore, lifecycleSequenceAfter: m.lifecycleSequenceAfter, packageStoppedBefore: value.packageStoppedBefore, packageStoppedAfter: value.packageStoppedAfter, deliberateQaFixtureUnstop: value.deliberateQaFixtureUnstop, fullPackageForceStoppedStateCertified: false, leaseClosed: value.leaseClosed, mainReactApplicationInitializedByObserver: false }; }
+
 function knownSource(value) {
   assert.ok(typeof value?.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value.id), 'ANDROID_FILES_KNOWN_SOURCE_ID_REQUIRED');
   assert.ok(/^[A-Za-z0-9][A-Za-z0-9._-]{1,200}$/.test(value.filename || ''), 'ANDROID_FILES_KNOWN_FILENAME_REQUIRED');
@@ -338,7 +355,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
   for (const { value } of cohorts) {
     for (const [key, expected] of Object.entries({ schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, providerOriginalsRead: false,
       platform: 'android', udid: containers.udid, appId: containers.appId, bootId: containers.bootId })) assert.equal(value[key], expected, 'ANDROID_FILES_STAGING_IDENTITY_MISMATCH');
-    for (const [key, expected] of Object.entries(accessEvidence(containers))) assert.equal(value[key], expected, 'ANDROID_FILES_STAGING_ACCESS_MISMATCH');
+    for (const [key, expected] of Object.entries(accessEvidence(containers))) assert.deepEqual(value[key], expected, 'ANDROID_FILES_STAGING_ACCESS_MISMATCH');
     if (containers.transportMode === 'usb-reverse') assert.ok(!Object.hasOwn(value, 'rootUid') && !Object.hasOwn(value, 'avdName'), 'ANDROID_FILES_STAGING_ACCESS_MISMATCH');
     assert.ok(/^CaseOpsFiles-[A-Za-z0-9-]{6,64}$/.test(value.folderName || ''), 'ANDROID_FILES_OWNED_PROVIDER_FOLDER_REQUIRED');
     assert.equal(value.deviceFolderPath, `${containers.provider.path}/${value.folderName}`, 'ANDROID_FILES_PROVIDER_FOLDER_MISMATCH');
@@ -393,6 +410,25 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     }
     return paths.sort();
   };
+  let observationEpoch;
+  if (containers.access === 'qa-observer-service') {
+    observeQaPrivacy({ ...scanOptions, udid: containers.udid, androidTransportMode: containers.transportMode, privacyObserver: containers.observerInstallationEvidence, operation: 'files-snapshot' }, value => {
+      observationEpoch=observerEpoch(value); entries=value.metadata.entries; files=value.files.length; bytesRead=value.metadata.privateBytesRead;
+      for(const inventory of value.metadata.inventories) inventories.push({ root: inventory.name, initialCount: inventory.initial.length, finalCount: inventory.final.length, initialSha256: hash(JSON.stringify(inventory.initial)), finalSha256: hash(JSON.stringify(inventory.final)), stable: true });
+      for(const file of value.files) {
+        const root=value.metadata.inventories.find(i=>i.initial.includes(file.path)); const relative=file.path.slice(root.root.length).replace(/^\//,'');
+        if(root.name==='app-data' && relative.startsWith('cache/caseops-matter-files-v1/')) ownedStagingFiles++;
+        const matches=[]; for(const source of unique) { const reasons=[];
+          if(file.sha256===source.sha256)reasons.push('exact-content-sha256');
+          if(source.marker&&file.bytes.includes(Buffer.from(source.marker)))reasons.push('synthetic-marker');
+          if(path.posix.basename(file.path)===source.filename||file.bytes.includes(Buffer.from(source.filename)))reasons.push('synthetic-filename');
+          if(file.bytes.includes(Buffer.from(source.sha256)))reasons.push('synthetic-sha256-metadata');
+          if(reasons.length)matches.push({id:source.id,reasons});
+        }
+        if(matches.length)findings.push({relativePathSha256:hash(`${root.name}/${relative}`),sha256:file.sha256,matches});
+      }
+    });
+  } else {
   for (const root of roots) {
     let paths;
     try { paths = inventory(root); }
@@ -436,6 +472,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
       catch (error) { io.rethrowStatFailure(error); issues.push({ reason: 'directory-or-file-metadata-changed', relativePath }); }
     }
   }
+  }
   for (const expected of providerChecks) {
     try { assert.deepEqual(io.stat(expected.path), expected.metadata, 'ANDROID_FILES_PROVIDER_METADATA_CHANGED'); }
     catch (error) { io.rethrowStatFailure(error); expected.row.metadataPreserved = false; if (verifyProviderBytes) expected.row.preserved = false;
@@ -447,7 +484,7 @@ export function snapshotAndroidFilesPrivacy({ containers, stagingEvidence, prior
     providerOriginalsPreserved: verifyProviderBytes ? originals.every(value => value.preserved) : null,
     providerMetadataPreserved: originals.every(value => value.metadataPreserved), providerOriginalsRead: providerBytesRead > 0,
     providerBytesRead, providerByteVerification: verifyProviderBytes ? 'postflight' : 'deferred-until-postflight', providerOriginals: originals,
-    complete: issues.length === 0, limits, knownSources: unique.map(({ marker, ...metadata }) => metadata), stagingEvidence, priorStagingEvidence,
+    ...(observationEpoch ? { observationEpoch } : {}), complete: issues.length === 0, limits, knownSources: unique.map(({ marker, ...metadata }) => metadata), stagingEvidence, priorStagingEvidence,
     counts: { entries, files, bytesRead, observationBytes: budget.bytes, ownedStagingFiles, privateAssetMatchCount: findings.length }, inventories, findings, issues,
     fileContentsRetained: false, credentialValuesPrinted: false, deviceFilesDeleted: false };
   return { snapshot, evidence: save(output, snapshot) };
@@ -460,6 +497,16 @@ export function snapshotAndroidCameraPrivacy({ containers, output, ...options })
   const limits = CAMERA_PRIVACY_LIMITS, deadline = Date.now() + limits.milliseconds;
   const budget = { bytes: 0, limit: limits.totalBytes }, scanOptions = { ...options, deadline, budget };
   const io = current(containers, scanOptions), root = `${containers.appData.path}/cache/ImagePicker`;
+  if (containers.access === 'qa-observer-service') {
+    const observation = observeQaPrivacy({ ...scanOptions, udid: containers.udid, androidTransportMode: containers.transportMode, privacyObserver: containers.observerInstallationEvidence, operation: 'camera-snapshot' }, value => ({
+      schemaVersion: 1, kind: 'camera-sdk-private-copies', platform: 'android', udid: containers.udid, appId: containers.appId, bootId: containers.bootId, packageUid: containers.packageUid, ...accessEvidence(containers), root, complete: true,
+      directoryPresent: value.metadata.inventories[0].initial.length > 0, limits, counts: { copies: value.files.length, bytesRead: value.metadata.privateBytesRead, observationBytes: budget.bytes, entries: value.metadata.entries }, readBytesComplete: true,
+      copies: value.files.map(file => ({ nameSha256: hash(path.posix.basename(file.path)), sizeBytes: file.sizeBytes, sha256: file.sha256, classification: 'owned-camera-sdk-copy' })), issues: [],
+      inventory: [value.metadata.inventories[0].initial,value.metadata.inventories[0].final].map(values => ({count: Math.max(0,values.length-1),sha256:hash(JSON.stringify(values.filter(p=>p!==root)))})), observationEpoch: observerEpoch(value),
+      legacyKnownFixtureCountsIncluded: false, providerOriginalsRead: false, fileContentsRecorded: false, filesDeleted: false, encodedMetadataInspected: false, physicalCameraAcceptance: false
+    }));
+    current(containers, scanOptions); observation.counts.observationBytes=budget.bytes; return { observation, evidence: save(output,observation) };
+  }
   const issues = [], copies = [], namespaces = [], pathsByObservation = [];
   let entries = 0, bytesRead = 0, paths = [], readBytesComplete = true;
   const namespace = () => [containers.appData.path, `${containers.appData.path}/cache`, root].map(file => {

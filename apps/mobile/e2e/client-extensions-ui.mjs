@@ -1,3 +1,4 @@
+import { withObserverAppiumWitness } from '../../../scripts/mobile/android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { find, findQuery, visible, selector, dispatchNativeClick, restart, input, backgroundAndResume } from './native-ui.mjs';
@@ -27,7 +28,7 @@ export async function signOut(c,control='sign-out') {
  const after=await c.controls.traffic();assert.equal(after.runId,before.runId);const rows=after.requests.slice(before.requests.length).filter(x=>x.method==='POST'&&x.route==='/api/auth/native/logout');assert.equal(rows.length,1,'CX_LOGOUT_NOT_ONCE');assert.ok([200,204].includes(rows[0].status));
  c.state.activeActor=null;
 }
-export async function cameraPrivacy(c,{empty=true}={}) {const r=await authoritative(c,'cameraPrivacy');assert.equal(r.observed,true);assert.equal(r.complete,true);assert.equal(r.udid,c.fixture.udid);assert.equal(r.appId,c.fixture.appId);assert.equal(r.binaryHash,c.binaryHash);assert.equal(r.providerOriginalsRead,false);assert.equal(r.filesDeleted,false);assert.equal(r.legacyKnownFixtureCountsIncluded,false);if(empty)assert.equal(r.counts.copies,0,'CX_CAMERA_SDK_COPY_REMAINS');return r;}
+export async function cameraPrivacy(c,{empty=true}={}) {const witnessed=c.platform==='android'&&c.fixture.privacyObserverEvidence?await withObserverAppiumWitness(c.driver,()=>authoritative(c,'cameraPrivacy')):{value:await authoritative(c,'cameraPrivacy')};const r=witnessed.value;if(witnessed.appiumWitness){assert.equal(r.access,'qa-observer-service');assert.equal(r.observationEpoch?.fullPackageForceStoppedStateCertified,false);c.record?.({type:'qa-observer-appium-coexistence',evidence:witnessed.appiumWitness,observationEpoch:r.observationEpoch});}assert.equal(r.observed,true);assert.equal(r.complete,true);assert.equal(r.udid,c.fixture.udid);assert.equal(r.appId,c.fixture.appId);assert.equal(r.binaryHash,c.binaryHash);assert.equal(r.providerOriginalsRead,false);assert.equal(r.filesDeleted,false);assert.equal(r.legacyKnownFixtureCountsIncluded,false);if(empty)assert.equal(r.counts.copies,0,'CX_CAMERA_SDK_COPY_REMAINS');return r;}
 export async function runOsRecipe(c,name) {
  const envelope=c.fixture.cx.osRecipes;
  assert.equal(envelope.observed,true);assert.equal(envelope.platform,c.platform);assert.equal(envelope.udid,c.fixture.udid);assert.equal(envelope.binaryHash,c.binaryHash);assert.deepEqual(envelope.appiumInventoryEvidence,c.appiumInventoryEvidence);

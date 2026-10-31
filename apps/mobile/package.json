@@ -39,10 +39,13 @@
     "pdfjs-dist": "6.4.299",
     "prettier": "3.6.2",
     "typescript": "6.0.3",
-    "deepmerge": "file:vendor/deepmerge-4.3.1-caseops.1/deepmerge-4.3.1-caseops.1.tgz"
+    "deepmerge": "file:vendor/deepmerge-4.3.1-caseops.1/deepmerge-4.3.1-caseops.1.tgz",
+    "glob": "file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz"
   },
   "overrides": {
     "zod": "$zod",
-    "deepmerge": "$deepmerge"
+    "deepmerge": "$deepmerge",
+    "glob": "$glob",
+    "minimatch": "11.0.1"
   }
 }

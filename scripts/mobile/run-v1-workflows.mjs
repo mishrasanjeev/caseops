@@ -1,3 +1,5 @@
+import { OBSERVER_SOURCE_INPUTS } from './android-qa-observer.mjs';
+import { observerConfiguration } from './android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
-import { attestAndroidFilesContainers } from './android-files-privacy.mjs';
+import { OBSERVER_IDENTITY, attestAndroidFilesContainers } from './android-files-privacy.mjs';
 import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
@@ -24,7 +26,7 @@ import { V1_BUDGETS, V1_CASE_CONTROL_LIMITS } from '../../apps/mobile/e2e/v1-wor
 import { collectV1Workflows, v1WorkflowScenarios, prepareV1Context } from '../../apps/mobile/e2e/v1-workflows.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
-const INPUTS = ['apps/mobile/e2e/v1-workflows-inventory.mjs', 'apps/mobile/e2e/v1-workflows-contract.mjs',
+const INPUTS = [...OBSERVER_SOURCE_INPUTS, 'apps/mobile/e2e/v1-workflows-inventory.mjs', 'apps/mobile/e2e/v1-workflows-contract.mjs',
   'apps/mobile/e2e/v1-workflows.mjs', 'apps/mobile/e2e/v1-workflows-credentials.mjs', 'apps/mobile/e2e/v1-workflows-fixture.mjs',
   'apps/mobile/e2e/native-ui.mjs', 'apps/mobile/e2e/browser-handoff.mjs', 'apps/mobile/e2e/firefox-handoff.mjs',
   'apps/mobile/e2e/fixture-contract.mjs', 'apps/mobile/e2e/evidence.mjs', 'apps/mobile/e2e/support.mjs',
@@ -47,7 +49,7 @@ export function observeInstalled(fixture, platform, expectedHash, environment) {
   const command = (file, args, options) => execFileSync(file, args, { ...options, env: tools });
   if (platform === 'android') {
     const installed = attestAndroidBinary(fixture, expectedHash, { install: false, command });
-    const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, command, environment: tools });
+    const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, privacyObserver: fixture.privacyObserverEvidence, command, environment: tools });
     let layout;
     if (containers.transportMode === 'usb-reverse') {
       const observe = args => {
@@ -66,7 +68,7 @@ export function observeInstalled(fixture, platform, expectedHash, environment) {
       layout = { schemaVersion: 1, kind: 'android-physical-layout-observation', observed: true, platform: 'android',
         udid: fixture.udid, appId: fixture.appId, binaryHash: installed.installedApkSha256, bootId: containers.bootId,
         deviceKind: 'physical', transportMode: 'usb-reverse', pageSizeBytes: Number(page.text.trim()),
-        physicalIdentity: Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'].map(key => [key, containers[key]])),
+        physicalIdentity: Object.fromEntries((containers.access==='qa-observer-service' ? ['packageUid', ...OBSERVER_IDENTITY] : ['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']).map(key => [key, containers[key]])),
         observationCommand: ['shell', 'getconf', 'PAGESIZE'], returnedOutputBytes: { beforeBoot: beforeBoot.returnedBytes, pageSize: page.returnedBytes, afterBoot: afterBoot.returnedBytes },
         acceptanceScope: 'physical-workflow-only', sixteenKEmulatorAcceptance: false };
     }
@@ -74,7 +76,7 @@ export function observeInstalled(fixture, platform, expectedHash, environment) {
       bootId: containers.bootId, appDataPath: containers.appData.path,
       appDataIdentity: Object.fromEntries(['kind', 'uid', 'device', 'inode'].map(key => [key, containers.appData.metadata[key]])),
       ...(layout ? { pageSizeBytes: layout.pageSizeBytes, androidLayout: layout, physicalWorkflowOnly: true, sixteenKEmulatorAcceptance: false } : { pageSizeRequired: 16384 }),
-      ...(containers.transportMode === 'usb-reverse' ? Object.fromEntries(['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']
+      ...(containers.transportMode === 'usb-reverse' ? Object.fromEntries((containers.access==='qa-observer-service' ? ['packageUid', ...OBSERVER_IDENTITY] : ['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'])
         .map(key => [key, containers[key]])) : {}) };
   }
   assert.equal(process.platform, 'darwin', 'IOS_NATIVE_OWNER_MAC_REQUIRED');
@@ -121,15 +123,15 @@ export function validateAndroidLayoutEvidence(fixture, actual, device, expectedI
   assert.match(layout.bootId || '', /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
   assert.deepEqual(Object.keys(layout.returnedOutputBytes || {}).sort(), ['afterBoot', 'beforeBoot', 'pageSize']);
   for (const bytes of Object.values(layout.returnedOutputBytes)) assert.ok(Number.isSafeInteger(bytes) && bytes > 0 && bytes <= 64, 'ANDROID_LAYOUT_OUTPUT_BOUND');
-  const fields = ['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'];
+  const fields = actual.access==='qa-observer-service' ? ['packageUid', ...OBSERVER_IDENTITY] : ['access', 'deviceKind', 'transportMode', 'shellUid', 'packageUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff'];
   for (const value of [actual, device, expectedInstalled]) {
     assert.equal(value.udid, fixture.udid, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED'); assert.equal(value.appId, fixture.appId, 'ANDROID_LAYOUT_DEVICE_IDENTITY_CHANGED');
     assert.equal(value.binaryHash ?? value.installedApkSha256, actual.binaryHash, 'ANDROID_LAYOUT_BINARY_CHANGED');
     assert.equal(value.bootId, layout.bootId, 'ANDROID_LAYOUT_BOOT_CHANGED'); assert.equal(value.pageSizeBytes, layout.pageSizeBytes, 'ANDROID_LAYOUT_PAGE_CHANGED');
     assert.equal(value.pageSizeRequired, undefined, 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
     assert.ok(!Object.hasOwn(value, 'rootUid') && !Object.hasOwn(value, 'avdName'), 'ANDROID_LAYOUT_PHYSICAL_CANNOT_CERTIFY_EMULATOR');
-    assert.equal(value.access, 'run-as'); assert.equal(value.deviceKind, 'physical'); assert.equal(value.transportMode, mode); assert.equal(value.shellUid, 2000);
-    assert.ok(Number.isSafeInteger(value.packageUid) && value.packageUid >= 10000); assert.equal(value.runAsUid, value.packageUid);
+    assert.equal(value.access,actual.access);assert.ok(['run-as','qa-observer-service'].includes(value.access)); assert.equal(value.deviceKind, 'physical'); assert.equal(value.transportMode, mode); assert.equal(value.shellUid, 2000);
+    assert.ok(Number.isSafeInteger(value.packageUid) && value.packageUid >= 10000); if(value.access==='qa-observer-service'){assert.ok(!Object.hasOwn(value,'runAsUid'));const d=observerConfiguration(value.observerInstallationEvidence,fixture.udid);assert.equal(d.targetApkSha256,actual.binaryHash);assert.equal(d.sourceSha,fixture.binarySourceSha);assert.deepEqual(value.observerInstallationEvidence,fixture.privacyObserverEvidence);assert.equal(d.packageUid,value.packageUid);for(const k of ['observerAppId','observerUid','targetApkSha256','observerApkSha256','sourceSha','signerSha256'])assert.equal(value[k],d[k]);assert.equal(value.observationDomain,d.domain);assert.equal(value.fullPackageForceStoppedStateCertified,false);}else assert.equal(value.runAsUid, value.packageUid);
     assert.match(value.usbDevPath || '', /^usb:[A-Za-z0-9.:_-]{1,128}$/); assert.equal(value.apiLevel, 36); assert.equal(value.abi, 'arm64-v8a'); assert.equal(value.qemuOff, true);
     assert.deepEqual(Object.fromEntries(fields.map(key => [key, value[key]])), layout.physicalIdentity, 'ANDROID_LAYOUT_PHYSICAL_IDENTITY_CHANGED');
     assert.deepEqual(value.androidLayout, layout, 'ANDROID_LAYOUT_RETAINED_OBSERVATION_CHANGED');

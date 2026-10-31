@@ -1,0 +1,260 @@
+{
+  "kind": "caseops-npm-dependency-rebundle-v1",
+  "npmCliVersion": "11.12.1",
+  "artifact": {
+    "file": "npm-11.12.1-caseops-security.tgz",
+    "sha256": "fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052",
+    "sizeBytes": 4043346,
+    "integrity": "sha512-+VNalMDZUHBNe6TDDl/Qv/1E7isq3gLkmAs15beXmIJe22PipBXa+XiQCDO22dKQo8mfGo3urzevtDvO1WdOHw=="
+  },
+  "upstreamInputs": [
+    {
+      "name": "npm",
+      "version": "11.12.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "e679850e663b16f5f146ee425d0eb0e3442c1d2bda3d513bbfd7c81f5ee5db38",
+        "sizeBytes": 2833345
+      },
+      "url": "https://registry.npmjs.org/npm/-/npm-11.12.1.tgz",
+      "integrity": "sha512-zcoUuF1kezGSAo0CqtvoLXX3mkRqzuqYdL6Y5tdo8g69NVV3CkjQ6ZBhBgB4d7vGkPcV6TcvLi3GRKPDFX+xTA=="
+    },
+    {
+      "name": "glob",
+      "version": "14.0.2-caseops.1",
+      "kind": "verified-local-glob",
+      "archive": {
+        "sha256": "6a1eb71056c3c6138d30c06c4c9e0877b4a9bf79ee66c684a9405c6c4442ae25",
+        "sizeBytes": 475071
+      },
+      "localArtifact": "../glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz",
+      "targetPrefix": "package/node_modules/glob/"
+    },
+    {
+      "name": "@isaacs/nonrecursive-glob-match",
+      "version": "1.0.3",
+      "kind": "official",
+      "archive": {
+        "sha256": "9c67e29b5fea7f3736c427cf061c81fa0546f3587f397fa303e46c8dbf8e9998",
+        "sizeBytes": 95322
+      },
+      "url": "https://registry.npmjs.org/@isaacs/nonrecursive-glob-match/-/nonrecursive-glob-match-1.0.3.tgz",
+      "integrity": "sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==",
+      "targetPrefix": "package/node_modules/@isaacs/nonrecursive-glob-match/"
+    },
+    {
+      "name": "minimatch",
+      "version": "11.0.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "8e6e370e8cc4d4d0d9e6b041f5ef888dbd9a15b5bdb1957794fe8eef6d60ac62",
+        "sizeBytes": 100549
+      },
+      "url": "https://registry.npmjs.org/minimatch/-/minimatch-11.0.1.tgz",
+      "integrity": "sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==",
+      "targetPrefix": "package/node_modules/minimatch/"
+    },
+    {
+      "name": "path-scurry",
+      "version": "3.0.0",
+      "kind": "official",
+      "archive": {
+        "sha256": "28d5862f70595973f00d63bb219083d6ed7a28488685a73a1c3340ba55688675",
+        "sizeBytes": 103785
+      },
+      "url": "https://registry.npmjs.org/path-scurry/-/path-scurry-3.0.0.tgz",
+      "integrity": "sha512-1pTbQqH1wIwMi/eleQ5leFTTCkzFsPcgXNjwOA8YGGW/W4/kHT3dssE7Z6NH+zuqNLOzOB0uaD61yl7cAcVhgg==",
+      "targetPrefix": "package/node_modules/path-scurry/"
+    },
+    {
+      "name": "brace-expansion",
+      "version": "5.0.12",
+      "kind": "official",
+      "archive": {
+        "sha256": "ef8448ec78f20b692f04fa6d01f39b5ab34c66404bea3429f5a39c6c9e0be8b4",
+        "sizeBytes": 12620
+      },
+      "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.12.tgz",
+      "integrity": "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==",
+      "targetPrefix": "package/node_modules/brace-expansion/"
+    },
+    {
+      "name": "@sigstore/core",
+      "version": "3.2.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "b1ebd091f75345f83c709f9a4e5be06c2c0f80adc7f42c0ab469008367998a3e",
+        "sizeBytes": 19857
+      },
+      "url": "https://registry.npmjs.org/@sigstore/core/-/core-3.2.1.tgz",
+      "integrity": "sha512-qRsxPnCrbC/puegGxKuynfnxgLiHqWStrSjxkoB4YKqq3Z3s4cyZyj42ZdWFAEblNP65C+rBH8EuREHIXoi83g==",
+      "targetPrefix": "package/node_modules/@sigstore/core/"
+    },
+    {
+      "name": "@sigstore/verify",
+      "version": "3.1.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "66fba97654e6850703065d461678965f604aba69f6f792b3fed316a6ffba4154",
+        "sizeBytes": 17564
+      },
+      "url": "https://registry.npmjs.org/@sigstore/verify/-/verify-3.1.1.tgz",
+      "integrity": "sha512-qv7+G3J2cc6wwFj3yKvXOamzqhMwSk1ogPGmhpS8iXllcPrJaIIBA+4HbttlHVu1pqWTdmaCH/WE7UOC51kdoA==",
+      "targetPrefix": "package/node_modules/@sigstore/verify/"
+    },
+    {
+      "name": "sigstore",
+      "version": "4.1.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "4d7ecc73cd9559457209adab0d9a64c50145e5cb1286de92abc75f0a140928a0",
+        "sizeBytes": 10329
+      },
+      "url": "https://registry.npmjs.org/sigstore/-/sigstore-4.1.1.tgz",
+      "integrity": "sha512-endqECJkfhozrXMK5ngu/UAA0xVcVEFdnHJCElGaExypjW+HK5i6zu3NteLoaX/iFbRUbC3+DjttQs0GARr+5w==",
+      "targetPrefix": "package/node_modules/sigstore/"
+    },
+    {
+      "name": "ip-address",
+      "version": "10.7.4",
+      "kind": "official",
+      "archive": {
+        "sha256": "f9e1d0dd369c002f43770c6ee35942c8078e76d080a1e18e89113eef865f26ff",
+        "sizeBytes": 85495
+      },
+      "url": "https://registry.npmjs.org/ip-address/-/ip-address-10.7.4.tgz",
+      "integrity": "sha512-DWBMKyeM25D70nrIiTkgQth59/G+naKOTep6huF9j+GmeK3DMD60Zvxg5d5qQnz+38AHgou6ean2LECX+lrKDg==",
+      "targetPrefix": "package/node_modules/ip-address/"
+    },
+    {
+      "name": "pacote",
+      "version": "21.5.1",
+      "kind": "official",
+      "archive": {
+        "sha256": "d671739e5e4b8d1f1042fe3f337c0b471b01a9abd7bb9afb764305d919118612",
+        "sizeBytes": 24073
+      },
+      "url": "https://registry.npmjs.org/pacote/-/pacote-21.5.1.tgz",
+      "integrity": "sha512-KvcJ9iy3crysCsgqc4+PknH/w6jkrp8JN36mpZBPwNaDRwTfMZD37YzRazNstiZUOhuF5pno9f78n9mEJBavwg==",
+      "targetPrefix": "package/node_modules/pacote/"
+    },
+    {
+      "name": "postcss-selector-parser",
+      "version": "7.1.6",
+      "kind": "official",
+      "archive": {
+        "sha256": "48c903f98c5591d8d26f16f389d5cb3435459474c645209a79f6241bf4b657b6",
+        "sizeBytes": 46652
+      },
+      "url": "https://registry.npmjs.org/postcss-selector-parser/-/postcss-selector-parser-7.1.6.tgz",
+      "integrity": "sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==",
+      "targetPrefix": "package/node_modules/postcss-selector-parser/"
+    },
+    {
+      "name": "tar",
+      "version": "7.5.22",
+      "kind": "official",
+      "archive": {
+        "sha256": "b792c2d1c7fc770910522ca1ffc29eee02ee38de4fa3a01e7832eb705879c6c6",
+        "sizeBytes": 471090
+      },
+      "url": "https://registry.npmjs.org/tar/-/tar-7.5.22.tgz",
+      "integrity": "sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==",
+      "targetPrefix": "package/node_modules/tar/"
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.4",
+      "kind": "official",
+      "archive": {
+        "sha256": "515b5ab666558ed9a117483a310892aede54a68dd78f2d8db6604513e578571c",
+        "sizeBytes": 23662
+      },
+      "url": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz",
+      "integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==",
+      "targetPrefix": "package/node_modules/tinyglobby/node_modules/picomatch/"
+    }
+  ],
+  "manifestEdits": [
+    {
+      "path": "package/node_modules/@npmcli/arborist/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.0.3",
+      "to": "11.0.1"
+    },
+    {
+      "path": "package/node_modules/@npmcli/map-workspaces/package.json",
+      "field": "dependencies.glob",
+      "from": "^13.0.0",
+      "to": "14.0.2-caseops.1"
+    },
+    {
+      "path": "package/node_modules/@npmcli/map-workspaces/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.0.3",
+      "to": "11.0.1"
+    },
+    {
+      "path": "package/node_modules/@npmcli/package-json/package.json",
+      "field": "dependencies.glob",
+      "from": "^13.0.0",
+      "to": "14.0.2-caseops.1"
+    },
+    {
+      "path": "package/node_modules/@tufjs/models/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.1.1",
+      "to": "11.0.1"
+    },
+    {
+      "path": "package/node_modules/cacache/package.json",
+      "field": "dependencies.glob",
+      "from": "^13.0.0",
+      "to": "14.0.2-caseops.1"
+    },
+    {
+      "path": "package/node_modules/ignore-walk/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.0.3",
+      "to": "11.0.1"
+    },
+    {
+      "path": "package/node_modules/libnpmdiff/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.0.3",
+      "to": "11.0.1"
+    },
+    {
+      "path": "package/package.json",
+      "field": "dependencies.glob",
+      "from": "^13.0.6",
+      "to": "14.0.2-caseops.1"
+    },
+    {
+      "path": "package/package.json",
+      "field": "dependencies.minimatch",
+      "from": "^10.2.4",
+      "to": "11.0.1"
+    }
+  ],
+  "unchanged": "Every other official upstream member, including npm own bin/lib/index source; no npm CLI source patch.",
+  "proof": {
+    "twoIndependentArchiveBytesEqual": true,
+    "all2149MemberPayloadModeAndMetadataEqual": true,
+    "packageIdentities": 146,
+    "ownedModuleMarkers": 42,
+    "embeddedDependencies": 7,
+    "upstreamGlobMapping": 1,
+    "noticeMembers": 149,
+    "observedPlatform": "darwin-arm64",
+    "node": "24.15.0",
+    "linuxWindowsAcceptance": "Required separately in CI; not implied by Mac proof."
+  },
+  "packagingDifference": {
+    "path": "package/bin/node-gyp-bin/node-gyp.cmd",
+    "officialSha256": "8cb8b915e6f433f7f8994eae04e74595d5a169d1e593833bb4a5f2cbe213f02d",
+    "acceptedSha256": "081880abf39d600c58b850ab0e28c5e562eac0d5c81bbc49226588d850dcd5d3",
+    "sizeBytes": 144,
+    "reason": "Retain the previously accepted LF node-gyp launcher; npm own executable source remains otherwise official."
+  }
+}

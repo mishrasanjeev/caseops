@@ -184,3 +184,14 @@ from task-specific
 Task-specific environment APIs exist; they do not provide a reviewed uniform
 hook for every compiler/plugin worker used by the canonical wrapper. No init
 script, generated project mutation or internal Gradle API is introduced here.
+
+
+## October31 dependency follow-on
+
+The version pins above describe CLI/driver code identity; they do not certify all bundled dependencies against later advisories. Newly affected glob/minimatch copies require the local `glob14.0.2-caseops.1` default-bundle rebuild and the distinct npm11.12.1 dependency rebundle. An override alone cannot repair code already embedded in a minified bundle or an inBundle driver dependency. All existing trust policies and reviewed deepmerge exception semantics remain.
+
+Native CI now uses `node scripts/mobile/npm-tooling.mjs` for normal npm arguments (`../../scripts/mobile/npm-tooling.mjs` from apps/mobile). `--npx` selects the same package’s npx; `--cli-health` checks every production dependency edge; `--audit-cli` sends one marked, TLS-verified current advisory request for all146installed package identities, seven embedded dependencies and the explicit upstream glob mapping. The helper accepts exact Node22.23.4/24.15.0, a fixed local archive digest, fresh private runtime directories and scoped nested launchers. Ordinary npm/npx and nested launchers use the kept marked registry entry without changing NODE_OPTIONS; POSIX kernel executable access is required before CLI dispatch. It does not install or update global npm.
+
+The archive and all149notice members are in `apps/mobile/vendor/npm-11.12.1-caseops-security/`; PROVENANCE.json identifies the13dependency roots/10range fields/accepted launcher change and MEMBERS.json pins every2149member payload/mode. Twenty-four Mac and24 actual Linux22 controls passed, including exact nested CLI identity against a hostile different-version global, native request marker/TLS/authentication/payload preservation, no added replay, kernel noexec refusal and complete root-present paired inventory refusals. Actual Windows acceptance remains pending. New preparation runtimes include the2594-object package root, enclosing root, two scoped launchers, one bin directory, one held entry file and one transport directory (2600objects total); none are claimed to be native app artifacts.
+
+The original Android build failure and backend preparation refusal remain retained. Current native APK/Simulator/device/store acceptance is still NO-GO.

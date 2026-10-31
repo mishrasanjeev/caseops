@@ -368,6 +368,24 @@ class PrivateFixtureFileTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_web_source_fingerprint_covers_every_root_context_copy_and_filter(self):
+        source = (bootstrap_module.REPO / "apps/web/Dockerfile").read_text(encoding="utf-8")
+        scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
+        copied = set()
+        for line in source.splitlines():
+            if not line.startswith("COPY ") or line.startswith("COPY --from="):
+                continue
+            fields = line.split()
+            copied.update(value for value in fields[1:-1] if not value.startswith("--"))
+        self.assertTrue(copied)
+        for path in copied | {".dockerignore", ".gcloudignore"}:
+            relative = Path(path)
+            self.assertTrue(any(relative == scope or relative.is_relative_to(scope) for scope in scopes), path)
+        for omitted in ("scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+                        "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz"):
+            reduced = [scope for scope in scopes if scope != Path(omitted)]
+            self.assertFalse(any(Path(omitted) == scope or Path(omitted).is_relative_to(scope) for scope in reduced))
+
     def test_ios_web_build_uses_the_configured_simulator_loopback_origins(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -392,7 +410,7 @@ class BootstrapTests(unittest.TestCase):
             rendered = path.read_text(encoding="utf-8")
             insertion = "\nARG NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE=0\nENV NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE=$NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE"
             self.assertEqual(rendered.replace(insertion, ""), canonical)
-            self.assertLess(rendered.index(insertion), rendered.index("RUN npm run build"))
+            self.assertLess(rendered.index(insertion), rendered.index("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build"))
 
     def test_compose_does_not_inherit_foreign_provider_credentials(self):
         with tempfile.TemporaryDirectory() as directory:

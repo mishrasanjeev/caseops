@@ -3032,7 +3032,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  assert.equal(setupCount, 15); assert.equal(commandCount, 106);
+  assert.equal(setupCount, 15); assert.equal(commandCount, 108);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
@@ -3816,7 +3816,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '2fb386b772aecfcc5c18aacf5d6c77aa934fa90d895adf2adf8baf42a9b6d6a5'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -3959,7 +3959,7 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '4c18c81d7c0ed28e7188c4335f0922eb024d6dff']]);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '1ec73b3c42d8b79d93775d56ffad383645c55ce8']]);
     for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
@@ -4641,7 +4641,9 @@ function observerSinkFixture(callback) {
 }
 
 test('source observer import is inert and the worker allowlist is literal and unique', () => {
-  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 33); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 33);
+  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 36); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 36);
+  for (const added of ['scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
+    assert.equal(SOURCE_GATE_WORKER_PATHS.filter(name => name === added).length, 1);
   assert.ok(SOURCE_GATE_WORKER_PATHS.every(name => !name.includes('..') && name.endsWith('.test.mjs')));
 });
 test('source observer absent mode preserves BASE144 and creates no compact witness', async () => {
@@ -4925,6 +4927,15 @@ test('source observer bootstrap generator preserves exact tokens and AST within 
     const raw = observerRead(path.join(folder, ref.file), 65536);
     assert.equal(raw.length, ref.sizeBytes); assert.equal(observerHash(raw), ref.sha256);
   }
+  const recorder = observerRead(path.join(folder, 'source-gate-observer.mjs'), 65536);
+  const checkRecorderBinding = bytes => {
+    const text = bytes.toString('utf8');
+    assert.equal(/const A_SHA\s*=\s*'([a-f0-9]{64})'/.exec(text)?.[1], observerHash(recorder));
+    assert.equal(Number(/const A_SIZE\s*=\s*(\d+)/.exec(text)?.[1]), recorder.length);
+  };
+  checkRecorderBinding(input); checkRecorderBinding(actual);
+  assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace(observerHash(recorder), '0'.repeat(64)))), { code: 'ERR_ASSERTION' });
+  assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace('const A_SIZE = ' + recorder.length, 'const A_SIZE = 0'))), { code: 'ERR_ASSERTION' });
   const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
   assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
   assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);

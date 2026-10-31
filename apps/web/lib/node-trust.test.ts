@@ -59,10 +59,45 @@ afterAll(() => fs.rmSync(temp, { recursive: true, force: true }));
 test("Docker generates trust before npm and inherits it into build and runtime", () => {
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
   expect(docker).toMatch(/FROM node:22\.23\.4-alpine AS trusted-base/);
-  expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm ci"));
-  expect(docker).toMatch(/FROM trusted-base AS deps/);
+  expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm-tooling.mjs ci"));
+  expect(docker).toMatch(/FROM trusted-base AS builder-tooling/);
+  expect(docker).toMatch(/FROM builder-tooling AS deps/);
   expect(docker).toMatch(/FROM trusted-base AS runner/);
   expect(docker).toContain("SSL_CERT_DIR=/opt/caseops/trust/empty");
+  expect(docker).toContain('test "$(node /opt/caseops/scripts/mobile/npm-tooling.mjs --version)" = "11.12.1"');
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund");
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund");
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build");
+  const runner = docker.split("FROM trusted-base AS runner")[1];
+  expect(runner).not.toMatch(/COPY.*(?:builder-tooling|scripts\/mobile|apps\/mobile\/vendor)/);
+});
+
+test("Docker's exact runtime tool-absence program rejects files, dangling launchers and metadata errors", async () => {
+  const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
+  const program = docker.match(/&& node -e '([^']+UNUSED_GLOBAL_TOOL_REMAINS[^']+)'/);
+  assert.ok(program, "Missing actual trusted-base absence program");
+  for (const mode of ["absent", "file", "dangling-link", "metadata-error"]) {
+    const root = path.join(temp, `tool-absence-${mode}`);
+    fs.mkdirSync(root);
+    const name = mode === "dangling-link" ? "/usr/local/bin/npm" : "/usr/local/lib/node_modules/npm";
+    const target = path.join(root, name.slice(1));
+    if (mode === "file" || mode === "dangling-link") {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (mode === "file") fs.writeFileSync(target, "synthetic retained tool");
+      else fs.symlinkSync(path.join(root, "missing-owned-target"), target);
+    }
+    const prelude = `const actualFs=require('node:fs'), actualPath=require('node:path');
+      const originalStat=actualFs.lstatSync;
+      actualFs.lstatSync=(p,...args)=>{
+        if(${JSON.stringify(mode)}==='metadata-error') throw Error('SYNTHETIC_METADATA_REFUSAL');
+        if(typeof p!=='string'||!p.startsWith('/')) throw Error('UNEXPECTED_ABSENCE_PATH');
+        return originalStat(actualPath.join(${JSON.stringify(root)},p.slice(1)),...args);
+      };`;
+    const result = await child(["-e", prelude + program[1]]);
+    expect(result.code, mode).toBe(mode === "absent" ? 0 : 1);
+    expect(result.stdout).toBe("");
+    if (mode === "file" || mode === "dangling-link") expect(fs.lstatSync(target)).toBeTruthy();
+  }
 });
 
 test("Docker runtime explicitly preloads the guard independently of NODE_OPTIONS", () => {

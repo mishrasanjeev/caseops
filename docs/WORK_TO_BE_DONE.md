@@ -1,3 +1,15 @@
+## 2026-10-31 — current mobile build-tool security follow-on
+
+J20/M22 remains **Partially implemented; release NO-GO**. Published PR #558 head `bcf881a8b6f8121f71ef52c9f45594fd2330748d` completed all70 CI checks (68success,2explicit skips). The earlier CI timeout regression passed that run. Those results do not certify an APK, Simulator app, connected device, store archive or a dependency advisory published afterwards.
+
+Fresh mobile/tooling review found affected glob/minimatch copies, including pre-fix matcher code inside the official glob14.0.2 default bundles. The local glob14.0.2-caseops.1 artifact rebuilds both default bundles from pinned minimatch11.0.1 inputs, retains raw dist/types and all bundled notices, and reproduced identical archives twice. Sixteen ordinary default-bundle/Expo-consumer controls passed. A clean isolated543-row lock regeneration and ordinary mobile npm ci passed; full physical inventory confirms511installed packages,31typed optional absences and exact local glob payloads. Current combined source/export and Linux/Windows checks remain required. Existing zod/deepmerge versions and reviewed exception policy are unchanged.
+
+The isolated npm11.12.1 dependency rebundle passed complete2149-member extraction, real dependency health, ordinary offline installation and a fresh154-row installed/embedded advisory query with no findings. Its portable helper accepts exact Node22.23.4/24.15.0 and passes24 Mac and24 actual Linux22 controls, including complete paired inventories, descriptor/path failures, marked ordinary and nested npm/npx requests, exact nested CLI identity and kernel executable-access refusal. The prepared runtime has2600 root-present objects. Actual Windows acceptance remains pending. Global npm was not repaired or replaced.
+
+Actual Android/iOS acceptance remains open: the first Android model/APK attempt failed before assembly at a stale source fence, its corrected private source has controls but no replacement APK yet, and canonical backend provisioning stopped before persistent creation at a certificate ownership mapping assertion. The controlled container proof and narrow mapped-UID fix do not create a running backend. Fresh exact-source build, full83-case/249-phase inventories per OS and store signing remain required. Android QA privacy observation is still under development; it must preserve the main process, remain absent from production, and explicitly distinguish its running signed observer from full-package force-stop evidence. DUNS enrollment is underway; no store submission or launch date is established.
+
+See `docs/mobile/HOST_TOOLING_SECURITY_2026-10-28.md` and QA18 in the enterprise ledger.
+
 # CaseOps  - Work To Be Done
 
 ## October 31 Native Replacement and Fresh Dependency Gate

@@ -1,3 +1,4 @@
+import { OBSERVER_SOURCE_INPUTS } from './android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -551,7 +552,7 @@ export function assertClientRuntimeInventory(value,purpose,platform) {
 }
 
 export function clientHarnessFingerprint(root) {
-  const names=['compose.mobile-local.yml','package.json','package-lock.json','apps/mobile/package.json','apps/mobile/package-lock.json'];
+  const names=[...OBSERVER_SOURCE_INPUTS,'compose.mobile-local.yml','package.json','package-lock.json','apps/mobile/package.json','apps/mobile/package-lock.json'];
   for(const dir of ['apps/mobile/e2e','scripts/mobile'])for(const name of fs.readdirSync(path.join(root,dir)))
     if(/\.(mjs|py|json)$/.test(name))names.push(dir+'/'+name);
   const hash=createHash('sha256');for(const name of [...new Set(names)].sort()){

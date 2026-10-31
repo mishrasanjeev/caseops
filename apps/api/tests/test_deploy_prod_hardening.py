@@ -706,9 +706,9 @@ def test_web_image_uses_committed_workspace_lockfile() -> None:
     gcloudignore = _read_repo_text(".gcloudignore")
 
     assert "COPY package.json package-lock.json ./" in dockerfile
-    assert "RUN npm ci --no-audit --no-fund" in dockerfile
+    assert "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund" in dockerfile
     assert "npm install" not in dockerfile
-    assert "npm prune --omit=dev" in dockerfile
+    assert "npm-tooling.mjs prune --omit=dev" in dockerfile
     assert "context: ." in compose
     assert "dockerfile: apps/web/Dockerfile" in compose
     assert "apps/web/Dockerfile" in cloudbuild
@@ -1267,6 +1267,55 @@ def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str])
         f"COPY {path} /app/{path}" for path in required
     } for line in lines), "Do not copy the whole test tree"
     assert "/app/tests" not in runner and "COPY tests/" not in runner
+    _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+def _web_npm_tooling_inputs(root: Path) -> set[str]:
+    helper = "scripts/mobile/npm-tooling.mjs"
+    source = (root / helper).read_text(encoding="utf-8")
+    assert "from './npm-registry.mjs'" in source
+    artifact = re.findall(r"relative: '([^']+)'", source)
+    assert artifact == ["apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz"]
+    required = {helper, "scripts/mobile/npm-registry.mjs", artifact[0]}
+    assert all((root / path).is_file() for path in required), "Missing pinned npm source input"
+    return required
+
+
+def _assert_web_npm_tooling_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
+    tooling = dockerfile.split("FROM trusted-base AS builder-tooling", 1)[1].split(
+        "FROM builder-tooling AS deps", 1)[0]
+    assert "COPY scripts/mobile/npm-tooling.mjs scripts/mobile/npm-registry.mjs /opt/caseops/scripts/mobile/" in tooling
+    artifact = next(path for path in required if path.endswith(".tgz"))
+    assert f"COPY {artifact} /opt/caseops/{artifact}" in tooling, "Missing pinned npm archive COPY"
+    patterns = set(ignore.splitlines())
+    parents = {parent.as_posix() + "/" for path in required for parent in Path(path).parents
+               if parent != Path(".")}
+    assert {f"!{path}" for path in required | parents} <= patterns, "Missing pinned npm context input"
+    actual = {line[1:] for line in patterns if line.startswith(("!scripts/", "!apps/mobile/"))}
+    assert actual == {path for path in required | parents if path.startswith(("scripts/", "apps/mobile/"))}, "Npm context must admit only its exact source closure"
+    runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
+    assert all(value not in runner for value in ("builder-tooling", "COPY scripts/", "COPY apps/mobile/", "/opt/caseops/scripts/mobile")), "Npm tooling must remain builder only"
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("path", ["scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz"])
+def test_web_npm_tooling_closure_rejects_each_omission(boundary: str, path: str) -> None:
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(path, "missing-tooling-input")
+    else:
+        ignore = ignore.replace(f"!{path}\n", "")
+    with pytest.raises(AssertionError):
+        _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+def test_web_npm_tooling_closure_rejects_broad_sibling_admission(ignore_path: str) -> None:
+    with pytest.raises(AssertionError, match="exact source closure"):
+        _assert_web_npm_tooling_inputs(_read_repo_text("apps/web/Dockerfile"),
+            _read_repo_text(ignore_path) + "\n!scripts/mobile/**\n", _web_npm_tooling_inputs(REPO_ROOT))
 
 
 @pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
@@ -1370,7 +1419,7 @@ def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
     assert {"**/*.ts", "**/*.tsx"} <= set(config["include"])
     assert config["exclude"] == ["node_modules"]
     assert "ignoreBuildErrors" not in _read_repo_text("apps/web/next.config.ts")
-    assert "RUN npm run build" in _read_repo_text("apps/web/Dockerfile")
+    assert "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build" in _read_repo_text("apps/web/Dockerfile")
 
 
 def _assert_ci_web_builder_gate(workflow: dict) -> None:
@@ -3882,6 +3931,9 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
         ("clean", None, None, False),
         ("security-helper", "scripts/release_security_gate.py", "modify", True),
         ("security-policy", ".github/workflows/security.yml", "modify", True),
+        ("npm-helper", "scripts/mobile/npm-tooling.mjs", "modify", True),
+        ("npm-registry", "scripts/mobile/npm-registry.mjs", "modify", True),
+        ("npm-archive", "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz", "modify", True),
         ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
         ("registry", "license-policy/reviewed-packages.json", "modify", True),
         ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
@@ -3957,6 +4009,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("public-release-identity", "tests/e2e/support/public-release-identity.ts"),
         ]),
     }
+    initial_paths.update(_web_npm_tooling_inputs(REPO_ROOT))
     for relative in initial_paths:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)

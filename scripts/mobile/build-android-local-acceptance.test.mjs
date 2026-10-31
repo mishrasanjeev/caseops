@@ -87,7 +87,7 @@ function fixture(t, extra = {}) {
     'scripts/mobile/prepare-viewer-assets.mjs', 'apps/mobile/src/viewer/renderer-runtime.ts',
     ...['LICENSES.txt', 'manifest.json', 'pdfjs-assets.ts', 'renderer-runtime-source.ts'].map(name => `apps/mobile/src/viewer/generated/${name}`),
     'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/plugins/store-build.cjs',
-    'apps/mobile/plugins/privacy-policy.cjs', 'apps/mobile/plugins/with-privacy-policy.cjs', 'apps/mobile/e2e/support.mjs'];
+    'apps/mobile/plugins/privacy-policy.cjs', 'apps/mobile/plugins/with-privacy-policy.cjs', 'apps/mobile/plugins/qa-observer.cjs', 'apps/mobile/e2e/support.mjs'];
   for (const name of files) { const destination = path.join(checkout, name); mkdirSync(path.dirname(destination), { recursive: true }); copyFileSync(path.join(repo, name), destination); }
   // Trace actual source capture in the temporary contract fixture, so an order
   // assertion cannot pass merely because the wrapper contains command strings.

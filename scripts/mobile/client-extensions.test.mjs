@@ -1,3 +1,4 @@
+import { bindObserverTestIdentity } from './qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -1117,4 +1118,9 @@ test('complete ClientExtensions admission binds physical4K layout and rejects mi
  function packet(){const x=clientAdmissionPacket(),current=x.io.installed();bindPhysicalPacket(x,x.values,current);const version=x.values.get(x.q.artifactVersionEvidence.path);version.reader='aapt2-dump-badging';return x;}
  const good=packet(),result=await admitClientExtensions(good.q,good.io);assert.equal(result.installed.pageSizeBytes,4096);assert.equal(result.installed.androidLayout.sixteenKEmulatorAcceptance,false);assert.equal(good.reads(),2);
  for(const mutate of[x=>x.values.get(x.q.deviceEvidence.path).pageSizeBytes=16384,x=>x.values.get(x.q.installedEvidence.path).androidLayout=undefined,x=>x.values.get(x.q.deviceEvidence.path).bootId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee']){const x=packet();mutate(x);await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}
+});
+
+
+test('ClientExtensions complete admission binds signed observer source and refuses a forged run-as label',async()=>{
+ for(const wrong of[false,true]){const x=clientAdmissionPacket(),dir=temp();try{const actual=bindPhysicalPacket(x,x.values,x.io.installed());const ref=bindObserverTestIdentity(actual,dir,x.q.expectedSourceSha);for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])x.values.get(r.path).privacyObserverEvidence=ref;for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){delete x.values.get(r.path).runAsUid;Object.assign(x.values.get(r.path),structuredClone(actual));}x.io.installed=()=>structuredClone(actual);x.values.get(x.q.artifactVersionEvidence.path).reader='aapt2-dump-badging';if(wrong)x.values.get(x.q.deviceEvidence.path).access='run-as';if(wrong){await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}else{const r=await admitClientExtensions(x.q,x.io);assert.equal(r.installed.access,'qa-observer-service');assert.equal(r.installed.sixteenKEmulatorAcceptance,false);}}finally{fs.rmSync(dir,{recursive:true,force:true});}}
 });

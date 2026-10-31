@@ -1,3 +1,4 @@
+import { OBSERVER_SOURCE_INPUTS } from './android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -266,10 +267,18 @@ test('actual Files fingerprint closes local transport helper bytes and refuses i
   for (const name of ['run-android-files.mjs','android-files-privacy.mjs','source-snapshot.mjs','prepare-android-files-fixture.py','admit-android-file-source.py','local-transport.py']) {
     writeFileSync(path.join(directory, 'scripts/mobile', name), readFileSync(path.join(source, 'scripts/mobile', name)));
   }
+  for(const name of OBSERVER_SOURCE_INPUTS){const out=path.join(directory,name);mkdirSync(path.dirname(out),{recursive:true});writeFileSync(out,readFileSync(path.join(source,name)));}
   writeFileSync(path.join(directory, 'apps/mobile/e2e/android-local-profile.mjs'), readFileSync(path.join(source, 'apps/mobile/e2e/android-local-profile.mjs')));
   const file = path.join(directory, 'scripts/mobile/local-transport.py'), original = readFileSync(file), first = androidFilesHarnessFingerprint(directory);
   writeFileSync(file, Buffer.concat([original, Buffer.from('\n# synthetic fingerprint mutation only\n')]));
   assert.notEqual(androidFilesHarnessFingerprint(directory), first);
   writeFileSync(file, original); assert.equal(androidFilesHarnessFingerprint(directory), first);
   rmSync(file); assert.throws(() => androidFilesHarnessFingerprint(directory), { code: 'ENOENT' });
+});
+
+test('Files fingerprint binds every observer Java manifest transform and build-helper byte',t=>{
+ const directory=mkdtempSync(path.join(os.tmpdir(),'caseops-observer-fingerprint-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));const source=fileURLToPath(new URL('../../',import.meta.url));
+ const names=[...OBSERVER_SOURCE_INPUTS,'scripts/mobile/run-android-files.mjs','scripts/mobile/android-files-privacy.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/prepare-android-files-fixture.py','scripts/mobile/admit-android-file-source.py','scripts/mobile/local-transport.py','apps/mobile/e2e/android-local-profile.mjs'];
+ for(const name of names){const out=path.join(directory,name);mkdirSync(path.dirname(out),{recursive:true});writeFileSync(out,readFileSync(path.join(source,name)));}
+ const first=androidFilesHarnessFingerprint(directory);for(const name of OBSERVER_SOURCE_INPUTS){const file=path.join(directory,name),original=readFileSync(file);writeFileSync(file,Buffer.concat([original,Buffer.from('\n') ]));assert.notEqual(androidFilesHarnessFingerprint(directory),first,name);writeFileSync(file,original);assert.equal(androidFilesHarnessFingerprint(directory),first,name);}
 });

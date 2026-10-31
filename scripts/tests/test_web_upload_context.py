@@ -23,6 +23,10 @@ NODE_MATERIALS = {
     "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt",
     "license-policy/upstream/node_22.23.4/LICENSE",
 }
+NPM_TOOLING_INPUTS = {
+    "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+}
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
     "tests/fixtures/statutes/structured-schedule-api.json",
@@ -33,6 +37,7 @@ BUILDER_INPUTS = {
         "public-release-identity", "ip-import-acknowledgements",
         "ip-portfolio-export-completion",
     )),
+    *NPM_TOOLING_INPUTS,
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
 SIBLING_CANARIES = {
@@ -44,6 +49,12 @@ SIBLING_CANARIES = {
     "tests/e2e/unlisted.spec.ts", "tests/fixtures/statutes/deep/unlisted.json",
     "tests/fixtures/statutes/unlisted.json", "tests/fixtures/unlisted.json",
     "tests/other-private/canary.txt", "tests/unlisted.txt",
+    "scripts/unlisted.txt", "scripts/other-private/canary.txt",
+    "scripts/mobile/unlisted.mjs", "scripts/mobile/private/canary.txt",
+    "apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt",
+    "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
 }
 
 
@@ -173,7 +184,20 @@ class NativeUploadTests(unittest.TestCase):
         self.files(safe | SIBLING_CANARIES)
         original = (ROOT / ".dockerignore").read_text(encoding="utf-8")
         controls = {
-            "apps/**": {name for name in SIBLING_CANARIES if name.startswith("apps/")},
+            "apps/**": {name for name in SIBLING_CANARIES if name.startswith((
+                "apps/api/", "apps/other-private/"))},
+            "apps/mobile/**": {"apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt"},
+            "apps/mobile/vendor/**": {
+                "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",
+            },
+            "apps/mobile/vendor/npm-11.12.1-caseops-security/**": {
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
+            },
+            "scripts/**": {"scripts/unlisted.txt", "scripts/other-private/canary.txt"},
+            "scripts/mobile/**": {
+                "scripts/mobile/unlisted.mjs", "scripts/mobile/private/canary.txt",
+            },
             "tests/**": {
                 "tests/auth/canary.json", "tests/auth/deep/state.json",
                 "tests/other-private/canary.txt", "tests/unlisted.txt",

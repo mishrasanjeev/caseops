@@ -122,3 +122,27 @@ apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt -text whitespace=-s
 apps/mobile/e2e/android-local-profile.mjs text eol=lf
 scripts/mobile/fixtures/ios-local-archive/runner.mjs text eol=lf
 scripts/mobile/local-transport.py text eol=lf
+
+# Canonical pinned native verification installer bytes.
+scripts/mobile/npm-tooling.mjs text eol=lf
+scripts/mobile/npm-tooling.test.mjs text eol=lf
+apps/mobile/vendor/npm-11.12.1-caseops-security/*.tgz -text
+apps/mobile/vendor/npm-11.12.1-caseops-security/*.json text eol=lf
+apps/mobile/vendor/npm-11.12.1-caseops-security/*.md text eol=lf
+
+# Hash-pinned glob dependency artifact and exact upstream notices.
+apps/mobile/vendor/glob-14.0.2-caseops.1/*.tgz -text
+apps/mobile/vendor/glob-14.0.2-caseops.1/*.json text eol=lf
+apps/mobile/vendor/glob-14.0.2-caseops.1/*.md text eol=lf
+apps/mobile/vendor/glob-14.0.2-caseops.1/*.txt text eol=lf
+
+# QA-only Android observer source and strict manifest transformer.
+apps/mobile/plugins/qa-observer.cjs text eol=lf
+apps/mobile/qa-observer/** text eol=lf
+scripts/mobile/android-qa-observer*.mjs text eol=lf
+scripts/mobile/qa-observer-test-fixture.mjs text eol=lf
+scripts/mobile/android-observer-manifest*.py text eol=lf
+/scripts/mobile/npm-registry.mjs text eol=lf
+
+# Preserve the byte-exact vendored license buffer, including its final blank line.
+/apps/mobile/vendor/glob-14.0.2-caseops.1/BUNDLED-LICENSES.txt whitespace=-blank-at-eof

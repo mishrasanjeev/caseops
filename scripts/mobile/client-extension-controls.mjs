@@ -94,7 +94,7 @@ export function createClientExtensionControls({fixture,descriptor,admission,repo
  return{...methods,policyCheckpoint:args=>checkpoint('policyCheckpoint',args),operatorBoundary:args=>checkpoint('operatorBoundary',args),
   async traffic(){const status=await io.getJson(fixture.gatewayUrl+'/__caseops_e2e/status');assert.equal(status.runId,current.runId);assert.equal(status.overflow,false);assert.ok(Array.isArray(status.requests)&&status.requests.length<=500);return status;},
   async cameraPrivacy(){assert.deepEqual(io.installed(fixture,admission.platform,admission.installed.binaryHash,io.environment),admission.installed);const containers=io.read(descriptor.cameraContainersEvidence);
-   const output=path.join(cameraRoot,++sequence+'.json');const result=admission.platform==='ios'?io.cameraIos({containers,output}):io.cameraAndroid({containers,output,udid:fixture.udid,appId:fixture.appId,environment:io.environment});
+   const output=path.join(cameraRoot,++sequence+'.json');const result=admission.platform==='ios'?io.cameraIos({containers,output}):io.cameraAndroid({containers,output,udid:fixture.udid,appId:fixture.appId,androidTransportMode:fixture.androidTransport?.transportMode,privacyObserver:fixture.privacyObserverEvidence,environment:io.environment});
    return{...result.observation,observed:true,binaryHash:admission.installed.binaryHash};},
   dispose(){authority=undefined;disposed=true;},publicState:()=>({attemptedOperations:attempted.size,caseCounts:{...counts},disposed,credentialValuesPrinted:false,currentRunId:current.runId})};
 }

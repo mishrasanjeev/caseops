@@ -39,12 +39,15 @@ export const SOURCE_GATE_WORKER_PATHS = Object.freeze([
   "scripts/mobile/forge-security.test.mjs",
   "scripts/mobile/deepmerge-security.test.mjs",
   "scripts/mobile/deepmerge-installed.test.mjs",
+  "scripts/mobile/npm-tooling.test.mjs",
   "scripts/mobile/privacy-policy.test.mjs",
   "scripts/mobile/prepare-source-exports.test.mjs",
   "apps/mobile/e2e/v1-workflows.test.mjs",
   "scripts/mobile/v1-workflows-credentials.test.mjs",
   "apps/mobile/e2e/queue-privacy.test.mjs",
-  "scripts/mobile/client-extensions.test.mjs"
+  "scripts/mobile/client-extensions.test.mjs",
+  "scripts/mobile/android-qa-observer.test.mjs",
+  "scripts/mobile/android-qa-observer-build.test.mjs"
 ]);
 const HASH = createHash, RANDOM = randomBytes;
 const NOW = Date.now.bind(Date), HR = process.hrtime.bigint.bind(process.hrtime);

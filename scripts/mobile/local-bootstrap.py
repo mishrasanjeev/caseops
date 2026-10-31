@@ -25,7 +25,10 @@ DEVICE_OUTPUT_LIMIT = 65536
 MARKER = {"X-CaseOps-Automated-Test": "no-paid-providers"}
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
-             "tests/fixtures/statutes/structured-schedule-api.json", "license-policy", "docs/security"]
+             "tests/fixtures/statutes/structured-schedule-api.json",
+             "tests/fixtures/node-default-tls-probe.cjs", ".dockerignore", ".gcloudignore",
+             "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+             "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz", "license-policy", "docs/security"]
 
 
 def _load_local_transport():

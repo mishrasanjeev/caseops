@@ -1,3 +1,4 @@
+import { descriptor as observerDescriptorBase, packet as observerPacket, wire as observerWire } from './qa-observer-test-fixture.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,12 +19,12 @@ const environment = { ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', PATH: '/unit/bin'
 // or production operation is invoked by these source-contract tests.
 function fixture(t, selectedProfile = null) {
   const profile = selectedProfile ?? { udid: 'emulator-5584', adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202, avdName: 'CaseOps_Pixel9_API36_arm64' };
-  const SERIAL = profile.udid, physical = profile.deviceKind === 'physical';
+  const SERIAL = profile.udid, physical = profile.deviceKind === 'physical', observing = profile.observer === true;
   const selectedEnvironment = { ...environment, ADB_SERVER_SOCKET: `tcp:127.0.0.1:${profile.adbPort}` };
   const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-fs-unit-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const nodes = new Map(), calls = []; let inode = 10;
-  const add = (file, bytes = null, uid = file.startsWith(PRIVATE) ? 10087 : 1023) => {
+  const add = (file, bytes = null, uid = file.startsWith(PRIVATE) ? (observing ? 10123 : 10087) : 1023) => {
     const data = bytes === null ? null : Buffer.from(bytes);
     nodes.set(file, { kind: bytes === null ? 'directory' : 'file', uid, device: '10', inode: String(++inode),
       sizeBytes: data?.length || 0, modified: '2026-10-26 00:00:00.123456789 +0000', changed: '2026-10-26 00:00:00.123456789 +0000', bytes: data });
@@ -33,7 +34,32 @@ function fixture(t, selectedProfile = null) {
   const line = node => [node.kind === 'directory' ? 'directory' : 'regular file', node.uid, node.device, node.inode,
     node.sizeBytes, node.modified, node.changed].join('|');
   const state = { uid: physical ? '2000' : '0', user: '0', api: '36', abi: 'arm64-v8a', qemu: '0', devpath: 'usb:1-2.5', runAsUid: '10087', runAsPwd: PRIVATE, packageUid: '10087', privateReadlink: PRIVATE, bootId: '11111111-2222-4333-8444-555555555555', statFailures: new Map(), avd: profile.avdName, brokenRead: false, listCalls: 0 };
+  let observerDescriptor, privacyObserver;
+  const nativeFrame = node => [node.device,node.inode,node.kind==='directory'?'16832':'33152',String(node.uid),String(node.uid),'1',String(node.sizeBytes),'1','1'];
+  const nativeNs = (target,owned) => {const rows=[];for(let p=path.posix.dirname(target);;p=path.posix.dirname(p)){const ownedPath=p===owned||p.startsWith(owned+'/'),n=nodes.get(p);rows.push({path:p,owned:ownedPath,frame:ownedPath?(n?nativeFrame(n):null):['1','1','16877','0','0']});if(p==='/')return rows;}};
+  const observerCommand = (args,options) => {
+    const a=args.slice(2);calls.push(a);
+    if(a[1]==='cmd')return `package:${a.at(-1)} uid:${a.at(-1)===APP?observerDescriptor.packageUid:observerDescriptor.observerUid}`;
+    if(a[1]==='pm')return `package:/data/app/${a.at(-1)}/base.apk`;
+    if(a[1]==='sha256sum')return `${a[2].includes(observerDescriptor.observerAppId)?observerDescriptor.observerApkSha256:observerDescriptor.targetApkSha256}  ${a[2]}`;
+    if(a[1]==='pidof')throw Object.assign(new Error('UNIT_MAIN_ABSENT'),{status:1,signal:null,stdout:Buffer.alloc(0),stderr:Buffer.alloc(0)});
+    if(a[1]==='-T'&&a[2].startsWith("'am' 'instrument'")){
+      const q=JSON.parse(/'caseopsRequest' '([^']+)'/.exec(a[2])[1]),roots=q.operation==='files-snapshot'?[['app-data',PRIVATE],['external-app-data',EXTERNAL]]:q.operation==='camera-snapshot'?[['camera',PRIVATE+'/cache/ImagePicker']]:[];
+      const chosen=roots.flatMap(([,r])=>[...nodes.keys()].filter(p=>p===r||p.startsWith(r+'/')).sort()),bodies=chosen.filter(p=>nodes.get(p).kind==='file').map(p=>nodes.get(p).bytes);let index=0;
+      const raw=observerPacket(q,m=>{
+        m.appData={path:PRIVATE,frame:nativeFrame(nodes.get(PRIVATE))};m.entries=20+chosen.length*5;m.privateBytesRead=bodies.reduce((n,b)=>n+b.length,0);
+        m.inventories=roots.map(([name,r])=>{const paths=chosen.filter(p=>p===r||p.startsWith(r+'/'));return{name,root:r,initial:paths,final:[...paths],namespaceBefore:nativeNs(r,PRIVATE),namespaceAfter:nativeNs(r,PRIVATE)};});
+        m.records=chosen.map(p=>{const n=nodes.get(p),f=nativeFrame(n),r=roots.find(([,r])=>p===r||p.startsWith(r+'/'))[1];return{path:p,kind:n.kind,canonical:p,before:f,after:f,opened:n.kind==='file'?{bodyIndex:index++,length:n.bytes.length,fdClosed:true,pathBefore:f,fdBefore:f,fdAfter:f,pathAfter:f,namespaceBefore:nativeNs(p,r),namespaceAfter:nativeNs(p,r)}:null};});
+        if(state.observerMutation)state.observerMutation(m);
+      },Buffer.concat(bodies));return observerWire(raw,q.requestId);
+    }
+    throw new Error('NO_OBSERVER_FAKE_FALLTHROUGH');
+  };
   const command = (binary, args, options) => {
+    if(observing&&args[2]==='shell'&&['cmd','pm','pidof','sha256sum'].includes(args[3]))return observerCommand(args,options);
+    if(observing&&args[2]==='shell'&&args[3]==='-T'&&args[4].startsWith("'am' 'instrument'"))return observerCommand(args,options);
+    if(observing)assert.equal(args.includes('run-as'),false,'OBSERVER_MUST_NOT_USE_RUN_AS');
+
     assert.equal(binary, 'adb'); assert.deepEqual(args.slice(0, 2), ['-s', SERIAL]);
     assert.equal(options.shell, false); assert.ok(options.timeout > 0 && options.timeout <= 15000);
     assert.equal(options.env.ADB_SERVER_SOCKET, `tcp:127.0.0.1:${profile.adbPort}`);
@@ -140,6 +166,7 @@ function fixture(t, selectedProfile = null) {
     });
     return save(`manifest-${nonce}.json`, { schemaVersion: 1, kind: 'android-files-synthetic-fixtures', platform: 'android', syntheticDataOnly: true, assets });
   };
+  if(observing){state.packageUid='10123';observerDescriptor={...observerDescriptorBase,udid:SERIAL};privacyObserver=save('observer-installation.json',observerDescriptor);options.privacyObserver=privacyObserver;}
   const containers = attestAndroidFilesContainers(options), manifestEvidence = manifest('012345abcdef');
   const stage = (suffix = 'first', selectedManifest = manifestEvidence) => stageAndroidFilesAssets({ ...options, containers,
     manifestEvidence: selectedManifest, runId: `unit-run-${suffix}`, output: path.join(root, `provider-${suffix}.json`) });
@@ -690,4 +717,21 @@ test('physical ENOENT stdout and stderr observations stay charged to the unchang
   assert.equal(value.complete, true); assert.equal(value.directoryPresent, false); assert.ok(failedBytes > 0);
   assert.equal(value.counts.observationBytes, charged); assert.ok(charged <= CAMERA_PRIVACY_LIMITS.totalBytes);
   assert.deepEqual(value.limits, CAMERA_PRIVACY_LIMITS);
+});
+
+
+test('signed QA observer composes cold attestation, shell-only provider staging and complete Files classification',t=>{
+ const f=fixture(t,{...PHONE,observer:true}),staged=f.stage();assert.equal(f.containers.access,'qa-observer-service');assert.equal(Object.hasOwn(f.containers,'runAsUid'),false);assert.equal(f.containers.observationEpoch.mainBefore.present,false);
+ const publicAsset=JSON.parse(readFileSync(f.manifestEvidence.path)).assets[0];f.add(`${PRIVATE}/cache/unknown-private-copy`,readFileSync(publicAsset.path));
+ const result=f.snapshot(staged.evidence,{verifyProviderBytes:false});assert.equal(result.snapshot.complete,true);assert.equal(result.snapshot.counts.privateAssetMatchCount,1);assert.equal(result.snapshot.findings[0].relativePath,undefined);assert.match(result.snapshot.findings[0].relativePathSha256,/^[a-f0-9]{64}$/);assert.equal(result.snapshot.providerOriginalsRead,false);assert.equal(result.snapshot.observationEpoch.fullPackageForceStoppedStateCertified,false);assert.equal(f.calls.some(a=>a.includes('run-as')||a[0]==='root'),false);
+});
+test('signed QA camera observer classifies unknown image bytes and retains no raw payload',t=>{
+ const f=fixture(t,{...PHONE,observer:true}),r=PRIVATE+'/cache/ImagePicker';f.add(r);f.add(r+'/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png','synthetic-camera-only');
+ const result=f.camera();assert.equal(result.observation.complete,true);assert.equal(result.observation.counts.copies,1);assert.equal(result.observation.copies[0].sha256,sha('synthetic-camera-only'));assert.equal(readFileSync(result.evidence.path,'utf8').includes('synthetic-camera-only'),false);assert.equal(result.observation.observationEpoch.fullPackageForceStoppedStateCertified,false);
+});
+test('signed QA scan refuses a main-process lifecycle change instead of reporting zero copies',t=>{
+ const f=fixture(t,{...PHONE,observer:true}),staged=f.stage();f.state.observerMutation=m=>{if(m.operation==='files-snapshot')m.lifecycleSequenceAfter++;};assert.throws(()=>f.snapshot(staged.evidence,{verifyProviderBytes:false}),/MAIN_LIFECYCLE_CHANGED/);
+});
+test('signed QA camera unknown entry refuses and never becomes empty acceptance',t=>{
+ const f=fixture(t,{...PHONE,observer:true}),r=PRIVATE+'/cache/ImagePicker';f.add(r);f.add(r+'/unknown-name.png','synthetic');assert.throws(()=>f.camera(),/CAMERA_NAME/);
 });

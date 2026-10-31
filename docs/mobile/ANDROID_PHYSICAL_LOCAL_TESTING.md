@@ -13,7 +13,9 @@ A running test session must independently prove:
 - A fresh source-bound QA APK for `ai.caseops.mobile.dev.localacceptance`, matching the current API, web, CA and build receipts. Prove an absent or previously owned QA installation before installing. Keep production app data untouched.
 - The returned Appium session identifies that same device, package, OS and complete transport tuple. Keep `ADB_SERVER_SOCKET=tcp:127.0.0.1:5042` and the explicit mode in the test environment.
 
-The phone path uses its normal shell UID and `run-as` for the debuggable QA package. It never enables root. Private observations are limited to that package's internal and external app directories; synthetic provider fixtures use an exclusively owned folder under Downloads. Preserve descriptor-bound staging bytes, all scan limits, provider originals and final inventory reconciliation.
+The current nondebuggable phone candidate requires the explicitly enabled QA privacy observer and its same-signed sidecar. Bind both actual APK hashes, package identities, signer, caller UID and per-observation main-process identity before reading private data. The observer uses the normal application UID and bounded, descriptor-verified reads in that QA package's internal and external directories. It does not enable root. Synthetic provider fixtures use an exclusively owned folder under Downloads; preserve their descriptor-bound staging bytes, provider originals, scan limits and final inventory reconciliation.
+
+The observer-running evidence domain preserves the main process and explicitly records any permitted fixture unstop. It cannot certify that the whole package remains force-stopped. Retained debuggable `run-as` runs keep their original binary and observer receipts. Current APK/sidecar compilation, installation and complete device acceptance remain pending.
 
 Before accepting an absent private copy, exercise a known missing path and an inaccessible path with the actual device's scoped observer. Only an exact reviewed missing-file diagnostic may mean absence. Permission, I/O, transport and malformed responses remain failures.
 
