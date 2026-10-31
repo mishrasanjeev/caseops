@@ -201,6 +201,7 @@ const WORKSPACE: IpRecordalWorkspace = {
     docket_id: "docket-1",
     rules: [],
     eligible_rule_version_ids: [],
+    eligible_responsible_membership_ids: [],
     calendars: [],
     deadlines: [],
     exceptions: [],

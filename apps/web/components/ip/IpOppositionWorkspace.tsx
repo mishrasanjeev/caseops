@@ -336,7 +336,7 @@ export function IpOppositionWorkspace({
 
   if (focusDraftOnly && initialProceedingId && initialDraftId) {
     return (
-      <Card className="min-w-0 xl:col-span-2" data-testid="ip-opposition-workspace">
+      <Card id="ip-opposition-workspace" className="min-w-0 scroll-mt-24 xl:col-span-2" data-testid="ip-opposition-workspace">
         <CardHeader>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             <CardTitle as="h3">Trademark opposition</CardTitle>
@@ -357,7 +357,7 @@ export function IpOppositionWorkspace({
   }
 
   return (
-    <Card className="min-w-0 xl:col-span-2" data-testid="ip-opposition-workspace">
+    <Card id="ip-opposition-workspace" className="min-w-0 scroll-mt-24 xl:col-span-2" data-testid="ip-opposition-workspace">
       <CardHeader>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <CardTitle as="h3">Trademark opposition</CardTitle>

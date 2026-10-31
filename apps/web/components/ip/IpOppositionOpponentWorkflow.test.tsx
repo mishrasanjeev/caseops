@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -74,13 +74,14 @@ const deadline = {
 const deadlineWorkspace: IpDeadlineWorkspace = {
   docket_id: "docket-1",
   rules: [
-    governedRule({ id: "wrong-rule", key: "applicant-rule", version: 1, role: "applicant" }),
-    governedRule({ id: "notice-rule", key: "opponent-notice", version: 3 }),
+    governedRule({ id: "wrong-rule", key: "applicant-rule", version: 1, role: "applicant", definition: { rule_citation: "Applicant rule" } }),
+    governedRule({ id: "notice-rule", key: "opponent-notice", version: 3, definition: { rule_citation: "TM Act s.21(1)" } }),
     // Active and exact, but company policy does not select it: the validator refuses it.
-    governedRule({ id: "unselected-rule", key: "opponent-unselected", version: 5 }),
-    governedRule({ id: "evidence-rule", key: "opponent-evidence", version: 4, stage: "opponent_evidence_due" }),
+    governedRule({ id: "unselected-rule", key: "opponent-unselected", version: 5, definition: { rule_citation: "Unselected rule" } }),
+    governedRule({ id: "evidence-rule", key: "opponent-evidence", version: 4, stage: "opponent_evidence_due", definition: { rule_citation: "TM Rules r.45" } }),
   ],
   eligible_rule_version_ids: ["wrong-rule", "notice-rule", "evidence-rule"],
+  eligible_responsible_membership_ids: ["membership-primary", "membership-backup"],
   calendars: [workingCalendar({ id: "calendar-1", name: "India registry calendar", version: 2 })],
   deadlines: [],
   exceptions: [],
@@ -109,6 +110,7 @@ function workflow(next: string, extra: Record<string, unknown> = {}) {
     deadlines: [],
     corrective_task_id: null,
     next_required_action: next,
+    deadline_proposal_gaps: [],
     ...extra,
   };
 }
@@ -139,18 +141,46 @@ describe("IpOppositionOpponentWorkflow", () => {
     fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
     renderWorkflow();
 
-    expect(await screen.findByRole("option", { name: /^opponent-notice v3 · Opposition, opponent · notice of opposition due/ })).toBeVisible();
-    expect(screen.queryByRole("option", { name: /^applicant-rule v1/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /^opponent-unselected v5/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /^opponent-evidence v4/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Propose deadline" }));
+    expect(await screen.findByRole("option", { name: /^TM Act s\.21\(1\) \(v3\) · Opposition, opponent · notice of opposition due/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /^Applicant rule/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Unselected rule/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^TM Rules r\.45/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /opponent-notice/ })).not.toBeInTheDocument();
+    // The notice period runs from the advertisement: never prefilled from the profile save date.
+    const advertised = screen.getByLabelText("TM Journal advertisement date");
+    expect(advertised).toHaveValue("");
+    const propose = screen.getByRole("button", { name: "Propose deadline" });
+    expect(propose).toBeDisabled();
+    expect(document.getElementById(propose.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+      "Enter the TM Journal advertisement date; the period runs from it.",
+    );
+    fireEvent.change(advertised, { target: { value: "2026-05-20" } });
+    fireEvent.click(propose);
     await waitFor(() => expect(proposeMock).toHaveBeenCalledOnce());
     expect(proposeMock).toHaveBeenCalledWith(expect.objectContaining({
       workflowStage: "notice_filing_due",
       triggerEventId: "profile-event-1",
       ruleVersionId: "notice-rule",
       calendarVersionId: "calendar-1",
+      baseDate: "2026-05-20",
     }));
+  });
+
+  it("BUG-003 names the opposition workspace gaps that refuse a deadline proposal", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline", {
+      deadline_proposal_gaps: ["relied_on_right_required"],
+    }));
+    renderWorkflow();
+
+    await screen.findByRole("option", { name: /^TM Act s\.21\(1\) \(v3\)/ });
+    fireEvent.change(screen.getByLabelText("TM Journal advertisement date"), { target: { value: "2026-05-20" } });
+    const propose = screen.getByRole("button", { name: "Propose deadline" });
+    expect(propose).toBeDisabled();
+    const blockers = document.getElementById(propose.getAttribute("aria-describedby") ?? "") as HTMLElement;
+    expect(blockers).toHaveTextContent("Complete the opposition workspace before proposing this deadline.");
+    expect(blockers).toHaveTextContent("Add at least one relied-on earlier right.");
+    expect(within(blockers).getByRole("link", { name: "Open the opposition workspace" })).toHaveAttribute("href", "#ip-opposition-workspace");
+    expect(proposeMock).not.toHaveBeenCalled();
   });
 
   it("resets the governed base date to the current stage trigger event", async () => {
@@ -165,7 +195,7 @@ describe("IpOppositionOpponentWorkflow", () => {
       }],
     });
 
-    await waitFor(() => expect(screen.getByLabelText("Trigger date")).toHaveValue("2026-09-03"));
+    await waitFor(() => expect(screen.getByLabelText("Counterstatement service date")).toHaveValue("2026-09-03"));
     fireEvent.click(screen.getByRole("button", { name: "Propose deadline" }));
     await waitFor(() => expect(proposeMock).toHaveBeenCalledOnce());
     expect(proposeMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -251,6 +281,20 @@ describe("IpOppositionOpponentWorkflow", () => {
     expect(screen.queryByText(/notice_filing_due/)).not.toBeInTheDocument();
   });
 
+  it("BUG-003 responsibility pickers offer only people the confirmation accepts", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("file_notice", {
+      deadlines: [{ workflow_stage: "notice_filing_due", deadline }],
+    }));
+    fetchDeadlineMock.mockResolvedValue({ ...deadlineWorkspace, eligible_responsible_membership_ids: ["membership-primary"] });
+    renderWorkflow();
+
+    const backup = await screen.findByLabelText("Opponent backup lawyer");
+    await waitFor(() => expect(backup).toBeEnabled());
+    expect(within(backup).queryByRole("option", { name: /Asha Rao/ })).not.toBeInTheDocument();
+    expect(screen.getByText("No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+  });
+
   it("BUG-004 names a candidate calendar awaiting another approver", async () => {
     fetchWorkflowMock.mockResolvedValue(workflow("propose_notice_filing_deadline"));
     fetchDeadlineMock.mockResolvedValue({
@@ -262,7 +306,7 @@ describe("IpOppositionOpponentWorkflow", () => {
     const calendar = await screen.findByLabelText("Working calendar");
     await waitFor(() => expect(calendar).toBeDisabled());
     expect(document.getElementById(calendar.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
-      "Delhi registry calendar v1 is awaiting activation by an approver other than its proposer.",
+      "Delhi registry calendar v1 is awaiting activation by an approver other than the proposer.",
     );
   });
 
@@ -275,7 +319,7 @@ describe("IpOppositionOpponentWorkflow", () => {
     expect(screen.getByLabelText("Governed rule")).toBeDisabled();
     expect(screen.getByLabelText("Governed rule")).toHaveDisplayValue("Unavailable — retry below");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByRole("option", { name: /^opponent-notice v3/ })).toBeVisible();
+    expect(await screen.findByRole("option", { name: /^TM Act s\.21\(1\) \(v3\)/ })).toBeVisible();
     expect(screen.getByLabelText("Governed rule")).toBeEnabled();
   });
 

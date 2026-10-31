@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpSharedHearing,
+  fetchIpDeadlineWorkspace,
   fetchIpOppositionSharedWorkflow,
   recordIpOppositionSharedAction,
   type IpDocket,
@@ -82,6 +83,14 @@ export function IpOppositionSharedWorkflow({
     queryKey,
     queryFn: () => fetchIpOppositionSharedWorkflow({ docketId: docket.id, proceedingId: proceeding.id }),
   });
+  // An extension re-confirms the deadline: offer exactly the people its
+  // confirmation accepts (stable Matter and IP-record access).
+  const deadlineWorkspace = useQuery({
+    queryKey: ["ip", "deadline-workspace", docket.id],
+    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
+  });
+  const responsibleIds = deadlineWorkspace.data?.eligible_responsible_membership_ids;
+  const responsibleEmpty = "No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.";
 
   const [actionKind, setActionKind] = useState<ActionKind>("deadline_extended");
   const [sourceReference, setSourceReference] = useState("");
@@ -346,8 +355,9 @@ export function IpOppositionSharedWorkflow({
         {actionKind === "deadline_extended" ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Active deadline"><select className={SELECT_CLASS} value={deadlineId} onChange={(event) => setDeadlineId(event.target.value)}><option value="">Select deadline</option>{workflow.data.active_deadlines.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.result_on ?? "unresolved"}</option>)}</select></Field>
           <Field label="Extended result date"><Input type="date" value={newDeadlineOn} onChange={(event) => setNewDeadlineOn(event.target.value)} /></Field>
-          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} /></div>
-          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} placeholder="Select a backup…" /></div>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} /></div>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} placeholder="Select a backup…" /></div>
+          {deadlineWorkspace.isError ? <p className="text-xs text-[var(--color-danger)] md:col-span-2 xl:col-span-4" role="alert">Colleagues who can own this deadline could not be loaded. <button type="button" className="underline" onClick={() => deadlineWorkspace.refetch()}>Retry</button></p> : null}
         </div> : null}
 
         {actionKind === "further_evidence_leave_recorded" ? <div className="grid gap-3 md:grid-cols-3">

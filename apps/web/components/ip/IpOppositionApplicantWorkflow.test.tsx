@@ -57,8 +57,10 @@ const workspace = {
     jurisdiction: "IN",
     version: 7,
   },
+  profile: { service: { method: "email", destination: "agent@example.com", served_on: "2026-08-23", acknowledgement: null } },
   profile_event: profileEvent,
   stage_events: [],
+  readiness_gaps: [],
 };
 const deadline = {
   id: "deadline-1",
@@ -70,10 +72,11 @@ const deadline = {
 const deadlineWorkspace: IpDeadlineWorkspace = {
   docket_id: "docket-1",
   rules: [
-    governedRule({ id: "wrong-rule", key: "opponent-rule", version: 1, role: "opponent", stage: "counterstatement_due" }),
-    governedRule({ id: "counter-rule", key: "applicant-counter", version: 3, role: "applicant", stage: "counterstatement_due" }),
+    governedRule({ id: "wrong-rule", key: "opponent-rule", version: 1, role: "opponent", stage: "counterstatement_due", definition: { rule_citation: "Opponent rule" } }),
+    governedRule({ id: "counter-rule", key: "applicant-counter", version: 3, role: "applicant", stage: "counterstatement_due", definition: { rule_citation: "TM Rules r.44" } }),
   ],
   eligible_rule_version_ids: ["wrong-rule", "counter-rule"],
+  eligible_responsible_membership_ids: ["membership-primary", "membership-backup"],
   calendars: [workingCalendar({ id: "calendar-1", name: "India registry calendar", version: 2 })],
   deadlines: [],
   exceptions: [],
@@ -140,8 +143,10 @@ describe("IpOppositionApplicantWorkflow", () => {
     });
     renderWorkflow();
 
-    expect(await screen.findByRole("option", { name: /^applicant-counter v3 · Opposition, applicant · counterstatement due/ })).toBeVisible();
-    expect(screen.queryByRole("option", { name: /^opponent-rule v1/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /^TM Rules r\.44 \(v3\) · Opposition, applicant · counterstatement due/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /^Opponent rule/ })).not.toBeInTheDocument();
+    // The counterstatement period runs from service of the notice the profile records.
+    expect(screen.getByLabelText("Notice of opposition service date")).toHaveValue("2026-08-23");
     fireEvent.click(screen.getByRole("button", { name: "Propose deadline" }));
     await waitFor(() => expect(proposeMock).toHaveBeenCalledOnce());
     expect(proposeMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -149,6 +154,7 @@ describe("IpOppositionApplicantWorkflow", () => {
       triggerEventId: "profile-event-1",
       ruleVersionId: "counter-rule",
       calendarVersionId: "calendar-1",
+      baseDate: "2026-08-23",
     }));
   });
 

@@ -3,14 +3,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createHearingMock, fetchWorkflowMock, recordActionMock } = vi.hoisted(() => ({
+const { createHearingMock, fetchWorkflowMock, recordActionMock, deadlineWorkspaceMock } = vi.hoisted(() => ({
   createHearingMock: vi.fn(),
   fetchWorkflowMock: vi.fn(),
   recordActionMock: vi.fn(),
+  deadlineWorkspaceMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   createIpSharedHearing: createHearingMock,
+  fetchIpDeadlineWorkspace: deadlineWorkspaceMock,
   fetchIpOppositionSharedWorkflow: fetchWorkflowMock,
   recordIpOppositionSharedAction: recordActionMock,
 }));
@@ -64,6 +66,7 @@ describe("IpOppositionSharedWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchWorkflowMock.mockResolvedValue(baseWorkflow);
+    deadlineWorkspaceMock.mockResolvedValue({ eligible_responsible_membership_ids: [] });
     recordActionMock.mockResolvedValue(baseWorkflow);
     createHearingMock.mockResolvedValue({ id: "hearing-43" });
   });

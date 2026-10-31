@@ -105,6 +105,7 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
+import { deadlineExceptionLabel } from "@/lib/ip/governance";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -2217,17 +2218,21 @@ function DeadlineWorkspaceCard({
             <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
               Exception queue
             </div>
-            {workspace.data.exceptions.map((item) => (
-              <div
-                key={item.deadline_id}
-                className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
-              >
-                <strong className="break-words">{item.exception_kinds.join(" · ")}</strong>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {item.result_on ?? "No reliable legal date"} · deadline {item.deadline_id}
+            {workspace.data.exceptions.map((item) => {
+              const affected = workspace.data.deadlines.find((row) => row.id === item.deadline_id);
+              return (
+                <div
+                  key={item.deadline_id}
+                  className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
+                  data-exception-kinds={item.exception_kinds.join(" ")}
+                >
+                  <strong className="break-words">{item.exception_kinds.map(deadlineExceptionLabel).join(" · ")}</strong>
+                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                    {affected ? `${affected.title} · ` : ""}{item.result_on ?? "No reliable legal date"}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -2337,7 +2342,13 @@ function DeadlineWorkspaceCard({
         {enabled && workspace.data?.deadlines.length ? (
           <div className={IP_FORM_GRID}>
             <Field label="Responsible lawyer" htmlFor="deadline-primary-owner">
-              <PersonPicker id="deadline-primary-owner" value={primaryId} onChange={setPrimaryId} />
+              <PersonPicker
+                id="deadline-primary-owner"
+                value={primaryId}
+                onChange={setPrimaryId}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
+                emptyText="No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter."
+              />
             </Field>
             <Field label="Backup" htmlFor="deadline-backup-owner">
               <PersonPicker
@@ -2345,6 +2356,7 @@ function DeadlineWorkspaceCard({
                 value={backupId}
                 onChange={setBackupId}
                 excludeMembershipIds={[primaryId]}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
                 placeholder="No backup"
               />
             </Field>

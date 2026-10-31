@@ -1909,6 +1909,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
       eligible_rule_version_ids: ["rule-1", "rule-2"],
+      eligible_responsible_membership_ids: ["member-1", "member-2"],
       rules: [
         { id: "rule-1", key: "in-tm-response", version: 1, status: "active", source_reference: "https://official.example/ip-india/tm-rules" },
         { id: "rule-2", key: "in-tm-alternate", version: 2, status: "active", source_reference: "https://official.example/ip-india/tm-rules-alternate" },
@@ -1939,7 +1940,10 @@ describe("IpDocketPage", () => {
     );
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
-    expect(within(deadlineWorkspace).getByText("unowned · unacknowledged")).toBeVisible();
+    // Readable labels and the deadline's title, never raw codes or ids.
+    expect(within(deadlineWorkspace).getByText("No responsible lawyer · Owner has not accepted")).toBeVisible();
+    expect(within(deadlineWorkspace).getByText(/Respond to examination report · 2026-08-18/)).toBeVisible();
+    expect(within(deadlineWorkspace).queryByText(/deadline legal-deadline-1/)).not.toBeInTheDocument();
     // 2026-08-16: these were free-text boxes demanding a membership UUID. They
     // are now pickers, so the assertion is that a lawyer can name a colleague.
     const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");

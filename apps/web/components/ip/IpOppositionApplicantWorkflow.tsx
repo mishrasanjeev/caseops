@@ -2,9 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Check, FileSignature, Hash, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { IpDeadlineProposalBlockers } from "@/components/ip/IpDeadlineProposalBlockers";
 import { IpGovernedDeadlinePickers, resolveGovernedSelection } from "@/components/ip/IpGovernedDeadlinePickers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -67,7 +68,7 @@ export function IpOppositionApplicantWorkflow({
 
   const [oppositionNumber, setOppositionNumber] = useState("");
   const [numberSource, setNumberSource] = useState("Trade Marks Registry record");
-  const [baseDate, setBaseDate] = useState(TODAY);
+  const [baseDate, setBaseDate] = useState("");
   const [certainty, setCertainty] = useState<"certain" | "uncertain" | "conflicting" | "unknown">("certain");
   const [ruleVersionId, setRuleVersionId] = useState("");
   const [calendarVersionId, setCalendarVersionId] = useState("");
@@ -100,6 +101,25 @@ export function IpOppositionApplicantWorkflow({
   const triggerEvent = workflowStage === "counterstatement_due"
     ? workspace.profile_event
     : [...workspace.stage_events].reverse().find((row) => row.after_phase === "opponent_evidence_filed" || row.resulting_stage === "opponent_evidence_filed");
+  // The counterstatement period runs from service of the notice, which the
+  // profile records; the evidence period from the recorded service event.
+  const triggerDate = workflowStage === "counterstatement_due"
+    ? workspace.profile?.service?.served_on ?? ""
+    : triggerEvent?.effective_at?.slice(0, 10) ?? "";
+  const triggerNoun = workflowStage === "counterstatement_due" ? "notice of opposition service date" : "opponent evidence service date";
+  const triggerLabel = `${triggerNoun.charAt(0).toUpperCase()}${triggerNoun.slice(1)}`;
+  useEffect(() => {
+    setBaseDate(triggerDate);
+  }, [triggerDate, triggerEvent?.id, workflowStage]);
+  const responsibleIds = deadlineWorkspace.data?.eligible_responsible_membership_ids;
+  const responsibleEmpty = "No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.";
+  const proposalGaps = workspace.readiness_gaps ?? [];
+  const proposeBlockers = [
+    !canReview ? "Your role cannot propose legal deadlines; an IP reviewer must propose it." : null,
+    !triggerEvent ? "The confirmed trigger event is not yet recorded." : null,
+    !selectedRule || !selectedCalendar ? "Choose a governed rule and a working calendar above." : null,
+    !baseDate ? `Enter the ${triggerNoun}; the period runs from it.` : null,
+  ].filter((row): row is string => Boolean(row));
 
   const refresh = async () => {
     await Promise.all([
@@ -226,16 +246,15 @@ export function IpOppositionApplicantWorkflow({
 
       {next?.startsWith("propose_") ? <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" onSubmit={(event) => { event.preventDefault(); propose.mutate(); }}>
         <IpGovernedDeadlinePickers docketId={docket.id} idPrefix="applicant-deadline" scope={governedScope} workspace={deadlineWorkspace} selection={governed} onRuleChange={setRuleVersionId} onCalendarChange={setCalendarVersionId} />
-        <Field label="Trigger date"><Input type="date" value={baseDate} onChange={(event) => setBaseDate(event.target.value)} /></Field>
+        <Field label={triggerLabel}><Input type="date" required value={baseDate} onChange={(event) => setBaseDate(event.target.value)} /></Field>
         <Field label="Date certainty"><select className={SELECT_CLASS} value={certainty} onChange={(event) => setCertainty(event.target.value as typeof certainty)}><option value="certain">Certain</option><option value="uncertain">Uncertain</option><option value="conflicting">Conflicting</option><option value="unknown">Unknown</option></select></Field>
-        <div className="flex items-end"><Button type="submit" disabled={!canReview || !triggerEvent || !selectedRule || !selectedCalendar || propose.isPending}><CalendarClock className="h-4 w-4" /> Propose deadline</Button></div>
-        {!triggerEvent ? <p className="text-sm text-[var(--color-danger)] md:col-span-2 xl:col-span-5">The confirmed trigger event is not yet recorded.</p> : null}
-        {!canReview ? <p className="text-sm text-[var(--color-mute)] md:col-span-2 xl:col-span-5">Your role cannot propose legal deadlines; an IP reviewer must propose it.</p> : null}
+        <div className="flex items-end"><Button type="submit" disabled={proposeBlockers.length > 0 || proposalGaps.length > 0 || propose.isPending} aria-describedby={proposeBlockers.length || proposalGaps.length ? "applicant-deadline-blockers" : undefined}><CalendarClock className="h-4 w-4" /> Propose deadline</Button></div>
+        <IpDeadlineProposalBlockers id="applicant-deadline-blockers" gaps={proposalGaps} missing={proposeBlockers} />
       </form> : null}
 
       {workflow.data.deadlines.length ? <div className="space-y-2">{workflow.data.deadlines.map(({ workflow_stage, deadline }) => <div key={deadline.id} className="grid min-w-0 gap-3 rounded-md border border-[var(--color-line)] p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
         <div><strong>{readable(workflow_stage)}</strong><p className="text-sm text-[var(--color-mute)]">{deadline.result_on ?? "Date unresolved"} · {deadline.state} · {deadline.rule_citation}</p></div>
-        {deadline.state === "provisional" || deadline.state === "candidate" ? <><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-primary-${deadline.id}`}>Responsible lawyer</Label><PersonPicker id={`applicant-primary-${deadline.id}`} value={primaryId} onChange={setPrimaryId} /></div><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-backup-${deadline.id}`}>Backup lawyer</Label><PersonPicker id={`applicant-backup-${deadline.id}`} value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} placeholder="Select a backup…" /></div><Button type="button" onClick={() => confirm.mutate(deadline)} disabled={!canReview || !primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() || confirm.isPending}><Check className="h-4 w-4" /> Confirm</Button>{!primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() ? <p className="text-xs text-[var(--color-mute)] md:col-span-4">Choose a responsible lawyer and a different backup to confirm this deadline.</p> : null}</> : <Badge tone="success">Confirmed</Badge>}
+        {deadline.state === "provisional" || deadline.state === "candidate" ? <><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-primary-${deadline.id}`}>Responsible lawyer</Label><PersonPicker id={`applicant-primary-${deadline.id}`} value={primaryId} onChange={setPrimaryId} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} /></div><div className="flex min-w-0 flex-col gap-1"><Label htmlFor={`applicant-backup-${deadline.id}`}>Backup lawyer</Label><PersonPicker id={`applicant-backup-${deadline.id}`} value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} placeholder="Select a backup…" /></div><Button type="button" onClick={() => confirm.mutate(deadline)} disabled={!canReview || !primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() || confirm.isPending}><Check className="h-4 w-4" /> Confirm</Button>{!primaryId.trim() || !backupId.trim() || primaryId.trim() === backupId.trim() ? <p className="text-xs text-[var(--color-mute)] md:col-span-4">Choose a responsible lawyer and a different backup to confirm this deadline.</p> : null}{deadlineWorkspace.isError ? <p className="text-xs text-[var(--color-danger)] md:col-span-4" role="alert">Colleagues who can own this deadline could not be loaded. <button type="button" className="underline" onClick={() => deadlineWorkspace.refetch()}>Retry</button></p> : null}</> : <Badge tone="success">Confirmed</Badge>}
       </div>)}</div> : null}
 
       {next && ["file_counterstatement", "record_counterstatement_service", "record_applicant_evidence_decision"].includes(next) ? <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); recordAction.mutate(); }}>
