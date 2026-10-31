@@ -72,7 +72,7 @@ test.describe("Admin portal invitations", () => {
     await page.getByTestId("portal-invite-name").fill("Client Contact");
     await page.getByTestId("portal-invite-email").fill(clientEmail);
     await page.getByTestId("portal-invite-role").selectOption("client");
-    await page.getByTestId("portal-invite-matter").selectOption(matterId);
+    await page.locator("#portal-invite-matter").selectOption(matterId);
     await page.getByTestId("portal-invite-submit").click();
     await expect(page.getByText(/Client Contact invited/i)).toBeVisible();
 
@@ -80,7 +80,7 @@ test.describe("Admin portal invitations", () => {
     await page.getByTestId("portal-invite-name").fill("Outside Counsel");
     await page.getByTestId("portal-invite-email").fill(ocEmail);
     await page.getByTestId("portal-invite-role").selectOption("outside_counsel");
-    await page.getByTestId("portal-invite-matter").selectOption(matterId);
+    await page.locator("#portal-invite-matter").selectOption(matterId);
     await expect(page.getByTestId("portal-invite-can-upload")).toBeChecked();
     await expect(page.getByTestId("portal-invite-can-invoice")).toBeChecked();
     await page.getByTestId("portal-invite-submit").click();

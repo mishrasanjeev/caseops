@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
+import { MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
 import { SourceAction } from "@/components/app/SourceAction";
 import { Button } from "@/components/ui/Button";
 import {
@@ -49,7 +50,6 @@ import {
   fetchAuthorityResearchReports,
   fetchIpCoreRecords,
   fetchIpPortfolio,
-  listMatters,
   type AuthorityResearchReport,
   type IpPortfolioRow,
 } from "@/lib/api/endpoints";
@@ -107,13 +107,10 @@ export default function IntelligentReviewsPage() {
     queryKey: ["authorities", "research-reports"],
     queryFn: fetchAuthorityResearchReports,
   });
-  const mattersQuery = useQuery({
-    queryKey: ["matters", "intelligent-review-targets"],
-    queryFn: () => listMatters({ limit: 100 }),
-    // Also wait out a background refresh of cached reports after in-app
-    // navigation, which would otherwise make this a third concurrent read.
-    enabled: reportsQuery.isFetched && !reportsQuery.isFetching,
-  });
+  // The Matter target picker reads after the reports, and also waits out a
+  // background refresh of cached reports after in-app navigation, which would
+  // otherwise make it a third concurrent read.
+  const mattersEnabled = reportsQuery.isFetched && !reportsQuery.isFetching;
   const ipQuery = useQuery({
     queryKey: ["ip", "intelligent-review-targets"],
     queryFn: () => fetchIpPortfolio({}, { limit: 100 }),
@@ -263,21 +260,26 @@ export default function IntelligentReviewsPage() {
                       <TabsTrigger className="min-w-0 flex-1" value="ip_docket">IP docket</TabsTrigger>
                     </TabsList>
                     <TabsContent value="matter">
-                      <TargetSelect
+                      {/* Searchable and paged: the first 100 Matters hid every
+                          older one (Ram 2026-10-30, BUG-007 sibling). Matters
+                          the review API refuses (services/intelligent_reviews.py
+                          _load_target, require_operational_matter) are listed
+                          disabled with the reason instead of hidden. */}
+                      <MatterPicker
                         id="review-matter-target"
                         label="Matter target"
+                        searchLabel="Search Matters"
                         value={targetId}
-                        onValueChange={(value) => {
+                        enabled={mattersEnabled}
+                        onChange={(value) => {
                           setTargetId(value);
                           setProceedingId("");
                         }}
-                        placeholder={mattersQuery.isPending ? "Loading matters" : "Choose a Matter"}
-                        options={(mattersQuery.data?.matters ?? [])
-                          .filter((matter) => !["closed", "disposed"].includes(matter.status))
-                          .map((matter) => ({
-                            id: matter.id,
-                            label: `${matter.matter_code} · ${matter.title}`,
-                          }))}
+                        disabledReason={(matter) =>
+                          OPERATIONAL_MATTER_STATUSES.has(matter.status)
+                            ? null
+                            : `${matter.status.replaceAll("_", " ")} Matters cannot be reviewed`
+                        }
                       />
                     </TabsContent>
                     <TabsContent value="ip_docket">

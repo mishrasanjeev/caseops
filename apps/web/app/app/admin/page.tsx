@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { MatterPicker } from "@/components/app/MatterPicker";
 import { RoadmapStub } from "@/components/app/RoadmapStub";
 import { TenantAIPolicyCard } from "@/components/app/TenantAIPolicyCard";
 import { Button } from "@/components/ui/Button";
@@ -37,7 +38,6 @@ import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
 import {
   fetchTenantEnterpriseReadiness,
   getStorageGovernance,
-  listMatters,
   updateStorageGovernance,
   type FirmStorageUsageSummary,
 } from "@/lib/api/endpoints";
@@ -221,13 +221,6 @@ export default function AdminPage() {
       toast.error(apiErrorMessage(err, "Could not update storage quota."));
     },
   });
-
-  const portalMattersQuery = useQuery({
-    queryKey: ["admin", "portal-invite", "matters"],
-    queryFn: () => listMatters({ limit: 100 }),
-    enabled: canPortalInvite,
-  });
-  const portalMatterOptions = portalMattersQuery.data?.matters ?? [];
 
   const portalInviteMutation = useMutation({
     mutationFn: () =>
@@ -721,31 +714,14 @@ export default function AdminPage() {
                   <option value="outside_counsel">Outside counsel portal</option>
                 </select>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="portal-invite-matter">Matter grant</Label>
-                <select
-                  id="portal-invite-matter"
-                  // A matter title can be long; the select must not widen the form.
-                  className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
-                  value={portalMatterId}
-                  onChange={(e) => setPortalMatterId(e.target.value)}
-                  disabled={portalMattersQuery.isPending}
-                  data-testid="portal-invite-matter"
-                >
-                  <option value="">
-                    {portalMattersQuery.isPending
-                      ? "Loading matters..."
-                      : "Select a matter"}
-                  </option>
-                  {portalMatterOptions.map((matter) => (
-                    <option key={matter.id} value={matter.id}>
-                      {[matter.matter_code, matter.title]
-                        .filter(Boolean)
-                        .join(" - ")}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <MatterPicker
+                id="portal-invite-matter"
+                className="md:col-span-2"
+                label="Matter grant"
+                searchLabel="Search Matters to grant"
+                value={portalMatterId}
+                onChange={(matterId) => setPortalMatterId(matterId)}
+              />
               <div className="md:col-span-2">
                 <fieldset className="grid gap-2 rounded-md border border-[var(--color-line)] px-3 py-2 text-sm sm:grid-cols-3">
                   <legend className="px-1 text-xs font-medium text-[var(--color-mute)]">

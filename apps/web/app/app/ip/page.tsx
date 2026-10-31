@@ -1505,7 +1505,9 @@ function DocketWorkspace({
           </div>
         </TabsContent>
         <TabsContent value="access">
-          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          {/* One column: the docket detail column is too narrow to split
+              without squeezing the Matter picker. */}
+          <div className="flex min-w-0 flex-col gap-5" data-testid="ip-access-tab-panels">
             {canManageAccess ? (
               <IpAccessWorkspace docket={docket} onChanged={onChanged} />
             ) : null}

@@ -3,9 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, Link2, Plus, Unlink, X } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -16,7 +17,6 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { Label } from "@/components/ui/Label";
-import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
@@ -25,18 +25,18 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { apiErrorMessage } from "@/lib/api/config";
+import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors } from "@/lib/api/config";
 import {
   createIpDocketMatterLink,
   fetchIpDocketMatterLinks,
   fetchIpDocket,
   fetchMatterIpLinks,
-  listMatters,
   retireIpDocketMatterLink,
   type IpDocket,
   type IpMatterLink,
   type IpMatterRelationRole,
 } from "@/lib/api/endpoints";
+import type { Matter } from "@/lib/api/schemas";
 import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
 const ROLES: Array<{ value: IpMatterRelationRole; label: string }> = [
@@ -48,6 +48,12 @@ const ROLES: Array<{ value: IpMatterRelationRole; label: string }> = [
   { value: "billing", label: "Billing" },
   { value: "other", label: "Other" },
 ];
+
+const LINK_FIELD_IDS = {
+  matter_id: "ip-link-matter",
+  relation_role: "ip-link-role",
+  reason: "ip-link-reason",
+} as const;
 
 function titleCase(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -64,40 +70,82 @@ export function IpMatterLinksPanel({
 }) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [matterSearch, setMatterSearch] = useState("");
-  const deferredMatterSearch = useDeferredValue(matterSearch);
   const [matterId, setMatterId] = useState("");
+  const [chosenMatter, setChosenMatter] = useState<Matter | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [relationRole, setRelationRole] =
     useState<IpMatterRelationRole>("litigation");
   const [reason, setReason] = useState("");
   const [retiringId, setRetiringId] = useState<string | null>(null);
   const [retirementReason, setRetirementReason] = useState("");
+  const [retireErrors, setRetireErrors] = useState<Record<string, string>>({});
   const links = useQuery({
     queryKey: ["ip", "dockets", docket.id, "matter-links"],
     queryFn: () => fetchIpDocketMatterLinks(docket.id),
   });
-  const matters = useQuery({
-    queryKey: ["matters", "ip-link-picker", deferredMatterSearch],
-    queryFn: () =>
-      listMatters({ limit: 100, q: deferredMatterSearch.trim() || undefined }),
-    enabled: canWrite && showCreate,
-  });
   const activeOperational = links.data?.links.some(
     (link) => link.relation_role === "operational" && link.retired_at === null,
   );
-  const availableMatters = useMemo(
-    () =>
-      (matters.data?.matters ?? []).filter(
-        (matter) =>
-          !links.data?.links.some(
-            (link) =>
-              link.matter_id === matter.id &&
-              link.relation_role === relationRole &&
-              link.retired_at === null,
-          ),
-      ),
-    [links.data?.links, matters.data?.matters, relationRole],
-  );
+  // Mirrors services/ip_matter_links.py create_matter_link: the picker lists
+  // what the write would refuse as disabled, with the reason. Until the
+  // existing links load, a duplicate cannot be ruled out, so the form waits.
+  const linksReady = links.isSuccess;
+  const matterDisabledReason = (matter: Matter): string | null => {
+    if (
+      links.data?.links.some(
+        (link) =>
+          link.matter_id === matter.id &&
+          link.relation_role === relationRole &&
+          link.retired_at === null,
+      )
+    ) {
+      return `already linked as ${titleCase(relationRole)}`;
+    }
+    if (relationRole !== "operational") return null;
+    if (!OPERATIONAL_MATTER_STATUSES.has(matter.status)) {
+      return `${titleCase(matter.status)} Matters cannot be operational`;
+    }
+    if (docket.matter_id && docket.matter_id !== matter.id) {
+      return "another Matter is this record's operational Matter";
+    }
+    return null;
+  };
+  // Changing the role keeps the chosen Matter; when the new role makes it
+  // ineligible, the reason is anchored to the Matter field and submit waits.
+  const chosenReason = chosenMatter && chosenMatter.id === matterId ? matterDisabledReason(chosenMatter) : null;
+  const fieldError = (key: keyof typeof LINK_FIELD_IDS) => fieldErrors[LINK_FIELD_IDS[key]] ?? null;
+  const matterError =
+    fieldError("matter_id") ??
+    (chosenMatter && chosenReason
+      ? `${chosenMatter.matter_code}: ${chosenReason}. Choose another Matter or role.`
+      : null);
+  const fieldIds: string[] = Object.values(LINK_FIELD_IDS);
+  const formError = Object.entries(fieldErrors)
+    .filter(([key]) => !fieldIds.includes(key))
+    .map(([key, message]) => (key === API_FORM_ERROR_KEY ? message : `${titleCase(key)}: ${message}`))
+    .join(" ");
+  const clearFieldError = (key: keyof typeof LINK_FIELD_IDS) =>
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[LINK_FIELD_IDS[key]];
+      return next;
+    });
+  const reasonTooShort = reason.trim().length < 8;
+  const addBlockedBy = !linksReady
+    ? links.isError
+      ? "Retry loading this record's relationships"
+      : "Wait for this record's relationships to load"
+    : !matterId
+      ? "Choose a Matter"
+      : chosenReason
+        ? "Choose a Matter that can take this role"
+        : reasonTooShort
+          ? "Give a reason of at least 8 characters"
+          : null;
+  const retireFormError = Object.entries(retireErrors)
+    .filter(([key]) => key !== "reason")
+    .map(([key, message]) => (key === API_FORM_ERROR_KEY ? message : `${titleCase(key)}: ${message}`))
+    .join(" ");
 
   async function refresh() {
     await Promise.all([
@@ -124,13 +172,18 @@ export function IpMatterLinksPanel({
     onSuccess: async () => {
       toast.success("Matter relationship added.");
       setShowCreate(false);
-      setMatterSearch("");
       setMatterId("");
+      setChosenMatter(null);
       setReason("");
+      setFieldErrors({});
       await refresh();
     },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not add the Matter relationship.")),
+    onError: (error) => {
+      const message = apiErrorMessage(error, "Could not add the Matter relationship.");
+      const fields = apiFieldErrors(error, LINK_FIELD_IDS);
+      setFieldErrors(Object.keys(fields).length ? fields : { [API_FORM_ERROR_KEY]: message });
+      toast.error(message);
+    },
   });
   const retireLink = useMutation({
     mutationFn: async (link: IpMatterLink) => {
@@ -147,10 +200,15 @@ export function IpMatterLinksPanel({
       toast.success("Matter relationship retired.");
       setRetiringId(null);
       setRetirementReason("");
+      setRetireErrors({});
       await refresh();
     },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not retire the Matter relationship.")),
+    onError: (error) => {
+      const message = apiErrorMessage(error, "Could not retire the Matter relationship.");
+      const fields = apiFieldErrors(error, { reason: "reason" });
+      setRetireErrors(Object.keys(fields).length ? fields : { [API_FORM_ERROR_KEY]: message });
+      toast.error(message);
+    },
   });
 
   return (
@@ -174,53 +232,52 @@ export function IpMatterLinksPanel({
       <CardContent className="flex min-w-0 flex-col gap-4">
         {showCreate ? (
           <form
-            className="grid min-w-0 gap-3 border-b border-[var(--color-line)] pb-4 sm:grid-cols-2"
+            className="grid min-w-0 gap-4 border-b border-[var(--color-line)] pb-4"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
+              setFieldErrors({});
               createLink.mutate();
             }}
           >
-            <div className="min-w-0 sm:col-span-2">
-              <Label htmlFor="ip-link-matter-search">Search Matters</Label>
-              <Input
-                id="ip-link-matter-search"
-                className="mt-1"
-                value={matterSearch}
-                onChange={(event) => setMatterSearch(event.target.value)}
-                placeholder="Matter code or title"
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="ip-link-matter">Matter</Label>
-              <Select value={matterId} onValueChange={setMatterId}>
-                <SelectTrigger id="ip-link-matter" className="mt-1 w-full">
-                  <SelectValue placeholder="Select Matter" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMatters.map((matter) => (
-                    <SelectItem key={matter.id} value={matter.id}>
-                      {matter.matter_code} - {matter.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {matters.isPending ? (
-                <p className="mt-1 text-xs text-[var(--color-mute)]" role="status">
-                  Loading Matters…
-                </p>
-              ) : availableMatters.length === 0 ? (
-                <p className="mt-1 text-xs text-[var(--color-mute)]">
-                  No accessible matching Matter.
-                </p>
-              ) : null}
-            </div>
-            <div className="min-w-0">
+            {!linksReady ? (
+              <p className="min-w-0 break-words text-sm text-[var(--color-mute)]" role="status">
+                {links.isError
+                  ? "This record's Matter relationships could not be loaded, so a duplicate link cannot be ruled out. Retry them below before adding one."
+                  : "Loading this record's Matter relationships…"}
+              </p>
+            ) : null}
+            <MatterPicker
+              id="ip-link-matter"
+              label="Matter"
+              searchLabel="Search Matters"
+              value={matterId}
+              onChange={(next, matter) => {
+                setMatterId(next);
+                setChosenMatter(matter);
+                clearFieldError("matter_id");
+              }}
+              disabledReason={matterDisabledReason}
+              error={matterError}
+              disabled={!linksReady}
+              required
+            />
+            <div className="min-w-0 sm:max-w-xs">
               <Label htmlFor="ip-link-role">Role</Label>
               <Select
                 value={relationRole}
-                onValueChange={(value) => setRelationRole(value as IpMatterRelationRole)}
+                disabled={!linksReady}
+                onValueChange={(value) => {
+                  setRelationRole(value as IpMatterRelationRole);
+                  clearFieldError("relation_role");
+                }}
               >
-                <SelectTrigger id="ip-link-role" className="mt-1 w-full">
+                <SelectTrigger
+                  id="ip-link-role"
+                  className="mt-1 w-full"
+                  aria-invalid={fieldError("relation_role") ? true : undefined}
+                  aria-describedby={fieldError("relation_role") ? "ip-link-role-error" : undefined}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -230,36 +287,76 @@ export function IpMatterLinksPanel({
                       value={role.value}
                       disabled={role.value === "operational" && activeOperational}
                     >
-                      {role.label}
+                      {role.value === "operational" && activeOperational
+                        ? `${role.label} (retire the current operational link first)`
+                        : role.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {fieldError("relation_role") ? (
+                <p id="ip-link-role-error" className="mt-1 text-sm text-[var(--color-danger-500)]">
+                  {fieldError("relation_role")}
+                </p>
+              ) : null}
             </div>
-            <div className="min-w-0 sm:col-span-2">
+            <div className="min-w-0">
               <Label htmlFor="ip-link-reason">Reason</Label>
               <Textarea
                 id="ip-link-reason"
                 className="mt-1"
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                maxLength={2000}
+                required
+                aria-invalid={fieldError("reason") ? true : undefined}
+                aria-describedby={["ip-link-reason-hint", fieldError("reason") ? "ip-link-reason-error" : null]
+                  .filter(Boolean)
+                  .join(" ")}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  clearFieldError("reason");
+                }}
               />
+              <p id="ip-link-reason-hint" className="mt-1 text-xs text-[var(--color-mute)]">
+                At least 8 characters. Recorded in the audit trail.
+              </p>
+              {fieldError("reason") ? (
+                <p id="ip-link-reason-error" className="mt-1 text-sm text-[var(--color-danger-500)]">
+                  {fieldError("reason")}
+                </p>
+              ) : null}
             </div>
-            <Button
-              type="submit"
-              size="sm"
-              className="w-full sm:w-fit"
-              disabled={!matterId || reason.trim().length < 8 || createLink.isPending}
-            >
-              <Link2 className="h-4 w-4" aria-hidden /> Add relationship
-            </Button>
+            {formError ? (
+              <p role="alert" className="min-w-0 break-words text-sm text-[var(--color-danger-500)]">
+                {formError}
+              </p>
+            ) : null}
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <Button
+                type="submit"
+                size="sm"
+                className="whitespace-nowrap"
+                disabled={Boolean(addBlockedBy) || createLink.isPending}
+              >
+                <Link2 className="h-4 w-4" aria-hidden />
+                {createLink.isPending ? "Adding relationship…" : "Add relationship"}
+              </Button>
+              {addBlockedBy ? (
+                <span className="text-xs text-[var(--color-mute)]">{addBlockedBy} to add the relationship.</span>
+              ) : null}
+            </div>
           </form>
         ) : null}
 
         {links.isPending ? (
           <p className="text-sm text-[var(--color-mute)]" role="status">Loading relationships…</p>
         ) : links.isError ? (
-          <Button variant="secondary" onClick={() => links.refetch()}>Retry relationships</Button>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <p className="min-w-0 break-words text-sm text-[var(--color-danger-500)]" role="alert">
+              Matter relationships could not be loaded: {apiErrorMessage(links.error, "Request failed.")}
+            </p>
+            <Button variant="secondary" onClick={() => links.refetch()}>Retry relationships</Button>
+          </div>
         ) : links.data.links.length === 0 ? (
           <p className="text-sm text-[var(--color-mute)]">No Matter relationships.</p>
         ) : (
@@ -292,7 +389,11 @@ export function IpMatterLinksPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setRetiringId(link.id)}
+                      onClick={() => {
+                        setRetiringId(link.id);
+                        setRetirementReason("");
+                        setRetireErrors({});
+                      }}
                     >
                       <Unlink className="h-4 w-4" aria-hidden /> Retire
                     </Button>
@@ -315,17 +416,42 @@ export function IpMatterLinksPanel({
                   </div>
                 ) : null}
                 {retiringId === link.id ? (
-                  <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
-                    <div className="min-w-0 flex-1">
+                  <div className="mt-3 flex min-w-0 flex-col gap-2">
+                    <div className="min-w-0">
                       <Label htmlFor={`retire-${link.id}`}>Retirement reason</Label>
                       <Textarea
                         id={`retire-${link.id}`}
                         className="mt-1"
                         value={retirementReason}
-                        onChange={(event) => setRetirementReason(event.target.value)}
+                        maxLength={2000}
+                        aria-invalid={retireErrors.reason ? true : undefined}
+                        aria-describedby={[`retire-${link.id}-hint`, retireErrors.reason ? `retire-${link.id}-error` : null]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onChange={(event) => {
+                          setRetirementReason(event.target.value);
+                          setRetireErrors((current) => {
+                            const next = { ...current };
+                            delete next.reason;
+                            return next;
+                          });
+                        }}
                       />
+                      <p id={`retire-${link.id}-hint`} className="mt-1 text-xs text-[var(--color-mute)]">
+                        At least 8 characters. Recorded in the audit trail.
+                      </p>
+                      {retireErrors.reason ? (
+                        <p id={`retire-${link.id}-error`} className="mt-1 text-sm text-[var(--color-danger-500)]">
+                          {retireErrors.reason}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="flex gap-2">
+                    {retireFormError ? (
+                      <p role="alert" className="min-w-0 break-words text-sm text-[var(--color-danger-500)]">
+                        {retireFormError}
+                      </p>
+                    ) : null}
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <Button
                         size="sm"
                         variant="secondary"
@@ -337,6 +463,11 @@ export function IpMatterLinksPanel({
                       <Button size="sm" variant="ghost" onClick={() => setRetiringId(null)}>
                         Cancel
                       </Button>
+                      {retirementReason.trim().length < 8 ? (
+                        <span className="text-xs text-[var(--color-mute)]">
+                          Give a reason of at least 8 characters to retire the relationship.
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

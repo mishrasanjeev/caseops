@@ -328,9 +328,9 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     await user.type(screen.getByTestId("portal-invite-email"), "oc@example.com");
     await user.selectOptions(screen.getByTestId("portal-invite-role"), "outside_counsel");
     await waitFor(() =>
-      expect(screen.getByTestId("portal-invite-matter")).not.toBeDisabled(),
+      expect(screen.getByLabelText("Matter grant")).not.toBeDisabled(),
     );
-    await user.selectOptions(screen.getByTestId("portal-invite-matter"), "matter-1");
+    await user.selectOptions(screen.getByLabelText("Matter grant"), "matter-1");
     await user.click(screen.getByTestId("portal-invite-submit"));
 
     await waitFor(() =>
@@ -355,6 +355,30 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
       can_invoice: true,
       can_reply: false,
     });
+  });
+
+  it("never sends a portal invite when Enter is pressed in the Matter search (BUG-007 review)", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+
+    await user.type(screen.getByTestId("portal-invite-name"), "Counsel One");
+    await user.type(screen.getByTestId("portal-invite-email"), "oc@example.com");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Matter grant")).not.toBeDisabled(),
+    );
+    await user.selectOptions(screen.getByLabelText("Matter grant"), "matter-1");
+    expect(screen.getByTestId("portal-invite-submit")).toBeEnabled();
+
+    // Switching to another Matter starts with a search; Enter must not grant the earlier one.
+    await user.type(screen.getByLabelText("Search Matters to grant"), "EXT-002{Enter}");
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) => /\/api\/matters\/\?.*q=EXT-002/.test(String(input))),
+      ).toBe(true),
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/admin/portal/invitations")),
+    ).toBe(false);
   });
 
   it("shows storage governance and patches the firm quota", async () => {
