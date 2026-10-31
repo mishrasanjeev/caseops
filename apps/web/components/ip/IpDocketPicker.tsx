@@ -68,7 +68,7 @@ export type IpDocketPickerProps = {
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-type DocketPages = UseInfiniteQueryResult<InfiniteData<IpDocketListPage, string | null>, Error>;
+type DocketPages = UseInfiniteQueryResult<InfiniteData<IpDocketListPage, unknown>, Error>;
 
 function errorText(error: unknown): string {
   if (isApiErrorShape(error) && error.detail.trim()) return error.detail;
@@ -116,6 +116,7 @@ export function IpDocketPicker({
   const searchId = `${selectId}-search`;
   const statusId = `${selectId}-status`;
   const errorId = `${selectId}-error`;
+  const lookupErrorId = `${selectId}-selected-error`;
 
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -178,7 +179,9 @@ export function IpDocketPicker({
     onChange(next, docket);
   };
 
-  const describedBy = [statusId, error ? errorId : null].filter(Boolean).join(" ");
+  const describedBy = [statusId, lookupFailed ? lookupErrorId : null, error ? errorId : null]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)} data-testid="ip-docket-picker">
@@ -221,7 +224,7 @@ export function IpDocketPicker({
 
       {lookupFailed ? (
         <div role="alert" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-danger-500)]">
-          <span className="min-w-0 break-words">
+          <span id={lookupErrorId} className="min-w-0 break-words">
             {isHidden(lookup.error)
               ? "The selected docket is not available to you or no longer exists."
               : `The selected docket could not be loaded: ${errorText(lookup.error)}`}

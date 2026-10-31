@@ -174,6 +174,9 @@ describe("IpDocketPicker", () => {
     renderPicker(<Harness initial="walled" onChange={change} />);
     const alert = await screen.findByText("The selected docket is not available to you or no longer exists.");
     expect(picker()).toHaveAttribute("aria-invalid", "true");
+    expect(picker()).toHaveAccessibleDescription(
+      expect.stringContaining("The selected docket is not available to you or no longer exists."),
+    );
     expect(picker().selectedIndex).toBe(-1);
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     fireEvent.click(within(alert.parentElement!).getByRole("button", { name: "Clear selection" }));
