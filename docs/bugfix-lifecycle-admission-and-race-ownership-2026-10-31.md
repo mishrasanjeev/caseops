@@ -1,5 +1,36 @@
 # Lifecycle Admission And Race Ownership
 
+## October 31 Disclosure Hydration Follow-Up: NO-GO
+
+Candidate9fd9175a CI41169038267 independently exposed two real later-stage
+failures: fresh-mixed PG1 charged10148 shared blocks and stale-mixed PG4
+charged10156 against the unchanged `<10000` contract. Each shard completely
+reconciles151 cases/453 phases/150passed/1failed/0skipped; setup/teardown pass.
+Actual disclosure-version plans return100 rows and reject9901 more through
+`uq_patent_family_version_number`. This is not a timeout or a reason to raise
+the limit. Both original ZIPs, complete traces and exact merge/tree proof are
+retained in the dated ci-9fd9-complete-01 diagnosis. Other CI work is unfinished.
+
+The replacement seeks that existing composite index once per authorized
+family/current-version pair, then requires exact tenant/family/version equality.
+Missing keys still raise the original integrity409; SQLite remains unchanged.
+No new schema/index/planner override or larger work/deadline budget. Regression
+now requires at most100 disclosure tuples for a100-row page, exact returned
+composite keys, custom/generic/default first/cursor plans, and one four-scenario
+negative journey proving later-version/family/tenant/no-successor rejection.
+Its inconsistent current-pointer fixtures roll back without altering history.
+
+The old raw patent records were outside the configured CI native directory and
+therefore absent from both ZIPs. Full EXPLAIN stdout supports the diagnosis but
+does not replace those missing records. Corrected path follows the existing
+native uploader; final artifacts must positively prove actual binds/settings/
+catalogue records present. Neither this replacement nor the new tests has yet
+completed acceptance. Old frozen61 completed at04:57:55UTC:61passed/183phases,
+zero skips/retries, unchanged source and all28 runtime files hash/length
+verified; natural exit0 reaped. Its runtime excludes this disclosure follow-up.
+Full final-head Docker,
+CI/main/deployment/live15sD29/private cadence and both Excel gates remain open.
+
 ## October 31 Parallel CI Candidate: Still NO-GO
 
 **Partially fixed / NO-GO.** This latest checkpoint preserves every failed and

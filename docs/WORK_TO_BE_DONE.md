@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Disclosure Follow-Up Still Requires Full Release
+
+**NO-GO.** 9fd9 CI exposed two real later disclosure-work failures, not flaky
+timeouts: PG1/PG4 each150P/1F,10148/10156blocks over the original limit. New
+composite seeks, strict page work, exact returned keys, four successor-negative
+states and corrected raw-plan retention are unverified replacements. Preserve
+all original failures. Complete final-source Docker/CI, normal567/main/tree,
+guarded deployment/full original15sD29/cadences and both actual Excel updates.
+App/Mac/0008 remain excluded. No replacement production SHA is claimed.
+
 ## October 31 Parallel Candidate And Still-Open Release Work
 
 **NO-GO.** Actual1985 CI41149650760 failed14notification+1family-work roots

@@ -530,7 +530,8 @@ def _patent_evidence_value(value):
 
 def _patent_evidence_path(request, tmp_path):
     journal = os.environ.get("CASEOPS_TEST_RESULT_JOURNAL")
-    root = Path(journal).parent if journal else tmp_path
+    native = os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR")
+    root = Path(native) if native else (Path(journal).parent if journal else tmp_path)
     node_hash = sha256(request.node.nodeid.encode()).hexdigest()[:20]
     directory = root / "ip-preflight-plans" / f"patent-family-{node_hash}"
     directory.mkdir(parents=True, exist_ok=True)
@@ -622,12 +623,14 @@ def _patent_hydration_ids(captured, *, company_id):
 
 
 def _patent_family_page_plan(
-    session, captured, *, limit, generic, evidence, kind="page", expected_ids=None
+    session, captured, *, limit, generic, evidence, kind="page", expected_ids=None,
+    expected_versions=None,
 ):
     numeric_sql, parameters = _numeric_patent_execution(captured, limit=limit)
     name = f"patent_page_{uuid4().hex}"
     mode = {False: "force_custom_plan", True: "force_generic_plan", None: "auto"}[generic]
     result_ids = None
+    result_versions = None
     prepared = False
     with session.connection().connection.cursor() as cursor:
         cursor.execute("SHOW plan_cache_mode")
@@ -659,19 +662,30 @@ def _patent_family_page_plan(
                 numeric_parameters=parameters,
                 settings=settings,
                 expected_ids=expected_ids,
+                expected_versions=expected_versions,
                 counters=_patent_plan_counters(plan),
                 execution=_patent_execution_record(captured),
             )
-            if expected_ids is not None:
+            if expected_ids is not None or expected_versions is not None:
                 cursor.execute(execute)
-                id_position = [column.name for column in cursor.description].index("id")
-                result_ids = [str(row[id_position]) for row in cursor.fetchall()]
+                columns = [column.name for column in cursor.description]
+                result_rows = cursor.fetchall()
+                if expected_ids is not None:
+                    result_ids = [str(row[columns.index("id")]) for row in result_rows]
+                if expected_versions is not None:
+                    result_versions = [
+                        (str(row[columns.index("company_id")]),
+                         str(row[columns.index("family_id")]), row[columns.index("version")])
+                        for row in result_rows
+                    ]
                 _retain_patent_evidence(
                     evidence,
                     kind=f"{kind}_results",
                     mode=mode,
                     actual_ids=result_ids,
                     expected_ids=expected_ids,
+                    actual_versions=result_versions,
+                    expected_versions=expected_versions,
                 )
         finally:
             if cursor.connection.info.transaction_status != TransactionStatus.INERROR:
@@ -692,6 +706,8 @@ def _patent_family_page_plan(
     assert restored_mode == previous_mode
     if expected_ids is not None:
         assert sorted(result_ids) == sorted(expected_ids)
+    if expected_versions is not None:
+        assert sorted(result_versions) == sorted(expected_versions)
     print(json.dumps({"kind": kind, "generic": generic, "limit": limit, "plan": plan}))
     return plan
 
@@ -734,7 +750,9 @@ def _assert_patent_plan_common_work(plan):
     assert counters["root_shared_blocks"] < 10_000
 
 
-def _patent_later_hydration_plans(session, captured_statements, evidence, *, prefix=""):
+def _patent_later_hydration_plans(
+    session, captured_statements, evidence, *, expected_versions, prefix=""
+):
     plans = []
     for model, stage in (
         (IpDocketRecord, "docket_hydration"),
@@ -750,20 +768,25 @@ def _patent_later_hydration_plans(session, captured_statements, evidence, *, pre
             evidence,
             kind=f"{prefix}{stage}_inventory",
             statement_count=len(matches),
-            per_relation_work_bound="diagnostic_only",
+            per_relation_work_bound=(
+                "admitted_page_size" if model is IpPatentFamilyVersion else "diagnostic_only"
+            ),
         )
         for captured in matches:
             for generic in (False, True, None):
-                plans.append(
-                    _patent_family_page_plan(
+                plans.append((
+                    stage, _patent_family_page_plan(
                         session,
                         captured,
                         limit=None,
                         generic=generic,
                         evidence=evidence,
                         kind=f"{prefix}{stage}_diagnostic",
-                    )
-                )
+                        expected_versions=(
+                            expected_versions if model is IpPatentFamilyVersion else None
+                        ),
+                    ),
+                ))
         assert matches
     return plans
 
@@ -789,6 +812,16 @@ def _assert_patent_family_hydration_work(plan, *, limit):
     assert sum(_plan_work(node) for node in family_nodes) <= limit
     assert sum(_plan_work(node) for node in all_nodes) < 50_000
     assert plan["Plan"]["Shared Hit Blocks"] + plan["Plan"]["Shared Read Blocks"] < 10_000
+
+
+def _assert_patent_disclosure_hydration_work(plan, *, limit):
+    nodes = [
+        node for node in _plan_nodes(plan["Plan"])
+        if node.get("Relation Name") == "ip_patent_family_versions"
+    ]
+    assert nodes
+    assert sum(_plan_work(node) for node in nodes) <= limit
+    _assert_patent_plan_common_work(plan)
 
 
 def _seed_patent_family_scale(
@@ -1077,7 +1110,10 @@ def _check_patent_family_scale(
             )
             for generic in (False, True, None)
         ]
-        diagnostic_plans = _patent_later_hydration_plans(session, page_statements, evidence)
+        diagnostic_plans = _patent_later_hydration_plans(
+            session, page_statements, evidence,
+            expected_versions=[(company_id, str(row.id), row.version) for row in result.families],
+        )
         assert len(result.families) == 100 and result.next_cursor is not None
         assert len(statements) <= 12
         assert sorted(first_inputs) == sorted(first_ids)
@@ -1176,7 +1212,12 @@ def _check_patent_family_scale(
             for generic in (False, True, None)
         )
         diagnostic_plans.extend(
-            _patent_later_hydration_plans(session, page_statements, evidence, prefix="cursor_")
+            _patent_later_hydration_plans(
+                session, page_statements, evidence, prefix="cursor_",
+                expected_versions=[
+                    (company_id, str(row.id), row.version) for row in second.families
+                ],
+            )
         )
         cursor_plans = []
         for generic in (False, True, None):
@@ -1233,8 +1274,10 @@ def _check_patent_family_scale(
             _assert_patent_family_page_work(plan, limit=plan_limit)
         for plan in hydration_plans:
             _assert_patent_family_hydration_work(plan, limit=100)
-        for plan in diagnostic_plans:
+        for stage, plan in diagnostic_plans:
             _assert_patent_plan_common_work(plan)
+            if stage == "disclosure_version_hydration":
+                _assert_patent_disclosure_hydration_work(plan, limit=100)
 
 
 def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
@@ -1649,6 +1692,160 @@ def test_patent_family_deleted_warm_identity_rejects_exact_seek_miss(
             )
         )
         assert remaining_versions == [sibling_id]
+
+
+def test_current_disclosure_seek_rejects_all_composite_successors(
+    migration_pg_engine, request, tmp_path
+):
+    pg_engine = migration_pg_engine
+    seeded = [_seed(pg_engine), _seed(pg_engine)]
+    lower, upper = sorted(seeded, key=lambda row: row[0])
+    company_id, actor_id, first = lower
+    other_company, other_actor, other = upper
+    evidence = _patent_evidence_path(request, tmp_path)
+    with Session(pg_engine) as session:
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        sibling = create_patent_family(
+            session,
+            context=context,
+            payload=PatentFamilyCreateRequest(
+                title=f"Composite disclosure sibling {uuid4()}",
+                client_id=first.facts.client_id,
+                disclosure_date=date(2026, 9, 5),
+                disclosure_narrative="Retained sibling disclosure.",
+            ),
+            idempotency_key=str(uuid4()),
+        )
+        low, high = sorted((first, sibling), key=lambda row: str(row.id))
+        scenarios = (
+            ("version", low, company_id, actor_id, (company_id, str(low.id), 3)),
+            ("family", low, company_id, actor_id, (company_id, str(high.id), 1)),
+            ("tenant", high, company_id, actor_id, (other_company, str(other.id), 1)),
+            ("none", other, other_company, other_actor, None),
+        )
+        completed = []
+        for kind, target, tenant, actor, expected_successor in scenarios:
+            context = _ip_race_context(session, company_id=tenant, membership_id=actor)
+            warm = session.scalars(
+                select(IpPatentFamilyVersion).where(
+                    IpPatentFamilyVersion.company_id == tenant,
+                    IpPatentFamilyVersion.family_id == str(target.id),
+                    IpPatentFamilyVersion.version == 1,
+                )
+            ).one()
+            warm_title = warm.title
+            boundary = session.begin_nested()
+            try:
+                # Inject an inconsistent current pointer without deleting or
+                # modifying immutable history; roll back each negative fixture.
+                session.execute(
+                    update(IpDocketRecord)
+                    .where(IpDocketRecord.id == str(target.docket_id))
+                    .values(current_version=2)
+                )
+                if kind == "version":
+                    fields = {
+                        field.name: getattr(warm, field.name)
+                        for field in IpPatentFamilyVersion.__table__.columns
+                    }
+                    fields.update(id=str(uuid4()), version=3, reason="Negative seek fixture.")
+                    session.execute(insert(IpPatentFamilyVersion.__table__), fields)
+                successor = session.execute(
+                    select(
+                        IpPatentFamilyVersion.company_id,
+                        IpPatentFamilyVersion.family_id,
+                        IpPatentFamilyVersion.version,
+                    )
+                    .where(
+                        tuple_(
+                            IpPatentFamilyVersion.company_id,
+                            IpPatentFamilyVersion.family_id,
+                            IpPatentFamilyVersion.version,
+                        ) >= (tenant, str(target.id), 2)
+                    )
+                    .order_by(
+                        IpPatentFamilyVersion.company_id,
+                        IpPatentFamilyVersion.family_id,
+                        IpPatentFamilyVersion.version,
+                    )
+                    .limit(1)
+                ).first()
+                actual_successor = tuple(successor) if successor is not None else None
+                _retain_patent_evidence(
+                    evidence, kind="composite_seek_negative", scenario=kind,
+                    requested=(tenant, str(target.id), 2),
+                    expected_successor=expected_successor, actual_successor=actual_successor,
+                )
+                assert actual_successor == expected_successor
+                with pytest.raises(HTTPException) as rejected:
+                    list_patent_families(
+                        session, context=context, query=target.facts.title, limit=1
+                    )
+                assert rejected.value.status_code == 409
+                assert rejected.value.detail["code"] == "patent_family_integrity"
+                if kind == "family":
+                    # A good sibling cannot conceal one missing admitted key.
+                    with pytest.raises(HTTPException) as mixed:
+                        list_patent_families(session, context=context, limit=100)
+                    assert mixed.value.status_code == 409
+                    assert mixed.value.detail["code"] == "patent_family_integrity"
+                assert session.get(IpPatentFamilyVersion, warm.id) is warm
+                assert warm.version == 1 and warm.title == warm_title
+                completed.append(kind)
+            finally:
+                boundary.rollback()
+            restored = get_patent_family(session, context=context, family_id=str(target.id))
+            assert restored == target
+            _retain_patent_evidence(
+                evidence, kind="composite_seek_restored", scenario=kind,
+                family_id=str(restored.id), version=restored.version,
+            )
+        assert completed == ["version", "family", "tenant", "none"]
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        original = session.scalars(
+            select(IpPatentFamilyVersion).where(
+                IpPatentFamilyVersion.company_id == company_id,
+                IpPatentFamilyVersion.family_id == str(low.id),
+                IpPatentFamilyVersion.version == 1,
+            )
+        ).one()
+        boundary = session.begin_nested()
+        try:
+            for number in (2, 3):
+                fields = {
+                    field.name: getattr(original, field.name)
+                    for field in IpPatentFamilyVersion.__table__.columns
+                }
+                fields.update(
+                    id=str(uuid4()), version=number, title=f"Exact disclosure version {number}",
+                    reason="Composite current-version selection fixture.",
+                )
+                session.execute(insert(IpPatentFamilyVersion.__table__), fields)
+            session.execute(
+                update(IpDocketRecord).where(IpDocketRecord.id == str(low.docket_id))
+                .values(current_version=2)
+            )
+            current = list_patent_families(
+                session, context=context, query=low.facts.title, limit=1
+            )
+            assert len(current.families) == 1 and current.next_cursor is None
+            assert str(current.families[0].id) == str(low.id)
+            assert current.families[0].version == 2
+            assert current.families[0].facts.title == "Exact disclosure version 2"
+            _retain_patent_evidence(
+                evidence, kind="composite_seek_exact_middle_version",
+                family_id=str(low.id), version=current.families[0].version,
+            )
+        finally:
+            boundary.rollback()
+        for tenant, actor, expected in (
+            (company_id, actor_id, {str(low.id), str(high.id)}),
+            (other_company, other_actor, {str(other.id)}),
+        ):
+            context = _ip_race_context(session, company_id=tenant, membership_id=actor)
+            listed = list_patent_families(session, context=context)
+            assert {str(row.id) for row in listed.families} == expected
+            assert all(row.version == 1 for row in listed.families)
 
 
 def test_patent_family_key_barrier_preserves_canonical_effective_acl(pg_engine):

@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Page authorization is not a bound on later hydration. Reconcile family,
+  docket, disclosure and source-document plans separately using actual binds
+  under custom, generic and default planning. Exact composite seeks must reject
+  a later version, another family or tenant, and an absent successor. Keep raw
+  plans under the configured native evidence directory actually uploaded by CI.
+
 - Raw-owned emulator cleanup and pytest patch lifetime are separate owners.
   Restore a nested override before closing its owning emulator, then undo the
   outer patch before asserting baseline identity. Do not close an owner through

@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Later Hydration And Missing Raw Plans
+
+**Partially implemented / NO-GO.** 9fd9 PG1/PG4 disclose actual10001-row history
+scans and original block-bound failures. Replacing only family hydration was
+insufficient. Composite disclosure seeks retain exact tenant/version integrity;
+strict page work and four negative successor cases remain to be executed.
+Corrected raw-plan path uses the configured uploaded native directory. Require
+positive artifact presence and actual-bind/settings proof, not stdout alone.
+Full final-head Docker/CI/main/live/cadence/paired Excel gates remain separate.
+
 ## October 31 Actual CI And Disjoint Candidate Boundaries
 
 **Partially implemented / NO-GO.** Actual1985 CI41149650760 has14notification

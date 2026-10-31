@@ -6,6 +6,16 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-31 04:56 UTC - Release Still Gated, No New GSC Audit
+
+The9fd9 release run has two independently retained disclosure-work failures;
+the replacement is unverified. Full canonical Docker, CI, main merge, guarded
+deployment and exact-serving product certification remain open. This is only
+an engineering deferral, not a completed SEO/AEO audit. Preserve the October27
+browser URL-safety stop. Daily SEO remains ACTIVE with sanjeev@orchestrum.in,
+no competing release, invented Google metrics, lead submissions or paid probes.
+Mobile/native work remains with the MacBook and is not marketed as shipped.
+
 ## 2026-10-31 IST - Disjoint Release Candidate, No New Google Data
 
 SEO remains ACTIVE but release-deferred; this is an engineering checkpoint, not

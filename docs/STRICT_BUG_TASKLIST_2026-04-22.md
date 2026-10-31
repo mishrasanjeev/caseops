@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Later Disclosure Work: Partially Fixed, NO-GO
+
+9fd9 CI41169038267 PG1/PG4 each150P/1F of151: disclosure hydration reads10001
+tenant tuples and10148/10156 blocks, violating original `<10000`. Exact composite
+seek and strict100-row disclosure regression are implemented but unverified.
+Correct CI native-plan retention and prove missing-version successor rejection.
+See the dated lifecycle-admission report. Full final-head Docker/CI/main/live
+and actual paired Excel publication are still required; no app work is included.
+
 ## October 31 Disjoint CI Candidate: Partially Fixed, NO-GO
 
 1985 CI41149650760 actually failed 14 notification cases and one family-work
