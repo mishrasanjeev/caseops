@@ -38,6 +38,7 @@ vi.mock("@/lib/api/endpoints", async () => {
 });
 
 import RecordalsPage from "@/app/app/ip/recordals/page";
+import { availableGovernance } from "@/test/ip-governance-fixtures";
 
 const RECORDAL: IpRecordal = {
   id: "recordal-1",
@@ -204,6 +205,7 @@ const WORKSPACE: IpRecordalWorkspace = {
     deadlines: [],
     exceptions: [],
     automation_state: "explicit_confirmation_only",
+    governance: availableGovernance(),
   },
 };
 
