@@ -406,14 +406,9 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       await captureGeometry("hearing-initial", hearingFields);
       const governance = page.getByTestId("ip-deadline-governance");
       await captureGeometry("governance-initial", governance);
-      const reviewer = governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true });
-      const reviewerValue = fixture.local ? fixture.reviewerId : fixture.actor.membership.id;
-      await reviewer.selectOption(reviewerValue);
-      await assertSelectedDescription(reviewer, governance.locator("#rule-fixture-reviewer-selected-description"), reviewerValue, {});
-      await captureGeometry("governance-selected-identity", governance, [reviewerValue]);
-      await reviewer.selectOption("");
-      await expect(governance.locator("#rule-fixture-reviewer-selected-description")).toHaveCount(0);
-      expect(Boolean(await reviewer.getAttribute("aria-describedby")), "Clearing must remove the stale description link.").toBe(false);
+      // Reviewers are chosen per candidate rule from the server's eligible list
+      // (2026-10-31 BUG-006); with no candidate there is no reviewer picker to fill.
+      await expect(governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true })).toHaveCount(0);
 
       const hearing = page.getByTestId("ip-hearing-workflow");
       const purpose = `Synthetic IP15 hearing ${fixture.run}`;

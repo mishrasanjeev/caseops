@@ -491,7 +491,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   for (const name of [
     "Propose calendar version",
     "Propose rule and fixture",
-    "Preview impact and emergency-disable",
+    "Preview impact",
   ]) {
     const control = governance.getByRole("button", { name });
     await expect(control).toBeVisible();

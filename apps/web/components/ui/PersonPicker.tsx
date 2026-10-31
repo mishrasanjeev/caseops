@@ -27,6 +27,15 @@ export type PersonPickerProps = {
   onChange: (membershipId: string) => void;
   /** Omit people who cannot be a valid answer, e.g. the person being replaced. */
   excludeMembershipIds?: string[];
+  /**
+   * When set, offer only these memberships: the server's own list of people
+   * its validator accepts (for example a rule's eligible fixture reviewers).
+   */
+  onlyMembershipIds?: string[];
+  /** Shown instead of the generic empty text when no one can be chosen. */
+  emptyText?: string;
+  /** Id of the caller's field error; marks the select invalid and describes it. */
+  errorId?: string;
   /** Shown when nothing is chosen yet. */
   placeholder?: string;
   disabled?: boolean;
@@ -54,6 +63,9 @@ export function PersonPicker({
   value,
   onChange,
   excludeMembershipIds = [],
+  onlyMembershipIds,
+  emptyText,
+  errorId,
   placeholder = "Select a colleague…",
   disabled = false,
   className,
@@ -69,19 +81,24 @@ export function PersonPicker({
     () => new Set(excludeMembershipIds.filter(Boolean)),
     [excludeMembershipIds],
   );
+  const allowed = useMemo(
+    () => (onlyMembershipIds ? new Set(onlyMembershipIds) : null),
+    [onlyMembershipIds],
+  );
   const selectableUsers = useMemo(() => {
     return (companyUsers.data?.users ?? [])
       .filter(
         (user) =>
           user.membership_active &&
           user.user_active &&
-          !excluded.has(user.membership_id),
+          !excluded.has(user.membership_id) &&
+          (allowed === null || allowed.has(user.membership_id)),
       )
       .sort(
         (a, b) =>
           a.full_name.localeCompare(b.full_name) || a.email.localeCompare(b.email),
       );
-  }, [companyUsers.data?.users, excluded]);
+  }, [companyUsers.data?.users, excluded, allowed]);
 
   const options = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -143,7 +160,10 @@ export function PersonPicker({
       <select
         id={id}
         value={effectiveValue}
-        aria-describedby={selectedCaption ? selectedDescriptionId : undefined}
+        aria-invalid={errorId ? true : undefined}
+        aria-describedby={
+          [errorId, selectedCaption ? selectedDescriptionId : null].filter(Boolean).join(" ") || undefined
+        }
         disabled={disabled || companyUsers.isLoading || companyUsers.isError}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
@@ -182,10 +202,68 @@ export function PersonPicker({
         <p className="text-sm text-[var(--color-mute)]">
           {filter.trim()
             ? "No colleague matches that filter."
-            : "No other colleague is available to choose."}
+            : emptyText ?? "No other colleague is available to choose."}
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Choose several colleagues (for example, who attended a hearing). Same
+ * directory and active-member rule as {@link PersonPicker}.
+ */
+export function PersonChecklist({
+  id,
+  legend,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  id: string;
+  legend: string;
+  value: string[];
+  onChange: (membershipIds: string[]) => void;
+  disabled?: boolean;
+}) {
+  const companyUsers = useQuery({
+    queryKey: ["company-users"],
+    queryFn: () => listCompanyUsers(),
+  });
+  const people = (companyUsers.data?.users ?? [])
+    .filter((user) => user.membership_active && user.user_active)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name) || a.email.localeCompare(b.email));
+  const chosen = new Set(value);
+  return (
+    <fieldset id={id} className="flex min-w-0 flex-col gap-1" disabled={disabled}>
+      <legend className="break-words text-sm font-medium leading-snug text-[var(--color-ink-2)]">{legend}</legend>
+      {companyUsers.isLoading ? <p className="text-sm text-[var(--color-mute)]">Loading colleagues…</p> : null}
+      {companyUsers.isError ? (
+        <p className="text-sm text-[var(--color-mute)]">
+          The staff list could not be loaded.{" "}
+          <button type="button" className="underline" onClick={() => companyUsers.refetch()}>Try again</button>
+        </p>
+      ) : null}
+      <div className="flex max-h-40 min-w-0 flex-col gap-1 overflow-y-auto">
+        {people.map((user) => (
+          <label key={user.membership_id} className="flex min-w-0 items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={chosen.has(user.membership_id)}
+              onChange={(event) =>
+                onChange(
+                  event.target.checked
+                    ? [...value, user.membership_id]
+                    : value.filter((item) => item !== user.membership_id),
+                )
+              }
+            />
+            <span className="min-w-0 break-words">{personLabel(user)}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
