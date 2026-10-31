@@ -20,6 +20,7 @@ import {
   type CalendarEventKind,
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
+  type CalendarSummaryResponse,
   type CalendarSyncStatusResponse,
   type CalendarProviderEventCandidateListResponse,
   type CalendarProviderEventCandidateRecord,
@@ -169,6 +170,7 @@ import {
   calendarConnectionStartResponse,
   calendarEventListResponse,
   calendarEventSyncResponse,
+  calendarSummaryResponse,
   calendarSyncStatusResponse,
   calendarProviderEventCandidateListResponse,
   calendarProviderEventCandidateRecord,
@@ -7205,6 +7207,18 @@ export async function fetchCalendarEvents(input: {
     `/api/calendar/events?${params.toString()}`,
   );
   return calendarEventListResponse.parse(data);
+}
+
+/** Per-day open-item counts for up to one year (the Year view). */
+export async function fetchCalendarSummary(input: {
+  from: string; // ISO yyyy-mm-dd
+  to: string;   // ISO yyyy-mm-dd
+}): Promise<CalendarSummaryResponse> {
+  const params = new URLSearchParams({ from: input.from, to: input.to });
+  const data = await apiRequest<unknown>(
+    `/api/calendar/summary?${params.toString()}`,
+  );
+  return calendarSummaryResponse.parse(data);
 }
 
 // Phase B / J12 / M11 — communications log endpoints.
