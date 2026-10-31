@@ -27,6 +27,7 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarSnapshot,
     LegalCalendarVersionProposalRequest,
 )
+from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -276,6 +277,7 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_id = str(bootstrap["membership"]["id"])
     owner_headers = auth_headers(owner_token)
@@ -776,6 +778,7 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
     client: TestClient,
 ) -> None:
     first = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(first["company"]["id"]))
     owner_token = str(first["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -926,6 +929,7 @@ def test_workspace_eligibility_rechecks_company_selection_without_hiding_governa
     client: TestClient,
 ) -> None:
     owner = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(owner["company"]["id"]))
     owner_headers = auth_headers(owner["access_token"])
     _, legal_token = _member(client, owner["access_token"], name="Eligibility legal reviewer",
                              email="eligibility-legal@asterlegal.in")

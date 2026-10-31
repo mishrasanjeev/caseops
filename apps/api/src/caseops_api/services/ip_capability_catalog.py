@@ -323,6 +323,43 @@ def assert_ip_rollout_enabled(
     )
 
 
+def assert_ip_feature_entitled(
+    session: Session,
+    *,
+    context: SessionContext,
+    feature_id: str,
+) -> None:
+    """Enforce one IP feature's company entitlement at a writer boundary.
+
+    For writers that must apply the rollout gate first, before any database
+    access, and then enforce capability on a locked membership row. The refusal
+    has the same typed shape as ``assert_ip_feature_available``.
+    """
+
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    feature = IP_FEATURE_BY_ID[feature_id]
+    entitlements = current_entitlements_for_company(session, context.company.id)
+    if _entitlement_enabled(entitlements.get(feature.entitlement_key)):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "ip_feature_unavailable",
+            "feature_id": feature.feature_id,
+            "reason": "missing_entitlement",
+            "missing_capabilities": [],
+            "entitlement_key": feature.entitlement_key,
+            "rollout_flag": feature.rollout_flag,
+            "rollout_owner": feature.rollout_owner,
+            "detail": (
+                f"This workspace's plan does not include {feature.entitlement_key}. "
+                "Existing records remain readable."
+            ),
+        },
+    )
+
+
 def assert_ip_feature_available(
     session: Session,
     *,

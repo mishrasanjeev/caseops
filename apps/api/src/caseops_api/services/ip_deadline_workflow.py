@@ -13,7 +13,8 @@ from hashlib import sha256
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.settings import get_settings
@@ -73,6 +74,10 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.deadlines import create_deadline, update_deadline
+from caseops_api.services.ip_capability_catalog import (
+    IP_FEATURE_BY_ID,
+    assert_ip_feature_entitled,
+)
 from caseops_api.services.ip_coverage_projection import (
     cutover_ip_coverage_projection,
     tombstone_matter_deadline_calendar_projections,
@@ -101,6 +106,9 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+_RULE_GOVERNANCE = IP_FEATURE_BY_ID["rule_governance"]
+
+
 def _assert_rule_governance_mutation_enabled() -> None:
     """Quiesce rule-governance ownership before authoritative state access.
 
@@ -109,9 +117,13 @@ def _assert_rule_governance_mutation_enabled() -> None:
     first executable statement of each writer) also protects non-HTTP callers.
     Existing deadline operations and read-only impact/workspace/readiness paths
     deliberately remain available while governance ownership is quiesced.
+
+    A1 extends the fence with the configured rollout expiry. Both rollout gates
+    read settings only, so the fence still precedes every database access.
     """
 
-    if not get_settings().ip_rule_governance_enabled:
+    settings = get_settings()
+    if getattr(settings, _RULE_GOVERNANCE.rollout_flag) is not True:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -124,6 +136,56 @@ def _assert_rule_governance_mutation_enabled() -> None:
                 ),
             },
         )
+    expires_at = getattr(settings, _RULE_GOVERNANCE.rollout_expiry)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if _now() >= expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "ip_rule_governance_quiesced",
+                    "reason": "rollout_expired",
+                    "rollout_flag": "ip_rule_governance_enabled",
+                    "rollout_expiry": _RULE_GOVERNANCE.rollout_expiry,
+                    "detail": (
+                        "IP rule-governance mutations are unavailable because the "
+                        "controlled rollout window has expired."
+                    ),
+                },
+            )
+
+
+def _assert_rule_governance_entitled(session: Session, *, context: SessionContext) -> None:
+    """Require the company's ``ip_rule_governance`` entitlement.
+
+    Runs after the rollout fence (for rule writers) and before any governance
+    read, lock, mutation, or audit. Capability is then enforced on the fenced
+    membership row by ``_lock_governance_memberships``.
+    """
+
+    assert_ip_feature_entitled(
+        session,
+        context=context,
+        feature_id=_RULE_GOVERNANCE.feature_id,
+    )
+
+
+def _assert_rule_governance_writer_allowed(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> None:
+    """The single server-side decision for every rule-governance writer.
+
+    Order is part of the contract: rollout flag and expiry (settings only, no
+    database access), then the company entitlement, then - in the caller - the
+    locked actor capability. Working-calendar writers are outside the A0
+    ownership drain and call ``_assert_rule_governance_entitled`` alone.
+    """
+
+    _assert_rule_governance_mutation_enabled()
+    _assert_rule_governance_entitled(session, context=context)
 
 
 def _actor_label(context: SessionContext) -> str:
@@ -180,28 +242,57 @@ def _lock_responsibility_memberships(
     )
 
 
+def _reviewer_unqualified() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "ip_rule_reviewer_unqualified",
+            "field": "reviewer_membership_id",
+            "required_capability": "ip:rules_activate",
+            "detail": (
+                "The fixture reviewer must be another active member of this "
+                "workspace who can activate legal rules."
+            ),
+        },
+    )
+
+
 def _lock_governance_memberships(
     session: Session,
     *,
     context: SessionContext,
     required_capability: str,
     participant_ids: set[str | None] | None = None,
+    reviewer_membership_id: str | None = None,
 ) -> tuple[SessionContext, dict[str, CompanyMembership]]:
-    """Fence the governance actor and any resulting evidence principals."""
+    """Fence the governance actor and any resulting evidence principals.
 
-    membership_ids = {
+    A named fixture reviewer is fenced in the same stable lock order and must
+    be an active same-company membership that itself holds
+    ``ip:rules_activate``; anything else is one typed refusal, so a reviewer id
+    from another workspace is indistinguishable from an unqualified one.
+    """
+
+    def usable(membership: CompanyMembership | None) -> bool:
+        return (
+            membership is not None
+            and membership.is_active
+            and membership.user.is_active
+        )
+
+    required_ids = {
         membership_id
         for membership_id in (participant_ids or set()) | {context.membership.id}
         if membership_id
     }
+    membership_ids = required_ids | ({reviewer_membership_id} if reviewer_membership_id else set())
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
         membership_ids=membership_ids,
     )
-    if set(memberships) != membership_ids or any(
-        not membership.is_active or not membership.user.is_active
-        for membership in memberships.values()
+    if not required_ids <= set(memberships) or any(
+        not usable(memberships.get(membership_id)) for membership_id in required_ids
     ):
         raise HTTPException(status_code=400, detail="Active company membership not found.")
     actor = require_locked_membership_capability(
@@ -209,6 +300,16 @@ def _lock_governance_memberships(
         memberships[context.membership.id],
         required_capability,
     )
+    if reviewer_membership_id is not None:
+        reviewer = memberships.get(reviewer_membership_id)
+        if reviewer is None or not usable(reviewer):
+            raise _reviewer_unqualified()
+        try:
+            require_locked_membership_capability(session, reviewer, "ip:rules_activate")
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_403_FORBIDDEN:
+                raise
+            raise _reviewer_unqualified() from exc
     return (
         SessionContext(
             company=context.company,
@@ -219,19 +320,72 @@ def _lock_governance_memberships(
     )
 
 
-def _assert_rule_governance_access(
+def owned_rule_version(
+    session: Session,
+    *,
+    company_id: str,
+    rule_version_id: str,
+) -> tuple[IpRuleVersion, IpRuleSet] | None:
+    """Load a rule version only through its company-owned rule set.
+
+    A version of another company's rule set - or of a legacy rule set whose
+    owner was never backfilled - is reported exactly like a missing id, so no
+    caller can learn that another tenant's rule exists or what it governs.
+    """
+
+    row = session.execute(
+        select(IpRuleVersion, IpRuleSet)
+        .join(IpRuleSet, IpRuleSet.id == IpRuleVersion.rule_set_id)
+        .where(
+            IpRuleVersion.id == rule_version_id,
+            IpRuleSet.company_id == company_id,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    return row[0], row[1]
+
+
+def _lock_owned_rule_version(
     session: Session,
     *,
     context: SessionContext,
-    row: IpRuleVersion,
-) -> None:
-    proposer_company_id = session.scalar(
-        select(CompanyMembership.company_id).where(
-            CompanyMembership.id == row.proposed_by_membership_id
+    rule_version_id: str,
+) -> tuple[IpRuleVersion, IpRuleSet]:
+    """Lock rule set then version: the governance serialization point.
+
+    Every rule-governance writer takes the owning rule-set row lock before it
+    reads sibling versions or the company policy. Overlap checks, sibling
+    retirement, emergency disable and policy selection for one rule set
+    therefore run one at a time, so effective ranges cannot be activated into
+    an overlap by two concurrent requests.
+    """
+
+    rule_set_id = session.scalar(
+        select(IpRuleVersion.rule_set_id)
+        .join(IpRuleSet, IpRuleSet.id == IpRuleVersion.rule_set_id)
+        .where(
+            IpRuleVersion.id == rule_version_id,
+            IpRuleSet.company_id == context.company.id,
         )
     )
-    if proposer_company_id != context.company.id:
+    if rule_set_id is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
+    rule_set = session.scalar(
+        select(IpRuleSet)
+        .where(IpRuleSet.id == rule_set_id, IpRuleSet.company_id == context.company.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    row = session.scalar(
+        select(IpRuleVersion)
+        .where(IpRuleVersion.id == rule_version_id, IpRuleVersion.rule_set_id == rule_set_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if rule_set is None or row is None:
+        raise HTTPException(status_code=404, detail="Rule version not found.")
+    return row, rule_set
 
 
 def _rule_record(rule_set: IpRuleSet, row: IpRuleVersion) -> IpRuleVersionRecord:
@@ -358,16 +512,23 @@ def propose_rule_version(
     context: SessionContext,
     payload: IpRuleVersionProposalRequest,
 ) -> IpRuleVersionRecord:
-    _assert_rule_governance_mutation_enabled()
+    _assert_rule_governance_writer_allowed(session, context=context)
     context, _memberships = _lock_governance_memberships(
         session,
         context=context,
         required_capability="ip:rules_propose",
     )
     key = payload.key.strip().lower()
-    rule_set = session.scalar(select(IpRuleSet).where(IpRuleSet.key == key).with_for_update())
+    # Keys are unique per company: another tenant's identical key is neither
+    # visible nor a collision, and version numbering is never shared.
+    rule_set = session.scalar(
+        select(IpRuleSet)
+        .where(IpRuleSet.company_id == context.company.id, IpRuleSet.key == key)
+        .with_for_update()
+    )
     if rule_set is None:
         rule_set = IpRuleSet(
+            company_id=context.company.id,
             key=key,
             rule_kind=payload.rule_kind,
             jurisdiction=payload.jurisdiction.strip().upper(),
@@ -379,8 +540,15 @@ def propose_rule_version(
             role=payload.role.strip().lower() if payload.role else None,
             stage=payload.stage.strip().lower(),
         )
-        session.add(rule_set)
-        session.flush()
+        try:
+            with session.begin_nested():
+                session.add(rule_set)
+                session.flush()
+        except IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This rule key was created by a concurrent proposal; reload and retry.",
+            ) from exc
     elif (
         rule_set.rule_kind != payload.rule_kind
         or rule_set.jurisdiction != payload.jurisdiction.strip().upper()
@@ -391,7 +559,10 @@ def propose_rule_version(
         or rule_set.role != (payload.role.strip().lower() if payload.role else None)
         or rule_set.stage != payload.stage.strip().lower()
     ):
-        raise HTTPException(status_code=409, detail="Rule key already exists with another scope.")
+        raise HTTPException(
+            status_code=409,
+            detail="This workspace already uses the rule key for another scope.",
+        )
 
     next_version = (
         int(
@@ -453,27 +624,19 @@ def _overlapping_active_versions(
     session: Session,
     *,
     row: IpRuleVersion,
-    company_id: str,
 ) -> list[IpRuleVersion]:
-    """Tenant-owned active siblings whose effective range collides with ``row``.
+    """Active siblings whose effective range collides with ``row``.
 
-    ``IpRuleSet`` is a shared legal-scope identity, while each version is owned
-    by the company of its proposer.  Joining that ownership here is essential:
-    otherwise a tenant activating its own version can retire another tenant's
-    active version merely because both use the same platform rule key.
+    Every version of a rule set belongs to the set's single owning company, so
+    the sibling scan can never reach another tenant's version. Writers call
+    this only while holding the rule-set row lock.
     """
 
     siblings = session.scalars(
-        select(IpRuleVersion)
-        .join(
-            CompanyMembership,
-            CompanyMembership.id == IpRuleVersion.proposed_by_membership_id,
-        )
-        .where(
+        select(IpRuleVersion).where(
             IpRuleVersion.rule_set_id == row.rule_set_id,
             IpRuleVersion.status == "active",
             IpRuleVersion.id != row.id,
-            CompanyMembership.company_id == company_id,
         )
     ).all()
     return [
@@ -488,26 +651,55 @@ def _overlapping_active_versions(
     ]
 
 
+# The arithmetic a deadline rule definition fixes. A fixture only proves the
+# version being activated when its calculation uses exactly these values.
+_DEADLINE_DEFINITION_ARITHMETIC = (
+    "duration_value",
+    "duration_unit",
+    "calendar_method",
+    "direction",
+    "include_base_date",
+    "next_working_day",
+    "extension_days",
+)
+
+
 def _rule_fixture_results(row: IpRuleVersion, rule_set: IpRuleSet) -> tuple[list[str], list[str]]:
+    """Evaluate fixtures on the server; only deadline rules have an evaluator.
+
+    Form and fee fixtures carry caller-supplied expected/observed values, so a
+    comparison of the two proves nothing: they never pass. A deadline fixture
+    passes only when the server engine, run on the rule's own definition,
+    produces the expected state and date.
+    """
+
     fixture_ids: list[str] = []
     passed_ids: list[str] = []
+    definition = (
+        IpDeadlineRuleDefinition.model_validate(row.definition_json)
+        if rule_set.rule_kind == "deadline"
+        else None
+    )
     for fixture in row.fixture_set_json:
         fixture_id = str(fixture.get("id") or "")
         if not fixture_id:
             continue
         fixture_ids.append(fixture_id)
-        if rule_set.rule_kind == "deadline":
-            calculation = fixture.get("calculation")
-            if not calculation:
-                continue
-            result = calculate_ip_deadline(IpDeadlineCalculationRequest.model_validate(calculation))
-            expected_date = fixture.get("expected_result_on")
-            if (
-                result.state == fixture.get("expected_state")
-                and (result.result_on.isoformat() if result.result_on else None) == expected_date
-            ):
-                passed_ids.append(fixture_id)
-        elif fixture.get("expected_outcome") == fixture.get("observed_outcome"):
+        calculation = fixture.get("calculation")
+        if definition is None or not calculation:
+            continue
+        request = IpDeadlineCalculationRequest.model_validate(calculation)
+        if any(
+            getattr(request, name) != getattr(definition, name)
+            for name in _DEADLINE_DEFINITION_ARITHMETIC
+        ):
+            continue
+        result = calculate_ip_deadline(request)
+        expected_date = fixture.get("expected_result_on")
+        if (
+            result.state == fixture.get("expected_state")
+            and (result.result_on.isoformat() if result.result_on else None) == expected_date
+        ):
             passed_ids.append(fixture_id)
     return fixture_ids, passed_ids
 
@@ -518,10 +710,14 @@ def rule_impact(
     context: SessionContext,
     rule_version_id: str,
 ) -> IpRuleImpactResponse:
-    row = session.get(IpRuleVersion, rule_version_id)
-    if row is None:
+    found = owned_rule_version(
+        session,
+        company_id=context.company.id,
+        rule_version_id=rule_version_id,
+    )
+    if found is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
-    _assert_rule_governance_access(session, context=context, row=row)
+    row, _rule_set = found
 
     # RULE-GOV-05: the preview must describe what acting on this version will
     # affect.  Activating a candidate supersedes the active versions whose
@@ -530,12 +726,7 @@ def rule_impact(
     scoped_ids = [row.id]
     if row.status == "candidate":
         scoped_ids.extend(
-            item.id
-            for item in _overlapping_active_versions(
-                session,
-                row=row,
-                company_id=context.company.id,
-            )
+            item.id for item in _overlapping_active_versions(session, row=row)
         )
 
     policy_count = int(
@@ -601,38 +792,39 @@ def activate_rule_version(
     rule_version_id: str,
     payload: IpRuleActivationRequest,
 ) -> IpRuleVersionRecord:
-    _assert_rule_governance_mutation_enabled()
+    _assert_rule_governance_writer_allowed(session, context=context)
     candidate = session.execute(
         select(
             IpRuleVersion.proposed_by_membership_id,
             IpRuleVersion.rule_set_id,
             IpRuleVersion.version,
             IpRuleVersion.status,
-        ).where(IpRuleVersion.id == rule_version_id)
+        )
+        .join(IpRuleSet, IpRuleSet.id == IpRuleVersion.rule_set_id)
+        .where(
+            IpRuleVersion.id == rule_version_id,
+            IpRuleSet.company_id == context.company.id,
+        )
     ).one_or_none()
     if candidate is None:
         raise HTTPException(status_code=404, detail="Rule version not found.")
-    proposer_company_id = session.scalar(
-        select(CompanyMembership.company_id).where(
-            CompanyMembership.id == candidate.proposed_by_membership_id
+    if candidate.proposed_by_membership_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail="The proposer of this rule version no longer exists; propose it again.",
         )
-    )
-    if proposer_company_id != context.company.id:
-        raise HTTPException(status_code=404, detail="Rule version not found.")
     context, governance_memberships = _lock_governance_memberships(
         session,
         context=context,
         required_capability="ip:rules_activate",
-        participant_ids={
-            candidate.proposed_by_membership_id,
-            payload.reviewer_membership_id,
-        },
+        participant_ids={candidate.proposed_by_membership_id},
+        reviewer_membership_id=payload.reviewer_membership_id,
     )
-    row = session.scalar(
-        select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
+    row, rule_set = _lock_owned_rule_version(
+        session,
+        context=context,
+        rule_version_id=rule_version_id,
     )
-    if row is None:
-        raise HTTPException(status_code=404, detail="Rule version not found.")
     if (
         row.proposed_by_membership_id,
         row.rule_set_id,
@@ -645,11 +837,21 @@ def activate_rule_version(
         candidate.status,
     ):
         raise HTTPException(status_code=409, detail="Rule version changed; reload.")
-    _assert_rule_governance_access(session, context=context, row=row)
     if row.status != "candidate":
         raise HTTPException(status_code=409, detail="Only a candidate rule can be activated.")
-    rule_set = session.get(IpRuleSet, row.rule_set_id)
-    assert rule_set is not None
+    if rule_set.rule_kind != "deadline":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_rule_kind_unsupported",
+                "rule_kind": rule_set.rule_kind,
+                "detail": (
+                    "Only deadline rules can be activated. CaseOps has no server "
+                    "evaluator for form or fee rules yet, so their fixtures cannot "
+                    "be proven."
+                ),
+            },
+        )
     proposer = governance_memberships[str(row.proposed_by_membership_id)]
     reviewer = governance_memberships[payload.reviewer_membership_id]
     fixture_ids, passed_ids = _rule_fixture_results(row, rule_set)
@@ -660,11 +862,7 @@ def activate_rule_version(
         fixture_ids=fixture_ids,
         passed_fixture_ids=passed_ids,
     )
-    overlapping = _overlapping_active_versions(
-        session,
-        row=row,
-        company_id=context.company.id,
-    )
+    overlapping = _overlapping_active_versions(session, row=row)
     if overlapping and not payload.supersede_overlapping:
         collided = ", ".join(
             str(item.version) for item in sorted(overlapping, key=lambda x: x.version)
@@ -757,18 +955,17 @@ def transition_rule_version(
     rule_version_id: str,
     payload: IpRuleTransitionRequest,
 ) -> IpRuleVersionRecord:
-    _assert_rule_governance_mutation_enabled()
+    _assert_rule_governance_writer_allowed(session, context=context)
     context, _memberships = _lock_governance_memberships(
         session,
         context=context,
         required_capability="ip:rules_activate",
     )
-    row = session.scalar(
-        select(IpRuleVersion).where(IpRuleVersion.id == rule_version_id).with_for_update()
+    row, rule_set = _lock_owned_rule_version(
+        session,
+        context=context,
+        rule_version_id=rule_version_id,
     )
-    if row is None:
-        raise HTTPException(status_code=404, detail="Rule version not found.")
-    _assert_rule_governance_access(session, context=context, row=row)
     impact = rule_impact(session, context=context, rule_version_id=row.id)
     if payload.impact_token != impact.impact_token:
         raise HTTPException(status_code=409, detail="Rule impact changed; preview again.")
@@ -824,8 +1021,7 @@ def transition_rule_version(
     )
     session.commit()
     session.refresh(row)
-    rule_set = session.get(IpRuleSet, row.rule_set_id)
-    assert rule_set is not None
+    session.refresh(rule_set)
     return _rule_record(rule_set, row)
 
 
@@ -930,28 +1126,31 @@ def select_company_rule_version(
     context: SessionContext,
     payload: IpCompanyRuleSelectionRequest,
 ) -> IpCompanyRulePolicyRecord:
-    """RULE-GOV-04: select an approved platform rule version for this company.
+    """RULE-GOV-04: select an approved rule version of this company's rule set.
 
-    A tenant policy can only point at a version the platform already activated;
-    it can never make a candidate, retired, or disabled version authoritative.
+    A company policy can only point at a version that is already active in a
+    rule set the company owns; it can never make a candidate, retired, or
+    disabled version authoritative. The write is a compare-and-swap:
+    ``expected_policy_version`` must name the current policy version, and
+    omitting it asserts that no policy exists yet for the rule set.
     """
 
+    _assert_rule_governance_writer_allowed(session, context=context)
     context, _memberships = _lock_governance_memberships(
         session,
         context=context,
         required_capability="ip:rules_activate",
     )
-    version = session.get(IpRuleVersion, payload.rule_version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail="Rule version not found.")
-    _assert_rule_governance_access(session, context=context, row=version)
+    version, rule_set = _lock_owned_rule_version(
+        session,
+        context=context,
+        rule_version_id=payload.rule_version_id,
+    )
     if version.status != "active":
         raise HTTPException(
             status_code=409,
             detail="Only an active approved rule version can be selected by a company.",
         )
-    rule_set = session.get(IpRuleSet, version.rule_set_id)
-    assert rule_set is not None
 
     policy = session.scalar(
         select(CompanyIpRulePolicy)
@@ -960,10 +1159,21 @@ def select_company_rule_version(
             CompanyIpRulePolicy.rule_set_id == version.rule_set_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
+    current_policy_version = policy.version if policy is not None else None
+    if payload.expected_policy_version != current_policy_version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_rule_policy_version_conflict",
+                "field": "expected_policy_version",
+                "expected_policy_version": payload.expected_policy_version,
+                "current_policy_version": current_policy_version,
+                "detail": "Company policy no longer matches; reload it and retry.",
+            },
+        )
     if policy is None:
-        if payload.expected_policy_version is not None:
-            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
         policy = CompanyIpRulePolicy(
             company_id=context.company.id,
             rule_set_id=version.rule_set_id,
@@ -976,11 +1186,6 @@ def select_company_rule_version(
         )
         session.add(policy)
     else:
-        if (
-            payload.expected_policy_version is not None
-            and payload.expected_policy_version != policy.version
-        ):
-            raise HTTPException(status_code=409, detail="Company policy no longer matches.")
         policy.active_rule_version_id = version.id
         policy.auto_confirm_eligible = payload.auto_confirm_eligible
         policy.internal_target_policy_json = payload.internal_target_policy
@@ -1018,7 +1223,10 @@ def list_company_rule_policies(
             select(CompanyIpRulePolicy, IpRuleSet, IpRuleVersion)
             .join(IpRuleSet, IpRuleSet.id == CompanyIpRulePolicy.rule_set_id)
             .join(IpRuleVersion, IpRuleVersion.id == CompanyIpRulePolicy.active_rule_version_id)
-            .where(CompanyIpRulePolicy.company_id == context.company.id)
+            .where(
+                CompanyIpRulePolicy.company_id == context.company.id,
+                IpRuleSet.company_id == context.company.id,
+            )
             .order_by(IpRuleSet.key)
         ).all()
     )
@@ -1031,6 +1239,9 @@ def propose_calendar_version(
     context: SessionContext,
     payload: LegalCalendarVersionProposalRequest,
 ) -> LegalCalendarVersionRecord:
+    # Working calendars stay outside the A0 rule-ownership drain (no rollout
+    # fence) but belong to the same entitled feature as rule governance.
+    _assert_rule_governance_entitled(session, context=context)
     context, _memberships = _lock_governance_memberships(
         session,
         context=context,
@@ -1112,6 +1323,7 @@ def activate_calendar_version(
     calendar_version_id: str,
     payload: LegalCalendarActivationRequest,
 ) -> LegalCalendarVersionRecord:
+    _assert_rule_governance_entitled(session, context=context)
     context, _memberships = _lock_governance_memberships(
         session,
         context=context,
@@ -1197,11 +1409,15 @@ def propose_deadline(
         for_update=True,
         required_capability="ip:approve",
     )
-    rule = session.get(IpRuleVersion, payload.rule_version_id)
-    if rule is None or rule.status != "active":
+    # Another company's version answers exactly like a missing one.
+    found = owned_rule_version(
+        session,
+        company_id=context.company.id,
+        rule_version_id=payload.rule_version_id,
+    )
+    if found is None or found[0].status != "active":
         raise HTTPException(status_code=409, detail="An active rule version is required.")
-    rule_set = session.get(IpRuleSet, rule.rule_set_id)
-    assert rule_set is not None
+    rule, rule_set = found
     if rule_set.rule_kind != "deadline":
         raise HTTPException(status_code=409, detail="Selected rule is not a deadline rule.")
     policy = session.scalar(
@@ -2210,12 +2426,6 @@ def deadline_workspace(
     docket_id: str,
 ) -> IpDeadlineWorkspaceResponse:
     _docket_or_404(session, context=context, docket_id=docket_id)
-    company_member_ids = select(CompanyMembership.id).where(
-        CompanyMembership.company_id == context.company.id
-    )
-    company_selected_rule_ids = select(CompanyIpRulePolicy.active_rule_version_id).where(
-        CompanyIpRulePolicy.company_id == context.company.id
-    )
     company_selected = (
         select(CompanyIpRulePolicy.id)
         .where(
@@ -2230,12 +2440,7 @@ def deadline_workspace(
         session.execute(
             select(IpRuleSet, IpRuleVersion, company_selected)
             .join(IpRuleVersion, IpRuleVersion.rule_set_id == IpRuleSet.id)
-            .where(
-                or_(
-                    IpRuleVersion.id.in_(company_selected_rule_ids),
-                    IpRuleVersion.proposed_by_membership_id.in_(company_member_ids),
-                )
-            )
+            .where(IpRuleSet.company_id == context.company.id)
             .order_by(IpRuleSet.key, IpRuleVersion.version.desc())
         ).all()
     )

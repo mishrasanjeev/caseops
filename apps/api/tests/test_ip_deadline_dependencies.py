@@ -16,6 +16,7 @@ from sqlalchemy import select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import IpDeadline, MatterDeadline, NotificationDeliveryIntent
 from caseops_api.db.session import get_session_factory
+from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -47,6 +48,7 @@ def _enable_rule_governance(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _setup(client: TestClient):
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
