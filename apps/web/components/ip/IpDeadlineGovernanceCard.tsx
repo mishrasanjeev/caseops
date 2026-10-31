@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { SourceHashField } from "@/components/ip/SourceHashField";
@@ -157,6 +157,13 @@ export function IpDeadlineGovernanceCard({ docket }: { docket: IpDocket }) {
     queryFn: () => fetchIpDeadlineWorkspace(docket.id),
   });
   const governance = workspace.data?.governance;
+  // Deep links from empty deadline pickers land here; the card renders after
+  // its data loads, so the browser's own hash scroll has nothing to reach.
+  useEffect(() => {
+    if (workspace.isSuccess && window.location.hash === "#ip-deadline-governance") {
+      document.getElementById("ip-deadline-governance")?.scrollIntoView?.({ block: "start" });
+    }
+  }, [workspace.isSuccess]);
 
   return (
     <Card id="ip-deadline-governance" className="min-w-0 scroll-mt-24 xl:col-span-2" data-testid="ip-deadline-governance">
@@ -278,6 +285,12 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
   const [sourceReference, setSourceReference] = useState("");
   const [sourceHash, setSourceHash] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
+  const clear = (key: string) => setErrors((current) => {
+    if (!(key in current)) return current;
+    const next = { ...current };
+    delete next[key];
+    return next;
+  });
 
   const propose = useMutation({
     mutationFn: (holidayDates: string[]) =>
@@ -341,16 +354,16 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
     >
       <div className="col-span-full text-sm font-semibold">Propose working calendar</div>
       <Field id="calendar-key" label="Calendar key" error={errors["calendar-key"]}>
-        {(describedBy, invalid) => <Input id="calendar-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setKey(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setKey(e.target.value); clear("calendar-key"); }} />}
       </Field>
       <Field id="calendar-name" label="Calendar name" error={errors["calendar-name"]}>
-        {(describedBy, invalid) => <Input id="calendar-name" value={name} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setName(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-name" value={name} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setName(e.target.value); clear("calendar-name"); }} />}
       </Field>
       <Field id="calendar-jurisdiction" label="Jurisdiction" error={errors["calendar-jurisdiction"]}>
-        {(describedBy, invalid) => <Input id="calendar-jurisdiction" value={jurisdiction} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setJurisdiction(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-jurisdiction" value={jurisdiction} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setJurisdiction(e.target.value); clear("calendar-jurisdiction"); }} />}
       </Field>
       <Field id="calendar-office" label="Office" error={errors["calendar-office"]}>
-        {(describedBy, invalid) => <Input id="calendar-office" value={office} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setOffice(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-office" value={office} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setOffice(e.target.value); clear("calendar-office"); }} />}
       </Field>
       <Field
         id="calendar-holidays"
@@ -358,15 +371,15 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
         error={errors["calendar-holidays"]}
         hint="YYYY-MM-DD or DD/MM/YYYY, separated by commas."
       >
-        {(describedBy, invalid) => <Input id="calendar-holidays" value={holidays} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setHolidays(e.target.value)} placeholder="26/01/2026, 15/08/2026" />}
+        {(describedBy, invalid) => <Input id="calendar-holidays" value={holidays} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setHolidays(e.target.value); clear("calendar-holidays"); }} placeholder="26/01/2026, 15/08/2026" />}
       </Field>
       <Field id="calendar-effective-from" label="Effective from" error={errors["calendar-effective-from"]}>
-        {(describedBy, invalid) => <Input id="calendar-effective-from" type="date" value={effectiveFrom} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setEffectiveFrom(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-effective-from" type="date" value={effectiveFrom} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setEffectiveFrom(e.target.value); clear("calendar-effective-from"); }} />}
       </Field>
       <Field id="calendar-source-reference" label="Official source reference" error={errors["calendar-source-reference"]}>
-        {(describedBy, invalid) => <Input id="calendar-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setSourceReference(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="calendar-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setSourceReference(e.target.value); clear("calendar-source-reference"); }} />}
       </Field>
-      <SourceHashField id="calendar-source-hash" value={sourceHash} onChange={setSourceHash} error={errors["calendar-source-hash"]} />
+      <SourceHashField id="calendar-source-hash" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("calendar-source-hash"); }} error={errors["calendar-source-hash"]} />
       <FormError id="calendar-form-error" message={errors[API_FORM_ERROR_KEY]} />
       <div className="col-span-full min-w-0">
         <Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={propose.isPending}>
@@ -404,6 +417,12 @@ function RuleProposalForm({
   const [fixtureBase, setFixtureBase] = useState(TODAY);
   const [fixtureExpected, setFixtureExpected] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
+  const clear = (key: string) => setErrors((current) => {
+    if (!(key in current)) return current;
+    const next = { ...current };
+    delete next[key];
+    return next;
+  });
   const calendar = calendars.find((row) => row.id === calendarId) ?? calendars[0];
   const prerequisiteId = "rule-proposal-prerequisite";
 
@@ -525,16 +544,16 @@ function RuleProposalForm({
         )}
       </Field>
       <Field id="rule-key" label="Rule key" error={errors["rule-key"]}>
-        {(describedBy, invalid) => <Input id="rule-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setKey(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setKey(e.target.value); clear("rule-key"); }} />}
       </Field>
       <Field id="rule-jurisdiction" label="Jurisdiction" error={errors["rule-jurisdiction"]}>
-        {(describedBy, invalid) => <Input id="rule-jurisdiction" value={jurisdiction} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setJurisdiction(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-jurisdiction" value={jurisdiction} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setJurisdiction(e.target.value); clear("rule-jurisdiction"); }} />}
       </Field>
       <Field id="rule-office" label="Office" error={errors["rule-office"]}>
-        {(describedBy, invalid) => <Input id="rule-office" value={office} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setOffice(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-office" value={office} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setOffice(e.target.value); clear("rule-office"); }} />}
       </Field>
       <Field id="rule-trigger" label="Trigger event kind" error={errors["rule-trigger"]}>
-        {(describedBy, invalid) => <Input id="rule-trigger" value={triggerKind} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setTriggerKind(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-trigger" value={triggerKind} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setTriggerKind(e.target.value); clear("rule-trigger"); }} />}
       </Field>
       <Field id="rule-method" label="Period counted in">
         {(describedBy) => (
@@ -546,18 +565,18 @@ function RuleProposalForm({
         )}
       </Field>
       <Field id="rule-duration" label={`Period (${unit})`} error={errors["rule-duration"]}>
-        {(describedBy, invalid) => <Input id="rule-duration" type="number" min={1} inputMode="numeric" value={duration} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setDuration(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-duration" type="number" min={1} inputMode="numeric" value={duration} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setDuration(e.target.value); clear("rule-duration"); }} />}
       </Field>
       <Field id="rule-citation" label="Rule citation" error={errors["rule-citation"]}>
-        {(describedBy, invalid) => <Input id="rule-citation" value={citation} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setCitation(e.target.value)} placeholder="Trade Marks Act 1999, s.21(1)" />}
+        {(describedBy, invalid) => <Input id="rule-citation" value={citation} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setCitation(e.target.value); clear("rule-citation"); }} placeholder="Trade Marks Act 1999, s.21(1)" />}
       </Field>
       <Field id="rule-effective-from" label="Effective from" error={errors["rule-effective-from"]}>
-        {(describedBy, invalid) => <Input id="rule-effective-from" type="date" value={effectiveFrom} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setEffectiveFrom(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-effective-from" type="date" value={effectiveFrom} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setEffectiveFrom(e.target.value); clear("rule-effective-from"); }} />}
       </Field>
       <Field id="rule-source-reference" label="Rule source reference" error={errors["rule-source-reference"]}>
-        {(describedBy, invalid) => <Input id="rule-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setSourceReference(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setSourceReference(e.target.value); clear("rule-source-reference"); }} />}
       </Field>
-      <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={setSourceHash} error={errors["rule-source-hash"]} />
+      <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("rule-source-hash"); }} error={errors["rule-source-hash"]} />
       <Field id="rule-fixture-calendar" label="Fixture working calendar">
         {(describedBy) => (
           <select
@@ -574,10 +593,10 @@ function RuleProposalForm({
         )}
       </Field>
       <Field id="rule-fixture-base" label="Fixture trigger date" error={errors["rule-fixture-base"]}>
-        {(describedBy, invalid) => <Input id="rule-fixture-base" type="date" value={fixtureBase} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setFixtureBase(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-fixture-base" type="date" value={fixtureBase} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setFixtureBase(e.target.value); clear("rule-fixture-base"); }} />}
       </Field>
       <Field id="rule-fixture-expected" label="Expected fixture deadline" error={errors["rule-fixture-expected"]}>
-        {(describedBy, invalid) => <Input id="rule-fixture-expected" type="date" value={fixtureExpected} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setFixtureExpected(e.target.value)} />}
+        {(describedBy, invalid) => <Input id="rule-fixture-expected" type="date" value={fixtureExpected} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setFixtureExpected(e.target.value); clear("rule-fixture-expected"); }} />}
       </Field>
       {!calendars.length ? (
         <p id={prerequisiteId} className="col-span-full min-w-0 break-words text-sm text-[var(--color-warn-text)]">
