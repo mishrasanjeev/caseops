@@ -6,7 +6,440 @@ mark unavailable or processing fields rather than treating them as zero.
 Do not count an indexing request, directory prospect, or owned link as organic
 traffic, a backlink, or a conversion.
 
+## 2026-10-31 04:56 UTC - Release Still Gated, No New GSC Audit
+
+Later3987 CI exposed four real generic-plan disclosure-work failures. Exact
+unique-key replacement remains unverified; no new release or SEO audit follows.
+
+The9fd9 release run has two independently retained disclosure-work failures;
+the replacement is unverified. Full canonical Docker, CI, main merge, guarded
+deployment and exact-serving product certification remain open. This is only
+an engineering deferral, not a completed SEO/AEO audit. Preserve the October27
+browser URL-safety stop. Daily SEO remains ACTIVE with sanjeev@orchestrum.in,
+no competing release, invented Google metrics, lead submissions or paid probes.
+Mobile/native work remains with the MacBook and is not marketed as shipped.
+
+## 2026-10-31 IST - Disjoint Release Candidate, No New Google Data
+
+SEO remains ACTIVE but release-deferred; this is an engineering checkpoint, not
+a GSC audit. At 04:15 UTC the frozen component has 49 passed calls/147 phases,
+including the original stale-unique work failure; twelve cases remain
+unverified. This supersedes the dated 03:44 progress count below, not whole
+acceptance. Existing J19/M21/US-063 mail fixture ownership now has exact ordered
+48-case RED34P/14F and complete107P/321 replacement including4PG mail races,
+39files independently verified; pure ownership8P/24. This is no synthetic lead,
+delivery-to-a-real-prospect, qualified-lead or conversion evidence. No product
+feature or telemetry expansion follows.
+
+Actual1985 CI41149650760 failed14notification+1family-work roots/2aggregates.
+Independent Security/Advanced green with17CodeQL annotations is not full release
+acceptance. Strict161audit/244P compatibility and corrected20pure SQL-map cases
+are components. Source-frozen61 is only43P/0F/18unverified at03:44UTC; M2's two
+added PG negative cases make an intended63, not a new passing run. Docker28
+remains3615P/2F;29/30 are incomplete;0browser executed,640discovery only. Require
+newALL-CI/full canonicalDocker31, guarded current-main/deploy/exact-live D29 15s,
+post-QA clean private/guarded resume/distinct natural cadence and both real Excel
+updates. Interim08 stays36fixed/7partial/1inconclusive; onlyD29 may promote after
+production proof. MainB994 is not a new-source API/web release; no new deploy.
+See bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md. Remain NO-GO.
+
+Preferred account remains sanjeev@orchestrum.in and authorized property remains
+https://caseops.ai/. Preserve the October27 URL-safety stop without browser/API
+bypass. No new GSC data, search metrics, indexing submission, synthetic lead,
+paid probe or client telemetry occurred. External legal, old-calendar/consent,
+provider and owner-MFA holds remain; App/MacBook/native/0008 stays excluded.
+Prior entries below are historical evidence, not erased or upgraded by this note.
+
+## 2026-10-31 IST - Human Release Deferral, Not A Google Audit
+
+Later engineering checkpoint:75FA's dependency/CodeQL failures require a new
+committed candidate. Strict161-package audit and244-case offline compatibility
+now pass, but Docker29 was owned-interrupted after61complete of3619intended,
+0browser. This is not full regression or a release. A fresh complete Docker/
+hosted/live sequence remains active; no competing SEO implementation or main
+advance is authorized by this dated checkpoint.
+
+Owner-requested PR567 release remains the critical path; App/MacBook/0008 is
+separate. Full998A Docker28 completed3615passed/2failed of3617native cases,
+0skips/retries and0browser execution. Hosted55success/2skipped checks is not
+release certification. Subsequent scoped lifecycle/ownership replacement passes
+191cases/573phases, but new committed full Docker/CI/main/deploy/live gates
+remain required. Both Excel originals still contain explicit interim08 results.
+See bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+
+Daily automation remains ACTIVE with preferred account sanjeev@orchestrum.in
+and URL-prefix https://caseops.ai/. No new GSC report was obtained; retain the
+October27 URL-safety stop without an alternate-browser/API bypass. No traffic,
+indexing, AI-feature, qualified-lead, backlink or conversion result is inferred.
+No synthetic lead, paid probe, indexing submission or client tracking occurred.
+Resume the evidence-based audit after the human release critical path clears.
+Stored sign-in noindex issue521 stays closed; sender/retention/consent and owner
+MFA dependencies remain separate from serving admission code.
+
+## 2026-10-30 IST - Continuing Human Release Gate
+
+C50C focused replacement now completes114passes/342phases, no skips/retries,
+source unchanged. Its remaining hosted failure identifies a missed old exact
+artifact-path test; that adjacent consumer is corrected without weakening its
+inventory assertion. Full Docker/current CI/main/live gates still pending.
+This remains engineering deferral, not an SEO/GSC audit. App stays with MacBook.
+The complete four-consumer replay passes106cases/318phases with no skips/retries;
+the full replacement release gate remains next, not completed by that component.
+
+After the complete135-case component:132passed/3physical-plan failures,405phases,
+no skips. CI41088520247 completed37successful/4failed/2skipped jobs; only three
+root physical-plan failures plus aggregate. Query-work correction and nested
+evidence retention require replacement Docker/hosted/main/live certification.
+Both original summaries now contain published/fresh-read-back interim08, not
+certification. SEO stays ACTIVE/release-deferred, browser URL-safety stop intact;
+no fresh Google report, public audit, metric, lead, provider call or tracking.
+This supersedes the earlier workbook-publication-pending checkpoint below.
+
+16:13UTC engineering continuation only: D060 CI is terminally failed with all
+57checks reconciled (42success/12failure/3skips). Consolidated remaining source
+repairs are unverified. The nine-file component was retained as incomplete at
+93passedcases/279phases,228unexecuted; it is not full Docker or production
+certification. At15:51:53-54UTC fresh no-paid public metadata still shows F49
+on both API/web. Both summaries remain interim07 until actual publication.
+Daily SEO remains ACTIVE/release-deferred; no new GSC audit, metrics, indexing,
+lead, provider probe, tracking or URL-safety bypass. MacBook owns App work.
+
+13:31UTC engineering continuation, not a Google audit: owner-directed PR567/
+#561/#564 remains active and the MacBook owns App work. Complete Docker26 has
+3514P/2F/0S and no browser execution; subsequent GREEN02 is348passedcalls/
+3failedcalls plus1teardown error over351identities/1053phases. Corrected narrow
+work/ownership candidates have15pure passes/45phases. Complete GREEN03 ran
+392cases/1176phases (384P/8structured-query recorder failures), with all26
+dual-database recipient cases and original concurrency cases passing. The
+corrected GREEN05 passes41profile+5original variants,46cases/138phases/0F/0S
+with unchanged source, not full release certification. Both workbooks remain
+INTERIM07 until actual full Docker/current CI/main/deploy/live/cadence proof.
+Daily SEO stays ACTIVE and release-deferred. No new GSC metrics, audit,
+indexing/sitemap action, paid probe, synthetic lead, tracking or safety-stop
+bypass occurred. Preserve sanjeev@orchestrum.in and the authorized property.
+
+20:22UTC continuation: a separate positive scanner fixture reached an unknown
+create outcome in fresh hosted Security; fail-closed cleanup remained correct.
+Its narrow stage-boundary correction passes all75local native Docker cases.
+Docker25 was stopped before builds and must be replaced completely. This is
+still engineering deferral, not GSC/SEO acceptance or production certification.
+
+At2026-10-29T19:56UTC, owner-directed #561/#564/PR567 work remains active.
+Docker24 found a real private-invalidation timing failure; failed/interrupted
+evidence remains retained. The bounded-allocation repair has a complete275-case
+focused replacement, not full-release acceptance. Fresh frozen Docker/hosted
+gates, main, deployment and live certification are next. Daily SEO stays ACTIVE
+but deferred, not a completed GSC audit. No new Google metrics, indexing, leads,
+links or conversion claims; preserve the October27 browser URL-safety stop and
+sanjeev@orchestrum.in preference. No paid probe, synthetic lead, client tracking,
+sitemap submission or competing release.
+
+## 2026-10-29 - Critical Release Deferral
+
+16:12UTC engineering continuation, not Google/search acceptance: current540E
+hosted CI completed RED from two stale source-security inventories plus their
+aggregate. The corrected canonical-writer inventories pass a fresh complete
+50-case/150phase Docker-PG component; later full-definition wrapper tightening
+separately passes both original identities2/6phases. Docker22 storage timeout
+and pre-build Docker23 interruption remain retained, not main acceptance.
+New committed full Docker/CI/current-main/live certification is still required.
+Both original summaries remain interim07/NO-GO. No Google retry, metrics,
+synthetic lead, paid probe, indexing/sitemap action or competing release occurred.
+Daily automation remains unpaused; the existing URL-safety stop and MacBook
+app ownership are preserved. External legal/provider/consent/MFA holds stay.
+
+14:55UTC engineering continuation, not Google/search acceptance: committed82C8
+Docker21 stopped in web fixture preflight before images/main regression,
+18process cases16P/2F. The original driver10s failure and EBUSY cleanup remain
+retained; a later driver observation does not establish their historical cause.
+Scoped awaited/bounded cleanup plus one new process control now passes the full
+76fixture cases, source equality/owned-tree reaping and Node22.14 typecheck.
+Product GREEN46/138 remains component evidence. A new committed full Docker/CI/
+main/guarded live release is still required; no deployment or new workbook
+publication occurred. This work did not pause daily SEO or bypass the Google
+URL-safety stop. No new metrics/leads/provider probe/sitemap action. MacBook
+app work and all external/legal/provider/consent/MFA holds remain separate.
+
+14:10UTC engineering continuation, not a Google audit: Docker20 on committed1F
+retains437P/2F/1317phases;3070native/640browser cases are unexecuted. Both failures
+are import deadlines before export measurement, not observed plan failures.
+A narrow discarded-response writer replacement passes46cases/138phases across
+seven complete modules, including the original201-row deadlines;37retained
+files verify. Its separate diagnostic profiler remains INCOMPLETE and is not
+SQL acceptance. New whole-source Docker/CI/main/live certification is still
+required. Prior1F hosted CI is now green but does not certify dirty new source.
+No new deployment occurred; last actual cloud identity remains the11:34read
+of mainB994/APIwebF49 until refreshed. Both workbooks remain INTERIM07/NO-GO.
+This work did not pause the last-verified ACTIVE daily automation. No Google
+retry/bypass, synthetic lead, paid probe, sitemap action or competing SEO work.
+MacBook app work and external/legal/provider/consent/MFA holds stay separate.
+
+11:50UTC engineering continuation, not a search audit: owner confirms the
+MacBook owns app work and requests backend/web closure. AFBC hosted CI/Security
+is green but Docker19 retains1313P/1F over three complete groups; the remaining
+2189native/640browser cases were unexecuted. A scoped precommit metadata
+replacement now passes the complete206-case/618phase affected component,
+including unchanged upload/writer/finalizer races;177retained files verified.
+Its supervisor's long-path verification failure and earlier incomplete runs
+are preserved, not rewritten as outer success. Full new Docker/CI/main/live
+certification is still required. Fresh11:34read-only cloud metadata remains
+mainB994/APIwebF49, not this candidate. Both workbooks remain actual INTERIM07/
+NO-GO, with all legal/provider/owner holds. Daily automation was freshly checked
+ACTIVE; no GSC retry, paid probe, synthetic lead or competing SEO release occurs.
+
+06:46UTC engineering continuation:13D hosted CI failed the exact export
+provenance work bound81600>820. Docker18 was intentionally stopped after one
+naturally completed438-case group; remaining3061native and640browser cases
+are unexecuted. Both original summaries were actually published INTERIM07/
+NO-GO, not certified. A subsequent full17-case source-proof/export component
+passes with51phases and400recorded visits for the failing200-row lookup.
+This is not a new serving release, complete Docker or production acceptance.
+No Google audit occurred and the existing URL-safety stop was not bypassed.
+
+The02:19UTC heartbeat deferred to the active owner-requested #561/#564/PR567
+release. Daily automation remains ACTIVE with sanjeev@orchestrum.in, the same
+URL-prefix property, schedule, privacy/provider fences and quiet intent. No
+Google/browser/connector/API retry occurred; the October27 URL-safety stop was
+not bypassed. No new search metrics, indexing, backlinks or conversions exist
+from this deferral, and no synthetic lead, paid probe or sitemap action occurred.
+
+The complete BFF Docker17 native run is3482P/1F/0S over3483cases/10449phases;
+all640browsercases remain unexecuted. Its hosted CI/Security success and five
+reviewed CodeQL warnings are separate. A subsequent narrow Matter response
+candidate has46focused native passes/138phases, not whole-release acceptance.
+Do not advance main or launch competing SEO work. Keep #513/#515, consent/
+retention/real-delivery/owner-MFA and separate MacBook/native holds honest.
+The dated sidecar SEO_DAILY_DEFERRAL_2026-10-29.md records the limited scope;
+resume the evidence-based daily program after the human critical path clears.
+
+## 2026-10-28 20:52 UTC - Release Deferral And Automation Restored
+
+The existing daily 07:30 heartbeat is ACTIVE again with the same account,
+property, privacy rules and quiet notification intent. Its updated release
+guard prohibits interruption or competing execution while #561/#564 acceptance
+is active. This is an automation-state change, not a completed GSC audit.
+
+Read-only Cloud Run evidence still identifies API/web `f49b274e` at 100% traffic
+and canonical main `b9946c71`. Hosted checks for `36a56e77` are green, including
+zero independent CodeQL annotations, but local Docker16 has an unresolved
+administrator invitation-race failure. The two later original-source diagnostic
+passes are component evidence, not a new deployment or production acceptance.
+
+The October 27 browser URL-safety stop remains authoritative. No alternate
+browser, connector or API bypass, fresh Google report, ranking, conversion,
+backlink, lead submission, paid probe or sitemap resubmission is claimed.
+Preferred GSC identity remains `sanjeev@orchestrum.in`. Native #558, MacBook,
+readthrough0008, owner MFA, legal evidence and external calendar consent stay
+separate. Next action: finish the human-requested release, then perform a safe
+daily audit if direct access is available. Evidence: the October 28 20:52:41 UTC
+`live-main.json` observation and `platform-invite-race-20261028` sidecars under
+the primary workspace's `outputs/fix-561-20261026/portfolio-export-worker`.
+
+## 2026-10-28 13:14 UTC - Release Gate, Not A Search Audit
+
+17:08 UTC engineering update: A729 Security40729502028 failed one real scanner
+cleanup test out of67; full CI40729501940 was cancelled for changed source,
+not accepted. The isolated acknowledged-create replacement passes all75 scanner
+cases (67retained+8new), separately from the75fixture-component inventory.
+Joined-source/current-head security, independent CodeQL, full Docker and exact
+production certification remain open. Both actual original Excel summaries were
+updated/read back INTERIM05/NO-GO at17:05UTC with formulas/verdicts preserved.
+No new live release, public acceptance, GSC metrics or conversion is inferred.
+
+16:46 UTC engineering correction:68C's CI, Security and CodeQL Advanced workflows
+passed, but the independent CodeQL results check122895415429 FAILED (two errors,
+four notes). Workflow-only green reporting was incomplete. The source correction
+passes75 local fixture tests, including six interruption-completion regressions.
+Frozen Docker15 was interrupted before source edits and retains1887 passing calls,
+not full native/browser acceptance. New independent results and all release gates
+remain required. No new deployment or GSC/public-content audit is claimed; the
+October27 browser safety stop and existing privacy/provider fences remain intact.
+
+Later engineering correction: DE333 CI40698272945 was cancelled at the outer
+12-minute PostgreSQL shard15 job boundary. Retained reports reconcile3483 cases
+and10449 passing phases, but the aggregate correctly refuses a cancelled job.
+Security and CodeQL passed separately. A24-shard replacement keeps the same
+deadline/concurrency/coverage guards; its capacity forecast is not execution.
+Docker14's69 preflight passed, then the obsolete candidate was explicitly
+interrupted before these edits. It remains incomplete, not a new public audit,
+release pass or deployment. The source requires another frozen full replacement.
+
+J19/M21/US-063. No fresh GSC or production public-content audit is claimed.
+The October 27 browser safety stop remains authoritative. The preferred GSC
+account remains `sanjeev@orchestrum.in`; its signed-in identity was not newly
+verified today. No Google metrics, indexing change, lead, backlink or conversion
+is inferred from this engineering work.
+
+At `5df10f35`, CI40606343710, Security40606343777 and CodeQL40606343729 passed.
+Canonical Docker13 completed all 3,483 PostgreSQL cases and 10,449 phases, with
+no failures, skips or retries. Its first desktop browser shard nevertheless
+ended with 308 passes, four failures, five configured skips and two serially
+unexecuted tests out of 319 selected. The remaining 321 intended browser cases
+did not run. This is NO-GO, not a completed release or SEO acceptance audit.
+
+The integrated bounded IP fixture replacement subsequently passed 18 process
+and 51 SQLite cases with source identity and child cleanup reconciled. A
+separate fresh PostgreSQL component passed 51 cases. The original module walk
+also passed in a six-case, unchanged-source diagnostic replay including its
+preceding accessibility tests; this does not establish the original cause or
+replace the complete release inventory. The replacement source still requires
+fresh CI, full Docker, protected merge, guarded deployment and live replay.
+
+At 12:21 UTC, read-only canonical Git and routed Cloud Run metadata still show
+main `b9946c71` and API/web `f49b274e`, each at 100% traffic without tags. These
+are routing observations, not a fresh public-page or whole-product test. Both
+original Excel summaries now retain INTERIM04/NO-GO results and unchanged
+legal, owner-MFA, external cleanup and provider dependencies.
+
+At 13:14 UTC the daily automation was observed PAUSED. Restore the owner's
+existing daily schedule after critical release coordination; do not silently
+treat the earlier ACTIVE descriptions below as current state. Native PR558 at
+the owner's Mac checkpoint `a2a66b8d`, its read-page/security/storage branches
+and their testing remain separately owned. No competing SEO release, synthetic
+lead, paid probe, sitemap resubmission, GA4 or client telemetry was introduced.
+
+## 2026-10-28 IST - Release Replacement, No New Search Observation
+
+J19/M21/US-063. This is an engineering checkpoint, not a new GSC audit. The
+October27 browser safety stop remains authoritative; no current Google report,
+conversion, indexing or backlink result is invented. The previous17 marked
+HTTP observations remain dated F49 components, not a new browser execution.
+
+PR567 at8f8b65d7 has complete1907/1907 frontend passes and green Security/
+CodeQL, but whole CI40558115542 fails one214-case PG14 shard at its unchanged
+provenance-work cap. Local unchanged-source PostgreSQL17.11 reproduces excess
+row visits and identifies repeated company/action scans; the originally
+suggested hashed-plan cause was not observed. A complete-predicate support
+index and fresh/analyzed retained-width regressions are being implemented.
+Docker09 stopped before stack/product tests and is incomplete. MainB994 has
+not routed API/web; serving F49 and all external/native/owner dependencies
+remain separate. At19:22UTC the daily automation was restored ACTIVE with its
+existing07:30IST schedule, preferred account and quiet intent, with an explicit
+guard to defer competing work while human release/native gates run. External
+holds must not leave it paused. No paid probe, synthetic lead, sitemap request,
+GA4, client tracking or marketing claim is introduced.
+
+At19:53UTC, the complete focused non-PostgreSQL selection passed345 cases with
+1035 setup/call/teardown reports;67 PostgreSQL identities remain reserved.
+The supplementary44-case database run was stopped by the parent agent, not
+the owner, to replace the known lint-unreleasable candidate with the canonical
+full final-source Docker gate. It retained two passing calls, a third passing
+setup and no completion event; no retained-width, migration or whole-database
+acceptance follows. Two line wraps correct E501 only, without changing SQL
+text, predicates or limits. Actual cleanup and failed partial-stop evidence
+are retained. No new search or deployed-release claim follows.
+
+At20:23UTC, canonical Docker10 on62c130a0 stopped before image/PG/browser
+acceptance: the generated runtime data-class projection still carried the old
+map/schema fingerprints. Its strict validator correctly refused release. The
+renderer changes only three artifact fingerprints; admitted class sets,
+reviewed registries, ORM column schema and policy decisions are unchanged.
+Both projection and inventory validators must pass before the replacement
+freeze. No product cases or new search observations are claimed from Docker10.
+
+At21:53UTC, CI40578349238 on6cc is complete:3442/3443 PostgreSQL cases pass,
+one fresh-statistics export case fails, and Security/CodeQL pass. Docker11
+was stopped and cleaned up before complete PG/browser acceptance. The
+unchanged default-server reproduction retains69854/69854/67218 provenance
+visits despite the new index; index-only closure is rejected. A scoped query
+repair and complete CI plan retention remain pending real tests. This is not
+a new GSC observation or production release. Ordinary interim maintenance08
+completed cleanly for eight tenants with zero rebuilds at21:53:52UTC; it is
+not post-QA certification or scheduler-resume evidence. The original workbook
+verdicts remain interim, and native/iOS/owner dependencies remain separate.
+
+At22:47UTC,942 is rejected: its complete fresh application case still exceeds
+the unchanged work cap (69960/69960/67269 visits); scalar LIMIT is not a repair.
+Its complete349-case non-PG run has348 passes and one failed export; retained
+observation attributes that failure to a Windows rename from242 to265 path
+characters, with an unchanged short-root control passing. All original failed
+evidence remains. Security/CodeQL/review passed, but the parent cancelled its
+own known-unreleasable CI run. No green CI, full Docker or routing is claimed.
+A cold SQL-only diagnostic preserves default planner settings and equal53-row
+proofs while dropping only a redundant historical prefix index: work falls
+from69907 to106. That is hypothesis support, not real application acceptance.
+A separate guarded reversible migration and fresh complete short-root tests
+remain required. The original EXISTS reader is retained; unrelated marketing,
+privacy, legal and provider policy is unchanged.
+
+The interrupted mobile-backend PDF/email replacement completes155 intended
+cases:152 passed, three model-cache skips, zero failures and465 phases. An
+external list/tuple reconciliation error is preserved; an independent stored-
+JSON comparison verifies source/installed identity and all actual outcomes.
+This is a component on F945 plus three dependency files, not a new clean mobile
+release or Android/iOS acceptance. Owner-Mac, native security/Windows and
+external consent dependencies remain. Automation is ACTIVE; no new Google
+report, synthetic lead, provider charge or conversion result is claimed.
+
+At23:26UTC,9aecd60d's targeted preflight completes49 non-PG passes,147 phases,
+zero failures/skips;39 PG identities remain reserved. The full real PostgreSQL,
+Docker, CI and production gates are still pending. A separate second-wait
+native DROP cancellation case is added before that replacement; no failed or
+unverified case is relabelled passing. The earlier mobile upstream-unavailable
+rationale is corrected: the maintainer's CVE-2026-85393 advisory lists1.4.1 as
+patched and official npm1.4.2 was already published before the earlier check.
+The mirror's null patch field was incomplete. Targeted mobile update/audit is
+separate and not yet certified. The saved SEO automation readback is ACTIVE
+with unchanged schedule/account and an explicit non-interruption release guard.
+These engineering results are not a new Search Console observation or release.
+
+At00:04UTC October28, F7 is rejected before release. CI40603387893 fails its
+governance branch-diff check because0002 declared an unchanged map despite the
+updated purpose documentation. Two PG test failures and the separate local
+dead-DROP failure miss SQLAlchemy's leading newline in compiled DROP statements;
+the native wait/cancel/replay assertions remain unproved, not waived. Normalize
+only observation whitespace and correct the declaration, then replay the full
+contract chain and native cases. The parent stopped the known-unreleasable CI
+and unfinished focused08 run; completed phases remain separate from unexecuted
+identities. Security40603387883 and CodeQL40603387936 succeeded, not release
+acceptance. Ordinary interim maintenance10 is clean for eight tenants with zero
+rebuilds; this is not post-release certification. Mobile's official Forge1.4.2
+repair now has347 source-test passes and no high/moderate audit findings; native
+device/iOS acceptance remains separate. No new GSC result or deployment follows.
+
 ## 2026-10-27 IST - Marked Public Checks; GSC Safety Stop
+
+Later engineering update,17:09 UTC: protected PR566/main
+`b9946c71f7e9912d56b5372f2dcfedd3cf82eea6` passed full local acceptance
+(3425 PostgreSQL,1906 frontend,630 browser passes/10 explicit browser skips)
+and main CI/Security/CodeQL. Its deployment stopped before API/web routing:
+an enabled Cloud Tasks API was misreported absent by filtered CLI list/limit
+ordering. Exact official metadata proves ENABLED; the worker secret is still
+absent. The source correction replaces both this and the adjacent secret
+existence check with exact metadata reads and typed absence, not broader IAM,
+secret access or an opaque retry. Its complete focused replacement passes
+142/142; full new-candidate release acceptance remains required. Existing
+business worker schedules/admission were canonically restored at17:09 UTC;
+private and unreleased export-recovery cadences remain held. Fresh marked
+API/web identity at17:02 UTC remains `f49b274e`, not B994. No new GSC access,
+metrics, indexing, leads, conversion or deployed-fix claim follows from this
+engineering update. See `docs/bugfix-export-resource-readiness-2026-10-27.md`.
+
+At17:18 UTC, replacement PR567's fresh Security40548963348 found three newly
+published dnspython/fpdf2 advisories despite the prior main scan passing. Full
+Docker08 was stopped during image build, before product tests, and is incomplete.
+Patched dependency floors/lock and fresh acceptance are required; no advisory
+waiver or deployed-success claim is made. Its complete component run has331
+non-PostgreSQL passes and49 PostgreSQL cases pending, not whole-release proof.
+The patched local environment now passes strict OSV audit with no known
+vulnerabilities; compatibility checks pass. This does not replace fresh protected
+CI or the serving-release verification. No new search data is implied.
+
+Later,2046e2d9 Security and CodeQL passed, and the complete release component
+selection repeated331 passes/49 PostgreSQL cases pending. Full frontend04 is
+red at1905passes/1reports-entry test failure, not accepted: its account label
+was not observed during asynchronous session/report loading. The captured DOM
+cannot identify the exact pending stage. A controlled two-stage fixture and
+invalidation regression are being prepared; production deadlines and access
+checks remain unchanged. Docker09 and deployment have not started. No current
+GSC access or positive native Android/iOS acceptance is inferred from this work.
+
+Controlled replacement proof passes62/62 across the real-provider page,
+reports, session and client modules, including late-response invalidation.
+The unchanged isolated three-case diagnostic also passed, leaving the exact
+original delayed stage unproved. All failed full-run evidence is retained;
+the new1907-case complete frontend run and full Docker/release gates remain
+pending. No production deadline, role fence or telemetry setting changed.
 
 J19/M21/US-063. Seventeen fresh marked observations cover fifteen unique
 public/policy/release URLs, bounded before and after by serving API/web

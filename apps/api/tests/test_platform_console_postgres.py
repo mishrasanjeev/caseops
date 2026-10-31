@@ -31,6 +31,7 @@ from caseops_api.services import platform_console as console
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.security import _decrypt_secret, _hotp
 from tests import test_platform_console as cases
+from tests.platform_race_evidence import JoinedActorPool
 from tests.test_platform_console import report_console as report_console
 
 __all__ = ["pytestmark", "report_console"]
@@ -68,7 +69,9 @@ def _viewer(data):
 
 
 @pytest.mark.parametrize("target", ["root", "manager", "issuer_user"])
-def test_console_revocation_fences_are_native_and_fresh(report_console, monkeypatch, target):
+def test_console_revocation_fences_are_native_and_fresh(
+    report_console, monkeypatch, target, request, record_property
+):
     data = report_console
     _viewer(data)
     token = data["client"].cookies.get(CONSOLE_SESSION_COOKIE)
@@ -122,15 +125,15 @@ def test_console_revocation_fences_are_native_and_fresh(report_console, monkeypa
             )
             session.commit()
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        reader = pool.submit(read)
+    with JoinedActorPool(request, record_property, actors=("reader", "writer")) as pool:
+        reader = pool.submit_actor("reader", read)
         writer = None
         try:
             if not reached.wait(2):
                 if reader.done():
                     reader.result()
                 pytest.fail("Console authorization never reached its exact fence.")
-            writer = pool.submit(revoke)
+            writer = pool.submit_actor("writer", revoke)
             assert writer_started.wait(1)
             _wait_for_edge(engine, holder_pids[0], waiter_pids[0], writer)
         finally:

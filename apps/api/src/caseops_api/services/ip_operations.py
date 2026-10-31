@@ -694,6 +694,27 @@ def create_ip_docket(
     source_provenance: tuple[str, str] | None = None,
     commit: bool = True,
 ) -> IpDocketRecordResponse:
+    docket = _create_ip_docket_record(
+        session,
+        context=context,
+        payload=payload,
+        docket_id=docket_id,
+        source_provenance=source_provenance,
+        commit=commit,
+    )
+    return _serialize_docket(session, docket, context=context)
+
+
+def _create_ip_docket_record(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpDocketCreateRequest,
+    docket_id: str | None = None,
+    source_provenance: tuple[str, str] | None = None,
+    commit: bool = True,
+) -> IpDocketRecord:
+    """Shared canonical writer; import callers need the record, not a rich DTO."""
     from caseops_api.services.private_retrieval import lock_private_authority_writer
 
     if "portfolio_dates" in payload.particulars.representation:
@@ -906,7 +927,7 @@ def create_ip_docket(
         session.refresh(docket)
     else:
         session.flush()
-    return _serialize_docket(session, docket, context=context)
+    return docket
 
 
 def _new_version(

@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from caseops_api.db import migrations
+from caseops_api.services import case_tracking_summary, court_sync_jobs, document_jobs
 from caseops_api.services import qa_document_quiescence as gate
 from caseops_api.workers import document_processor as worker
 
@@ -177,16 +179,18 @@ def test_quiescence_cli_only_observes_queue_and_sanitizes_failure(
     document_worker_settings.env = "production"
     document_worker_settings.document_worker_admission_protocol_version = 1
     document_worker_settings.document_worker_admission_enabled = True
-    for name in (
-        "run_migrations",
-        "run_worker_iteration",
-        "drain_document_processing_jobs",
-        "recover_stale_document_processing_jobs",
-        "enqueue_scheduled_document_reprocessing",
-        "drain_matter_court_sync_jobs",
-        "drain_update_summaries",
+    for module, names in (
+        (migrations, ("run_migrations",)),
+        (worker, ("run_worker_iteration",)),
+        (document_jobs, (
+            "drain_document_processing_jobs", "recover_stale_document_processing_jobs",
+            "enqueue_scheduled_document_reprocessing",
+        )),
+        (court_sync_jobs, ("drain_matter_court_sync_jobs",)),
+        (case_tracking_summary, ("drain_update_summaries",)),
     ):
-        monkeypatch.setattr(worker, name, lambda **_: pytest.fail("Mutation path invoked"))
+        for name in names:
+            monkeypatch.setattr(module, name, lambda **_: pytest.fail("Mutation path invoked"))
 
     def observe():
         if failure:

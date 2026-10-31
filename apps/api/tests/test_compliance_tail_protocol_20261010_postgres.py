@@ -38,6 +38,8 @@ from caseops_api.db.models import (
     MatterComplianceExtractionRun,
     MatterComplianceItem,
     MatterCourtOrder,
+    MatterCourtSyncJob,
+    MatterCourtSyncJobStatus,
     ModelRun,
     utcnow,
 )
@@ -1274,7 +1276,7 @@ def test_native_fk_detachment_retains_marker_and_source_history(tail_database, p
 
 @pytest.mark.parametrize("caller", ["manual", "worker"])
 def test_current_multi_order_import_rebinds_each_root_without_committing_partial_work(
-    tail_database, monkeypatch, caller
+    tail_database, monkeypatch, caller, record_property,
 ):
     database = tail_database
     command.upgrade(database.cfg, "head")
@@ -1310,6 +1312,13 @@ def test_current_multi_order_import_rebinds_each_root_without_committing_partial
                 court_sync_jobs, "get_session_factory", lambda: lambda: scoped_session("worker")
             )
             court_sync_jobs.run_matter_court_sync_job(fixture["court_job_id"])
+            with Session(database.engine) as session:
+                job = session.get(MatterCourtSyncJob, fixture["court_job_id"])
+                assert job is not None
+                outcome = {"status": job.status, "error_message": job.error_message}
+                record_property("court_worker_outcome", json.dumps(outcome))
+                assert job.status == MatterCourtSyncJobStatus.COMPLETED, outcome
+                assert job.error_message is None, outcome
         else:
             with scoped_session("manual") as session:
                 context = _ip_race_context(

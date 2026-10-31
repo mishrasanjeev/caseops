@@ -15,6 +15,33 @@ from packaging.version import Version
 
 @pytest.mark.parametrize(
     "name,minimum",
+    [("dnspython", "2.9.0"), ("fpdf2", "2.8.8")],
+)
+def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, minimum):
+    api = Path(__file__).resolve().parents[1]
+    manifest = tomllib.loads((api / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads((api / "uv.lock").read_text(encoding="utf-8"))
+    assert f"{name}>={minimum}" in manifest["project"]["dependencies"]
+    rows = [row for row in lock["package"] if row["name"] == name]
+    assert len(rows) == 1
+    assert Version(rows[0]["version"]) >= Version(minimum)
+    assert rows[0]["wheels"]
+    assert all(wheel["hash"].startswith("sha256:") for wheel in rows[0]["wheels"])
+    assert Version(importlib.metadata.version(name)) >= Version(minimum)
+
+
+def test_patched_dns_parser_rejects_a_self_referencing_compression_pointer():
+    import dns.name
+
+    with pytest.raises(dns.name.BadPointer):
+        dns.name.from_wire(b"\xc0\x00", 0)
+    value, consumed = dns.name.from_wire(b"\x07caseops\x02ai\x00", 0)
+    assert value.to_text() == "caseops.ai."
+    assert consumed == 12
+
+
+@pytest.mark.parametrize(
+    "name,minimum",
     [
         ("opentelemetry-api", "1.45.1"),
         ("opentelemetry-sdk", "1.45.1"),

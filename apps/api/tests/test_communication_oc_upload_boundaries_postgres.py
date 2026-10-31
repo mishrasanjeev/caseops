@@ -534,25 +534,122 @@ def test_inbound_import_is_atomic_and_retryable(
 
 @pytest.mark.parametrize("autoflush", [False, True])
 def test_simultaneous_inbound_import_preserves_idempotency(
-    pg_engine, monkeypatch, tmp_path, autoflush
+    pg_engine, monkeypatch, tmp_path, autoflush, request, record_property
 ):
+    import json
+    import sys
+    from pathlib import Path
+    from time import perf_counter_ns
+    from traceback import walk_tb
+
     fixture, payload = _seed(pg_engine), _payload()
     _local_storage(monkeypatch, tmp_path)
     gate, state = Barrier(2), local()
     place = document_storage._place_local_temp_file
+    roles = ("import_1", "import_2")
+    event_limit, started = 32, perf_counter_ns()
+    actors = {role: {"phases": [], "dropped_phases": 0} for role in roles}
+
+    def phase(name):
+        actor = actors[state.role]
+        if len(actor["phases"]) >= event_limit:
+            actor["dropped_phases"] += 1
+            return
+        session = getattr(state, "session", None)
+        actor["phases"].append(
+            {
+                "phase": name,
+                "elapsed_ns": perf_counter_ns() - started,
+                "stored": state.stored,
+                "in_transaction": session.in_transaction() if session is not None else None,
+                "in_nested_transaction": (
+                    session.in_nested_transaction() if session is not None else None
+                ),
+                "session_active": session.is_active if session is not None else None,
+                "barrier_broken": gate.broken,
+                "barrier_waiting": gate.n_waiting,
+            }
+        )
 
     def store(temp, target):
-        assert not state.session.in_transaction()
-        result = place(temp, target)
-        state.stored += 1
-        if state.stored == 2:
-            gate.wait(timeout=8)
-        return result
+        phase("storage_enter")
+        try:
+            assert not state.session.in_transaction()
+            result = place(temp, target)
+            state.stored += 1
+            phase("storage_placed")
+            if state.stored == 2:
+                phase("barrier_enter")
+                try:
+                    gate.wait(timeout=8)
+                finally:
+                    phase("barrier_exit")
+            return result
+        finally:
+            phase("storage_exit")
 
-    def invoke():
-        with Session(pg_engine, autoflush=autoflush) as session:
-            state.session, state.stored = session, 0
-            return _invoke(session, fixture, "inbound", payload)
+    def invoke(role):
+        state.role, state.session, state.stored = role, None, 0
+        phase("worker_enter")
+        try:
+            with Session(pg_engine, autoflush=autoflush) as session:
+                state.session = session
+                phase("session_enter")
+                try:
+                    return _invoke(session, fixture, "inbound", payload)
+                finally:
+                    phase("invoke_exit_before_session_close")
+        finally:
+            phase("worker_exit_after_session_context")
+
+    def safe_error(error, seen=None):
+        # Keep every traceback frame and chain, never messages, source lines or locals.
+        seen = set() if seen is None else seen
+        if id(error) in seen:
+            return {"exception_chain_reference": True}
+        seen.add(id(error))
+        kind = type(error)
+        module = sys.modules.get(kind.__module__)
+        public_type = (
+            kind.__module__
+            in {
+                "builtins",
+                "threading",
+                "concurrent.futures._base",
+                "sqlalchemy.exc",
+                "psycopg",
+                "psycopg.errors",
+                "psycopg2",
+                "psycopg2.errors",
+                "fastapi.exceptions",
+                "starlette.exceptions",
+            }
+            and module is not None
+            and vars(module).get(kind.__name__) is kind
+        )
+        detail = {
+            "exception_class": (
+                f"{kind.__module__}.{kind.__qualname__}"
+                if public_type
+                else "unlisted_exception_type_redacted"
+            ),
+            "traceback": [
+                {
+                    "file": Path(frame.f_code.co_filename).name,
+                    "function": frame.f_code.co_name,
+                    "line": line,
+                }
+                for frame, line in walk_tb(error.__traceback__)
+            ],
+            "suppress_context": error.__suppress_context__,
+        }
+        for label in ("__cause__", "__context__"):
+            linked = getattr(error, label)
+            if linked is not None:
+                detail[label] = safe_error(linked, seen)
+        if isinstance(error, BaseExceptionGroup):
+            detail["exceptions"] = [safe_error(child, seen) for child in error.exceptions]
+        return detail
 
     monkeypatch.setattr(
         virus_scan,
@@ -560,9 +657,115 @@ def test_simultaneous_inbound_import_preserves_idempotency(
         lambda path: virus_scan.ScanResult(status="clean", signature=None),
     )
     monkeypatch.setattr(document_storage, "_place_local_temp_file", store)
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(invoke) for _ in range(2)]
-        results = [future.result(timeout=15) for future in futures]
+    futures, returned, waits = {}, {}, {}
+    primary, joined, recording_error = None, False, None
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            try:
+                for role in roles:
+                    futures[role] = pool.submit(invoke, role)
+                for role in roles:
+                    wait = {"start_ns": perf_counter_ns() - started, "error": None}
+                    waits[role] = wait
+                    try:
+                        returned[role] = futures[role].result(timeout=15)
+                    except BaseException as error:
+                        wait["error"] = error
+                        if primary is None:
+                            primary = (error, error.__traceback__)
+                    finally:
+                        wait["finish_ns"] = perf_counter_ns() - started
+            except BaseException as error:
+                if primary is None:
+                    primary = (error, error.__traceback__)
+        joined = True
+    except BaseException as error:
+        if primary is None:
+            primary = (error, error.__traceback__)
+
+    # Executor shutdown must return before inspecting peers or publishing evidence.
+    if joined:
+        try:
+            for role in roles:
+                actor, future = actors[role], futures.get(role)
+                terminal_error = None
+                if future is None:
+                    actor["terminal"] = {"outcome": "unsubmitted"}
+                elif future.cancelled():
+                    actor["terminal"] = {"outcome": "cancelled"}
+                elif not future.done():
+                    actor["terminal"] = {"outcome": "pending"}
+                else:
+                    terminal_error = future.exception(timeout=0)
+                    actor["terminal"] = (
+                        {"outcome": "exception", "error": safe_error(terminal_error)}
+                        if terminal_error is not None
+                        else {"outcome": "returned"}
+                    )
+                wait = waits.get(role)
+                if wait is None:
+                    actor["result_wait"] = {"outcome": "unobserved"}
+                else:
+                    error = wait["error"]
+                    actor["result_wait"] = {
+                        "start_ns": wait["start_ns"],
+                        "finish_ns": wait["finish_ns"],
+                        "outcome": (
+                            "returned"
+                            if error is None
+                            else "worker_exception"
+                            if error is terminal_error
+                            else "result_timeout"
+                            if isinstance(error, TimeoutError)
+                            else "controller_exception"
+                        ),
+                    }
+                    if error is not None:
+                        actor["result_wait"]["error"] = safe_error(error)
+            evidence = json.dumps(
+                {
+                    "schema": "inbound_race_after_join_v1",
+                    "join_returned": True,
+                    "autoflush": autoflush,
+                    "barrier_timeout_seconds": 8,
+                    "per_future_timeout_seconds": 15,
+                    "phase_limit_per_role": event_limit,
+                    "actors": actors,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            for sink in (
+                lambda: request.node.add_report_section(
+                    "call",
+                    "inbound-race-after-join",
+                    evidence,
+                ),
+                lambda: record_property("inbound_race_after_join", evidence),
+            ):
+                try:
+                    sink()
+                except BaseException as error:
+                    if recording_error is None:
+                        recording_error = error
+        except BaseException as error:
+            if recording_error is None:
+                recording_error = error
+
+    if primary is not None:
+        if not joined:
+            primary[0].add_note("Race evidence incomplete: executor join did not return normally.")
+        if recording_error is not None:
+            primary[0].add_note("Race evidence incomplete: a post-join evidence sink failed.")
+        raise primary[0].with_traceback(primary[1])
+    if recording_error is not None:
+        raise recording_error
+    assert joined
+    assert set(futures) == set(returned) == set(roles)
+    assert all(actor["terminal"]["outcome"] == "returned" for actor in actors.values())
+    assert all(actor["dropped_phases"] == 0 for actor in actors.values())
+    results = [returned[role] for role in roles]
     assert sorted(result.duplicate for result in results) == [False, True]
     assert results[0].communication.id == results[1].communication.id
     assert results[0].attachment_ids == results[1].attachment_ids

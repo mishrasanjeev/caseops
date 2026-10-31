@@ -256,7 +256,6 @@ class _PassiveOverlapTiming:
         self.sql_overflow = self.gc_overflow = self.invalid = False
         self.enabled = False
         self.critical_pools = 0
-        self.callback = self._gc_callback
         # PyDLL retains the GIL; native clocks fill cells allocated before registration.
         # No Python timestamp objects, record containers or counters are built in GC.
         if os.name == "nt":
@@ -287,6 +286,11 @@ class _PassiveOverlapTiming:
         self.mono_clock(self.next_gc.mono_pointer)
         self.utc_clock(self.next_gc.utc_pointer)
         assert self._gc_ns(self.next_gc)[0] > 0 and self._gc_ns(self.next_gc)[1] > 0
+
+    @property
+    def callback(self):
+        # The registered bound method owns us only until stop removes it.
+        return self._gc_callback
 
     def _gc_callback(self, phase, info):
         if not self.enabled:
@@ -421,6 +425,31 @@ class _FinalizerAudit:
         self.factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
         self.hooks = [("before_cursor_execute", self.before),
                       ("after_cursor_execute", self.after), ("handle_error", self.error)]
+
+    def detach_hooks(self):
+        timing = self.passive
+        if timing is not None:
+            assert not timing.enabled and timing.callback not in gc.callbacks, (
+                "Passive capture is active"
+            )
+            assert not timing.critical_pools, "Owned workers are still active"
+        for name, callback in self.hooks:
+            if event.contains(self.engine, name, callback):
+                event.remove(self.engine, name, callback)
+        # Drop bound-self ownership only after every owned listener is removed.
+        self.hooks.clear()
+
+    def flush_passive_evidence(self):
+        timing = self.passive
+        assert timing is not None
+        assert not timing.enabled and timing.callback not in gc.callbacks, (
+            "Passive capture is active"
+        )
+        assert not timing.critical_pools, "Passive evidence cannot flush during owned worker timing"
+        try:
+            timing.flush(self.record)
+        finally:
+            self.passive = None
 
     def session(self, role):
         session = self.factory()
@@ -1089,8 +1118,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
         finally:
             audit.release.set()
             audit.passive.stop()
-            for name, callback in audit.hooks:
-                event.remove(engine, name, callback)
+            audit.detach_hooks()
             try:
                 remaining = audit.snapshot()
                 locks = audit.retained_locks()
@@ -1099,7 +1127,7 @@ def finalizer_audit(pg_engine, monkeypatch, tmp_path, request):
             finally:
                 engine.dispose()
                 try:
-                    audit.passive.flush(record)
+                    audit.flush_passive_evidence()
                 finally:
                     journal.complete()
             assert not remaining, "Owned labelled PostgreSQL transaction leaked"
@@ -1114,24 +1142,40 @@ def _real_login_server(audit):
         with audit.session("login") as session:
             yield session
 
+    missing = object()
+    previous = app.dependency_overrides.get(get_db_session, missing)
     app.dependency_overrides[get_db_session] = request_session
-    listener = socket.socket()
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(128)
-    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="error"))
-    thread = Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
-    thread.start()
+    listener = server = thread = None
     try:
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(128)
+        server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="error"))
+        thread = Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
         deadline = monotonic() + 6
         while not server.started and thread.is_alive() and monotonic() < deadline:
             sleep(0.01)
         assert server.started, "Owned socket server failed to start"
         yield f"http://127.0.0.1:{listener.getsockname()[1]}"
     finally:
-        server.should_exit = True
-        thread.join(timeout=6)
-        listener.close()
-        assert not thread.is_alive(), "Owned socket server did not stop"
+        try:
+            if server is not None:
+                server.should_exit = True
+            if thread is not None and thread.ident is not None:
+                thread.join(timeout=6)
+        finally:
+            try:
+                if listener is not None:
+                    listener.close()
+            finally:
+                stopped = thread is None or not thread.is_alive()
+                if stopped and app.dependency_overrides.get(get_db_session) is request_session:
+                    if previous is missing:
+                        app.dependency_overrides.pop(get_db_session)
+                    else:
+                        app.dependency_overrides[get_db_session] = previous
+        assert stopped, "Owned socket server did not stop"
 
 
 def _login(client, origin, fixture, audit):
