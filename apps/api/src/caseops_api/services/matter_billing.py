@@ -739,7 +739,8 @@ def render_invoice_pdf(
     )
     if portal_user is not None and portal_user.company_id != invoice.company_id:
         portal_user = None
-    footer_text = f"{marking}{invoice.invoice_number} | Page {{page}} of {{{{nb}}}}"
+    # Portal invoice numbers are free text, so they are never passed to format().
+    footer_prefix = f"{marking}{invoice.invoice_number} | Page "
 
     class _InvoicePdf(pdf_class):  # type: ignore[misc]
         # BUG-016: set_y(-14) inside the 16 mm auto-break margin forced a blank
@@ -748,7 +749,7 @@ def render_invoice_pdf(
             self.set_y(-12)
             self.set_font("Helvetica", "", 8)
             self.set_text_color(*TEXT_COLOR)
-            self.cell(0, 5, footer_text.format(page=self.page_no()), align="C")
+            self.cell(0, 5, f"{footer_prefix}{self.page_no()} of {{nb}}", align="C")
 
     pdf = _InvoicePdf(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=16)

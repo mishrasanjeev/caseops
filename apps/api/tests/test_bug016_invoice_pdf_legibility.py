@@ -202,7 +202,7 @@ def test_bug016_outside_counsel_submission_reconciles_and_prints_review_copy(
     submitted = client.post(
         f"/api/portal/oc/matters/{matter_id}/invoices",
         json={
-            "invoice_number": "OC-BUG016-1",
+            "invoice_number": "OC-{BUG016}-1",
             "issued_on": "2026-10-23",
             "currency": "INR",
             "line_items": [{"description": "Appearance before the DRT", "amount_minor": 100000}],
@@ -214,7 +214,7 @@ def test_bug016_outside_counsel_submission_reconciles_and_prints_review_copy(
     workspace = client.get(f"/api/matters/{matter_id}/workspace", headers=auth_headers(token))
     assert workspace.status_code == 200, workspace.text
     invoice = next(
-        item for item in workspace.json()["invoices"] if item["invoice_number"] == "OC-BUG016-1"
+        item for item in workspace.json()["invoices"] if item["invoice_number"] == "OC-{BUG016}-1"
     )
     assert invoice["status"] == "needs_review"
     assert invoice["taxable_value_minor"] == invoice["subtotal_amount_minor"] == 100000
@@ -228,6 +228,8 @@ def test_bug016_outside_counsel_submission_reconciles_and_prints_review_copy(
     assert "Tax Invoice" not in rendered.text
     assert "OC Counsel (outside counsel)" in rendered.text
     assert compact("Taxable value INR 1,000.00") in compact(rendered.text)
+    # A free-text portal invoice number must not break the page footer.
+    assert compact("REVIEW COPY | OC-{BUG016}-1 | Page 1 of 1") in compact(rendered.text)
 
 
 def test_bug016_table_helpers_ignore_and_restore_the_caller_graphics_state() -> None:
