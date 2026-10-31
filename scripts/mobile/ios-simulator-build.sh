@@ -30,6 +30,7 @@ cp ios/Podfile.lock "$run/Podfile.lock"
 "$CASEOPS_IOS_HOST_XCODEBUILD" -workspace ios/CaseOps.xcworkspace -scheme CaseOps -configuration Release \
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
   -derivedDataPath "$run/DerivedData" -jobs 4 \
+  "HOME=$HOME" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
   build 2>&1 | tee "$run/xcodebuild.log"
 app="$run/DerivedData/Build/Products/Release-iphonesimulator/CaseOps.app"

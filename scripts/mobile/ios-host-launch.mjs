@@ -14,7 +14,7 @@ const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9aca
 const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1';
 export const IOS_PODS_SOURCE_SHA256 = 'bcac5eb3bf33069d711759ba925b8ff54d474bc1f64b36176be52b6daec32947';
 const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
-  'ios-simulator-build.sh': '93e748e4993eb19b992e7f1f6d480368070b5e1423467640bf8d8908b083e72e',
+  'ios-simulator-build.sh': 'abee50f7e0a46eb5b3237cfd2e73e99b994f1fccc26cb01c71661493eaa0b5f0',
   'ios-node-build-env.json': '050bd27cab9480e208d17141e5df2d5f98d8f7cdbadc73c31b085ff3be5f0ba6',
   'ios-git-readonly.py': '17b09505fbf0d95e71386d0bfe0f685c2f4c0802b1ddcd9443d1d8042ea207a9',
   'ios-local-qa-host.py': 'c79fedf8f144a311dbcf591d51bf10b6905ae7cc2351fa9ec972dbd0917f783d',

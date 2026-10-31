@@ -3235,6 +3235,27 @@ test('iOS neutral Xcode and offline tools receive no Node or Ruby CA environment
   assert.equal(result.environment.NODE_BINARY, f.policy.paths.bin + '/node');
   assert.equal(result.environment.LANG, 'en_US.UTF-8'); assert.equal(result.environment.LC_ALL, 'en_US.UTF-8');
 });
+test('iOS simulator shell binds the admitted HOME as one Xcode build setting', { skip: process.platform === 'win32' }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-xcode-home-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'private HOME=with space'), run = path.join(root, 'output');
+  fs.mkdirSync(home, { mode: 0o700 }); fs.mkdirSync(run, { mode: 0o700 });
+  const receipt = path.join(root, 'argv.json'), executable = path.join(root, 'capture-xcode');
+  // Exercise the actual shell argument boundary. This capture is not Xcode or
+  // native-build acceptance; the separate real-Xcode phase probe supplies that.
+  fs.writeFileSync(executable, '#!/bin/bash\nexec "$CASEOPS_TEST_NODE" --input-type=module -e \'import fs from "node:fs"; fs.writeFileSync(process.env.CASEOPS_ARGV_RECEIPT, JSON.stringify({args:process.argv.slice(1),home:process.env.HOME}), {mode:0o600});\' -- "$@"\n', { mode: 0o700 });
+  const source = fs.readFileSync(new URL('./ios-simulator-build.sh', import.meta.url), 'utf8');
+  const start = source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace'), end = source.indexOf('\napp=', start);
+  assert.ok(start >= 0 && end > start); assert.equal(source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace', start + 1), -1);
+  execFileSync('/bin/bash', ['-c', 'set -euo pipefail\n' + source.slice(start, end)], { cwd: root, timeout: 10000,
+    env: { PATH: '/usr/bin:/bin', HOME: home, run, SIMULATOR_UDID: 'SYNTHETIC-SIMULATOR',
+      CASEOPS_IOS_HOST_XCODEBUILD: executable, CASEOPS_TEST_NODE: process.execPath, CASEOPS_ARGV_RECEIPT: receipt } });
+  const actual = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  assert.equal(actual.home, home); assert.deepEqual(actual.args.filter(arg => arg.startsWith('HOME=')), ['HOME=' + home]);
+  const f = iosProjectionFixture(); f.policy.paths.home = home;
+  assert.equal(iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: actual.args.find(arg => arg.startsWith('HOME=')).slice(5) }).environment.HOME, home);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: '/SYNTHETIC/operator-home' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+});
 test('iOS cross-role rebind permits only the exact admitted previous recipe and rejects foreign overrides', () => {
   for (const field of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'HOME', 'RUBYOPT', 'HTTPS_PROXY', 'OPENSSL_CONF']) {
     const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { [field]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
