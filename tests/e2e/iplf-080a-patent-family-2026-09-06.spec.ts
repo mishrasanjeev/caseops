@@ -73,6 +73,8 @@ for (const width of [393, 768, 1280]) {
     });
     await page.getByLabel("Title", { exact: true }).fill("Inventor original source");
     await page.getByLabel("Invention", { exact: true }).fill("Substrate");
+    // Classification is an explicit choice from the server-listed entries.
+    await page.getByLabel("Classification", { exact: true }).selectOption("evidence");
     await expect(page.getByLabel("Confidentiality", { exact: true })).toHaveValue("restricted");
     await page.getByRole("button", { name: "Preview controlled name" }).click();
     await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();

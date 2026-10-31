@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import {
   addIpDocumentLinks,
   applyIpDocumentBulk,
@@ -20,6 +21,7 @@ import {
   importIpDocumentAliases,
   previewIpDocumentName,
   previewIpDocumentBulk,
+  seedIpDocumentTaxonomy,
   transitionIpDocument,
   uploadIpDocument,
   uploadIpDocumentVersion,
@@ -32,6 +34,14 @@ import {
   type IpDocumentState,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
+
+const TAXONOMY_STATUS_ID = "ip-document-taxonomy-status";
+const UPLOAD_REQUIREMENTS_ID = "ip-document-upload-requirements";
+
+function formatList(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
 
 const NEXT_STATE: Partial<Record<IpDocumentState, IpDocumentState>> = {
   draft: "review",
@@ -69,20 +79,20 @@ export function IpDocumentWorkspace({
   const [proceedingType, setProceedingType] = useState("");
   const [proceedingNo, setProceedingNo] = useState("");
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [taxonomyKey, setTaxonomyKey] = useState("evidence");
+  const [taxonomyKey, setTaxonomyKey] = useState("");
   const [docketId, setDocketId] = useState(dockets[0]?.id ?? "");
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
   >(assetType === "Patent" ? "restricted" : "internal");
   const [isPrivileged, setIsPrivileged] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkTaxonomy, setBulkTaxonomy] = useState("correspondence");
+  const [bulkTaxonomy, setBulkTaxonomy] = useState("");
   const [bulkPreview, setBulkPreview] = useState<IpDocumentBulkPreview | null>(null);
   const [bulkItems, setBulkItems] = useState<IpDocumentBulkItem[]>([]);
   const [namePreview, setNamePreview] = useState<
     (IpDocumentNamingPreview & { inputKey: string }) | null
   >(null);
-  const [aliasTaxonomy, setAliasTaxonomy] = useState("evidence");
+  const [aliasTaxonomy, setAliasTaxonomy] = useState("");
   const [aliasText, setAliasText] = useState("");
   const [aliasPreview, setAliasPreview] = useState<IpDocumentAliasImportResult | null>(null);
   const [duplicate, setDuplicate] = useState<{
@@ -102,6 +112,19 @@ export function IpDocumentWorkspace({
     () => taxonomy.data?.entries.filter((entry) => entry.is_active) ?? [],
     [taxonomy.data],
   );
+  // Every classification sent to the API is one the server listed as active.
+  // A stale or never-chosen key resolves to "", which keeps its actions disabled.
+  const activeTaxonomyKeys = useMemo(
+    () => new Set(activeTaxonomy.map((entry) => entry.key)),
+    [activeTaxonomy],
+  );
+  const documentTaxonomyKey = activeTaxonomyKeys.has(taxonomyKey) ? taxonomyKey : "";
+  const aliasTaxonomyKey = activeTaxonomyKeys.has(aliasTaxonomy) ? aliasTaxonomy : "";
+  const bulkTaxonomyKey = activeTaxonomyKeys.has(bulkTaxonomy) ? bulkTaxonomy : "";
+  const taxonomyReady = activeTaxonomy.length > 0;
+  const taxonomyDescription = taxonomyReady ? undefined : TAXONOMY_STATUS_ID;
+  const showsBulk = (documents.data?.items.length ?? 0) > 1 && canManage;
+  const showsTaxonomyStatus = !taxonomyReady && (canUpload || canConfigure || showsBulk);
   const existingDisplayNames = useMemo(
     () =>
       (documents.data?.items ?? [])
@@ -120,11 +143,27 @@ export function IpDocumentWorkspace({
     applicationNo,
     proceedingType,
     proceedingNo,
-    taxonomyKey,
+    documentTaxonomyKey,
     documentDate,
     ...existingDisplayNames,
   ]);
   const hasCurrentPreview = namePreview?.inputKey === currentPreviewKey;
+  const uploadRequirements = [
+    !file ? "the original file" : null,
+    !documentTaxonomyKey ? "a classification" : null,
+    !docketId
+      ? dockets.length ? "a linked docket" : "a linked docket (create an IP docket first)"
+      : null,
+  ].filter((value): value is string => value !== null);
+  const uploadHint = !taxonomyReady
+    ? null
+    : uploadRequirements.length
+      ? `Choose ${formatList(uploadRequirements)} before upload.`
+      : !hasCurrentPreview
+        ? "Preview the controlled name before upload."
+        : null;
+  const uploadDescription =
+    taxonomyDescription ?? (uploadHint ? UPLOAD_REQUIREMENTS_ID : undefined);
   const aliases = aliasText
     .split(/\r?\n|,/)
     .map((value) => value.trim())
@@ -140,11 +179,12 @@ export function IpDocumentWorkspace({
   const upload = useMutation({
     mutationFn: () => {
       if (!file || !docketId) throw new Error("Choose a file and linked docket.");
+      if (!documentTaxonomyKey) throw new Error("Choose a classification.");
       if (!hasCurrentPreview) throw new Error("Preview the controlled name before upload.");
       return uploadIpDocument({
         assetType,
         file,
-        taxonomyKey,
+        taxonomyKey: documentTaxonomyKey,
         title,
         confidentiality,
         isPrivileged,
@@ -179,6 +219,7 @@ export function IpDocumentWorkspace({
   const previewName = useMutation({
     mutationFn: async (inputKey: string) => {
       if (!file) throw new Error("Choose a file before previewing its controlled name.");
+      if (!documentTaxonomyKey) throw new Error("Choose a classification.");
       const extension = file.name.includes(".") ? (file.name.split(".").pop() ?? "") : "";
       const result = await previewIpDocumentName({
         assetType,
@@ -188,7 +229,7 @@ export function IpDocumentWorkspace({
         applicationNo,
         proceedingType,
         proceedingNo,
-        taxonomyKey,
+        taxonomyKey: documentTaxonomyKey,
         documentDate,
         version: 1,
         extension,
@@ -261,8 +302,10 @@ export function IpDocumentWorkspace({
     onError: (error) => toast.error(apiErrorMessage(error, "Document download failed.")),
   });
   const importAliases = useMutation({
-    mutationFn: (dryRun: boolean) =>
-      importIpDocumentAliases({ taxonomyKey: aliasTaxonomy, aliases, dryRun }),
+    mutationFn: async (dryRun: boolean) => {
+      if (!aliasTaxonomyKey) throw new Error("Choose the classification these aliases map to.");
+      return importIpDocumentAliases({ taxonomyKey: aliasTaxonomyKey, aliases, dryRun });
+    },
     onSuccess: async (result) => {
       setAliasPreview(result);
       if (!result.dry_run) {
@@ -273,8 +316,22 @@ export function IpDocumentWorkspace({
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Alias import failed.")),
   });
+  const seedTaxonomy = useMutation({
+    mutationFn: seedIpDocumentTaxonomy,
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["ip", "document-taxonomy"], result);
+      toast.success("Standard document classifications loaded.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ip", "document-taxonomy"] }),
+        queryClient.invalidateQueries({ queryKey: ["ip", "readiness"] }),
+      ]);
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Standard classifications could not be loaded.")),
+  });
   const previewBulk = useMutation({
     mutationFn: async () => {
+      if (!bulkTaxonomyKey) throw new Error("Choose the new classification.");
       const chosen = (documents.data?.items ?? []).filter((row) =>
         selectedIds.includes(row.id),
       );
@@ -282,11 +339,11 @@ export function IpDocumentWorkspace({
         document_id: row.id,
         expected_current_version: row.current_version,
         expected_taxonomy_key: row.taxonomy_key,
-        taxonomy_key: bulkTaxonomy,
+        taxonomy_key: bulkTaxonomyKey,
         naming: {
           client_code: clientCode || null,
           asset_type: assetType,
-          document_type: bulkTaxonomy,
+          document_type: bulkTaxonomyKey,
           document_date: new Date().toISOString().slice(0, 10),
           version: row.current_version,
           extension: row.versions[0]?.original_filename.split(".").pop() ?? null,
@@ -321,6 +378,25 @@ export function IpDocumentWorkspace({
         </p>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-5">
+        {showsTaxonomyStatus ? (
+          <TaxonomyStatus
+            state={
+              taxonomy.isPending
+                ? "loading"
+                : taxonomy.isError && !taxonomy.data
+                  ? "error"
+                  : (taxonomy.data?.entries.length ?? 0) === 0
+                    ? "empty"
+                    : "inactive"
+            }
+            error={taxonomy.error}
+            onRetry={() => taxonomy.refetch()}
+            canConfigure={canConfigure}
+            seeding={seedTaxonomy.isPending}
+            seedError={seedTaxonomy.isError ? seedTaxonomy.error : null}
+            onSeed={() => seedTaxonomy.mutate()}
+          />
+        ) : null}
         {canUpload ? (
           <form
             className="grid min-w-0 gap-3 rounded-lg border border-[var(--color-line)] p-4 md:grid-cols-2"
@@ -401,10 +477,13 @@ export function IpDocumentWorkspace({
               <Label htmlFor="ip-document-taxonomy">Classification</Label>
               <select
                 id="ip-document-taxonomy"
-                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                value={taxonomyKey}
+                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:opacity-60"
+                value={documentTaxonomyKey}
+                disabled={!taxonomyReady}
+                aria-describedby={taxonomyDescription}
                 onChange={(event) => setTaxonomyKey(event.target.value)}
               >
+                <TaxonomyPlaceholder loading={taxonomy.isPending} ready={taxonomyReady} />
                 {activeTaxonomy.map((entry) => (
                   <option key={entry.key} value={entry.key}>{entry.label}</option>
                 ))}
@@ -465,17 +544,26 @@ export function IpDocumentWorkspace({
                 type="button"
                 variant="secondary"
                 onClick={() => previewName.mutate(currentPreviewKey)}
-                disabled={!file || previewName.isPending}
+                disabled={!file || !documentTaxonomyKey || previewName.isPending}
+                aria-describedby={uploadDescription}
               >
                 Preview controlled name
               </Button>
               <Button
                 type="submit"
-                disabled={!file || !docketId || !hasCurrentPreview || upload.isPending}
+                disabled={
+                  !file || !documentTaxonomyKey || !docketId || !hasCurrentPreview || upload.isPending
+                }
+                aria-describedby={uploadDescription}
               >
                 <Upload className="h-4 w-4" aria-hidden /> Upload reviewed document
               </Button>
             </div>
+            {uploadHint ? (
+              <p id={UPLOAD_REQUIREMENTS_ID} className="text-xs text-[var(--color-mute)] md:col-span-2">
+                {uploadHint}
+              </p>
+            ) : null}
           </form>
         ) : null}
 
@@ -511,16 +599,19 @@ export function IpDocumentWorkspace({
             </div>
             <div className="grid min-w-0 gap-3 md:grid-cols-2">
               <div className="min-w-0">
-                <Label htmlFor="ip-alias-taxonomy">Classification</Label>
+                <Label htmlFor="ip-alias-taxonomy">Alias classification</Label>
                 <select
                   id="ip-alias-taxonomy"
-                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                  value={aliasTaxonomy}
+                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:opacity-60"
+                  value={aliasTaxonomyKey}
+                  disabled={!taxonomyReady}
+                  aria-describedby={taxonomyDescription}
                   onChange={(event) => {
                     setAliasTaxonomy(event.target.value);
                     setAliasPreview(null);
                   }}
                 >
+                  <TaxonomyPlaceholder loading={taxonomy.isPending} ready={taxonomyReady} />
                   {activeTaxonomy.map((entry) => (
                     <option key={entry.key} value={entry.key}>{entry.label}</option>
                   ))}
@@ -549,7 +640,8 @@ export function IpDocumentWorkspace({
               <Button
                 variant="secondary"
                 onClick={() => importAliases.mutate(true)}
-                disabled={aliases.length === 0 || importAliases.isPending}
+                disabled={aliases.length === 0 || !aliasTaxonomyKey || importAliases.isPending}
+                aria-describedby={taxonomyDescription}
               >
                 Preview alias import
               </Button>
@@ -560,6 +652,7 @@ export function IpDocumentWorkspace({
                   || !aliasPreview.dry_run
                   || aliasPreview.conflicts.length > 0
                   || aliasPreview.imported_count === 0
+                  || !aliasTaxonomyKey
                   || importAliases.isPending
                 }
               >
@@ -569,17 +662,20 @@ export function IpDocumentWorkspace({
           </div>
         ) : null}
 
-        {(documents.data?.items.length ?? 0) > 1 && canManage ? (
+        {showsBulk ? (
           <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-[var(--color-line)] p-4">
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1">
                 <Label htmlFor="ip-bulk-taxonomy">Bulk classification</Label>
                 <select
                   id="ip-bulk-taxonomy"
-                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                  value={bulkTaxonomy}
+                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:opacity-60"
+                  value={bulkTaxonomyKey}
+                  disabled={!taxonomyReady}
+                  aria-describedby={taxonomyDescription}
                   onChange={(event) => setBulkTaxonomy(event.target.value)}
                 >
+                  <TaxonomyPlaceholder loading={taxonomy.isPending} ready={taxonomyReady} />
                   {activeTaxonomy.map((entry) => (
                     <option key={entry.key} value={entry.key}>{entry.label}</option>
                   ))}
@@ -588,7 +684,8 @@ export function IpDocumentWorkspace({
               <Button
                 variant="secondary"
                 onClick={() => previewBulk.mutate()}
-                disabled={selectedIds.length === 0 || previewBulk.isPending}
+                disabled={selectedIds.length === 0 || !bulkTaxonomyKey || previewBulk.isPending}
+                aria-describedby={taxonomyDescription}
               >
                 Preview rename and classification
               </Button>
@@ -722,5 +819,86 @@ export function IpDocumentWorkspace({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function TaxonomyPlaceholder({ loading, ready }: { loading: boolean; ready: boolean }) {
+  return (
+    <option value="" disabled>
+      {loading ? "Loading classifications…" : ready ? "Choose a classification" : "No classifications available"}
+    </option>
+  );
+}
+
+function TaxonomyStatus({
+  state,
+  error,
+  onRetry,
+  canConfigure,
+  seeding,
+  seedError,
+  onSeed,
+}: {
+  state: "loading" | "empty" | "inactive" | "error";
+  error: unknown;
+  onRetry: () => unknown;
+  canConfigure: boolean;
+  seeding: boolean;
+  seedError: unknown;
+  onSeed: () => void;
+}) {
+  if (state === "loading") {
+    return (
+      <p id={TAXONOMY_STATUS_ID} role="status" className="text-sm text-[var(--color-mute)]">
+        Loading document classifications…
+      </p>
+    );
+  }
+  if (state === "error") {
+    return (
+      <div id={TAXONOMY_STATUS_ID}>
+        <QueryErrorState
+          error={error}
+          title="Could not load document classifications"
+          onRetry={onRetry}
+        />
+      </div>
+    );
+  }
+  return (
+    <div
+      id={TAXONOMY_STATUS_ID}
+      role="status"
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+    >
+      <p className="font-semibold">
+        {state === "empty"
+          ? "No document classifications are configured"
+          : "Every document classification is inactive"}
+      </p>
+      <p>
+        Uploads, alias imports and bulk reclassification need at least one active
+        classification, so they stay disabled until one exists.
+      </p>
+      {state === "inactive" ? (
+        <p>Ask an IP workspace admin to reactivate a classification for this workspace.</p>
+      ) : canConfigure ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={onSeed} disabled={seeding}>
+            {seeding ? "Loading standard classifications…" : "Load standard classifications"}
+          </Button>
+          <span className="text-xs">
+            Adds the CaseOps trademark document categories. You can rename or deactivate them later.
+          </span>
+        </div>
+      ) : (
+        <p>Ask an IP workspace admin to load the standard document classifications.</p>
+      )}
+      {seedError ? (
+        <p role="alert" className="text-red-800">
+          {apiErrorMessage(seedError, "Standard classifications could not be loaded.")}
+        </p>
+      ) : null}
+    </div>
   );
 }

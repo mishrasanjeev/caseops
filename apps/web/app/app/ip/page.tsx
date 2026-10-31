@@ -954,7 +954,8 @@ function IpWorkspaceSetupCard({
         {!configuration ? <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
           <div className="font-semibold">Seeded governance contract</div>
           <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-            Taxonomy ip-taxonomy-2026.1 · event catalogue ip-events-v1 · jurisdiction rule
+            Document taxonomy {status?.document_taxonomy?.taxonomy_version ?? "server default"}
+            {" "}· event catalogue ip-events-v1 · jurisdiction rule
             2026.1 · Monday–Friday working policy · in-app notification · 30-minute critical
             escalation.
           </div>

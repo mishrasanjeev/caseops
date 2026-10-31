@@ -9,12 +9,16 @@ const {
   fetchIpDocumentTaxonomyMock,
   importIpDocumentAliasesMock,
   previewIpDocumentNameMock,
+  seedIpDocumentTaxonomyMock,
+  uploadIpDocumentMock,
 } = vi.hoisted(() => ({
   downloadApiFileMock: vi.fn(),
   fetchIpDocumentsMock: vi.fn(),
   fetchIpDocumentTaxonomyMock: vi.fn(),
   importIpDocumentAliasesMock: vi.fn(),
   previewIpDocumentNameMock: vi.fn(),
+  seedIpDocumentTaxonomyMock: vi.fn(),
+  uploadIpDocumentMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -26,8 +30,9 @@ vi.mock("@/lib/api/endpoints", () => ({
   importIpDocumentAliases: importIpDocumentAliasesMock,
   previewIpDocumentBulk: vi.fn(),
   previewIpDocumentName: previewIpDocumentNameMock,
+  seedIpDocumentTaxonomy: seedIpDocumentTaxonomyMock,
   transitionIpDocument: vi.fn(),
-  uploadIpDocument: vi.fn(),
+  uploadIpDocument: uploadIpDocumentMock,
   uploadIpDocumentVersion: vi.fn(),
 }));
 
@@ -134,6 +139,9 @@ describe("IpDocumentWorkspace", () => {
     });
     fireEvent.change(screen.getByLabelText("Client code"), { target: { value: "ACME" } });
     fireEvent.change(screen.getByLabelText("Mark"), { target: { value: "ASTER" } });
+    const classification = await screen.findByRole("combobox", { name: "Classification" });
+    await waitFor(() => expect(classification).toBeEnabled());
+    fireEvent.change(classification, { target: { value: "evidence" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview controlled name" }));
 
     expect(await screen.findByText("ACME_Trademark_ASTER_evidence_2026-08-09_1.txt")).toBeVisible();
@@ -179,6 +187,9 @@ describe("IpDocumentWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Supplied document names"), {
       target: { value: "Affidavit Evidence\nEvidence Affidavit" },
     });
+    const aliasClassification = screen.getByRole("combobox", { name: "Alias classification" });
+    await waitFor(() => expect(aliasClassification).toBeEnabled());
+    fireEvent.change(aliasClassification, { target: { value: "evidence" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview alias import" }));
     expect(await screen.findByRole("status")).toHaveTextContent("2 new, 0 unchanged, 0 conflicts");
     expect(importIpDocumentAliasesMock).toHaveBeenNthCalledWith(1, {
@@ -249,5 +260,193 @@ describe("IpDocumentWorkspace", () => {
       "/api/ip/documents/document-1/versions/1/download",
       "original evidence.txt",
     ));
+  });
+
+  it("disables upload and offers admins the standard classifications when none exist", async () => {
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [],
+    });
+    seedIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [
+        { key: "assignment", label: "Assignment", is_active: true, version: 1 },
+        { key: "licence", label: "Licence", is_active: true, version: 1 },
+      ],
+    });
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+    ));
+
+    const status = await screen.findByText("No document classifications are configured");
+    const notice = status.closest("[role=status]");
+    expect(notice).toHaveAttribute("id", "ip-document-taxonomy-status");
+    const classification = screen.getByRole("combobox", { name: "Classification" });
+    expect(classification).toBeDisabled();
+    expect(classification).toHaveAttribute("aria-describedby", "ip-document-taxonomy-status");
+    expect(classification).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Alias classification" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Original file"), {
+      target: { files: [new File(["deed"], "deed.txt", { type: "text/plain" })] },
+    });
+    for (const name of ["Preview controlled name", "Upload reviewed document"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("aria-describedby", "ip-document-taxonomy-status");
+    }
+    expect(screen.queryByText(/Ask an IP workspace admin/)).not.toBeInTheDocument();
+
+    // After the seed, the refetched server list is what the select offers.
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [
+        { key: "assignment", label: "Assignment", is_active: true, version: 1 },
+        { key: "licence", label: "Licence", is_active: true, version: 1 },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Load standard classifications" }));
+    await waitFor(() => expect(seedIpDocumentTaxonomyMock).toHaveBeenCalledOnce());
+    await waitFor(() => expect(classification).toBeEnabled());
+    expect(screen.queryByText("No document classifications are configured")).not.toBeInTheDocument();
+    expect(Array.from((classification as HTMLSelectElement).options).map((option) => option.value))
+      .toEqual(["", "assignment", "licence"]);
+    expect(classification).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Preview controlled name" })).toBeDisabled();
+    expect(screen.getByText("Choose a classification before upload.")).toBeVisible();
+    expect(previewIpDocumentNameMock).not.toHaveBeenCalled();
+  });
+
+  it("tells members without taxonomy admin to ask an IP workspace admin", async () => {
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [],
+    });
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage={false} canReview={false} canConfigure={false} />,
+    ));
+
+    expect(await screen.findByText(
+      "Ask an IP workspace admin to load the standard document classifications.",
+    )).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Load standard classifications" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Classification" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Upload reviewed document" })).toBeDisabled();
+    expect(seedIpDocumentTaxonomyMock).not.toHaveBeenCalled();
+  });
+
+  it("does not offer the standard set when every classification was deactivated", async () => {
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [{ key: "evidence", label: "Evidence", is_active: false, version: 2 }],
+    });
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+    ));
+
+    expect(await screen.findByText("Every document classification is inactive")).toBeVisible();
+    expect(screen.getByText(/reactivate a classification/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Load standard classifications" })).not.toBeInTheDocument();
+    const classification = screen.getByRole("combobox", { name: "Classification" });
+    expect(Array.from((classification as HTMLSelectElement).options).map((option) => option.value))
+      .toEqual([""]);
+  });
+
+  it("shows the seed failure next to the action that failed", async () => {
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [],
+    });
+    seedIpDocumentTaxonomyMock.mockRejectedValue(new Error("Capability 'ip:taxonomy_admin' is required."));
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+    ));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load standard classifications" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Capability 'ip:taxonomy_admin' is required.",
+    );
+    expect(screen.getByRole("combobox", { name: "Classification" })).toBeDisabled();
+  });
+
+  it("keeps classification-dependent actions disabled while loading and retries a failed load", async () => {
+    let resolveTaxonomy: (value: unknown) => void = () => undefined;
+    fetchIpDocumentTaxonomyMock
+      .mockReturnValueOnce(new Promise((resolve) => { resolveTaxonomy = resolve; }))
+      .mockResolvedValueOnce({
+        taxonomy_version: "ip-document-taxonomy-v1",
+        entries: [{ key: "assignment", label: "Assignment", is_active: true, version: 1 }],
+      });
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure={false} />,
+    ));
+
+    expect(screen.getByText("Loading document classifications…")).toBeVisible();
+    const classification = screen.getByRole("combobox", { name: "Classification" });
+    expect(classification).toBeDisabled();
+    expect(classification).toHaveDisplayValue("Loading classifications…");
+
+    resolveTaxonomy(Promise.reject(new Error("Taxonomy service unavailable")));
+    expect(await screen.findByText("Could not load document classifications")).toBeVisible();
+    expect(screen.getByText("Taxonomy service unavailable")).toBeVisible();
+    expect(classification).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Upload reviewed document" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(classification).toBeEnabled());
+    expect(fetchIpDocumentTaxonomyMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Could not load document classifications")).not.toBeInTheDocument();
+  });
+
+  it("never sends a classification the server did not list as active", async () => {
+    fetchIpDocumentTaxonomyMock.mockResolvedValue({
+      taxonomy_version: "ip-document-taxonomy-v1",
+      entries: [
+        { key: "assignment", label: "Assignment", is_active: true, version: 1 },
+        { key: "evidence", label: "Evidence", is_active: false, version: 2 },
+      ],
+    });
+    previewIpDocumentNameMock.mockImplementation(async (input: { taxonomyKey: string }) => ({
+      pattern: "[DocumentType]",
+      requested_name: `ACME_${input.taxonomyKey}_1.txt`,
+      resolved_name: `ACME_${input.taxonomyKey}_1.txt`,
+      conflict_detected: false,
+      conflict_suffix: null,
+      sanitized_components: [],
+      omitted_components: [],
+      warnings: [],
+      export_safe_name: `ACME_${input.taxonomyKey}_1.txt`,
+    }));
+    uploadIpDocumentMock.mockResolvedValue({ outcome: "created", document: null });
+    render(withClient(
+      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+    ));
+
+    const classification = screen.getByRole("combobox", { name: "Classification" });
+    await waitFor(() => expect(classification).toBeEnabled());
+    // The inactive entry and the former hidden "evidence" default are not offered.
+    expect(Array.from((classification as HTMLSelectElement).options).map((option) => option.value))
+      .toEqual(["", "assignment"]);
+    expect(classification).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Original file"), {
+      target: { files: [new File(["deed"], "deed.txt", { type: "text/plain" })] },
+    });
+    expect(screen.getByRole("button", { name: "Preview controlled name" })).toBeDisabled();
+    expect(screen.getByText("Choose a classification before upload.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Preview controlled name" }))
+      .toHaveAttribute("aria-describedby", "ip-document-upload-requirements");
+
+    fireEvent.change(classification, { target: { value: "assignment" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview controlled name" }));
+    expect(await screen.findByText("ACME_assignment_1.txt")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Upload reviewed document" }));
+    await waitFor(() => expect(uploadIpDocumentMock).toHaveBeenCalledOnce());
+
+    const listed = new Set(["assignment"]);
+    for (const [input] of previewIpDocumentNameMock.mock.calls) expect(listed).toContain(input.taxonomyKey);
+    for (const [input] of uploadIpDocumentMock.mock.calls) expect(listed).toContain(input.taxonomyKey);
+    expect(uploadIpDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ taxonomyKey: "assignment", docketId: "docket-1" }),
+    );
   });
 });
