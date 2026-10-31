@@ -4,11 +4,17 @@ Text extraction cannot see colour: dark text on a dark fill still extracts and
 still sits inside its column, which is how the invoice shipped unreadable line
 items while glyph-position tests stayed green. These helpers render each page
 to pixels and measure, for every text run, the WCAG contrast between the
-darkest and lightest pixels inside the run's box.
+run's glyph pixels and the dominant background colour inside the run's box.
+
+Taking the darkest and lightest pixel of the whole box was too weak: a box
+that touched a white margin or a border line passed even when its glyphs sat
+on a fill of their own colour. The background is the most common colour in
+the box, and glyph ink is only read from the box interior.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 import pypdfium2 as pdfium
@@ -52,6 +58,28 @@ def contrast_ratio(a: float, b: float) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
+def run_contrast(image, box: tuple[int, int, int, int]) -> float:
+    """Contrast of a run's glyph ink against the dominant colour of its box.
+
+    The interior excludes the outer tenth of the width and fifth of the
+    height, so a margin, rule or neighbouring cell that only touches the box
+    edge cannot stand in for missing glyph ink.
+    """
+
+    left, top, right, bottom = box
+    if right - left < 2 or bottom - top < 2:
+        return 1.0
+    background = Counter(image.crop(box).get_flattened_data()).most_common(1)[0][0]
+    inset_x = (right - left) // 10
+    inset_y = (bottom - top) // 5
+    interior = (left + inset_x, top + inset_y, right - inset_x, bottom - inset_y)
+    background_luminance = luminance(background)
+    return max(
+        contrast_ratio(luminance(colour), background_luminance)
+        for colour in set(image.crop(interior).get_flattened_data())
+    )
+
+
 def render(pdf_bytes: bytes) -> RenderedPdf:
     document = pdfium.PdfDocument(pdf_bytes)
     sizes: list[tuple[float, float]] = []
@@ -76,11 +104,7 @@ def render(pdf_bytes: bytes) -> RenderedPdf:
                     min(image.width, int(right * SCALE) + 1),
                     min(image.height, int((height - bottom) * SCALE) + 1),
                 )
-                if box[2] - box[0] < 2 or box[3] - box[1] < 2:
-                    contrast = 1.0
-                else:
-                    values = [luminance(pixel) for pixel in image.crop(box).get_flattened_data()]
-                    contrast = contrast_ratio(min(values), max(values))
+                contrast = run_contrast(image, box)
                 runs.append(TextRun(index, text, (left, bottom, right, top), contrast))
             textpage.close()
             page.close()

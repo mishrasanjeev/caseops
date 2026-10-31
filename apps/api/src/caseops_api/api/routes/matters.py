@@ -297,6 +297,7 @@ from caseops_api.services.matters import (
     get_matter_dashboard_summary,
     get_matter_invoice_pdf,
     get_matter_workspace,
+    issue_matter_invoice_draft,
     list_matter_hearing_follow_up,
     list_matter_hearing_portfolio,
     list_matter_tasks,
@@ -341,6 +342,7 @@ HearingPackGenerator = Annotated[
 HearingPackReviewer = Annotated[SessionContext, Depends(require_capability("hearing_packs:review"))]
 CourtSyncRunner = Annotated[SessionContext, Depends(require_capability("court_sync:run"))]
 InvoiceIssuer = Annotated[SessionContext, Depends(require_capability("invoices:issue"))]
+InvoiceVoider = Annotated[SessionContext, Depends(require_capability("invoices:void"))]
 TimeEntryWriter = Annotated[SessionContext, Depends(require_capability("time_entries:write"))]
 DocumentUploader = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
 DocumentManager = Annotated[SessionContext, Depends(require_capability("documents:manage"))]
@@ -2723,6 +2725,22 @@ async def download_current_company_matter_invoice_pdf(
 
 
 @router.post(
+    "/{matter_id}/invoices/{invoice_id}/issue",
+    response_model=InvoiceRecord,
+    summary="Issue a draft matter invoice",
+)
+async def issue_current_company_matter_invoice_draft(
+    matter_id: str,
+    invoice_id: str,
+    context: InvoiceIssuer,
+    session: DbSession,
+) -> InvoiceRecord:
+    return issue_matter_invoice_draft(
+        session, context=context, matter_id=matter_id, invoice_id=invoice_id
+    )
+
+
+@router.post(
     "/{matter_id}/invoices/{invoice_id}/void",
     response_model=InvoiceRecord,
     summary="Void a draft matter invoice",
@@ -2730,7 +2748,7 @@ async def download_current_company_matter_invoice_pdf(
 async def void_current_company_matter_invoice_draft(
     matter_id: str,
     invoice_id: str,
-    context: InvoiceIssuer,
+    context: InvoiceVoider,
     session: DbSession,
 ) -> InvoiceRecord:
     return void_matter_invoice_draft(

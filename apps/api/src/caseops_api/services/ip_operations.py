@@ -3774,7 +3774,9 @@ def _canonical_billing_value(
                 MatterInvoice.matter_id == cost.matter_id,
             )
         )
-        if row is not None:
+        # IPLF-UJ-52-EXC-06: a voided invoice is not billing evidence; the link
+        # surfaces as missing instead of matching (BUG-016 added draft voids).
+        if row is not None and row.status != "void":
             amount, currency = row.total_amount_minor, row.currency
     elif cost.billing_link_type == "invoice_line_item":
         result = session.execute(
@@ -3786,7 +3788,7 @@ def _canonical_billing_value(
                 MatterInvoice.matter_id == cost.matter_id,
             )
         ).first()
-        if result is not None:
+        if result is not None and result[1].status != "void":
             line, invoice = result
             amount, currency = line.line_total_amount_minor, invoice.currency
     elif cost.billing_link_type == "time_entry":
