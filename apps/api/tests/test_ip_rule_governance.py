@@ -815,6 +815,56 @@ def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
     assert client.get("/api/ip/rule-policies", headers=other_headers).json() == []
 
 
+def _role_headers(client: TestClient, owner_token: str, *, role: str, email: str) -> dict[str, str]:
+    created = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": f"Rule {role}",
+            "email": email,
+            "password": "RulePolicy123!",
+            "role": role,
+        },
+    )
+    assert created.status_code == 200, created.text
+    login = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "RulePolicy123!", "company_slug": "aster-legal"},
+    )
+    assert login.status_code == 200, login.text
+    return auth_headers(str(login.json()["access_token"]))
+
+
+def test_rule_policy_list_is_readable_by_every_rule_activator(client: TestClient) -> None:
+    """RULE-GOV-04: whoever may select a policy (ip:rules_activate) can read it.
+
+    The selection is a compare-and-swap on the policy version, so an activator
+    who cannot read the current version could never make a valid selection.
+    Members without either governance capability stay refused.
+    """
+
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
+    rule = _propose(client, owner_headers)
+    assert _activate(client, legal_headers, rule["id"], reviewer_id).status_code == 200
+
+    partner_headers = _role_headers(
+        client, owner_token, role="partner", email="rule-partner@asterlegal.in"
+    )
+    member_headers = _role_headers(
+        client, owner_token, role="member", email="rule-member@asterlegal.in"
+    )
+
+    partner = client.get("/api/ip/rule-policies", headers=partner_headers)
+    assert partner.status_code == 200, partner.text
+    assert [row["active_rule_version_id"] for row in partner.json()] == [rule["id"]]
+    assert partner.json()[0]["version"] == 1
+
+    member = client.get("/api/ip/rule-policies", headers=member_headers)
+    assert member.status_code == 403
+    client.cookies.clear()
+    assert client.get("/api/ip/rule-policies").status_code == 401
+
+
 def test_shared_rule_key_governance_never_crosses_tenant_ownership(
     client: TestClient,
 ) -> None:

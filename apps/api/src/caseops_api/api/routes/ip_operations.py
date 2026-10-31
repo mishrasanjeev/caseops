@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from caseops_api.api.dependencies import (
     DbSession,
     require_all_capabilities,
+    require_any_capability,
     require_capability,
 )
 from caseops_api.api.routes.ip_patents import router as patent_router
@@ -540,6 +541,12 @@ IpRuleProposer = Annotated[
 IpRuleActivator = Annotated[
     SessionContext,
     Depends(require_capability("ip:rules_activate")),
+]
+# Company rule selection is a compare-and-swap made by activators, so everyone
+# who may select (ip:rules_activate) or propose rules can read the current one.
+IpRulePolicyReader = Annotated[
+    SessionContext,
+    Depends(require_any_capability("ip:rules_propose", "ip:rules_activate")),
 ]
 IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
 IpWorkspaceAdmin = Annotated[
@@ -1283,7 +1290,7 @@ async def post_ip_deadline_rule_transition(
     response_model=list[IpCompanyRulePolicyRecord],
 )
 async def get_ip_rule_policies(
-    context: IpRuleProposer,
+    context: IpRulePolicyReader,
     session: DbSession,
 ) -> list[IpCompanyRulePolicyRecord]:
     return list_company_rule_policies(session, context=context)
