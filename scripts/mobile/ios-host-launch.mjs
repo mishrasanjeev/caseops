@@ -15,8 +15,8 @@ const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9aca
 const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1';
 export const IOS_PODS_SOURCE_SHA256 = 'bcac5eb3bf33069d711759ba925b8ff54d474bc1f64b36176be52b6daec32947';
 const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
-  'ios-simulator-build.sh': 'abee50f7e0a46eb5b3237cfd2e73e99b994f1fccc26cb01c71661493eaa0b5f0',
-  'ios-node-build-env.json': 'df8561756f00fe395608fe3769c876c0cb0970dcbd674887c605ea959df21843',
+  'ios-simulator-build.sh': 'f825762b8a2ab942ad905284c3c772fb659dbf95a81973647f3a781d6fb2d5eb',
+  'ios-node-build-env.json': '9d01580fa8fb54bac9cbc7362465a38a06000cc4751429188f946160752ad93d',
   'ios-git-readonly.py': '17b09505fbf0d95e71386d0bfe0f685c2f4c0802b1ddcd9443d1d8042ea207a9',
   'ios-local-qa-host.py': 'c79fedf8f144a311dbcf591d51bf10b6905ae7cc2351fa9ec972dbd0917f783d',
   'store-packaging-host.py': 'a7c9d00f7e9c87a3e2a27ce758b49464fa4c50da92001aac02ebb20ee2dc71bb',
@@ -138,7 +138,7 @@ export function reviewRubyRootBundle(bytes) {
   return { rows, count: 188, setSha256: set };
 }
 const nodeKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'];
-const unsafe = /^(?:DYLD_.*|LD_(?:PRELOAD|LIBRARY_PATH|AUDIT|DEBUG|PROFILE|ASSUME_KERNEL|BIND_NOW)|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_TLS_REJECT_UNAUTHORIZED|OPENSSL_CONF|OPENSSL_CONF_INCLUDE|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|RUBYOPT|RUBYLIB|GEM_HOME|GEM_PATH|BUNDLE_.*|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.*|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|CURL_HOME|CP_HOME_DIR|CP_CACHE_DIR|CP_REPOS_DIR|HOME|XDG_CONFIG_HOME|NODE_BINARY)$/;
+const unsafe = /^(?:DYLD_.*|LD_(?:PRELOAD|LIBRARY_PATH|AUDIT|DEBUG|PROFILE|ASSUME_KERNEL|BIND_NOW)|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_TLS_REJECT_UNAUTHORIZED|OPENSSL_CONF|OPENSSL_CONF_INCLUDE|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|RUBYOPT|RUBYLIB|GEM_HOME|GEM_PATH|BUNDLE_.*|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.*|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy|CURL_HOME|CP_HOME_DIR|CP_CACHE_DIR|CP_REPOS_DIR|HOME|CFFIXED_USER_HOME|XDG_CONFIG_HOME|NODE_BINARY)$/;
 const publicKeys = /^(?:PATH|LANG|LC_ALL|TZ|TMPDIR|CI|NODE_ENV|__EXPO_CONFIG_MODE|EXPO_NO_DOTENV|EXPO_NO_TELEMETRY|EXPO_OFFLINE|EXPO_PUBLIC_API_ORIGIN|EXPO_PUBLIC_WEB_ORIGIN|SIMULATOR_UDID|CASEOPS_MOBILE_(?:BUILD_PROFILE|AUTOMATED_TEST|RELEASE_SHA|ANDROID_CA_FILE|ANDROID_CA_SHA256|PRIVACY_POLICY_FILE|PRIVACY_POLICY_SHA256)|CASEOPS_(?:NATIVE_LINK_CONFIG|STORE_BUILD)_(?:FILE|SHA256)|DEVELOPER_DIR|SDKROOT|ARCHS|CODE_SIGN_(?:IDENTITY|STYLE|ENTITLEMENTS)|GIT_(?:CONFIG_GLOBAL|CONFIG_NOSYSTEM|OPTIONAL_LOCKS|TERMINAL_PROMPT))$/;
 // Expo's generated Podfile sets these before its Node autolinking subprocess.
 // Keep their finite public build values across the Ruby/Node/tool boundary.
@@ -225,6 +225,32 @@ export function reviewIosHostHome(home, end = Date.now() + 20000) {
   assert.deepEqual(directory(home, end), before, 'IOS_HOST_HOME_NAMESPACE_CHANGED');
   return { frame: fields.map(k => String(fs.lstatSync(home, { bigint: true })[k])), namespace: before };
 }
+const iosHomeDirectories = Object.freeze(['Library', 'Library/Caches', 'Library/Caches/ReactNative',
+  'Library/Caches/org.swift.swiftpm', 'Library/org.swift.swiftpm',
+  'Library/org.swift.swiftpm/configuration', 'Library/org.swift.swiftpm/security']);
+function reviewIosHomeDirectories(home, end) {
+  return iosHomeDirectories.map(relative => {
+    const file = path.join(home, relative), observed = directory(file, end);
+    assert.equal(fs.lstatSync(file, { bigint: true }).mode & 0o777n, 0o700n, 'IOS_HOST_HOME_DIRECTORY_MODE');
+    return observed;
+  });
+}
+export function prepareIosHomeDirectories(output, home, end = Date.now() + 20000) {
+  assert.ok(typeof process.getuid === 'function', 'IOS_HOST_POSIX_OWNER_REQUIRED');
+  assert.equal(home, path.join(output, 'home'), 'IOS_HOST_HOME_BINDING');
+  const outer = directory(output, end), owned = directory(home, end);
+  for (const file of [output, home])
+    assert.equal(fs.lstatSync(file, { bigint: true }).mode & 0o777n, 0o700n, 'IOS_HOST_HOME_DIRECTORY_MODE');
+  for (const relative of iosHomeDirectories) {
+    const file = path.join(home, relative), parent = directory(path.dirname(file), end);
+    assert.equal(fs.lstatSync(file, { throwIfNoEntry: false }), undefined, 'IOS_HOST_FRESH_HOME_DIRECTORY');
+    fs.mkdirSync(file, { mode: 0o700 }); directory(file, end);
+    assert.deepEqual(directory(path.dirname(file), end), parent, 'IOS_HOST_HOME_DIRECTORY_PARENT_CHANGED');
+  }
+  assert.deepEqual(directory(output, end), outer, 'IOS_HOST_HOME_NAMESPACE_CHANGED');
+  assert.deepEqual(directory(home, end), owned, 'IOS_HOST_HOME_NAMESPACE_CHANGED');
+  return reviewIosHomeDirectories(home, end);
+}
 function validateIncoming(p, nodeEnvironment, environment) {
   // Xcode exports these fixed bundle-layout facts. They are not Bundler
   // configuration and neutralIosEnvironment still discards every BUNDLE_* key.
@@ -233,7 +259,7 @@ function validateIncoming(p, nodeEnvironment, environment) {
     BUNDLE_EXTENSIONS_FOLDER_PATH: ['Extensions'], BUNDLE_FORMAT: ['shallow'],
     BUNDLE_FRAMEWORKS_FOLDER_PATH: ['Frameworks'], BUNDLE_PLUGINS_FOLDER_PATH: ['PlugIns'],
     BUNDLE_PRIVATE_HEADERS_FOLDER_PATH: ['PrivateHeaders'], BUNDLE_PUBLIC_HEADERS_FOLDER_PATH: ['Headers'],
-    HOME: [p.paths.home], CURL_HOME: [p.paths.home], XDG_CONFIG_HOME: [p.paths.home],
+    HOME: [p.paths.home], CFFIXED_USER_HOME: [p.paths.home], CURL_HOME: [p.paths.home], XDG_CONFIG_HOME: [p.paths.home],
     SSL_CERT_FILE: [p.bundle.path, nodeEnvironment.SSL_CERT_FILE], SSL_CERT_DIR: [p.paths.empty, nodeEnvironment.SSL_CERT_DIR],
     NODE_OPTIONS: [nodeEnvironment.NODE_OPTIONS], NODE_EXTRA_CA_CERTS: p.fixtureCA ? [p.fixtureCA.path] : [],
     GEM_HOME: [p.podHome], GEM_PATH: [[p.podHome, p.rubyGems].join(':')], CP_HOME_DIR: [p.paths.pods], CP_CACHE_DIR: [p.paths.cache], CP_REPOS_DIR: [p.paths.repos], NODE_BINARY: [p.shims.node.path],
@@ -413,7 +439,7 @@ export async function prepareIosHostLaunch({ directory: output, nodePolicy, ruby
   // Expo/CocoaPods create this deferred project path during the admitted build.
   // CP_HOME_DIR is not Pod::Config.project_pods_root.
   paths.projectPods = path.join(sourceRoot, 'apps/mobile/ios/Pods');
-  for (const suffix of ['Library', 'Library/Caches', 'Library/Caches/ReactNative']) fs.mkdirSync(path.join(paths.home, suffix), { mode: 0o700 });
+  prepareIosHomeDirectories(output, paths.home, end);
   const bundle = writeExclusive(path.join(output, 'ruby-curl-roots.pem'), ca, end); ca.fill(0);
   const helper = referenceIosHostInput(path.join(sourceRoot, 'scripts/mobile/ios-host-launch.mjs'), end, 131072);
   const executing = readIosHostInput(helper, { end, maxBytes: 131072 });
@@ -461,6 +487,7 @@ export async function verifyIosHostLaunch(policyRef, { end = Date.now() + 20000 
     } else { assert.equal(value, path.join(parent, name), 'IOS_HOST_OWNED_PATH'); directory(value, end); }
   }
   empty(p.paths.empty, end); const homeObservation = reviewIosHostHome(p.paths.home, end);
+  reviewIosHomeDirectories(p.paths.home, end);
   const bundle = readIosHostInput(p.bundle, { end, maxBytes: 1048576 });
   try {
     const rows = certs(bundle.bytes), fixtureId = p.fixtureCA?.certificateSha256;
@@ -498,7 +525,7 @@ export async function verifyIosHostLaunch(policyRef, { end = Date.now() + 20000 
     try {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(namesInput.bytes));
       assert.ok(value.schemaVersion === 1 && value.kind === 'caseops-ios-node-build-environment-names'
-        && Array.isArray(value.names) && value.names.length === 609 && new Set(value.names).size === value.names.length
+        && Array.isArray(value.names) && value.names.length === 618 && new Set(value.names).size === value.names.length
         && value.names.every(k => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !unsafe.test(k) && !processMetadataKeys.includes(k)), 'IOS_HOST_BUILD_NAMES'); nodeBuildNames = value.names;
     } finally { namesInput.bytes.fill(0); }
     const script = readIosHostInput(p.podScript, { end, maxBytes: 32768, system: true });
@@ -828,7 +855,7 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
       path.resolve(path.dirname(p.helper.path), '../..'), 'IOS_HOST_POD_SOURCE_ROOT');
     const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [],
       podBuildPaths: admitted.podBuildPaths?.values ?? null });
-    Object.assign(neutral, { HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
+    Object.assign(neutral, { HOME: p.paths.home, CFFIXED_USER_HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
       CP_HOME_DIR: p.paths.pods, CP_CACHE_DIR: p.paths.cache, CP_REPOS_DIR: p.paths.repos, TMPDIR: p.paths.temporary,
       LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
       PATH: [p.paths.bin, path.dirname(p.tools.ruby.path), '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'),
@@ -979,12 +1006,17 @@ export async function runIosLocalQaCommand(policyRef, role, args, { environment 
     return await dispatchLocalQaChild(p, hostRef, host.bytes, request, scoped.environment, finish, transport);
   } finally { host.bytes.fill(0); }
 }
+export function iosSimulatorInputEnvironment(environment) {
+  assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
+  // Keep an optional CF override until the policy-bound validator can reject it.
+  return Object.fromEntries(Object.entries(environment).filter(([key]) => publicKeys.test(key) || key === 'CFFIXED_USER_HOME'));
+}
 export async function runIosSimulatorBuild(policyRef, environment, { transport } = {}) {
   assert.equal(environment.CASEOPS_IOS_SIMULATOR_BUILD_GO, 'EXPLICIT_REVIEWED_LOCAL_SIMULATOR_BUILD', 'IOS_HOST_SIMULATOR_NOT_ARMED');
   assert.match(environment.SIMULATOR_UDID || '', /^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$/, 'IOS_HOST_SIMULATOR_ID');
   assert.match(environment.CASEOPS_MOBILE_RELEASE_SHA || '', /^[a-f0-9]{40}$/, 'IOS_HOST_SOURCE_SHA');
   const p = await admitIosHostExecution(policyRef), end = Math.min(p.deadlineEpochMs, Date.now() + 1830000);
-  const supplied = Object.fromEntries(Object.entries(environment).filter(([key]) => publicKeys.test(key)));
+  const supplied = iosSimulatorInputEnvironment(environment);
   const scoped = await composeIosHostCommand(policyRef, 'neutral', [], { environment: supplied, end: Math.min(Date.now() + 20000, end) });
   scoped.environment.CASEOPS_IOS_HOST_OUTER_DEADLINE = String(end - 30000);
   scoped.environment.CASEOPS_IOS_HOST_SOURCE_ROOT = path.resolve(path.dirname(p.helper.path), '../..');

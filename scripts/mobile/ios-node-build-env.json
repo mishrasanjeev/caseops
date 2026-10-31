@@ -49,6 +49,40 @@
           "USER",
           "GROUP"
         ]
+      },
+      {
+        "sourceSha": "f3f4afe7d6caf453eba5fce2d3395c119fc2f238",
+        "retainedLogSha256": "8194e7849429f431294dcaa27712f5ec104fe291e3b1c3c20c8a3511a3361dad",
+        "namesEvidenceSha256": "38211a5c76fde352d9afcb96037cf02cd2d9ebc0fc6646ac7119657cd283d4a6",
+        "xcodeVersion": "27.1",
+        "sdkVersion": "27.1",
+        "phase": "Hermes Replace Hermes for the right configuration",
+        "evidenceKind": "source-coupled projection of retained actual phase exports; native replacement remains unverified",
+        "capturedExportCount": 544,
+        "addedNames": [
+          "GCC_WARN_INHIBIT_ALL_WARNINGS"
+        ]
+      },
+      {
+        "sourceSha": "f3f4afe7d6caf453eba5fce2d3395c119fc2f238",
+        "namesEvidenceSha256": "38915dd36a4ac6cf51d13a0a351faab1518bfb4101164d567946b465cda7932d",
+        "pbxCensusSha256": "706496e9ebad56c3c920fe0c56a64b30019f431bc26ba6e1a953eb9b2cd25ffb",
+        "xcconfigCensusSha256": "38c8a77fcb6d44811f83b432dad97b7a6e0cbe6aca1bc035e6e0b1ea86a1db79",
+        "evidenceKind": "source-declared Node-script target/configuration build settings; not observed exports or native success",
+        "targets": [
+          "ReactCodegen",
+          "CaseOps"
+        ],
+        "addedNames": [
+          "ENABLE_BITCODE",
+          "ENABLE_MODULE_VERIFIER",
+          "GCC_PREFIX_HEADER",
+          "MACOSX_DEPLOYMENT_TARGET",
+          "MODULEMAP_FILE",
+          "OTHER_LIBTOOLFLAGS",
+          "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
+          "SWIFT_INSTALL_OBJC_HEADER"
+        ]
       }
     ]
   },
@@ -208,6 +242,7 @@
     "EMBEDDED_CONTENT_CONTAINS_SWIFT",
     "EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE",
     "ENABLE_APP_SANDBOX",
+    "ENABLE_BITCODE",
     "ENABLE_CODE_COVERAGE",
     "ENABLE_COHORT_ARCHS",
     "ENABLE_CPLUSPLUS_BOUNDS_SAFE_BUFFERS",
@@ -220,6 +255,7 @@
     "ENABLE_HARDWARE_CHECKED_POINTER_ARITHMETIC_SLICE",
     "ENABLE_HEADER_DEPENDENCIES",
     "ENABLE_INCOMING_NETWORK_CONNECTIONS",
+    "ENABLE_MODULE_VERIFIER",
     "ENABLE_NS_ASSERTIONS",
     "ENABLE_ON_DEMAND_RESOURCES",
     "ENABLE_OUTGOING_NETWORK_CONNECTIONS",
@@ -272,6 +308,7 @@
     "GCC_NO_COMMON_BLOCKS",
     "GCC_OBJC_LEGACY_DISPATCH",
     "GCC_PFE_FILE_C_DIALECTS",
+    "GCC_PREFIX_HEADER",
     "GCC_PREPROCESSOR_DEFINITIONS",
     "GCC_SYMBOLS_PRIVATE_EXTERN",
     "GCC_TREAT_WARNINGS_AS_ERRORS",
@@ -279,6 +316,7 @@
     "GCC_VERSION_IDENTIFIER",
     "GCC_WARN_64_TO_32_BIT_CONVERSION",
     "GCC_WARN_ABOUT_RETURN_TYPE",
+    "GCC_WARN_INHIBIT_ALL_WARNINGS",
     "GCC_WARN_UNDECLARED_SELECTOR",
     "GCC_WARN_UNINITIALIZED_AUTOS",
     "GCC_WARN_UNUSED_FUNCTION",
@@ -381,6 +419,7 @@
     "LOCROOT",
     "LOCSYMROOT",
     "MACH_O_TYPE",
+    "MACOSX_DEPLOYMENT_TARGET",
     "MAC_OS_X_PRODUCT_BUILD_VERSION",
     "MAC_OS_X_VERSION_ACTUAL",
     "MAC_OS_X_VERSION_MAJOR",
@@ -392,6 +431,7 @@
     "MERGE_LINKED_LIBRARIES",
     "METAL_LIBRARY_FILE_BASE",
     "METAL_LIBRARY_OUTPUT_DIR",
+    "MODULEMAP_FILE",
     "MODULES_FOLDER_PATH",
     "MODULE_CACHE_DIR",
     "MTL_ENABLE_DEBUG_INFO",
@@ -412,6 +452,7 @@
     "OTHER_CFLAGS",
     "OTHER_CPLUSPLUSFLAGS",
     "OTHER_LDFLAGS",
+    "OTHER_LIBTOOLFLAGS",
     "OTHER_MODULE_VERIFIER_FLAGS",
     "OTHER_SWIFT_FLAGS",
     "PACKAGE_TYPE",
@@ -548,6 +589,7 @@
     "SUPPRESS_WARNINGS",
     "SWIFTC_PASS_SDKROOT",
     "SWIFTC_PASS_SYSROOT",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
     "SWIFT_COLOR_DIAGNOSTICS",
     "SWIFT_COMPILATION_MODE",
     "SWIFT_EMIT_CONST_VALUE_PROTOCOLS",
@@ -555,6 +597,7 @@
     "SWIFT_EMIT_MODULE_INTERFACE",
     "SWIFT_ENABLE_EXPLICIT_MODULES",
     "SWIFT_INCLUDE_PATHS",
+    "SWIFT_INSTALL_OBJC_HEADER",
     "SWIFT_OBJC_BRIDGING_HEADER",
     "SWIFT_OPTIMIZATION_LEVEL",
     "SWIFT_PLATFORM_TARGET_PREFIX",

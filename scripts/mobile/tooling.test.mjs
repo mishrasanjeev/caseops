@@ -29,7 +29,7 @@ import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFai
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
-import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, prepareIosHomeDirectories, iosSimulatorInputEnvironment, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -3235,6 +3235,62 @@ test('iOS neutral Xcode and offline tools receive no Node or Ruby CA environment
   assert.equal(result.environment.NODE_BINARY, f.policy.paths.bin + '/node');
   assert.equal(result.environment.LANG, 'en_US.UTF-8'); assert.equal(result.environment.LC_ALL, 'en_US.UTF-8');
 });
+test('iOS CoreFoundation home is owned across every role and foreign overrides refuse', () => {
+  const roles = [['node', []], ['npm', ['--version']], ['ruby', ['-v']], ['pod', []], ['git', ['--version']],
+    ['curl', curlDownloaderArgs()], ['xcodebuild', ['build']], ['neutral', []]];
+  for (const [role, args] of roles) {
+    const f = iosProjectionFixture(), incoming = { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs - 1000) };
+    const actual = iosHostCommandProjection(f.admitted, f.ref, role, args, incoming);
+    assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home, role);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.XDG_CONFIG_HOME, f.policy.paths.home);
+    const matched = iosProjectionFixture(), supplied = { ...incoming, CFFIXED_USER_HOME: matched.policy.paths.home };
+    assert.equal(iosHostCommandProjection(matched.admitted, matched.ref, role, args, supplied).environment.CFFIXED_USER_HOME, matched.policy.paths.home);
+    assert.equal(supplied.CFFIXED_USER_HOME, matched.policy.paths.home);
+    for (const value of ['/SYNTHETIC/operator-home', '', false, f.policy.paths.home + '/..']) {
+      const foreign = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(foreign.admitted, foreign.ref, role, args, { CFFIXED_USER_HOME: value }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+  }
+});
+test('iOS simulator entry preserves optional CoreFoundation input for policy validation', () => {
+  const f = iosProjectionFixture(), supplied = { CFFIXED_USER_HOME: '/SYNTHETIC/operator-home',
+    SIMULATOR_UDID: 'SYNTHETIC', UNREVIEWED_OWNER_FIELD: 'SYNTHETIC' }, before = { ...supplied };
+  const incoming = iosSimulatorInputEnvironment(supplied);
+  assert.equal(incoming.CFFIXED_USER_HOME, supplied.CFFIXED_USER_HOME);
+  assert.equal(incoming.UNREVIEWED_OWNER_FIELD, undefined); assert.deepEqual(supplied, before);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'neutral', [], incoming), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  assert.deepEqual(neutralIosEnvironment({ CFFIXED_USER_HOME: 'SYNTHETIC' }, { buildNames: ['CFFIXED_USER_HOME'] }), {});
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  assert.equal(names.includes('CFFIXED_USER_HOME'), false);
+});
+test('iOS home preparation creates only private real directories and refuses protected roots or aliases', t => {
+  const root = trustRoot(), protectedRoot = trustRoot();
+  t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(protectedRoot, { recursive: true, force: true }); });
+  const home = path.join(root, 'home'); fs.mkdirSync(home, { mode: 0o700 });
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => prepareIosHomeDirectories(root, home), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    assert.deepEqual(fs.readdirSync(home), []); return;
+  }
+  assert.throws(() => prepareIosHomeDirectories(root, protectedRoot), /IOS_HOST_HOME_BINDING/);
+  assert.deepEqual(fs.readdirSync(protectedRoot), []);
+  const rows = prepareIosHomeDirectories(root, home);
+  const expected = ['Library', 'Library/Caches', 'Library/Caches/ReactNative', 'Library/Caches/org.swift.swiftpm',
+    'Library/org.swift.swiftpm', 'Library/org.swift.swiftpm/configuration', 'Library/org.swift.swiftpm/security'];
+  assert.deepEqual(rows.map(row => path.relative(home, row.path)), expected.map(name => name.split('/').join(path.sep)));
+  for (const row of rows) {
+    const metadata = fs.lstatSync(row.path); assert.equal(metadata.isDirectory(), true); assert.equal(metadata.isSymbolicLink(), false);
+    assert.equal(metadata.uid, process.getuid()); assert.equal(metadata.mode & 0o777, 0o700); assert.equal(fs.realpathSync(row.path), row.path);
+  }
+  assert.throws(() => prepareIosHomeDirectories(root, home), /IOS_HOST_FRESH_HOME_DIRECTORY/);
+  const second = path.join(root, 'second'); fs.mkdirSync(second, { mode: 0o700 });
+  const secondHome = path.join(second, 'home'); fs.mkdirSync(secondHome, { mode: 0o700 });
+  fs.symlinkSync(protectedRoot, path.join(secondHome, 'Library'), 'dir');
+  assert.throws(() => prepareIosHomeDirectories(second, secondHome), /IOS_HOST_FRESH_HOME_DIRECTORY/);
+  assert.deepEqual(fs.readdirSync(protectedRoot), []);
+  fs.unlinkSync(path.join(secondHome, 'Library')); fs.chmodSync(secondHome, 0o500);
+  assert.throws(() => prepareIosHomeDirectories(second, secondHome), /IOS_HOST_HOME_DIRECTORY_MODE/);
+  assert.deepEqual(fs.readdirSync(secondHome), []); fs.chmodSync(secondHome, 0o700);
+});
 test('iOS simulator shell binds the admitted HOME as one Xcode build setting', { skip: process.platform === 'win32' }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-xcode-home-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -3243,15 +3299,21 @@ test('iOS simulator shell binds the admitted HOME as one Xcode build setting', {
   const receipt = path.join(root, 'argv.json'), executable = path.join(root, 'capture-xcode');
   // Exercise the actual shell argument boundary. This capture is not Xcode or
   // native-build acceptance; the separate real-Xcode phase probe supplies that.
-  fs.writeFileSync(executable, '#!/bin/bash\nexec "$CASEOPS_TEST_NODE" --input-type=module -e \'import fs from "node:fs"; fs.writeFileSync(process.env.CASEOPS_ARGV_RECEIPT, JSON.stringify({args:process.argv.slice(1),home:process.env.HOME}), {mode:0o600});\' -- "$@"\n', { mode: 0o700 });
+  fs.writeFileSync(executable, '#!/bin/bash\nexec "$CASEOPS_TEST_NODE" --input-type=module -e \'import fs from "node:fs"; fs.writeFileSync(process.env.CASEOPS_ARGV_RECEIPT, JSON.stringify({args:process.argv.slice(1),home:process.env.HOME,cfHome:process.env.CFFIXED_USER_HOME}), {mode:0o600});\' -- "$@"\n', { mode: 0o700 });
   const source = fs.readFileSync(new URL('./ios-simulator-build.sh', import.meta.url), 'utf8');
   const start = source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace'), end = source.indexOf('\napp=', start);
   assert.ok(start >= 0 && end > start); assert.equal(source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace', start + 1), -1);
   execFileSync('/bin/bash', ['-c', 'set -euo pipefail\n' + source.slice(start, end)], { cwd: root, timeout: 10000,
-    env: { PATH: '/usr/bin:/bin', HOME: home, run, SIMULATOR_UDID: 'SYNTHETIC-SIMULATOR',
+    env: { PATH: '/usr/bin:/bin', HOME: home, CFFIXED_USER_HOME: home, run, SIMULATOR_UDID: 'SYNTHETIC-SIMULATOR',
       CASEOPS_IOS_HOST_XCODEBUILD: executable, CASEOPS_TEST_NODE: process.execPath, CASEOPS_ARGV_RECEIPT: receipt } });
   const actual = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   assert.equal(actual.home, home); assert.deepEqual(actual.args.filter(arg => arg.startsWith('HOME=')), ['HOME=' + home]);
+  assert.equal(actual.cfHome, home);
+  assert.deepEqual(actual.args.filter(arg => arg.startsWith('CFFIXED_USER_HOME=')), ['CFFIXED_USER_HOME=' + home]);
+  const guardStart = source.indexOf(': "${CFFIXED_USER_HOME:'), guardEnd = source.indexOf('\nrepo=', guardStart);
+  assert.ok(guardStart >= 0 && guardEnd > guardStart);
+  assert.throws(() => execFileSync('/bin/bash', ['-c', 'set -euo pipefail\n' + source.slice(guardStart, guardEnd)],
+    { env: { HOME: home, CFFIXED_USER_HOME: '/SYNTHETIC/operator-home' }, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }), error => error.status === 1 && /IOS_HOST_CF_HOME_MISMATCH/.test(String(error.stderr)));
   const f = iosProjectionFixture(); f.policy.paths.home = home;
   assert.equal(iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: actual.args.find(arg => arg.startsWith('HOME=')).slice(5) }).environment.HOME, home);
   assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: '/SYNTHETIC/operator-home' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
@@ -3674,11 +3736,18 @@ function spawnSyncForIosEntry(file, env) {
 }
 test('iOS Node build names are pinned to actual retained phase evidence without owner or TLS override fields', () => {
   const raw = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), spec = JSON.parse(raw);
-  assert.equal(createHash('sha256').update(raw).digest('hex'), 'df8561756f00fe395608fe3769c876c0cb0970dcbd674887c605ea959df21843');
+  assert.equal(createHash('sha256').update(raw).digest('hex'), '9d01580fa8fb54bac9cbc7362465a38a06000cc4751429188f946160752ad93d');
   assert.equal(spec.provenance.namesEvidenceSha256, '6670f54a23ed98e6c33ec02e43339bb56e5fa4abebc3a7dc7850fea51319f257');
-  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 609); assert.equal(new Set(spec.names).size, 609);
+  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 618); assert.equal(new Set(spec.names).size, 618);
   assert.equal(spec.provenance.baseNameCount, 586); assert.equal(spec.provenance.supplements[0].addedNames.length, 23);
   assert.equal(spec.provenance.supplements[0].namesEvidenceSha256, '2fbd819e92ad6aa263f809eece3b8d85a20b42ca9b59302126a7f57328e94128');
+  assert.equal(spec.provenance.supplements.length, 3);
+  assert.deepEqual(spec.provenance.supplements[1].addedNames, ['GCC_WARN_INHIBIT_ALL_WARNINGS']);
+  assert.equal(spec.provenance.supplements[1].namesEvidenceSha256, '38211a5c76fde352d9afcb96037cf02cd2d9ebc0fc6646ac7119657cd283d4a6');
+  assert.deepEqual(spec.provenance.supplements[2].addedNames, ['ENABLE_BITCODE', 'ENABLE_MODULE_VERIFIER', 'GCC_PREFIX_HEADER',
+    'MACOSX_DEPLOYMENT_TARGET', 'MODULEMAP_FILE', 'OTHER_LIBTOOLFLAGS', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'SWIFT_INSTALL_OBJC_HEADER']);
+  assert.equal(spec.provenance.supplements[2].namesEvidenceSha256, '38915dd36a4ac6cf51d13a0a351faab1518bfb4101164d567946b465cda7932d');
+  assert.match(spec.provenance.supplements[2].evidenceKind, /source-declared.*not observed exports or native success/);
   assert.equal(spec.names.includes('LD_RUNPATH_SEARCH_PATHS'), true); assert.equal(spec.names.includes('BUILT_PRODUCTS_DIR'), true);
   for (const key of ['HOME', 'USER', 'UID', 'GROUP', 'GID', 'PATH', 'NODE_OPTIONS', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'HTTPS_PROXY']) assert.equal(spec.names.includes(key), false, key);
 });
@@ -3710,6 +3779,41 @@ test('iOS retained RNDeps build names stay Node-only and current process metadat
     for (const key of ['UID', 'GID', 'USER', 'GROUP']) assert.equal(result.environment[key], undefined, key);
     assert.deepEqual(owner, before);
   }
+});
+test('iOS Hermes warning metadata reaches only the reviewed Node build environment', () => {
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const supplied = { GCC_WARN_INHIBIT_ALL_WARNINGS: 'YES' }, before = { ...supplied };
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  assert.equal(actual.environment.GCC_WARN_INHIBIT_ALL_WARNINGS, 'YES');
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  assert.equal(actual.environment.HOME, f.policy.paths.home); assert.deepEqual(supplied, before);
+  for (const role of ['pod', 'neutral', 'xcodebuild'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['GCC_WARN_INHIBIT_ALL_WARNINGS_UNREVIEWED', 'PRIVATE_OPERATOR_TOKEN'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['HOME', 'NODE_OPTIONS', 'HTTPS_PROXY', 'BUNDLE_GEMFILE', 'BUNDLE_UNKNOWN'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, [key]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  for (const value of [false, 'bad\0value', 'x'.repeat(32769)])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { GCC_WARN_INHIBIT_ALL_WARNINGS: value }), /IOS_HOST_ENVIRONMENT/);
+});
+test('iOS declared Node-script build fields remain finite Node-only metadata', () => {
+  const declaredNames = ['MODULEMAP_FILE', 'OTHER_LIBTOOLFLAGS', 'ENABLE_MODULE_VERIFIER', 'GCC_PREFIX_HEADER',
+    'SWIFT_INSTALL_OBJC_HEADER', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'MACOSX_DEPLOYMENT_TARGET', 'ENABLE_BITCODE'];
+  const supplied = Object.fromEntries(declaredNames.map(name => [name, 'SYNTHETIC_' + name])), before = { ...supplied };
+  const f = iosProjectionFixture();
+  f.admitted.nodeBuildNames = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  for (const name of declaredNames) assert.equal(actual.environment[name], supplied[name], name);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.deepEqual(supplied, before);
+  for (const role of ['pod', 'neutral', 'xcodebuild'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const name of declaredNames)
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name + '_UNREVIEWED']: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, MODULEMAP_FILE: 'bad\0path' }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, OTHER_LIBTOOLFLAGS: 'x'.repeat(32769) }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], Object.fromEntries(declaredNames.map(name => [name, 'x'.repeat(32768)]))), /IOS_HOST_ENVIRONMENT_BOUND/);
 });
 test('iOS process metadata and observed build names cannot admit foreign identities or owner overrides', () => {
   for (const key of ['UID', 'GID', 'USER', 'GROUP']) {

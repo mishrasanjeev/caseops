@@ -11,6 +11,8 @@ fi
 : "${EXPO_PUBLIC_WEB_ORIGIN:?Supply the isolated HTTPS web origin}"
 : "${CASEOPS_IOS_HOST_SOURCE_ROOT:?Owned controller must bind source root}"
 : "${CASEOPS_IOS_HOST_BUILD_OUTPUT:?Owned controller must bind private output}"
+: "${CFFIXED_USER_HOME:?Owned controller must bind CoreFoundation HOME}"
+[[ "$CFFIXED_USER_HOME" == "$HOME" ]] || { echo IOS_HOST_CF_HOME_MISMATCH >&2; exit 1; }
 repo="$CASEOPS_IOS_HOST_SOURCE_ROOT"
 run="$CASEOPS_IOS_HOST_BUILD_OUTPUT"
 trap 'printf "Raw build evidence retained: %s\n" "$run"' EXIT
@@ -30,7 +32,7 @@ cp ios/Podfile.lock "$run/Podfile.lock"
 "$CASEOPS_IOS_HOST_XCODEBUILD" -workspace ios/CaseOps.xcworkspace -scheme CaseOps -configuration Release \
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
   -derivedDataPath "$run/DerivedData" -jobs 4 \
-  "HOME=$HOME" \
+  "HOME=$HOME" "CFFIXED_USER_HOME=$CFFIXED_USER_HOME" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_INJECT_BASE_ENTITLEMENTS=YES \
   build 2>&1 | tee "$run/xcodebuild.log"
 app="$run/DerivedData/Build/Products/Release-iphonesimulator/CaseOps.app"
