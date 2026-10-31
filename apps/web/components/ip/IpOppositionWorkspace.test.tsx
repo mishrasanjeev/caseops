@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createMock,
   fetchCoreMock,
+  fetchIpNiceClassesMock,
   fetchWorkspaceMock,
   pleadingWorkspaceMock,
   saveMock,
@@ -13,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   fetchCoreMock: vi.fn(),
+  fetchIpNiceClassesMock: vi.fn(),
   fetchWorkspaceMock: vi.fn(),
   pleadingWorkspaceMock: vi.fn(),
   saveMock: vi.fn(),
@@ -22,6 +25,7 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   createIpOppositionProceeding: createMock,
   fetchIpCoreRecords: fetchCoreMock,
+  fetchIpNiceClasses: fetchIpNiceClassesMock,
   fetchIpOppositionWorkspace: fetchWorkspaceMock,
   saveIpOppositionWorkspace: saveMock,
   transitionIpOppositionStage: transitionMock,
@@ -54,6 +58,32 @@ vi.mock("@/components/ip/IpPleadingWorkspace", () => ({
 }));
 
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
+
+function niceCatalogue() {
+  return {
+    edition: "NCL 13-2026",
+    in_force_from: "2026-01-01",
+    source_url: "https://nclpub.wipo.int/enfr/?version=20260101",
+    source_data_url: "https://www.wipo.int/classifications/data/nice/20260101.zip",
+    retrieved_on: "2026-10-31",
+    headings_sha256: "a".repeat(64),
+    attribution: "Nice Classification, 13th edition, version 2026 (NCL 13-2026). Copyright World Intellectual Property Organization (WIPO).",
+    classes: Array.from({ length: 45 }, (_, index) => ({
+      number: index + 1,
+      kind: index + 1 <= 34 ? "goods" : "services",
+      heading: `Class ${index + 1} heading.`,
+      note: null,
+    })),
+  };
+}
+
+async function chooseNiceClass(user: ReturnType<typeof userEvent.setup>, name: string, number: number) {
+  const input = screen.getByRole("combobox", { name });
+  await waitFor(() => expect(input).toBeEnabled());
+  await user.click(input);
+  await user.type(input, String(number));
+  await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: new RegExp(`^Class ${number}, `) }));
+}
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -240,6 +270,7 @@ describe("IpOppositionWorkspace", () => {
       identifiers: workspace.application_identifiers,
     });
     fetchWorkspaceMock.mockResolvedValue(workspace);
+    fetchIpNiceClassesMock.mockResolvedValue(niceCatalogue());
     saveMock.mockResolvedValue(workspace);
     transitionMock.mockResolvedValue({ proceeding, event });
   });
@@ -516,5 +547,42 @@ describe("IpOppositionWorkspace", () => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: ["ip", "opposition-applicant-workflow", "docket-1", "opposition-1"],
     });
+  });
+
+  it("BUG-002 asks for a Nice class for each challenged segment before saving", async () => {
+    const user = userEvent.setup();
+    fetchWorkspaceMock.mockResolvedValue({ ...workspace, profile: { ...workspace.profile, challenged_scope: [] } });
+    render(withClient(<IpOppositionWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+
+    const segment = await screen.findByLabelText("Scope 1 goods and services");
+    await user.type(segment, "Downloadable legal software");
+    const save = screen.getByRole("button", { name: "Save profile revision" });
+    expect(save).toBeDisabled();
+    expect(screen.getByText("Choose the Nice class of this segment.")).toBeVisible();
+    expect(screen.queryByRole("spinbutton", { name: "Scope 1 class" })).not.toBeInTheDocument();
+
+    await chooseNiceClass(user, "Scope 1 class", 9);
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    await waitFor(() => expect(saveMock).toHaveBeenCalledOnce());
+    expect(saveMock).toHaveBeenCalledWith(
+      expect.objectContaining({ challengedScope: [{ class_number: 9, goods_services_segment: "Downloadable legal software" }] }),
+      expect.any(Object),
+    );
+  });
+
+  it("BUG-002 shows a refused challenged class under that segment's class field", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    saveMock.mockRejectedValue(new ApiError(422, "Challenged scope › Class number: Class 9 is outside the opposed application.", {
+      errors: [{ loc: ["body", "challenged_scope", 0, "class_number"], type: "value_error",
+        msg: "Class 9 is outside the opposed application." }],
+    }));
+    render(withClient(<IpOppositionWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save profile revision" }));
+    const field = screen.getByRole("combobox", { name: "Scope 1 class" });
+    await waitFor(() => expect(field).toHaveAttribute("aria-invalid", "true"));
+    const described = (field.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain("Class 9 is outside the opposed application.");
   });
 });

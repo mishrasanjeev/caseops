@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { actionMock, createMock, fetchCoreMock, fetchWorkspaceMock, saveMock } =
+const { actionMock, createMock, fetchCoreMock, fetchIpNiceClassesMock, fetchWorkspaceMock, saveMock } =
   vi.hoisted(() => ({
     actionMock: vi.fn(),
     createMock: vi.fn(),
     fetchCoreMock: vi.fn(),
+    fetchIpNiceClassesMock: vi.fn(),
     fetchWorkspaceMock: vi.fn(),
     saveMock: vi.fn(),
   }));
@@ -15,6 +17,7 @@ const { actionMock, createMock, fetchCoreMock, fetchWorkspaceMock, saveMock } =
 vi.mock("@/lib/api/endpoints", () => ({
   createIpPostRegistrationProceeding: createMock,
   fetchIpCoreRecords: fetchCoreMock,
+  fetchIpNiceClasses: fetchIpNiceClassesMock,
   fetchIpPostRegistrationWorkspace: fetchWorkspaceMock,
   recordIpPostRegistrationAction: actionMock,
   saveIpPostRegistrationWorkspace: saveMock,
@@ -23,6 +26,32 @@ vi.mock("@/lib/api/endpoints", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
+
+function niceCatalogue() {
+  return {
+    edition: "NCL 13-2026",
+    in_force_from: "2026-01-01",
+    source_url: "https://nclpub.wipo.int/enfr/?version=20260101",
+    source_data_url: "https://www.wipo.int/classifications/data/nice/20260101.zip",
+    retrieved_on: "2026-10-31",
+    headings_sha256: "a".repeat(64),
+    attribution: "Nice Classification, 13th edition, version 2026 (NCL 13-2026). Copyright World Intellectual Property Organization (WIPO).",
+    classes: Array.from({ length: 45 }, (_, index) => ({
+      number: index + 1,
+      kind: index + 1 <= 34 ? "goods" : "services",
+      heading: `Class ${index + 1} heading.`,
+      note: null,
+    })),
+  };
+}
+
+async function chooseNiceClass(user: ReturnType<typeof userEvent.setup>, name: string, number: number) {
+  const input = screen.getByRole("combobox", { name });
+  await waitFor(() => expect(input).toBeEnabled());
+  await user.click(input);
+  await user.type(input, String(number));
+  await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: new RegExp(`^Class ${number}, `) }));
+}
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -213,6 +242,7 @@ describe("IpPostRegistrationWorkspace", () => {
       identifiers: [],
     });
     fetchWorkspaceMock.mockResolvedValue(workspace);
+    fetchIpNiceClassesMock.mockResolvedValue(niceCatalogue());
     saveMock.mockResolvedValue(workspace);
     actionMock.mockResolvedValue(workspace);
     createMock.mockResolvedValue(proceeding);
@@ -323,5 +353,44 @@ describe("IpPostRegistrationWorkspace", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("BUG-002 needs a Nice class chosen from the catalogue before the profile can be confirmed", async () => {
+    const user = userEvent.setup();
+    fetchWorkspaceMock.mockResolvedValue({ ...workspace, profile: null, profile_event: null });
+    render(withClient(<IpPostRegistrationWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+
+    expect(await screen.findByText("RECT-100")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Record source"), { target: { value: "registry:rectification:100" } });
+    fireEvent.change(screen.getAllByLabelText("Source documents")[0], { target: { value: "document:petition" } });
+    const confirm = screen.getByRole("button", { name: "Confirm profile" });
+    // No class is preselected, and an empty class is never sent as 0.
+    expect(screen.getByRole("combobox", { name: "Class" })).toHaveValue("");
+    expect(confirm).toBeDisabled();
+    expect(screen.getByText("Choose the Nice class of the challenged goods or services.")).toBeVisible();
+
+    await chooseNiceClass(user, "Class", 9);
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    await waitFor(() => expect(saveMock).toHaveBeenCalledOnce());
+    expect(saveMock.mock.calls[0][0].profile.challenged_scope[0].class_number).toBe(9);
+  });
+
+  it("BUG-002 anchors a refused challenged class to the class field", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    saveMock.mockRejectedValue(new ApiError(422, "Profile › Challenged scope › Class number: Class 9 is not registered.", {
+      errors: [{ loc: ["body", "profile", "challenged_scope", 0, "class_number"], type: "value_error",
+        msg: "Class 9 is not registered." }],
+    }));
+    render(withClient(<IpPostRegistrationWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+
+    expect(await screen.findByText("RECT-100")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Record source"), { target: { value: "registry:rectification:100" } });
+    fireEvent.change(screen.getAllByLabelText("Source documents")[0], { target: { value: "document:petition" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm profile" }));
+    const field = screen.getByRole("combobox", { name: "Class" });
+    await waitFor(() => expect(field).toHaveAttribute("aria-invalid", "true"));
+    const described = (field.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain("Class 9 is not registered.");
   });
 });

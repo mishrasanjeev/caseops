@@ -14,6 +14,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { NiceClassPicker } from "@/components/ip/NiceClassPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -32,7 +33,7 @@ import {
   type IpPostRegistrationActionKind,
   type IpPostRegistrationKind,
 } from "@/lib/api/endpoints";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, apiFieldErrors } from "@/lib/api/config";
 
 const SELECT_CLASS =
   "h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)]";
@@ -92,6 +93,10 @@ function refs(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+const CLASS_PICKER_ID = "ip-post-registration-class";
+// The challenged scope's class number, wherever the API reports it.
+const PROFILE_FIELD_MAP = { "challenged_scope.class_number": CLASS_PICKER_ID } as const;
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
@@ -187,7 +192,9 @@ export function IpPostRegistrationWorkspace({
   const [targetRight, setTargetRight] = useState("");
   const [applicantName, setApplicantName] = useState("");
   const [respondentName, setRespondentName] = useState("");
-  const [classNumber, setClassNumber] = useState("9");
+  // Chosen from the Nice catalogue; nothing is preselected (BUG-002).
+  const [classNumber, setClassNumber] = useState<number | null>(null);
+  const [classError, setClassError] = useState<string | null>(null);
   const [scope, setScope] = useState("");
   const [grounds, setGrounds] = useState("");
   const [forum, setForum] = useState("Trade Marks Registry Delhi");
@@ -219,7 +226,7 @@ export function IpPostRegistrationWorkspace({
     setTargetRight(profile.target_right_reference);
     setApplicantName(profile.applicant_name);
     setRespondentName(profile.respondent_name);
-    setClassNumber(String(profile.challenged_scope[0]?.class_number ?? 9));
+    setClassNumber(profile.challenged_scope[0]?.class_number ?? null);
     setScope(profile.challenged_scope[0]?.goods_services_segment ?? "");
     setGrounds(profile.grounds.join("\n"));
     setForum(profile.forum);
@@ -239,12 +246,16 @@ export function IpPostRegistrationWorkspace({
   }, [profile]);
   const save = useMutation({
     mutationFn: saveIpPostRegistrationWorkspace,
+    onMutate: () => setClassError(null),
     onSuccess: async () => {
       toast.success("Post-registration profile confirmed.");
       await refresh();
     },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not save the profile.")),
+    onError: (error) => {
+      const anchored = apiFieldErrors(error, PROFILE_FIELD_MAP)[CLASS_PICKER_ID] ?? null;
+      setClassError(anchored);
+      toast.error(anchored ? "Check the highlighted class." : apiErrorMessage(error, "Could not save the profile."));
+    },
   });
 
   const [actionKind, setActionKind] =
@@ -428,7 +439,7 @@ export function IpPostRegistrationWorkspace({
               className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!currentMembershipId) return;
+                if (!currentMembershipId || classNumber === null) return;
                 const kind = workspace.data.proceeding
                   .proceeding_kind as IpPostRegistrationKind;
                 save.mutate({
@@ -452,7 +463,7 @@ export function IpPostRegistrationWorkspace({
                     respondent_name: respondentName,
                     challenged_scope: [
                       {
-                        class_number: Number(classNumber),
+                        class_number: classNumber,
                         goods_services_segment: scope,
                       },
                     ],
@@ -512,15 +523,26 @@ export function IpPostRegistrationWorkspace({
                   onChange={(event) => setRespondentName(event.target.value)}
                 />
               </Field>
-              <Field label="Class">
-                <Input
-                  type="number"
-                  min={1}
-                  max={45}
+              <div className="min-w-0 space-y-1.5">
+                <NiceClassPicker
+                  id={CLASS_PICKER_ID}
+                  label="Class"
                   value={classNumber}
-                  onChange={(event) => setClassNumber(event.target.value)}
+                  onChange={(value) => {
+                    setClassNumber(value);
+                    setClassError(null);
+                  }}
+                  invalid={Boolean(classError)}
+                  errorId={classError ? `${CLASS_PICKER_ID}-error` : undefined}
                 />
-              </Field>
+                {classError ? (
+                  <p id={`${CLASS_PICKER_ID}-error`} className="break-words text-xs text-[var(--color-danger-text)]">
+                    {classError}
+                  </p>
+                ) : classNumber === null ? (
+                  <p className="text-xs text-[var(--color-mute)]">Choose the Nice class of the challenged goods or services.</p>
+                ) : null}
+              </div>
               <Field label="Challenged scope">
                 <Textarea
                   value={scope}
@@ -678,6 +700,7 @@ export function IpPostRegistrationWorkspace({
                   disabled={
                     !canReview ||
                     !currentMembershipId ||
+                    classNumber === null ||
                     !profileSource.trim() ||
                     !profileDocument.trim() ||
                     save.isPending

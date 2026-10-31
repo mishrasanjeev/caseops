@@ -20,7 +20,8 @@ import { IpOppositionOpponentWorkflow } from "@/components/ip/IpOppositionOppone
 import { IpOppositionSharedWorkflow } from "@/components/ip/IpOppositionSharedWorkflow";
 import { IpOppositionSpecializedPaths } from "@/components/ip/IpOppositionSpecializedPaths";
 import { IpPleadingWorkspace } from "@/components/ip/IpPleadingWorkspace";
-import { apiErrorMessage } from "@/lib/api/config";
+import { NiceClassPicker } from "@/components/ip/NiceClassPicker";
+import { ApiError, apiErrorMessage, apiValidationIssues } from "@/lib/api/config";
 import {
   createIpOppositionProceeding,
   fetchIpCoreRecords,
@@ -41,7 +42,8 @@ type PartyDraft = {
   party_name: string;
   source: string;
 };
-type ScopeDraft = { class_number: number; goods_services_segment: string };
+// The class is chosen from the Nice catalogue; null until chosen (BUG-002).
+type ScopeDraft = { class_number: number | null; goods_services_segment: string };
 type RightDraft = IpOppositionProfile["relied_on_rights"][number];
 
 const EMPTY_PARTIES: PartyDraft[] = [
@@ -53,7 +55,7 @@ const EMPTY_GROUND: IpOppositionGround = {
   lawyer_detail: "",
   classification_source: "manual",
 };
-const EMPTY_SCOPE: ScopeDraft = { class_number: 1, goods_services_segment: "" };
+const EMPTY_SCOPE: ScopeDraft = { class_number: null, goods_services_segment: "" };
 const EMPTY_RIGHT: RightDraft = {
   mark_or_right: "",
   jurisdiction: "IN",
@@ -198,6 +200,8 @@ export function IpOppositionWorkspace({
   const [parties, setParties] = useState<PartyDraft[]>(EMPTY_PARTIES);
   const [grounds, setGrounds] = useState<IpOppositionGround[]>([EMPTY_GROUND]);
   const [scope, setScope] = useState<ScopeDraft[]>([EMPTY_SCOPE]);
+  const [scopeErrors, setScopeErrors] = useState<Record<number, string>>({});
+  const scopeIdPrefix = useId().replace(/:/g, "");
   const [rights, setRights] = useState<RightDraft[]>([]);
   const [serviceMethod, setServiceMethod] = useState("");
   const [serviceDestination, setServiceDestination] = useState("");
@@ -232,6 +236,11 @@ export function IpOppositionWorkspace({
     setDocumentRefs(workspace.data.profile_event?.document_refs_json.join(", ") ?? "");
   }, [workspace.data]);
 
+  // Segments sent to the API, with their row on screen so a refusal lands there.
+  const submittedScope = scope
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => row.goods_services_segment.trim() && row.class_number !== null);
+  const scopeMissingClass = scope.some((row) => row.goods_services_segment.trim() && row.class_number === null);
   const saveInput = workspace.data && currentMembershipId ? {
     docketId: docket.id,
     proceedingId: workspace.data.proceeding.id,
@@ -252,7 +261,7 @@ export function IpOppositionWorkspace({
     limitationDate: limitationDate || null,
     parties: parties.filter((row) => row.party_name.trim()).map((row) => ({ ...row, party_name: row.party_name.trim(), source: row.source.trim() })),
     grounds: grounds.filter((row) => row.lawyer_detail.trim()),
-    challengedScope: scope.filter((row) => row.goods_services_segment.trim()),
+    challengedScope: submittedScope.map(({ row }) => ({ class_number: row.class_number!, goods_services_segment: row.goods_services_segment })),
     reliedOnRights: rights.filter((row) => row.mark_or_right.trim()),
     service: serviceMethod.trim() && serviceDestination.trim() && servedOn && serviceEvidence.trim()
       ? {
@@ -271,11 +280,22 @@ export function IpOppositionWorkspace({
   } : null;
   const save = useMutation({
     mutationFn: saveIpOppositionWorkspace,
+    onMutate: () => setScopeErrors({}),
     onSuccess: async () => {
       toast.success("Lawyer-confirmed opposition profile saved.");
       await refreshWorkspace();
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not save the opposition profile.")),
+    onError: (error) => {
+      const byRow: Record<number, string> = {};
+      for (const issue of error instanceof ApiError ? apiValidationIssues(error.data) : []) {
+        const at = issue.loc.indexOf("challenged_scope");
+        const position = issue.loc[at + 1];
+        const row = at >= 0 && typeof position === "number" ? submittedScope[position] : undefined;
+        if (row && issue.loc[at + 2] === "class_number") byRow[row.index] = issue.msg;
+      }
+      setScopeErrors(byRow);
+      toast.error(Object.keys(byRow).length ? "Check the highlighted class." : apiErrorMessage(error, "Could not save the opposition profile."));
+    },
   });
 
   const [toStage, setToStage] = useState("notice_filed");
@@ -448,13 +468,13 @@ export function IpOppositionWorkspace({
 
               <section className="min-w-0 space-y-3"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Grounds</h4><Button type="button" size="sm" variant="secondary" onClick={() => setGrounds((rows) => [...rows, { ...EMPTY_GROUND }])}><Plus className="h-4 w-4" /> Add ground</Button></div>{grounds.map((ground, index) => <div key={index} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 rounded-md border border-[var(--color-line)] p-3"><select aria-label={`Ground ${index + 1} category`} className={SELECT_CLASS} value={ground.category} onChange={(event) => setGrounds((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, category: event.target.value as IpOppositionGround["category"] } : row))}>{["earlier_mark", "passing_off", "well_known_mark", "descriptiveness", "non_distinctive", "prohibited_mark", "bad_faith", "other"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select><select aria-label={`Ground ${index + 1} classification source`} className={SELECT_CLASS} value={ground.classification_source} onChange={(event) => setGrounds((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, classification_source: event.target.value as IpOppositionGround["classification_source"] } : row))}><option value="manual">Manual</option><option value="ai_assisted">AI assisted</option></select><Textarea aria-label={`Ground ${index + 1} lawyer detail`} value={ground.lawyer_detail} onChange={(event) => setGrounds((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, lawyer_detail: event.target.value } : row))} placeholder="Lawyer-confirmed pleaded ground" /><Button type="button" size="sm" className="w-10 px-0" variant="ghost" title="Remove ground" onClick={() => setGrounds((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}</section>
 
-              <section className="min-w-0 space-y-3"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Challenged goods and services</h4><Button type="button" size="sm" variant="secondary" onClick={() => setScope((rows) => [...rows, { ...EMPTY_SCOPE }])}><Plus className="h-4 w-4" /> Add class segment</Button></div>{scope.map((row, index) => <div key={index} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 rounded-md border border-[var(--color-line)] p-3"><Input aria-label={`Scope ${index + 1} class`} type="number" min={1} max={45} value={row.class_number} onChange={(event) => setScope((rows) => rows.map((item, rowIndex) => rowIndex === index ? { ...item, class_number: Number(event.target.value) } : item))} /><Textarea aria-label={`Scope ${index + 1} goods and services`} value={row.goods_services_segment} onChange={(event) => setScope((rows) => rows.map((item, rowIndex) => rowIndex === index ? { ...item, goods_services_segment: event.target.value } : item))} placeholder="Challenged segment" /><Button type="button" size="sm" className="w-10 px-0" variant="ghost" title="Remove class segment" onClick={() => setScope((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}</section>
+              <section className="min-w-0 space-y-3"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Challenged goods and services</h4><Button type="button" size="sm" variant="secondary" onClick={() => setScope((rows) => [...rows, { ...EMPTY_SCOPE }])}><Plus className="h-4 w-4" /> Add class segment</Button></div>{scope.map((row, index) => <div key={index} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 rounded-md border border-[var(--color-line)] p-3"><div className="min-w-0"><NiceClassPicker id={`${scopeIdPrefix}-scope-${index}-class`} label={`Scope ${index + 1} class`} value={row.class_number} invalid={Boolean(scopeErrors[index])} errorId={scopeErrors[index] ? `${scopeIdPrefix}-scope-${index}-class-error` : undefined} onChange={(value) => { setScope((rows) => rows.map((item, rowIndex) => rowIndex === index ? { ...item, class_number: value } : item)); setScopeErrors((current) => { const next = { ...current }; delete next[index]; return next; }); }} />{scopeErrors[index] ? <p id={`${scopeIdPrefix}-scope-${index}-class-error`} className="mt-1 break-words text-xs text-[var(--color-danger-text)]">{scopeErrors[index]}</p> : row.goods_services_segment.trim() && row.class_number === null ? <p className="mt-1 text-xs text-[var(--color-mute)]">Choose the Nice class of this segment.</p> : null}</div><Textarea aria-label={`Scope ${index + 1} goods and services`} value={row.goods_services_segment} onChange={(event) => setScope((rows) => rows.map((item, rowIndex) => rowIndex === index ? { ...item, goods_services_segment: event.target.value } : item))} placeholder="Challenged segment" /><Button type="button" size="sm" className="w-10 px-0" variant="ghost" title="Remove class segment" onClick={() => setScope((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}</section>
 
               {workspace.data.proceeding.side === "opponent" ? <section className="min-w-0 space-y-3"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Relied-on rights</h4><Button type="button" size="sm" variant="secondary" onClick={() => setRights((rows) => [...rows, { ...EMPTY_RIGHT }])}><Plus className="h-4 w-4" /> Add right</Button></div>{rights.map((right, index) => <div key={index} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 rounded-md border border-[var(--color-line)] p-3"><Input aria-label={`Right ${index + 1} mark`} value={right.mark_or_right} onChange={(event) => setRights((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, mark_or_right: event.target.value } : row))} placeholder="Mark or right" /><Input aria-label={`Right ${index + 1} identifier`} value={right.identifier ?? ""} onChange={(event) => setRights((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, identifier: event.target.value || null } : row))} placeholder="Registration number" /><Input aria-label={`Right ${index + 1} owner`} value={right.owner} onChange={(event) => setRights((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, owner: event.target.value } : row))} placeholder="Owner" /><Input aria-label={`Right ${index + 1} status`} value={right.status} onChange={(event) => setRights((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, status: event.target.value } : row))} placeholder="Status" /><Textarea className="col-span-full" aria-label={`Right ${index + 1} goods and services`} value={right.goods_services} onChange={(event) => setRights((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, goods_services: event.target.value } : row))} placeholder="Goods and services" /><Button type="button" size="sm" className="w-10 px-0" variant="ghost" title="Remove relied-on right" onClick={() => setRights((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}</section> : null}
 
               {workspace.data.proceeding.side === "applicant" ? <section className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-3"><h4 className="col-span-full font-semibold">Service</h4><Field label="Method"><Input value={serviceMethod} onChange={(event) => setServiceMethod(event.target.value)} /></Field><Field label="Destination"><Input value={serviceDestination} onChange={(event) => setServiceDestination(event.target.value)} /></Field><Field label="Served on"><Input type="date" value={servedOn} onChange={(event) => setServedOn(event.target.value)} /></Field><Field label="Service evidence"><Input value={serviceEvidence} onChange={(event) => setServiceEvidence(event.target.value)} /></Field><label className="flex items-center gap-2 text-sm col-span-full"><input type="checkbox" checked={startsResponse} onChange={(event) => setStartsResponse(event.target.checked)} /> Starts response period</label></section> : null}
 
-              <Button className="w-full sm:w-auto sm:self-start" type="submit" disabled={!canReview || !currentMembershipId || ruleVersion.trim().length < 2 || forum.trim().length < 2 || profileReason.trim().length < 5 || save.isPending}><Save className="h-4 w-4" /> {profile ? "Save profile revision" : "Confirm opposition profile"}</Button>
+              <Button className="w-full sm:w-auto sm:self-start" type="submit" disabled={!canReview || !currentMembershipId || ruleVersion.trim().length < 2 || forum.trim().length < 2 || profileReason.trim().length < 5 || scopeMissingClass || save.isPending}><Save className="h-4 w-4" /> {profile ? "Save profile revision" : "Confirm opposition profile"}</Button>
             </form>
 
             {workspace.data.proceeding.side === "applicant" && workspace.data.profile ? <IpOppositionApplicantWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
