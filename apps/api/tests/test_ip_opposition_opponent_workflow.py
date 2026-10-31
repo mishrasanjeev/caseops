@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.ip_oppositions import IpOppositionOpponentActionRequest
+from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -135,6 +136,7 @@ def _governed_rule(
     workflow_stage: str,
 ) -> tuple[dict, dict, str, str]:
     token = str(bootstrap["access_token"])
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     headers = auth_headers(token)
     suffix = workflow_stage.replace("_", "-")
     legal_id, legal_token = _member(

@@ -25,7 +25,11 @@ from caseops_api.schemas.ip_oppositions import (
     IpOppositionProfile,
 )
 from caseops_api.schemas.shared_work import IpSharedTaskCreateRequest
-from caseops_api.services.ip_deadline_workflow import _deadline_record, propose_deadline
+from caseops_api.services.ip_deadline_workflow import (
+    _deadline_record,
+    owned_rule_version,
+    propose_deadline,
+)
 from caseops_api.services.ip_operations import _docket_or_404
 from caseops_api.services.ip_opposition_workspace import (
     _opposition_or_404,
@@ -557,8 +561,11 @@ def propose_opponent_deadline(
     )
     if trigger is None:
         raise HTTPException(status_code=404, detail="Confirmed opposition trigger event not found.")
-    rule = session.get(IpRuleVersion, payload.rule_version_id)
-    rule_set = session.get(IpRuleSet, rule.rule_set_id) if rule is not None else None
+    # Company-scoped: another tenant's version is indistinguishable from none.
+    owned = owned_rule_version(
+        session, company_id=proceeding.company_id, rule_version_id=payload.rule_version_id
+    )
+    rule_set = owned[1] if owned is not None else None
     if rule_set is None or not all(
         (
             rule_set.proceeding_kind == "opposition",

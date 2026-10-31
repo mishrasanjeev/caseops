@@ -23,22 +23,27 @@ from caseops_api.services.ip_nice_classes import (
     is_nice_class,
 )
 
+IpFeatureBlockedReason = Literal[
+    "unknown_feature",
+    "missing_capability",
+    "missing_entitlement",
+    "rollout_disabled",
+    "rollout_expired",
+    "workspace_not_configured",
+    "tenant_disabled",
+    "readiness_test_failed",
+    "incident_kill_switch",
+]
+
 
 class IpFeatureReadinessRecord(BaseModel):
     feature_id: str
     available: bool
-    reason: Literal[
-        "available",
-        "unknown_feature",
-        "missing_capability",
-        "missing_entitlement",
-        "rollout_disabled",
-        "rollout_expired",
-        "workspace_not_configured",
-        "tenant_disabled",
-        "readiness_test_failed",
-        "incident_kill_switch",
-    ]
+    # First failing gate, kept for compatibility. ``blocked_reasons`` lists
+    # every failing gate in the same precedence order; it is empty exactly when
+    # ``available`` is true and its first entry always equals ``reason``.
+    reason: Literal["available"] | IpFeatureBlockedReason
+    blocked_reasons: list[IpFeatureBlockedReason] = Field(default_factory=list)
     owner: str
     required_capabilities: list[str]
     missing_capabilities: list[str]

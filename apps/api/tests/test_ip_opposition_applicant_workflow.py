@@ -13,6 +13,7 @@ from caseops_api.schemas.ip_oppositions import (
     IpOppositionWorkspaceUpsertRequest,
 )
 from caseops_api.schemas.ip_records import IpOppositionStageTransitionRequest
+from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -189,6 +190,7 @@ def _governed_deadline_rule(
     suffix: str,
 ) -> tuple[dict, dict, str, str]:
     owner_token = str(bootstrap["access_token"])
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
         client,

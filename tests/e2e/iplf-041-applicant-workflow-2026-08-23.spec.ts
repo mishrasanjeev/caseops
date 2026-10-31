@@ -19,7 +19,7 @@ function grantIpEntitlement(companyId: string): void {
     "from caseops_api.db.models import BillingSubscription",
     "from caseops_api.db.session import get_session_factory",
     "session=get_session_factory()()",
-    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf_041_playwright',externally_billable=False,entitlement_overrides_json={'ip_workspace': True}))",
+    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf_041_playwright',externally_billable=False,entitlement_overrides_json={'ip_workspace': True, 'ip_rule_governance': True}))",
     "session.commit()",
     "session.close()",
   ].join("; ");

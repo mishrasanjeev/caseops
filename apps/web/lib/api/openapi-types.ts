@@ -27202,7 +27202,7 @@ export interface components {
             /** Docket Id */
             docket_id: string;
             /** Exception Kinds */
-            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled")[];
+            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled" | "rule_retired")[];
             /** Result On */
             result_on: string | null;
             /**
@@ -27210,6 +27210,13 @@ export interface components {
              * @default true
              */
             visible: boolean;
+        };
+        /** IpDeadlineGovernanceProjection */
+        IpDeadlineGovernanceProjection: {
+            calendar_activation: components["schemas"]["IpGovernanceActionDecision"];
+            calendar_proposal: components["schemas"]["IpGovernanceActionDecision"];
+            rule_activation: components["schemas"]["IpGovernanceActionDecision"];
+            rule_proposal: components["schemas"]["IpGovernanceActionDecision"];
         };
         /** IpDeadlineImpactResponse */
         IpDeadlineImpactResponse: {
@@ -27651,6 +27658,7 @@ export interface components {
             eligible_rule_version_ids?: string[];
             /** Exceptions */
             exceptions: components["schemas"]["IpDeadlineExceptionRecord"][];
+            governance: components["schemas"]["IpDeadlineGovernanceProjection"];
             /** Rules */
             rules: components["schemas"]["IpRuleVersionRecord"][];
         };
@@ -28846,6 +28854,8 @@ export interface components {
             available: boolean;
             /** Blocked By Incident Id */
             blocked_by_incident_id?: string | null;
+            /** Blocked Reasons */
+            blocked_reasons?: ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch")[];
             /** Entitled */
             entitled: boolean;
             /** Entitlement Key */
@@ -28858,11 +28868,8 @@ export interface components {
             missing_capabilities: string[];
             /** Owner */
             owner: string;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch";
+            /** Reason */
+            reason: "available" | ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch");
             /** Required Capabilities */
             required_capabilities: string[];
             /** Rollout Enabled */
@@ -29323,6 +29330,24 @@ export interface components {
             response_overdue: boolean;
             /** Transactions */
             transactions: components["schemas"]["IpDocketEventResponse"][];
+        };
+        /**
+         * IpGovernanceActionDecision
+         * @description One governance action for the current viewer, from the writers' gates.
+         */
+        IpGovernanceActionDecision: {
+            /** Available */
+            available: boolean;
+            /** Code */
+            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing");
+            /** Entitlement Key */
+            entitlement_key: string;
+            /** Reasons */
+            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
+            /** Required Capability */
+            required_capability: string;
+            /** Rollout Flag */
+            rollout_flag: string | null;
         };
         /** IpHearingReminderPolicyRequest */
         IpHearingReminderPolicyRequest: {
@@ -33867,6 +33892,15 @@ export interface components {
         IpRuleVersionRecord: {
             /** Activated At */
             activated_at: string | null;
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
             /**
              * Created At
              * Format: date-time
@@ -33885,6 +33919,8 @@ export interface components {
             effective_from: string;
             /** Effective Until */
             effective_until: string | null;
+            /** Eligible Reviewer Membership Ids */
+            eligible_reviewer_membership_ids?: string[];
             /** Engine Compatibility */
             engine_compatibility: string;
             /** Fixtures */
@@ -33905,6 +33941,8 @@ export interface components {
             office: string | null;
             /** Proceeding Kind */
             proceeding_kind: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Reviewer Label Snapshot */
@@ -35544,12 +35582,21 @@ export interface components {
         };
         /** LegalCalendarVersionRecord */
         LegalCalendarVersionRecord: {
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
             /** Approved At */
             approved_at: string | null;
             /** Approver Label Snapshot */
             approver_label_snapshot: string | null;
             /** Calendar Id */
             calendar_id: string;
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
             /**
              * Created At
              * Format: date-time
@@ -35576,6 +35623,8 @@ export interface components {
             name: string;
             /** Office */
             office: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Source Hash */
