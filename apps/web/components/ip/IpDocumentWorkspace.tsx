@@ -60,8 +60,16 @@ export function IpDocumentWorkspace({
   canConfigure,
   assetType = "Trademark",
   scopeDocketId,
+  docketsLoading = false,
+  docketsError = null,
+  onRetryDockets,
 }: {
   dockets: Pick<IpDocket, "id" | "title">[];
+  /** The caller's docket listing is still loading, so an empty list means nothing yet. */
+  docketsLoading?: boolean;
+  /** The caller's docket listing failed; shown with a retry instead of "no docket yet". */
+  docketsError?: unknown;
+  onRetryDockets?: () => void;
   assetType?: "Trademark" | "Patent";
   scopeDocketId?: string;
   canUpload: boolean;
@@ -152,7 +160,13 @@ export function IpDocumentWorkspace({
     !file ? "the original file" : null,
     !documentTaxonomyKey ? "a classification" : null,
     !docketId
-      ? dockets.length ? "a linked docket" : "a linked docket (create an IP docket first)"
+      ? dockets.length
+        ? "a linked docket"
+        : docketsLoading
+          ? "a linked docket (the docket list is still loading)"
+          : docketsError
+            ? "a linked docket (the docket list could not load)"
+            : "a linked docket (create an IP docket first)"
       : null,
   ].filter((value): value is string => value !== null);
   const uploadHint = !taxonomyReady
@@ -502,7 +516,18 @@ export function IpDocumentWorkspace({
                 <option value="">Choose docket</option>
                 {dockets.map((docket) => <option key={docket.id} value={docket.id}>{docket.title}</option>)}
               </select>
-              {dockets.length === 0 ? (
+              {dockets.length === 0 && docketsLoading ? (
+                <p id="ip-document-docket-empty" role="status" className="mt-1 text-xs text-[var(--color-mute)]">
+                  Loading dockets…
+                </p>
+              ) : dockets.length === 0 && docketsError ? (
+                <div id="ip-document-docket-empty" role="alert" className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--color-danger-text)]">
+                  <span className="min-w-0 break-words">{apiErrorMessage(docketsError, "The docket list could not load.")}</span>
+                  {onRetryDockets ? (
+                    <Button type="button" size="sm" variant="outline" onClick={onRetryDockets}>Try again</Button>
+                  ) : null}
+                </div>
+              ) : dockets.length === 0 ? (
                 <p id="ip-document-docket-empty" className="mt-1 text-xs text-[var(--color-mute)]">
                   No trademark docket yet. Create one with New trademark, then link the document to it here.
                 </p>

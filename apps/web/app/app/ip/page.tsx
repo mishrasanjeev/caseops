@@ -379,6 +379,9 @@ export default function IpDocketPage() {
         <TabsContent value="documents">
           <IpDocumentWorkspace
             dockets={portfolioDockets}
+            docketsLoading={listing.isLoading || deepLinkDocketPending}
+            docketsError={listing.error ?? requestedDocket.error ?? null}
+            onRetryDockets={() => void (listing.isError ? listing.refetch() : requestedDocket.refetch())}
             canUpload={canWrite && canUploadDocuments}
             canManage={canWrite && canManageDocuments}
             canReview={canReview}
