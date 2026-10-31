@@ -3780,6 +3780,105 @@ test('iOS retained RNDeps build names stay Node-only and current process metadat
     assert.deepEqual(owner, before);
   }
 });
+function iosSdkScriptFixture() {
+  const f = iosRnProjectionFixture(), bytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url));
+  f.admitted.nodeBuildNames = JSON.parse(bytes).names;
+  f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  return f;
+}
+function iosCodegenShellValues(f) {
+  const mobile = path.join(f.admitted.podBuildPaths.sourceRoot, 'apps/mobile'), ios = path.join(mobile, 'ios');
+  const podfile = path.join(ios, 'Pods') + path.sep + '..';
+  const rn = podfile + path.sep + '..' + path.sep + 'node_modules' + path.sep + 'react-native';
+  return { RCT_SCRIPT_RN_DIR: rn, RCT_SCRIPT_APP_PATH: podfile + path.sep + '..', RCT_SCRIPT_OUTPUT_DIR: podfile,
+    RCT_SCRIPT_TYPE: 'withCodegenDiscovery', SCRIPT_PHASES_SCRIPT: rn + '/scripts/react_native_pods_utils/script_phases.sh',
+    WITH_ENVIRONMENT: rn + '/scripts/xcode/with-environment.sh' };
+}
+function iosBundleShellValues(f) {
+  const mobile = path.join(f.admitted.podBuildPaths.sourceRoot, 'apps/mobile');
+  return { PROJECT_ROOT: path.join(mobile, 'ios') + path.sep + '..', ENTRY_FILE: path.join(mobile, 'index.ts'),
+    CLI_PATH: path.join(mobile, 'node_modules/expo/node_modules/@expo/cli/build/src/index.js'),
+    BUNDLE_COMMAND: 'export:embed', NODE_ARGS: '' };
+}
+test('iOS Codegen shell cohort keeps its owned output and discards shell selectors for Node', () => {
+  const f = iosSdkScriptFixture();
+  // The retained real Xcode export is PODFILE_DIR=$(SRCROOT)/.. with SRCROOT
+  // ending in ios/Pods. Keep this independent raw operand, including its '..'.
+  const expectedOutput = path.resolve('/SYNTHETIC/reviewed-rn-source') + path.sep + ['apps', 'mobile', 'ios', 'Pods', '..'].join(path.sep);
+  const rawRn = expectedOutput + path.sep + ['..', 'node_modules', 'react-native'].join(path.sep);
+  const incoming = { RCT_SCRIPT_RN_DIR: rawRn, RCT_SCRIPT_APP_PATH: expectedOutput + path.sep + '..', RCT_SCRIPT_OUTPUT_DIR: expectedOutput,
+    RCT_SCRIPT_TYPE: 'withCodegenDiscovery', SCRIPT_PHASES_SCRIPT: rawRn + '/scripts/react_native_pods_utils/script_phases.sh',
+    WITH_ENVIRONMENT: rawRn + '/scripts/xcode/with-environment.sh' }, before = { ...incoming };
+  assert.deepEqual(incoming, iosCodegenShellValues(f));
+  const args = ['scripts/generate-codegen-artifacts.js', '--path', incoming.RCT_SCRIPT_APP_PATH, '--outputPath', incoming.RCT_SCRIPT_OUTPUT_DIR, '--targetPlatform', 'ios'];
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, incoming);
+  assert.equal(actual.environment.RCT_SCRIPT_OUTPUT_DIR, expectedOutput);
+  for (const key of Object.keys(incoming).filter(key => key !== 'RCT_SCRIPT_OUTPUT_DIR')) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.deepEqual(actual.args, args); assert.deepEqual(incoming, before);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  // Observe the projected output in a real child, using the runner's real trust
+  // environment rather than turning synthetic policy references into authority.
+  const observedChildOutput = execFileSync(process.execPath, ['-e', 'process.stdout.write(process.env.RCT_SCRIPT_OUTPUT_DIR)'],
+    { env: { ...process.env, RCT_SCRIPT_OUTPUT_DIR: actual.environment.RCT_SCRIPT_OUTPUT_DIR }, encoding: 'utf8', timeout: 5000 });
+  assert.equal(observedChildOutput, expectedOutput);
+});
+test('iOS Codegen shell cohort rejects partial foreign and cross-role contexts within existing bounds', () => {
+  for (const key of Object.keys(iosCodegenShellValues(iosSdkScriptFixture()))) {
+    const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f), missing = { ...valid }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_NODE_SCRIPT_COHORT/);
+    for (const value of ['/FOREIGN/source', valid[key] + '/', valid[key].toLowerCase() === valid[key] ? 'FOREIGN' : valid[key].toLowerCase()])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), /IOS_HOST_NODE_SCRIPT_VALUE/);
+    for (const value of [false, null, 1, {}, 'bad\0value', 'x'.repeat(32769)])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), /IOS_HOST_ENVIRONMENT/);
+    const alias = key.toLowerCase(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [alias]: valid[key] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const f = iosSdkScriptFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], iosCodegenShellValues(f)), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  for (const mutate of [f => { delete f.admitted.nodeBuildNames; }, f => { f.admitted.nodeBuildNames = f.admitted.nodeBuildNames.slice(1); },
+    f => { f.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); }, f => { delete f.admitted.podBuildPaths; }]) {
+    const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f); mutate(f); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], valid), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f);
+  const oldCanonicalCohort = Object.fromEntries(Object.entries(valid).map(([key, value]) =>
+    [key, key === 'RCT_SCRIPT_TYPE' ? value : path.normalize(value)]));
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], oldCanonicalCohort), /IOS_HOST_NODE_SCRIPT_VALUE/);
+  const large = { ...valid, ...Object.fromEntries(['CONFIGURATION', 'ARCHS', 'BUILT_PRODUCTS_DIR', 'LD_RUNPATH_SEARCH_PATHS', 'TARGET_NAME', 'PROJECT_NAME', 'SDKROOT', 'PRODUCT_NAME'].map(key => [key, 'x'.repeat(32768)])) };
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], large), /IOS_HOST_ENVIRONMENT_BOUND/);
+  for (const key of ['HOME', 'CFFIXED_USER_HOME', 'NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'BUNDLE_GEMFILE'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  for (const key of ['RCT_SCRIPT_UNKNOWN', 'SCRIPT_PHASES_SCRIPT_UNKNOWN', 'RN_DIR'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+test('iOS Release bundle shell prefixes retain only exact source-derived Node values', () => {
+  for (const size of [1, 2, 4, 5]) {
+    const f = iosSdkScriptFixture(), values = iosBundleShellValues(f), incoming = Object.fromEntries(Object.entries(values).slice(0, size));
+    const before = { ...incoming }, args = ['--print', "require.resolve('react-native/package.json')"];
+    const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, incoming);
+    for (const [key, value] of Object.entries(incoming)) assert.equal(actual.environment[key], value, key);
+    assert.deepEqual(actual.args, args); assert.deepEqual(incoming, before);
+    assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home);
+  }
+});
+test('iOS Release bundle shell values reject partial foreign and option-bearing contexts', () => {
+  const f = iosSdkScriptFixture(), valid = iosBundleShellValues(f), keys = Object.keys(valid);
+  for (const incoming of [{ ENTRY_FILE: valid.ENTRY_FILE }, Object.fromEntries(Object.entries(valid).slice(0, 3)),
+    { ...valid, ...iosCodegenShellValues(f) }])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], incoming), /IOS_HOST_NODE_SCRIPT_COHORT/);
+  for (const key of keys) {
+    for (const value of ['/FOREIGN/source', valid[key] + ' ', key === 'NODE_ARGS' ? '--inspect' : valid[key] + '/'])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), key === 'BUNDLE_COMMAND' ? /IOS_HOST_CROSS_ROLE_OVERRIDE/ : /IOS_HOST_NODE_SCRIPT_VALUE/);
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key.toLowerCase()]: valid[key] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const other = iosSdkScriptFixture(); assert.throws(() => iosHostCommandProjection(other.admitted, other.ref, role, [], valid), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, NODE_ARGS: 'bad\0value' }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, CLI_PATH: 'x'.repeat(32769) }), /IOS_HOST_ENVIRONMENT/);
+  for (const key of ['NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'BUNDLE_WITH', 'BUNDLE_GEMFILE'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+});
 test('iOS Xcode engine metadata is discarded only for verified Node builds', () => {
   const keys = ['IDEBuildOperationMaxNumberOfConcurrentCompileTasks', 'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID',
     'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations'];

@@ -159,6 +159,37 @@ const podBuildValues = Object.freeze({
 const processMetadataKeys = ['UID', 'GID', 'USER', 'GROUP'];
 const nodeEngineMetadataKeys = Object.freeze(['IDEBuildOperationMaxNumberOfConcurrentCompileTasks',
   'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID', 'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations']);
+const codegenShellKeys = Object.freeze(['RCT_SCRIPT_RN_DIR', 'RCT_SCRIPT_APP_PATH', 'RCT_SCRIPT_OUTPUT_DIR',
+  'RCT_SCRIPT_TYPE', 'SCRIPT_PHASES_SCRIPT', 'WITH_ENVIRONMENT']);
+const bundleShellKeys = Object.freeze(['PROJECT_ROOT', 'ENTRY_FILE', 'CLI_PATH', 'BUNDLE_COMMAND', 'NODE_ARGS']);
+const nodeScriptKeys = Object.freeze([...codegenShellKeys, ...bundleShellKeys]);
+function iosNodeScriptValues(root) {
+  const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios');
+  // Pods sets PODFILE_DIR to $(SRCROOT)/..; retain its observed /Pods/..
+  // spelling before appending the generated script's other relative operands.
+  const podfile = path.join(ios, 'Pods') + path.sep + '..';
+  const rn = podfile + path.sep + '..' + path.sep + 'node_modules' + path.sep + 'react-native';
+  return { RCT_SCRIPT_RN_DIR: rn, RCT_SCRIPT_APP_PATH: podfile + path.sep + '..', RCT_SCRIPT_OUTPUT_DIR: podfile,
+    RCT_SCRIPT_TYPE: 'withCodegenDiscovery', SCRIPT_PHASES_SCRIPT: rn + '/scripts/react_native_pods_utils/script_phases.sh',
+    WITH_ENVIRONMENT: rn + '/scripts/xcode/with-environment.sh', PROJECT_ROOT: ios + path.sep + '..',
+    ENTRY_FILE: path.join(mobile, 'index.ts'), CLI_PATH: path.join(mobile, 'node_modules/expo/node_modules/@expo/cli/build/src/index.js'),
+    BUNDLE_COMMAND: 'export:embed', NODE_ARGS: '' };
+}
+function validateNodeScriptCohort(environment, values) {
+  const codegen = codegenShellKeys.filter(key => Object.hasOwn(environment, key));
+  const bundle = bundleShellKeys.filter(key => Object.hasOwn(environment, key));
+  if (!codegen.length && !bundle.length) return;
+  assert.ok(values, 'IOS_HOST_NODE_SCRIPT_CONTEXT');
+  assert.ok(!(codegen.length && bundle.length), 'IOS_HOST_NODE_SCRIPT_COHORT');
+  if (codegen.length) assert.equal(codegen.length, codegenShellKeys.length, 'IOS_HOST_NODE_SCRIPT_COHORT');
+  if (bundle.length) {
+    // These are the shell's successive Node constructors: entry resolver,
+    // CLI resolver, RN script resolver, then bundler with exact empty options.
+    assert.ok([1, 2, 4, 5].includes(bundle.length), 'IOS_HOST_NODE_SCRIPT_COHORT');
+    assert.deepEqual(bundle, bundleShellKeys.slice(0, bundle.length), 'IOS_HOST_NODE_SCRIPT_COHORT');
+  }
+  for (const key of [...codegen, ...bundle]) assert.ok(environment[key] === values[key], 'IOS_HOST_NODE_SCRIPT_VALUE');
+}
 function validateProcessMetadata(environment) {
   const present = processMetadataKeys.filter(key => Object.hasOwn(environment, key));
   if (!present.length) return;
@@ -169,14 +200,26 @@ function validateProcessMetadata(environment) {
     && environment.USER === actual.username && /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(environment.GROUP), 'IOS_HOST_PROCESS_METADATA');
   // GROUP is a discarded label. The numeric GID above is the identity fence.
 }
-export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null, discardNodeEngineMetadata = false } = {}) {
+export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null, discardNodeEngineMetadata = false, nodeScriptValues = null } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
-  validateProcessMetadata(environment);
+  const entries = Object.entries(environment), incoming = Object.fromEntries(entries);
+  validateProcessMetadata(incoming);
   const result = {}; let bytes = 0;
-  for (const [key, value] of Object.entries(environment)) {
+  for (const [key, value] of entries) {
     assert.ok(typeof value === 'string' && !value.includes('\0') && Buffer.byteLength(value) <= 32768, 'IOS_HOST_ENVIRONMENT');
     bytes += Buffer.byteLength(key) + Buffer.byteLength(value) + 2;
     assert.ok(bytes <= 262144, 'IOS_HOST_ENVIRONMENT_BOUND');
+  }
+  validateNodeScriptCohort(incoming, nodeScriptValues);
+  for (const [key, value] of entries) {
+    if (nodeScriptKeys.includes(key.toUpperCase())) {
+      assert.equal(key, key.toUpperCase(), 'IOS_HOST_UNREVIEWED_ENVIRONMENT');
+      // Codegen consumes only OUTPUT_DIR in Node; the remaining selectors have
+      // already selected the reviewed shell. Bundle values are preserved for
+      // the SDK's later Node consumers, after the exact cohort/value checks.
+      if (key === 'RCT_SCRIPT_OUTPUT_DIR' || bundleShellKeys.includes(key)) result[key] = value;
+      continue;
+    }
     if (nodeEngineMetadataKeys.includes(key)) {
       assert.equal(discardNodeEngineMetadata, true, 'IOS_HOST_UNREVIEWED_ENVIRONMENT');
       continue; // Bounded Xcode task metadata is discarded, never forwarded.
@@ -257,10 +300,12 @@ export function prepareIosHomeDirectories(output, home, end = Date.now() + 20000
   assert.deepEqual(directory(home, end), owned, 'IOS_HOST_HOME_NAMESPACE_CHANGED');
   return reviewIosHomeDirectories(home, end);
 }
-function validateIncoming(p, nodeEnvironment, environment) {
+function validateIncoming(p, nodeEnvironment, environment, nodeScriptValues = null) {
   // Xcode exports these fixed bundle-layout facts. They are not Bundler
-  // configuration and neutralIosEnvironment still discards every BUNDLE_* key.
+  // configuration. Layout facts are discarded; the Node-only bundle command
+  // below is separately validated by the fixed SDK script contract.
   const allowed = {
+    BUNDLE_COMMAND: nodeScriptValues ? [nodeScriptValues.BUNDLE_COMMAND] : [],
     BUNDLE_CONTENTS_FOLDER_PATH_deep: ['Contents/'], BUNDLE_EXECUTABLE_FOLDER_NAME_deep: ['MacOS'],
     BUNDLE_EXTENSIONS_FOLDER_PATH: ['Extensions'], BUNDLE_FORMAT: ['shallow'],
     BUNDLE_FRAMEWORKS_FOLDER_PATH: ['Frameworks'], BUNDLE_PLUGINS_FOLDER_PATH: ['PlugIns'],
@@ -839,7 +884,7 @@ export async function composeIosHostCommand(policyRef, role, args, { environment
   if (role === 'npm') assert.deepEqual(args, ['--version'], 'IOS_HOST_NPM_METADATA_ONLY');
   const admitted = await verifyIosHostLaunch(policyRef, { end });
   try {
-    if (['APP_PATH', 'REACT_NATIVE_PATH'].some(name => Object.hasOwn(environment, name)))
+    if (['APP_PATH', 'REACT_NATIVE_PATH', ...nodeScriptKeys].some(name => Object.hasOwn(environment, name)))
       admitted.podBuildPaths = reviewIosPodBuildPaths(admitted.policy, { end });
     if (role === 'curl' && args[0] === '-f' && args[4]?.startsWith('file:')) admitted.localArchive = reviewIosLocalArchive(admitted.policy, args, end);
     if (role === 'npm') {
@@ -856,12 +901,14 @@ export async function composeIosHostCommand(policyRef, role, args, { environment
 export function iosHostCommandProjection(admitted, policyRef, role, args, environment) {
   const p = admitted.policy;
   try {
-    validateIncoming(p, admitted.node.environment, environment);
     if (admitted.podBuildPaths) assert.equal(admitted.podBuildPaths.sourceRoot,
       path.resolve(path.dirname(p.helper.path), '../..'), 'IOS_HOST_POD_SOURCE_ROOT');
+    const verifiedNodeBuild = role === 'node' && Array.isArray(admitted.nodeBuildNames) && admitted.nodeBuildNames.length === 618
+      && p.source['ios-node-build-env.json']?.sha256 === SOURCE_PINS['ios-node-build-env.json'];
+    const scriptValues = verifiedNodeBuild && admitted.podBuildPaths ? iosNodeScriptValues(admitted.podBuildPaths.sourceRoot) : null;
+    validateIncoming(p, admitted.node.environment, environment, scriptValues);
     const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [],
-      discardNodeEngineMetadata: role === 'node' && Array.isArray(admitted.nodeBuildNames) && admitted.nodeBuildNames.length === 618
-        && p.source['ios-node-build-env.json']?.sha256 === SOURCE_PINS['ios-node-build-env.json'],
+      discardNodeEngineMetadata: verifiedNodeBuild, nodeScriptValues: scriptValues,
       podBuildPaths: admitted.podBuildPaths?.values ?? null });
     Object.assign(neutral, { HOME: p.paths.home, CFFIXED_USER_HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
       CP_HOME_DIR: p.paths.pods, CP_CACHE_DIR: p.paths.cache, CP_REPOS_DIR: p.paths.repos, TMPDIR: p.paths.temporary,
