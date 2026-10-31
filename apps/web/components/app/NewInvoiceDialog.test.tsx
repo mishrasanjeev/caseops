@@ -78,6 +78,8 @@ describe("NewInvoiceDialog", () => {
 
     render(withClient(<NewInvoiceDialog matterId="m1" />));
     await user.click(screen.getByTestId("new-invoice-trigger"));
+    // BUG-016: the dialog creates a draft, so it must not be titled as issuing.
+    expect(screen.getByRole("dialog", { name: "Create a draft invoice" })).toBeInTheDocument();
     await user.clear(screen.getByLabelText(/Invoice number/i));
     await user.type(screen.getByLabelText(/Invoice number/i), "INV-2026-0001");
     await user.type(screen.getByLabelText(/Client GSTIN/i), "07ABCDE1234F1Z5");

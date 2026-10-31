@@ -94,7 +94,7 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
   });
   const manualItems = useFieldArray({ control: form.control, name: "manual_items" });
   // Ram-BUG-008 pre-flight: watch the two billable sources so we
-  // can disable the Issue button until at least one is present.
+  // can disable the create button until at least one is present.
   const includeTimeEntries = form.watch("include_uninvoiced_time_entries");
   const manualItemsValues = form.watch("manual_items") ?? [];
 
@@ -160,10 +160,11 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Issue a new invoice</DialogTitle>
+          <DialogTitle>Create a draft invoice</DialogTitle>
           <DialogDescription>
             Uninvoiced billable time on this matter rolls in by default. Add
-            manual items for fixed fees or disbursements.
+            manual items for fixed fees or disbursements. Review the draft PDF,
+            then issue it from the invoice list.
           </DialogDescription>
         </DialogHeader>
 
@@ -189,7 +190,7 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
               id="issued-on"
-              label="Issued on"
+              label="Invoice date"
               error={form.formState.errors.issued_on?.message}
             >
               <Input
