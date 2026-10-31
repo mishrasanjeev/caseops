@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from caseops_api.schemas.ip_domains import IpDomainCapability
 from caseops_api.schemas.ip_records import (
@@ -14,6 +15,12 @@ from caseops_api.schemas.ip_records import (
     IpIdentifierResponse,
     IpWorkspaceConfigurationStatusResponse,
     TrademarkApplicationResponse,
+)
+from caseops_api.services.ip_nice_classes import (
+    NICE_CLASS_MAX,
+    NICE_CLASS_MIN,
+    NICE_EDITION,
+    is_nice_class,
 )
 
 
@@ -53,9 +60,160 @@ class IpWorkspaceReadinessResponse(BaseModel):
     domains: list[IpDomainCapability] = Field(default_factory=list)
 
 
+SPECIFICATION_MIN_LENGTH = 3
+SPECIFICATION_MAX_LENGTH = 4000
+
+
 class TrademarkClassScope(BaseModel):
-    class_number: int = Field(ge=1, le=45)
-    specification: str = Field(min_length=3, max_length=4000)
+    class_number: int = Field(ge=NICE_CLASS_MIN, le=NICE_CLASS_MAX)
+    specification: str = Field(
+        min_length=SPECIFICATION_MIN_LENGTH, max_length=SPECIFICATION_MAX_LENGTH
+    )
+    # The Nice edition the class number was validated against when the row was
+    # recorded. Rows written before BUG-002 have no edition and stay readable.
+    nice_edition: str = Field(default=NICE_EDITION, max_length=40)
+
+    @field_validator("nice_edition", mode="before")
+    @classmethod
+    def current_nice_edition(cls, value: object) -> object:
+        # An explicit null means "not stated": the row is validated against, and
+        # therefore recorded with, the current catalogue edition.
+        if value is None:
+            return NICE_EDITION
+        if value != NICE_EDITION:
+            raise PydanticCustomError(
+                "nice_edition",
+                "Only Nice edition {edition} is supported.",
+                {"edition": NICE_EDITION},
+            )
+        return value
+
+
+_MISSING = object()
+
+
+def _class_row_value(row: object, key: str) -> object:
+    if isinstance(row, dict):
+        return row.get(key, _MISSING)
+    if isinstance(row, BaseModel):
+        return getattr(row, key, _MISSING)
+    return _MISSING
+
+
+def _class_row_number(value: object) -> int | None:
+    """Return the Nice class a row names, or ``None`` when it names none.
+
+    JSON integers and ASCII digit strings are accepted (the API always took
+    both); booleans, fractions and words are not class numbers.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        number = int(value.strip())
+    else:
+        return None
+    return number if is_nice_class(number) else None
+
+
+def _class_row_error(index: int, field: str, message: str, value: object) -> InitErrorDetails:
+    return InitErrorDetails(
+        type=PydanticCustomError("nice_class", message),
+        loc=(index, field),
+        input=None if value is _MISSING else value,
+    )
+
+
+def validate_nice_class_rows(rows: object, *, incomplete_allowed: bool, title: str) -> object:
+    """Validate class rows against the Nice catalogue with row-numbered messages.
+
+    Runs before the row model so a lawyer reads "Class row 2: ..." instead of a
+    framework message, while ``loc`` still addresses the exact row field. The
+    accepted values are exactly what ``TrademarkClassScope`` accepts, so this
+    changes the wording of a refusal, never what is accepted.
+    ``incomplete_allowed`` is the source-incomplete import contract: no rows and
+    blank goods/services are allowed there, never in an interactive filing.
+    """
+    if not isinstance(rows, list):
+        raise PydanticCustomError("nice_classes", "Classes: list each Nice class as its own row.")
+    if not rows and not incomplete_allowed:
+        raise PydanticCustomError("nice_classes", "Classes: add at least one Nice class.")
+    errors: list[InitErrorDetails] = []
+    first_row_for_class: dict[int, int] = {}
+    for index, row in enumerate(rows):
+        label = f"Class row {index + 1}"
+        if not isinstance(row, (dict, BaseModel)):
+            errors.append(
+                _class_row_error(
+                    index,
+                    "class_number",
+                    f"{label}: choose a Nice class between {NICE_CLASS_MIN} and "
+                    f"{NICE_CLASS_MAX} and describe its goods or services.",
+                    row,
+                )
+            )
+            continue
+        raw_number = _class_row_value(row, "class_number")
+        number = _class_row_number(raw_number)
+        if number is None:
+            errors.append(
+                _class_row_error(
+                    index,
+                    "class_number",
+                    f"{label}: choose a Nice class between {NICE_CLASS_MIN} and {NICE_CLASS_MAX}.",
+                    raw_number,
+                )
+            )
+        elif number in first_row_for_class:
+            errors.append(
+                _class_row_error(
+                    index,
+                    "class_number",
+                    f"{label}: Nice class {number} is already listed in class row "
+                    f"{first_row_for_class[number] + 1}; list each class once.",
+                    raw_number,
+                )
+            )
+        else:
+            first_row_for_class[number] = index
+        specification = _class_row_value(row, "specification")
+        subject = f"Nice class {number}" if number is not None else "this class"
+        if isinstance(specification, str) and len(specification) > SPECIFICATION_MAX_LENGTH:
+            errors.append(
+                _class_row_error(
+                    index,
+                    "specification",
+                    f"{label}: shorten the goods or services for {subject} to "
+                    f"{SPECIFICATION_MAX_LENGTH:,} characters or fewer.",
+                    None,
+                )
+            )
+        elif not incomplete_allowed and (
+            not isinstance(specification, str) or len(specification) < SPECIFICATION_MIN_LENGTH
+        ):
+            errors.append(
+                _class_row_error(
+                    index,
+                    "specification",
+                    f"{label}: describe the goods or services for {subject} "
+                    f"(at least {SPECIFICATION_MIN_LENGTH} characters).",
+                    None,
+                )
+            )
+        edition = _class_row_value(row, "nice_edition")
+        if edition is not _MISSING and edition is not None and edition != NICE_EDITION:
+            errors.append(
+                _class_row_error(
+                    index,
+                    "nice_edition",
+                    f"{label}: only Nice edition {NICE_EDITION} is supported.",
+                    edition,
+                )
+            )
+    if errors:
+        raise ValidationError.from_exception_data(title, errors)
+    return rows
 
 
 class TrademarkParty(BaseModel):
@@ -92,12 +250,16 @@ class TrademarkParticularPayload(BaseModel):
     agent: dict | None = None
     filing_manifest: list[FilingManifestItem] = Field(default_factory=list, max_length=80)
 
-    @model_validator(mode="after")
-    def unique_classes(self) -> TrademarkParticularPayload:
-        values = [row.class_number for row in self.classes]
-        if len(values) != len(set(values)):
-            raise ValueError("Trademark class numbers must be unique.")
-        return self
+    # Source-incomplete import drafts may omit classes and goods/services;
+    # interactive filings may not.
+    incomplete_class_rows_allowed: ClassVar[bool] = False
+
+    @field_validator("classes", mode="before")
+    @classmethod
+    def nice_class_rows(cls, value: object) -> object:
+        return validate_nice_class_rows(
+            value, incomplete_allowed=cls.incomplete_class_rows_allowed, title=cls.__name__
+        )
 
 
 class IpDocketCreateRequest(BaseModel):
