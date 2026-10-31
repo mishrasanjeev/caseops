@@ -42,10 +42,14 @@ Edition NCL 13-2027 (13th edition, version 2027, in force from 1 January
   every other row is the 2026 text, which the 2027 XML repeats unchanged. The
   2027 digests pin the full 45-class text.
 
-The edition served and stamped is the one in force on the server's UTC date
-(``nice_catalogue_in_force``). A class row records that edition; a client that
-loaded the catalogue before 1 January and submits after it is refused on the
-row's ``nice_edition`` and reloads the list.
+The edition served by default, and stamped on a row that states none, is the
+one in force on the server's UTC date (``nice_catalogue_in_force``). A row may
+also state an earlier edition CaseOps holds (``recordable_nice_editions``):
+an application keeps the edition it was classified under, so an amendment or
+an import of a 2026 record stays valid after 1 January 2027. An edition not yet
+in force, or one CaseOps does not hold, is refused. Every held edition stays
+readable (``GET /api/ip/nice-classes?edition=``), so a recorded row keeps its
+class heading after its edition is superseded.
 
 Text is copied verbatim; do not edit it by hand. ``NICE_HEADINGS_SHA256`` and
 ``NICE_NOTES_SHA256`` pin the normalized text (see ``normalized_headings`` and
@@ -787,6 +791,28 @@ def nice_catalogue_in_force(on: date | None = None) -> NiceCatalogue:
     day = on or _server_date()
     in_force = [row for row in NICE_CATALOGUES if row.in_force_from <= day]
     return in_force[-1] if in_force else NICE_CATALOGUES[0]
+
+
+def recordable_nice_editions(on: date | None = None) -> tuple[str, ...]:
+    """Editions a class row may record on ``on``, newest (the one in force) first.
+
+    The edition in force and every earlier edition CaseOps holds; never one
+    that is not yet in force.
+    """
+    current = nice_catalogue_in_force(on)
+    return tuple(
+        row.edition
+        for row in reversed(NICE_CATALOGUES)
+        if row.in_force_from <= current.in_force_from
+    )
+
+
+def nice_edition_refusal(on: date | None = None) -> str:
+    """The sentence a refused ``nice_edition`` reads, without a row prefix."""
+    accepted = recordable_nice_editions(on)
+    if len(accepted) == 1:
+        return f"only Nice edition {accepted[0]} is supported."
+    return f"Nice edition must be one of {', '.join(accepted)}."
 
 
 def nice_class(number: int) -> NiceClass | None:

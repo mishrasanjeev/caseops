@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from caseops_api.api.dependencies import require_capability
 from caseops_api.schemas.ip_nice_classes import NiceClassCatalogueResponse, NiceClassRecord
@@ -45,7 +45,25 @@ _RESPONSES = {catalogue.edition: _response(catalogue) for catalogue in NICE_CATA
 @router.get("/nice-classes", response_model=NiceClassCatalogueResponse)
 def nice_class_catalogue(
     _context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
+    edition: Annotated[
+        str | None,
+        Query(
+            max_length=40,
+            description=(
+                "A held edition to read, for example the one a class row recorded. "
+                "Omitted: the edition in force on the server date."
+            ),
+        ),
+    ] = None,
 ) -> NiceClassCatalogueResponse:
-    # The edition in force on the server date, the same one the class-row
-    # validator accepts and stamps.
-    return _RESPONSES[nice_catalogue_in_force().edition]
+    if edition is None:
+        # The edition in force on the server date: the one the class picker
+        # offers and the class-row validator stamps by default.
+        return _RESPONSES[nice_catalogue_in_force().edition]
+    response = _RESPONSES.get(edition)
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"CaseOps does not hold Nice edition {edition}.",
+        )
+    return response

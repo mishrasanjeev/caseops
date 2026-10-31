@@ -21,6 +21,8 @@ from caseops_api.services.ip_nice_classes import (
     NICE_CLASS_MIN,
     is_nice_class,
     nice_catalogue_in_force,
+    nice_edition_refusal,
+    recordable_nice_editions,
 )
 
 IpFeatureBlockedReason = Literal[
@@ -74,8 +76,9 @@ class TrademarkClassScope(BaseModel):
     specification: str = Field(
         min_length=SPECIFICATION_MIN_LENGTH, max_length=SPECIFICATION_MAX_LENGTH
     )
-    # The Nice edition the class number was validated against when the row was
-    # recorded: the edition in force on the server date. Rows written before
+    # The Nice edition the class number was classified under: the edition in
+    # force on the server date unless the row states an earlier held edition
+    # (an amendment or import keeps its original edition). Rows written before
     # BUG-002 have no edition and stay readable.
     nice_edition: str = Field(
         default_factory=lambda: nice_catalogue_in_force().edition, max_length=40
@@ -83,18 +86,14 @@ class TrademarkClassScope(BaseModel):
 
     @field_validator("nice_edition", mode="before")
     @classmethod
-    def current_nice_edition(cls, value: object) -> object:
+    def recordable_nice_edition(cls, value: object) -> object:
         # An explicit null means "not stated": the row is validated against, and
-        # therefore recorded with, the current catalogue edition.
-        current = nice_catalogue_in_force().edition
+        # therefore recorded with, the edition in force.
         if value is None:
-            return current
-        if value != current:
-            raise PydanticCustomError(
-                "nice_edition",
-                "Only Nice edition {edition} is supported.",
-                {"edition": current},
-            )
+            return nice_catalogue_in_force().edition
+        if value not in recordable_nice_editions():
+            refusal = nice_edition_refusal()
+            raise PydanticCustomError("nice_edition", refusal[0].upper() + refusal[1:])
         return value
 
 
@@ -149,7 +148,7 @@ def validate_nice_class_rows(rows: object, *, incomplete_allowed: bool, title: s
     if not rows and not incomplete_allowed:
         raise PydanticCustomError("nice_classes", "Classes: add at least one Nice class.")
     errors: list[InitErrorDetails] = []
-    current_edition = nice_catalogue_in_force().edition
+    editions = recordable_nice_editions()
     first_row_for_class: dict[int, int] = {}
     for index, row in enumerate(rows):
         label = f"Class row {index + 1}"
@@ -212,12 +211,12 @@ def validate_nice_class_rows(rows: object, *, incomplete_allowed: bool, title: s
                 )
             )
         edition = _class_row_value(row, "nice_edition")
-        if edition is not _MISSING and edition is not None and edition != current_edition:
+        if edition is not _MISSING and edition is not None and edition not in editions:
             errors.append(
                 _class_row_error(
                     index,
                     "nice_edition",
-                    f"{label}: only Nice edition {current_edition} is supported.",
+                    f"{label}: {nice_edition_refusal()}",
                     edition,
                 )
             )

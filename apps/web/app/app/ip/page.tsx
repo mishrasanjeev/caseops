@@ -27,7 +27,7 @@ import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationW
 import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
 import { IpAutomationReadiness, readinessReasonText } from "@/components/ip/IpAutomationReadiness";
 import { IP_NEW_TRADEMARK_PANEL_ID, IpTrademarkCreatePanel } from "@/components/ip/IpTrademarkCreatePanel";
-import { useNiceClassCatalogue } from "@/components/ip/NiceClassPicker";
+import { IpDocketClassScope } from "@/components/ip/IpDocketClassScope";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -1396,7 +1396,6 @@ function DocketWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const classes = docket.current_particulars.classes_json;
-  const niceCatalogue = useNiceClassCatalogue();
   const [activeView, setActiveView] = useState<DocketView>(initialView);
   const [focusDraftOnly, setFocusDraftOnly] = useState(
     Boolean(initialProceedingId && initialDraftId),
@@ -1412,22 +1411,7 @@ function DocketWorkspace({
           <Metric label="Cost items" value={String(docket.cost_items.length)} icon={BadgeIndianRupee} />
           <div className="sm:col-span-2 xl:col-span-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Class scope</div>
-            <ul className="mt-2 flex min-w-0 flex-col gap-2">
-              {classes.map((row) => (
-                <li key={row.class_number} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-3 text-sm" data-testid={`ip-docket-class-${row.class_number}`}>
-                  <strong>Class {row.class_number}</strong>
-                  {niceCatalogue.data && row.nice_edition === niceCatalogue.data.edition ? (
-                    <span className="break-words text-[var(--color-mute)]">
-                      {" — "}{niceCatalogue.data.classes.find((entry) => entry.number === row.class_number)?.heading}
-                    </span>
-                  ) : null}
-                  <span className="mt-1 block break-words">{row.specification}</span>
-                  <span className="mt-1 block text-xs text-[var(--color-mute)]">
-                    {row.nice_edition ? `Nice edition ${row.nice_edition}` : "Nice edition not recorded"}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <IpDocketClassScope classes={classes} />
           </div>
         </CardContent>
       </Card>

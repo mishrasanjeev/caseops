@@ -250,10 +250,23 @@ def test_edition_in_force_follows_the_date(day: date, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("day", "served", "refused"),
+    ("day", "served", "refused", "refusal"),
     [
-        (date(2026, 12, 31), "NCL 13-2026", "NCL 13-2027"),
-        (date(2027, 1, 1), "NCL 13-2027", "NCL 13-2026"),
+        # Before 1 January 2027 the 2027 edition is published but not in force.
+        (
+            date(2026, 12, 31),
+            "NCL 13-2026",
+            "NCL 13-2027",
+            "only Nice edition NCL 13-2026 is supported.",
+        ),
+        # From 1 January 2027 an edition CaseOps does not hold is refused; the
+        # superseded 2026 edition stays recordable (see the amendment test).
+        (
+            date(2027, 1, 1),
+            "NCL 13-2027",
+            "NCL 12-2023",
+            "Nice edition must be one of NCL 13-2027, NCL 13-2026.",
+        ),
     ],
 )
 def test_route_serves_and_validator_stamps_the_edition_in_force(
@@ -262,6 +275,7 @@ def test_route_serves_and_validator_stamps_the_edition_in_force(
     day: date,
     served: str,
     refused: str,
+    refusal: str,
 ) -> None:
     monkeypatch.setattr(catalogue, "_server_date", lambda: day)
     headers = _owner(client)
@@ -303,4 +317,66 @@ def test_route_serves_and_validator_stamps_the_edition_in_force(
     assert stale.status_code == 422, stale.text
     error = stale.json()["errors"][0]
     assert error["loc"] == ["body", "particulars", "classes", 0, "nice_edition"]
-    assert error["msg"] == f"Class row 1: only Nice edition {served} is supported."
+    assert error["msg"] == f"Class row 1: {refusal}"
+
+
+def test_a_row_recorded_under_a_superseded_edition_keeps_its_edition_and_heading(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 2026 docket viewed and amended after NCL 13-2027 enters into force."""
+
+    monkeypatch.setattr(catalogue, "_server_date", lambda: date(2026, 12, 31))
+    headers = _owner(client)
+    created = client.post(
+        "/api/ip/trademark-applications/manual",
+        headers=headers,
+        json=_manual_payload([{"class_number": 9, "specification": "Downloadable software"}]),
+    )
+    assert created.status_code == 201, created.text
+    docket = created.json()["docket"]
+    assert docket["current_particulars"]["classes_json"][0]["nice_edition"] == "NCL 13-2026"
+
+    monkeypatch.setattr(catalogue, "_server_date", lambda: date(2027, 1, 1))
+    # The picker's catalogue moved on to 2027; the recorded edition is still
+    # served on request, so the docket keeps showing the heading it was filed under.
+    assert client.get(ROUTE, headers=headers).json()["edition"] == "NCL 13-2027"
+    recorded = client.get(ROUTE, headers=headers, params={"edition": "NCL 13-2026"})
+    assert recorded.status_code == 200, recorded.text
+    body = recorded.json()
+    assert body["edition"] == "NCL 13-2026"
+    assert body["headings_sha256"] == catalogue.NCL_13_2026.headings_sha256
+    assert body["classes"][8]["heading"] == catalogue.NCL_13_2026.classes[8].heading
+    assert body["classes"][8]["heading"] != catalogue.NCL_13_2027.classes[8].heading
+    unknown = client.get(ROUTE, headers=headers, params={"edition": "NCL 12-2023"})
+    assert unknown.status_code == 404, unknown.text
+    assert unknown.json()["detail"] == "CaseOps does not hold Nice edition NCL 12-2023."
+    session_cookies = dict(client.cookies)
+    client.cookies.clear()
+    assert client.get(ROUTE, params={"edition": "NCL 13-2026"}).status_code == 401
+    client.cookies.update(session_cookies)
+
+    # An amendment keeps the edition a row was classified under; a row that
+    # states none is classified under the edition in force.
+    amended = client.post(
+        f"/api/ip/dockets/{docket['id']}/versions",
+        headers=headers,
+        json={
+            **_manual_payload([])["particulars"],
+            "classes": [
+                {
+                    "class_number": 9,
+                    "specification": "Downloadable software",
+                    "nice_edition": "NCL 13-2026",
+                },
+                {"class_number": 35, "specification": "Advertising services"},
+            ],
+            "expected_current_version": docket["current_version"],
+            "finalize": False,
+        },
+    )
+    assert amended.status_code == 200, amended.text
+    rows = amended.json()["current_particulars"]["classes_json"]
+    assert [(row["class_number"], row["nice_edition"]) for row in rows] == [
+        (9, "NCL 13-2026"),
+        (35, "NCL 13-2027"),
+    ]

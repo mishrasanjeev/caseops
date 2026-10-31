@@ -13733,9 +13733,15 @@ export async function transitionIpOppositionStage(input: {
   );
 }
 
-/** The WIPO Nice class catalogue: the only source of selectable classes. */
-export async function fetchIpNiceClasses(): Promise<IpNiceClassCatalogue> {
-  const data = await apiRequest<unknown>("/api/ip/nice-classes");
+/**
+ * The WIPO Nice class catalogue: the only source of selectable classes.
+ * Without `edition` the server returns the edition in force; with one it
+ * returns that held edition, for example the edition a class row recorded.
+ */
+export async function fetchIpNiceClasses(edition?: string): Promise<IpNiceClassCatalogue> {
+  const data = await apiRequest<unknown>(
+    edition ? `/api/ip/nice-classes?edition=${encodeURIComponent(edition)}` : "/api/ip/nice-classes",
+  );
   return ipNiceClassCatalogue.parse(data);
 }
 

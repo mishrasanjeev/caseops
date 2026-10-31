@@ -28,10 +28,17 @@ import { cn } from "@/lib/cn";
 
 export const NICE_CLASS_QUERY_KEY = ["ip", "nice-classes"] as const;
 
-export function useNiceClassCatalogue() {
+/**
+ * The catalogue the picker offers: the edition in force. Pass `edition` to read
+ * a recorded (possibly superseded) edition instead, for example to show the
+ * heading a docket's class row was filed under; `null` reads nothing.
+ */
+export function useNiceClassCatalogue(edition?: string | null) {
+  const recorded = edition !== undefined;
   return useQuery({
-    queryKey: NICE_CLASS_QUERY_KEY,
-    queryFn: fetchIpNiceClasses,
+    queryKey: recorded ? [...NICE_CLASS_QUERY_KEY, "edition", edition] : NICE_CLASS_QUERY_KEY,
+    queryFn: () => fetchIpNiceClasses(edition ?? undefined),
+    enabled: !recorded || Boolean(edition),
     // Reference data: a new edition arrives with a release, not mid-session.
     staleTime: Number.POSITIVE_INFINITY,
   });
