@@ -38,6 +38,7 @@ describe("governance helpers", () => {
         governedRule({ id: "candidate", status: "candidate" }),
       ],
       eligible_rule_version_ids: ["selected", "other-role", "candidate"],
+      eligible_responsible_membership_ids: [],
       calendars: [workingCalendar()],
       deadlines: [],
       exceptions: [],

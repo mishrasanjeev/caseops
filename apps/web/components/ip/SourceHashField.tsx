@@ -80,7 +80,7 @@ export function SourceHashField({
       <output id={resultId} aria-live="polite" className="min-w-0 break-all text-xs text-[var(--color-mute)]">
         {value
           ? <>SHA-256 <span className="font-mono">{value}</span>{shownFrom ? ` from ${shownFrom.name} (${shownFrom.size.toLocaleString("en-IN")} bytes), computed in this browser; the file was not uploaded.` : null}</>
-          : "Choose the official source you relied on. Its SHA-256 is computed in this browser and the file is not uploaded."}
+          : "Choose the official source you relied on. Its SHA-256 is computed in this browser and the file is not uploaded. If the source is a web page, save it first (Print to PDF, or Save page as HTML) and choose that file."}
       </output>
       {message ? (
         <p id={errorId} className="min-w-0 break-words text-xs text-[var(--color-danger)]">{message}</p>

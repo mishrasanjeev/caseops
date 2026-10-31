@@ -23,7 +23,9 @@ import {
   proposeIpWorkingCalendar,
   selectIpRulePolicy,
   transitionIpDeadlineRule,
+  withdrawIpWorkingCalendar,
   type IpCompanyRulePolicy,
+  type IpDeadlineRuleImpact,
   type IpDeadlineRuleVersion,
   type IpDeadlineWorkspace,
   type IpDocket,
@@ -34,11 +36,15 @@ import {
 import {
   RULE_SCOPES,
   activeWorkingCalendars,
+  awaitingActivationText,
+  calendarKeyFor,
   describeGovernanceDecision,
   governanceReasonText,
   isRuleScopeId,
   parseHolidayDates,
+  ruleKeyFor,
   ruleScopeLabel,
+  ruleVersionName,
   sourceHashError,
   workingCalendarOptionCaption,
   type GovernanceAction,
@@ -83,6 +89,18 @@ function Field({
   );
 }
 
+const EMPLOYEE_DIRECTORY = "/app/admin/employees";
+
+function ReasonLink({ reason }: { reason: IpGovernanceBlockReason }) {
+  if (reason !== "no_other_approver") return null;
+  return (
+    <>
+      {" "}
+      <a className="font-medium underline underline-offset-2" href={EMPLOYEE_DIRECTORY}>Open the employee directory</a>
+    </>
+  );
+}
+
 function FormError({ id, message }: { id: string; message?: string | null }) {
   if (!message) return null;
   return <p id={id} role="alert" className="col-span-full min-w-0 break-words text-sm text-[var(--color-danger)]">{message}</p>;
@@ -109,6 +127,7 @@ function BlockedReasons({
         {reasons.map((reason) => (
           <li key={reason} className="min-w-0 break-words text-[var(--color-mute)]" data-reason={reason}>
             {governanceReasonText(reason, subject, action)}
+            <ReasonLink reason={reason} />
           </li>
         ))}
       </ul>
@@ -139,7 +158,10 @@ function DecisionStatus({
       </div>
       <ul className="mt-1 flex min-w-0 flex-col gap-1">
         {rows.map((row) => (
-          <li key={row.reason} data-reason={row.reason} className="min-w-0 break-words text-[var(--color-mute)]">{row.text}</li>
+          <li key={row.reason} data-reason={row.reason} className="min-w-0 break-words text-[var(--color-mute)]">
+            {row.text}
+            <ReasonLink reason={row.reason} />
+          </li>
         ))}
       </ul>
     </li>
@@ -212,6 +234,7 @@ function GovernanceBody({ data }: { data: IpDeadlineWorkspace }) {
     governance.rule_proposal,
     governance.rule_activation,
   ].some((decision) => !decision.available);
+  const rulesPaused = governance.rule_proposal.reasons.some((reason) => reason.startsWith("rollout_"));
 
   return (
     <>
@@ -227,6 +250,12 @@ function GovernanceBody({ data }: { data: IpDeadlineWorkspace }) {
             <DecisionStatus label="Propose deadline rules" decision={governance.rule_proposal} subject="rule" action="propose" />
             <DecisionStatus label="Activate, select, disable or retire deadline rules" decision={governance.rule_activation} subject="rule" action="activate" />
           </ul>
+          {rulesPaused && governance.calendar_proposal.available ? (
+            <p className="mt-3 min-w-0 break-words" data-testid="ip-governance-calendars-open">
+              Working calendars stay open while rule publication is paused: a calendar only lists working
+              days and holidays, and no deadline uses it until an active rule is selected with it.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -276,7 +305,6 @@ function GovernanceBody({ data }: { data: IpDeadlineWorkspace }) {
 }
 
 function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
-  const [key, setKey] = useState("ip-india-working-calendar");
   const [name, setName] = useState("IP India working calendar");
   const [jurisdiction, setJurisdiction] = useState("IN");
   const [office, setOffice] = useState("IP India");
@@ -295,7 +323,7 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
   const propose = useMutation({
     mutationFn: (holidayDates: string[]) =>
       proposeIpWorkingCalendar({
-        key,
+        key: calendarKeyFor(name),
         name,
         jurisdiction,
         office,
@@ -315,7 +343,7 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
     },
     onError: (error) => {
       const fields = apiFieldErrors(error, {
-        key: "calendar-key",
+        key: "calendar-name",
         name: "calendar-name",
         jurisdiction: "calendar-jurisdiction",
         office: "calendar-office",
@@ -333,8 +361,7 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
   const submit = () => {
     const parsed = parseHolidayDates(holidays);
     const next: FieldErrors = {};
-    if (!key.trim()) next["calendar-key"] = "Enter a calendar key.";
-    if (!name.trim()) next["calendar-name"] = "Enter a calendar name.";
+    if (!calendarKeyFor(name)) next["calendar-name"] = "Enter a calendar name with letters or numbers.";
     if (!jurisdiction.trim()) next["calendar-jurisdiction"] = "Enter the jurisdiction, for example IN.";
     if (parsed.errors.length) next["calendar-holidays"] = parsed.errors.join(" ");
     if (!effectiveFrom) next["calendar-effective-from"] = "Choose the date this calendar takes effect.";
@@ -353,10 +380,12 @@ function CalendarProposalForm({ onSaved }: { onSaved: () => Promise<void> }) {
       onSubmit={(event) => { event.preventDefault(); submit(); }}
     >
       <div className="col-span-full text-sm font-semibold">Propose working calendar</div>
-      <Field id="calendar-key" label="Calendar key" error={errors["calendar-key"]}>
-        {(describedBy, invalid) => <Input id="calendar-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setKey(e.target.value); clear("calendar-key"); }} />}
-      </Field>
-      <Field id="calendar-name" label="Calendar name" error={errors["calendar-name"]}>
+      <Field
+        id="calendar-name"
+        label="Calendar name"
+        error={errors["calendar-name"]}
+        hint="Proposing again under the same name creates its next version."
+      >
         {(describedBy, invalid) => <Input id="calendar-name" value={name} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setName(e.target.value); clear("calendar-name"); }} />}
       </Field>
       <Field id="calendar-jurisdiction" label="Jurisdiction" error={errors["calendar-jurisdiction"]}>
@@ -403,10 +432,9 @@ function RuleProposalForm({
   const pendingCalendars = data.calendars.filter((row) => row.status === "candidate");
   const [scopeId, setScopeId] = useState<RuleScopeId>(initialScope);
   const scope = RULE_SCOPES.find((row) => row.id === scopeId) ?? RULE_SCOPES[0];
-  const [key, setKey] = useState(`in-tm-${initialScope.replaceAll("_", "-")}`);
   const [jurisdiction, setJurisdiction] = useState("IN");
   const [office, setOffice] = useState("IP India");
-  const [triggerKind, setTriggerKind] = useState<string>(scope.triggerKind);
+  const triggerKind = scope.triggerKind;
   const [method, setMethod] = useState<"business_days" | "calendar_days" | "month_anniversary">(scope.calendarMethod);
   const [duration, setDuration] = useState("");
   const [citation, setCitation] = useState("");
@@ -457,7 +485,7 @@ function RuleProposalForm({
         },
       };
       return proposeIpDeadlineRule({
-        key,
+        key: ruleKeyFor(scope.id, jurisdiction),
         jurisdiction,
         office,
         rightKind: "trademark",
@@ -478,7 +506,7 @@ function RuleProposalForm({
       });
     },
     onSuccess: async (row) => {
-      toast.success(`Rule ${row.key} v${row.version} proposed. Another approver must run its fixtures and activate it.`);
+      toast.success(`${ruleVersionName(row)} proposed. Another approver must run its fixtures and activate it.`);
       setSourceReference("");
       setSourceHash("");
       setErrors({});
@@ -486,7 +514,7 @@ function RuleProposalForm({
     },
     onError: (error) => {
       const fields = apiFieldErrors(error, {
-        key: "rule-key",
+        key: "rule-scope",
         jurisdiction: "rule-jurisdiction",
         office: "rule-office",
         source_reference: "rule-source-reference",
@@ -501,9 +529,7 @@ function RuleProposalForm({
 
   const submit = () => {
     const next: FieldErrors = {};
-    if (!key.trim()) next["rule-key"] = "Enter a rule key.";
     if (!jurisdiction.trim()) next["rule-jurisdiction"] = "Enter the jurisdiction, for example IN.";
-    if (!triggerKind.trim()) next["rule-trigger"] = "Enter the trigger event kind.";
     if (!/^\d+$/.test(duration.trim()) || Number(duration) < 1) next["rule-duration"] = "Enter the period as a whole number of at least 1.";
     if (!citation.trim()) next["rule-citation"] = "Enter the statutory citation, for example the section and rule.";
     if (!sourceReference.trim()) next["rule-source-reference"] = "Enter the official source reference for this rule.";
@@ -524,36 +550,35 @@ function RuleProposalForm({
       onSubmit={(event) => { event.preventDefault(); submit(); }}
     >
       <div className="col-span-full text-sm font-semibold">Propose tested deadline rule</div>
-      <Field id="rule-scope" label="Applies to" hint="Opposition deadline pickers list only rules of their exact scope.">
-        {(describedBy) => (
+      <Field
+        id="rule-scope"
+        label="Applies to"
+        error={errors["rule-scope"]}
+        hint={`Starts from: ${scope.triggerLabel}. Opposition deadline pickers list only rules of their exact scope; proposing the same scope again creates its next version.`}
+      >
+        {(describedBy, invalid) => (
           <select
             id="rule-scope"
             className={SELECT_CLASS}
             value={scopeId}
+            aria-invalid={invalid || undefined}
             aria-describedby={describedBy}
             onChange={(event) => {
               const nextScope = RULE_SCOPES.find((row) => row.id === event.target.value) ?? RULE_SCOPES[0];
               setScopeId(nextScope.id);
-              setTriggerKind(nextScope.triggerKind);
               setMethod(nextScope.calendarMethod);
-              setKey(`in-tm-${nextScope.id.replaceAll("_", "-")}`);
+              clear("rule-scope");
             }}
           >
             {RULE_SCOPES.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
           </select>
         )}
       </Field>
-      <Field id="rule-key" label="Rule key" error={errors["rule-key"]}>
-        {(describedBy, invalid) => <Input id="rule-key" value={key} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setKey(e.target.value); clear("rule-key"); }} />}
-      </Field>
       <Field id="rule-jurisdiction" label="Jurisdiction" error={errors["rule-jurisdiction"]}>
         {(describedBy, invalid) => <Input id="rule-jurisdiction" value={jurisdiction} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setJurisdiction(e.target.value); clear("rule-jurisdiction"); }} />}
       </Field>
       <Field id="rule-office" label="Office" error={errors["rule-office"]}>
         {(describedBy, invalid) => <Input id="rule-office" value={office} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setOffice(e.target.value); clear("rule-office"); }} />}
-      </Field>
-      <Field id="rule-trigger" label="Trigger event kind" error={errors["rule-trigger"]}>
-        {(describedBy, invalid) => <Input id="rule-trigger" value={triggerKind} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setTriggerKind(e.target.value); clear("rule-trigger"); }} />}
       </Field>
       <Field id="rule-method" label="Period counted in">
         {(describedBy) => (
@@ -602,7 +627,7 @@ function RuleProposalForm({
         <p id={prerequisiteId} className="col-span-full min-w-0 break-words text-sm text-[var(--color-warn-text)]">
           A rule&apos;s fixture is calculated on an active working calendar.{" "}
           {pendingCalendars.length
-            ? `${pendingCalendars.map((row) => `${row.name} v${row.version}`).join(", ")} is awaiting activation by an approver other than its proposer.`
+            ? awaitingActivationText(pendingCalendars.map((row) => `${row.name} v${row.version}`))
             : "Propose a working calendar first; another owner, admin or partner must activate it."}
         </p>
       ) : null}
@@ -621,10 +646,27 @@ function RuleProposalForm({
   );
 }
 
+function calendarStatusLabel(row: IpWorkingCalendarVersion): string {
+  // A retired version nobody activated was withdrawn by its proposer.
+  return row.status === "retired" && !row.approved_at ? "withdrawn" : row.status;
+}
+
 function CalendarVersionRow({ row, onSaved }: { row: IpWorkingCalendarVersion; onSaved: () => Promise<void> }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const reasonId = `calendar-activation-reason-${row.id}`;
+  const withdrawId = `calendar-withdraw-reason-${row.id}`;
+  const withdraw = useMutation({
+    mutationFn: () => withdrawIpWorkingCalendar({ calendarVersionId: row.id, reason: withdrawReason }),
+    onSuccess: async () => {
+      toast.success(`${row.name} v${row.version} was withdrawn.`);
+      setWithdrawError(null);
+      await onSaved();
+    },
+    onError: (failure) => setWithdrawError(apiErrorMessage(failure, "The calendar could not be withdrawn.")),
+  });
   const activate = useMutation({
     mutationFn: () => activateIpWorkingCalendar({ calendarVersionId: row.id, reason, conflictReviewed: true }),
     onSuccess: async () => {
@@ -638,7 +680,7 @@ function CalendarVersionRow({ row, onSaved }: { row: IpWorkingCalendarVersion; o
     <div className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm" data-testid={`ip-calendar-version-${row.id}`}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="break-words font-semibold">{row.name} v{row.version}</span>
-        <Badge tone={row.status === "active" ? "success" : row.status === "candidate" ? "warning" : "neutral"}>{row.status}</Badge>
+        <Badge tone={row.status === "active" ? "success" : row.status === "candidate" ? "warning" : "neutral"}>{calendarStatusLabel(row)}</Badge>
       </div>
       <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
         {row.jurisdiction}{row.office ? ` · ${row.office}` : ""} · {row.source_reference} · proposed by {row.proposer_label_snapshot}
@@ -678,6 +720,32 @@ function CalendarVersionRow({ row, onSaved }: { row: IpWorkingCalendarVersion; o
           />
         </div>
       ) : null}
+      {row.can_withdraw ? (
+        <div className="mt-3 flex min-w-0 flex-col gap-2" data-testid={`ip-calendar-withdraw-${row.id}`}>
+          <Label htmlFor={withdrawId}>Reason to withdraw your proposal</Label>
+          <Input
+            id={withdrawId}
+            value={withdrawReason}
+            onChange={(event) => { setWithdrawReason(event.target.value); setWithdrawError(null); }}
+            aria-describedby={`${withdrawId}-hint${withdrawError ? ` ${withdrawId}-error` : ""}`}
+            aria-invalid={withdrawError ? true : undefined}
+          />
+          <p id={`${withdrawId}-hint`} className="text-xs text-[var(--color-mute)]">
+            At least 5 characters. The version is kept as withdrawn evidence and can no longer be activated.
+          </p>
+          {withdrawError ? <p id={`${withdrawId}-error`} className="break-words text-xs text-[var(--color-danger)]">{withdrawError}</p> : null}
+          <Button
+            className="w-full sm:w-auto"
+            size="sm"
+            variant="secondary"
+            disabled={withdrawReason.trim().length < 5 || withdraw.isPending}
+            aria-describedby={`${withdrawId}-hint`}
+            onClick={() => withdraw.mutate()}
+          >
+            Withdraw my proposal
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -697,32 +765,67 @@ function RuleVersionRow({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [reviewerError, setReviewerError] = useState<string | null>(null);
-  const [impact, setImpact] = useState<Awaited<ReturnType<typeof fetchIpDeadlineRuleImpact>> | null>(null);
+  const [impact, setImpact] = useState<IpDeadlineRuleImpact | null>(null);
+  // Activation sends only the token of the preview this person saw.
+  const [activationImpact, setActivationImpact] = useState<IpDeadlineRuleImpact | null>(null);
+  const [impactReviewed, setImpactReviewed] = useState(false);
+  const [supersede, setSupersede] = useState(false);
   const reviewerFieldId = `rule-reviewer-${row.id}`;
   const reasonId = `rule-reason-${row.id}`;
-  const citation = typeof row.definition?.rule_citation === "string" ? row.definition.rule_citation : null;
+  const name = ruleVersionName(row);
+  const affects = activationImpact
+    ? activationImpact.company_policy_count + activationImpact.open_deadline_count > 0
+    : false;
+  const superseded = activationImpact?.superseded_versions ?? [];
+  const activationMissing = [
+    !reviewerId ? "choose the fixture reviewer" : null,
+    reason.trim().length < 5 ? "write an activation note (at least 5 characters)" : null,
+    !activationImpact ? "preview the activation impact" : null,
+    affects && !impactReviewed ? "confirm you reviewed the impact" : null,
+    superseded.length && !supersede ? "confirm the replacement of the active version" : null,
+  ].filter((item): item is string => Boolean(item));
 
+  const previewActivation = useMutation({
+    mutationFn: () => fetchIpDeadlineRuleImpact(row.id),
+    onSuccess: (result) => {
+      setActivationImpact(result);
+      setImpactReviewed(false);
+      setSupersede(false);
+      setError(null);
+    },
+    onError: (failure) => setError(apiErrorMessage(failure, "The activation impact could not be loaded.")),
+  });
   const activate = useMutation({
-    mutationFn: async () => {
-      const preview = await fetchIpDeadlineRuleImpact(row.id);
+    mutationFn: () => {
+      if (!activationImpact) throw new Error("Preview the activation impact first.");
       return activateIpDeadlineRule({
         ruleVersionId: row.id,
         reviewerMembershipId: reviewerId,
-        impactAcknowledged: true,
+        impactAcknowledged: affects ? impactReviewed : false,
         impactReason: reason,
-        impactToken: preview.impact_token,
+        impactToken: activationImpact.impact_token,
+        supersedeOverlapping: superseded.length > 0 && supersede,
       });
     },
     onSuccess: async () => {
-      toast.success(`${row.key} v${row.version} is active and selected for company deadlines.`);
+      toast.success(`${name} is active and selected for company deadlines.`);
       setError(null);
       setReviewerError(null);
       await onSaved();
     },
     onError: (failure) => {
       const message = apiErrorMessage(failure, "The rule activation was rejected.");
-      if (problemCode(failure) === "ip_rule_reviewer_unqualified") setReviewerError(message);
-      else setError(message);
+      if (problemCode(failure) === "ip_rule_reviewer_unqualified") {
+        setReviewerError(message);
+      } else if (/preview again|impact must be reviewed|overlaps active version/i.test(message)) {
+        // The impact moved after the preview: never activate on a stale one.
+        setActivationImpact(null);
+        setImpactReviewed(false);
+        setSupersede(false);
+        setError("The rules or deadlines this activation affects changed after your preview. Preview the impact again, then confirm.");
+      } else {
+        setError(message);
+      }
     },
   });
   const preview = useMutation({
@@ -741,7 +844,7 @@ function RuleVersionRow({
       });
     },
     onSuccess: async (result) => {
-      toast.success(`${row.key} v${row.version} is ${result.status}. Owners of dependent deadlines were alerted.`);
+      toast.success(`${name} is ${result.status}. Owners of dependent deadlines were alerted.`);
       setImpact(null);
       setError(null);
       await onSaved();
@@ -762,12 +865,12 @@ function RuleVersionRow({
   return (
     <div className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm" data-testid={`ip-rule-version-${row.id}`}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="break-words font-semibold">{row.key} v{row.version}</span>
+        <span className="break-words font-semibold">{name}</span>
         <Badge tone={row.status === "active" ? "success" : row.status === "candidate" ? "warning" : "neutral"}>{row.status}</Badge>
         {selected ? <Badge tone="brand">Selected for company deadlines</Badge> : null}
       </div>
       <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-        {ruleScopeLabel(row)} · {row.jurisdiction}{row.office ? ` · ${row.office}` : ""}{citation ? ` · ${citation}` : ""} · proposed by {row.proposer_label_snapshot}
+        {ruleScopeLabel(row)} · {row.jurisdiction}{row.office ? ` · ${row.office}` : ""} · proposed by {row.proposer_label_snapshot}
         {row.legal_approver_label_snapshot ? ` · activated by ${row.legal_approver_label_snapshot}` : ""}
       </div>
 
@@ -786,18 +889,55 @@ function RuleVersionRow({
           {reviewerError ? <p id={`${reviewerFieldId}-error`} className="break-words text-xs text-[var(--color-danger)]">{reviewerError}</p> : null}
           <Label htmlFor={reasonId}>Activation note</Label>
           <Input id={reasonId} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reviewed against the official source…" />
+          <Button
+            className="w-full sm:w-auto"
+            size="sm"
+            variant="secondary"
+            disabled={previewActivation.isPending}
+            onClick={() => previewActivation.mutate()}
+          >
+            {activationImpact ? "Preview activation impact again" : "Preview activation impact"}
+          </Button>
+          {activationImpact ? (
+            <div className="min-w-0 rounded-md border border-[var(--color-line)] p-2 text-xs" role="status" data-testid={`ip-rule-activation-impact-${row.id}`}>
+              <p className="break-words">
+                {affects
+                  ? `Activating affects ${activationImpact.company_policy_count} company selection(s), ${activationImpact.open_deadline_count} open deadline(s) and ${activationImpact.candidate_deadline_count} unconfirmed deadline(s). Confirmed deadlines keep their dates.`
+                  : "No company selection or open deadline uses this rule yet."}
+              </p>
+              {superseded.length ? (
+                <p className="mt-1 break-words">
+                  Its effective dates overlap active version{superseded.length > 1 ? "s" : ""} {superseded.map((version) => `v${version}`).join(", ")}, which activation retires.
+                </p>
+              ) : null}
+              {affects ? (
+                <label className="mt-2 flex min-w-0 items-start gap-2">
+                  <input type="checkbox" className="mt-0.5" checked={impactReviewed} onChange={(event) => setImpactReviewed(event.target.checked)} />
+                  <span className="min-w-0 break-words">I reviewed this impact; the activation note explains why it is acceptable.</span>
+                </label>
+              ) : null}
+              {superseded.length ? (
+                <label className="mt-2 flex min-w-0 items-start gap-2">
+                  <input type="checkbox" className="mt-0.5" checked={supersede} onChange={(event) => setSupersede(event.target.checked)} />
+                  <span className="min-w-0 break-words">Retire {superseded.map((version) => `v${version}`).join(", ")} and use v{row.version} from {row.effective_from}.</span>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           {error ? <p role="alert" className="break-words text-xs text-[var(--color-danger)]">{error}</p> : null}
           <Button
             className="w-full sm:w-auto"
             size="sm"
-            disabled={!reviewerId || reason.trim().length < 5 || activate.isPending}
+            disabled={activationMissing.length > 0 || activate.isPending}
             aria-describedby={`${reasonId}-requirement`}
             onClick={() => activate.mutate()}
           >
             Run fixtures and activate rule
           </Button>
           <p id={`${reasonId}-requirement`} className="text-xs text-[var(--color-mute)]">
-            Choose the reviewer who checked the fixture and write an activation note (at least 5 characters). The server re-runs every fixture before activating.
+            {activationMissing.length
+              ? `To activate: ${activationMissing.join("; ")}.`
+              : "Ready. The server re-runs every fixture and checks the impact again before activating."}
           </p>
         </div>
       ) : null}
@@ -878,7 +1018,7 @@ function RulePolicySection({
         autoConfirmEligible: input.policy?.auto_confirm_eligible ?? false,
       }),
     onSuccess: async (policy) => {
-      toast.success(`${policy.rule_set_key} v${policy.active_rule_version} is selected for company deadlines.`);
+      toast.success(`Version ${policy.active_rule_version} is selected for company deadlines.`);
       setConflict(null);
       setError(null);
       await onSaved();
@@ -933,7 +1073,7 @@ function RulePolicySection({
         const needsSelection = Boolean(active && policy?.active_rule_version_id !== active.id);
         return (
           <div key={ruleSetId} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm" data-testid={`ip-rule-policy-${ruleSetId}`}>
-            <div className="break-words font-semibold">{versions[0]?.key}</div>
+            <div className="break-words font-semibold">{versions[0] ? ruleScopeLabel(versions[0]) : null}{versions[0] ? ` · ${versions[0].jurisdiction}` : null}</div>
             <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
               {policy
                 ? `Selected: v${policy.active_rule_version} (${policy.active_rule_status}) · policy version ${policy.version} · updated by ${policy.updater_label_snapshot}`

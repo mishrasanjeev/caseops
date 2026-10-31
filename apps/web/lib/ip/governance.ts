@@ -7,6 +7,7 @@
  * decide availability themselves.
  */
 import type {
+  IpDeadlineException,
   IpDeadlineRuleVersion,
   IpDeadlineWorkspace,
   IpGovernanceActionDecision,
@@ -28,6 +29,7 @@ const CATEGORY: Record<IpGovernanceBlockReason, GovernanceBlockCategory> = {
   missing_capability: "Your role cannot",
   proposer_cannot_self_approve: "Needs another approver",
   no_qualified_reviewer: "Needs another approver",
+  no_other_approver: "Needs another approver",
   proposer_unavailable: "Needs setup",
   fixtures_not_passing: "Needs setup",
   not_candidate: "Needs setup",
@@ -59,6 +61,10 @@ export function governanceReasonText(
       return "You proposed this version, so another owner, admin or partner must activate it.";
     case "no_qualified_reviewer":
       return "No colleague other than you and the proposer can review the fixtures. Add another owner, admin or partner to the workspace.";
+    case "no_other_approver":
+      return subject === "calendar"
+        ? "No other owner, admin or partner is in this workspace, so nobody can activate it yet. A workspace owner or admin can add one in the employee directory."
+        : "A rule needs two other owners, admins or partners: one reviews the fixtures and one activates it. A workspace owner or admin can add them in the employee directory.";
     case "proposer_unavailable":
       return "The proposer is no longer an active member. Propose this version again.";
     case "fixtures_not_passing":
@@ -68,6 +74,22 @@ export function governanceReasonText(
     case "rule_kind_unsupported":
       return "Only deadline rules can be activated; CaseOps cannot yet evaluate form or fee rules.";
   }
+}
+
+const EXCEPTION_LABELS: Record<IpDeadlineException["exception_kinds"][number], string> = {
+  overdue: "Overdue",
+  unacknowledged: "Owner has not accepted",
+  unowned: "No responsible lawyer",
+  conflicting: "Conflicting dates",
+  uncertain: "Uncertain date",
+  source_stale: "Rule or calendar source out of date",
+  rule_disabled: "Rule disabled",
+  rule_retired: "Rule retired",
+};
+
+/** The exception queue label a lawyer reads, never the raw code. */
+export function deadlineExceptionLabel(kind: IpDeadlineException["exception_kinds"][number]): string {
+  return EXCEPTION_LABELS[kind] ?? kind.replaceAll("_", " ");
 }
 
 export function governanceCategory(reason: IpGovernanceBlockReason): GovernanceBlockCategory {
@@ -109,6 +131,8 @@ export type RuleScope = {
   role: "opponent" | "applicant" | null;
   stage: string;
   triggerKind: string;
+  /** The event that starts the period, as a lawyer names it. */
+  triggerLabel: string;
   calendarMethod: "calendar_days" | "business_days" | "month_anniversary";
 };
 
@@ -117,12 +141,12 @@ export type RuleScope = {
  * citations are legal content, so the proposer always supplies them.
  */
 export const RULE_SCOPES = [
-  { id: "docket_examination", label: "Docket deadline · examination response", proceedingKind: null, role: null, stage: "examination", triggerKind: "examination_report_received", calendarMethod: "business_days" },
-  { id: "opponent_notice", label: "Opposition, opponent · notice of opposition due", proceedingKind: "opposition", role: "opponent", stage: "notice_filing_due", triggerKind: "trademark_advertised", calendarMethod: "month_anniversary" },
-  { id: "opponent_evidence", label: "Opposition, opponent · Rule 45 evidence due", proceedingKind: "opposition", role: "opponent", stage: "opponent_evidence_due", triggerKind: "counterstatement_served", calendarMethod: "month_anniversary" },
-  { id: "opponent_reply", label: "Opposition, opponent · Rule 47 reply evidence due", proceedingKind: "opposition", role: "opponent", stage: "reply_evidence_due", triggerKind: "applicant_evidence_served", calendarMethod: "month_anniversary" },
-  { id: "applicant_counterstatement", label: "Opposition, applicant · counterstatement due", proceedingKind: "opposition", role: "applicant", stage: "counterstatement_due", triggerKind: "notice_of_opposition_served", calendarMethod: "month_anniversary" },
-  { id: "applicant_evidence", label: "Opposition, applicant · Rule 46 evidence due", proceedingKind: "opposition", role: "applicant", stage: "applicant_evidence_due", triggerKind: "opponent_evidence_served", calendarMethod: "month_anniversary" },
+  { id: "docket_examination", label: "Docket deadline · examination response", proceedingKind: null, role: null, stage: "examination", triggerKind: "examination_report_received", triggerLabel: "Examination report received", calendarMethod: "business_days" },
+  { id: "opponent_notice", label: "Opposition, opponent · notice of opposition due", proceedingKind: "opposition", role: "opponent", stage: "notice_filing_due", triggerKind: "trademark_advertised", triggerLabel: "Trade mark advertised in the TM Journal", calendarMethod: "month_anniversary" },
+  { id: "opponent_evidence", label: "Opposition, opponent · Rule 45 evidence due", proceedingKind: "opposition", role: "opponent", stage: "opponent_evidence_due", triggerKind: "counterstatement_served", triggerLabel: "Counterstatement served on the opponent", calendarMethod: "month_anniversary" },
+  { id: "opponent_reply", label: "Opposition, opponent · Rule 47 reply evidence due", proceedingKind: "opposition", role: "opponent", stage: "reply_evidence_due", triggerKind: "applicant_evidence_served", triggerLabel: "Applicant's evidence served on the opponent", calendarMethod: "month_anniversary" },
+  { id: "applicant_counterstatement", label: "Opposition, applicant · counterstatement due", proceedingKind: "opposition", role: "applicant", stage: "counterstatement_due", triggerKind: "notice_of_opposition_served", triggerLabel: "Notice of opposition served on the applicant", calendarMethod: "month_anniversary" },
+  { id: "applicant_evidence", label: "Opposition, applicant · Rule 46 evidence due", proceedingKind: "opposition", role: "applicant", stage: "applicant_evidence_due", triggerKind: "opponent_evidence_served", triggerLabel: "Opponent's evidence served on the applicant", calendarMethod: "month_anniversary" },
 ] as const satisfies readonly RuleScope[];
 
 export type RuleScopeId = (typeof RULE_SCOPES)[number]["id"];
@@ -145,9 +169,44 @@ export function ruleScopeLabel(rule: Pick<IpDeadlineRuleVersion, "proceeding_kin
     ?? [rule.proceeding_kind, rule.role, (rule.stage ?? "").replaceAll("_", " ")].filter(Boolean).join(" · ");
 }
 
+function ruleCitation(rule: IpDeadlineRuleVersion): string | null {
+  const citation = rule.definition?.rule_citation;
+  return typeof citation === "string" && citation.trim() ? citation.trim() : null;
+}
+
+/** How a lawyer names a rule version: its citation (or scope), never the machine key. */
+export function ruleVersionName(rule: IpDeadlineRuleVersion): string {
+  return `${ruleCitation(rule) ?? ruleScopeLabel(rule)} (v${rule.version})`;
+}
+
 export function governedRuleCaption(rule: IpDeadlineRuleVersion): string {
-  const citation = typeof rule.definition?.rule_citation === "string" ? ` · ${rule.definition.rule_citation}` : "";
-  return `${rule.key} v${rule.version} · ${ruleScopeLabel(rule)} · ${rule.jurisdiction}${rule.office ? ` · ${rule.office}` : ""}${citation}`;
+  return `${ruleVersionName(rule)} · ${ruleScopeLabel(rule)} · ${rule.jurisdiction}${rule.office ? ` · ${rule.office}` : ""}`;
+}
+
+/**
+ * "A is awaiting activation…" for a bounded list: at most two names, then a
+ * count, so a workspace with many pending candidates stays one sentence.
+ */
+export function boundedNameList(names: string[]): string {
+  const shown = names.slice(0, 2);
+  const rest = names.length - shown.length;
+  if (rest > 0) return `${shown.join(", ")} and ${rest} more`;
+  return shown.length === 2 ? `${shown[0]} and ${shown[1]}` : shown[0] ?? "";
+}
+
+export function awaitingActivationText(names: string[]): string {
+  if (!names.length) return "";
+  return `${boundedNameList(names)} ${names.length === 1 ? "is" : "are"} awaiting activation by an approver other than the proposer.`;
+}
+
+/** Versions of one rule share a key: the scope and jurisdiction it governs. */
+export function ruleKeyFor(scopeId: RuleScopeId, jurisdiction: string): string {
+  return `${jurisdiction.trim().toLowerCase() || "in"}-tm-${scopeId.replaceAll("_", "-")}`;
+}
+
+/** Versions of one calendar share a key derived from its name. */
+export function calendarKeyFor(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
 }
 
 export function workingCalendarOptionCaption(calendar: IpWorkingCalendarVersion): string {

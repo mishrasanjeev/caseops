@@ -106,6 +106,7 @@ export function workingCalendar(overrides: Partial<IpWorkingCalendarVersion> = {
     can_activate: false,
     activation_blocked_reason: "not_candidate",
     activation_blocked_reasons: ["not_candidate"],
+    can_withdraw: false,
     ...overrides,
   };
 }

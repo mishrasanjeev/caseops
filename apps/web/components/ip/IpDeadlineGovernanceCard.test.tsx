@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   transition: vi.fn(),
   policies: vi.fn(),
   selectPolicy: vi.fn(),
+  withdrawCalendar: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -30,6 +31,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   transitionIpDeadlineRule: mocks.transition,
   fetchIpRulePolicies: mocks.policies,
   selectIpRulePolicy: mocks.selectPolicy,
+  withdrawIpWorkingCalendar: mocks.withdrawCalendar,
 }));
 
 import { IpDeadlineGovernanceCard } from "@/components/ip/IpDeadlineGovernanceCard";
@@ -66,6 +68,7 @@ function workspace(overrides: Partial<IpDeadlineWorkspace> = {}): IpDeadlineWork
     docket_id: "docket-1",
     rules: [],
     eligible_rule_version_ids: [],
+    eligible_responsible_membership_ids: [],
     calendars: [],
     deadlines: [],
     exceptions: [],
@@ -118,6 +121,9 @@ describe("IpDeadlineGovernanceCard", () => {
     expect(screen.queryByRole("button", { name: "Propose rule and fixture" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Emergency-disable|Retire rule|Preview impact/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Propose calendar version" })).toBeEnabled();
+    expect(within(status).getByTestId("ip-governance-calendars-open")).toHaveTextContent(
+      "Working calendars stay open while rule publication is paused",
+    );
     expect(screen.queryByText(/membership-ram/)).not.toBeInTheDocument();
   });
 
@@ -230,7 +236,52 @@ describe("IpDeadlineGovernanceCard", () => {
 
     const submit = await screen.findByRole("button", { name: "Propose rule and fixture" });
     expect(submit).toBeDisabled();
-    expect(described(submit)).toContain("Delhi calendar v1 is awaiting activation by an approver other than its proposer.");
+    expect(described(submit)).toContain("Delhi calendar v1 is awaiting activation by an approver other than the proposer.");
+  });
+
+  it("BUG-006 many pending calendars are summarised in one bounded sentence", async () => {
+    mocks.workspace.mockResolvedValue(workspace({
+      calendars: ["A", "B", "C", "D"].map((name, index) =>
+        workingCalendar({ id: `cal-${index}`, name: `${name} calendar`, status: "candidate" })),
+    }));
+    renderCard();
+
+    const submit = await screen.findByRole("button", { name: "Propose rule and fixture" });
+    expect(described(submit)).toContain("A calendar v1, B calendar v1 and 2 more are awaiting activation");
+    expect(described(submit)).not.toContain("D calendar");
+  });
+
+  it("BUG-005 a proposer alone in the workspace is told no other approver exists and where to add one", async () => {
+    mocks.workspace.mockResolvedValue(workspace({
+      calendars: [workingCalendar({
+        id: "cal-solo",
+        status: "candidate",
+        activation_blocked_reason: "proposer_cannot_self_approve",
+        activation_blocked_reasons: ["proposer_cannot_self_approve", "no_other_approver"],
+        can_withdraw: true,
+      })],
+    }));
+    renderCard();
+
+    const blocked = await screen.findByTestId("ip-calendar-activation-blocked-cal-solo");
+    expect(blocked).toHaveTextContent("No other owner, admin or partner is in this workspace");
+    expect(within(blocked).getByRole("link", { name: "Open the employee directory" })).toHaveAttribute("href", "/app/admin/employees");
+  });
+
+  it("BUG-005 the proposer withdraws its own candidate calendar with a reason", async () => {
+    mocks.workspace.mockResolvedValue(workspace({
+      calendars: [workingCalendar({ id: "cal-own", status: "candidate", can_withdraw: true, approved_at: null })],
+    }));
+    mocks.withdrawCalendar.mockResolvedValue(workingCalendar({ id: "cal-own", status: "retired", approved_at: null }));
+    renderCard();
+
+    const withdraw = await screen.findByRole("button", { name: "Withdraw my proposal" });
+    expect(withdraw).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reason to withdraw your proposal"), { target: { value: "Wrong holiday list." } });
+    fireEvent.click(withdraw);
+    await waitFor(() => expect(mocks.withdrawCalendar).toHaveBeenCalledWith({
+      calendarVersionId: "cal-own", reason: "Wrong holiday list.",
+    }));
   });
 
   it("BUG-003/006 proposes an opposition-scoped rule with its own source evidence", async () => {
@@ -240,6 +291,8 @@ describe("IpDeadlineGovernanceCard", () => {
     renderCard();
 
     expect(await screen.findByLabelText("Applies to")).toHaveValue("opponent_notice");
+    expect(described(screen.getByLabelText("Applies to"))).toContain("Starts from: Trade mark advertised in the TM Journal.");
+    expect(screen.queryByLabelText(/Rule key|Trigger event kind|Calendar key/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Period (months)"), { target: { value: "4" } });
     fireEvent.change(screen.getByLabelText("Rule citation"), { target: { value: "Trade Marks Act 1999, s.21(1)" } });
     fireEvent.change(screen.getByLabelText("Rule source reference"), { target: { value: "act:s21" } });
@@ -251,6 +304,8 @@ describe("IpDeadlineGovernanceCard", () => {
     await waitFor(() => expect(mocks.proposeRule).toHaveBeenCalledOnce());
     const input = mocks.proposeRule.mock.calls[0][0];
     expect(input).toEqual(expect.objectContaining({
+      key: "in-tm-opponent-notice",
+      triggerKind: "trademark_advertised",
       proceedingKind: "opposition",
       role: "opponent",
       stage: "notice_filing_due",
@@ -287,12 +342,103 @@ describe("IpDeadlineGovernanceCard", () => {
     expect(offered).toEqual(["membership-b"]);
     fireEvent.change(reviewer, { target: { value: "membership-b" } });
     fireEvent.change(screen.getByLabelText("Activation note"), { target: { value: "Fixture checked against s.21." } });
-    fireEvent.click(screen.getByRole("button", { name: "Run fixtures and activate rule" }));
+    const activate = screen.getByRole("button", { name: "Run fixtures and activate rule" });
+    expect(activate).toBeDisabled();
+    expect(described(activate)).toContain("preview the activation impact");
+    fireEvent.click(screen.getByRole("button", { name: "Preview activation impact" }));
+    expect(await screen.findByText("No company selection or open deadline uses this rule yet.")).toBeVisible();
+    fireEvent.click(activate);
     await waitFor(() => expect(mocks.activateRule).toHaveBeenCalledWith(expect.objectContaining({
       ruleVersionId: "rule-candidate",
       reviewerMembershipId: "membership-b",
       impactToken: "token-1",
+      impactAcknowledged: false,
+      supersedeOverlapping: false,
     })));
+  });
+
+  function activatableV2() {
+    return workspace({
+      rules: [
+        governedRule({ id: "rule-v1", rule_set_id: "set-1", version: 1, status: "active" }),
+        governedRule({
+          id: "rule-v2",
+          rule_set_id: "set-1",
+          version: 2,
+          status: "candidate",
+          effective_from: "2026-06-01",
+          can_activate: true,
+          activation_blocked_reason: null,
+          activation_blocked_reasons: [],
+          eligible_reviewer_membership_ids: ["membership-b"],
+        }),
+      ],
+      eligible_rule_version_ids: ["rule-v1"],
+    });
+  }
+
+  async function prepareActivation() {
+    const row = await screen.findByTestId("ip-rule-version-rule-v2");
+    await within(row).findByRole("option", { name: "Bina Reviewer — bina@example.com" });
+    fireEvent.change(within(row).getByLabelText("Independent fixture reviewer"), { target: { value: "membership-b" } });
+    fireEvent.change(within(row).getByLabelText("Activation note"), { target: { value: "Mid-year amendment checked." } });
+    return row;
+  }
+
+  it("BUG-006 a v2 over an active v1 shows the impact and needs explicit review and supersession", async () => {
+    mocks.workspace.mockResolvedValue(activatableV2());
+    mocks.impact.mockResolvedValue({
+      rule_version_id: "rule-v2", impact_token: "token-v2", company_policy_count: 1, open_deadline_count: 2,
+      candidate_deadline_count: 1, confirmed_deadlines_preserved: true, superseded_versions: [1],
+    });
+    mocks.activateRule.mockResolvedValue(governedRule({ id: "rule-v2", version: 2, status: "active" }));
+    renderCard();
+
+    const row = await prepareActivation();
+    const activate = within(row).getByRole("button", { name: "Run fixtures and activate rule" });
+    fireEvent.click(within(row).getByRole("button", { name: "Preview activation impact" }));
+    const impact = await within(row).findByTestId("ip-rule-activation-impact-rule-v2");
+    expect(impact).toHaveTextContent("Activating affects 1 company selection(s), 2 open deadline(s) and 1 unconfirmed deadline(s).");
+    expect(impact).toHaveTextContent("overlap active version v1, which activation retires");
+    expect(activate).toBeDisabled();
+    expect(described(activate)).toContain("confirm you reviewed the impact");
+    expect(described(activate)).toContain("confirm the replacement of the active version");
+    fireEvent.click(within(impact).getByRole("checkbox", { name: /I reviewed this impact/ }));
+    expect(activate).toBeDisabled();
+    expect(mocks.activateRule).not.toHaveBeenCalled();
+    fireEvent.click(within(impact).getByRole("checkbox", { name: /Retire v1 and use v2/ }));
+    expect(activate).toBeEnabled();
+    fireEvent.click(activate);
+    await waitFor(() => expect(mocks.activateRule).toHaveBeenCalledWith(expect.objectContaining({
+      ruleVersionId: "rule-v2",
+      impactToken: "token-v2",
+      impactAcknowledged: true,
+      impactReason: "Mid-year amendment checked.",
+      supersedeOverlapping: true,
+    })));
+  });
+
+  it("BUG-006 a stale activation preview is cleared and must be previewed again", async () => {
+    mocks.workspace.mockResolvedValue(activatableV2());
+    mocks.impact.mockResolvedValue({
+      rule_version_id: "rule-v2", impact_token: "token-old", company_policy_count: 1, open_deadline_count: 0,
+      candidate_deadline_count: 0, confirmed_deadlines_preserved: true, superseded_versions: [1],
+    });
+    mocks.activateRule.mockRejectedValue(new ApiError(409, "Rule impact changed; preview again.", { detail: "Rule impact changed; preview again." }));
+    renderCard();
+
+    const row = await prepareActivation();
+    fireEvent.click(within(row).getByRole("button", { name: "Preview activation impact" }));
+    const impact = await within(row).findByTestId("ip-rule-activation-impact-rule-v2");
+    fireEvent.click(within(impact).getByRole("checkbox", { name: /I reviewed this impact/ }));
+    fireEvent.click(within(impact).getByRole("checkbox", { name: /Retire v1 and use v2/ }));
+    fireEvent.click(within(row).getByRole("button", { name: "Run fixtures and activate rule" }));
+
+    expect(await within(row).findByText(/changed after your preview. Preview the impact again, then confirm./)).toBeVisible();
+    expect(within(row).queryByTestId("ip-rule-activation-impact-rule-v2")).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Run fixtures and activate rule" })).toBeDisabled();
+    expect(within(row).getByRole("button", { name: "Preview activation impact" })).toBeEnabled();
+    expect(mocks.activateRule).toHaveBeenCalledOnce();
   });
 
   it("BUG-006 the proposer's candidate rule shows the self-approval reason and no activate control", async () => {

@@ -12,12 +12,15 @@ import type {
 } from "@/lib/api/endpoints";
 import {
   activeWorkingCalendars,
+  awaitingActivationText,
+  boundedNameList,
   describeGovernanceDecision,
   eligibleScopedRules,
   governedRuleCaption,
   ipGovernanceHref,
   ruleScopeFor,
   ruleScopeLabel,
+  ruleVersionName,
   workingCalendarOptionCaption,
 } from "@/lib/ip/governance";
 
@@ -33,7 +36,11 @@ export type GovernedSelection = {
   calendar: IpWorkingCalendarVersion | undefined;
 };
 
-/** Options come from the validators' own predicate; a stale choice falls back to the first eligible one. */
+/**
+ * Options come from the validators' own predicate. A single eligible option is
+ * preselected; with several, the lawyer must choose (a stale or missing choice
+ * selects nothing rather than silently the first).
+ */
 export function resolveGovernedSelection(
   workspace: IpDeadlineWorkspace | undefined,
   scope: GovernedScope,
@@ -45,8 +52,8 @@ export function resolveGovernedSelection(
   return {
     rules,
     calendars,
-    rule: rules.find((row) => row.id === ruleId) ?? rules[0],
-    calendar: calendars.find((row) => row.id === calendarId) ?? calendars[0],
+    rule: rules.find((row) => row.id === ruleId) ?? (rules.length === 1 ? rules[0] : undefined),
+    calendar: calendars.find((row) => row.id === calendarId) ?? (calendars.length === 1 ? calendars[0] : undefined),
   };
 }
 
@@ -86,6 +93,8 @@ export function IpGovernedDeadlinePickers({
   const governanceHref = ipGovernanceHref(docketId, scopeDef?.id);
   const placeholder = (loaded: string) =>
     workspace.isPending ? "Loading…" : workspace.isError ? "Unavailable — retry below" : loaded;
+  // Absent during a deploy skew with an older API: fall back to the generic path.
+  const governance = data?.governance;
 
   let ruleStatus: string[] = [];
   let calendarStatus: string[] = [];
@@ -94,11 +103,12 @@ export function IpGovernedDeadlinePickers({
     const pending = scoped.filter((row) => row.status === "candidate");
     const unselected = scoped.filter((row) => row.status === "active");
     if (pending.length) {
-      ruleStatus = [`${pending.map((row) => `${row.key} v${row.version}`).join(", ")} is awaiting activation by an approver other than its proposer.`];
+      ruleStatus = [awaitingActivationText(pending.map(ruleVersionName))];
     } else if (unselected.length) {
-      ruleStatus = [`${unselected.map((row) => `${row.key} v${row.version}`).join(", ")} is active but not selected by company policy. An approver can select it in Rule and calendar governance.`];
+      const names = unselected.map(ruleVersionName);
+      ruleStatus = [`${boundedNameList(names)} ${names.length === 1 ? "is" : "are"} active but not selected by company policy. An approver can select it in Rule and calendar governance.`];
     } else {
-      const blocked = describeGovernanceDecision(data.governance.rule_proposal, "rule", "propose");
+      const blocked = governance ? describeGovernanceDecision(governance.rule_proposal, "rule", "propose") : [];
       ruleStatus = [
         `No active governed rule exists for ${scopeLabel}. Your firm authors its own rules.`,
         ...(blocked.length
@@ -110,9 +120,9 @@ export function IpGovernedDeadlinePickers({
   if (data && !selection.calendars.length) {
     const pending = data.calendars.filter((row) => row.status === "candidate");
     if (pending.length) {
-      calendarStatus = [`${pending.map((row) => `${row.name} v${row.version}`).join(", ")} is awaiting activation by an approver other than its proposer.`];
+      calendarStatus = [awaitingActivationText(pending.map((row) => `${row.name} v${row.version}`))];
     } else {
-      const blocked = describeGovernanceDecision(data.governance.calendar_proposal, "calendar", "propose");
+      const blocked = governance ? describeGovernanceDecision(governance.calendar_proposal, "calendar", "propose") : [];
       calendarStatus = [
         "No active working calendar exists for this workspace.",
         ...(blocked.length
@@ -135,6 +145,7 @@ export function IpGovernedDeadlinePickers({
           onChange={(event) => onRuleChange(event.target.value)}
         >
           {!selection.rules.length ? <option value="">{placeholder(`No eligible rule for ${scopeLabel}`)}</option> : null}
+          {selection.rules.length > 1 && !selection.rule ? <option value="">Choose a governed rule…</option> : null}
           {selection.rules.map((row) => (
             <option key={row.id} value={row.id}>{governedRuleCaption(row)}</option>
           ))}
@@ -154,6 +165,7 @@ export function IpGovernedDeadlinePickers({
           onChange={(event) => onCalendarChange(event.target.value)}
         >
           {!selection.calendars.length ? <option value="">{placeholder("No active working calendar")}</option> : null}
+          {selection.calendars.length > 1 && !selection.calendar ? <option value="">Choose a working calendar…</option> : null}
           {selection.calendars.map((row) => (
             <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>
           ))}
