@@ -1794,6 +1794,14 @@ def test_current_disclosure_seek_rejects_all_composite_successors(
                 completed.append(kind)
             finally:
                 boundary.rollback()
+            restored_pointer = session.scalar(
+                select(IpDocketRecord.current_version)
+                .where(IpDocketRecord.id == str(target.docket_id))
+            )
+            # Raw ORM bulk synchronization is not savepoint-tracked state.
+            # Verify the rollback in PostgreSQL before clearing fixture caches.
+            session.expire_all()
+            assert restored_pointer == 1
             restored = get_patent_family(session, context=context, family_id=str(target.id))
             assert restored == target
             _retain_patent_evidence(
@@ -1838,6 +1846,11 @@ def test_current_disclosure_seek_rejects_all_composite_successors(
             )
         finally:
             boundary.rollback()
+        restored_pointer = session.scalar(
+            select(IpDocketRecord.current_version).where(IpDocketRecord.id == str(low.docket_id))
+        )
+        session.expire_all()
+        assert restored_pointer == 1
         for tenant, actor, expected in (
             (company_id, actor_id, {str(low.id), str(high.id)}),
             (other_company, other_actor, {str(other.id)}),

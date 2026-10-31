@@ -1,5 +1,43 @@
 # Lifecycle Admission And Race Ownership
 
+## October 31 Generic-Plan Correction: Still NO-GO
+
+3987 CI41170834397 independently failed four complete PostgreSQL selections:
+605 identities/1815 phases/601passed/4failed/0skipped, all setup/teardown passed.
+The new range query is itself inadequate under forced generic planning:
+company_registry index plus incremental sort reads roughly10000 versions for
+each of100 keys. Actual raw-version work1000300 (PG4:1000200), total1000800
+(PG4:1000700), shared60100 (PG4:59900). This is not a Seq Scan or timeout.
+All four original native journals now correctly survive CI upload and retain
+actual bindings/settings/catalogues/results. Exact merge tree511e6569 matches.
+See ci-3987-complete-01/PG1-PG2-PG4-PG5-CONSOLIDATED-DIAGNOSIS.md.
+
+The corrected lookup places all three exact tenant/family/current-version
+equalities inside its correlated LIMIT1 before outer integrity checks. No
+composite range, ordering, new index, literalized limit, planner flag or relaxed
+budget. Existing unique constraint is applicable without estimating an unknown
+range limit. Preserve strict<=100 raw-version work and all existing custom/
+generic/auto first/cursor plus missing/successor/mixed/positive-middle checks.
+Static review is not performance proof; final-source acceptance remains open.
+
+The3987 local focused replay completed all3cases:two scale passes and one new
+fixture failure during post-savepoint restoration. Its first negative rejection
+passed, but ORM bulk-synchronized current-version cache survived the raw fixture
+rollback, producing a404 on restoration; later scenarios were unexecuted.
+Correction explicitly reads PostgreSQL's restored pointer, clears only the
+test session's cached state, then asserts restored version1. Negative warm-cache
+and integrity assertions stay before rollback. Preserve the failed run; this
+does not authorize changing product rollback/lifecycle behavior or claiming the
+four-state journey passed. Full replacement and final gates remain required.
+
+Independent adjacent audit reconciles all72 retained later-stage docket/document
+plans across the four failed hosted cases. None exceeds the unchanged common
+50000-work/10000-block contract (maximum10603work/749blocks); document-version
+plans each charge1row/2blocks. Sixteen docket plans still include tenant-scale
+batch or linked-source authorization scans, so a strict page-sized guarantee
+is NOT claimed for those paths. Keep this separate capacity-hardening gap
+visible; no permission rule or original acceptance budget is relaxed here.
+
 ## October 31 Disclosure Hydration Follow-Up: NO-GO
 
 Candidate9fd9175a CI41169038267 independently exposed two real later-stage

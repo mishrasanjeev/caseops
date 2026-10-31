@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Generic Disclosure Regression Still Open
+
+3987 CI41170834397 has four retained physical-work failures,605complete cases/
+601P4F/1815phases/0S in those selections. Range plus generic unknown LIMIT
+produces million-row work. All three exact unique-key predicates now live
+inside the per-key barrier; original strict bounds/409/negative journeys stay.
+Unverified replacement, not a fixed/deployed verdict. Require complete final
+Docker/CI/main/live/cadence and paired Excel results before promotion.
+
 ## October 31 Later Disclosure Work: Partially Fixed, NO-GO
 
 9fd9 CI41169038267 PG1/PG4 each150P/1F of151: disclosure hydration reads10001

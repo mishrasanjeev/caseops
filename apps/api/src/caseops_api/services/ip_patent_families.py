@@ -650,26 +650,14 @@ def list_patent_families(
             column("version", IpPatentFamilyVersion.__table__.c.version.type),
             name="admitted_patent_disclosure_keys",
         ).data(version_keys)
-        # Seek the existing unique composite index once per admitted key. A
-        # tuple IN can instead scan every tenant disclosure under a custom plan.
+        # The complete unique key stays inside the per-key barrier. A range
+        # with an unknown generic LIMIT can scan/sort an entire tenant per key.
         picked_version = (
             select(IpPatentFamilyVersion)
             .where(
-                tuple_(
-                    IpPatentFamilyVersion.company_id,
-                    IpPatentFamilyVersion.family_id,
-                    IpPatentFamilyVersion.version,
-                )
-                >= tuple_(
-                    literal(context.company.id),
-                    wanted_versions.c.family_id,
-                    wanted_versions.c.version,
-                )
-            )
-            .order_by(
-                IpPatentFamilyVersion.company_id,
-                IpPatentFamilyVersion.family_id,
-                IpPatentFamilyVersion.version,
+                IpPatentFamilyVersion.company_id == context.company.id,
+                IpPatentFamilyVersion.family_id == wanted_versions.c.family_id,
+                IpPatentFamilyVersion.version == wanted_versions.c.version,
             )
             .correlate(wanted_versions)
             .limit(1)

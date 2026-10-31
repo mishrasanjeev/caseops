@@ -8,6 +8,9 @@ traffic, a backlink, or a conversion.
 
 ## 2026-10-31 04:56 UTC - Release Still Gated, No New GSC Audit
 
+Later3987 CI exposed four real generic-plan disclosure-work failures. Exact
+unique-key replacement remains unverified; no new release or SEO audit follows.
+
 The9fd9 release run has two independently retained disclosure-work failures;
 the replacement is unverified. Full canonical Docker, CI, main merge, guarded
 deployment and exact-serving product certification remain open. This is only

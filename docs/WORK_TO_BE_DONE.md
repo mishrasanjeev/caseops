@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Generic Disclosure Replacement Pending
+
+**NO-GO.** 3987's correlated range still scans roughly10000 versions per key
+under generic planning; four complete failing selections retained. Replace
+range/order with every exact unique-key equality inside the barrier, then
+replay all four original profiles plus integrity journey and full final-source
+CI/Docker. Main, guarded deploy, full live15sD29, private cadences and both
+actual Excel final publications remain required. No App/Mac/0008 work.
+
 ## October 31 Disclosure Follow-Up Still Requires Full Release
 
 **NO-GO.** 9fd9 CI exposed two real later disclosure-work failures, not flaky

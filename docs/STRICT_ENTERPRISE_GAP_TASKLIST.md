@@ -1,5 +1,13 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Generic LIMIT Is Not A Physical Bound
+
+**Partially implemented / NO-GO.** Four3987 PostgreSQL failures independently
+show million-version generic work despite LIMIT1. Raw query/catalogue/settings
+now uploaded, not inferred. Exact complete unique-key predicates replace the
+range inside the correlated lookup. Keep original tuple/buffer budgets and
+all planner/profile/security assertions. Replacement/full release unverified.
+
 ## October 31 Later Hydration And Missing Raw Plans
 
 **Partially implemented / NO-GO.** 9fd9 PG1/PG4 disclose actual10001-row history

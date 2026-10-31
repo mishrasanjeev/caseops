@@ -1,5 +1,10 @@
 # CaseOps agent instructions
 
+- A parameterized LIMIT 1 does not tell a generic plan that only one row will
+  execute. A composite range plus partial-index incremental sort can read the
+  entire tenant per admitted key. Put every exact unique-key equality inside
+  the correlated lookup and prove physical work, not just output cardinality.
+
 - Page authorization is not a bound on later hydration. Reconcile family,
   docket, disclosure and source-document plans separately using actual binds
   under custom, generic and default planning. Exact composite seeks must reject
