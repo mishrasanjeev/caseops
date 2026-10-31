@@ -48335,11 +48335,8 @@ export interface components {
         TrademarkClassScope: {
             /** Class Number */
             class_number: number;
-            /**
-             * Nice Edition
-             * @default NCL 13-2026
-             */
-            nice_edition: string;
+            /** Nice Edition */
+            nice_edition?: string;
             /** Specification */
             specification: string;
         };

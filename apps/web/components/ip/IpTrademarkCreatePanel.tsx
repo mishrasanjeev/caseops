@@ -155,7 +155,8 @@ function MatterSelect({
         className={SELECT_CLASS}
         value={value}
         options={options}
-        disabled={matters.isPending || matters.isError}
+        // With nothing to choose the select would only offer "No Matter"; the status says why.
+        disabled={matters.isPending || matters.isError || options.length === 1}
         aria-invalid={error ? true : undefined}
         aria-describedby={[status ? statusId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined}
         onChange={(event) => {
