@@ -8713,6 +8713,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/working-calendars/{calendar_version_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Working Calendar Withdrawal */
+        post: operations["post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/workspace/configuration": {
         parameters: {
             query?: never;
@@ -27654,6 +27671,8 @@ export interface components {
             deadlines: components["schemas"]["IpDeadlineRecord"][];
             /** Docket Id */
             docket_id: string;
+            /** Eligible Responsible Membership Ids */
+            eligible_responsible_membership_ids?: string[];
             /** Eligible Rule Version Ids */
             eligible_rule_version_ids?: string[];
             /** Exceptions */
@@ -29339,11 +29358,11 @@ export interface components {
             /** Available */
             available: boolean;
             /** Code */
-            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing");
+            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing");
             /** Entitlement Key */
             entitlement_key: string;
             /** Reasons */
-            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
+            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
             /** Required Capability */
             required_capability: string;
             /** Rollout Flag */
@@ -30915,6 +30934,8 @@ export interface components {
             client_instruction_status: "pending" | "confirmed" | "not_required";
             /** Corrective Task Id */
             corrective_task_id: string | null;
+            /** Deadline Proposal Gaps */
+            deadline_proposal_gaps?: string[];
             /** Deadlines */
             deadlines: components["schemas"]["IpOppositionOpponentDeadlineRecord"][];
             /**
@@ -33832,6 +33853,8 @@ export interface components {
             open_deadline_count: number;
             /** Rule Version Id */
             rule_version_id: string;
+            /** Superseded Versions */
+            superseded_versions?: number[];
         };
         /** IpRuleTransitionRequest */
         IpRuleTransitionRequest: {
@@ -33893,9 +33916,9 @@ export interface components {
             /** Activated At */
             activated_at: string | null;
             /** Activation Blocked Reason */
-            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing") | null;
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing") | null;
             /** Activation Blocked Reasons */
-            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
             /**
              * Can Activate
              * @default false
@@ -35583,9 +35606,9 @@ export interface components {
         /** LegalCalendarVersionRecord */
         LegalCalendarVersionRecord: {
             /** Activation Blocked Reason */
-            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing") | null;
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing") | null;
             /** Activation Blocked Reasons */
-            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "fixtures_not_passing")[];
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
             /** Approved At */
             approved_at: string | null;
             /** Approver Label Snapshot */
@@ -35597,6 +35620,11 @@ export interface components {
              * @default false
              */
             can_activate: boolean;
+            /**
+             * Can Withdraw
+             * @default false
+             */
+            can_withdraw: boolean;
             /**
              * Created At
              * Format: date-time
@@ -35644,6 +35672,14 @@ export interface components {
             version: number;
             /** Weekend Days */
             weekend_days: number[];
+        };
+        /**
+         * LegalCalendarWithdrawalRequest
+         * @description The proposer withdraws its own candidate before anyone activates it.
+         */
+        LegalCalendarWithdrawalRequest: {
+            /** Reason */
+            reason: string;
         };
         /** LegalKnowledgeGraphEdgeRecord */
         LegalKnowledgeGraphEdgeRecord: {
@@ -67126,6 +67162,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LegalCalendarActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalCalendarVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalCalendarWithdrawalRequest"];
             };
         };
         responses: {
