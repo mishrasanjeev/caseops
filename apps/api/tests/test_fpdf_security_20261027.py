@@ -29,16 +29,16 @@ def test_fpdf_manifest_lock_and_installed_artifact_exclude_both_advisories():
     api = Path(__file__).resolve().parents[1]
     manifest = tomllib.loads((api / "pyproject.toml").read_text())
     lock = tomllib.loads((api / "uv.lock").read_text())
-    assert "fpdf2==2.8.8" in manifest["project"]["dependencies"]
+    assert "fpdf2==2.8.9" in manifest["project"]["dependencies"]
     rows = [row for row in lock["package"] if row["name"] == "fpdf2"]
-    assert len(rows) == 1 and rows[0]["version"] == "2.8.8"
+    assert len(rows) == 1 and rows[0]["version"] == "2.8.9"
     assert rows[0]["wheels"] == [{
         "url": rows[0]["wheels"][0]["url"],
-        "hash": "sha256:3557a478fc577a929c94aace9666aed4dcc432b5ab6764232e6a59f1ccd75f17",
-        "size": 337000,
+        "hash": "sha256:6e1d94af6d6311950a23dec7fb5fc84b000203eb59aee8e76c1e701b12a14976",
+        "size": 341268,
         "upload-time": rows[0]["wheels"][0]["upload-time"],
     }]
-    assert importlib.metadata.version("fpdf2") == "2.8.8"
+    assert importlib.metadata.version("fpdf2") == "2.8.9"
 
 
 def test_application_pdf_has_no_external_resource_access_and_keeps_svg_limits():

@@ -1,3 +1,5 @@
+Historical evidence: the current merged source pins fpdf2 2.8.9; see [the 2026-11-01 update](fpdf2-security-20261101.md). The dated 2.8.8 results below are retained unchanged.
+
 # fpdf2 2.8.8 API dependency remediation
 
 The retained 2.8.7 dependency audit is a failed security result. Upstream names

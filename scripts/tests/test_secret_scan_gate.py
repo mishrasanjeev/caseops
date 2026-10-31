@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -601,17 +602,29 @@ class CleanupTests(unittest.TestCase):
         self.remove_elapsed = 0.0
         self.inspect_elapsed = 0.0
         self.scan_error = None
+        self.create_error = None
+        self.create_elapsed = 0.0
+        self.create_result = (0, ("a" * 64 + "\n").encode(), b"")
         self.owner = None
 
     def fake_run(self, args, **kwargs):
         self.calls.append((list(args), dict(kwargs)))
         self.assertEqual(args[0], "docker")
-        if args[1] == "run":
+        if args[1] == "create":
             self.owner = args[args.index("--name") + 1]
             self.assertRegex(self.owner, r"^caseops-secret-[0-9a-f]{32}$")
             self.assertEqual(kwargs["timeout"], 1)
             self.assertEqual(args[args.index("--network") + 1], "none")
             self.assertEqual(args[args.index("--pull") + 1], "never")
+            self.assertIn(scan.GITLEAKS_IMAGE, args)
+            self.now += self.create_elapsed
+            if self.create_error:
+                raise self.create_error
+            return subprocess.CompletedProcess(args, *self.create_result)
+        if args[1] == "start":
+            self.assertEqual(args, ["docker", "start", "--attach", "a" * 64])
+            self.assertGreater(kwargs["timeout"], 0)
+            self.assertLessEqual(kwargs["timeout"], 1 - self.create_elapsed)
             if self.scan_error:
                 raise self.scan_error
             (self.workspace / "tree.sarif").write_text(
@@ -622,7 +635,9 @@ class CleanupTests(unittest.TestCase):
             )
         self.assertEqual(args[-1], self.owner)
         self.assertGreater(kwargs["timeout"], 0)
-        self.assertLessEqual(kwargs["timeout"], 30 - self.now)
+        self.assertLessEqual(
+            kwargs["timeout"], 30 - (self.now - self.create_elapsed)
+        )
         if args[1] == "rm":
             self.assertEqual(args, ["docker", "rm", "--force", self.owner])
             self.now += self.remove_elapsed
@@ -676,6 +691,129 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(inspections, [["docker", "inspect", self.owner]])
         self.assertTrue(result["cleanup_confirmed"])
         self.assertEqual(self.cleanup()["inspect_attempts"], 1)
+
+    def test_late_create_after_not_found_cannot_claim_cleanup(self):
+        pending = False
+        late_created = False
+        error = subprocess.TimeoutExpired("docker create", 1)
+
+        def late(args, **kwargs):
+            nonlocal pending, late_created
+            self.calls.append((list(args), dict(kwargs)))
+            if args[1] in ("run", "create"):
+                self.owner = args[args.index("--name") + 1]
+                pending = True
+                raise error
+            if args[1] == "rm":
+                self.assertTrue(pending)
+                return subprocess.CompletedProcess(args, 0, b"", b"")
+            self.assertEqual(args, ["docker", "inspect", self.owner])
+            # The daemon settles the in-flight create AFTER this absence snapshot.
+            self.assertTrue(pending)
+            pending = False
+            late_created = True
+            return subprocess.CompletedProcess(
+                args, 1, b"[]", f"Error: No such object: {self.owner}".encode()
+            )
+
+        with patch.object(self, "fake_run", side_effect=late):
+            with self.assertRaises(scan.ScanError) as caught:
+                self.boundary()
+        self.assertIs(caught.exception.__context__, error)
+        self.assertTrue(late_created)
+        self.assert_unconfirmed()
+        self.assertFalse(self.cleanup()["create_acknowledged"])
+        self.assertFalse(any(args[1] == "start" for args, _ in self.calls))
+
+    def test_start_requires_acknowledged_id_and_shares_original_deadline(self):
+        self.create_elapsed = 0.75
+        result = self.boundary()
+        self.assertEqual(
+            [args[1] for args, _ in self.calls], ["create", "start", "rm", "inspect"]
+        )
+        self.assertEqual(self.calls[1][1]["timeout"], 0.25)
+        self.assertTrue(result["cleanup_confirmed"])
+        self.assertEqual(self.cleanup()["container_id"], "a" * 64)
+        self.assertTrue(self.cleanup()["create_acknowledged"])
+
+    def test_create_consuming_scan_budget_cannot_start(self):
+        self.create_elapsed = 1.0
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.boundary()
+        self.assertFalse(any(args[1] == "start" for args, _ in self.calls))
+        self.assertTrue(self.cleanup()["create_acknowledged"])
+        self.assertTrue(self.cleanup()["cleanup_confirmed"])
+        self.assertFalse((self.output / "tree-receipt.json").exists())
+
+    def test_create_timeout_and_interruption_cannot_claim_settled_absence(self):
+        for error in (
+            subprocess.TimeoutExpired("docker create", 1),
+            KeyboardInterrupt(),
+        ):
+            with self.subTest(error=type(error).__name__):
+                self.create_error = error
+                self.calls.clear()
+                with self.assertRaisesRegex(scan.ScanError, "unacknowledged") as caught:
+                    self.boundary()
+                self.assertIs(caught.exception.__context__, error)
+                self.assertEqual(
+                    self.cleanup()["scan_error_type"], type(error).__name__
+                )
+                self.assertFalse(self.cleanup()["create_acknowledged"])
+                self.assert_unconfirmed()
+                self.assertFalse(any(args[1] == "start" for args, _ in self.calls))
+
+    def test_failed_or_malformed_create_acknowledgement_cannot_start(self):
+        for result in (
+            (1, ("a" * 64 + "\n").encode(), b"transport error"),
+            (0, b"", b""),
+            (0, b"not-an-id\n", b""),
+            (0, ("a" * 64 + "\n" + "b" * 64 + "\n").encode(), b""),
+        ):
+            with self.subTest(result=result):
+                self.create_result = result
+                self.calls.clear()
+                with self.assertRaisesRegex(scan.ScanError, "unacknowledged") as caught:
+                    self.boundary()
+                self.assertIsInstance(caught.exception.__context__, scan.ScanError)
+                self.assert_unconfirmed()
+                self.assertFalse(self.cleanup()["create_acknowledged"])
+                self.assertFalse(any(args[1] == "start" for args, _ in self.calls))
+
+    def test_late_start_cannot_recreate_acknowledged_removed_container(self):
+        original = self.fake_run
+        exists = False
+        pending_start = False
+        error = subprocess.TimeoutExpired("docker start", 1)
+
+        def late(args, **kwargs):
+            nonlocal exists, pending_start
+            if args[1] == "create":
+                result = original(args, **kwargs)
+                exists = True
+                return result
+            if args[1] == "start":
+                self.assertEqual(args[-1], "a" * 64)
+                self.assertTrue(exists)
+                pending_start = True
+                raise error
+            if args[1] == "rm":
+                exists = False
+            result = original(args, **kwargs)
+            if args[1] == "inspect":
+                self.assertTrue(pending_start)
+                self.assertFalse(exists)
+                pending_start = False
+            return result
+
+        with patch.object(self, "fake_run", side_effect=late):
+            with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                self.boundary()
+        self.assertIs(caught.exception, error)
+        self.assertFalse(exists)
+        self.assertFalse(pending_start)
+        self.assertTrue(self.cleanup()["cleanup_confirmed"])
+        self.assertEqual(sum(args[1] == "create" for args, _ in self.calls), 1)
 
     def test_delayed_removal_visibility_is_verified_before_claim(self):
         self.visibility = ["present", "present", "absent"]
@@ -770,7 +908,7 @@ class CleanupTests(unittest.TestCase):
         self.assertLess(inspections[1], inspections[0])
 
     def test_scan_timeout_is_preserved_after_verified_delayed_cleanup(self):
-        self.scan_error = subprocess.TimeoutExpired("docker run", 1)
+        self.scan_error = subprocess.TimeoutExpired("docker start", 1)
         self.visibility = ["present", "absent"]
         with self.assertRaises(subprocess.TimeoutExpired) as caught:
             self.boundary()
@@ -780,7 +918,7 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(self.cleanup()["scan_error_type"], "TimeoutExpired")
 
     def test_original_scan_timeout_retained_when_cleanup_cannot_finish(self):
-        self.scan_error = subprocess.TimeoutExpired("docker run", 1)
+        self.scan_error = subprocess.TimeoutExpired("docker start", 1)
         self.visibility = ["present"]
         self.inspect_elapsed = 15
         with self.assertRaises(scan.ScanError) as caught:
@@ -795,11 +933,23 @@ class FailureTests(GitFixture):
         super().setUp()
         self.write("record.txt", "changed\n")
         self.head = self.commit("changed")
+        self.creates = {}
 
     def fake_run(self, args, **kwargs):
         if args[0] != "docker":
             return REAL_RUN(args, **kwargs)
-        if args[1] == "run":
+        if args[1] == "create":
+            container_id = hashlib.sha256(
+                args[args.index("--name") + 1].encode()
+            ).hexdigest()
+            self.creates[container_id] = list(args)
+            return subprocess.CompletedProcess(
+                args, 0, (container_id + "\n").encode(), b""
+            )
+        if args[1] == "start":
+            created = self.creates[args[-1]]
+            self.assertEqual(args, ["docker", "start", "--attach", args[-1]])
+            args = created
             mount = args[args.index("--mount", args.index("--mount") + 1) + 1]
             workspace = Path(mount.split("source=", 1)[1].split(",target=", 1)[0])
             kind = "tree" if "dir" in args else "history"
@@ -836,7 +986,7 @@ class FailureTests(GitFixture):
     def test_scanner_failure_retains_report_without_completion(self):
         def failed(args, **kwargs):
             result = self.fake_run(args, **kwargs)
-            if args[:2] == ["docker", "run"]:
+            if args[:2] == ["docker", "start"]:
                 result.returncode = 2
             return result
 
@@ -851,7 +1001,7 @@ class FailureTests(GitFixture):
     def test_zero_scanner_bytes_is_not_success_even_with_nonempty_git_inventory(self):
         def zero(args, **kwargs):
             result = self.fake_run(args, **kwargs)
-            if args[:2] == ["docker", "run"]:
+            if args[:2] == ["docker", "start"]:
                 result.stdout = b"0 commits scanned.\nscanned ~0 bytes (0)"
             return result
 
@@ -870,7 +1020,7 @@ class FailureTests(GitFixture):
                 def interrupted(
                     args, _error=error, _cleanup_calls=cleanup_calls, **kwargs
                 ):
-                    if args[:2] == ["docker", "run"]:
+                    if args[:2] == ["docker", "start"]:
                         raise _error
                     if args[:2] == ["docker", "rm"]:
                         _cleanup_calls.append(args)
@@ -904,8 +1054,11 @@ class FailureTests(GitFixture):
     def test_malformed_or_missing_sarif_fails_closed(self):
         def malformed(args, **kwargs):
             result = self.fake_run(args, **kwargs)
-            if args[:2] == ["docker", "run"]:
-                mount = args[args.index("--mount", args.index("--mount") + 1) + 1]
+            if args[:2] == ["docker", "start"]:
+                created = self.creates[args[-1]]
+                mount = created[
+                    created.index("--mount", created.index("--mount") + 1) + 1
+                ]
                 workspace = Path(mount.split("source=", 1)[1].split(",target=", 1)[0])
                 (workspace / "tree.sarif").write_text("{}")
             return result
@@ -937,6 +1090,27 @@ class FailureTests(GitFixture):
         ):
             self.run_scan(self.head)
         self.assert_incomplete()
+
+    def test_unsettled_creation_records_failure_without_scan_completion(self):
+        original = self.fake_run
+        error = subprocess.TimeoutExpired("docker create", 1)
+
+        def unsettled(args, **kwargs):
+            if args[:2] == ["docker", "create"]:
+                raise error
+            self.assertNotEqual(args[:2], ["docker", "start"])
+            return original(args, **kwargs)
+
+        with patch.object(scan.subprocess, "run", side_effect=unsettled):
+            with self.assertRaisesRegex(scan.ScanError, "unacknowledged") as caught:
+                self.run_scan(self.head)
+        self.assertIs(caught.exception.__context__, error)
+        self.assert_incomplete()
+        cleanup = json.loads((self.root / "evidence/tree-cleanup.json").read_text())
+        self.assertFalse(cleanup["cleanup_confirmed"])
+        self.assertFalse(cleanup["create_acknowledged"])
+        self.assertEqual(cleanup["scan_error_type"], "TimeoutExpired")
+        self.assertFalse((self.root / "evidence/tree-receipt.json").exists())
 
 
 class RealGitleaksTests(GitFixture):
@@ -1405,6 +1579,25 @@ class HistoryProvenanceTests(GitFixture):
 
 
 class ProvenanceTests(GitFixture):
+    def cleanup_test_containers(self, names):
+        for name in names:
+            self.assertRegex(name, r"^caseops-secret-[0-9a-f]{32}$")
+            present = REAL_RUN(
+                ["docker", "inspect", name], capture_output=True, timeout=30
+            )
+            if present.returncode == 0:
+                REAL_RUN(
+                    ["docker", "rm", "--force", name],
+                    capture_output=True,
+                    timeout=30,
+                    check=True,
+                )
+            absence = REAL_RUN(
+                ["docker", "inspect", name], capture_output=True, timeout=30
+            )
+            self.assertEqual(absence.returncode, 1)
+            self.assertIn(f"no such object: {name}".encode(), absence.stderr.lower())
+
     def test_new_multiline_suffix_cannot_inherit_reviewed_start_line(self):
         self.write("record.txt", "old first line\nold second line\n")
         origin = self.commit("old span")
@@ -1462,9 +1655,13 @@ class ProvenanceTests(GitFixture):
         self.write("record.txt", "change\n")
         head = self.commit("change")
         names = []
+        acknowledged = []
+        timed_out = []
+        timeout_errors = []
+        self.addCleanup(self.cleanup_test_containers, names)
 
         def sleeping(args, **kwargs):
-            if args[:2] == ["docker", "run"]:
+            if args[:2] == ["docker", "create"]:
                 names.append(args[args.index("--name") + 1])
                 index = args.index(scan.GITLEAKS_IMAGE)
                 args = args[:index] + [
@@ -1474,14 +1671,56 @@ class ProvenanceTests(GitFixture):
                     "-c",
                     "sleep 30",
                 ]
+                result = REAL_RUN(args, **kwargs)
+                self.assertEqual(result.returncode, 0)
+                acknowledged.append(result.stdout.decode().strip())
+                (self.root / "evidence/timeout-create-ack.json").write_text(
+                    json.dumps(
+                        {
+                            "container": names[0],
+                            "container_id": acknowledged[0],
+                            "network": "none",
+                            "image": scan.GITLEAKS_IMAGE,
+                        }
+                    )
+                )
+                return result
+            if args[:2] == ["docker", "start"]:
+                self.assertEqual(
+                    args, ["docker", "start", "--attach", acknowledged[0]]
+                )
+                self.assertGreater(kwargs["timeout"], 0)
+                # Cap only the real attached client, within the remaining budget.
+                kwargs["timeout"] = min(kwargs["timeout"], 1)
+                self.assertLessEqual(kwargs["timeout"], 1)
+                try:
+                    return REAL_RUN(args, **kwargs)
+                except subprocess.TimeoutExpired as exc:
+                    timed_out.append(list(args))
+                    timeout_errors.append(exc)
+                    raise
             return REAL_RUN(args, **kwargs)
 
         with (
             patch.object(scan.subprocess, "run", side_effect=sleeping),
-            self.assertRaises(subprocess.TimeoutExpired),
+            self.assertRaises(subprocess.TimeoutExpired) as caught,
         ):
-            self.run_scan(head, timeout=1)
+            self.run_scan(head, timeout=10)
         self.assert_incomplete()
+        self.assertEqual(len(acknowledged), 1)
+        self.assertEqual(
+            timed_out, [["docker", "start", "--attach", acknowledged[0]]]
+        )
+        self.assertEqual(len(timeout_errors), 1)
+        self.assertIs(caught.exception, timeout_errors[0])
+        self.assertEqual(caught.exception.cmd, timed_out[0])
+        self.assertGreater(caught.exception.timeout, 0)
+        self.assertLessEqual(caught.exception.timeout, 1)
+        cleanup = json.loads((self.root / "evidence/tree-cleanup.json").read_text())
+        self.assertTrue(cleanup["create_acknowledged"])
+        self.assertEqual(cleanup["container_id"], acknowledged[0])
+        self.assertTrue(cleanup["cleanup_confirmed"])
+        self.assertEqual(cleanup["scan_error_type"], "TimeoutExpired")
         absence = REAL_RUN(
             ["docker", "inspect", names[0]], capture_output=True, timeout=30
         )
@@ -1492,13 +1731,14 @@ class ProvenanceTests(GitFixture):
         self.write("record.txt", "change\n")
         head = self.commit("change")
         names = []
+        acknowledged = []
+        self.addCleanup(self.cleanup_test_containers, names)
 
         def interrupted(args, **kwargs):
-            if args[:2] == ["docker", "run"]:
+            if args[:2] == ["docker", "create"]:
                 names.append(args[args.index("--name") + 1])
                 index = args.index(scan.GITLEAKS_IMAGE)
                 launch = args[:index] + [
-                    "--detach",
                     "--entrypoint",
                     "/bin/sh",
                     scan.GITLEAKS_IMAGE,
@@ -1507,6 +1747,18 @@ class ProvenanceTests(GitFixture):
                 ]
                 result = REAL_RUN(launch, capture_output=True, timeout=30)
                 self.assertEqual(result.returncode, 0)
+                acknowledged.append(result.stdout.decode().strip())
+                return result
+            if args[:2] == ["docker", "start"]:
+                self.assertEqual(
+                    args, ["docker", "start", "--attach", acknowledged[0]]
+                )
+                REAL_RUN(
+                    ["docker", "start", acknowledged[0]],
+                    capture_output=True,
+                    timeout=30,
+                    check=True,
+                )
                 state = REAL_RUN(
                     ["docker", "inspect", "--format", "{{json .State}}", names[0]],
                     capture_output=True,
@@ -1520,6 +1772,7 @@ class ProvenanceTests(GitFixture):
                     json.dumps(
                         {
                             "container": names[0],
+                            "container_id": acknowledged[0],
                             "pid": state["Pid"],
                             "running": state["Running"],
                             "started_at": state["StartedAt"],
@@ -1537,11 +1790,189 @@ class ProvenanceTests(GitFixture):
         ):
             self.run_scan(head)
         self.assert_incomplete()
+        cleanup = json.loads((self.root / "evidence/tree-cleanup.json").read_text())
+        self.assertTrue(cleanup["create_acknowledged"])
+        self.assertTrue(cleanup["cleanup_confirmed"])
+        self.assertEqual(cleanup["scan_error_type"], "KeyboardInterrupt")
         absence = REAL_RUN(
             ["docker", "inspect", names[0]], capture_output=True, timeout=30
         )
         self.assertNotEqual(absence.returncode, 0)
         self.assertIn(f"no such object: {names[0]}".encode(), absence.stderr.lower())
+
+    def test_real_lost_create_ack_is_cleaned_but_never_certified(self):
+        self.write("record.txt", "change\n")
+        head = self.commit("change")
+        names = []
+        self.addCleanup(self.cleanup_test_containers, names)
+        error = subprocess.TimeoutExpired("docker create", 1)
+
+        def lost(args, **kwargs):
+            if args[:2] == ["docker", "create"]:
+                names.append(args[args.index("--name") + 1])
+                result = REAL_RUN(args, **kwargs)
+                self.assertEqual(result.returncode, 0)
+                state = REAL_RUN(
+                    ["docker", "inspect", "--format", "{{json .State}}", names[0]],
+                    capture_output=True,
+                    timeout=30,
+                    check=True,
+                )
+                self.assertFalse(json.loads(state.stdout)["Running"])
+                (self.root / "evidence/unacknowledged-created-container.json").write_text(
+                    json.dumps(
+                        {
+                            "container": names[0],
+                            "container_id": result.stdout.decode().strip(),
+                            "running": False,
+                            "network": "none",
+                            "image": scan.GITLEAKS_IMAGE,
+                        }
+                    )
+                )
+                raise error
+            self.assertNotEqual(args[:2], ["docker", "start"])
+            return REAL_RUN(args, **kwargs)
+
+        with patch.object(scan.subprocess, "run", side_effect=lost):
+            with self.assertRaisesRegex(scan.ScanError, "unacknowledged") as caught:
+                self.run_scan(head)
+        self.assertIs(caught.exception.__context__, error)
+        self.assert_incomplete()
+        cleanup = json.loads((self.root / "evidence/tree-cleanup.json").read_text())
+        self.assertFalse(cleanup["cleanup_confirmed"])
+        self.assertFalse(cleanup["create_acknowledged"])
+        absence = REAL_RUN(
+            ["docker", "inspect", names[0]], capture_output=True, timeout=30
+        )
+        self.assertEqual(absence.returncode, 1)
+        self.assertIn(f"no such object: {names[0]}".encode(), absence.stderr.lower())
+
+
+class ReviewedHistoryPolicyTests(unittest.TestCase):
+    def reviewed_rows(self):
+        review = json.loads(
+            (ROOT / "docs/security/history-finding-review-2026-10-31.json").read_text()
+        )
+        rows = review["findings"]
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(len({row["fingerprint"] for row in rows}), 10)
+        policy = (ROOT / ".gitleaksignore").read_text()
+        start = "# 2026-10-31 scheduled all-refs:"
+        end = "# End 2026-10-31 review."
+        self.assertEqual(policy.count(start), 1)
+        self.assertEqual(policy.count(end), 1)
+        section = policy.split(start, 1)[1].split(end, 1)[0]
+        entries = {
+            line for line in section.splitlines() if line and not line.startswith("#")
+        }
+        self.assertEqual(entries, {row["fingerprint"] for row in rows})
+        for row in rows:
+            self.assertTrue(bool(re.fullmatch(
+                r"[0-9a-f]{40}:[A-Za-z0-9_./-]+:generic-api-key:[1-9][0-9]*",
+                row["fingerprint"],
+            )))
+            for field in ("blob_sha256", "span_sha256"):
+                self.assertTrue(bool(re.fullmatch(r"[0-9a-f]{64}", row[field])))
+        kinds = [row["kind"] for row in rows]
+        self.assertEqual(
+            {kind: kinds.count(kind) for kind in set(kinds)},
+            {"reviewed_file_checksum": 1, "certifi_bundle_checksum": 1,
+             "synthetic_receipt_kind": 1, "apk_public_key_digest": 6,
+             "rfc6238_public_test_vector": 1},
+        )
+        return rows
+
+    def assert_reachable_spans(self, rows, selected_commits):
+        blobs = {}
+        checked, not_selected = [], []
+        for row in rows:
+            commit, path, rule, number = row["fingerprint"].split(":")
+            if commit not in selected_commits:
+                not_selected.append(row["fingerprint"])
+                continue
+            key = commit + ":" + path
+            if key not in blobs:
+                blobs[key] = scan.git(ROOT, "show", key)
+            with self.subTest(fingerprint=row["fingerprint"]):
+                self.assertIsNotNone(re.fullmatch(r"[0-9a-f]{40}", commit))
+                self.assertEqual(rule, "generic-api-key")
+                blob = blobs[key]
+                self.assertLess(len(blob), 200_000)
+                self.assertEqual(hashlib.sha256(blob).hexdigest(), row["blob_sha256"])
+                span = blob.splitlines(keepends=True)[int(number) - 1]
+                self.assertEqual(hashlib.sha256(span).hexdigest(), row["span_sha256"])
+                text = blob.decode("utf-8")
+                line = span.decode("utf-8").strip()
+                if row["kind"] == "apk_public_key_digest":
+                    algorithm = row["algorithm"]
+                    length = {"SHA-256": 64, "SHA-1": 40, "MD5": 32}[algorithm]
+                    self.assertTrue(
+                        bool(
+                            re.fullmatch(
+                                r"V2 Signer: public key "
+                                + re.escape(algorithm)
+                                + r" digest: [a-f0-9]{"
+                                + str(length)
+                                + r"}",
+                                line,
+                            )
+                        ),
+                        "Reviewed line must remain a public-key fingerprint",
+                    )
+                    self.assertTrue("const SDK37_REPORT =" in text)
+                elif row["kind"] == "reviewed_file_checksum":
+                    self.assertTrue("const reviewedFiles =" in text)
+                    self.assertTrue("Object.entries(reviewedFiles)" in text)
+                    self.assertTrue(
+                        bool(re.search(r"""createHash\((['"])sha256\1\)""", text))
+                    )
+                elif row["kind"] == "certifi_bundle_checksum":
+                    self.assertTrue("CERTIFI_BYTES =" in text)
+                    self.assertTrue("sha(data) == CERTIFI_BYTES[key]" in text)
+                elif row["kind"] == "synthetic_receipt_kind":
+                    self.assertTrue("kind: plan.phase ===" in line)
+                    self.assertTrue("syntheticDataOnly: true" in text)
+                    self.assertTrue("fixture.v1.preparedOnly = true" in text)
+                else:
+                    self.assertEqual(row["kind"], "rfc6238_public_test_vector")
+                    value = re.fullmatch(r"const secret = '([A-Z2-7]+)';", line)
+                    self.assertTrue(
+                        bool(value), "Expected the reviewed public RFC test vector"
+                    )
+                    self.assertTrue(
+                        base64.b32decode(value.group(1)) == b"1234567890" * 2,
+                        "Reviewed seed must be the published RFC6238 vector",
+                    )
+                    self.assertTrue("assert.equal(totp(secret, 59000)" in text)
+                checked.append(row["fingerprint"])
+        return {"checked": checked, "not_selected": not_selected}
+
+    def test_october31_review_binds_exact_policy_and_selected_public_spans(self):
+        rows = self.reviewed_rows()
+        selected = set(scan.git(ROOT, "rev-list", "--all").decode().splitlines())
+        self.assertTrue(selected, "Review requires a nonempty all-refs inventory")
+        result = self.assert_reachable_spans(rows, selected)
+        self.assertEqual(len(result["checked"]) + len(result["not_selected"]), 10)
+        print("CASEOPS_HISTORY_REVIEW " + json.dumps({
+            "checked": len(result["checked"]),
+            "not_selected": len(result["not_selected"]),
+            "scope": "actual current all-refs selection; not-selected is not source verification",
+        }), flush=True)
+
+    def test_unselected_deleted_branch_origins_need_no_git_blob_retention(self):
+        rows = self.reviewed_rows()
+        with patch.object(scan, "git", side_effect=AssertionError("Unselected origin lookup")):
+            result = self.assert_reachable_spans(rows, set())
+        self.assertEqual(result["checked"], [])
+        self.assertEqual(len(result["not_selected"]), 10)
+
+    def test_missing_selected_origin_blob_remains_fail_closed(self):
+        rows = self.reviewed_rows()
+        selected = {rows[0]["fingerprint"].split(":")[0]}
+        with patch.object(scan, "git", side_effect=scan.ScanError("Missing selected blob")):
+            with self.assertRaisesRegex(scan.ScanError, "Missing selected blob"):
+                self.assert_reachable_spans(rows, selected)
 
 
 if __name__ == "__main__":

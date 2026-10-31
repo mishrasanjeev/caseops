@@ -332,8 +332,36 @@ def _generic_plan(connection, record, entry, *, index):
                     raise
 
 
-def _plans(records, *, directory, candidate_bound, audit_buffer_bound=None):
+def _plans(
+    records, *, directory, candidate_bound, nodeid, measurement=None, audit_buffer_bound=None,
+):
     problems = []
+    journal = os.environ.get("CASEOPS_TEST_RESULT_JOURNAL")
+    native = os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR")
+    root = Path(native) if native else Path(journal).parent if journal else directory
+    digest = hashlib.sha256(nodeid.encode()).hexdigest()[:16]
+    phase = (measurement or {}).get("phase")
+    assert phase in {None, "positive", "missing-owned-proof"}
+    suffix = f"-{phase}" if phase else ""
+    directory = root / "export-projection" / (digest + suffix)
+    directory.mkdir(parents=True, exist_ok=False)
+    header = {"nodeid": nodeid, "candidate_bound": candidate_bound,
+              "audit_buffer_bound": audit_buffer_bound, "measurement": measurement}
+    with (directory / "measurement.json").open("x", encoding="utf-8") as stream:
+        json.dump(header, stream, indent=2)
+    flat = root / f"export-projection-{digest}{suffix}.jsonl"
+    with flat.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "export_projection_measurement", **header}) + "\n")
+    with (directory / "plans.jsonl").open("x", encoding="utf-8"):
+        pass
+
+    def retain(entry):
+        line = json.dumps(entry, default=str) + "\n"
+        for path in (directory / "plans.jsonl", flat):
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(line)
+                stream.flush()
+
     profiles = {"default": [], "adverse": [], "generic": []}
     catalogs = {}
     sort_disabled_estimates = []
@@ -358,14 +386,18 @@ def _plans(records, *, directory, candidate_bound, audit_buffer_bound=None):
                     assert record["read_only"], record
                     entry = {**record, "profile": profile, "plan_state": "not_observed"}
                     plans.append(entry)
-                    if profile == "generic":
-                        plan = _generic_plan(connection, record, entry, index=index)
-                    else:
-                        plan = connection.exec_driver_sql(
-                            "EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON) " + sql,
-                            record["parameters"],
-                        ).scalar_one()
-                        entry.update(plan=plan, plan_state="observed")
+                    try:
+                        if profile == "generic":
+                            plan = _generic_plan(connection, record, entry, index=index)
+                        else:
+                            plan = connection.exec_driver_sql(
+                                "EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON) " + sql,
+                                record["parameters"],
+                            ).scalar_one()
+                            entry.update(plan=plan, plan_state="observed")
+                    except BaseException:
+                        retain(entry)
+                        raise
                     nodes = list(_nodes(plan[0]["Plan"]))
                     # Preserve the original relation-only oracle separately.
                     relation_work = sum(
@@ -394,6 +426,7 @@ def _plans(records, *, directory, candidate_bound, audit_buffer_bound=None):
                         "all_nodes_retained": len(nodes),
                         "bound_scope": "provenance; not a whole-query work guarantee",
                     }
+                    retain(entry)
                     if len(sql.encode()) > 65_536:
                         problems.append("SQL exceeds the existing 64KiB source-fact bound")
                     if any(sql.lower().count(f"from {table}") > 2
@@ -557,7 +590,7 @@ def test_minimal_page_preserves_dates_manual_clear_and_missing_provenance(
 
 
 def test_minimal_page_query_count_is_page_bounded_and_ignores_retained_history(
-    isolated_postgres_client, monkeypatch, tmp_path,
+    isolated_postgres_client, monkeypatch, tmp_path, request,
 ):
     # Literal counterexamples exercise the supplemental observer independently
     # of the real ordinary/adverse plans that follow.
@@ -628,7 +661,8 @@ def test_minimal_page_query_count_is_page_bounded_and_ignores_retained_history(
                 session, context=context, filters=filters, columns=["mark"], limit=51
             )
         assert len(marked) == 51 and len(mark_only) == 1
-        _plans(observed + continuation + mark_only, directory=tmp_path, candidate_bound=201)
+        _plans(observed + continuation + mark_only, directory=tmp_path,
+               candidate_bound=201, nodeid=request.node.nodeid)
 
 
 def test_rich_export_rows_and_cursor_equal_complete_public_rows_without_counts(
@@ -690,10 +724,38 @@ def test_manifest_and_page_reauthorize_restricted_rows_and_tenant_scope(
         ) == ([], None)
 
 
+@pytest.mark.parametrize("statistics", ["fresh", "analyzed"])
 def test_retained_width_date_category_projection_keeps_existing_work_bounds(
-    isolated_postgres_client, monkeypatch, tmp_path,
+    isolated_postgres_client, monkeypatch, tmp_path, request, statistics,
 ):
-    actor, prefix, target_ids = _retained_fixture(isolated_postgres_client, monkeypatch)
+    tables = (
+        "ip_docket_records", "ip_trademark_particular_versions", "audit_events",
+        "ip_import_rows", "trademark_applications", "ip_identifiers",
+        "ip_portfolio_renewal_series", "ip_portfolio_renewal_occurrences",
+        "notification_delivery_intents", "ip_renewal_terms", "ip_deadlines",
+    )
+    with get_engine().begin() as connection:
+        database = connection.exec_driver_sql("SELECT current_database()").scalar_one()
+        assert database.startswith("caseops_http_")
+        assert not database.startswith("caseops_http_template_")
+        # Control only this disposable fixture, never the shared template or server.
+        for table in tables:
+            connection.exec_driver_sql(f"ALTER TABLE {table} SET (autovacuum_enabled = false)")
+    actor, prefix, target_ids = _retained_fixture(
+        isolated_postgres_client, monkeypatch, target_last=True
+    )
+    with get_engine().begin() as connection:
+        assert connection.exec_driver_sql(
+            "SELECT count(*) FROM pg_stats WHERE schemaname = current_schema() "
+            "AND tablename IN ('audit_events', 'ip_import_rows')"
+        ).scalar_one() == 0
+        if statistics == "analyzed":
+            for table in tables:
+                connection.exec_driver_sql(f"ANALYZE {table}")
+            assert connection.exec_driver_sql(
+                "SELECT count(*) FROM pg_stats WHERE schemaname = current_schema() "
+                "AND tablename IN ('audit_events', 'ip_import_rows')"
+            ).scalar_one() > 0
     filters = IpPortfolioFilters(
         query=prefix, application_date_from=date(2020, 1, 1),
         application_date_to=date(2020, 12, 31), renewal_tracker_state=["missing"],
@@ -720,7 +782,10 @@ def test_retained_width_date_category_projection_keeps_existing_work_bounds(
                    and row.source_renewal_due_on is None for row in rows)
     # Each scoped selector reads policy once; only the page also hydrates dates.
     assert len(observed) == 5 and all(row["read_only"] for row in observed)
-    _plans(observed, directory=tmp_path, candidate_bound=53)
+    _plans(observed, directory=tmp_path, candidate_bound=53, nodeid=request.node.nodeid,
+           measurement={"statistics": statistics, "target_imported_last": True,
+                        "portfolio_width": 1345, "rows": len(rows),
+                        "elapsed_seconds": elapsed})
     assert elapsed < 10, f"Projection exceeded the existing visible 10s work budget: {elapsed}"
 
 
@@ -749,7 +814,7 @@ def test_export_projection_rejects_invalid_bounds_and_cursor(isolated_postgres_c
 
 
 def test_typed_proof_prefix_bounds_foreign_same_target_histories(
-    isolated_postgres_client, monkeypatch, tmp_path,
+    isolated_postgres_client, monkeypatch, tmp_path, request,
 ):
     client = isolated_postgres_client
     _assert_audit_buffer_counter_contract()
@@ -875,4 +940,5 @@ def test_typed_proof_prefix_bounds_foreign_same_target_histories(
             destination.mkdir()
             _plans(observed + continuation + mark_only,
                    directory=destination, candidate_bound=201,
-                   audit_buffer_bound=audit_buffer_bound)
+                   audit_buffer_bound=audit_buffer_bound, nodeid=request.node.nodeid,
+                   measurement={"phase": phase})

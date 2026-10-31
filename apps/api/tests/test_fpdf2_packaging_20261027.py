@@ -16,7 +16,7 @@ import unittest.mock as mock
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[3]
-VENDOR = ROOT / "apps/api/vendor/fpdf2-2.8.8"
+VENDOR = ROOT / "apps/api/vendor/fpdf2-2.8.9"
 SPEC = importlib.util.spec_from_file_location("caseops_fpdf2_package_verify", VENDOR / "verify.py")
 assert SPEC is not None and SPEC.loader is not None
 verify = importlib.util.module_from_spec(SPEC)
@@ -47,10 +47,10 @@ def ignored(relative, patterns):
 
 
 class Distribution:
-    def __init__(self, directory, *, version="2.8.8"):
+    def __init__(self, directory, *, version="2.8.9"):
         self.directory, self.version = directory, version
-        self.files = [PurePosixPath("fpdf2-2.8.8.dist-info/METADATA"),
-                      PurePosixPath("fpdf2-2.8.8.dist-info/licenses/LICENSE")]
+        self.files = [PurePosixPath("fpdf2-2.8.9.dist-info/METADATA"),
+                      PurePosixPath("fpdf2-2.8.9.dist-info/licenses/LICENSE")]
 
     def locate_file(self, entry):
         return self.directory / str(entry)
@@ -71,11 +71,11 @@ class Fpdf2Packaging(unittest.TestCase):
 
     def distribution(self):
         installed = self.root / "site-packages"
-        distinfo = installed / "fpdf2-2.8.8.dist-info"
+        distinfo = installed / "fpdf2-2.8.9.dist-info"
         (distinfo / "licenses").mkdir(parents=True)
-        archive = (self.bundle / "fpdf2-2.8.8.tar.gz").read_bytes()
+        archive = (self.bundle / "fpdf2-2.8.9.tar.gz").read_bytes()
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as source:
-            member = source.extractfile("fpdf2-2.8.8/PKG-INFO")
+            member = source.extractfile("fpdf2-2.8.9/PKG-INFO")
             assert member is not None
             with member:
                 (distinfo / "METADATA").write_bytes(member.read())
@@ -85,9 +85,9 @@ class Fpdf2Packaging(unittest.TestCase):
     def test_real_pinned_archive_and_all_notice_bytes_are_admitted(self):
         result = verify.validate_bundle(self.bundle)
         self.assertEqual(result, {
-            "name": "fpdf2", "version": "2.8.8", "licenseExpression": "LGPL-3.0-only",
+            "name": "fpdf2", "version": "2.8.9", "licenseExpression": "LGPL-3.0-only",
             "unmodifiedSourceSha256":
-                "9e94e155e85e8053329a9a1fce8b566fd7a7c5bb79e98a1a3952d379b947c5b9",
+                "5b0b3786f5236a2b3cc83c1fee567df17ddd314f8c4e13d820d8f09b617ab4f0",
             "bundleVerified": True,
         })
 
@@ -106,7 +106,7 @@ class Fpdf2Packaging(unittest.TestCase):
     def test_corrupted_installed_metadata_or_license_is_refused(self):
         distribution = self.distribution()
         for relative in ("METADATA", "licenses/LICENSE"):
-            file = distribution.directory / "fpdf2-2.8.8.dist-info" / relative
+            file = distribution.directory / "fpdf2-2.8.9.dist-info" / relative
             original = file.read_bytes()
             file.write_bytes(original[:-1] + b"!")
             with self.subTest(member=relative), self.assertRaisesRegex(
@@ -199,8 +199,8 @@ class Fpdf2Packaging(unittest.TestCase):
 
     def test_api_copy_context_and_dirty_fence_cover_the_complete_bundle(self):
         docker = (ROOT / "apps/api/Dockerfile").read_text()
-        copy = "COPY vendor/fpdf2-2.8.8 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8"
-        run = "python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8/verify.py --installed"
+        copy = "COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9"
+        run = "python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9/verify.py --installed"
         self.assertEqual(docker.splitlines().count(copy), 1)
         self.assertEqual(docker.count(run), 1)
         self.assertLess(docker.index(copy), docker.index("RUN uv export"))
@@ -210,7 +210,7 @@ class Fpdf2Packaging(unittest.TestCase):
             for file in VENDOR.iterdir():
                 if not file.is_file():
                     continue
-                relative = "vendor/fpdf2-2.8.8/" + file.name
+                relative = "vendor/fpdf2-2.8.9/" + file.name
                 self.assertFalse(ignored(relative, patterns), (name, relative))
                 self.assertTrue(ignored(relative, patterns + "\nvendor/\n"))
         deployment = (ROOT / "scripts/deploy-prod.sh").read_text()
@@ -219,9 +219,9 @@ class Fpdf2Packaging(unittest.TestCase):
         self.assertIn("git status --porcelain --untracked-files=all --", deployment)
         attributes = (ROOT / ".gitattributes").read_text().splitlines()
         for name in ("LICENSE", "COPYING.GPLv3", "NOTICE.txt", "provenance.json", "verify.py"):
-            self.assertIn("apps/api/vendor/fpdf2-2.8.8/" + name + " text eol=lf", attributes)
+            self.assertIn("apps/api/vendor/fpdf2-2.8.9/" + name + " text eol=lf", attributes)
             self.assertNotIn(b"\r\n", (VENDOR / name).read_bytes())
-        self.assertIn("apps/api/vendor/fpdf2-2.8.8/fpdf2-2.8.8.tar.gz -text", attributes)
+        self.assertIn("apps/api/vendor/fpdf2-2.8.9/fpdf2-2.8.9.tar.gz -text", attributes)
 
 
 if __name__ == "__main__":

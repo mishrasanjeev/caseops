@@ -28,7 +28,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException, status
-from sqlalchemy import JSON, and_, func, select, text, type_coerce
+from sqlalchemy import JSON, String, and_, column, func, select, text, type_coerce, values
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -69,7 +69,7 @@ from caseops_api.services.ip_import_files import (
     normalize_header,
     source_value,
 )
-from caseops_api.services.ip_operations import create_ip_docket
+from caseops_api.services.ip_operations import _create_ip_docket_record as create_ip_docket
 from caseops_api.services.ip_records import create_ip_asset, create_trademark_application
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
@@ -1282,6 +1282,57 @@ def _recover_materialized_docket(
     return docket
 
 
+def _preflight_materialized_dockets(
+    session: Session,
+    *,
+    context: SessionContext,
+    rows: list[IpImportRow],
+) -> dict[str, bool]:
+    """Read scalar recovery facts; the caller applies errors in source-row order."""
+
+    pending = [
+        (row.id, _import_docket_id(row.id))
+        for row in rows
+        if row.commit_status == "pending" and row.validation_status == "valid"
+    ]
+    if not pending:
+        return {}
+    candidates = values(
+        column("row_id", String(36)),
+        column("docket_id", String(36)),
+    ).data(pending).cte("ip_import_preflight_candidates")
+    matched_docket = (
+        select(IpDocketRecord.id)
+        .where(
+            IpDocketRecord.id == candidates.c.docket_id,
+            IpDocketRecord.company_id == context.company.id,
+        )
+        .correlate(candidates)
+        .limit(1)
+        .scalar_subquery()
+    )
+    # Scalar limited lookups retain candidate-bound seeks instead of allowing
+    # a join or hashed EXISTS to read the tenant's full docket/receipt history.
+    receipt = (
+        select(1)
+        .select_from(AuditEvent)
+        .where(
+            AuditEvent.company_id == context.company.id,
+            AuditEvent.action == IMPORT_MATERIALIZATION_ACTION,
+            AuditEvent.target_type == "ip_import_row",
+            AuditEvent.target_id == candidates.c.row_id,
+            AuditEvent.ip_docket_id == candidates.c.docket_id,
+        )
+        .correlate(candidates)
+        .limit(1)
+        .scalar_subquery()
+    )
+    statement = select(candidates.c.row_id, receipt.is_not(None)).where(
+        matched_docket.is_not(None)
+    )
+    return {row_id: proven for row_id, proven in session.execute(statement)}
+
+
 def _materialize_import_row(
     session: Session,
     *,
@@ -1487,18 +1538,23 @@ def _commit_ip_import_job_locked(
             },
         )
     defaults = _workspace_import_defaults(session, context=context)
+    materialized = (
+        _preflight_materialized_dockets(session, context=context, rows=staged_rows)
+        if job.idempotency_key
+        else {}
+    )
     for row in staged_rows:
         if row.commit_status != "pending" or row.validation_status != "valid":
             continue
-        if (
-            job.idempotency_key
-            and _recover_materialized_docket(
-                session,
-                context=context,
-                row_id=row.id,
-            )
-            is not None
-        ):
+        if row.id in materialized:
+            if not materialized[row.id]:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_import_materialization_provenance_missing",
+                        "message": "A reserved docket exists without matching import provenance.",
+                    },
+                )
             continue
         derived = {
             item["field"]
@@ -1515,6 +1571,7 @@ def _commit_ip_import_job_locked(
                     ),
                 },
             )
+    del materialized  # Never reuse preflight facts across the row writer's commits.
     if job.idempotency_key and job.idempotency_key != payload.idempotency_key:
         raise HTTPException(409, "Recover this import using its retained creator-authorized claim.")
 

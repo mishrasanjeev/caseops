@@ -1,5 +1,217 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 31 Actual Family And Mail Candidate Coverage
+
+Scheduled-history addition: J08/M08/J14/M14 now bind ten reviewed public
+historical spans to exact blob/span hashes and origin-only policy entries in
+the standard secret-scan regression inventory. A PR-range pass is not all-refs
+coverage. Actual full scanner/Docker/main/live proof remains pending; Docker37
+was reboot-interrupted after76fixturepasses, not a complete accepted release.
+
+IPLF-032/UJ-02/NFT-005/J14/M14 cover family hydration and exact fail-closed
+identity/access/lifecycle/source semantics. J19/M21/US-063 cover emulator lead-mail
+ownership, not new telemetry/leads or GSC activity. No new module or native/
+App/Mac/0008 acceptance; J04/M03/J08/M08 boundaries remain unchanged.
+
+1985 CI41149650760 failed14notification+1family-work roots/2aggregates. Actual
+API10 has1417identities/1311P/14F/92S; PG24 has150/450phases/149P/1F and a
+real custom hydration10033rows>100. Original/merge tree25ceee9 agrees. Independent
+Security41149650788/Advanced41149650680 are green, with17CodeQL annotations,
+9warnings/8notices/0failure. Strict161audit/0skips and244P/732 are components.
+
+Email exact ordered48=34P/14F is retained. Replacement107P/321 includes4PG
+mail races/39independently verified files; pure-owner8P/24. Actual expanded-map
+pure replacement20P/60/12verified files preserves8original scalar IDs within20.
+Initial7P/1fixtureF and interrupted49-role38complete/34P/4F/11unverified stay open
+as historical evidence, not passing execution. Full frozen61 inventory is known,
+but at03:44UTC only43P/0F (20pure+20SQLite/API+3PG) with18PG unverified. Later
+long setup is not a call failure or causal diagnosis.
+
+M2's two new standard-module identities are
+`test_patent_family_deleted_warm_identity_rejects_exact_seek_miss[with_successor]`
+and `[without_successor]`. Existing retarget/delete/revoke identities and all21PG
+cases remain. Intended expanded63=23PG+20SQLite/API+20pure is unexecuted here,
+not new collection proof. Versionless targets are negative fault injection;
+retained sibling evidence/roots/ACL and exact409 are required. SQLite warm-race
+parity remains a gap. Static no-findings cannot certify actual family work.
+
+See the dated lifecycle-admission brief. Docker28=3615P/2F of3617;29 incomplete
+61/3619;30 incomplete18/3619;0browser (640discovered only). NewALL-CI/full
+canonicalDocker31, guarded main/exact deployment/production originalD29 15s,
+post-QA clean private/guarded resume/distinct natural cadence and both original
+Excel updates are required. Interim08=36fixed/7partial/1inconclusive remains;
+onlyD29 may promote after prod. MainB994 is not new-source API/web; no deploy.
+External legal/calendar/provider/MFA holds and ACTIVE release-deferred SEO stay.
+Older sections below retain their original evidence, not newer-source acceptance.
+
+## October 31 Lifecycle And Ownership Coverage
+
+Existing J04/M03/J08/M08/J14/M14 and IPLF-032/UJ-02/NFT-005 boundaries remain.
+Actual new component191cases/573phases passes with0skips/retries: all122
+admission races,2 fenced PostgreSQL lifecycle cases,9 ownership and58 passive
+controls. The new modules are standard-discoverable. Full Docker28 at998A is
+separately3615P/2F/0S of3617,0browser executed; it is not replacement or live
+acceptance. Preserve original deadlines and all failure bytes. See the dated
+lifecycle-admission brief; final-head Docker/CI/main/production/cadence and
+both real workbook publications remain required before any closure.
+
+## October 30 Preflight And Observer Coverage
+
+Follow-up IPLF-032/UJ-02/NFT-005: complete135-case component132P/3physicalF,
+405 complete phases/0S. All58 observer/2multi-order/30finalizer/1,000-success/
+41workspace pass. Preserve the three real broad-plan failures; scalar limited
+lookup replacement and all52 semantic cases (four new NULL negatives) remain
+unverified. CI must retain nested exact plans/catalogs. Interim08 publication
+is proven, not production certification. Earlier partial numbers below remain
+historical and do not supersede this complete failed component.
+
+IPLF-032/UJ-02/NFT-005 maps IP-PF-01..09 to48 actual dual-database passes
+inside incomplete green02; original90s/1,000-materialization still pending.
+Three new default physical-plan cases are intended, not passed. Historical
+observer18 has9actual passes,9unexecuted; stopped ownership27 and original
+observer9 pass. The complete selection321 was interrupted at93/279phases,
+228unexecuted, not certified. Exact registered-callback and worker-status
+corrections require new execution. Existing J04/M03/J08/M08/J14/M14 and
+source/ACL/lifecycle contracts stay unchanged. Full canonical Docker/CI/main/
+production/cadence remain required; see the dated import/CI observer brief.
+
+## October 30 Compliance And Workspace Coverage
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map to CWF-01..41 in the dated
+attachment profile; all41pass in GREEN05 with five original variants,46cases/
+138phases/0F/0S/source unchanged. Earlier GREEN02 remains failed.
+OBS-01..09 and NTF-01..06 are standard-discoverable pure modules with15actual
+passes/45phases. REC-01..26 are standard-discoverable dual-database cases;
+all26pass within completed GREEN03, whose eight structured-query recorder
+failures remain retained (384P/8F,392cases/1176phases).
+Raw1000-row overlap and1001-row rejection are charged, not distinct-ID counts.
+Existing five PG freshness/query assertions tighten2/3to1/2, without changing
+authority or the original Company wait. Full new Docker/CI/main/live evidence
+remains required; see the compliance work brief. J19/M21/US-063 remains an
+ACTIVE release deferral, not a new GSC audit; App/Mac work is separate.
+
+## October 30 Scanner Acceptance Coverage
+
+Existing release/security isolation retains all75offline scanner identities.
+The known-created positive fixture now proves its exact real <=1s attached
+timeout after bounded acknowledged setup, without weakening total-budget or
+unknown-create controls. Local isolated Docker75P/0S/0F and source equality
+pass; this does not certify a new hosted scan or full release. See the dated
+scanner fixture brief; interrupted Docker25 remains incomplete.
+
+## October 30 Private Invalidation Coverage
+
+Existing private retrieval/IPLF-066, M02/M08/M13/M14, NFT-005 and tenant/access
+fences gain5streaming contracts and4SQLite/PG pre/post-flush rollback cases.
+The original10,001projection/10,000output case adds expired-output, retained
+prior-lock and untouched resident-row assertions without changing5s, one-UPDATE
+or18-SQL bounds. Full10-module component275P/825phases/0S/0F,167retained files;
+large invalidation1.8983929s. Row batches are not a global driver/database cap.
+Docker24 and its partial later group remain failed/incomplete evidence. See
+the dated allocation brief; no whole Docker, live, legal or native closure.
+
+## October 29 Shared Writer Security Inventory
+
+IPLF-032/UJ-02/UJ-57/NFT-005: current540E hosted CI failed two exact source
+contracts after the shared writer extraction; the aggregate failure is not a
+third test failure. Both capability and membership-before-parent assertions
+now inspect the canonical writer, without weakening either oracle. Full mixed
+Docker-PG component is10core/35transfer/5materialization=50P/150phases,0S/0F,
+13retained files verified. A later strengthened full-definition AST guard also
+pins the synchronous signature/defaults/decorators and exact forwarding; both
+original failing identities then pass2/2 with6phases and6retained files verified.
+The earlier body-only50-case result is not reassigned to the later test bytes.
+New full committed Docker/CI/main/production evidence remains required.
+
+## October 29 Web Fixture Cleanup Coverage
+
+NFT-005 and local-only QA/security isolation retain the original10s child and
+15s deadline-test bounds. Docker21 preflight is16P/2F over18process cases;
+the57remaining fixture and all main native/browser cases were unexecuted.
+The new cleanup control in ip-entitlement-fixture.test.ts proves actual close,
+owned-root/options, awaited removal, exhausted-error propagation and no child
+retry. All original18identities remain, plus that one control. Actual canonical
+replacement passes19process/51SQLite/6controller=76cases with0skip/retry/failure,
+all three owned phase trees reaped and source snapshots equal. Pinned Node22.14
+typecheck passes. This is a fixture role, not whole Docker or production proof.
+
+## October 29 Import Response Coverage
+
+IPLF-032/UJ-02/NFT-005 map IMP-MAT-01..04 to the discoverable
+test_ip_import_materialization_profile_20261029.py:5actual native cases prove
+zero bulk rich loads, complete public DTO, caller commit/rollback and real
+partial-row failure/replay. Baseline RED is4P/1F/15phases with27discarded
+SELECTs. Full seven-file mixed-dialect GREEN is5new/11bulk/4recovery/5seek/
+4parity/8export/9filing=46P/138phases,0S/0retry,37retained files verified.
+Collection-only XML is explicitly not execution. Original201-row deadlines
+and all prior export/source oracles remain unchanged. Docker20's437P/2F and
+unexecuted3070native/640browser inventory remain failed/incomplete evidence;
+full new release and live15second desktop/mobile CSV acceptance remain open.
+
+## October 29 First-Transaction Metadata Coverage
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map PML-01..06 to the discoverable
+test_matter_metadata_load_profile_20261029_postgres.py. Exact five-file inventory
+is6new/16response/32upload/122writer/30finalizer=206cases/618phases, all passed
+without skip/retry. Six bounded precommit receipts show3graph SELECTs versus
+the valid old-product14-query RED; complete DTO/current values, caller-owned
+transaction and later workspace assertions are retained. All177files/17long
+paths verify after a separately preserved Windows verifier failure. This is
+source-bound component evidence only, not full Docker or production acceptance.
+J19/M21/US-063 continues to record ACTIVE SEO deferral, not invented GSC data.
+
+## October 29 Full-Key Provenance Coverage
+
+IPLF-030B/037/UJ-04/IP15-018/NFT-005/SEC-003/004 map to the new
+test_ip_provenance_seek_20261029.py: two SQLite/PG full-predicate cases and three
+PostgreSQL fresh/stale-empty/analyzed work-bound cases. The full existing
+test_ip_provenance_proof_20261028.py and
+test_ip_portfolio_export_projection_20261026.py remain unchanged and are
+included completely:17cases/51phases, all passed, six actual plan receipts.
+The helper's final empty mark expression explicitly includes all three SQLite
+cases; collection/phase/JUnit identities agree. Old-product RED is2failed/
+1passed over3cases/9phases, not a passing gate. Record400/820 visits as local
+work evidence only. Full current Docker/CI/live browser and15second CSV proof
+remain pending. Daily SEO is still an ACTIVE release deferral, not a GSC audit.
+
+## October 29 Matter Response Acceptance
+
+J04/M03/US-007..009/FT-011..015/NFT-005 map to MRH-01..16 in the dated
+response-hydration brief. Preserve the complete MatterRecord contract and
+current authorization/lifecycle/assignment/private-source fences while bounding
+postcommit response work. The valid native RED observes13SELECTs; fresh GREEN
+passes16new plus30unchanged finalizer cases (46P/138phases), with all eleven
+positive response receipts showing3queries. Both retained/expiring sessions,
+separate-writer freshness, tenant denial, commitFalse ownership and subsequent
+same-session full workspace parity are covered.
+BFF's complete Docker17 remains3482P/1F/0S with0browserexecution; no whole-source
+acceptance, main merge, deployment or production closure is implied. J19/M21/
+US-063 records only the active daily automation's release deferral, not GSC data.
+
+## October 29 Administrator Race Evidence
+
+J14/M14/US-040/042/FT-060/061/PRA-10..12 retain the original native lock-edge,
+credential and lifecycle assertions. Post-join actor evidence now survives a
+body failure in accept/remove, reinvite, concurrent first-invite and reader/
+revocation-writer tests. Completed real hash/consume/issue spans are bounded
+diagnostics, never fake hashing or permission to extend a deadline. All 31
+pure evidence cases pass (93 phases), alongside both complete affected native
+files: 27 passes, 81 phases and nine matching call-section/JUnit payloads.
+Docker16's 2,612P/1F and two later original-source diagnostic passes do not
+establish a product cause or complete replacement acceptance. J19/M21/US-063
+records restored daily automation with release deferral, not a new GSC audit.
+
+## October 28 Security Evidence Replacement
+
+ARCH-OPS-23/QG-SEC-004/SEC-031 require independent exact-head CodeQL results,
+not merely successful analysis upload. The scanner cleanup boundary now needs
+acknowledged creation before immutable-ID start, original shared timeout and
+explicitly unconfirmed unknown creation. Eight additive tests retain all67
+existing scanner identities; isolated75/75 and75standardfixture component
+passes are distinct inventories, not150browser tests or release acceptance.
+Complete joined-source Docker/CI/main/exact-production gates remain pending.
+J19/M21/US-063 records an engineering deferral only, not a fresh search audit.
+
 ## October 26 Verification Isolation Coverage
 
 ARCH-OPS-23/QG-SEC-004/SEC-031 add VR561-01..05 across actual primary/adjacent

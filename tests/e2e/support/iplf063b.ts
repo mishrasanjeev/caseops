@@ -4,40 +4,13 @@ import path from "node:path";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./env";
+import { grantIpEntitlement, requireLocalIpFixtureTarget } from "./ip-entitlement-fixture";
 import { expectStatus } from "./iplf058b";
 
 export const INTELLIGENT_REVIEW_PASSWORD = "ReviewWorkflow2026!";
 
-function grantIpEntitlement(companyId: string): void {
-  const python = process.env.CASEOPS_E2E_PYTHON?.trim() ||
-    (process.platform === "win32"
-      ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
-      : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"));
-  const script = [
-    "import os",
-    "from caseops_api.db.models import BillingSubscription",
-    "from caseops_api.db.session import get_session_factory",
-    "session=get_session_factory()()",
-    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf_063b_playwright',externally_billable=False,entitlement_overrides_json={'ip_workspace': True}))",
-    "session.commit()",
-    "session.close()",
-  ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ...e2eEnv,
-      CASEOPS_E2E_COMPANY_ID: companyId,
-      PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH]
-        .filter(Boolean)
-        .join(path.delimiter),
-    },
-  });
-  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-}
-
 export async function bootstrapIntelligentReviewTenant(api: APIRequestContext) {
+  requireLocalIpFixtureTarget();
   const slug = `intelligent-review-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const email = `owner-${slug}@example.com`;
   const response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
@@ -52,7 +25,13 @@ export async function bootstrapIntelligentReviewTenant(api: APIRequestContext) {
   });
   await expectStatus(response, 200, "bootstrap intelligent-review tenant");
   const tenant = await response.json();
-  grantIpEntitlement(tenant.company.id);
+  await grantIpEntitlement({
+    company_id: tenant.company.id,
+    membership_id: tenant.membership.id,
+    user_id: tenant.user.id,
+    slug,
+    email,
+  });
   return { ...tenant, slug, email };
 }
 

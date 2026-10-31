@@ -55,6 +55,357 @@ A8; fresh APK, Simulator builds, both complete 83-case native inventories,
 image/runtime security, signed distribution and organization enrollment remain
 open. See [scoped observer evidence](mobile/SOURCE_OBSERVER_REPAIR_2026-10-29.md).
 
+## October 31 All-Refs Security Review: Release-Gated
+
+Partially implemented/NO-GO. Main's actual scheduled secret-scan failure was
+ten unreviewed historical spans, not infrastructure. All ten were inspected
+and identified as public checksums, test-report labels or the published OTP
+test seed; the dated security ledger pins each immutable blob/span. Candidate
+policy changes only exact origins and adds standard regression coverage.
+Require unchanged negative canaries, actual all-refs scan and fresh whole
+Docker/main/live evidence. Docker37 lacks completion after a workstation
+reboot; no Excel promotion or native-app acceptance follows from its76passes.
+
+## October 31 Cold Admission Remains Release-Gated
+
+**Partially implemented / NO-GO.** AB50 Docker31 stopped before product tests:
+document-worker imports exceeded the original offline 30-second startup bound.
+Move database/queue/provider imports behind validated admission. A mounted-file
+startup exits zero; fresh-process negative/enabled regressions and a complete
+fresh-image Docker/CI/live release are still required. No policy/budget waiver.
+See `bugfix-document-worker-production-2026-10-10.md` for retained evidence.
+
+## October 31 Generic LIMIT Is Not A Physical Bound
+
+**Partially implemented / NO-GO.** Four3987 PostgreSQL failures independently
+show million-version generic work despite LIMIT1. Raw query/catalogue/settings
+now uploaded, not inferred. Exact complete unique-key predicates replace the
+range inside the correlated lookup. Keep original tuple/buffer budgets and
+all planner/profile/security assertions. Replacement/full release unverified.
+
+## October 31 Later Hydration And Missing Raw Plans
+
+**Partially implemented / NO-GO.** 9fd9 PG1/PG4 disclose actual10001-row history
+scans and original block-bound failures. Replacing only family hydration was
+insufficient. Composite disclosure seeks retain exact tenant/version integrity;
+strict page work and four negative successor cases remain to be executed.
+Corrected raw-plan path uses the configured uploaded native directory. Require
+positive artifact presence and actual-bind/settings proof, not stdout alone.
+Full final-head Docker/CI/main/live/cadence/paired Excel gates remain separate.
+
+## October 31 Actual CI And Disjoint Candidate Boundaries
+
+**Partially implemented / NO-GO.** Actual1985 CI41149650760 has14notification
+and1family-work root failures plus2aggregates; API10=1311P/14F/92S of1417,
+PG24=149P/1F of150. The actual custom hydration reads10033family rows >100.
+Head/merge tree25ceee9 agrees. Independent Security41149650788/Advanced41149650680
+green retain17CodeQL annotations (9warnings/8notices/0failure), not zero findings
+or full-CI acceptance. Strict161audit/0skips and244P/732 remain offline components.
+
+Mail patch/cleanup ownership now has ordered48-case RED34P/14F and complete
+107P/321 phases including4PG mail races/39verified files, plus pure-owner8P/24.
+Pinned post-expanded execution-map recording has20P/60/12verified files. Keep
+the initial fixture/actual-map failures and interrupted49-role34P/4F/11unverified.
+The source-frozen61 gate is only43P/0F at03:44UTC, with18unverified. Long fresh
+setup is not a failed call or a proved cause. The parent retains gate ownership.
+
+M2's two new unexecuted PG deleted-key cases preserve original3identities and
+all21existingPG tests: expected63=23PG+20SQLite/API+20pure, not a verified run.
+Versionless targets are explicit negative fault injection, not legal-record
+acceptance; survivor evidence, exact tenant/ID,409, lifecycle and ACL fences stay.
+The 37-line runtime unique-key barrier was already projected; this sidecar adds
+no runtime/dependency change. Static no-findings is not physical-work proof.
+Ownership remains IPLF-032/UJ-02/NFT-005/J14/M14 and J19/M21/US-063 mail fixtures.
+See the dated lifecycle-admission brief; source M and native/App/Mac/0008 stay out.
+
+Docker28 failed3615P/2F;29 incomplete61/3619;30 incomplete18/3619;0browser.
+NewALL-CI green/full canonicalDocker31, guarded current-main/exact deployment,
+production originalD29 15s, post-QA clean private maintenance, guarded resume and
+distinct natural cadence plus both original Excel updates remain mandatory.
+Interim08 remains36fixed/7partial/1inconclusive; onlyD29 may promote after prod.
+MainB994 is not a new-source API/web release; no new deployment. External legal,
+old-calendar/unknown-Matter, provider/MFA holds and ACTIVE deferred SEO remain.
+Earlier evidence below is history, not a superseded failure erased by green.
+
+## October 31 Admission Lock Work And Diagnostic Ownership
+
+Security continuation remains Partially implemented/NO-GO until full release:
+targeted pyasn1 .6.4->.6.5, all other resolved versions unchanged, official wheel
+hash verified and161/161 strict OSV packages clean with zero skips. Imperative
+test work now lives outside assertions;244 offline cases/732phases pass. No
+audit/CodeQL rule waiver. Docker29 is explicitly interrupted61/3619complete,
+0browser, not a completed replacement; preserve both this and full Docker28.
+
+**Partially implemented / NO-GO.** Fresh998A Docker28 retained complete3617cases,
+3615P/2F/0S and10851phases; no browser gate ran. Hosted55success/2skipped checks
+does not override it. Separate lifecycle history hydration and sibling recorder/
+session ownership had been missed. Valid REDs and191/573 complete replacement
+component cover both fixes, original races and persistence with unchanged
+deadlines. No historical GC causal claim follows. Full final-head Docker/CI/
+security/main/live/D29/cadence and both original workbook publications remain
+required. See the October31 lifecycle-admission brief; no App/Mac/0008,
+legal-source, provider-consent, unknown-Matter or owner-MFA acceptance is implied.
+
+## October 30 Remaining Work And Test Boundaries
+
+Latest component completes135/405 at132P/3physical-planF/0S. One-query/no-ORM
+facts did not bound physical history work. Preserve the measured broad scans,
+original budgets and old failures; prove correlated scalar lookup replacement
+under all three statistics states and52 semantic cases. Retain nested plan
+artifacts in hosted CI. All original focused roles pass, but complete Docker,
+current CI/main/deploy/live/cadence remain required. Both original summaries are
+verified interim08. Earlier partial/unexecuted text below remains history.
+
+**Partially implemented / NO-GO.** Full D060 CI evidence is57terminalchecks,
+42success/12failure/3skips, with one independent product CodeQL error. New scalar
+import preflight removes an independently reproduced1,000reads/resume boundary
+without caching facts across row commits. Physical raw work still needs three
+default-statistics plans. Historical SELECT traversal and exact callback
+registration repair missed test consumers; worker failures now retain persisted
+outcome before downstream counts. Partial93/321 component is not replacement
+acceptance. See the dated import/CI observer brief. Full current Docker/hosted
+checks/main/exact production/private cadence and actual workbooks stay required;
+no blanket legal/provider/native/MFA acceptance follows.
+
+## October 30 Compliance Critical Work
+
+**Partially implemented / NO-GO pending complete replacement release.** A
+safe parent/participant fence still needs bounded work while held. Preserve
+two actual Company2s failures with83/104mutation-labelled SELECTs and no
+generation2GC; do not invent a GC/allocation cause. A separate stopped test
+recorder self-cycle has deterministic RED/9-case GREEN ownership proof.
+One fresh notification fence returns context and recipients, and the bounded
+recipient UNION preserves inactive/raw-union caps and duplicates. Full pure
+15/45 and all26dual-database recipient cases pass. GREEN03 remains failed
+384P/8recorder failures over392cases/1176phases. Its structured UNION observer
+is corrected without weakening budgets; GREEN05 passes41profile+5exact
+original variants,46cases/138phases,0F/0S/source unchanged. These are focused
+components, not complete Docker or production proof.
+All authorization, lifecycle, source, delivery and original timing checks
+remain. Complete Docker/current hosted security/main/exact-serving QA/cadence
+and actual workbook publication are open. See the dated compliance work brief;
+no blanket enterprise or App/Mac acceptance follows.
+
+## October 30 Security Fixture Stage Separation
+
+**Partially fixed / NO-GO pending new committed release gates.** E968's real
+unknown-create cleanup rejection is correct, while its positive one-second
+fixture failed before acknowledged creation. Bounded setup plus <=1s real
+attached-client transport now retains exact timeout/ID/absence assertions;
+all75local native Docker cases pass. No product/security deadline or unknown-
+ack fence changed. See bugfix-scanner-timeout-fixture-2026-10-30.md; full new
+Docker/CI/tree-history scanner/main/live acceptance remains mandatory.
+
+## October 30 Private Invalidation Allocations
+
+**Partially fixed / NO-GO pending full release.** A set-based UPDATE still
+buffered per-chunk ORM/source identities and failed its5s Docker24 lock budget.
+Narrow Core updates/batched metadata preserve atomic scope and output closure.
+Returned resident objects retain exact values plus nested rollback tracking;
+global database/driver memory is not claimed bounded. Full10-module mixed-
+dialect component passes275/275,825phases,167retained files; large invalidation
+1.8983929s. See bugfix-private-invalidation-allocations-2026-10-30.md. Preserve
+all RED/interrupted evidence; whole Docker/new CI/main/live/cadence gates and
+external holds remain unclosed.
+
+## October 29 Import Writer Work
+
+**Partially fixed / NO-GO pending full replacement release.** Reusing the
+canonical import writer also built a rich response discarded by its ID-only
+caller: controlled3row RED records27SELECTs. Shared private write logic now
+returns the ORM record; the public wrapper retains the original full response,
+authorization, locks, source events and commit behavior. All46affected cases/
+138phases pass, including public/caller-transaction/recovery controls and the
+unchanged201-row deadline cases. Full37file retention verifies. Docker20's
+actual437P/2F is not erased; its historical timing cause remains unproven.
+Diagnostic profile02 is explicitly INCOMPLETE, not green SQL evidence. Require
+complete new Docker/CI/main/exact-live/cadence and actual workbook publication.
+
+## October 29 Tenant Lock Work
+
+**Partially implemented / NO-GO pending replacement release.** Postcommit-only
+hydration did not bound the first transaction. Preserve Docker19's Company-wait
+failure and missing historical timings. Metadata alone now omits ten unrelated
+workspace collections under admission locks; the required fresh graph14->3 is
+measured by six bounded receipts. All206affected native cases/618phases pass,
+including unchanged original races, without weaker locks or larger budgets.
+Retained177files/17long paths reconcile independently after a preserved verifier
+failure. Complete fresh Docker/CI/main/exact-live/cadence evidence is still open;
+native MacBook, legal/provider and owner-consent dependencies remain separate.
+
+## October 29 Alternative Prefix Plan
+
+**Partially implemented / NO-GO pending full replacement release.** The earlier
+index repair covered the company/action competitor, not every physical path.
+13D CI selected the still-valid company-only index and repeatedly filtered406
+unrelated rows per candidate. Complete shard/native plans preserve81600>820;
+no timing, legal-data or host/GC explanation substitutes for that measurement.
+
+The exact-key seek retains both indexes and rechecks all five fields outside
+the bounded candidate. Local controlled fresh/stale RED and independently
+migrated full17-case cross-dialect GREEN establish400recorded visits for the
+same200-row proof, not a production latency guarantee. Existing semantic and
+export modules remain unchanged. Full current-source CI, Docker and guarded
+exact-serving production/cadence acceptance remain open. Preserve all prior
+failed/interrupted evidence and legal/provider/owner-consent gaps.
+
+## October 29 Committed Response Hydration
+
+**Partially implemented / NO-GO pending replacement release.** Complete BFF
+Docker17 contains3483nativecases/10449phases and one actual5second response
+completion failure; its640browsercases were not executed. Transaction evidence
+shows a successful write before slow postcommit work, not a proved deadlock.
+An explicit workspace loader profile is reapplied by refresh although both
+factories disable commit expiry. Ten queried collections are unused by this DTO.
+
+A tenant/ID-scoped, populate-existing response reload keeps only scalars,
+tags/tag and court orders. A valid13-query RED and fresh3-query GREEN retain
+complete structured evidence; all16new plus30unchanged original cases pass,
+including current-data replacement, full DTO parity, cross-tenant denial and
+caller-owned commitFalse work and a later complete same-session workspace read.
+Product/Oracle hashes and limitations are in
+the dated response-hydration brief. Do not shrink shared workspace/lifecycle
+contracts or cache mutable ACLs. Fresh whole-source Docker/CI, main routing,
+exact-serving browser and private cadence gates are still required. Existing
+provider, legal and owner-consent gaps remain open; no blanket enterprise GO.
+
+## October 29 Hosted Green Is Not Local Acceptance
+
+**NO-GO.** The historical `36a56e77` hosted CI, Security and independent
+CodeQL results are green, but Docker16 retains an unresolved invitation-race
+failure and an incomplete full inventory. The original failure is not erased
+by the later two-case diagnostic pass. Test-only joined-worker diagnostics now
+cover the affected administrator races without changing their security or
+deadline oracles. Focused support31/native27 pass with complete phase/JUnit
+evidence; these are not whole-release acceptance. Fresh current-source CI/results and complete canonical Docker
+remain required before merge and guarded production deployment. Read-only
+Cloud Run metadata at October 28 20:52 UTC still identifies API/web `f49b274e`.
+
+## October 28 Unsettled Scanner Creation Is Not Proven Cleanup
+
+**NO-GO pending joined-source gates.** Security40729502028 fails the real
+timeout cleanup test despite a positive cleanup receipt. A deterministic late
+create reproduces the false absence claim. Acknowledged create followed by
+immutable-ID start shares the existing deadline and cannot recreate a removed
+container; missing acknowledgement remains explicitly unconfirmed. Isolated
+proposal75/75 preserves all67 prior identities and adds8 regressions, including
+three actual Docker timeout/interruption/lost-ack boundaries. Source/head CI,
+independent CodeQL results, full Docker and exact production acceptance are
+still required. No waived audit, raised deadline or broader cleanup is allowed.
+Both real Excel summaries now carry INTERIM05/NO-GO, not a certified release.
+
+## October 28 Scan Workflow Success Is Not Results Acceptance
+
+**NO-GO.** 68C's CI/Security/CodeQL Advanced workflows succeeded, but independent
+CodeQL results122895415429 failed with two driver-initialization errors and four
+notes. Reporting workflow success as full security clearance was incomplete.
+The replacement makes initialization explicit, preserves uncaught interruption
+propagation plus incomplete evidence, and includes six new controller cases.
+All75 local standard fixture tests passed with matching inventories and phases;
+fresh independent results, full Docker, main and production gates remain open.
+Docker15's interrupted1887-call progress is retained, never a whole-release pass.
+No alert dismissal, policy waiver, timeout increase or mobile-owner edit occurred.
+
+## October 28 Outer CI Deadline Is Not Accepted Coverage
+
+**NO-GO.** DE333's16 PostgreSQL shards retain3483 passing cases/10449 phases,
+but shard15 was cancelled at12minutes and its aggregate failed closed. Keep
+that job outcome distinct from its successful pytest/upload steps. The proposed
+24-shard complete selection lowers per-job work without changing12minutes,
+concurrency4, exact-once inventory, phase/JUnit proof or product deadlines.
+Current-cost forecast384.334s maximum is not a new wall-clock measurement.
+Complete focused guards/launcher, fresh CI and full Docker replacement remain
+required. Docker14 was intentionally interrupted before source edits and retains
+its incomplete phases/fixtures; zero outer-shell exit is not release acceptance.
+
+## October 28 Completed Native Gate, Failed Browser Gate
+
+**NO-GO; browser replacement and production verification remain open.** The
+5df10f35 migration/index replacement now passes the full3483-case PostgreSQL
+inventory,10449phases,0failures/skips/retries, with complete source/identity
+reconciliation. CI40606343710, Security40606343777 and CodeQL40606343729 pass.
+Docker13 nevertheless ended after desktop shard1/2:308P/4F/5configured skips/
+2unexecuted of319;321other browser cases not run. These facts supersede the
+older8f8b/6cc/942 statuses below without erasing their original failures.
+
+Three patent journeys consumed substantial time in an unbounded synchronous
+entitlement fixture. Its scoped asynchronous replacement has18process and
+51SQLite/51PostgreSQL component cases passed. The actual integrated18/51gate
+also passes with source and owned-tree reconciliation; default CI/full Docker
+and application replay remain pending. Keep the separate module-loading
+failure open: neither the natural38.8s pass nor controlled directed-lock
+cancellation checks reproduce it. Reference
+`bugfix-ip-fixture-budget-2026-10-28.md` for ownership and closure boundaries.
+No shared authentication/session/lifecycle fence, legal record or paid-provider
+policy is weakened. MainB994 and routedF49 remain unchanged at12:21UTC.
+
+## October 28 Provenance Index Replacement
+
+**NO-GO; replacement unverified.** Current8f8b65d7 frontend05 passes1907/1907,
+Security40558115629 and CodeQL40558115576 pass, but CI40558115542 fails PG14:
+213passes/1failure,642 reconciled phases. The retained-width export returns
+the correct51 records using five reads, then fails its228-row provenance cap.
+The original CI plans are missing. A complete unchanged-source controlled
+fresh-statistics PostgreSQL17.11 reproduction has1484/1484/1377 visits in its
+three source-bearing plans, using company/action scans with25/26 filtered
+events per loop, not the hypothesized hashed alternative. The ten-second
+query assertion was not reached;554.414seconds includes fixture work and is
+not export latency. Docker09 was interrupted before stack/product tests.
+
+Add the exact provenance support index with restart-safe concurrent migration;
+retain every existing authorization/source predicate. Regress late target
+imports under fresh and analyzed statistics, unchanged query/SQL/work/latency
+bounds and independently retained plan journals. Full replacement gates,
+protected main/deployment, IP18 desktop/mobile acceptance and later cadence
+remain required. No workbook verdict or deployed SHA is upgraded here.
+
+## October 27 Exact Export Resource Readiness
+
+Additional current boundary: PR567 Security40548963348 failed only pip-audit
+for newly published dnspython CVE-2026-114605 and fpdf2 CVE-2026-114609/114610.
+Docker08 remains incomplete, cancelled before stack/product tests. Only the
+two dependency resolutions change to dnspython2.9.0/fpdf2 2.8.9, with patched
+manifest floors and offline regression; a fresh candidate must pass security
+and all release gates. Other successful jobs cannot override this failure.
+
+**Partially implemented; production release NO-GO.** IPLF-030B/037, UJ-04,
+J08/M08, NFT-005 and SEC-003/004 map to EXW-MD01..07 in the
+[metadata-readiness brief](bugfix-export-resource-readiness-2026-10-27.md).
+gcloud list filter+limit2 falsely reported the enabled Cloud Tasks API absent;
+the secret-list lookup had the adjacent risk. The local helper now uses exact
+owned ServiceUsage GET and Secret Manager name-only GET, verifies project and
+resource identity/state, and accepts secret absence only from bounded typed
+HTTP404/NOT_FOUND. Denials/malformed metadata remain fail-closed. Canonical-main,
+runtime, resource IAM/etag preservation and no-rotation/no-secret-payload fences
+remain; diagnostics expose only allowlisted phases, not cloud exception text.
+
+Evidence directory: `outputs/fix-561-20261026/portfolio-export-worker` under the
+primary workspace (called E2 below). Retained `E2/serviceusage-red-01.jsonl`
+has2 failed cases/6 phases/exit1;
+`serviceusage-green-03.jsonl` has142 passed cases/426 phases/exit0, including the
+earlier missing identity, typed404/denial and scope negatives. Green02's Windows
+PYTEST_CURRENT_TEST oversized-ID setup/teardown failure and complete receipts
+remain preserved. Bounded replacement IDs do not reduce the payload test size.
+These are local uncommitted-helper results, not new full-source or deployed proof.
+
+B994 built/migrated/seeded and reconciled12 runtime jobs, then stopped16:06UTC
+before API routing at API-enablement readback. Cloud Tasks was actually ENABLED;
+no owned queue or dedicated worker secret was created. F49 still serves and b994
+is uncertified. The canonical three business cadences were restored17:09UTC in
+`E2/business-cadences-restore-b994-stop-02/completion.json`; private cadence and
+unreleased export recovery remain held. Future closure must bind the actual new
+accepted main/tree and canonical Docker/CI/deploy/production/cadence receipts,
+not assume old tree89e or add an ad-hoc closure helper as a release gate.
+
+Adjacent static risks remain separate follow-ups: the optional QA manual-grant
+helper's filtered job-list limit2 can skip its existing-execution inventory on
+an empty result; deploy-prod's latest50 run list filters active status afterward
+and can miss an older unfinished run. Cloud Run CLI ordering/current overlap
+were not reproduced by this read-only audit. Neither is proof those paths ran
+in the stopped deploy. No original workbook or unrelated verdict is upgraded;
+legal/source, owner MFA, Ram external cleanup, native, unidentified reopening
+and provider/mail UNKNOWN holds remain unchanged.
+
 ## October 26 Portfolio Export Execution #564
 
 NO-GO for whole-release closure at f49b274e. Exact QA40323857026's IP18 1280px

@@ -39,10 +39,17 @@ material is not evidence that the material exists, belongs to the publisher,
 has an accessible private key, or can sign the requested app. Synthetic mode
 exists only for bounded offline contract fixtures and cannot enable execution.
 
-This is useful reviewable preparation, not a production build runner. In
-particular, command executable aliases must be resolved to the accepted exact
-tools and hashes by the eventual guarded runner. Do not copy a plan into an
-unreviewed shell or treat the absence of a compiler run as a successful archive.
+The plan-only CLI remains reviewable preparation. The current source also
+implements a separate guarded local execution entry point,
+[`run-store-packaging.mjs`](../../scripts/mobile/run-store-packaging.mjs), with
+an explicit `--execute` request and reviewed GO. Its
+[`store-packaging-execution.mjs`](../../scripts/mobile/store-packaging-execution.mjs)
+consumer checks the complete current gate inventory, exact tools and source,
+actual store-history inputs, signing admission and artifact postflight. This
+implemented path does not establish that a real distribution-signed IPA or AAB
+has been built or verified. Those artifacts and store acceptance remain
+unverified; do not copy a plan into an unreviewed shell or treat an unexecuted
+compiler/archive command as a successful release.
 
 ## Immutable build numbering
 
@@ -149,7 +156,7 @@ unverified until a reviewed build can run with real inputs.
    rebuilds/inventories. The20th tooling module, production metadata fixtures
    and isolated native-build fixture closure are now included. The isolated
   21-test result and earlier18-test provisional result remain historical;
-   neither certifies the integrated candidate or an executable signing runner.
+   neither certifies the integrated candidate or an actual distribution-signed artifact.
 2. Complete all required security gates, independently reconcile real version
    history, reserve both numbers once, and verify clean full source/dependency
    closure and exact accepted tools before signing-secret access.

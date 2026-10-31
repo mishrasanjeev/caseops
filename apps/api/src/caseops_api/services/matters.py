@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, lazyload, raiseload, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -1492,6 +1492,7 @@ def _lock_matter_assignment_fence(
     required_capability: str,
     team_ids_to_lock: set[str | None] | None = None,
     commit_access_denial: bool = True,
+    load_locked_children: bool = True,
 ) -> tuple[Matter, dict[str, CompanyMembership], list[IpDocketRecord]]:
     """Lock principals, Matter, and active linked dockets in canonical order."""
 
@@ -1536,6 +1537,7 @@ def _lock_matter_assignment_fence(
         matter_id=matter_id,
         lock_for_update=True,
         commit_access_denial=commit_access_denial,
+        load_locked_children=load_locked_children,
     )
     current_roles = _matter_role_snapshot_from_model(matter)
     if current_roles != matter_roles:
@@ -1868,6 +1870,7 @@ def _get_matter_model(
     lock_for_share: bool = False,
     commit_access_denial: bool = True,
     load_locked_children: bool = True,
+    refresh_existing: bool = False,
 ) -> Matter:
     if lock_for_update and lock_for_share:
         raise ValueError("Matter lock cannot be both exclusive and shared.")
@@ -1884,6 +1887,7 @@ def _get_matter_model(
             select(Matter)
             .options(*(_matter_loader_options() if load_locked_children else ()))
             .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+            .execution_options(populate_existing=refresh_existing)
         )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
@@ -2736,7 +2740,21 @@ def update_matter(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
         team_ids_to_lock={matter_roles.team_id, resulting_team_id},
         commit_access_denial=commit_access_denial,
+        load_locked_children=False,
     )
+    # Metadata responses do not need the workspace graph under the tenant lock.
+    matter = session.scalar(
+        select(Matter)
+        .options(
+            raiseload("*"),
+            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+            selectinload(Matter.court_orders),
+        )
+        .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+        .execution_options(populate_existing=True)
+    )
+    if matter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     if (
         team_access_changing
         and _linked_docket_role_snapshot(
@@ -3134,8 +3152,25 @@ def update_matter(
             metadata={"before": forum_before, "after": forum_after},
         )
     if commit:
+        # Reload the response graph without replaying the workspace's eager loaders.
+        response_matter_id = matter.id
+        response_company_id = context.company.id
         session.commit()
-        session.refresh(matter)
+        matter = session.scalar(
+            select(Matter)
+            .options(
+                raiseload("*"),
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(
+                Matter.id == response_matter_id,
+                Matter.company_id == response_company_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if matter is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     else:
         session.flush()
     return _matter_record(matter)
@@ -3457,11 +3492,14 @@ def transition_matter_lifecycle_status(
         context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["transition_matter_lifecycle_status"],
     )
+    # Operational children are neutralized below; workspace history is not
+    # needed while the tenant, actor and lifecycle locks are held.
     matter = _get_matter_model(
         session,
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     current_status = _status_value(matter.status)
     expected_status = _status_value(payload.expected_from_status)
@@ -3657,13 +3695,23 @@ def get_matter_workspace(
     context: SessionContext,
     matter_id: str,
 ) -> MatterWorkspaceResponse:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    # Refresh retained reads without discarding the caller's unflushed work.
+    refresh_existing = False
+    if not session.new and not session.dirty and not session.deleted:
+        refresh_existing = True
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        refresh_existing=refresh_existing,
+    )
     memberships = list(
         session.scalars(
             select(CompanyMembership)
             .options(joinedload(CompanyMembership.user))
             .where(CompanyMembership.company_id == context.company.id)
             .order_by(CompanyMembership.created_at.asc())
+            .execution_options(populate_existing=refresh_existing)
         )
     )
     available_assignees = [
@@ -6067,6 +6115,7 @@ def update_matter_attachment_metadata(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="update attachment metadata")
     attachment = session.scalar(
@@ -6074,11 +6123,13 @@ def update_matter_attachment_metadata(
         .options(
             joinedload(MatterAttachment.uploaded_by_membership).joinedload(CompanyMembership.user),
             joinedload(MatterAttachment.linked_court_order),
+            lazyload(MatterAttachment.chunks),
         )
         .where(
             MatterAttachment.id == attachment_id,
             MatterAttachment.matter_id == matter.id,
         )
+        .execution_options(populate_existing=True)
     )
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")

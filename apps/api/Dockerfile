@@ -48,7 +48,7 @@ COPY vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl ./vendor/
 COPY vendor/fastembed-0.8.0-1caseops1.json ./vendor/
 # API-only LGPL notices and the exact unmodified corresponding source archive.
 # The web/mobile JavaScript notice and exception inventories are separate.
-COPY vendor/fpdf2-2.8.8 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8
+COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9
 # The official dnspython 2.9.0 archives omit their tagged ISC notice.
 COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0
 
@@ -70,7 +70,7 @@ RUN uv export \
       --output-file /app/pylock.toml \
   && uv pip install --system --requirements /app/pylock.toml \
   && rm /app/pylock.toml \
-  && python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.8/verify.py --installed \
+  && python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9/verify.py --installed \
   && python -m compileall -q --invalidation-mode checked-hash /usr/local/lib/python3.13/site-packages
 
 # Voyage token counting uses Hugging Face's tokenizer cache before every

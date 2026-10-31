@@ -74,6 +74,8 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
         "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
         "apps/api/postgres-shard-${{ matrix.shard }}-readthrough/",
         "apps/api/postgres-shard-${{ matrix.shard }}-query-plans/",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl",
     ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
@@ -194,7 +196,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     assert json.loads(result.stdout) == summary
 
 
-@pytest.mark.parametrize("total", [4, 8, 16, 32])
+@pytest.mark.parametrize("total", [4, 8, 16, 24, 32])
 def test_postgres_partition_is_complete_disjoint_and_order_independent(total):
     nodes = [f"tests/test_example.py::test_item[{index}]" for index in range(2301)]
     selections = [partition(nodes, shard, total) for shard in range(1, total + 1)]
@@ -229,7 +231,7 @@ def test_postgres_partition_rejects_incomplete_or_invalid_selections(nodes, shar
 @pytest.mark.parametrize(
     "fault", [None, "missing", "drift", "skipped", "failure", "error", "wrong-node"]
 )
-@pytest.mark.parametrize("total", [4, 8, 16, 32])
+@pytest.mark.parametrize("total", [4, 8, 16, 24, 32])
 def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, total):
     nodes = [f"tests/test_example.py::TestCases::test_item[{index}]" for index in range(64)]
     for shard in range(1, total + 1):

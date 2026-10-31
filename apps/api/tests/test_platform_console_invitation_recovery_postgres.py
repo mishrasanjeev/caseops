@@ -1,5 +1,4 @@
 """PRA-10..12 native lock/transport races on independent PostgreSQL fixtures."""
-from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import httpx
@@ -24,6 +23,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_engine, get_session_factory
 from caseops_api.services import platform_console as console
 from tests import test_platform_console as old
+from tests.platform_race_evidence import JoinedActorPool
 from tests.test_platform_console import report_console as report_console
 from tests.test_platform_console_postgres import _wait_for_edge
 
@@ -84,7 +84,7 @@ def test_independent_live_invitation_issuer_is_not_admissible(
 
 @pytest.mark.parametrize("first", ["accept", "remove"])
 def test_old_invitation_accept_and_remove_have_one_serial_order(
-    report_console, monkeypatch, record_property, first
+    report_console, monkeypatch, record_property, first, request
 ):
     data = report_console
     old._manager(data)
@@ -125,11 +125,14 @@ def test_old_invitation_accept_and_remove_have_one_serial_order(
                 return exc.status_code
 
     second = "remove" if first == "accept" else "accept"
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(operation, first)
+    with monkeypatch.context() as stage_patch, JoinedActorPool(
+        request, record_property, actors=(first, second)
+    ) as pool:
+        pool.time_stages(stage_patch, console)
+        a = pool.submit_actor(first, operation, first)
         try:
             assert reached.wait(3)
-            b = pool.submit(operation, second)
+            b = pool.submit_actor(second, operation, second)
             deadline = Event()
             # The helper observes the actual PostgreSQL blocker, not elapsed time.
             for _ in range(100):
@@ -149,7 +152,9 @@ def test_old_invitation_accept_and_remove_have_one_serial_order(
 
 
 @pytest.mark.parametrize("second", ["remove", "old_accept"])
-def test_reinvite_fences_old_admission_after_actual_lock_wait(report_console, monkeypatch, second):
+def test_reinvite_fences_old_admission_after_actual_lock_wait(
+    report_console, monkeypatch, second, request, record_property
+):
     data = report_console
     old._manager(data)
     record = old._invite(data)
@@ -199,11 +204,11 @@ def test_reinvite_fences_old_admission_after_actual_lock_wait(report_console, mo
         finally:
             reset_automated_test_request(marker)
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(operation, "reinvite")
+    with JoinedActorPool(request, record_property, actors=("reinvite", second)) as pool:
+        a = pool.submit_actor("reinvite", operation, "reinvite")
         try:
             assert reached.wait(3)
-            b = pool.submit(operation, second)
+            b = pool.submit_actor(second, operation, second)
             assert waiting.wait(1)
             _wait_for_edge(get_engine(), pids["reinvite"], pids[second], b)
         finally:
@@ -262,7 +267,7 @@ def test_actor_revocation_during_transport_cannot_authorize_reinvite(
 
 @pytest.mark.parametrize("existing_user", [False, True])
 def test_first_invites_serialize_on_authorized_issuer_without_duplicate_user_or_grant(
-    report_console, monkeypatch, existing_user
+    report_console, monkeypatch, existing_user, request, record_property
 ):
     data = report_console
     old._manager(data)
@@ -303,11 +308,14 @@ def test_first_invites_serialize_on_authorized_issuer_without_duplicate_user_or_
         finally:
             reset_automated_test_request(marker)
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(invite, 1)
+    with monkeypatch.context() as stage_patch, JoinedActorPool(
+        request, record_property, actors=("invite_first", "invite_second")
+    ) as pool:
+        pool.time_stages(stage_patch, console)
+        a = pool.submit_actor("invite_first", invite, 1)
         try:
             assert reached.wait(3)
-            b = pool.submit(invite, 2)
+            b = pool.submit_actor("invite_second", invite, 2)
             assert waiting.wait(1)
             _wait_for_edge(get_engine(), pids[1], pids[2], b)
         finally:

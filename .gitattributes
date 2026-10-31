@@ -146,3 +146,11 @@ scripts/mobile/android-observer-manifest*.py text eol=lf
 
 # Preserve the byte-exact vendored license buffer, including its final blank line.
 /apps/mobile/vendor/glob-14.0.2-caseops.1/BUNDLED-LICENSES.txt whitespace=-blank-at-eof
+
+# Current API fpdf2 2.8.9 attribution retains exact upstream bytes.
+apps/api/vendor/fpdf2-2.8.9/LICENSE text eol=lf
+apps/api/vendor/fpdf2-2.8.9/COPYING.GPLv3 text eol=lf
+apps/api/vendor/fpdf2-2.8.9/NOTICE.txt text eol=lf
+apps/api/vendor/fpdf2-2.8.9/provenance.json text eol=lf
+apps/api/vendor/fpdf2-2.8.9/verify.py text eol=lf
+apps/api/vendor/fpdf2-2.8.9/fpdf2-2.8.9.tar.gz -text

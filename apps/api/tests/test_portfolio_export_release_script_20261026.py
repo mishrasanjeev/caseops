@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import importlib
+import io
 import json
 import subprocess
 from pathlib import Path
@@ -16,6 +17,199 @@ ROOT = Path(__file__).resolve().parents[3]
 SHA = "a" * 40
 REVISION = "caseops-api-01234-test"
 NUMBER = "123456789012"
+
+
+@pytest.mark.parametrize("kind", ["api", "secret"])
+def test_exact_metadata_does_not_confuse_cli_limit_with_absence(harness, monkeypatch, kind):
+    h = harness
+    h.release.project_number = NUMBER
+    # The real CLI's two-row limit can precede its client-side identity filter.
+    original_call = h.release._call
+
+    def truncated_cli(args, **kwargs):
+        if args[:2] in (["services", "list"], ["secrets", "list"]):
+            return []
+        return original_call(args, **kwargs)
+
+    monkeypatch.setattr(h.release, "_call", truncated_cli)
+    reads = []
+
+    def metadata(api, path, **kwargs):
+        reads.append((api, path, kwargs))
+        if kind == "api":
+            return {
+                "name": f"projects/{NUMBER}/services/cloudtasks.googleapis.com",
+                "config": {"name": "cloudtasks.googleapis.com"},
+                "state": "ENABLED",
+            }
+        return {"name": f"projects/{NUMBER}/secrets/{h.module.SECRET}"}
+
+    monkeypatch.setattr(h.release, "_rest", metadata)
+    getter = h.release._api_enabled if kind == "api" else h.release._secret_exists
+    assert getter() is True, (
+        "An exact positive resource must not become absent through a truncated CLI list"
+    )
+    assert len(reads) == 1
+    assert not h.state["mutations"]
+
+
+@pytest.mark.parametrize("kind", ["api", "secret"])
+@pytest.mark.parametrize("number", ["", "foreign", "123", "1" * 21])
+def test_exact_metadata_requires_validated_project_number(harness, kind, number):
+    h = harness
+    h.release.project_number = number
+    getter = h.release._api_enabled if kind == "api" else h.release._secret_exists
+    with pytest.raises(h.module.Error, match="project identity"):
+        getter()
+    assert not h.state["requests"] and not h.state["events"]
+
+
+@pytest.mark.parametrize("state", ["ENABLED", "DISABLED"])
+def test_service_usage_exact_metadata_state(harness, state):
+    h = harness
+    h.release.project_number = NUMBER
+    h.state["api_enabled"] = state == "ENABLED"
+    assert h.release._api_enabled() is (state == "ENABLED")
+    assert h.state["requests"] == [
+        (
+            "GET",
+            f"projects/{NUMBER}/services/cloudtasks.googleapis.com",
+            None,
+            {"fields": ["name,state,config.name"]},
+        )
+    ]
+    assert not h.state["mutations"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"name": "projects/999999999999/services/cloudtasks.googleapis.com"},
+        {"name": f"projects/{NUMBER}/services/unapproved.googleapis.com"},
+        {"config": {"name": "unapproved.googleapis.com"}},
+        {"config": None},
+        {"state": "UNKNOWN"},
+        {"state": True},
+        {"state": None},
+        {"state": []},
+        {"state": {}},
+    ],
+)
+def test_service_usage_metadata_drift_never_enables_or_provisions(harness, change):
+    h = harness
+    h.state["api_rows"] = {
+        "name": f"projects/{NUMBER}/services/cloudtasks.googleapis.com",
+        "config": {"name": "cloudtasks.googleapis.com"},
+        "state": "ENABLED",
+        **change,
+    }
+    with pytest.raises(h.module.Error, match="API identity"):
+        h.release.run("provision")
+    assert not h.state["mutations"]
+
+
+@pytest.mark.parametrize(
+    "api,path,method,missing_ok",
+    [
+        ("usage", f"projects/{NUMBER}/services/cloudtasks.googleapis.com:enable", "POST", False),
+        ("usage", f"projects/{NUMBER}/services/other.googleapis.com", "GET", False),
+        ("usage", "projects/999999999999/services/cloudtasks.googleapis.com", "GET", False),
+        ("tasks", "projects/perfect-period-305406/locations/asia-south1/queues/other", "GET", True),
+        ("secrets", "projects/perfect-period-305406/secrets/other", "GET", True),
+    ],
+)
+def test_exact_metadata_cannot_expand_management_or_missing_scope(
+    harness, api, path, method, missing_ok
+):
+    h = harness
+    h.release.project_number = NUMBER
+    with pytest.raises(h.module.Error, match="unowned"):
+        h.release._rest(api, path, method=method, missing_ok=missing_ok)
+    assert not h.state["requests"] and not h.state["mutations"]
+
+
+@pytest.mark.parametrize(
+    "status,body,absent",
+    [
+        (404, b'{"error":{"code":404,"status":"NOT_FOUND"}}', True),
+        (404, b'{"error":{"code":404,"status":"PERMISSION_DENIED"}}', False),
+        (403, b'{"error":{"code":403,"status":"PERMISSION_DENIED"}}', False),
+        (500, b'{"error":{"code":500,"status":"INTERNAL"}}', False),
+        (404, b'{"error":{"code":400,"status":"NOT_FOUND"}}', False),
+        (404, b"not-json sensitive-canary", False),
+        (404, None, False),
+        (404, b'{"error":[]}', False),
+    ],
+    ids=[
+        "not-found",
+        "disguised-denial",
+        "forbidden",
+        "server-error",
+        "wrong-code",
+        "malformed",
+        "oversized",
+        "invalid-shape",
+    ],
+)
+def test_only_bounded_typed_secret_not_found_proves_absence(
+    harness, monkeypatch, status, body, absent
+):
+    h = harness
+    h.release.project_number = NUMBER
+    if body is None:
+        assert h.module.MAX_RESPONSE == 2_000_000
+        body = b"x" * (h.module.MAX_RESPONSE + 1)
+    stream = io.BytesIO(body)
+
+    class FailedLookup:
+        def open(self, req, timeout):
+            assert req.get_method() == "GET" and req.full_url.startswith(
+                f"https://secretmanager.googleapis.com/v1/{h.release.secret}?"
+            )
+            raise error.HTTPError(req.full_url, status, "sensitive-canary", {}, stream)
+
+    monkeypatch.setattr(h.module.request, "build_opener", lambda handler: FailedLookup())
+    if absent:
+        assert h.release._secret_exists() is False
+    else:
+        with pytest.raises(h.module.Error, match="absence is unverified") as caught:
+            h.release._secret_exists()
+        assert "sensitive-canary" not in str(caught.value)
+    assert stream.closed and not h.state["mutations"]
+
+
+def test_cli_failure_phase_is_safe_and_does_not_disclose_exception(harness, monkeypatch, capsys):
+    h = harness
+
+    def fail(self, command):
+        self.phase = "api_enable_readback"
+        raise h.module.Error("sensitive-canary credential-material")
+
+    monkeypatch.setattr(h.module.Release, "run", fail)
+    assert h.module.main(["provision", "--expected-sha", SHA]) == 1
+    output = capsys.readouterr()
+    assert "stage=api_enable_readback" in output.err
+    assert "sensitive-canary" not in output.err and "credential-material" not in output.err
+    assert not output.out
+
+
+@pytest.mark.parametrize(
+    "phase",
+    ["sensitive-canary credential-material", [], {"sensitive-canary": "credential-material"}, None],
+)
+def test_cli_unknown_phase_cannot_expose_untrusted_text(harness, monkeypatch, capsys, phase):
+    h = harness
+
+    def fail(self, command):
+        self.phase = phase
+        raise h.module.Error("private response")
+
+    monkeypatch.setattr(h.module.Release, "run", fail)
+    assert h.module.main(["provision", "--expected-sha", SHA]) == 1
+    output = capsys.readouterr()
+    assert "stage=startup" in output.err
+    assert "sensitive-canary" not in output.err and "credential-material" not in output.err
+    assert "private response" not in output.err
 
 
 @pytest.fixture
@@ -205,24 +399,6 @@ def harness(monkeypatch):
             return result
         if args[:2] == ["projects", "describe"]:
             return {"projectId": module.PROJECT, "projectNumber": NUMBER}
-        if args[:2] == ["services", "list"]:
-            assert "--limit=2" in args and "--filter=config.name=cloudtasks.googleapis.com" in args
-            if "api_rows" in state:
-                return state["api_rows"]
-            return (
-                [{"config": {"name": "cloudtasks.googleapis.com"}}] if state["api_enabled"] else []
-            )
-        if args[:2] == ["secrets", "list"]:
-            assert f"--filter=name~'/secrets/{module.SECRET}$'" in args and "--limit=2" in args
-            if state.get("deny_secret_list"):
-                raise module.Error("PERMISSION_DENIED sensitive-canary")
-            if "secret_rows" in state:
-                return state["secret_rows"]
-            return (
-                [{"name": f"projects/{NUMBER}/secrets/{module.SECRET}"}]
-                if state["secret_exists"]
-                else []
-            )
         if args[:3] == ["secrets", "versions", "describe"]:
             assert args[3] == "latest" and "--format=json(name,state)" in args
             return {
@@ -258,8 +434,13 @@ def harness(monkeypatch):
             assert url.scheme == "https" and url.hostname in {
                 "cloudtasks.googleapis.com",
                 "secretmanager.googleapis.com",
+                "serviceusage.googleapis.com",
             }
-            api = "tasks" if url.hostname == "cloudtasks.googleapis.com" else "secrets"
+            api = {
+                "cloudtasks.googleapis.com": "tasks",
+                "secretmanager.googleapis.com": "secrets",
+                "serviceusage.googleapis.com": "usage",
+            }[url.hostname]
             path = url.path.split("/", 2)[2]
             body = None if req.data is None else json.loads(req.data)
             query = parse.parse_qs(url.query)
@@ -271,7 +452,38 @@ def harness(monkeypatch):
                 state["events"].append(("http-read", path))
             if state.get("deny_http") and state["deny_http"] in path:
                 raise error.HTTPError(req.full_url, 403, "sensitive-canary", {}, None)
-            if read_policy:
+            if api == "usage":
+                assert (
+                    req.method == "GET"
+                    and path == f"projects/{NUMBER}/services/cloudtasks.googleapis.com"
+                )
+                assert query == {"fields": ["name,state,config.name"]}
+                payload = state.get(
+                    "api_rows",
+                    {
+                        "name": path,
+                        "config": {"name": "cloudtasks.googleapis.com"},
+                        "state": "ENABLED" if state["api_enabled"] else "DISABLED",
+                    },
+                )
+            elif api == "secrets" and path == release.secret and req.method == "GET":
+                assert query == {"fields": ["name"]}
+                if state.get("deny_secret_list"):
+                    raise error.HTTPError(req.full_url, 403, "sensitive-canary", {}, None)
+                if not state["secret_exists"]:
+                    raise error.HTTPError(
+                        req.full_url,
+                        404,
+                        "sensitive-canary",
+                        {},
+                        io.BytesIO(
+                            json.dumps({"error": {"code": 404, "status": "NOT_FOUND"}}).encode()
+                        ),
+                    )
+                payload = state.get(
+                    "secret_rows", {"name": f"projects/{NUMBER}/secrets/{module.SECRET}"}
+                )
+            elif read_policy:
                 if api == "tasks":
                     assert req.method == "POST" and body == {
                         "options": {"requestedPolicyVersion": 3}
@@ -588,7 +800,7 @@ def test_bounded_queue_inventory_never_accepts_truncation(harness, failure):
 def test_secret_inventory_exact_bounded(harness, rows):
     h = harness
     h.state["secret_rows"] = rows
-    with pytest.raises(h.module.Error, match="secret inventory"):
+    with pytest.raises(h.module.Error, match="secret metadata|response must be an object"):
         h.release.run("provision")
     assert not h.state["mutations"]
 
@@ -599,7 +811,7 @@ def test_secret_inventory_exact_bounded(harness, rows):
 def test_api_inventory_exact_bounded(harness, rows):
     h = harness
     h.state["api_rows"] = rows
-    with pytest.raises(h.module.Error, match="API"):
+    with pytest.raises(h.module.Error, match="API|response must be an object"):
         h.release.run("provision")
     assert not h.state["mutations"]
 
@@ -848,7 +1060,10 @@ def test_cli_json_contains_only_safe_metadata_and_errors_are_redacted(harness, c
 
 @pytest.mark.parametrize("exception_type", [OSError, ValueError, "inventory"])
 def test_cli_never_emits_raw_exception_or_credential_material(
-    harness, capsys, monkeypatch, exception_type,
+    harness,
+    capsys,
+    monkeypatch,
+    exception_type,
 ):
     h = harness
     kind = h.module.Error if exception_type == "inventory" else exception_type

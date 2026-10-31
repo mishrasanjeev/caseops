@@ -421,6 +421,8 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-readthrough/
             apps/api/postgres-shard-${{ matrix.shard }}-query-plans/
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json
+            apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl
           if-no-files-found: error
           retention-days: 14
 
@@ -620,6 +622,13 @@ jobs:
         timeout-minutes: 10
         working-directory: apps/api
         run: uv sync --all-extras --dev
+
+      - name: Verify local IP fixture protocol and database parity
+        timeout-minutes: 4
+        run: >-
+          uv run --project apps/api --python 3.13 python
+          scripts/e2e_fixture_regression.py
+          --results-directory test-results/e2e-fixtures
 
       # Keep the browser download separate from runtime verification. The
       # latter must be deterministic and must not mutate the hosted runner.

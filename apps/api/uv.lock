@@ -272,6 +272,7 @@ dependencies = [
     { name = "clamd" },
     { name = "cryptography" },
     { name = "defusedxml" },
+    { name = "dnspython" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -285,6 +286,7 @@ dependencies = [
     { name = "pdfminer-six" },
     { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "pyasn1" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pypdfium2" },
@@ -335,12 +337,13 @@ requires-dist = [
     { name = "clamd", specifier = ">=1.0.2" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "dnspython", specifier = ">=2.9.0" },
     { name = "email-validator", specifier = "==2.3.0" },
     { name = "fastapi", specifier = "==0.135.2" },
     { name = "fastembed", path = "vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl" },
     { name = "fastembed", marker = "extra == 'embeddings'", path = "vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl" },
     { name = "filelock", specifier = "==4.2.4" },
-    { name = "fpdf2", specifier = "==2.8.8" },
+    { name = "fpdf2", specifier = "==2.8.9" },
     { name = "google-cloud-storage", specifier = "==3.10.1" },
     { name = "google-genai", specifier = ">=1.73.1" },
     { name = "httpx", specifier = "==0.28.1" },
@@ -355,6 +358,7 @@ requires-dist = [
     { name = "pdfminer-six", specifier = "==20260107" },
     { name = "pillow", specifier = "==13.0.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.3" },
+    { name = "pyasn1", specifier = ">=0.6.5" },
     { name = "pydantic-settings", specifier = "==2.14.2" },
     { name = "pyjwt", specifier = "==2.15.0" },
     { name = "pypdfium2", specifier = "==5.7.0" },
@@ -848,16 +852,16 @@ wheels = [
 
 [[package]]
 name = "fpdf2"
-version = "2.8.8"
+version = "2.8.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "defusedxml" },
     { name = "fonttools" },
     { name = "pillow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/bc/8fd4321aed40cadadddc8f311c65b6082346b252bca048f7b476d8f35d72/fpdf2-2.8.8.tar.gz", hash = "sha256:9e94e155e85e8053329a9a1fce8b566fd7a7c5bb79e98a1a3952d379b947c5b9", size = 374689, upload-time = "2026-08-09T23:32:45.334Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/23/84dbe637708c2690972eff5df233a7c9f8d4bde809f714839dc1b08f5e5e/fpdf2-2.8.9.tar.gz", hash = "sha256:5b0b3786f5236a2b3cc83c1fee567df17ddd314f8c4e13d820d8f09b617ab4f0", size = 380865, upload-time = "2026-09-29T13:11:54.506Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/be/af012eda9507494f28b99b077423806c43a11573eb6225dd46f19ae2d263/fpdf2-2.8.8-py3-none-any.whl", hash = "sha256:3557a478fc577a929c94aace9666aed4dcc432b5ab6764232e6a59f1ccd75f17", size = 337000, upload-time = "2026-08-09T23:32:43.728Z" },
+    { url = "https://files.pythonhosted.org/packages/41/16/42cc18bba1561692a235fd232b38947e54f059150065d43d631b57a0085a/fpdf2-2.8.9-py3-none-any.whl", hash = "sha256:6e1d94af6d6311950a23dec7fb5fc84b000203eb59aee8e76c1e701b12a14976", size = 341268, upload-time = "2026-09-29T13:11:52.796Z" },
 ]
 
 [[package]]
@@ -2401,9 +2405,9 @@ wheels = [
 name = "pyasn1"
 version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/88/7e/3c0da41061a2021cac7cd524fd57092adbe5b515e8bf9005702e366802e2/pyasn1-0.6.5.tar.gz", hash = "sha256:6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47", size = 155152, upload-time = "2026-10-27T06:32:49.125917Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/7e/3c0da41061a2021cac7cd524fd57092adbe5b515e8bf9005702e366802e2/pyasn1-0.6.5.tar.gz", hash = "sha256:6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47", size = 155152, upload-time = "2026-10-27T06:32:49.125Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/1f/3eefd5c84c35cae44549ce1c7f7e58f7945b34f5a6bce07a135438522073/pyasn1-0.6.5-py3-none-any.whl", hash = "sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587", size = 84807, upload-time = "2026-10-27T06:32:48.045712Z" },
+    { url = "https://files.pythonhosted.org/packages/19/1f/3eefd5c84c35cae44549ce1c7f7e58f7945b34f5a6bce07a135438522073/pyasn1-0.6.5-py3-none-any.whl", hash = "sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587", size = 84807, upload-time = "2026-10-27T06:32:48.045Z" },
 ]
 
 [[package]]
