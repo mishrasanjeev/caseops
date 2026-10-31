@@ -343,6 +343,13 @@ def test_historical_a0_acceptance_is_opt_in_not_a_recurring_release_gate() -> No
     assert "type: boolean" in trigger_block
     assert "inputs.run_historical_a0_gate == true" in a0_step
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in a0_step
+    # The A0 journey asserts the governance fence; after A2 it must refuse,
+    # not report the intended enabled state as a failure.
+    guard = a0_step.index("deploy/ip-rule-governance-state.json")
+    run = a0_step.index('bash "$RUNNER_TEMP/caseops-prod-playwright" ip-a0')
+    assert guard < run
+    assert '["enabled"] is True' in a0_step
+    assert "exit 1" in a0_step[guard:run]
 
 
 def test_ip_cost_acceptance_is_isolated_and_partially_configured_runs_fail_closed() -> None:
