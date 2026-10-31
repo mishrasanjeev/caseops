@@ -92,6 +92,8 @@ MAX_INGEST_PUBLICATIONS = 50
 MAX_ACTIVE_PROFILES_PER_INGEST = 100
 MAX_PROFILE_PUBLICATION_COMPARISONS = 2_500
 MAX_HITS_PER_INGEST = 250
+# Profiles a capture is evaluated against; ingestion resets a quota pause itself.
+INTAKE_PROFILE_STATUSES = ("active", "paused_cost_quota")
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,6 +354,58 @@ def _publication_fingerprint(provider_key: str, payload: IpJournalPublicationCre
     )
 
 
+def _publication_content(
+    item: IpJournalPublicationCreate | IpJournalPublication,
+) -> dict[str, Any]:
+    """What the operator recorded beyond the fingerprint identity."""
+
+    if isinstance(item, IpJournalPublication):
+        return {
+            "application_id": item.application_id,
+            "mark_text": item.mark_text,
+            "device_reference": item.device_reference,
+            "proprietor_name": item.proprietor_name,
+            "goods_services": item.goods_services_json,
+            "publication_scope": item.publication_scope_json,
+            "raw_evidence": item.raw_evidence_json,
+        }
+    return {
+        "application_id": item.application_id,
+        "mark_text": item.mark_text.strip() if item.mark_text else None,
+        "device_reference": item.device_reference,
+        "proprietor_name": item.proprietor_name.strip() if item.proprietor_name else None,
+        "goods_services": item.goods_services,
+        "publication_scope": item.publication_scope,
+        "raw_evidence": item.raw_evidence,
+    }
+
+
+def _intake_profiles_statement(session: Session, *, context: SessionContext) -> Any:
+    """Visible watch profiles a journal capture is compared with (one predicate)."""
+
+    return (
+        select(IpWatchProfile)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == IpWatchProfile.docket_id)
+            & (IpDocketRecord.company_id == IpWatchProfile.company_id),
+        )
+        .outerjoin(
+            Matter,
+            (Matter.id == IpDocketRecord.matter_id)
+            & (Matter.company_id == IpDocketRecord.company_id),
+        )
+        .where(
+            IpWatchProfile.company_id == context.company.id,
+            IpWatchProfile.poll_status.in_(INTAKE_PROFILE_STATUSES),
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+
+
 def _similarity(profile: IpWatchProfile, publication: IpJournalPublication) -> dict[str, Any]:
     candidate = _normalize(publication.mark_text)
     word_rows = [
@@ -447,6 +501,7 @@ def _source_snapshot(publication: IpJournalPublication) -> dict[str, Any]:
         "source_status": publication.source_status,
         "source_fingerprint": publication.source_fingerprint,
         "supersedes_publication_id": publication.supersedes_publication_id,
+        "raw_evidence": publication.raw_evidence_json,
     }
 
 
@@ -609,29 +664,20 @@ def ingest_journal(
     now = _now()
     profiles = list(
         session.scalars(
-            select(IpWatchProfile)
-            .join(
-                IpDocketRecord,
-                (IpDocketRecord.id == IpWatchProfile.docket_id)
-                & (IpDocketRecord.company_id == IpWatchProfile.company_id),
-            )
-            .outerjoin(
-                Matter,
-                (Matter.id == IpDocketRecord.matter_id)
-                & (Matter.company_id == IpDocketRecord.company_id),
-            )
-            .where(
-                IpWatchProfile.company_id == locked.company.id,
-                IpWatchProfile.poll_status.in_(("active", "paused_cost_quota")),
-                IpDocketRecord.is_active.is_(True),
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-                or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
-                visible_ip_dockets_filter(session, context=locked),
-            )
+            _intake_profiles_statement(session, context=locked)
             .with_for_update(of=IpWatchProfile)
             .limit(MAX_ACTIVE_PROFILES_PER_INGEST + 1)
         )
     )
+    if not profiles:
+        # Recording a run that compares nothing would read as a completed check.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No active watch profile can be compared with this journal entry. "
+                "Create or resume a watch profile, then capture the entry."
+            ),
+        )
     if len(payload.publications) > MAX_INGEST_PUBLICATIONS:
         raise HTTPException(
             status_code=422,
@@ -756,6 +802,19 @@ def ingest_journal(
     candidate_publications_by_id: dict[str, IpJournalPublication] = {}
     for item, fingerprint in item_fingerprints:
         publication = publications_by_fingerprint.get(fingerprint)
+        if publication is not None and _publication_content(publication) != _publication_content(
+            item
+        ):
+            # The record is append-only; silently keeping the old content would
+            # drop what the operator just captured.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Journal {publication.journal_number} already records application "
+                    f"{publication.application_number} with different details. Record a "
+                    "correction or re-advertisement instead of capturing it again."
+                ),
+            )
         if publication is None:
             if item.application_id and item.application_id not in applications_by_id:
                 raise HTTPException(status_code=404, detail="Trademark application not found.")
@@ -1282,19 +1341,58 @@ def list_watch_workspace(
         else []
     )
     publication_ids = list(dict.fromkeys(hit.publication_id for hit in hits))
-    publications = (
+    hit_publications = (
         list(
             session.scalars(
-                select(IpJournalPublication)
-                .where(
+                select(IpJournalPublication).where(
                     IpJournalPublication.company_id == context.company.id,
                     IpJournalPublication.id.in_(publication_ids),
                 )
-                .order_by(IpJournalPublication.journal_date.desc())
             )
         )
         if publication_ids
         else []
+    )
+    # Journal entries are firm records: list recent ones even without a hit, so
+    # a capture is visible and can be corrected. An entry linked to an
+    # application is listed only when that application's docket is visible.
+    visible_applications = (
+        select(TrademarkApplication.id)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == TrademarkApplication.docket_id)
+            & (IpDocketRecord.company_id == TrademarkApplication.company_id),
+        )
+        .where(
+            TrademarkApplication.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+    recent_publications = list(
+        session.scalars(
+            select(IpJournalPublication)
+            .where(
+                IpJournalPublication.company_id == context.company.id,
+                or_(
+                    IpJournalPublication.application_id.is_(None),
+                    IpJournalPublication.application_id.in_(visible_applications),
+                ),
+            )
+            .order_by(IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc())
+            .limit(limit)
+        )
+    )
+    publications = sorted(
+        {item.id: item for item in [*hit_publications, *recent_publications]}.values(),
+        key=lambda item: (item.journal_date, item.created_at),
+        reverse=True,
+    )
+    intake_profile_count = session.scalar(
+        select(func.count()).select_from(
+            _intake_profiles_statement(session, context=context)
+            .with_only_columns(IpWatchProfile.id)
+            .subquery()
+        )
     )
     hit_ids = [item.id for item in hits]
     handoffs = (
@@ -1325,6 +1423,7 @@ def list_watch_workspace(
         publications=[IpJournalPublicationResponse.model_validate(item) for item in publications],
         ingestion_runs=[IpJournalIngestionRunResponse.model_validate(item) for item in runs],
         handoffs=[IpWatchHandoffResponse.model_validate(item) for item in handoffs],
+        intake_profile_count=intake_profile_count or 0,
     )
 
 

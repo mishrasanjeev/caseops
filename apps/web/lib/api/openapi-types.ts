@@ -29952,6 +29952,10 @@ export interface components {
             publication_scope_json: {
                 [key: string]: unknown;
             };
+            /** Raw Evidence Json */
+            raw_evidence_json?: {
+                [key: string]: unknown;
+            };
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Source Page */
@@ -34683,6 +34687,11 @@ export interface components {
             hits?: components["schemas"]["IpWatchHitResponse"][];
             /** Ingestion Runs */
             ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
+            /**
+             * Intake Profile Count
+             * @default 0
+             */
+            intake_profile_count: number;
             /** Profiles */
             profiles?: components["schemas"]["IpWatchProfileResponse"][];
             /** Publications */
