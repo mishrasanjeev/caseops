@@ -12,10 +12,10 @@
  *
  * Local runs use a fresh tenant entitled like test-legal; the three-user
  * journey adds two colleagues (local only). Production runs sign in as Ram on
- * test-legal: the opposition picker check is read-only, and the governance
- * check proposes one clock-stamped calendar (no retire endpoint exists for
- * calendars; the candidate stays as dated evidence) and asserts the honest
- * pending-approval state.
+ * test-legal: the opposition picker check is read-only, and each governance
+ * check proposes one clock-stamped calendar, asserts the honest
+ * pending-approval state, then withdraws it through the UI (the proposer's
+ * own audited withdrawal), so no candidate is left behind.
  */
 import {
   expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type Locator, type Page, type Response,
@@ -134,9 +134,8 @@ async function chooseSourceFile(scope: Locator, id: string, text: string) {
   await expect(scope.locator(`#${id}-result`)).toContainText("computed in this browser; the file was not uploaded.");
 }
 
-async function proposeCalendar(page: Page, card: Locator, name: string, key: string): Promise<{ id: string; status: string }> {
+async function proposeCalendar(page: Page, card: Locator, name: string): Promise<{ id: string; status: string }> {
   const form = card.getByTestId("ip-calendar-proposal");
-  await form.getByLabel("Calendar key").fill(key);
   await form.getByLabel("Calendar name").fill(name);
   await form.getByLabel("Holiday dates").fill("26/01/2026, 15/08/2026");
   await form.getByLabel("Effective from").fill("2026-01-01");
@@ -147,6 +146,18 @@ async function proposeCalendar(page: Page, card: Locator, name: string, key: str
   const response = await proposed;
   expect(response.status(), "The calendar proposal the tester submitted must be created").toBe(201);
   return response.json();
+}
+
+/** The proposer's own withdrawal, through the UI: production runs leave no candidate behind. */
+async function withdrawCalendar(page: Page, card: Locator, calendarId: string) {
+  const row = card.getByTestId(`ip-calendar-version-${calendarId}`);
+  await row.getByLabel("Reason to withdraw your proposal").fill("Synthetic tester proposal, withdrawn after the check.");
+  const withdrawn = responseTo(page, /\/working-calendars\/[^/]+\/withdraw$/, "POST");
+  await row.getByRole("button", { name: "Withdraw my proposal" }).click();
+  const response = await withdrawn;
+  expect(response.status(), "The proposer can withdraw its own candidate").toBe(200);
+  expect(await response.json()).toMatchObject({ id: calendarId, status: "retired", can_withdraw: false, can_activate: false });
+  await expect(row.getByText("withdrawn", { exact: true })).toBeVisible();
 }
 
 /**
@@ -206,6 +217,18 @@ test("BUG-003/004 opposition governed-rule and calendar pickers are never dead s
     await expect(calendar).toBeEnabled();
   }
   await expect(opponent.getByText(/notice_filing_due/)).toHaveCount(0);
+  // "Propose deadline" is never an enabled button that can only fail: every
+  // refusal the proposer would raise is named on screen first.
+  const propose = opponent.getByRole("button", { name: "Propose deadline" });
+  const blockers = opponent.getByTestId("opponent-deadline-blockers");
+  await expect(opponent.getByLabel("TM Journal advertisement date")).toHaveValue("");
+  await expect(propose).toBeDisabled();
+  await expect(propose).toHaveAttribute("aria-describedby", "opponent-deadline-blockers");
+  await expect(blockers).toContainText("Enter the TM Journal advertisement date; the period runs from it.");
+  expect(Array.isArray(workflow.deadline_proposal_gaps), "The workflow projects the proposer's readiness gaps").toBe(true);
+  for (const gap of workflow.deadline_proposal_gaps as string[]) {
+    await expect(blockers.locator(`[data-gap="${gap}"]`)).toBeVisible();
+  }
   const link = opponent.getByRole("link", { name: "Open rule and calendar governance" });
   await expect(link).toHaveCount(eligible.length === 0 || calendars.length === 0 ? 1 : 0);
   if (eligible.length === 0 || calendars.length === 0) {
@@ -227,6 +250,9 @@ test("[mobile] BUG-003/004 opposition picker reasons and governance link fit 393
   const opponent = await openOpponent(page, rt, target);
   await expect(opponent.getByLabel("Governed rule", { exact: true })).toBeVisible();
   expect(await deadSelects(page, opponent)).toEqual([]);
+  const blockers = opponent.getByTestId("opponent-deadline-blockers");
+  await blockers.scrollIntoViewIfNeeded();
+  await expectOnScreen(blockers, "Why Propose deadline is disabled is readable on a phone");
   await expectNoPageOverflow(page);
   const hasEligible = (oracle.rules as Array<Record<string, unknown>>).some((row) =>
     (oracle.eligible_rule_version_ids as string[]).includes(row.id as string) && row.proceeding_kind === "opposition"
@@ -264,28 +290,39 @@ test("BUG-005/006 Ram proposes a calendar and sees the honest pending-approval s
   }
 
   const name = stamp("BUG-005 working calendar");
-  const created = await proposeCalendar(page, card, name, slug("b4-cal"));
+  const created = await proposeCalendar(page, card, name);
   expect(created.status).toBe("candidate");
   const row = card.getByTestId(`ip-calendar-version-${created.id}`);
   await expect(row).toContainText(`${name} v1`);
-  await expect(row.getByTestId(`ip-calendar-activation-blocked-${created.id}`)).toContainText(
-    "You proposed this version, so another owner, admin or partner must activate it.");
+  const blocked = row.getByTestId(`ip-calendar-activation-blocked-${created.id}`);
+  await expect(blocked).toContainText("You proposed this version, so another owner, admin or partner must activate it.");
   await expect(row.getByRole("button", { name: "Independently activate calendar" })).toHaveCount(0);
   await expect(card.locator("#calendar-source-hash-result")).toContainText("Choose the official source");
 
   const after = await workspaceOf(rt, request, docketId);
-  const server = (after.calendars as Array<Record<string, unknown>>).find((item) => item.id === created.id);
-  expect(server).toMatchObject({ status: "candidate", can_activate: false, activation_blocked_reasons: ["proposer_cannot_self_approve"] });
+  const server = (after.calendars as Array<Record<string, unknown>>).find((item) => item.id === created.id) as
+    { activation_blocked_reasons: string[] } & Record<string, unknown>;
+  expect(server).toMatchObject({ status: "candidate", can_activate: false, can_withdraw: true });
+  expect(server.activation_blocked_reasons).toContain("proposer_cannot_self_approve");
+  // Every reason the server gives is on screen (a workspace without another
+  // approver is told so, with the way to add one).
+  for (const reason of server.activation_blocked_reasons) {
+    await expect(blocked.locator(`[data-reason="${reason}"]`)).toBeVisible();
+  }
   if (after.governance.rule_proposal.available) {
     const hasActive = (after.calendars as Array<{ status: string }>).some((item) => item.status === "active");
     const submit = card.getByRole("button", { name: "Propose rule and fixture" });
     if (hasActive) await expect(submit).toBeEnabled();
     else {
       await expect(submit).toBeDisabled();
-      await expect(card.locator("#rule-proposal-prerequisite")).toContainText(`${name} v1`);
+      await expect(card.locator("#rule-proposal-prerequisite")).toContainText("awaiting activation by an approver other than the proposer.");
     }
   }
   await markPositive(info, "bug-005-006-calendar-proposed", { calendar_version_id: created.id });
+  await withdrawCalendar(page, card, created.id);
+  const withdrawn = await workspaceOf(rt, request, docketId);
+  expect((withdrawn.calendars as Array<{ id: string; status: string }>).find((item) => item.id === created.id))
+    .toMatchObject({ status: "retired" });
 });
 
 test("[mobile] BUG-005 governance card controls fit 393px with a computed source hash", async ({ page, request, baseURL }, info) => {
@@ -302,7 +339,14 @@ test("[mobile] BUG-005 governance card controls fit 393px with a computed source
   await expect(form.locator("#calendar-source-reference-error")).toContainText("official source reference");
   await expectNoPageOverflow(page);
   expect(await deadSelects(page, card)).toEqual([]);
-  await markPositive(info, "bug-005-mobile-validation");
+  const created = await proposeCalendar(page, card, stamp("BUG-005 mobile calendar"));
+  const row = card.getByTestId(`ip-calendar-version-${created.id}`);
+  await row.getByRole("button", { name: "Withdraw my proposal" }).scrollIntoViewIfNeeded();
+  await expectOnScreen(row.getByRole("button", { name: "Withdraw my proposal" }), "The proposer's withdraw control fits a phone");
+  await expectNoPageOverflow(page);
+  await withdrawCalendar(page, card, created.id);
+  await expectNoPageOverflow(page);
+  await markPositive(info, "bug-005-mobile-validation", { calendar_version_id: created.id });
 });
 
 test("BUG-003/004/005/006 [local-only] three people govern a rule end to end through the UI", async ({ page, request, baseURL, browser }, info) => {
@@ -323,7 +367,7 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
 
   // 2. Ram proposes a calendar; he cannot activate his own proposal.
   const calendarName = stamp("BUG-004 Delhi registry calendar");
-  const calendar = await proposeCalendar(page, card, calendarName, slug("b4-cal"));
+  const calendar = await proposeCalendar(page, card, calendarName);
   await expect(card.getByTestId(`ip-calendar-activation-blocked-${calendar.id}`)).toContainText("another owner, admin or partner");
   await expect(card.getByRole("button", { name: "Propose rule and fixture" })).toBeDisabled();
 
@@ -342,8 +386,9 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
   card = page.getByTestId("ip-deadline-governance");
   const ruleForm = card.getByTestId("ip-rule-proposal");
   await expect(ruleForm.getByLabel("Applies to")).toHaveValue("opponent_notice");
+  await expect(ruleForm.getByLabel("Rule key")).toHaveCount(0);
+  await expect(ruleForm).toContainText("Starts from: Trade mark advertised in the TM Journal.");
   const ruleKey = slug("b4-opponent-notice");
-  await ruleForm.getByLabel("Rule key").fill(ruleKey);
   await ruleForm.getByLabel("Period (months)").fill("4");
   await ruleForm.getByLabel("Rule citation").fill("Trade Marks Act 1999, s.21(1) (firm-authored test rule)");
   await ruleForm.getByLabel("Effective from").fill("2026-01-01");
@@ -356,7 +401,8 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
   const ruleResponse = await ruleProposed;
   expect(ruleResponse.status()).toBe(201);
   const rule = await ruleResponse.json();
-  expect(rule).toMatchObject({ proceeding_kind: "opposition", role: "opponent", stage: "notice_filing_due", status: "candidate" });
+  expect(rule).toMatchObject({ proceeding_kind: "opposition", role: "opponent", stage: "notice_filing_due", status: "candidate",
+    key: "in-tm-opponent-notice", definition: expect.objectContaining({ trigger_kind: "trademark_advertised" }) });
   await expect(card.getByTestId(`ip-rule-activation-blocked-${rule.id}`)).toContainText(
     "You proposed this version, so another owner, admin or partner must activate it.");
   await expect(card.getByTestId(`ip-rule-version-${rule.id}`).getByRole("button", { name: "Run fixtures and activate rule" })).toHaveCount(0);
@@ -371,9 +417,17 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
   expect(reviewerOptions).toEqual([reviewer.membershipId]);
   await reviewerPicker.selectOption(reviewer.membershipId);
   await chetanRow.getByLabel("Activation note").fill("Fixture checked against s.21(1); four months from advertisement.");
+  // Activation is never sent on an impact nobody saw: preview first.
+  const activateButton = chetanRow.getByRole("button", { name: "Run fixtures and activate rule" });
+  await expect(activateButton).toBeDisabled();
+  await chetanRow.getByRole("button", { name: "Preview activation impact" }).click();
+  await expect(chetanRow.getByTestId(`ip-rule-activation-impact-${rule.id}`)).toContainText(
+    "No company selection or open deadline uses this rule yet.");
   const ruleActivated = responseTo(chetan, /\/deadline-rules\/[^/]+\/activate$/, "POST");
-  await chetanRow.getByRole("button", { name: "Run fixtures and activate rule" }).click();
-  expect((await ruleActivated).status()).toBe(200);
+  await activateButton.click();
+  const activation = await ruleActivated;
+  expect(activation.status()).toBe(200);
+  expect(JSON.parse(activation.request().postData() ?? "{}")).toMatchObject({ reviewer_membership_id: reviewer.membershipId, supersede_overlapping: false });
   await expect(chetanRow).toContainText("Selected for company deadlines");
   await expect(chetanCard.getByTestId(`ip-rule-policy-${rule.rule_set_id}`)).toContainText("Selected: v1 (active) · policy version 1");
 
@@ -386,24 +440,49 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
   expect(await deadSelects(page, ready)).toEqual([]);
   await markPositive(info, "bug-003-004-picker-lists-governed-rule", { rule_version_id: rule.id, calendar_version_id: calendar.id });
 
-  // 7. A dependent deadline, then an emergency disable flags it as rule_disabled.
+  // 7. Ram proposes and confirms the notice deadline in Opponent docketing with
+  // the governed rule: the journey after the picker works end to end.
+  const advertised = ready.getByLabel("TM Journal advertisement date");
+  await expect(advertised).toHaveValue("");
+  await advertised.fill("2026-07-01");
+  const opponentProposed = responseTo(page, /\/proceedings\/[^/]+\/opponent-deadlines$/, "POST");
+  await ready.getByRole("button", { name: "Propose deadline" }).click();
+  const proposedResponse = await opponentProposed;
+  expect(proposedResponse.status(), "The opposition deadline proposal succeeds").toBe(201);
+  const proposed = (await proposedResponse.json()).deadline as { id: string; rule_version_id: string; calendar_version_id: string; base_date: string };
+  expect(proposed).toMatchObject({ rule_version_id: rule.id, calendar_version_id: calendar.id, base_date: "2026-07-01" });
+  const oracle = await workspaceOf(rt, request, target.docketId);
+  const eligiblePeople = oracle.eligible_responsible_membership_ids as string[];
+  expect(eligiblePeople).toEqual(expect.arrayContaining([rt.actor.membership.id, reviewer.membershipId, approver.membershipId]));
+  const backupPicker = ready.locator(`#opponent-backup-${proposed.id}`);
+  await expect(backupPicker).toBeEnabled();
+  const backupOffered = await backupPicker.locator("option").evaluateAll((rows) => rows.map((row) => (row as HTMLOptionElement).value).filter(Boolean));
+  expect(backupOffered.sort()).toEqual(eligiblePeople.filter((id) => id !== rt.actor.membership.id).sort());
+  await backupPicker.selectOption(reviewer.membershipId);
+  const confirmed = responseTo(page, /\/api\/ip\/deadlines\/[^/]+\/confirm$/, "POST");
+  await ready.getByRole("button", { name: "Confirm", exact: true }).click();
+  const confirmedResponse = await confirmed;
+  expect(confirmedResponse.status(), "Confirmation accepts the offered people").toBe(200);
+  expect(await confirmedResponse.json()).toMatchObject({ id: proposed.id, state: "confirmed" });
+  await markPositive(info, "bug-003-opposition-deadline-confirmed", { deadline_id: proposed.id });
+
+  // 8. Emergency disable flags the confirmed deadline, with a readable label.
   await page.goto(`${rt.web.origin}/app/ip?docket=${target.docketId}&view=schedule`);
-  const deadlines = page.getByTestId("ip-deadline-workspace");
-  await expect(deadlines.getByLabel("Active rule version")).toHaveValue(rule.id);
-  const deadlineProposed = responseTo(page, /\/api\/ip\/dockets\/[^/]+\/deadlines$/, "POST");
-  await deadlines.getByRole("button", { name: "Calculate deadline proposal" }).click();
-  expect((await deadlineProposed).status()).toBe(201);
   const ramRow = page.getByTestId(`ip-rule-version-${rule.id}`);
   await ramRow.getByLabel("Reason to disable or retire").fill("Firm-authored test rule withdrawn after review.");
   await ramRow.getByRole("button", { name: "Preview impact" }).click();
-  await expect(ramRow.getByRole("status")).toContainText("1 unconfirmed deadline(s)");
+  await expect(ramRow.getByRole("status")).toContainText("1 open deadline(s)");
   const disabled = responseTo(page, /\/deadline-rules\/[^/]+\/transition$/, "POST");
   await ramRow.getByRole("button", { name: "Emergency-disable rule" }).click();
   expect((await disabled).status()).toBe(200);
-  await expect(page.getByTestId("ip-deadline-exceptions")).toContainText("rule_disabled");
+  const exceptions = page.getByTestId("ip-deadline-exceptions");
+  await expect(exceptions).toContainText("Rule disabled");
+  await expect(exceptions).not.toContainText("rule_disabled");
+  await expect(exceptions).not.toContainText(proposed.id);
   const afterDisable = await workspaceOf(rt, request, target.docketId);
   expect(afterDisable.eligible_rule_version_ids).not.toContain(rule.id);
-  expect((afterDisable.exceptions as Array<{ exception_kinds: string[] }>).some((row) => row.exception_kinds.includes("rule_disabled"))).toBe(true);
+  expect((afterDisable.exceptions as Array<{ deadline_id: string; exception_kinds: string[] }>)
+    .find((row) => row.deadline_id === proposed.id)?.exception_kinds).toContain("rule_disabled");
   await markPositive(info, "bug-006-emergency-disable", { rule_version_id: rule.id });
 
   await bina.context().close();

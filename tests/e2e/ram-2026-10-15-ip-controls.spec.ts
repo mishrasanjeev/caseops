@@ -357,6 +357,25 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       geometry.push({ stage, measurements: await checkGeometry(page, scope, requiredSources, stage) });
     };
     try {
+      // A candidate rule proposed by another member, so this viewer gets the
+      // per-candidate fixture reviewer picker (2026-10-31 BUG-006 moved it there).
+      const reviewerCandidate = fixture.legal ? await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/deadline-rules`, { data: {
+        key: "ip15-reviewer-guard", rule_kind: "deadline", jurisdiction: "IN", office: "IP India", right_kind: "trademark",
+        proceeding_kind: "application", role: "applicant", stage: "examination", source_record_id: "fixture-ip15-reviewer-guard",
+        source_hash: "c".repeat(64), source_reference: "fixture:ip15-reviewer-guard", effective_from: "2026-01-01",
+        engine_compatibility: "caseops-ip-deadline-v1",
+        definition: { deadline_kind: "legal_deadline", trigger_kind: "examination_report_received", duration_value: 1,
+          duration_unit: "days", calendar_method: "business_days", direction: "after", include_base_date: false,
+          next_working_day: true, extension_days: 0, rule_citation: "Synthetic IP15 reviewer guard, not legal advice" },
+        fixtures: [{ id: "ip15-reviewer-guard-day", fixture_kind: "boundary", expected_state: "candidate", expected_result_on: "2026-10-16",
+          evidence_reference: "fixture:ip15-reviewer-guard", calculation: { deadline_kind: "legal_deadline",
+            trigger_kind: "examination_report_received", duration_value: 1, duration_unit: "days", calendar_method: "business_days",
+            direction: "after", include_base_date: false, next_working_day: true, extension_days: 0,
+            rule_citation: "Synthetic IP15 reviewer guard, not legal advice", base_date: "2026-10-15", base_date_certainty: "certain",
+            rule_version_id: "fixture-ip15-reviewer-guard", source_version: "fixture-ip15-source", engine_version: "caseops-ip-deadline-v1",
+            calendar: { calendar_version_id: "fixture-ip15-calendar", timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [],
+              exceptional_working_days: [], source_reference: "fixture:ip15-calendar", source_hash: "a".repeat(64) } } }],
+      } }), 201) as { id: string } : null;
       const schedule = `${fixture.web.origin}/app/ip?docket=${fixture.docketId}&view=schedule`;
       let finishRead: () => void = () => {};
       const readGate = new Promise<void>(resolve => { finishRead = resolve; });
@@ -407,8 +426,27 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       const governance = page.getByTestId("ip-deadline-governance");
       await captureGeometry("governance-initial", governance);
       // Reviewers are chosen per candidate rule from the server's eligible list
-      // (2026-10-31 BUG-006); with no candidate there is no reviewer picker to fill.
-      await expect(governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true })).toHaveCount(0);
+      // (2026-10-31 BUG-006): every rendered picker offers exactly that list.
+      const activatable = currentWorkspace.rules.filter(row => row.status === "candidate" && row.can_activate);
+      await expect(governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true }))
+        .toHaveCount(activatable.length);
+      for (const candidate of activatable) {
+        const picker = governance.locator(`#rule-reviewer-${candidate.id}`);
+        await expect(picker.locator("option")).not.toHaveCount(0);
+        const offered = await picker.locator("option").evaluateAll(rows => rows.map(row => (row as HTMLOptionElement).value).filter(Boolean));
+        expect(offered.sort()).toEqual([...candidate.eligible_reviewer_membership_ids].sort());
+      }
+      if (reviewerCandidate) {
+        expect(activatable.map(row => row.id)).toEqual([reviewerCandidate.id]);
+        const reviewer = governance.locator(`#rule-reviewer-${reviewerCandidate.id}`);
+        const description = governance.locator(`#rule-reviewer-${reviewerCandidate.id}-selected-description`);
+        await reviewer.selectOption(fixture.reviewerId);
+        await assertSelectedDescription(reviewer, description, fixture.reviewerId, {});
+        await captureGeometry("governance-selected-identity", governance, [fixture.reviewerId]);
+        await reviewer.selectOption("");
+        await expect(description).toHaveCount(0);
+        expect(Boolean(await reviewer.getAttribute("aria-describedby")), "Clearing must remove the stale description link.").toBe(false);
+      }
 
       const hearing = page.getByTestId("ip-hearing-workflow");
       const purpose = `Synthetic IP15 hearing ${fixture.run}`;
