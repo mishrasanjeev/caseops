@@ -247,7 +247,7 @@ function productionShapedReadiness() {
     blocked_reasons: blocked,
     owner: "product-ip",
     required_capabilities: [],
-    missing_capabilities: [],
+    missing_capabilities: blocked.includes("missing_capability") ? ["ip:rules_propose"] : [],
     entitlement_key: `ip_${featureId}`,
     entitled: !blocked.includes("missing_entitlement"),
     rollout_flag: `ip_${featureId}_enabled`,
@@ -1030,7 +1030,7 @@ describe("IpDocketPage", () => {
       const summary = screen.getByTestId("ip-automation-summary");
       expect(panel.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(summary).toHaveTextContent(
-        "Manual docketing is available. 8 automations are unavailable: 1 paused by CaseOps, 8 not in your plan, 1 needs setup, 1 your role cannot use.",
+        "Manual docketing is available. 8 IP features are unavailable: 1 paused by CaseOps, 8 not in your plan, 1 needs setup, 1 your role cannot use.",
       );
       expect(screen.queryByText(/owner /)).not.toBeInTheDocument();
       expect(screen.queryByTestId("ip-automation-registry_sync")).not.toBeInTheDocument();
@@ -1057,8 +1057,19 @@ describe("IpDocketPage", () => {
     expect(within(deadlines).getByText(/^Needs setup\./)).toBeVisible();
     const rules = screen.getByTestId("ip-automation-rule_governance");
     expect(within(rules).getByText(/^Your role cannot use it\./)).toBeVisible();
+    // Lawyers read what the role is missing, never a capability id.
+    expect(rules).toHaveTextContent("It needs permission to propose deadline rules.");
+    expect(rules).not.toHaveTextContent("ip:rules_propose");
+    expect(registry.querySelector('[data-reason="missing_entitlement"]')).toHaveTextContent("ask CaseOps to add it to the plan");
+    expect(screen.queryByRole("link", { name: /workspace plan/i })).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Hide details" });
+    expect(toggle).toHaveAttribute("aria-controls", "ip-automation-readiness-detail");
+    expect(document.getElementById("ip-automation-readiness-detail")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open workspace configuration" }));
     expect(screen.getByTestId("ip-workspace-configuration-panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide details" }));
+    // A collapsed toggle points at nothing: the detail is not in the document.
+    expect(screen.getByRole("button", { name: "Show details" })).not.toHaveAttribute("aria-controls");
   });
 
   it("opens the tab named by ?tab= and writes the tab back to the URL", async () => {
@@ -1453,8 +1464,8 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     expect(await screen.findByRole("heading", { name: "IP workspace setup" })).toBeVisible();
-    expect(screen.getByText("Not in your plan. Your workspace plan does not include it. A workspace admin can change the plan.")).toBeVisible();
-    expect(screen.getByText("Paused by CaseOps. CaseOps has not switched this automation on yet. Nothing in your workspace needs to change.")).toBeVisible();
+    expect(screen.getByText("Not in your plan. Your workspace plan does not include it. A workspace admin can ask CaseOps to add it to the plan.")).toBeVisible();
+    expect(screen.getByText("Paused by CaseOps. CaseOps has not switched this feature on yet. Nothing in your workspace needs to change.")).toBeVisible();
     expect(screen.queryByText(/owner (product-ip|integrations)/)).not.toBeInTheDocument();
     expect(screen.getByText("Manual fallback: manual docketing")).toBeVisible();
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
@@ -1503,7 +1514,7 @@ describe("IpDocketPage", () => {
     expect(await screen.findByText("No IP records yet")).toBeVisible();
     expect(screen.getByRole("button", { name: "New trademark" })).toBeVisible();
     expect(screen.getByTestId("ip-automation-summary")).toHaveTextContent(
-      "Manual docketing is available. 1 automation is unavailable: 1 paused by CaseOps.",
+      "Manual docketing is available. 1 IP feature is unavailable: 1 paused by CaseOps.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("Registry sync")).toBeVisible();

@@ -176,7 +176,6 @@ export default function IpDocketPage() {
   const [showConfiguration, setShowConfiguration] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(requestedTab);
   const [createdDocketId, setCreatedDocketId] = useState<string | null>(null);
-  const canChangePlan = useCapability("workspace:admin");
 
   useEffect(() => {
     setActiveTab(requestedTab);
@@ -357,7 +356,6 @@ export default function IpDocketPage() {
         features={readiness.data.features}
         manualDocketingAvailable={readiness.data.manual_docketing_available}
         canConfigure={canConfigure}
-        canChangePlan={canChangePlan}
         onOpenConfiguration={() => {
           setShowConfiguration(true);
           window.setTimeout(() => document.getElementById("ip-workspace-configuration-panel")?.scrollIntoView?.({ block: "start" }), 0);

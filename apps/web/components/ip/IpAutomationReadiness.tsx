@@ -1,14 +1,13 @@
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import type { IpFeatureBlockedReason, IpFeatureReadiness } from "@/lib/api/endpoints";
 
 /**
- * Why an IP automation is unavailable, grouped by who can change it (BUG-001).
+ * Why an IP feature is unavailable, grouped by who can change it (BUG-001).
  *
  * The server lists every failing gate per feature in `blocked_reasons`. Each
  * gate belongs to exactly one group, and each group has its own wording and
@@ -41,10 +40,11 @@ const GROUP_TITLE: Record<IpReadinessGroup, string> = {
 };
 
 const REASON_DETAIL: Record<IpFeatureBlockedReason, string> = {
-  unknown_feature: "CaseOps has not released this automation.",
-  rollout_disabled: "CaseOps has not switched this automation on yet. Nothing in your workspace needs to change.",
-  rollout_expired: "The CaseOps pilot window for this automation has ended. CaseOps reopens it.",
-  missing_entitlement: "Your workspace plan does not include it. A workspace admin can change the plan.",
+  unknown_feature: "CaseOps has not released this feature.",
+  rollout_disabled: "CaseOps has not switched this feature on yet. Nothing in your workspace needs to change.",
+  rollout_expired: "The CaseOps pilot window for this feature has ended. CaseOps reopens it.",
+  // No self-serve plan carries IP features today; CaseOps adds them on request.
+  missing_entitlement: "Your workspace plan does not include it. A workspace admin can ask CaseOps to add it to the plan.",
   workspace_not_configured: "The IP workspace settings have not been saved. An IP workspace admin saves them in Workspace configuration.",
   tenant_disabled: "It is switched off in your workspace settings. An IP workspace admin can switch it on in Workspace configuration.",
   readiness_test_failed: "Its latest readiness test has not passed. An IP workspace admin re-runs the test in Workspace configuration.",
@@ -78,7 +78,7 @@ export function featureGroups(feature: IpFeatureReadiness): IpReadinessGroup[] {
   return GROUP_ORDER.filter((group) => groups.has(group));
 }
 
-/** One line: how many automations are unavailable, counted per group. */
+/** One line: how many IP features are unavailable, counted per group. */
 export function readinessSummary(features: IpFeatureReadiness[], manualDocketingAvailable: boolean): string {
   const blocked = features.filter((feature) => !feature.available);
   const counts = GROUP_ORDER.map((group) => [
@@ -86,26 +86,60 @@ export function readinessSummary(features: IpFeatureReadiness[], manualDocketing
     blocked.filter((feature) => featureGroups(feature).includes(group)).length,
   ] as const).filter(([, count]) => count > 0);
   const lead = manualDocketingAvailable ? "Manual docketing is available. " : "";
-  const noun = blocked.length === 1 ? "automation is" : "automations are";
+  const noun = blocked.length === 1 ? "IP feature is" : "IP features are";
   return `${lead}${blocked.length} ${noun} unavailable: ${counts.map(([group, count]) => countPhrase(group, count)).join(", ")}.`;
 }
 
-function featureName(featureId: string): string {
-  const words = featureId.replaceAll("_", " ");
+const FEATURE_NAMES: Record<string, string> = {
+  workspace_core: "IP workspace",
+  manual_docketing: "Manual docketing",
+  registry_sync: "Registry sync",
+  deadline_automation: "Deadline automation",
+  notification_automation: "Notification automation",
+  filing_prepare: "Filing preparation",
+  filing_confirm: "Filing confirmation",
+  watch_operations: "Trademark watch",
+  cost_operations: "IP costs",
+  rule_governance: "Deadline rule governance",
+  taxonomy_admin: "Document classification setup",
+};
+
+// What each capability lets a person do, in the words of the role editor.
+const CAPABILITY_NAMES: Record<string, string> = {
+  "ip:read": "view IP records",
+  "ip:write": "create and edit IP records",
+  "ip:registry_sync": "run registry sync",
+  "ip:approve": "approve IP deadlines and notices",
+  "ip:filing_prepare": "prepare filings",
+  "ip:filing_confirm": "confirm filings",
+  "ip:watch_manage": "manage trademark watches",
+  "ip:fees_view": "view IP fees",
+  "ip:rules_propose": "propose deadline rules",
+  "ip:taxonomy_admin": "manage document classifications",
+};
+
+function humanize(id: string): string {
+  const words = id.replace(/^ip:/, "").replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function featureName(featureId: string): string {
+  return FEATURE_NAMES[featureId] ?? humanize(featureId);
+}
+
+export function capabilityName(capability: string): string {
+  return CAPABILITY_NAMES[capability] ?? humanize(capability).toLowerCase();
 }
 
 export function IpAutomationReadiness({
   features,
   manualDocketingAvailable,
   canConfigure,
-  canChangePlan,
   onOpenConfiguration,
 }: {
   features: IpFeatureReadiness[];
   manualDocketingAvailable: boolean;
   canConfigure: boolean;
-  canChangePlan: boolean;
   onOpenConfiguration: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -119,7 +153,7 @@ export function IpAutomationReadiness({
       className="min-w-0 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2"
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <h2 id="ip-automation-readiness-title" className="sr-only">Automation readiness</h2>
+        <h2 id="ip-automation-readiness-title" className="sr-only">IP feature readiness</h2>
         <p className="min-w-0 flex-1 break-words text-sm text-[var(--color-ink-2)]" data-testid="ip-automation-summary">
           {readinessSummary(features, manualDocketingAvailable)}
         </p>
@@ -128,7 +162,7 @@ export function IpAutomationReadiness({
           size="sm"
           variant="ghost"
           aria-expanded={open}
-          aria-controls="ip-automation-readiness-detail"
+          aria-controls={open ? "ip-automation-readiness-detail" : undefined}
           onClick={() => setOpen((value) => !value)}
         >
           {open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
@@ -151,31 +185,26 @@ export function IpAutomationReadiness({
                       <span className="font-semibold text-[var(--color-ink-2)]">{GROUP_TITLE[GROUP_OF[reason]]}.</span>{" "}
                       {REASON_DETAIL[reason]}
                       {reason === "missing_capability" && feature.missing_capabilities.length
-                        ? ` Missing: ${feature.missing_capabilities.join(", ")}.`
+                        ? ` It needs permission to ${feature.missing_capabilities.map(capabilityName).join(", ")}.`
                         : null}
                     </li>
                   ))}
                 </ul>
                 {feature.manual_fallback_feature_id ? (
                   <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                    Until then, use {feature.manual_fallback_feature_id.replaceAll("_", " ")}.
+                    Until then, use {featureName(feature.manual_fallback_feature_id).toLowerCase()}.
                   </div>
                 ) : null}
               </li>
             ))}
           </ul>
-          <div className="flex min-w-0 flex-wrap gap-2">
-            {groups.has("configuration") && canConfigure ? (
+          {groups.has("configuration") && canConfigure ? (
+            <div className="flex min-w-0 flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={onOpenConfiguration}>
                 Open workspace configuration
               </Button>
-            ) : null}
-            {groups.has("entitlement") && canChangePlan ? (
-              <Link className="inline-flex h-9 items-center text-sm font-semibold text-[var(--color-brand-700)] underline" href="/app/admin/billing">
-                Review the workspace plan
-              </Link>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
