@@ -47,6 +47,7 @@ import {
   fetchIpWatchWorkspace,
   fetchIpWorkspaceReadiness,
   ingestIpJournal,
+  listCompanyUsers,
   updateIpWatchProfileStatus,
   type IpCoreRecords,
   type IpFeatureReadiness,
@@ -668,6 +669,12 @@ function RecipientsField({
   onAdd: () => void;
   onRemove: (membershipId: string) => void;
 }) {
+  // Same directory and predicate the picker uses: when every active colleague
+  // is already a recipient there is nothing to add, so the picker is disabled.
+  const colleagues = useQuery({ queryKey: ["company-users"], queryFn: () => listCompanyUsers() });
+  const nobodyToAdd = colleagues.isSuccess && !colleagues.data.users.some(
+    (user) => user.membership_active && user.user_active && !recipients.includes(user.membership_id),
+  );
   return (
     <fieldset className="min-w-0 space-y-2" aria-describedby={error ? errorIdFor("profile-recipients-picker") : undefined}>
       <legend className="text-sm font-medium text-[var(--color-ink)]">Recipients</legend>
@@ -675,8 +682,8 @@ function RecipientsField({
         <ul className="space-y-1" aria-label="Chosen recipients">
           {recipients.map((id) => (
             <li key={id} className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-[var(--color-line)] px-3 py-1.5 text-sm">
-              <span className="min-w-0 break-words"><PersonName membershipId={id} /></span>
-              <Button type="button" size="sm" variant="ghost" aria-label="Remove recipient" onClick={() => onRemove(id)}><X className="h-4 w-4" /></Button>
+              <span id={`recipient-${id}`} className="min-w-0 break-words"><PersonName membershipId={id} /></span>
+              <Button type="button" size="sm" variant="ghost" aria-label="Remove recipient" aria-describedby={`recipient-${id}`} onClick={() => onRemove(id)}><X className="h-4 w-4" /></Button>
             </li>
           ))}
         </ul>
@@ -688,9 +695,10 @@ function RecipientsField({
           value={candidate}
           onChange={setCandidate}
           excludeMembershipIds={recipients}
+          disabled={nobodyToAdd}
           className="min-w-0 flex-1"
         />
-        <Button type="button" variant="outline" size="sm" className="sm:mt-1" disabled={!candidate} onClick={onAdd}><UserPlus className="h-4 w-4" />Add recipient</Button>
+        <Button type="button" variant="outline" size="sm" className="sm:mt-1" disabled={!candidate || nobodyToAdd} onClick={onAdd}><UserPlus className="h-4 w-4" />Add recipient</Button>
       </div>
       {error ? <p id={errorIdFor("profile-recipients-picker")} className="break-words text-sm text-[var(--color-danger-500)]">{error}</p> : null}
     </fieldset>
@@ -810,8 +818,10 @@ function JournalIntake({
   }
 
   const correcting = form.kind !== "advertisement";
+  // The chosen entry stays an option when the filter no longer matches it.
   const filteredPublications = publications.filter((item) =>
-    publicationLabel(item).toLowerCase().includes(predecessorFilter.trim().toLowerCase()),
+    item.id === form.supersedes
+    || publicationLabel(item).toLowerCase().includes(predecessorFilter.trim().toLowerCase()),
   );
   const errorCount = Object.keys(errors).length;
 
@@ -853,6 +863,7 @@ function JournalIntake({
                       value={form.supersedes} onChange={(event) => update("supersedes", CAPTURE_FIELDS.supersedes)(event.target.value)}
                       aria-invalid={errors[CAPTURE_FIELDS.supersedes] ? true : undefined}
                       aria-describedby={errors[CAPTURE_FIELDS.supersedes] ? errorIdFor(CAPTURE_FIELDS.supersedes) : undefined}
+                      disabled={filteredPublications.length === 0}
                       options={[
                         { value: "", label: filteredPublications.length ? "Choose the recorded entry" : "No recorded entry matches", disabled: true },
                         ...filteredPublications.map((item) => ({ value: item.id, label: publicationLabel(item) })),

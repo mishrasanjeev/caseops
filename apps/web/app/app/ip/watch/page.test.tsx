@@ -463,6 +463,17 @@ describe("IP journal watch page", () => {
     await waitFor(() => expect(page.getByRole("button", { name: "Create profile" })).toBeEnabled());
   });
 
+  it("disables adding a recipient when every active colleague already is one", async () => {
+    const user = userEvent.setup();
+    usersMock.mockResolvedValue({ ...USERS, users: [USERS.users[0]] });
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Profiles" }));
+    expect(await within(page.getByRole("list", { name: "Chosen recipients" })).findByText("Ram Gupta — ram@aster.example")).toBeVisible();
+    await waitFor(() => expect(page.getByRole("combobox", { name: "Add a recipient" })).toBeDisabled());
+    expect(page.getByRole("button", { name: "Add recipient" })).toBeDisabled();
+    expect(page.getByText("No other colleague is available to choose.")).toBeVisible();
+  });
+
   it("BUG-014 never drops a profile class token silently", async () => {
     const user = userEvent.setup();
     const page = renderWatchPage();
