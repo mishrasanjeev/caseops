@@ -1,4 +1,11 @@
-"""Explicit, one-shot nonbillable manual-IP grant for the existing test-legal tenant."""
+"""Explicit, one-shot nonbillable IP grant for the existing test-legal tenant.
+
+Two entitlement sets exist. ``ip_workspace`` (receipt schema 1) is the original
+manual-IP grant. ``full_ip`` (receipt schema 2) grants every entitlement key the
+IP capability catalogue gates on, after the owner decided to entitle test-legal
+fully. Both share the same admission checks, request hashing, deterministic
+audit receipt and replay rules, and both only ever target test-legal.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +27,31 @@ _ACTIVE = frozenset({"active", "trialing", "grace", "manual_active"})
 _ACTION = "qa.test_legal.manual_ip_granted"
 _ACTOR = "qa_manual_ip_entitlement"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+IP_WORKSPACE_SET = "ip_workspace"
+FULL_IP_SET = "full_ip"
+# Every entitlement key ``ip_capability_catalog.IP_FEATURES`` gates on. Kept
+# explicit (and pinned to the catalogue by a test) so the reviewed grant cannot
+# silently widen when the catalogue gains a key.
+FULL_IP_ENTITLEMENT_KEYS: tuple[str, ...] = (
+    "ip_costs",
+    "ip_deadline_automation",
+    "ip_filing_operations",
+    "ip_notification_automation",
+    "ip_registry_sync",
+    "ip_rule_governance",
+    "ip_watch",
+    "ip_workspace",
+)
+ENTITLEMENT_SETS: dict[str, tuple[str, ...]] = {
+    IP_WORKSPACE_SET: ("ip_workspace",),
+    FULL_IP_SET: FULL_IP_ENTITLEMENT_KEYS,
+}
+# The receipt schema and audit action identify the set, and the audit identity
+# derives from the operation id alone, so one operation id is consumed by
+# exactly one set.
+_SCHEMA_VERSION = {IP_WORKSPACE_SET: 1, FULL_IP_SET: 2}
+_ACTIONS = {IP_WORKSPACE_SET: _ACTION, FULL_IP_SET: "qa.test_legal.full_ip_granted"}
 
 
 class QaManualIpGrantError(RuntimeError):
@@ -51,6 +83,38 @@ class GrantReceipt:
     replayed: bool
     schema_version: int = 1
     mode: str = "grant"
+
+
+@dataclass(frozen=True)
+class FullIpInspection:
+    company_id: str
+    subscription_id: str
+    before_sha256: str
+    entitlement_set: str = FULL_IP_SET
+    schema_version: int = 2
+    mode: str = "inspect"
+
+
+@dataclass(frozen=True)
+class FullIpGrantReceipt:
+    company_id: str
+    subscription_id: str
+    operation_id: str
+    request_sha256: str
+    before_sha256: str
+    after_sha256: str
+    audit_event_id: str
+    replayed: bool
+    entitlement_keys: tuple[str, ...]
+    entitlement_set: str = FULL_IP_SET
+    schema_version: int = 2
+    mode: str = "grant"
+
+
+def _entitlement_keys(entitlement_set: str) -> tuple[str, ...]:
+    if not isinstance(entitlement_set, str) or entitlement_set not in ENTITLEMENT_SETS:
+        raise QaManualIpGrantError("invalid_entitlement_set")
+    return ENTITLEMENT_SETS[entitlement_set]
 
 
 def _uuid(value: str) -> str:
@@ -119,6 +183,7 @@ def _existing_scope(
     company_id: str,
     subscription_id: str,
     lock: bool,
+    entitlement_keys: tuple[str, ...] = ("ip_workspace",),
 ) -> tuple[Company, BillingSubscription]:
     company_query = select(Company).where(Company.id == company_id)
     if lock:
@@ -149,7 +214,9 @@ def _existing_scope(
     overrides = subscription.entitlement_overrides_json
     if overrides is not None and not isinstance(overrides, dict):
         raise QaManualIpGrantError("invalid_entitlement_overrides")
-    if overrides and "ip_workspace" in overrides and type(overrides["ip_workspace"]) is not bool:
+    if overrides and any(
+        key in overrides and type(overrides[key]) is not bool for key in entitlement_keys
+    ):
         raise QaManualIpGrantError("invalid_ip_override")
     return company, subscription
 
@@ -159,8 +226,10 @@ def inspect_qa_manual_ip_entitlement(
     *,
     company_id: str,
     subscription_id: str,
-) -> Inspection:
+    entitlement_set: str = IP_WORKSPACE_SET,
+) -> Inspection | FullIpInspection:
     """Read only; never bootstrap an account, subscription, catalog or configuration."""
+    entitlement_keys = _entitlement_keys(entitlement_set)
     _uuid(company_id)
     _uuid(subscription_id)
     _fresh_session(session)
@@ -196,8 +265,12 @@ def inspect_qa_manual_ip_entitlement(
                     company_id=company_id,
                     subscription_id=subscription_id,
                     lock=False,
+                    entitlement_keys=entitlement_keys,
                 )
-                return Inspection(company_id, subscription_id, _fingerprint(company, subscription))
+                fingerprint = _fingerprint(company, subscription)
+                if entitlement_set == FULL_IP_SET:
+                    return FullIpInspection(company_id, subscription_id, fingerprint)
+                return Inspection(company_id, subscription_id, fingerprint)
         finally:
             try:
                 connection.rollback()
@@ -218,23 +291,58 @@ def grant_qa_manual_ip_entitlement(
     subscription_id: str,
     expected_before_sha256: str,
     operation_id: str,
-) -> GrantReceipt:
+    entitlement_set: str = IP_WORKSPACE_SET,
+) -> GrantReceipt | FullIpGrantReceipt:
     """Own and commit one atomic override/receipt transaction; never repair drift."""
+    entitlement_keys = _entitlement_keys(entitlement_set)
     _uuid(company_id)
     _uuid(subscription_id)
     _uuid(operation_id)
     if not isinstance(expected_before_sha256, str) or not _SHA256.fullmatch(expected_before_sha256):
         raise QaManualIpGrantError("invalid_fingerprint")
     _fresh_session(session)
-    request = {
-        "schema_version": 1,
+    full = entitlement_set == FULL_IP_SET
+    schema_version = _SCHEMA_VERSION[entitlement_set]
+    action = _ACTIONS[entitlement_set]
+    request: dict[str, object] = {
+        "schema_version": schema_version,
         "company_id": company_id,
         "subscription_id": subscription_id,
         "operation_id": operation_id,
         "expected_before_sha256": expected_before_sha256,
     }
+    receipt_fields = {
+        "schema_version",
+        "operation_id",
+        "request_sha256",
+        "before_sha256",
+        "after_sha256",
+    }
+    if full:
+        request["entitlement_set"] = entitlement_set
+        receipt_fields |= {"entitlement_set", "entitlement_keys"}
     request_sha256 = _digest(request)
     audit_id = str(uuid5(NAMESPACE_URL, f"caseops:qa-manual-ip-entitlement:{operation_id}"))
+
+    def granted(subscription: BillingSubscription) -> bool:
+        overrides = subscription.entitlement_overrides_json or {}
+        return all(overrides.get(key) is True for key in entitlement_keys)
+
+    def receipt(after_sha256: str, *, replayed: bool) -> GrantReceipt | FullIpGrantReceipt:
+        values = (
+            company_id,
+            subscription_id,
+            operation_id,
+            request_sha256,
+            expected_before_sha256,
+            after_sha256,
+            audit_id,
+            replayed,
+        )
+        if full:
+            return FullIpGrantReceipt(*values, entitlement_keys)
+        return GrantReceipt(*values)
+
     with session.begin():
         if session.get_bind().dialect.name == "sqlite":
             session.execute(text("BEGIN IMMEDIATE"))
@@ -250,6 +358,7 @@ def grant_qa_manual_ip_entitlement(
             company_id=company_id,
             subscription_id=subscription_id,
             lock=True,
+            entitlement_keys=entitlement_keys,
         )
         current_sha256 = _fingerprint(company, subscription)
         previous = session.get(AuditEvent, audit_id, populate_existing=True)
@@ -260,7 +369,7 @@ def grant_qa_manual_ip_entitlement(
                 raise QaManualIpGrantError("operation_receipt_mismatch") from exc
             if (
                 previous.company_id != company_id
-                or previous.action != _ACTION
+                or previous.action != action
                 or previous.target_type != "billing_subscription"
                 or previous.target_id != subscription_id
                 or previous.result != "success"
@@ -268,78 +377,67 @@ def grant_qa_manual_ip_entitlement(
                 or previous.actor_label != _ACTOR
                 or previous.request_id != operation_id
                 or not isinstance(metadata, dict)
-                or set(metadata)
-                != {
-                    "schema_version",
-                    "operation_id",
-                    "request_sha256",
-                    "before_sha256",
-                    "after_sha256",
-                }
+                or set(metadata) != receipt_fields
                 or type(metadata.get("schema_version")) is not int
-                or metadata.get("schema_version") != 1
+                or metadata.get("schema_version") != schema_version
                 or metadata.get("operation_id") != operation_id
                 or metadata.get("request_sha256") != request_sha256
                 or metadata.get("before_sha256") != expected_before_sha256
                 or not isinstance(metadata.get("after_sha256"), str)
                 or not _SHA256.fullmatch(metadata["after_sha256"])
+                or (
+                    full
+                    and (
+                        metadata.get("entitlement_set") != entitlement_set
+                        or metadata.get("entitlement_keys") != list(entitlement_keys)
+                    )
+                )
             ):
                 raise QaManualIpGrantError("operation_receipt_mismatch")
-            if (subscription.entitlement_overrides_json or {}).get(
-                "ip_workspace"
-            ) is not True or current_sha256 != metadata["after_sha256"]:
+            if not granted(subscription) or current_sha256 != metadata["after_sha256"]:
                 raise QaManualIpGrantError("consumed_operation_state_changed")
-            return GrantReceipt(
-                company_id,
-                subscription_id,
-                operation_id,
-                request_sha256,
-                expected_before_sha256,
-                current_sha256,
-                audit_id,
-                True,
-            )
+            return receipt(current_sha256, replayed=True)
         if current_sha256 != expected_before_sha256:
             raise QaManualIpGrantError("before_fingerprint_mismatch")
-        if (subscription.entitlement_overrides_json or {}).get("ip_workspace") is not True:
+        if not granted(subscription):
             subscription.entitlement_overrides_json = {
                 **(subscription.entitlement_overrides_json or {}),
-                "ip_workspace": True,
+                **dict.fromkeys(entitlement_keys, True),
             }
             session.flush()
         after_sha256 = _fingerprint(company, subscription)
         # Deterministic PK provides bounded collision detection; this writer only INSERTs.
+        metadata: dict[str, object] = {
+            "schema_version": schema_version,
+            "operation_id": operation_id,
+            "request_sha256": request_sha256,
+            "before_sha256": expected_before_sha256,
+            "after_sha256": after_sha256,
+        }
+        if full:
+            metadata["entitlement_set"] = entitlement_set
+            metadata["entitlement_keys"] = list(entitlement_keys)
         audit.record_audit(
             session,
             event_id=audit_id,
             company_id=company_id,
             actor_type="system",
             actor_label=_ACTOR,
-            action=_ACTION,
+            action=action,
             target_type="billing_subscription",
             target_id=subscription_id,
             result="success",
             request_id=operation_id,
             commit=False,
-            metadata={
-                "schema_version": 1,
-                "operation_id": operation_id,
-                "request_sha256": request_sha256,
-                "before_sha256": expected_before_sha256,
-                "after_sha256": after_sha256,
-            },
+            metadata=metadata,
         )
-        return GrantReceipt(
-            company_id,
-            subscription_id,
-            operation_id,
-            request_sha256,
-            expected_before_sha256,
-            after_sha256,
-            audit_id,
-            False,
-        )
+        return receipt(after_sha256, replayed=False)
 
 
-def receipt_dict(receipt: Inspection | GrantReceipt) -> dict:
-    return asdict(receipt)
+def receipt_dict(
+    receipt: Inspection | GrantReceipt | FullIpInspection | FullIpGrantReceipt,
+) -> dict:
+    value = asdict(receipt)
+    if "entitlement_keys" in value:
+        value["entitlement_keys"] = list(value["entitlement_keys"])
+    return value
