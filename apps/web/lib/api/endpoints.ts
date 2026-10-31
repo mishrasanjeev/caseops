@@ -11557,12 +11557,39 @@ export async function downloadBulkImportErrors(
   return response.blob();
 }
 
-export async function fetchIpDockets(): Promise<{
+export type IpDocketListPage = {
   dockets: IpDocket[];
   count: number;
   has_more: boolean;
-}> {
-  return apiRequest("/api/ip/dockets");
+  /** Keyset position of the next page; null on the last page. */
+  next_cursor?: string | null;
+  /** Visible dockets matching the query across every page. */
+  total_count?: number | null;
+};
+
+export type IpDocketListParams = {
+  /** Case-insensitive docket title, mark, or identifier. */
+  query?: string;
+  /** The previous page's `next_cursor`. */
+  cursor?: string | null;
+  /** Page size, 1-200 (server default 100). */
+  limit?: number;
+  signal?: AbortSignal;
+};
+
+/**
+ * One page of visible active trademark dockets, most recently updated first.
+ * With no argument (including as a bare React Query `queryFn`) this is the
+ * original first page of 100; pass `query` and `cursor` to search and page.
+ */
+export async function fetchIpDockets(params: IpDocketListParams = {}): Promise<IpDocketListPage> {
+  const search = new URLSearchParams();
+  const query = typeof params.query === "string" ? params.query.trim() : "";
+  if (query) search.set("query", query);
+  if (typeof params.cursor === "string" && params.cursor) search.set("cursor", params.cursor);
+  if (typeof params.limit === "number") search.set("limit", String(params.limit));
+  const suffix = search.toString();
+  return apiRequest(`/api/ip/dockets${suffix ? `?${suffix}` : ""}`, { signal: params.signal });
 }
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {

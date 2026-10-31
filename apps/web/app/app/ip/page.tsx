@@ -2218,7 +2218,7 @@ function DeadlineWorkspaceCard({
           Calculations are proposals. A legal deadline changes operational work only after an
           authorized user explicitly confirms it.
         </div>
-        {workspace.isPending ? <p className="text-sm">Loading deadline evidenceâ€¦</p> : null}
+        {workspace.isPending ? <p className="text-sm">Loading deadline evidence…</p> : null}
         {workspace.isError ? (
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <p className="min-w-0 flex-1 break-words text-sm text-red-700">
@@ -2239,9 +2239,9 @@ function DeadlineWorkspaceCard({
                 key={item.deadline_id}
                 className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
               >
-                <strong className="break-words">{item.exception_kinds.join(" Â· ")}</strong>
+                <strong className="break-words">{item.exception_kinds.join(" · ")}</strong>
                 <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {item.result_on ?? "No reliable legal date"} Â· deadline {item.deadline_id}
+                  {item.result_on ?? "No reliable legal date"} · deadline {item.deadline_id}
                 </div>
               </div>
             ))}
@@ -2374,7 +2374,7 @@ function DeadlineWorkspaceCard({
               <Input
                 value={actionReason}
                 onChange={(event) => setActionReason(event.target.value)}
-                placeholder="Verified source changed the dateâ€¦"
+                placeholder="Verified source changed the date…"
               />
             </Field>
             <Field label="Evidence reference">
@@ -2388,7 +2388,7 @@ function DeadlineWorkspaceCard({
               <Input
                 value={attestation}
                 onChange={(event) => setAttestation(event.target.value)}
-                placeholder="Verified official filing receiptâ€¦"
+                placeholder="Verified official filing receipt…"
               />
             </Field>
           </div>
@@ -2412,7 +2412,7 @@ function DeadlineWorkspaceCard({
                 <div className="min-w-0 flex-1">
                   <div className="break-words font-semibold">{deadline.title}</div>
                   <div className="mt-1 break-words text-sm">
-                    {deadline.result_on ?? "Provisional â€” source date unresolved"} Â· {deadline.state} Â· v{deadline.version}
+                    {deadline.result_on ?? "Provisional — source date unresolved"} · {deadline.state} · v{deadline.version}
                   </div>
                   <div className="mt-2 break-words text-xs text-[var(--color-mute)]">
                     {deadline.explanation}
@@ -2726,7 +2726,7 @@ function DeadlineGovernanceCard({
             {workspace.data?.calendars.map((row) => (
               <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
                 <div className="break-words font-semibold">{row.name} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} · {row.source_reference}</div>
                 {canActivate && row.status === "candidate" ? (
                   <Button className="mt-3 w-full sm:w-auto" size="sm" disabled={governanceReason.trim().length < 5 || activateCalendar.isPending} onClick={() => activateCalendar.mutate(row.id)}>Independently activate calendar</Button>
                 ) : null}
@@ -2738,7 +2738,7 @@ function DeadlineGovernanceCard({
             {workspace.data?.rules.map((row) => (
               <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
                 <div className="break-words font-semibold">{row.key} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
+                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} · {row.source_reference}</div>
                 {canActivate ? (
                   <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
                     {row.status === "candidate" ? (

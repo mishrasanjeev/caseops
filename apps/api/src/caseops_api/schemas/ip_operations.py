@@ -753,6 +753,11 @@ class IpDocketListResponse(BaseModel):
     dockets: list[IpDocketRecordResponse]
     count: int
     has_more: bool = False
+    # Keyset position of the next page; null on the last page.
+    next_cursor: str | None = None
+    # Visible dockets matching the query across all pages; null when a
+    # derived listing (for example a filtered control review) omits it.
+    total_count: int | None = None
 
 
 class IpDocketControlRow(BaseModel):

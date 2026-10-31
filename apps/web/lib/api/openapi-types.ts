@@ -27908,6 +27908,10 @@ export interface components {
              * @default false
              */
             has_more: boolean;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** IpDocketMatterLinkListResponse */
         IpDocketMatterLinkListResponse: {
@@ -59121,7 +59125,9 @@ export interface operations {
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
             query?: {
+                cursor?: string | null;
                 limit?: number;
+                query?: string | null;
             };
             header?: never;
             path?: never;
