@@ -281,6 +281,70 @@ describe("AdminMatterBillingPage", () => {
     }));
   });
 
+  it("BUG-016 corrects GST, terms and billing mode on the existing default profile", async () => {
+    const profile = { ...defaultProfile, gst_applicable: false, payment_terms_days: 47 };
+    fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [profile] });
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />));
+    const terms = screen.getByLabelText("Payment terms (days)");
+    await waitFor(() => expect(terms).toHaveValue("47"));
+    const gst = screen.getByRole("checkbox", { name: /GST applicable/ });
+    expect(gst).not.toBeChecked();
+    expect(screen.getByLabelText("CGST bps")).toHaveValue("900");
+    expect(screen.getByLabelText("SGST bps")).toHaveValue("900");
+    expect(screen.getByLabelText("Billing mode")).toHaveValue("hourly");
+    expect(
+      Array.from((screen.getByLabelText("Billing mode") as HTMLSelectElement).options).map((option) => option.value),
+    ).toEqual(["hourly", "fixed_fee", "milestone", "mixed"]);
+    await user.click(gst);
+    await user.clear(terms);
+    await user.type(terms, "30");
+    await user.selectOptions(screen.getByLabelText("Billing mode"), "mixed");
+    await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+    await waitFor(() => expect(updateMatterBillingProfileMock).toHaveBeenCalledWith({
+      profileId: "profile-1",
+      body: { gst_applicable: true, payment_terms_days: 30, billing_mode: "mixed" },
+    }));
+  });
+
+  it("BUG-016 anchors an invalid rate or term to its field and does not save", async () => {
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Save default profile/i })).toBeEnabled());
+    const terms = screen.getByLabelText("Payment terms (days)");
+    expect(terms).toHaveValue("30");
+    await user.clear(terms);
+    await user.type(terms, "400");
+    const cgst = screen.getByLabelText("CGST bps");
+    await user.clear(cgst);
+    await user.type(cgst, "9%");
+    await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+    expect(terms).toHaveAttribute("aria-invalid", "true");
+    expect(terms).toHaveAccessibleDescription("Payment terms (days) must be 365 or less.");
+    expect(cgst).toHaveAttribute("aria-invalid", "true");
+    expect(cgst).toHaveAccessibleDescription("CGST bps must be a whole number.");
+    expect(screen.getByLabelText("SGST bps")).not.toHaveAttribute("aria-invalid");
+    expect(updateMatterBillingProfileMock).not.toHaveBeenCalled();
+    expect(createMatterBillingProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("BUG-016 creates a new profile with the policy shown on the form", async () => {
+    const user = userEvent.setup();
+    fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
+    render(withClient(<AdminMatterBillingPage />));
+    await screen.findByText("No billing profiles");
+    await user.click(screen.getByRole("checkbox", { name: /GST applicable/ }));
+    await user.clear(screen.getByLabelText("Payment terms (days)"));
+    await user.type(screen.getByLabelText("Payment terms (days)"), "15");
+    await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+    await waitFor(() => expect(createMatterBillingProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gst_applicable: false, cgst_rate_bps: 900, sgst_rate_bps: 900,
+        payment_terms_days: 15, billing_mode: "hourly",
+      }),
+    ));
+  });
+
   it("does not invent a firm identity for a new tenant", async () => {
     fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
     render(withClient(<AdminMatterBillingPage />));
