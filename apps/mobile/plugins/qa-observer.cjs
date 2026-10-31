@@ -15,8 +15,9 @@ function parents(file) {
 function ownFile(s){assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1n,'QA_OBSERVER_OWNED_SOURCE');if(process.getuid)assert.equal(s.uid,BigInt(process.getuid()),'QA_OBSERVER_SOURCE_OWNER');}
 function readOpened(fd,size){const raw=Buffer.alloc(Number(size)+1);let offset=0;while(offset<raw.length){const n=fs.readSync(fd,raw,offset,raw.length-offset,null);if(!n)break;offset+=n;}assert.equal(offset,Number(size),'QA_OBSERVER_SOURCE_EXTENT');return raw.subarray(0,offset);}
 function withHeld(file,limit,operation,{writable=false,platform=process.platform}={}) {
- assert.ok(path.isAbsolute(file),'QA_OBSERVER_ABSOLUTE_SOURCE_REQUIRED');const ns=parents(file),named=fs.lstatSync(file,{bigint:true});ownFile(named);const fd=fs.openSync(file,(writable?fs.constants.O_RDWR:fs.constants.O_RDONLY)|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
- try{const first=fs.fstatSync(fd,{bigint:true});ownFile(first);assert.ok(first.size>0n&&first.size<=BigInt(limit)&&namedMatchesFd(named,first,platform),'QA_OBSERVER_OWNED_SOURCE');const raw=readOpened(fd,first.size),after=fs.fstatSync(fd,{bigint:true}),finalNamed=fs.lstatSync(file,{bigint:true});
+ assert.ok(path.isAbsolute(file),'QA_OBSERVER_ABSOLUTE_SOURCE_REQUIRED');let fd;
+ try{fd=fs.openSync(file,(writable?fs.constants.O_RDWR:fs.constants.O_RDONLY)|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));}catch(error){if(error.code==='ELOOP')assert.fail('QA_OBSERVER_OWNED_SOURCE');throw error;}
+ try{const first=fs.fstatSync(fd,{bigint:true});ownFile(first);assert.ok(first.size>0n&&first.size<=BigInt(limit),'QA_OBSERVER_OWNED_SOURCE');const named=fs.lstatSync(file,{bigint:true});ownFile(named);assert.ok(namedMatchesFd(named,first,platform),'QA_OBSERVER_OWNED_SOURCE');const ns=parents(file);const raw=readOpened(fd,first.size),after=fs.fstatSync(fd,{bigint:true}),finalNamed=fs.lstatSync(file,{bigint:true});
   assert.ok(fdEqual(first,after)&&fdEqual(named,finalNamed)&&namedMatchesFd(finalNamed,after,platform),'QA_OBSERVER_SOURCE_CHANGED');assert.deepEqual(parents(file),ns,'QA_OBSERVER_NAMESPACE_CHANGED');return operation({raw,fd,first,named,namespace:ns});
  }finally{fs.closeSync(fd);}
 }
@@ -59,12 +60,12 @@ started=time.monotonic()
 p=pathlib.Path(sys.argv[1]); expected=sys.argv[2]; args=sys.argv[3:]
 def ident(s):return tuple(getattr(s,k)for k in('st_dev','st_ino','st_mode','st_uid','st_gid','st_nlink','st_size','st_mtime_ns','st_ctime_ns'))
 def named_matches_fd(named,opened,platform=os.name):return all(getattr(named,k)==getattr(opened,k)for k in('st_dev','st_ino','st_mode','st_uid','st_gid','st_nlink','st_size','st_mtime_ns','st_ctime_ns')if not(k=='st_dev'and platform=='nt'and named.st_dev==0))
-ns=[(str(a),a.lstat().st_dev,a.lstat().st_ino,a.lstat().st_mode,a.lstat().st_uid,a.lstat().st_gid)for a in p.parents]
-assert all(stat.S_ISDIR(a.lstat().st_mode)and not stat.S_ISLNK(a.lstat().st_mode)for a in p.parents),'QA_OBSERVER_HELPER_NAMESPACE'
-n=p.lstat();assert stat.S_ISREG(n.st_mode)and not stat.S_ISLNK(n.st_mode)and n.st_nlink==1,'QA_OBSERVER_HELPER_OWNER'
 fd=os.open(p,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_NONBLOCK',0))
 try:
- s=os.fstat(fd);assert stat.S_ISREG(n.st_mode)and not stat.S_ISLNK(n.st_mode)and s.st_nlink==1 and s.st_uid==(os.getuid()if hasattr(os,'getuid')else pathlib.Path.home().stat().st_uid)and s.st_size<=65536 and named_matches_fd(n,s),'QA_OBSERVER_HELPER_OWNER'
+ s=os.fstat(fd);assert stat.S_ISREG(s.st_mode)and s.st_nlink==1 and s.st_uid==(os.getuid()if hasattr(os,'getuid')else pathlib.Path.home().stat().st_uid)and s.st_size<=65536,'QA_OBSERVER_HELPER_OWNER'
+ n=p.lstat();assert stat.S_ISREG(n.st_mode)and not stat.S_ISLNK(n.st_mode)and n.st_nlink==1 and named_matches_fd(n,s),'QA_OBSERVER_HELPER_OWNER'
+ ns=[(str(a),a.lstat().st_dev,a.lstat().st_ino,a.lstat().st_mode,a.lstat().st_uid,a.lstat().st_gid)for a in p.parents]
+ assert all(stat.S_ISDIR(a.lstat().st_mode)and not stat.S_ISLNK(a.lstat().st_mode)for a in p.parents),'QA_OBSERVER_HELPER_NAMESPACE'
  raw=bytearray()
  while len(raw)<=s.st_size:
   part=os.read(fd,min(65536,s.st_size+1-len(raw)))

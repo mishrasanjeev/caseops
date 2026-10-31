@@ -59,7 +59,7 @@ def workflow_contract(text):
         'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"', 'docker image inspect --format',
         'docker run --rm -i --user 0 --workdir /app', '"$image_id" sh -eu',
         'dst=/license-guard/check_js_license_coverage.py,readonly', 'dst=/evidence',
-        'apk add --no-cache python3', 'npm install --prefix /license-audit',
+        'apk add --no-cache python3', 'node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit',
         '--ignore-scripts --no-audit --no-fund --save-exact license-checker@25.0.1',
         '--require-platform linux-x64-musl --require-pruned-tree',
         'license-checker --start /app --json --packages "$packages"',
@@ -67,6 +67,16 @@ def workflow_contract(text):
         'name: js-license-report\n          path: ${{ runner.temp }}/js-license-evidence\n',
     )
     if any(marker not in block for marker in required) or any(marker in block for marker in ("--production", "--excludePackages", "--excludePrivatePackages", "--onlyAllow", "continue-on-error", "npx", "npm install --prefix /app", "|| true")):
+        raise ValueError("License coverage or policy wiring missing")
+
+
+    audit = re.findall(r"<<'AUDIT'[^\n]*\n(.*?)^\s+AUDIT\s*$", block, re.MULTILINE | re.DOTALL)
+    if len(audit) != 1:
+        raise ValueError("License coverage or policy wiring missing")
+    body = re.sub(r"\\\n\s*", " ", audit[0])
+    node_commands = [" ".join(line.split()) for line in body.splitlines() if re.match(r"^\s*node\s", line)]
+    expected = "node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit --cache /license-audit/npm-cache --ignore-scripts --no-audit --no-fund --save-exact license-checker@25.0.1"
+    if node_commands != [expected] or re.search(r"(?:^|[\s;&|])(?:[^\s;&|]*/)?(?:npm|npx)\s", body):
         raise ValueError("License coverage or policy wiring missing")
 
 
@@ -1074,7 +1084,19 @@ class WiringTests(unittest.TestCase):
     def test_audit_tools_cannot_be_installed_into_app_dependencies(self):
         text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "wiring missing"):
-            workflow_contract(text.replace('npm install --prefix /license-audit', 'npm install --prefix /app'))
+            workflow_contract(text.replace('node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit', 'node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /app'))
+
+    def test_musl_audit_cannot_revert_to_removed_ambient_npm(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text.replace('node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit', 'npm install --prefix /license-audit'))
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text.replace('cp /license-audit/package-lock.json', 'npm --version\n          cp /license-audit/package-lock.json'))
+
+    def test_musl_audit_cannot_use_an_unreviewed_cli_helper(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "wiring missing"):
+            workflow_contract(text.replace('node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit', 'node /unreviewed/npm-tooling.mjs install --prefix /license-audit'))
 
     def test_actual_pruned_target_cannot_be_replaced_with_runner_or_host(self):
         text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")

@@ -276,7 +276,7 @@ jobs:
             "$image_id" sh -eu <<'AUDIT' 2>&1 | tee "$output/container.log"
           trap 'status=$?; printf "{\"exit_code\":%s}\n" "$status" > /evidence/container-completion.json' EXIT
           apk add --no-cache python3
-          npm install --prefix /license-audit --cache /license-audit/npm-cache \
+          node /opt/caseops/scripts/mobile/npm-tooling.mjs install --prefix /license-audit --cache /license-audit/npm-cache \
             --ignore-scripts --no-audit --no-fund --save-exact license-checker@25.0.1
           cp /license-audit/package-lock.json /evidence/scanner-package-lock.json
           export PATH="/license-audit/node_modules/.bin:$PATH"

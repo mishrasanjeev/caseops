@@ -32,9 +32,10 @@ test('named Windows dev0 exception never applies to full FD equality or nonzero 
  for(const field of Object.keys(a)){assert.equal(helper.fdEqual(a,{...a,[field]:2n}),false,field);if(field!=='dev')assert.equal(helper.namedMatchesFd({...zero,[field]:2n},a,'win32'),false,field);}
 });
 test('actual held reader admits simulated named dev0 but rejects a changed FD dev',()=>fixture(root=>{
- const file=path.join(root,'owned'),raw=Buffer.from('public-owned-test');fs.writeFileSync(file,raw);const originalLstat=fs.lstatSync,originalFstat=fs.fstatSync;
- fs.lstatSync=(p,...args)=>{const s=originalLstat(p,...args);return p===file&&args[0]?.bigint?new Proxy(s,{get:(o,k)=>k==='dev'?0n:Reflect.get(o,k)}):s;};
- try{assert.deepEqual(helper.held(file,64,'win32'),raw);let n=0;fs.fstatSync=(fd,...args)=>{const s=originalFstat(fd,...args);return ++n===2?new Proxy(s,{get:(o,k)=>k==='dev'?s.dev+1n:Reflect.get(o,k)}):s;};assert.throws(()=>helper.held(file,64,'win32'),/SOURCE_CHANGED/);}finally{fs.lstatSync=originalLstat;fs.fstatSync=originalFstat;}
+ const file=path.join(root,'owned'),raw=Buffer.from('public-owned-test');fs.writeFileSync(file,raw);const originalLstat=fs.lstatSync,originalFstat=fs.fstatSync,originalOpen=fs.openSync,originalRead=fs.readSync,events=[];
+ fs.openSync=(p,...args)=>{if(p===file)events.push('open');return originalOpen(p,...args);};fs.fstatSync=(fd,...args)=>{events.push('fd');return originalFstat(fd,...args);};fs.readSync=(...args)=>{events.push('read');return originalRead(...args);};
+ fs.lstatSync=(p,...args)=>{const s=originalLstat(p,...args);if(p===file&&args[0]?.bigint){events.push('named');return new Proxy(s,{get:(o,k)=>k==='dev'?0n:Reflect.get(o,k)});}return s;};
+ try{assert.deepEqual(helper.held(file,64,'win32'),raw);assert.deepEqual(events.slice(0,3),['open','fd','named']);assert.ok(events.indexOf('read')>events.indexOf('named'));let n=0;fs.fstatSync=(fd,...args)=>{const s=originalFstat(fd,...args);return ++n===2?new Proxy(s,{get:(o,k)=>k==='dev'?s.dev+1n:Reflect.get(o,k)}):s;};assert.throws(()=>helper.held(file,64,'win32'),/SOURCE_CHANGED/);}finally{fs.lstatSync=originalLstat;fs.fstatSync=originalFstat;fs.openSync=originalOpen;fs.readSync=originalRead;}
 }));
 function overlayFixture(root){const main=path.join(root,'app/src/main/java/ai/caseops/mobile/dev/MainApplication.kt');fs.mkdirSync(path.dirname(main),{recursive:true});fs.writeFileSync(main,MAIN);const settings=path.join(root,'settings.gradle');fs.writeFileSync(settings,"include ':app'\n");return{main,settings};}
 test('recursive output symlink refuses before any outside creation or main/settings write',()=>fixture(root=>{

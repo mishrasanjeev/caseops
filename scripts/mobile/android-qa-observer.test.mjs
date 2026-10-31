@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { QA_APP, QA_OBSERVER_APP, QA_OBSERVER_DOMAIN, decodeObserverInstrumentation, validateObserverPacket, observeQaPrivacy } from './android-qa-observer.mjs';
+import { QA_APP, QA_OBSERVER_APP, decodeObserverInstrumentation, validateObserverPacket, observeQaPrivacy } from './android-qa-observer.mjs';
 const hash = v => createHash('sha256').update(v).digest('hex');
 import { descriptor, request, packet, wire, f, bundle } from './qa-observer-test-fixture.mjs';
 test('actual protobuf omitted scalar zero is accepted only for the typed fields', () => { const p = packet(), decoded = decodeObserverInstrumentation(wire(p), request.requestId); assert.deepEqual(decoded.packet, p); assert.equal(decoded.leaseClosed, true); });

@@ -44,7 +44,8 @@ export function installNpmRegistryTransport({ logPath, deadline, maximumRequests
     const host = options.hostname || options.host;
     assert.ok(host === 'registry.npmjs.org' && (!options.protocol || options.protocol === 'https:')
       && (options.port === undefined || options.port === null || options.port === '' || String(options.port) === '443')
-      && options.rejectUnauthorized !== false && (options.servername === undefined || options.servername === host)
+      && (options.rejectUnauthorized === undefined || options.rejectUnauthorized === true)
+      && (options.servername === undefined || options.servername === host)
       && typeof options.path === 'string' && options.path.startsWith('/') && options.path.length <= 4096,
     'NPM_REGISTRY_OFFICIAL_HTTPS_ONLY');
     const headers = { ...options.headers };

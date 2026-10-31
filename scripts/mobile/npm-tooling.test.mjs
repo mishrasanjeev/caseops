@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import childProcess, { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,7 +11,7 @@ import { gunzipSync } from 'node:zlib';
 import https from 'node:https';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
-import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, prepareNpm, readPinnedArchive, regularTarMembers, verifyInstalledNpm } from './npm-tooling.mjs';
+import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, verifyInstalledNpm } from './npm-tooling.mjs';
 import { installNpmRegistryTransport } from './npm-registry.mjs';
 
 const archive = process.env.CASEOPS_TEST_NPM_ARCHIVE || fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', import.meta.url));
@@ -193,7 +194,11 @@ test('failed ordinary native requests are not replayed and get keeps the origina
 });
 test('ordinary registry transport refuses unverified TLS foreign origins plaintext and conflicting markers before request', t => {
   withNativeRequest(t, ({ requests }) => {
-    for (const options of [{ hostname: 'elsewhere.example', path: '/' }, { hostname: 'registry.npmjs.org', path: '/', rejectUnauthorized: false },
+    // Adversarial data is rejected before the native request constructor sees it.
+    const tlsInputs = JSON.parse('[{"rejectUnauthorized":false},{"rejectUnauthorized":"INERT_FORBIDDEN_VALUE"},{"rejectUnauthorized":null}]');
+    assert.equal(tlsInputs[0].rejectUnauthorized, false);
+    for (const options of [{ hostname: 'elsewhere.example', path: '/' },
+      ...tlsInputs.map(value => ({ hostname: 'registry.npmjs.org', path: '/', ...value })),
       { hostname: 'registry.npmjs.org', path: '/', servername: 'elsewhere.example' },
       { hostname: 'registry.npmjs.org', path: '/', headers: { 'x-caseops-automated-test': 'conflict' } }]) assert.throws(() => https.request(options));
     assert.throws(() => http.request('http://registry.npmjs.org/'), /NPM_REGISTRY_PLAINTEXT_REFUSED/); assert.equal(requests.length, 0);
@@ -240,4 +245,115 @@ test('POSIX kernel EACCES on either owned shim refuses preparation before any CL
     } }, () => assert.throws(() => prepareNpm({ parent: root, archive }), /NPM_TOOLING_EXECUTABLE_SHIM_REQUIRED/));
     assert.equal(denied, true);
   }
+});
+
+
+// These fixed-fact/mocked-command controls exercise the portable admission code.
+// They do not establish actual Windows SID/ACL acceptance; fresh Windows CI does.
+const windowsAclFact = (patch = {}) => ({ runtimeOwner: true, reviewedAdminSource: false,
+  writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64), ...patch });
+function withWindowsAcl(root, producer, run) {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform'), original = childProcess.spawnSync;
+  const systemRoot = Object.getOwnPropertyDescriptor(process.env, 'SystemRoot');
+  Object.defineProperty(process, 'platform', { ...platform, value: 'win32' }); process.env.SystemRoot = root;
+  childProcess.spawnSync = producer; syncBuiltinESMExports();
+  try { return run(); }
+  finally {
+    childProcess.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot) Object.defineProperty(process.env, 'SystemRoot', systemRoot); else delete process.env.SystemRoot;
+  }
+}
+test('Windows npm ownership facts retain exact runtime and public-only administrator admission', () => {
+  const decoded = patch => JSON.stringify(windowsAclFact(patch));
+  assert.equal(reviewNpmWindowsOwnerOutput(decoded()), 'a'.repeat(64));
+  assert.equal(reviewNpmWindowsOwnerOutput(decoded({ runtimeOwner: false, reviewedAdminSource: true }), true), 'a'.repeat(64));
+  assert.throws(() => reviewNpmWindowsOwnerOutput(decoded({ runtimeOwner: false, reviewedAdminSource: true })), /NPM_TOOLING_WINDOWS_OWNER_SID_REFUSED/);
+  for (const publicData of [false, true]) {
+    assert.throws(() => reviewNpmWindowsOwnerOutput(decoded({ writeScopeSafe: false }), publicData), /NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED/);
+    assert.throws(() => reviewNpmWindowsOwnerOutput(decoded({ tokenUserPresent: false }), publicData), /NPM_TOOLING_WINDOWS_OWNER_TOKEN_REQUIRED/);
+    assert.throws(() => reviewNpmWindowsOwnerOutput(decoded({ runtimeOwner: false, reviewedAdminSource: false }), publicData), /NPM_TOOLING_WINDOWS_OWNER_SID_REFUSED/);
+  }
+});
+test('Windows npm ACL protocol refuses malformed oversized and unknown facts without reflecting them', () => {
+  for (const raw of ['', ' ', '{', 'null', '[]', 'x'.repeat(4097)])
+    assert.throws(() => reviewNpmWindowsOwnerOutput(raw), /NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_/);
+  for (const key of Object.keys(windowsAclFact())) {
+    const missing = windowsAclFact(); delete missing[key];
+    assert.throws(() => reviewNpmWindowsOwnerOutput(JSON.stringify(missing)), /NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_FIELDS/);
+    const wrong = windowsAclFact({ [key]: key === 'aclSha256' ? 'NOT_A_DIGEST' : 'true' });
+    assert.throws(() => reviewNpmWindowsOwnerOutput(JSON.stringify(wrong)), /NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_/);
+  }
+  assert.throws(() => reviewNpmWindowsOwnerOutput(JSON.stringify(windowsAclFact({ privateUnknownField: 'DO_NOT_REFLECT' }))), error => {
+    assert.match(error.message, /NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_FIELDS/); assert.equal(error.message.includes('DO_NOT_REFLECT'), false); return true;
+  });
+  assert.throws(() => reviewNpmWindowsOwnerOutput(JSON.stringify(windowsAclFact()), 'true'), /NPM_TOOLING_WINDOWS_OWNER_ADMISSION/);
+});
+test('the actual archive caller brackets held bytes with typed Windows ACL commands and rejects transport or hash drift', t => {
+  const root = fixture(t), calls = [];
+  const success = { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact({ runtimeOwner: false, reviewedAdminSource: true })) };
+  withWindowsAcl(root, (executable, args, options) => {
+    calls.push({ executable, args, options }); return success;
+  }, () => assert.equal(hash(readPinnedArchive(archive)), NPM_ARTIFACT.sha256));
+  assert.equal(calls.length, 2);
+  for (const { executable, args, options } of calls) {
+    assert.equal(executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'));
+    assert.deepEqual(args.slice(0, 4), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']);
+    assert.match(args[4], /\[IO\.File\]::GetAccessControl/); assert.match(args[4], /\[IO\.Directory\]::GetAccessControl/);
+    assert.equal(args[4].includes('Get-Acl'), false);
+    assert.deepEqual(options.env, { SystemRoot: root, WINDIR: root, CASEOPS_NPM_ACL_PATH: archive, CASEOPS_NPM_ACL_KIND: 'file' });
+    assert.ok(options.timeout > 0 && options.timeout <= 5000); assert.equal(options.maxBuffer, 4096); assert.equal(options.windowsHide, true);
+  }
+  for (const change of [{ status: 1 }, { signal: 'SIGTERM' }, { error: Error('CONTROL_TIMEOUT') }, { stderr: 'CONTROL_DIAGNOSTIC' }]) {
+    let opened, closed;
+    withWindowsAcl(root, () => ({ ...success, ...change }), () => withFs({
+      openSync(original, ...args) { const fd = original(...args); if (args[0] === archive) opened = fd; return fd; },
+      closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+    }, () => assert.throws(() => readPinnedArchive(archive), /NPM_TOOLING_WINDOWS_OWNER_COMMAND_REFUSED/)));
+    assert.equal(closed, opened); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  }
+  let observations = 0;
+  withWindowsAcl(root, () => ({ ...success, stdout: JSON.stringify(windowsAclFact({ aclSha256: (++observations === 1 ? 'a' : 'b').repeat(64) })) }),
+    () => assert.throws(() => readPinnedArchive(archive), /NPM_TOOLING_ARCHIVE_CHANGED/));
+  assert.equal(observations, 2);
+});
+test('a private npm runtime cannot inherit the pinned public archive owner exception', t => {
+  const root = fixture(t), kinds = [];
+  withWindowsAcl(root, (_executable, _args, options) => {
+    kinds.push(options.env.CASEOPS_NPM_ACL_KIND);
+    return { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact({ runtimeOwner: false, reviewedAdminSource: true })) };
+  }, () => assert.throws(() => prepareNpm({ parent: root, archive }), /NPM_TOOLING_WINDOWS_OWNER_SID_REFUSED/));
+  assert.deepEqual(kinds, ['file', 'file', 'directory']);
+  const children = fs.readdirSync(root); assert.equal(children.length, 1); assert.match(children[0], /^caseops-npm-/);
+  assert.deepEqual(fs.readdirSync(path.join(root, children[0])), []);
+});
+test('installed file descriptors precede pathname checks and reject replacement before any payload read', t => {
+  const value = installed(t), events = [];
+  withFs({
+    openSync(original, file, ...args) { if (file === value.file) events.push('open'); return original(file, ...args); },
+    lstatSync(original, file, ...args) { if (file === value.file) events.push('named'); return original(file, ...args); },
+  }, () => verify(value));
+  assert.equal(events[0], 'open');
+  let opened, closed, reads = 0;
+  withFs({
+    openSync(original, file, ...args) {
+      const fd = original(file, ...args);
+      if (file === value.file) { opened = fd; const replacement = path.join(value.root, 'replacement'); fs.writeFileSync(replacement, 'ordinary'); fs.renameSync(replacement, file); }
+      return fd;
+    },
+    readSync(original, fd, ...args) { if (fd === opened) reads++; return original(fd, ...args); },
+    closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+  }, () => assert.throws(() => verify(value), /NPM_TOOLING_NAMED_DESCRIPTOR_CHANGED/));
+  assert.equal(reads, 0); assert.equal(closed, opened); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+});
+
+test('ordinary registry transport accepts only default or explicit verified TLS and preserves native request identity', t => {
+  withNativeRequest(t, ({ requests }) => {
+    for (const option of [{}, { rejectUnauthorized: undefined }, { rejectUnauthorized: true }]) {
+      const request = https.request({ hostname: 'registry.npmjs.org', path: '/ordinary', ...option });
+      assert.equal(request, requests[requests.length - 1].req);
+      assert.equal(requests[requests.length - 1].options.rejectUnauthorized, true);
+      assert.equal(requests[requests.length - 1].options.headers['X-CaseOps-Automated-Test'], 'no-paid-providers');
+    }
+    assert.equal(requests.length, 3);
+  });
 });
