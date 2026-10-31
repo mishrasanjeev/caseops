@@ -47,6 +47,7 @@ function Harness({
   onChange?: (id: string, record: IpDocket | null) => void;
   emptyOptionLabel?: string;
   error?: string;
+  excludeIds?: string[];
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -252,5 +253,21 @@ describe("IpDocketPicker", () => {
     await waitFor(() => expect(picker()).toBeEnabled());
     expect(picker()).toHaveAttribute("aria-invalid", "true");
     expect(picker()).toHaveAccessibleDescription(expect.stringContaining("Docket: Select the docket to reconcile."));
+  });
+
+  it("never offers an excluded docket, such as a transfer's own docket as its successor", async () => {
+    fetchIpDocketsMock.mockResolvedValue(page([PINE, TASTYBITE], { total: 2 }));
+    renderPicker(<Harness excludeIds={["pine"]} />);
+    await waitFor(() => expect(picker()).toBeEnabled());
+    expect(optionValues()).toEqual(["", "tasty"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 docket.");
+  });
+
+  it("explains when the only visible docket is excluded", async () => {
+    fetchIpDocketsMock.mockResolvedValue(page([PINE]));
+    renderPicker(<Harness excludeIds={["pine"]} />);
+    expect(await screen.findByText(/No other trademark docket is visible to you/)).toBeVisible();
+    expect(optionValues()).toEqual([""]);
+    expect(picker()).toBeDisabled();
   });
 });

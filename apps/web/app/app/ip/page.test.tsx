@@ -19,6 +19,8 @@ vi.mock("@/components/app/InAppNotificationCenter", () => ({
 }));
 
 const {
+  addIpCostItemMock,
+  fetchMatterWorkspaceMock,
   fetchIpNiceClassesMock,
   listMattersMock,
   enableIpWorkspaceMock,
@@ -64,6 +66,8 @@ const {
   updateTrademarkApplicationPhaseMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  addIpCostItemMock: vi.fn(),
+  fetchMatterWorkspaceMock: vi.fn(),
   fetchIpNiceClassesMock: vi.fn(),
   listMattersMock: vi.fn(),
   enableIpWorkspaceMock: vi.fn(),
@@ -112,6 +116,7 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   TRADEMARK_MARK_KINDS: ["word", "device", "composite", "label", "colour", "shape", "sound", "other"],
+  fetchMatterWorkspace: fetchMatterWorkspaceMock,
   fetchIpNiceClasses: fetchIpNiceClassesMock,
   listMatters: listMattersMock,
   fetchIpDocket: fetchIpDocketMock,
@@ -161,7 +166,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   syncHearingToOutlook: vi.fn(),
   syncHearingToGoogleCalendar: vi.fn(),
   addIpTitleInterest: vi.fn(),
-  addIpCostItem: vi.fn(),
+  addIpCostItem: addIpCostItemMock,
   correctIpCostItem: correctIpCostItemMock,
   discoverIpEvidence: vi.fn(),
   reviewIpEvidenceCandidate: vi.fn(),
@@ -478,6 +483,10 @@ describe("IpDocketPage", () => {
     fetchIpNiceClassesMock.mockResolvedValue(niceCatalogue());
     listMattersMock.mockReset();
     listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
+    addIpCostItemMock.mockReset();
+    addIpCostItemMock.mockResolvedValue({});
+    fetchMatterWorkspaceMock.mockReset();
+    fetchMatterWorkspaceMock.mockResolvedValue({ invoices: [], time_entries: [] });
     fetchIpWorkspaceReadinessMock.mockResolvedValue({
       timezone: "Asia/Calcutta",
       workspace_available: true,
@@ -1042,6 +1051,68 @@ describe("IpDocketPage", () => {
     } finally {
       Element.prototype.scrollIntoView = original;
     }
+  });
+
+  it("BUG-001 picks a transfer's successor docket by name and never offers the docket itself", async () => {
+    const successor = { ...activeDocket(), id: "ip-2", title: "BIRCH", primary_identifier: "TM-2" };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket(), successor], count: 2 });
+    render(withClient(<IpDocketPage />));
+
+    const lifecycle = await screen.findByTestId("ip-lifecycle-workflow");
+    fireEvent.change(within(lifecycle).getByLabelText("Transition"), { target: { value: "transferred" } });
+    expect(within(lifecycle).queryByLabelText("Successor docket ID")).toBeNull();
+    const picker = within(lifecycle).getByRole<HTMLSelectElement>("combobox", { name: "Successor docket" });
+    await waitFor(() => expect(picker).toBeEnabled());
+    expect(Array.from(picker.options, (option) => option.value)).toEqual(["", "ip-2"]);
+    const preview = within(lifecycle).getByRole("button", { name: "Preview lifecycle impact" });
+    fireEvent.change(within(lifecycle).getByLabelText("Reason"), { target: { value: "Assigned to the successor owner." } });
+    fireEvent.change(within(lifecycle).getByLabelText("Outcome"), { target: { value: "transferred" } });
+    fireEvent.change(within(lifecycle).getByLabelText("Evidence reference"), { target: { value: "attachment:assignment-1" } });
+    expect(preview).toBeDisabled();
+    fireEvent.change(picker, { target: { value: "ip-2" } });
+    expect(preview).toBeEnabled();
+    fireEvent.click(preview);
+    await waitFor(() => expect(previewIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+    expect(previewIpDocketLifecycleMock).toHaveBeenCalledWith(
+      "ip-1",
+      expect.objectContaining({ toStatus: "transferred", successorDocketId: "ip-2" }),
+    );
+  });
+
+  it("BUG-002 posts the chosen cost category and a Matter billing record chosen by name", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchMatterWorkspaceMock.mockResolvedValue({
+      invoices: [{ id: "invoice-1", invoice_number: "INV-2026-001", status: "issued", total_amount_minor: 900000,
+        balance_due_minor: 0, amount_received_minor: 0, currency: "INR", line_items: [] }],
+      time_entries: [],
+    });
+    render(withClient(<IpDocketPage />));
+
+    const costs = await screen.findByTestId("ip-cost-workspace");
+    fireEvent.change(within(costs).getByLabelText("Category"), { target: { value: "professional_fee" } });
+    fireEvent.change(within(costs).getByLabelText("Description"), { target: { value: "Counsel fee for the search" } });
+    fireEvent.change(within(costs).getByLabelText("Amount (INR)"), { target: { value: "9000" } });
+    fireEvent.change(within(costs).getByLabelText("Evidence reference"), { target: { value: "receipt:counsel-1" } });
+    fireEvent.change(within(costs).getByLabelText("Matter billing link type"), { target: { value: "invoice" } });
+    expect(within(costs).queryByLabelText("Matter billing record ID")).toBeNull();
+    const record = within(costs).getByRole<HTMLSelectElement>("combobox", { name: "Matter billing record" });
+    await waitFor(() => expect(record).toBeEnabled());
+    expect(fetchMatterWorkspaceMock).toHaveBeenCalledWith("matter-1", expect.anything());
+    const add = within(costs).getByRole("button", { name: "Add cost evidence" });
+    expect(add).toBeDisabled();
+    fireEvent.change(record, { target: { value: "invoice-1" } });
+    expect(record).toHaveAccessibleDescription("INV-2026-001 · issued · INR 9000.00");
+    fireEvent.click(add);
+    await waitFor(() => expect(addIpCostItemMock).toHaveBeenCalledTimes(1));
+    expect(addIpCostItemMock).toHaveBeenCalledWith(
+      "ip-1",
+      expect.objectContaining({
+        category: "professional_fee",
+        amountMinor: 900000,
+        billingLinkType: "invoice",
+        billingLinkId: "invoice-1",
+      }),
+    );
   });
 
   it("BUG-001 explains each unavailable automation by who can change it", async () => {

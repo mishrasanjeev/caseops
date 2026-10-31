@@ -27,7 +27,9 @@ import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationW
 import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
 import { IpAutomationReadiness, readinessReasonText } from "@/components/ip/IpAutomationReadiness";
 import { IP_NEW_TRADEMARK_PANEL_ID, IpTrademarkCreatePanel } from "@/components/ip/IpTrademarkCreatePanel";
+import { IpBillingRecordSelect } from "@/components/ip/IpBillingRecordSelect";
 import { IpDocketClassScope } from "@/components/ip/IpDocketClassScope";
+import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -3152,7 +3154,16 @@ function LifecycleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabl
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             <Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
-            {toStatus === "transferred" ? <Field label="Successor docket ID"><Input value={successorDocketId} onChange={(event) => setSuccessorDocketId(event.target.value)} /></Field> : null}
+            {toStatus === "transferred" ? (
+              <IpDocketPicker
+                id="lifecycle-successor-docket"
+                label="Successor docket"
+                value={successorDocketId}
+                onChange={(docketId) => setSuccessorDocketId(docketId)}
+                excludeIds={[docket.id]}
+                required
+              />
+            ) : null}
             <Field label="Second approver (optional)" htmlFor="lifecycle-second-approver"><PersonPicker id="lifecycle-second-approver" value={secondApproverMembershipId} onChange={setSecondApproverMembershipId} placeholder="No second approver" /></Field>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview lifecycle impact</Button>
@@ -3755,7 +3766,7 @@ function CostCorrectionEditor({
                 <select
                   className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                   value={billingLinkType}
-                  onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}
+                  onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}
                 >
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
@@ -3763,10 +3774,15 @@ function CostCorrectionEditor({
                   <option value="time_entry">Time entry</option>
                 </select>
               </Field>
-              {billingLinkType ? (
-                <Field label="Corrected Matter billing record ID">
-                  <Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} />
-                </Field>
+              {billingLinkType && docket.matter_id ? (
+                <IpBillingRecordSelect
+                  id={`ip-cost-correction-billing-record-${row.id}`}
+                  label="Corrected Matter billing record"
+                  matterId={docket.matter_id}
+                  linkType={billingLinkType}
+                  value={billingLinkId}
+                  onChange={setBillingLinkId}
+                />
               ) : null}
             </>
           ) : null}
@@ -3942,7 +3958,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
             ) : null}
             {canLinkBilling ? (
               <Field label="Matter billing link type">
-                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}>
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
                   <option value="invoice_line_item">Invoice line item</option>
@@ -3956,7 +3972,16 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
                   : "A nonbillable cost is not linked to a billing record."}
               </p>
             )}
-            {canLinkBilling && billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            {canLinkBilling && billingLinkType && docket.matter_id ? (
+              <IpBillingRecordSelect
+                id="ip-cost-billing-record"
+                label="Matter billing record"
+                matterId={docket.matter_id}
+                linkType={billingLinkType}
+                value={billingLinkId}
+                onChange={setBillingLinkId}
+              />
+            ) : null}
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
                 {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
