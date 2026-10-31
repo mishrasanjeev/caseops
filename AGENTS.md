@@ -1,5 +1,14 @@
 # CaseOps agent instructions
 
+- Raw-owned emulator cleanup and pytest patch lifetime are separate owners.
+  Restore a nested override before closing its owning emulator, then undo the
+  outer patch before asserting baseline identity. Do not close an owner through
+  an unrelated patched cleanup function or put cleanup/dispatch/waits in asserts.
+- Capture actual post-expanded SQLAlchemy execution parameters, not cached
+  compiled defaults. Retain and replay the exact statement, driver SQL, binds
+  and expansion map, including tuple/empty predicates, the current cursor and
+  default planner modes; a synthetic query or stale map is not execution proof.
+
 - One scalar query is not proof of bounded database work. A candidate VALUES
   join and correlated EXISTS can scan tenant-wide docket and receipt history.
   Retain the exact driver SQL/binds and fresh/stale/analyzed default plans;

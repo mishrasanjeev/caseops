@@ -1,5 +1,43 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## October 31 Actual Family And Mail Candidate Coverage
+
+IPLF-032/UJ-02/NFT-005/J14/M14 cover family hydration and exact fail-closed
+identity/access/lifecycle/source semantics. J19/M21/US-063 cover emulator lead-mail
+ownership, not new telemetry/leads or GSC activity. No new module or native/
+App/Mac/0008 acceptance; J04/M03/J08/M08 boundaries remain unchanged.
+
+1985 CI41149650760 failed14notification+1family-work roots/2aggregates. Actual
+API10 has1417identities/1311P/14F/92S; PG24 has150/450phases/149P/1F and a
+real custom hydration10033rows>100. Original/merge tree25ceee9 agrees. Independent
+Security41149650788/Advanced41149650680 are green, with17CodeQL annotations,
+9warnings/8notices/0failure. Strict161audit/0skips and244P/732 are components.
+
+Email exact ordered48=34P/14F is retained. Replacement107P/321 includes4PG
+mail races/39independently verified files; pure-owner8P/24. Actual expanded-map
+pure replacement20P/60/12verified files preserves8original scalar IDs within20.
+Initial7P/1fixtureF and interrupted49-role38complete/34P/4F/11unverified stay open
+as historical evidence, not passing execution. Full frozen61 inventory is known,
+but at03:44UTC only43P/0F (20pure+20SQLite/API+3PG) with18PG unverified. Later
+long setup is not a call failure or causal diagnosis.
+
+M2's two new standard-module identities are
+`test_patent_family_deleted_warm_identity_rejects_exact_seek_miss[with_successor]`
+and `[without_successor]`. Existing retarget/delete/revoke identities and all21PG
+cases remain. Intended expanded63=23PG+20SQLite/API+20pure is unexecuted here,
+not new collection proof. Versionless targets are negative fault injection;
+retained sibling evidence/roots/ACL and exact409 are required. SQLite warm-race
+parity remains a gap. Static no-findings cannot certify actual family work.
+
+See the dated lifecycle-admission brief. Docker28=3615P/2F of3617;29 incomplete
+61/3619;30 incomplete18/3619;0browser (640discovered only). NewALL-CI/full
+canonicalDocker31, guarded main/exact deployment/production originalD29 15s,
+post-QA clean private/guarded resume/distinct natural cadence and both original
+Excel updates are required. Interim08=36fixed/7partial/1inconclusive remains;
+onlyD29 may promote after prod. MainB994 is not new-source API/web; no deploy.
+External legal/calendar/provider/MFA holds and ACTIVE release-deferred SEO stay.
+Older sections below retain their original evidence, not newer-source acceptance.
+
 ## October 31 Lifecycle And Ownership Coverage
 
 Existing J04/M03/J08/M08/J14/M14 and IPLF-032/UJ-02/NFT-005 boundaries remain.

@@ -1,5 +1,121 @@
 # Lifecycle Admission And Race Ownership
 
+## October 31 Parallel CI Candidate: Still NO-GO
+
+**Partially fixed / NO-GO.** This latest checkpoint preserves every failed and
+interrupted result below as history. It adds no product feature, entitlement,
+legal authority or native acceptance. Family work maps to IPLF-032/UJ-02/NFT-005
+and J14/M14; lead-mail fixture ownership maps to J19/M21/US-063. Existing
+J04/M03 and J08/M08 ownership remains unchanged. App/MacBook/native/0008 is out
+of scope.
+
+The parent created disjoint candidate worktree `caseops-pr567-ci-20261031`,
+branch `codex/pr567-ci-20261031`, at
+`1985691010f1962fbbe0092e7ebeded8801c1be0`. The seven owned WIP files were
+mechanically projected byte-identically; the source remains frozen. Proof is
+`outputs/fix-561-20261026/portfolio-export-worker/parallel-ci-candidate-01.json`
+at 04:06:37 UTC. This sidecar changes only the PostgreSQL test and these scoped
+documents/AGENTS instructions. It does not commit, push, deploy, change shared
+dependencies or interfere with the parent's local gate.
+
+### Actual Hosted And Component Evidence
+
+At 04:15 UTC the unchanged frozen run has 49 passed calls/147 phases, no failed
+phase, including the reported stale-unique family-work case and the 10,000-row
+baseline. Twelve cases remain unverified. This later observation supersedes
+the 03:44 progress count below, not the requirement for complete final-source
+local, hosted and production acceptance.
+
+- On 1985, strict audit covers all 161 dependencies with zero skips. The complete
+  ASN/SDK/ownership component passes 244 cases/732 phases. Its preceding complete
+  243P/1 new-fixture failure remains retained, not relabelled green.
+- Actual CI `41149650760` failed: 14 notification root cases and one family-work
+  root case, plus two aggregates. Actual API10 artifact contains 1,417 identities:
+  1,311P/14F/92S. Actual PG24 artifact contains 150 identities/450 phases:
+  149P/1F. The real custom family-hydration plan charges 10,033 family rows against
+  the unchanged 100-row bound. Original-head and synthetic-merge tree identities
+  agree at `25ceee9`; this is not a dirty-source diagnosis.
+- Independent Security `41149650788` and Advanced Security `41149650680` are green.
+  Independent CodeQL retains 17 annotations: nine warnings, eight notices and
+  zero failure annotations. Green analysis is not a claim of zero findings or
+  an override of failed CI.
+- Exact ordered email reproduction is 48 cases, 34P/14F. Nested patch context
+  restoration and a module-local raw-owner cleanup guard address fixture lifetime,
+  not product notification policy. Complete replacement is 107P/321 phases,
+  including four PostgreSQL mail races; all 39 files independently verify. The
+  pure owner role separately passes eight cases/24 phases.
+- Preserve the initial scalar-recorder predecessor's 7P/1 new-fixture failure
+  across eight cases and the actual PostgreSQL expanded-map rejections. The
+  interrupted 49-role run completed 38 cases/114 phases, 34P/4F, with 11 identities
+  unverified; 15 files/15.5 MB remain retained. The pinned actual-parameter-map
+  correction subsequently passes the complete 20-case pure role/60 phases, with
+  all 12 files verified. The eight original scalar identities remain in that
+  20-case inventory; cached compiled defaults are not replay evidence.
+
+The already-projected 37-line runtime hydration change uses per-key VALUES and
+LATERAL ordered unique-ID seeks, retaining outer exact-ID/tenant predicates,
+`populate_existing`, count plus docket-identity 409 guards, and SQLite fallback.
+Static safety review found no actionable introduced defect; this is not measured
+performance or runtime acceptance. Exact driver SQL, post-expanded binds/maps,
+tuple/empty inputs, current cursors and default/custom/generic plans must match
+the actual execution. No optional planner-setting assertion or runtime change
+is introduced by this sidecar.
+
+### Frozen Gate And Added Negative Cases
+
+The parent's source-frozen mixed component collected all 61 intended identities.
+At the supplied 03:44 UTC snapshot, all 20 pure and 20 SQLite/API cases plus
+PostgreSQL history and two lifecycle cases pass: 43P/0F, 18 PostgreSQL identities
+still unverified. The later fresh persistence setup at 790 seconds is not a
+call-phase failure. Green02 retains a host 180-second setup timeout with zero
+pytest execution. Same-source fresh green03 records host migration exit 0
+under that same 180-second setting and then running work. Neither establishes
+the historical setup cause or a completed replacement; the parent owns monitoring
+and final inventory/phase reconciliation.
+
+Only M2 receives the finalized two-case deleted-family patch. The existing
+`[retarget]`, `[delete]`, `[revoke]` identities and all 21 existing PostgreSQL
+cases remain. Added standard-module identities are
+`test_patent_family_deleted_warm_identity_rejects_exact_seek_miss[with_successor]`
+and `[without_successor]`. Independently fresh migrated databases and normal
+server-generated model IDs establish global min/max after two same-tenant rows;
+no PK rewrite, constraint bypass or permission relaxation is used. The target
+is deliberately versionless negative fault injection, as in the original delete
+race, not a positive legal record. The retained sibling has disclosure evidence.
+Both variants observe the post-delete seek, require the list's exact 409 instead
+of a substituted/short successful page, and retain warm identity, root/asset,
+access and sibling-version persistence assertions. Mutation, cleanup and dispatch
+remain outside assertions.
+
+Expected expanded component is 63 cases: 23 PostgreSQL, 20 SQLite/API and 20 pure.
+This is intended inventory, not a collected or passing M2 run. The two new cases
+are unexecuted here; equivalent SQLite warm-identity race coverage remains a gap.
+Only lightweight Ruff on this changed test and `git diff --check` are authorized
+for this sidecar. Neither is pytest, plan, browser or release proof.
+Both completed with exit 0: Ruff `check --no-cache` on the M2 test reports
+"All checks passed!"; `git diff --check` has no diagnostics. No pytest, application
+import, build, database operation or CI dispatch was run by this sidecar.
+
+### Required Release Sequence And External Holds
+
+Docker28 remains complete 3,617 cases: 3,615P/2F. Docker29 is incomplete at
+61/3,619; Docker30 is incomplete at 18/3,619. All failed/incomplete evidence is
+retained. Browser execution is zero; 640 discovered cases are not execution.
+Require new ALL-CI green and a complete canonical final-candidate Docker31 before
+normal PR567 merge/current-main proof, guarded exact-main deployment and
+exact-serving production QA. Main B994 is not a new-source API/web release;
+no new deployment or serving-identity proof is claimed.
+
+Production must replay original D29's 15-second, 51-row desktop/narrow journey,
+then prove post-QA clean private maintenance, guarded scheduler resume and a
+distinct natural clean cadence. Both actual original Excel summaries still show
+interim08: 36 fixed, seven partial, one inconclusive. Neither is updated here;
+only D29 may be promoted after its required production proof. External legal,
+unknown-Matter/old-calendar consent, owner-MFA and provider holds stay explicit.
+SEO remains ACTIVE/release-deferred, not a new audit. Preserve the October27
+URL-safety stop without bypass, preferred `sanjeev@orchestrum.in`, and no new GSC
+data, synthetic leads, paid probes or telemetry. All full gates remain required.
+
 ## Verdict And Ownership
 
 **Partially fixed / NO-GO for release.** Existing ownership remains

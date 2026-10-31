@@ -1,5 +1,41 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Parallel Candidate And Still-Open Release Work
+
+**NO-GO.** Actual1985 CI41149650760 failed14notification+1family-work roots
+and2aggregates. ActualAPI10=1311P/14F/92S of1417; PG24=149P/1F of150/450phases,
+with custom family hydration10033rows>100. Head/merge tree25ceee9 matches.
+Security41149650788/Advanced41149650680 are independently green;17CodeQL
+annotations are9warnings/8notices/0failure, not no findings. Strict161audit/0skips
+and244P/732 compatibility remain actual components, with243P/1fixtureF retained.
+
+Mail ownership replacement is107P/321 including4PG races/39verified files after
+exact ordered48-case34P/14F reproduction; pure-owner8P/24. Actual expanded-map
+capture replacement is20P/60/12verified files. Preserve initial7P/1fixtureF and
+interrupted49-role38complete/34P/4F/11unverified. Frozen local61 has43P/0F at
+03:44UTC and18unverified; later790s fresh setup is not a body failure. Host180s
+setup timeout/zero pytest and fresh green03 are retained without a causal claim.
+
+Separate M2 at1985691010f1962fbbe0092e7ebeded8801c1be0 carries the seven
+byte-identical projected WIP files (parallel-ci-candidate-01.json). Only its PG
+test gains two unexecuted deletion edge cases: original3 race IDs/all21PG cases
+remain; expected63=23PG+20SQLite/API+20pure, original8scalar IDs retained within20.
+Versionless deletion targets are negative fault injection, not positive legal
+records; SQLite race parity remains a gap. Source M remains frozen. Map family
+IPLF-032/UJ-02/NFT-005/J14/M14 and mail J19/M21/US-063; no feature/native expansion.
+The dated lifecycle-admission brief contains the exact evidence and scope.
+
+Next required work is newALL-CI green and full canonicalDocker31. Retain full
+Docker28=3615P/2F of3617,29 incomplete61/3619,30 incomplete18/3619, and0browser
+execution (640discovery only). Then normal PR567/current-main proof, guarded
+exact-main deployment, exact-live originalD29 15s, post-QA clean private work,
+guarded scheduler resume and a distinct natural cadence, plus both original
+Excel updates. MainB994 is not a new-source API/web release; no deploy here.
+Interim08 stays36fixed/7partial/1inconclusive; onlyD29 may promote after prod.
+External legal/old-calendar/unknown-Matter/provider/owner-MFA holds and ACTIVE
+release-deferred SEO stay explicit; App/MacBook/native/0008 is excluded. Older
+checkpoints below are preserved history, not current replacement acceptance.
+
 ## October 31 Actual Release Checkpoint
 
 Continuation: the75FA dependency/CodeQL blockers have a scoped candidate repair.

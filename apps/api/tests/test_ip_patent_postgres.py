@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
@@ -12,8 +14,7 @@ import pytest
 from fastapi import HTTPException
 from psycopg import sql
 from psycopg.pq import TransactionStatus
-from sqlalchemy import delete, event, func, insert, select, text, tuple_, update
-from sqlalchemy.dialects.postgresql.psycopg import dialect
+from sqlalchemy import delete, event, func, insert, inspect, select, text, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
@@ -52,12 +53,19 @@ from caseops_api.services.ip_patent_families import (
     get_patent_family,
     list_patent_families,
 )
-from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.matter_access import (
+    seed_restricted_ip_creator_access,
+    visible_ip_dockets_filter,
+)
 from caseops_api.services.private_retrieval import (
     ensure_active_private_generation,
     lock_private_authority_writer,
 )
 from caseops_api.services.record_access_policy import _active_ip_subject_match
+from tests.test_patent_plan_capture_20261031 import (
+    _freeze_patent_execution,
+    _numeric_patent_execution,
+)
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _ip_race_context,
@@ -512,34 +520,178 @@ def test_patent_source_correction_and_index_worker_take_company_before_version_o
         )
 
 
-def _patent_family_page_plan(session, statement, *, limit, generic, kind="page"):
-    compiled = statement.limit(limit).compile(
-        dialect=dialect(paramstyle="numeric_dollar"),
-        compile_kwargs={"render_postcompile": True},
-    )
-    name = f"patent_page_{uuid4().hex}"
-    with session.connection().connection.cursor() as cursor:
-        cursor.execute(
-            "SET LOCAL plan_cache_mode = "
-            + ("'force_generic_plan'" if generic else "'force_custom_plan'")
-        )
-        cursor.execute(
-            sql.SQL("PREPARE {} AS ").format(sql.Identifier(name)) + sql.SQL(str(compiled))
-        )
-        try:
-            cursor.execute(
-                sql.SQL("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE {} ({})").format(
-                    sql.Identifier(name),
-                    sql.SQL(",").join(
-                        sql.Literal(compiled.params[key]) for key in compiled.positiontup
-                    ),
-                )
+def _patent_evidence_value(value):
+    if isinstance(value, Mapping):
+        return {key: _patent_evidence_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_patent_evidence_value(item) for item in value]
+    return value
+
+
+def _patent_evidence_path(request, tmp_path):
+    journal = os.environ.get("CASEOPS_TEST_RESULT_JOURNAL")
+    root = Path(journal).parent if journal else tmp_path
+    node_hash = sha256(request.node.nodeid.encode()).hexdigest()[:20]
+    directory = root / "ip-preflight-plans" / f"patent-family-{node_hash}"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / f"plans-{uuid4().hex}.jsonl", request.node.nodeid
+
+
+def _retain_patent_evidence(evidence, **record):
+    path, nodeid = evidence
+    with path.open("a", encoding="ascii") as output:
+        output.write(
+            json.dumps(
+                _patent_evidence_value({"patent_kind": "family", "nodeid": nodeid, **record}),
+                default=str,
+                ensure_ascii=True,
             )
+            + "\n"
+        )
+
+
+def _patent_execution_record(captured):
+    return {
+        "actual_sql": captured.raw_sql,
+        "driver_parameters": captured.driver_parameters,
+        "compiled_parameters": captured.compiled_parameters,
+        "parameter_expansion": captured.parameter_expansion,
+        "executemany": captured.executemany,
+        "ast_columns": [column.key for column in captured.statement.selected_columns],
+    }
+
+
+def _patent_catalog_snapshot(session):
+    tables = (
+        "ip_patent_families",
+        "ip_docket_records",
+        "ip_patent_family_versions",
+        "ip_document_versions",
+        "matter_access_grants",
+        "ethical_walls",
+    )
+    queries = {
+        "settings": "SELECT name, setting, unit, source FROM pg_settings "
+        "WHERE name LIKE 'enable_%' OR name IN "
+        "('plan_cache_mode','statement_timeout','server_version','random_page_cost',"
+        "'seq_page_cost','work_mem','effective_cache_size') ORDER BY name",
+        "relations": "SELECT c.relname, c.reltuples, c.relpages, c.reloptions, "
+        "s.last_analyze, s.last_autoanalyze, s.n_mod_since_analyze "
+        "FROM pg_class c LEFT JOIN pg_stat_all_tables s ON s.relid=c.oid "
+        "WHERE c.oid IN (SELECT to_regclass(name) FROM unnest(CAST(:tables AS text[])) AS name)",
+        "statistics": "SELECT schemaname, tablename, attname, null_frac, n_distinct, "
+        "most_common_vals::text, most_common_freqs, histogram_bounds::text, correlation "
+        "FROM pg_stats WHERE schemaname=current_schema() "
+        "AND tablename=ANY(CAST(:tables AS text[]))",
+        "indexes": "SELECT c.relname, i.indexrelid::regclass::text AS index_name, "
+        "i.indisvalid, i.indisready, i.indislive, pg_get_indexdef(i.indexrelid) AS definition "
+        "FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid "
+        "WHERE c.oid IN (SELECT to_regclass(name) FROM unnest(CAST(:tables AS text[])) AS name)",
+    }
+    return {
+        key: [
+            dict(row) for row in session.execute(text(query), {"tables": list(tables)}).mappings()
+        ]
+        for key, query in queries.items()
+    }
+
+
+def _is_patent_entity_select(statement, model):
+    return any(
+        description.get("entity") is not None
+        and inspect(description["entity"]).mapper.class_ is model
+        for description in statement.column_descriptions
+    )
+
+
+def _patent_hydration_ids(captured, *, company_id):
+    def leaves(value):
+        if isinstance(value, (tuple, list)):
+            for item in value:
+                yield from leaves(item)
+        else:
+            yield value
+
+    # The family hydration binds contain only UUID identities and integer seek limits.
+    return [
+        value
+        for parameter in captured.compiled_parameters
+        for value in leaves(tuple(parameter.values()))
+        if isinstance(value, str) and value != company_id
+    ]
+
+
+def _patent_family_page_plan(
+    session, captured, *, limit, generic, evidence, kind="page", expected_ids=None
+):
+    numeric_sql, parameters = _numeric_patent_execution(captured, limit=limit)
+    name = f"patent_page_{uuid4().hex}"
+    mode = {False: "force_custom_plan", True: "force_generic_plan", None: "auto"}[generic]
+    result_ids = None
+    prepared = False
+    with session.connection().connection.cursor() as cursor:
+        cursor.execute("SHOW plan_cache_mode")
+        previous_mode = cursor.fetchone()[0]
+        try:
+            cursor.execute(sql.SQL("SET LOCAL plan_cache_mode = {}").format(sql.Literal(mode)))
+            cursor.execute(
+                "SELECT name, setting FROM pg_settings WHERE name LIKE 'enable_%' "
+                "OR name IN ('plan_cache_mode','statement_timeout') ORDER BY name"
+            )
+            settings = dict(cursor.fetchall())
+            cursor.execute(
+                sql.SQL("PREPARE {} AS ").format(sql.Identifier(name)) + sql.SQL(numeric_sql)
+            )
+            prepared = True
+            execute = sql.SQL("EXECUTE {} ({})").format(
+                sql.Identifier(name), sql.SQL(",").join(sql.Literal(value) for value in parameters)
+            )
+            cursor.execute(sql.SQL("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ") + execute)
             plan = cursor.fetchone()[0][0]
+            # Retain the physical counterexample even if result reconciliation fails.
+            _retain_patent_evidence(
+                evidence,
+                kind=kind,
+                mode=mode,
+                limit=limit,
+                plan=plan,
+                numeric_sql=numeric_sql,
+                numeric_parameters=parameters,
+                settings=settings,
+                expected_ids=expected_ids,
+                counters=_patent_plan_counters(plan),
+                execution=_patent_execution_record(captured),
+            )
+            if expected_ids is not None:
+                cursor.execute(execute)
+                id_position = [column.name for column in cursor.description].index("id")
+                result_ids = [str(row[id_position]) for row in cursor.fetchall()]
+                _retain_patent_evidence(
+                    evidence,
+                    kind=f"{kind}_results",
+                    mode=mode,
+                    actual_ids=result_ids,
+                    expected_ids=expected_ids,
+                )
         finally:
             if cursor.connection.info.transaction_status != TransactionStatus.INERROR:
-                cursor.execute(sql.SQL("DEALLOCATE {}").format(sql.Identifier(name)))
-    # Retain all four plans before checking bounds, including failing counterexamples.
+                if prepared:
+                    cursor.execute(sql.SQL("DEALLOCATE {}").format(sql.Identifier(name)))
+                cursor.execute(
+                    sql.SQL("SET LOCAL plan_cache_mode = {}").format(sql.Literal(previous_mode))
+                )
+                cursor.execute("SHOW plan_cache_mode")
+                restored_mode = cursor.fetchone()[0]
+    _retain_patent_evidence(
+        evidence,
+        kind="plan_mode_restored",
+        stage=kind,
+        previous_mode=previous_mode,
+        restored_mode=restored_mode,
+    )
+    assert restored_mode == previous_mode
+    if expected_ids is not None:
+        assert sorted(result_ids) == sorted(expected_ids)
     print(json.dumps({"kind": kind, "generic": generic, "limit": limit, "plan": plan}))
     return plan
 
@@ -560,6 +712,60 @@ def _plan_work(node):
             "Rows Removed by Index Recheck",
         )
     )
+
+
+def _patent_plan_counters(plan):
+    nodes = list(_plan_nodes(plan["Plan"]))
+    return {
+        "total_work": sum(_plan_work(node) for node in nodes),
+        "root_shared_blocks": plan["Plan"]["Shared Hit Blocks"]
+        + plan["Plan"]["Shared Read Blocks"],
+        "relations": [
+            {**node, "charged_work": _plan_work(node)}
+            for node in nodes
+            if node.get("Relation Name")
+        ],
+    }
+
+
+def _assert_patent_plan_common_work(plan):
+    counters = _patent_plan_counters(plan)
+    assert counters["total_work"] < 50_000
+    assert counters["root_shared_blocks"] < 10_000
+
+
+def _patent_later_hydration_plans(session, captured_statements, evidence, *, prefix=""):
+    plans = []
+    for model, stage in (
+        (IpDocketRecord, "docket_hydration"),
+        (IpPatentFamilyVersion, "disclosure_version_hydration"),
+        (IpDocumentVersion, "document_version_hydration"),
+    ):
+        matches = [
+            captured
+            for captured in captured_statements[2:]
+            if _is_patent_entity_select(captured.statement, model)
+        ]
+        _retain_patent_evidence(
+            evidence,
+            kind=f"{prefix}{stage}_inventory",
+            statement_count=len(matches),
+            per_relation_work_bound="diagnostic_only",
+        )
+        for captured in matches:
+            for generic in (False, True, None):
+                plans.append(
+                    _patent_family_page_plan(
+                        session,
+                        captured,
+                        limit=None,
+                        generic=generic,
+                        evidence=evidence,
+                        kind=f"{prefix}{stage}_diagnostic",
+                    )
+                )
+        assert matches
+    return plans
 
 
 def _assert_patent_family_page_work(plan, *, limit):
@@ -593,8 +799,11 @@ def _seed_patent_family_scale(
     family_uuid_base=None,
     key_stride=1,
     key_start=0,
+    with_source=False,
 ):
     company_id, actor_id, family = _seed(pg_engine)
+    if with_source:
+        family = _seed_patent_scale_source(pg_engine, company_id, actor_id, family)
     with Session(pg_engine) as session:
         docket = session.get(IpDocketRecord, str(family.docket_id))
         asset = session.get(IpAsset, str(family.asset_id))
@@ -602,6 +811,7 @@ def _seed_patent_family_scale(
         version = session.scalar(
             select(IpPatentFamilyVersion).where(
                 IpPatentFamilyVersion.family_id == str(family.id),
+                IpPatentFamilyVersion.version == docket.current_version,
             )
         )
         grant = session.scalar(
@@ -653,18 +863,102 @@ def _seed_patent_family_scale(
     return company_id, actor_id, family_uuid_base
 
 
-def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(pg_engine):
-    _check_patent_family_scale(pg_engine)
+def _seed_patent_scale_source(pg_engine, company_id, actor_id, family):
+    # Reuse the real source/link/correction path from the source-worker race fixture.
+    with Session(pg_engine) as session:
+        taxonomy = IpDocumentTaxonomyEntry(
+            company_id=company_id,
+            key=f"scale-source-{uuid4().hex}",
+            label="Inventor evidence",
+            updated_by_membership_id=actor_id,
+        )
+        session.add(taxonomy)
+        session.flush()
+        document = IpDocument(
+            company_id=company_id,
+            taxonomy_entry_id=taxonomy.id,
+            title="Scale inventor source",
+            confidentiality="restricted",
+            created_by_membership_id=actor_id,
+        )
+        session.add(document)
+        session.flush()
+        content = b"Immutable scale inventor source."
+        content_hash = sha256(content).hexdigest()
+        version = IpDocumentVersion(
+            company_id=company_id,
+            document_id=document.id,
+            version=1,
+            original_filename="inventor.txt",
+            display_name="inventor.txt",
+            storage_key=f"patent-scale/{uuid4()}/inventor.txt",
+            content_type="text/plain",
+            size_bytes=len(content),
+            sha256_hex=content_hash,
+            uploaded_by_membership_id=actor_id,
+        )
+        session.add(version)
+        session.flush()
+        session.add(
+            IpDocumentLink(
+                company_id=company_id,
+                document_id=document.id,
+                target_type="docket",
+                target_id=str(family.docket_id),
+                docket_id=str(family.docket_id),
+                created_by_membership_id=actor_id,
+            )
+        )
+        session.commit()
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        return correct_patent_family(
+            session,
+            context=context,
+            family_id=str(family.id),
+            payload=PatentFamilyCorrectionRequest(
+                expected_version=family.version,
+                expected_lifecycle_version=family.lifecycle_version,
+                facts=family.facts.model_copy(
+                    update={
+                        "source": PatentDocumentSource(
+                            document_id=document.id,
+                            document_version_id=version.id,
+                            content_sha256=content_hash,
+                        )
+                    }
+                ),
+                reason="Pin immutable scale evidence.",
+            ),
+        )
+
+
+def test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(
+    pg_engine, request, tmp_path
+):
+    _check_patent_family_scale(pg_engine, request=request, tmp_path=tmp_path)
 
 
 def _check_patent_family_scale(
-    pg_engine, *, mixed_order=False, fresh_statistics=False, family_uuid_base=None
+    pg_engine,
+    *,
+    request,
+    tmp_path,
+    mixed_order=False,
+    fresh_statistics=False,
+    family_uuid_base=None,
+    adverse_joins=True,
 ):
+    evidence = _patent_evidence_path(request, tmp_path)
+    with Session(pg_engine) as before_import:
+        _retain_patent_evidence(
+            evidence, kind="catalog_before_import", catalog=_patent_catalog_snapshot(before_import)
+        )
     company_id, actor_id, family_uuid_base = _seed_patent_family_scale(
         pg_engine,
         mixed_order=mixed_order,
         key_stride=2 if mixed_order else 1,
         family_uuid_base=family_uuid_base,
+        with_source=True,
     )
     if mixed_order:
         # Interleave another tenant's keys, not merely another tenant's heap rows.
@@ -703,38 +997,90 @@ def _check_patent_family_scale(
         statements = []
         page_statements = []
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
-        session.execute(text("SET LOCAL enable_hashjoin = off"))
-        session.execute(text("SET LOCAL enable_mergejoin = off"))
+        if adverse_joins:
+            session.execute(text("SET LOCAL enable_hashjoin = off"))
+            session.execute(text("SET LOCAL enable_mergejoin = off"))
+        _retain_patent_evidence(
+            evidence,
+            kind="catalog_before_pages",
+            adverse_joins=adverse_joins,
+            fresh_statistics=fresh_statistics,
+            mixed_order=mixed_order,
+            catalog=_patent_catalog_snapshot(session),
+        )
+        page_label = "first"
 
         def capture(_conn, _cursor, statement, _params, _context, _many):
             statements.append(statement)
-            if _context.compiled is not None:
-                page_statements.append(_context.compiled.statement)
+            if _context.compiled is not None and _context.compiled.statement.is_select:
+                captured = _freeze_patent_execution(
+                    _context.compiled,
+                    statement,
+                    _params,
+                    _context.compiled_parameters,
+                    _many,
+                    # Pinned SQLAlchemy execution data, copied before another call can reuse it.
+                    parameter_expansion=getattr(_context, "_expanded_parameters", None),
+                )
+                page_statements.append(captured)
+                _retain_patent_evidence(
+                    evidence,
+                    kind="actual_execution",
+                    page=page_label,
+                    sequence=len(page_statements),
+                    **_patent_execution_record(captured),
+                )
 
         event.listen(pg_engine, "before_cursor_execute", capture)
         try:
             result = list_patent_families(session, context=context, limit=100)
         finally:
             event.remove(pg_engine, "before_cursor_execute", capture)
-        assert len(result.families) == 100 and result.next_cursor is not None
-        assert len(statements) <= 12
-        assert [col.key for col in page_statements[0].selected_columns] == ["id", "docket_id"]
+        first_ids = [str(row.id) for row in result.families]
+        first_inputs = _patent_hydration_ids(page_statements[1], company_id=company_id)
+        _retain_patent_evidence(
+            evidence,
+            kind="admitted_page",
+            page="first",
+            actual_ids=first_ids,
+            hydration_inputs=first_inputs,
+            query_count=len(statements),
+            next_cursor=result.next_cursor,
+        )
+        assert [col.key for col in page_statements[0].statement.selected_columns] == [
+            "id",
+            "docket_id",
+        ]
         plans = [
             (
                 plan_limit,
                 _patent_family_page_plan(
-                    session, page_statements[0], limit=plan_limit, generic=generic
+                    session,
+                    page_statements[0],
+                    limit=plan_limit,
+                    generic=generic,
+                    evidence=evidence,
                 ),
             )
-            for generic in (False, True)
+            for generic in (False, True, None)
             for plan_limit in (101, 1)
         ]
         hydration_plans = [
             _patent_family_page_plan(
-                session, page_statements[1], limit=None, generic=generic, kind="hydration"
+                session,
+                page_statements[1],
+                limit=None,
+                generic=generic,
+                kind="hydration",
+                evidence=evidence,
+                expected_ids=first_ids,
             )
-            for generic in (False, True)
+            for generic in (False, True, None)
         ]
+        diagnostic_plans = _patent_later_hydration_plans(session, page_statements, evidence)
+        assert len(result.families) == 100 and result.next_cursor is not None
+        assert len(statements) <= 12
+        assert sorted(first_inputs) == sorted(first_ids)
         if mixed_order and not fresh_statistics:
             # Pre-fix outer shape only, not the full old ACL query: wide rows before ordering.
             wide = aliased(
@@ -745,12 +1091,18 @@ def _check_patent_family_scale(
                 .offset(0)
                 .subquery(),
             )
+            event.listen(pg_engine, "before_cursor_execute", capture)
+            try:
+                session.execute(select(wide).order_by(wide.id).limit(101)).all()
+            finally:
+                event.remove(pg_engine, "before_cursor_execute", capture)
             old_plan = _patent_family_page_plan(
                 session,
-                select(wide).order_by(wide.id),
+                page_statements[-1],
                 limit=101,
                 generic=True,
                 kind="pre_feature_outer_shape",
+                evidence=evidence,
             )
             old_nodes = list(_plan_nodes(old_plan["Plan"]))
             print(
@@ -791,6 +1143,7 @@ def _check_patent_family_scale(
         assert result.next_cursor == expected[99]
         statements.clear()
         page_statements.clear()
+        page_label = "second"
         event.listen(pg_engine, "before_cursor_execute", capture)
         try:
             second = list_patent_families(
@@ -798,21 +1151,51 @@ def _check_patent_family_scale(
             )
         finally:
             event.remove(pg_engine, "before_cursor_execute", capture)
-        assert len(statements) <= 12
+        second_ids = [str(row.id) for row in second.families]
+        second_inputs = _patent_hydration_ids(page_statements[1], company_id=company_id)
+        _retain_patent_evidence(
+            evidence,
+            kind="admitted_page",
+            page="second",
+            actual_ids=second_ids,
+            hydration_inputs=second_inputs,
+            first_ids=first_ids,
+            query_count=len(statements),
+            next_cursor=second.next_cursor,
+        )
         hydration_plans.extend(
             _patent_family_page_plan(
-                session, page_statements[1], limit=None, generic=generic, kind="cursor_hydration"
+                session,
+                page_statements[1],
+                limit=None,
+                generic=generic,
+                kind="cursor_hydration",
+                evidence=evidence,
+                expected_ids=second_ids,
             )
-            for generic in (False, True)
+            for generic in (False, True, None)
+        )
+        diagnostic_plans.extend(
+            _patent_later_hydration_plans(session, page_statements, evidence, prefix="cursor_")
         )
         cursor_plans = []
-        for generic in (False, True):
+        for generic in (False, True, None):
             for plan_limit in (101, 1):
                 cursor_plan = _patent_family_page_plan(
-                    session, page_statements[0], limit=plan_limit, generic=generic
+                    session,
+                    page_statements[0],
+                    limit=plan_limit,
+                    generic=generic,
+                    evidence=evidence,
                 )
                 cursor_plans.append(cursor_plan)
                 plans.append((plan_limit, cursor_plan))
+        _retain_patent_evidence(
+            evidence, kind="catalog_after_pages", catalog=_patent_catalog_snapshot(session)
+        )
+        assert len(statements) <= 12
+        assert sorted(second_inputs) == sorted(second_ids)
+        assert set(first_inputs).isdisjoint(second_inputs)
         assert [str(row.id) for row in second.families] == expected[100:200]
         seen = [str(row.id) for row in result.families + second.families]
         next_cursor = second.next_cursor
@@ -833,6 +1216,12 @@ def _check_patent_family_scale(
         ]
         assert found.next_cursor is None
         print(json.dumps({"authorized_ids": seen, "late_match_id": str(found.families[0].id)}))
+        _retain_patent_evidence(
+            evidence,
+            kind="complete_traversal",
+            authorized_ids=seen,
+            late_match_ids=[str(row.id) for row in found.families],
+        )
         for cursor_plan in cursor_plans:
             assert any(
                 node.get("Relation Name") == "ip_patent_families"
@@ -844,12 +1233,29 @@ def _check_patent_family_scale(
             _assert_patent_family_page_work(plan, limit=plan_limit)
         for plan in hydration_plans:
             _assert_patent_family_hydration_work(plan, limit=100)
+        for plan in diagnostic_plans:
+            _assert_patent_plan_common_work(plan)
 
 
 def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
     migration_pg_engine,
+    request,
+    tmp_path,
 ):
+    _train_patent_family_unique_statistics(migration_pg_engine)
+    _check_patent_family_scale(migration_pg_engine, request=request, tmp_path=tmp_path)
+
+
+def _train_patent_family_unique_statistics(migration_pg_engine):
     # Train unique tenant statistics before a concentrated import; do not analyze it away.
+    with migration_pg_engine.begin() as connection:
+        for table in (
+            "ip_docket_records",
+            "ip_patent_families",
+            "matter_access_grants",
+            "ethical_walls",
+        ):
+            connection.execute(text(f"ALTER TABLE {table} SET (autovacuum_enabled = false)"))
     for _ in range(32):
         _seed(migration_pg_engine)
     with migration_pg_engine.begin() as connection:
@@ -857,7 +1263,6 @@ def test_patent_family_list_stale_unique_tenant_statistics_bound_docket_work(
         connection.execute(text("ANALYZE ip_patent_families"))
         connection.execute(text("ANALYZE matter_access_grants"))
         connection.execute(text("ANALYZE ethical_walls"))
-    test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres(migration_pg_engine)
 
 
 def _train_patent_family_mixed_statistics(migration_pg_engine):
@@ -895,19 +1300,51 @@ def _train_patent_family_mixed_statistics(migration_pg_engine):
 
 def test_patent_family_list_stale_mixed_tenant_statistics_bound_outer_family_work(
     migration_pg_engine,
+    request,
+    tmp_path,
 ):
     _train_patent_family_mixed_statistics(migration_pg_engine)
-    _check_patent_family_scale(migration_pg_engine, mixed_order=True)
+    _check_patent_family_scale(
+        migration_pg_engine, request=request, tmp_path=tmp_path, mixed_order=True
+    )
 
 
 def test_patent_family_list_fresh_mixed_tenant_statistics_bound_outer_family_work(
     migration_pg_engine,
+    request,
+    tmp_path,
 ):
     _train_patent_family_mixed_statistics(migration_pg_engine)
-    _check_patent_family_scale(migration_pg_engine, mixed_order=True, fresh_statistics=True)
+    _check_patent_family_scale(
+        migration_pg_engine,
+        request=request,
+        tmp_path=tmp_path,
+        mixed_order=True,
+        fresh_statistics=True,
+    )
 
 
-def test_patent_family_list_retained_grants_bound_authorization_work(migration_pg_engine):
+@pytest.mark.parametrize("profile", ["fresh", "stale_unique", "stale_mixed"])
+def test_patent_family_list_default_join_scale_profiles(
+    migration_pg_engine, request, tmp_path, profile
+):
+    if profile == "stale_unique":
+        _train_patent_family_unique_statistics(migration_pg_engine)
+    elif profile == "stale_mixed":
+        _train_patent_family_mixed_statistics(migration_pg_engine)
+    _check_patent_family_scale(
+        migration_pg_engine,
+        request=request,
+        tmp_path=tmp_path,
+        mixed_order=profile == "stale_mixed",
+        fresh_statistics=profile == "fresh",
+        adverse_joins=False,
+    )
+
+
+def test_patent_family_list_retained_grants_bound_authorization_work(
+    migration_pg_engine, request, tmp_path
+):
     # Train the active-grant index before a foreign import, as retained suites
     # and ordinary bulk imports can leave its global statistics stale.
     _seed(migration_pg_engine)
@@ -918,10 +1355,12 @@ def test_patent_family_list_retained_grants_bound_authorization_work(migration_p
         connection.execute(text("ANALYZE matter_access_grants"))
     _seed_patent_family_scale(migration_pg_engine, count=10_000)
     _seed_patent_family_scale(migration_pg_engine, count=10_000)
-    _check_patent_family_scale(migration_pg_engine)
+    _check_patent_family_scale(migration_pg_engine, request=request, tmp_path=tmp_path)
 
 
-def test_patent_family_list_stale_low_id_histogram_bounds_cursor_work(migration_pg_engine):
+def test_patent_family_list_stale_low_id_histogram_bounds_cursor_work(
+    migration_pg_engine, request, tmp_path
+):
     # A known cursor above the stale histogram can make a global seek+sort look
     # cheaper than an ordered tenant seek. Keep that pre-import state explicit.
     with migration_pg_engine.begin() as connection:
@@ -950,7 +1389,9 @@ def test_patent_family_list_stale_low_id_histogram_bounds_cursor_work(migration_
         assert connection.scalar(text("SELECT max(id) FROM ip_patent_families")) < str(
             UUID(int=imported_base)
         )
-    _check_patent_family_scale(migration_pg_engine, family_uuid_base=imported_base)
+    _check_patent_family_scale(
+        migration_pg_engine, request=request, tmp_path=tmp_path, family_uuid_base=imported_base
+    )
 
 
 @pytest.mark.parametrize("change", ["retarget", "delete", "revoke"])
@@ -1001,45 +1442,31 @@ def test_patent_family_page_rechecks_warm_identity_after_selection(pg_engine, ch
                 clone(original_grant, id=new_grant_id, ip_docket_id=new_docket_id),
             )
         session.commit()
-        warm_family = session.get(IpPatentFamily, family_id)
-        assert warm_family.docket_id == docket_id
-        changed = False
+        def mutate(writer):
+            if change == "retarget":
+                writer.execute(
+                    update(IpPatentFamily)
+                    .where(IpPatentFamily.id == family_id)
+                    .values(docket_id=replacement_id)
+                )
+            elif change == "delete":
+                writer.execute(delete(IpPatentFamily).where(IpPatentFamily.id == family_id))
+            else:
+                writer.execute(
+                    update(MatterAccessGrant)
+                    .where(MatterAccessGrant.id == grant_id)
+                    .values(revoked_at=datetime.now(UTC))
+                )
 
-        def interleave(_conn, _cursor, _statement, _params, execution_context, _many):
-            nonlocal changed
-            compiled = execution_context.compiled
-            if changed or compiled is None or not compiled.statement.is_select:
-                return
-            if list(compiled.statement.selected_columns) != list(IpPatentFamily.__table__.columns):
-                return
-            changed = True
-            with Session(pg_engine) as writer:
-                if change == "retarget":
-                    writer.execute(
-                        update(IpPatentFamily)
-                        .where(IpPatentFamily.id == family_id)
-                        .values(docket_id=replacement_id)
-                    )
-                elif change == "delete":
-                    writer.execute(delete(IpPatentFamily).where(IpPatentFamily.id == family_id))
-                else:
-                    writer.execute(
-                        update(MatterAccessGrant)
-                        .where(MatterAccessGrant.id == grant_id)
-                        .values(revoked_at=datetime.now(UTC))
-                    )
-                writer.commit()
-
-        event.listen(pg_engine, "before_cursor_execute", interleave)
-        try:
-            with pytest.raises(HTTPException) as rejected:
-                list_patent_families(session, context=context, query=title, limit=1)
-        finally:
-            event.remove(pg_engine, "before_cursor_execute", interleave)
-        assert changed
-        assert rejected.value.status_code == 409
-        assert rejected.value.detail["code"] == "patent_family_access_changed"
-        assert session.get(IpPatentFamily, family_id) is warm_family
+        _assert_patent_family_page_rejects_interleaved_change(
+            pg_engine,
+            session,
+            context=context,
+            family_id=family_id,
+            docket_id=docket_id,
+            title=title,
+            mutate=mutate,
+        )
 
     with Session(pg_engine) as verify:
         context = _ip_race_context(verify, company_id=company_id, membership_id=actor_id)
@@ -1058,6 +1485,170 @@ def test_patent_family_page_rechecks_warm_identity_after_selection(pg_engine, ch
             assert retained is None
         else:
             assert retained.docket_id == (replacement_id if change == "retarget" else docket_id)
+
+
+def _assert_patent_family_page_rejects_interleaved_change(
+    pg_engine, session, *, context, family_id, docket_id, title, mutate
+):
+    warm_family = session.get(IpPatentFamily, family_id)
+    assert warm_family.docket_id == docket_id
+    changed = False
+
+    def interleave(_conn, _cursor, _statement, _params, execution_context, _many):
+        nonlocal changed
+        compiled = execution_context.compiled
+        if changed or compiled is None or not compiled.statement.is_select:
+            return
+        if not execution_context.execution_options.get("populate_existing"):
+            return
+        if not _is_patent_entity_select(compiled.statement, IpPatentFamily):
+            return
+        changed = True
+        with Session(pg_engine) as writer:
+            mutate(writer)
+            writer.commit()
+
+    event.listen(pg_engine, "before_cursor_execute", interleave)
+    try:
+        with pytest.raises(HTTPException) as rejected:
+            list_patent_families(session, context=context, query=title, limit=1)
+    finally:
+        event.remove(pg_engine, "before_cursor_execute", interleave)
+    assert changed
+    assert rejected.value.status_code == 409
+    assert rejected.value.detail["code"] == "patent_family_access_changed"
+    assert session.get(IpPatentFamily, family_id) is warm_family
+
+
+@pytest.mark.parametrize("deleted_position", ["with_successor", "without_successor"])
+def test_patent_family_deleted_warm_identity_rejects_exact_seek_miss(
+    migration_pg_engine, deleted_position
+):
+    pg_engine = migration_pg_engine
+    with Session(pg_engine) as session:
+        existing_ids = list(session.scalars(select(IpPatentFamily.id)))
+        assert existing_ids == []
+        company_id = _seed_company(session)
+        actor_id = _seed_membership(session, company_id, role="admin")
+        client = Client(company_id=company_id, name="Deleted family seek", client_type="corporate")
+        session.add(client)
+        session.flush()
+        context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
+        pairs = {}
+        for _ in range(2):
+            docket = IpDocketRecord(
+                company_id=company_id,
+                record_type="patent_family",
+                title=f"Warm family deletion {uuid4()}",
+                status="draft",
+                restricted=True,
+                current_version=1,
+                created_by_membership_id=actor_id,
+            )
+            session.add(docket)
+            session.flush()
+            seed_restricted_ip_creator_access(session, context=context, docket=docket)
+            asset = IpAsset(
+                company_id=company_id,
+                docket_id=docket.id,
+                asset_kind="patent",
+                jurisdiction="UNSPECIFIED",
+                title=docket.title,
+            )
+            session.add(asset)
+            session.flush()
+            family = IpPatentFamily(
+                company_id=company_id,
+                docket_id=docket.id,
+                asset_id=asset.id,
+                client_id=client.id,
+            )
+            session.add(family)
+            session.flush()
+            pairs[family.id] = (family, docket)
+        ordered_ids = list(session.scalars(select(IpPatentFamily.id).order_by(IpPatentFamily.id)))
+        assert len(ordered_ids) == 2
+        family_id = ordered_ids[0 if deleted_position == "with_successor" else -1]
+        sibling_id = next(key for key in ordered_ids if key != family_id)
+        family, docket = pairs[family_id]
+        _sibling, sibling_docket = pairs[sibling_id]
+        docket_id, asset_id, title = docket.id, family.asset_id, docket.title
+        sibling_docket_id = sibling_docket.id
+        # Keep the existing delete race's versionless target; never remove or
+        # disable append-only evidence. The retained sibling is fully readable.
+        session.add(
+            IpPatentFamilyVersion(
+                company_id=company_id,
+                family_id=sibling_id,
+                version=sibling_docket.current_version,
+                client_id=client.id,
+                title=sibling_docket.title,
+                disclosure_date=date(2026, 9, 5),
+                disclosure_narrative="Retained successor disclosure.",
+                created_by_membership_id=actor_id,
+                reason="Initial inventor disclosure.",
+            )
+        )
+        session.commit()
+        retained_sibling = get_patent_family(session, context=context, family_id=sibling_id)
+        target_versions = list(
+            session.scalars(
+                select(IpPatentFamilyVersion.id).where(IpPatentFamilyVersion.family_id == family_id)
+            )
+        )
+        assert target_versions == []
+        observed_successors = []
+
+        def delete_and_probe(writer):
+            deleted = writer.execute(delete(IpPatentFamily).where(IpPatentFamily.id == family_id))
+            assert deleted.rowcount == 1
+            successor = writer.scalar(
+                select(IpPatentFamily.id)
+                .where(IpPatentFamily.id >= family_id)
+                .order_by(IpPatentFamily.id)
+                .limit(1)
+            )
+            observed_successors.append(successor)
+
+        _assert_patent_family_page_rejects_interleaved_change(
+            pg_engine,
+            session,
+            context=context,
+            family_id=family_id,
+            docket_id=docket_id,
+            title=title,
+            mutate=delete_and_probe,
+        )
+        expected_successor = sibling_id if deleted_position == "with_successor" else None
+        assert observed_successors == [expected_successor]
+
+    with Session(pg_engine) as verify:
+        context = _ip_race_context(verify, company_id=company_id, membership_id=actor_id)
+        assert verify.get(IpPatentFamily, family_id) is None
+        retained_docket = verify.get(IpDocketRecord, docket_id)
+        assert retained_docket.company_id == company_id
+        assert retained_docket.record_type == "patent_family" and retained_docket.restricted
+        assert retained_docket.status == "draft" and retained_docket.is_active
+        assert retained_docket.current_version == 1 and retained_docket.lifecycle_version == 0
+        assert verify.get(IpAsset, asset_id).docket_id == docket_id
+        visible = set(
+            verify.scalars(
+                select(IpDocketRecord.id).where(
+                    IpDocketRecord.company_id == company_id,
+                    visible_ip_dockets_filter(verify, context=context),
+                )
+            )
+        )
+        assert visible == {docket_id, sibling_docket_id}
+        assert get_patent_family(verify, context=context, family_id=sibling_id) == retained_sibling
+        remaining_versions = list(
+            verify.scalars(
+                select(IpPatentFamilyVersion.family_id).where(
+                    IpPatentFamilyVersion.company_id == company_id
+                )
+            )
+        )
+        assert remaining_versions == [sibling_id]
 
 
 def test_patent_family_key_barrier_preserves_canonical_effective_acl(pg_engine):

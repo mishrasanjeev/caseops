@@ -1,5 +1,39 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Disjoint CI Candidate: Partially Fixed, NO-GO
+
+1985 CI41149650760 actually failed 14 notification cases and one family-work
+case plus two aggregates. API10 is 1417 identities/1311P/14F/92S; PG24 is
+150 identities/450 phases/149P/1F, with actual custom hydration 10033 rows >100.
+Original-head/synthetic-merge tree25ceee9 agrees. Independent Security/Advanced
+are green with17 CodeQL annotations (9warnings/8notices/0failure), not full CI.
+Strict161 audit/0skips and244P/732 phases remain component evidence.
+
+Email ordered RED48 is34P/14F; owner-lifetime replacement is107P/321 phases,
+including4PG races,39files verified; pure ownership8P/24. Corrected actual SQLA
+execution-map role is20P/60 phases/12verified files. Preserve initial7P/1fixtureF,
+the interrupted49-role38complete/34P/4F/11unverified, and all older failures.
+The frozen61 snapshot at03:44UTC is43P/0F/18unverified, not complete; later790s
+fresh setup is not a body failure. No setup-cause claim follows from host180s.
+
+Disjoint M2 adds only two unexecuted PG deleted-ID edge cases and a shared
+existing409/warm-identity check. Preserve original retarget/delete/revoke and
+all21PG cases; expected expanded63=23PG+20SQLite/API+20pure, original8scalar
+IDs retained within20. Versionless targets are explicit negative fault injection,
+not positive legal records; SQLite race parity remains unverified. Source M stays
+frozen. Map IPLF-032/UJ-02/NFT-005/J14/M14 and J19/M21/US-063 mail ownership;
+no product/native/App/Mac/0008 expansion. Details and retained setup/plan evidence
+are in bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+
+Docker28 remains3615P/2F;29 incomplete61/3619;30 incomplete18/3619;0browser,
+not640executed. Require newALL-CI green/full canonicalDocker31 before guarded
+main/deploy/exact-live QA, originalD29 15s, post-QA clean private maintenance,
+guarded resume/distinct natural cadence and both actual Excel updates. Originals
+remain interim08 (36fixed/7partial/1inconclusive); onlyD29 may promote after prod.
+MainB994 is not a new-source serving API/web; no deploy occurred. External legal,
+old-calendar/unknown-Matter, provider and owner-MFA holds remain. Older sections
+below are retained history, not later-source acceptance.
+
 ## October 31 Remaining Admission Failures: Partially Fixed
 
 Security continuation:75FA's pyasn1 audit and imperative test-assert CodeQL

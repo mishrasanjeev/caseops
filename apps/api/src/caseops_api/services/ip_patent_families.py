@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import BigInteger, cast, literal, null, select, tuple_
+from sqlalchemy import BigInteger, cast, column, literal, null, select, true, tuple_, values
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.util import ClauseAdapter
 
@@ -574,17 +574,40 @@ def list_patent_families(
         )
     rows = list(session.execute(statement.order_by(family_order).limit(limit + 1)))
     admitted_ids = rows[:limit]
+    family_hydration = select(IpPatentFamily).where(
+        IpPatentFamily.company_id == context.company.id,
+        IpPatentFamily.id.in_([row.id for row in admitted_ids]),
+    )
+    if postgres and admitted_ids:
+        # Resolve only admitted unique keys before tenant policy. A batch IN
+        # predicate can scan every wide family row under a custom/stale plan.
+        wanted = values(
+            column("id", IpPatentFamily.__table__.c.id.type),
+            name="admitted_patent_family_ids",
+        ).data([(row.id,) for row in admitted_ids])
+        picked = (
+            select(IpPatentFamily)
+            .where(IpPatentFamily.id >= wanted.c.id)
+            .order_by(IpPatentFamily.id)
+            .correlate(wanted)
+            .limit(1)
+            .lateral("admitted_patent_family_row")
+        )
+        hydrated_family = aliased(IpPatentFamily, picked)
+        family_hydration = (
+            select(hydrated_family)
+            .select_from(wanted.join(picked, true()))
+            .where(
+                hydrated_family.id == wanted.c.id,
+                hydrated_family.company_id == context.company.id,
+            )
+        )
     # Hydrate full families only after authorization and pagination, in one tenant batch.
     family_rows = (
         {
             family.id: family
             for family in session.scalars(
-                select(IpPatentFamily)
-                .where(
-                    IpPatentFamily.company_id == context.company.id,
-                    IpPatentFamily.id.in_([row.id for row in admitted_ids]),
-                )
-                .execution_options(populate_existing=True)
+                family_hydration.execution_options(populate_existing=True)
             )
         }
         if admitted_ids

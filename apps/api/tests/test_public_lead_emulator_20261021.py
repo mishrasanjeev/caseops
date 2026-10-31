@@ -1,6 +1,7 @@
 """Guarded real local capture; production provider access remains prohibited."""
 
 import importlib
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,10 +15,16 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import BillingEnrollment
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import billing_demo as demo
+from tests.emulator_mail_ownership import guarded_emulator_monkeypatch
 
 WEB = "http://127.0.0.1:3100"
 BASE = "/_e2e/platform-console/fixtures"
 MARKER = {"X-CaseOps-Automated-Test": "no-paid-providers"}
+
+
+@pytest.fixture
+def monkeypatch():
+    yield from guarded_emulator_monkeypatch()
 
 
 @pytest.fixture
@@ -164,31 +171,35 @@ def test_seven_marked_admissions_capture_only_references_and_retain_history(loca
 @pytest.mark.parametrize("adapter", ["https://example.com/mail", "http://127.0.0.1:80/?x=1"])
 def test_invalid_local_adapter_never_falls_through_to_sendgrid(local_leads, monkeypatch, adapter):
     api, capture, run, _manager, path, _prepared = local_leads
-    monkeypatch.setenv("CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL", adapter)
-    response = api.post("/api/billing/enrollments/demo-request", json=payload(run, 0))
-    assert response.status_code == 200
-    identity = response.json()["id"]
-    assert api.get(path + "/mail").json() == {
-        "items": [], "external_calls": 0,
-        "outbox": [{
-            "id": identity, "status": "pending", "attempts": 0,
-            "has_claim": False, "has_lease": False, "automated_request_preserved": True,
-        }],
-    }
-    assert api.post(path + "/drain", json={"web_origin": WEB}).status_code == 200
-    with get_session_factory()() as session:
-        row = session.get(BillingEnrollment, response.json()["id"])
-        assert demo._state(row)["notification_status"] == "exhausted"
-        assert demo._state(row)["last_error_code"] == "test_transport_not_admitted"
-        assert demo._state(row)["automated_request"] is True
-    assert api.get(path + "/mail").json() == {
-        "items": [], "external_calls": 0,
-        "outbox": [{
-            "id": identity, "status": "exhausted", "attempts": 0,
-            "has_claim": False, "has_lease": False, "automated_request_preserved": True,
-        }],
-    }
-    assert capture.external_calls == 0
+    owned_adapter = os.environ["CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL"]
+    # Restore this temporary override before the raw URL owner's fixture closes.
+    with monkeypatch.context() as malformed:
+        malformed.setenv("CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL", adapter)
+        response = api.post("/api/billing/enrollments/demo-request", json=payload(run, 0))
+        assert response.status_code == 200
+        identity = response.json()["id"]
+        assert api.get(path + "/mail").json() == {
+            "items": [], "external_calls": 0,
+            "outbox": [{
+                "id": identity, "status": "pending", "attempts": 0,
+                "has_claim": False, "has_lease": False, "automated_request_preserved": True,
+            }],
+        }
+        assert api.post(path + "/drain", json={"web_origin": WEB}).status_code == 200
+        with get_session_factory()() as session:
+            row = session.get(BillingEnrollment, response.json()["id"])
+            assert demo._state(row)["notification_status"] == "exhausted"
+            assert demo._state(row)["last_error_code"] == "test_transport_not_admitted"
+            assert demo._state(row)["automated_request"] is True
+        assert api.get(path + "/mail").json() == {
+            "items": [], "external_calls": 0,
+            "outbox": [{
+                "id": identity, "status": "exhausted", "attempts": 0,
+                "has_claim": False, "has_lease": False, "automated_request_preserved": True,
+            }],
+        }
+        assert capture.external_calls == 0
+    assert os.environ["CASEOPS_PUBLIC_LEAD_TEST_MAIL_URL"] == owned_adapter
 
 
 def test_local_fixture_marker_origin_replay_and_pii_fences(local_leads):

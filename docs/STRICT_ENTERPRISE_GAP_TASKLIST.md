@@ -1,5 +1,39 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Actual CI And Disjoint Candidate Boundaries
+
+**Partially implemented / NO-GO.** Actual1985 CI41149650760 has14notification
+and1family-work root failures plus2aggregates; API10=1311P/14F/92S of1417,
+PG24=149P/1F of150. The actual custom hydration reads10033family rows >100.
+Head/merge tree25ceee9 agrees. Independent Security41149650788/Advanced41149650680
+green retain17CodeQL annotations (9warnings/8notices/0failure), not zero findings
+or full-CI acceptance. Strict161audit/0skips and244P/732 remain offline components.
+
+Mail patch/cleanup ownership now has ordered48-case RED34P/14F and complete
+107P/321 phases including4PG mail races/39verified files, plus pure-owner8P/24.
+Pinned post-expanded execution-map recording has20P/60/12verified files. Keep
+the initial fixture/actual-map failures and interrupted49-role34P/4F/11unverified.
+The source-frozen61 gate is only43P/0F at03:44UTC, with18unverified. Long fresh
+setup is not a failed call or a proved cause. The parent retains gate ownership.
+
+M2's two new unexecuted PG deleted-key cases preserve original3identities and
+all21existingPG tests: expected63=23PG+20SQLite/API+20pure, not a verified run.
+Versionless targets are explicit negative fault injection, not legal-record
+acceptance; survivor evidence, exact tenant/ID,409, lifecycle and ACL fences stay.
+The 37-line runtime unique-key barrier was already projected; this sidecar adds
+no runtime/dependency change. Static no-findings is not physical-work proof.
+Ownership remains IPLF-032/UJ-02/NFT-005/J14/M14 and J19/M21/US-063 mail fixtures.
+See the dated lifecycle-admission brief; source M and native/App/Mac/0008 stay out.
+
+Docker28 failed3615P/2F;29 incomplete61/3619;30 incomplete18/3619;0browser.
+NewALL-CI green/full canonicalDocker31, guarded current-main/exact deployment,
+production originalD29 15s, post-QA clean private maintenance, guarded resume and
+distinct natural cadence plus both original Excel updates remain mandatory.
+Interim08 remains36fixed/7partial/1inconclusive; onlyD29 may promote after prod.
+MainB994 is not a new-source API/web release; no new deployment. External legal,
+old-calendar/unknown-Matter, provider/MFA holds and ACTIVE deferred SEO remain.
+Earlier evidence below is history, not a superseded failure erased by green.
+
 ## October 31 Admission Lock Work And Diagnostic Ownership
 
 Security continuation remains Partially implemented/NO-GO until full release:
