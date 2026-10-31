@@ -394,7 +394,9 @@ def _share_lock_rule_version(
     commits first and the transition sees (and alerts on) it, or the
     transition commits first and the writer re-reads a non-active status and
     refuses. Rule-governance writers never lock Matter, docket or deadline
-    rows, so taking this lock after a docket lock cannot form a cycle.
+    rows, and a transition fences every membership it will reference before
+    it takes the rule locks (or takes a late one with NOWAIT), so taking this
+    lock after the membership, Matter and docket locks cannot form a cycle.
     """
 
     row = session.execute(
