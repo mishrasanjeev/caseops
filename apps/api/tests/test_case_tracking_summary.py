@@ -939,19 +939,24 @@ def test_unlicensed_provider_summary_is_not_used_and_no_text_means_no_queue(summ
 
 
 def test_worker_drains_summary_in_both_modes(monkeypatch):
+    from caseops_api.services import court_sync_jobs, document_jobs
     from caseops_api.workers import document_processor as worker
 
     called = []
-    for name in (
-        "recover_stale_document_processing_jobs",
-        "recover_stale_matter_court_sync_jobs",
-        "enqueue_scheduled_document_reprocessing",
-        "drain_document_processing_jobs",
-        "drain_matter_court_sync_jobs",
+    for module, names in (
+        (document_jobs, (
+            "recover_stale_document_processing_jobs",
+            "enqueue_scheduled_document_reprocessing",
+            "drain_document_processing_jobs",
+        )),
+        (court_sync_jobs, (
+            "recover_stale_matter_court_sync_jobs", "drain_matter_court_sync_jobs",
+        )),
     ):
-        monkeypatch.setattr(worker, name, lambda **kwargs: 0)
+        for name in names:
+            monkeypatch.setattr(module, name, lambda **kwargs: 0)
     monkeypatch.setattr(
-        worker, "drain_update_summaries", lambda **kwargs: called.append(kwargs) or 1
+        summaries, "drain_update_summaries", lambda **kwargs: called.append(kwargs) or 1
     )
     assert worker.main(["--once", "--skip-migrations", "--summary-batch-size", "2"]) == 0
     assert (

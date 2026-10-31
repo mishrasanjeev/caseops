@@ -3612,3 +3612,8 @@ requirements when using the fallback.
   for regression code. An absent ASN.1 optional schema is not a value: compare
   its explicit absence plus canonical bytes and populated fields, rather than
   recursively equating an unpopulated schema object.
+- A disabled worker must validate its admission configuration before importing
+  queue, database or provider services. Warm in-process mocks do not cover cold
+  entrypoint imports. Prove disabled and invalid configurations in fresh
+  processes, retain enabled-work delegation, and replay the unchanged offline
+  image-startup deadline before full Docker acceptance.

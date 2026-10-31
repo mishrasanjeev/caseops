@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Cold Admission Remains Release-Gated
+
+**Partially implemented / NO-GO.** AB50 Docker31 stopped before product tests:
+document-worker imports exceeded the original offline 30-second startup bound.
+Move database/queue/provider imports behind validated admission. A mounted-file
+startup exits zero; fresh-process negative/enabled regressions and a complete
+fresh-image Docker/CI/live release are still required. No policy/budget waiver.
+See `bugfix-document-worker-production-2026-10-10.md` for retained evidence.
+
 ## October 31 Generic LIMIT Is Not A Physical Bound
 
 **Partially implemented / NO-GO.** Four3987 PostgreSQL failures independently

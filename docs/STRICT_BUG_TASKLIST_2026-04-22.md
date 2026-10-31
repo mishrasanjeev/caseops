@@ -1,5 +1,14 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Cold Worker Admission: Partially Fixed
+
+AB50 Docker31 failed its disabled document-worker 30-second startup check, with
+zero native/browser cases executed. Services loaded before admission. The narrow
+deferred-import correction passes one isolated, network-disabled mounted-file
+startup, not a fresh-image/full-regression or production verdict. Preserve the
+failure and complete final-source Docker/CI/live gates before closure. Details:
+`bugfix-document-worker-production-2026-10-10.md`, October 31 continuation.
+
 ## October 31 Generic Disclosure Regression Still Open
 
 3987 CI41170834397 has four retained physical-work failures,605complete cases/

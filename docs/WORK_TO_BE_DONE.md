@@ -1,5 +1,15 @@
 # CaseOps  - Work To Be Done
 
+## October 31 Worker Startup Replacement Pending
+
+**NO-GO.** Docker31 built AB50 and migrated a healthy stack, then stopped at the
+disabled document-worker's original 30-second offline startup check. No native
+or browser tests executed. Defer work-service imports until validated admission,
+prove fresh-process disabled/invalid/enabled paths, then rerun complete canonical
+Docker and current CI before normal PR567/main/deployment/live/D29/cadence and
+paired Excel publication. No app/Mac changes. Evidence is in the October 31
+continuation of `bugfix-document-worker-production-2026-10-10.md`.
+
 ## October 31 Generic Disclosure Replacement Pending
 
 **NO-GO.** 3987's correlated range still scans roughly10000 versions per key
