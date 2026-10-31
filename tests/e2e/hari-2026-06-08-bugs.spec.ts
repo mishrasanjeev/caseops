@@ -12,6 +12,8 @@
  * The spec uses local app/API fixtures only. It does not call Google,
  * Microsoft, Pine Labs, SMS, WhatsApp, or court providers.
  */
+import { readFile } from "node:fs/promises";
+
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
@@ -175,6 +177,19 @@ test.describe("Hari 2026-06-08 bugs", () => {
     expect(download.suggestedFilename()).toMatch(
       /^caseops-matter-invoice-HARI-[A-Z0-9]+\.pdf$/,
     );
+    // BUG-016: a file name is not proof of a readable invoice. The content is
+    // asserted here; ram-2026-10-31-invoice-pdf.spec.ts adds the raster check.
+    const pdf = await readFile((await download.path())!);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const document = await pdfjs.getDocument({ data: new Uint8Array(pdf), useSystemFonts: false }).promise;
+    expect(document.numPages, "one page, no blank trailing page").toBe(1);
+    const text = (await (await document.getPage(1)).getTextContent()).items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, "");
+    for (const expected of [invoice.invoiceNumber, "Manual professional fee", "DRAFT - NOT A TAX INVOICE", "Page 1 of 1"]) {
+      expect(text).toContain(expected.replace(/\s+/g, ""));
+    }
   });
 
   test("BUG-053: Google Calendar appears fail-closed with safe .ics fallback", async ({
