@@ -240,9 +240,14 @@ async def list_calendar_events_ical(
     return ICalendarResponse(
         content=body,
         headers={
-            # Content-Disposition so a browser "download" button
-            # yields a nicely-named .ics file for import clients.
-            "Content-Disposition": 'inline; filename="caseops-calendar.ics"',
+            # Content-Disposition so a browser "download" button yields a
+            # nicely-named .ics file for import clients. The range is in the
+            # name so the Year view's four quarterly files stay distinct (a
+            # cross-origin link's download attribute is ignored).
+            "Content-Disposition": (
+                f'inline; filename="caseops-calendar-{range_from.isoformat()}'
+                f'-to-{range_to.isoformat()}.ics"'
+            ),
         },
     )
 

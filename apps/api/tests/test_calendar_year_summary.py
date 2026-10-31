@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
-from caseops_api.db.models import Matter, MatterAccessGrant
+from caseops_api.db.models import Matter, MatterAccessGrant, MatterTask
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_calendar import _create_matter, _create_task, _schedule_hearing
@@ -140,6 +140,26 @@ def test_year_summary_excludes_what_the_month_list_excludes(client: TestClient) 
         json={"status": "done"},
     ).status_code == 200
 
+    # Cancelled items are closed work too.
+    cancelled_hearing = _schedule_hearing(client, headers, open_matter, day, "Will be cancelled")
+    cancelled_task = _create_task(client, headers, open_matter, "Will be cancelled", day)
+    cancelled_deadline = _deadline(client, headers, open_matter, day, "internal_target")
+    for path in (f"hearings/{cancelled_hearing}", f"deadlines/{cancelled_deadline}"):
+        assert client.patch(
+            f"/api/matters/{open_matter}/{path}", headers=headers, json={"status": "cancelled"},
+        ).status_code == 200, path
+
+    # A legacy closed matter (closed implies inactive, by constraint) hides its
+    # items as well. The task write API offers no "cancelled", but stored rows
+    # can carry it, so both states are written directly.
+    closed = _create_matter(client, headers, "YR-CLOSED", "Closed matter")
+    _create_task(client, headers, closed, "On a closed matter", day)
+    with get_session_factory()() as session:
+        closed_row = session.get(Matter, closed)
+        closed_row.status, closed_row.is_active = "closed", False
+        session.get(MatterTask, cancelled_task).status = "cancelled"
+        session.commit()
+
     disposed = _create_matter(client, headers, "YR-DISPOSED", "Disposed matter")
     _schedule_hearing(client, headers, disposed, day, "On a disposed matter")
     matter = client.get(f"/api/matters/{disposed}", headers=headers).json()
@@ -177,6 +197,34 @@ def test_year_summary_range_limits(client: TestClient) -> None:
         params={"from": f"{YEAR}-01-01", "to": f"{YEAR}-12-31"},
     )
     assert year_list.status_code == 400
+
+
+def test_year_view_quarter_exports_are_distinct_calendars(client: TestClient) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "YR-ICS", "Quarter export matter")
+    _schedule_hearing(client, headers, matter_id, date(YEAR, 11, 20), "Q4 hearing")
+    quarters = [
+        (date(YEAR, 1, 1), date(YEAR, 3, 31)),
+        (date(YEAR, 4, 1), date(YEAR, 6, 30)),
+        (date(YEAR, 7, 1), date(YEAR, 9, 30)),
+        (date(YEAR, 10, 1), date(YEAR, 12, 31)),
+    ]
+    names = []
+    for start, end in quarters:
+        resp = client.get(
+            "/api/calendar/events.ics", headers=headers,
+            params={"from": start.isoformat(), "to": end.isoformat()},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith("text/calendar")
+        assert resp.text.startswith("BEGIN:VCALENDAR")
+        assert ("Q4 hearing" in resp.text) == (start.month == 10)
+        names.append(resp.headers["content-disposition"])
+    assert names[3] == (
+        f'inline; filename="caseops-calendar-{YEAR}-10-01-to-{YEAR}-12-31.ics"'
+    )
+    assert len(set(names)) == 4
 
 
 def test_year_summary_requires_authentication(client: TestClient) -> None:
