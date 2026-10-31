@@ -5,6 +5,7 @@
 // Slice 1 (shipped 2026-04-23): month grid + tenant-scoped event feed
 // across hearings + tasks + matter_deadlines.
 // Slice 2b (this file): adds Week + Day views and an authenticated .ics export.
+// ENH-017 / US-064 / FT-097-098: Year view, URL view/date state, full legend.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,16 +15,13 @@ import {
   ChevronRight,
   Download,
   ExternalLink,
-  Gavel,
   Inbox,
-  ListTodo,
   Mail,
   RefreshCw,
-  Target,
-  Timer,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -31,6 +29,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import {
   fetchCalendarEvents,
+  fetchCalendarSummary,
   fetchCalendarSyncStatus,
   fetchGmailMailboxStatus,
   extractEmailInvitationCandidates,
@@ -47,37 +46,36 @@ import {
   syncGoogleCalendarVisibleRange,
   syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
-import type {
-  CalendarEventDisplayType,
-  CalendarEventRecord,
-} from "@/lib/api/schemas";
+import type { CalendarDaySummary, CalendarEventRecord } from "@/lib/api/schemas";
 import type { EmailInvitationCandidateRecord } from "@/lib/api/endpoints";
 import { API_BASE_URL } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
+import {
+  DISPLAY_META,
+  DISPLAY_ORDER,
+  MONTH_NAMES,
+  WEEKDAY_LABELS,
+  buildMonthGrid,
+  displayTypeForEvent,
+  isoDate,
+  parseIsoDate,
+  yearQuarters,
+} from "@/lib/calendar/display";
 import { cn } from "@/lib/cn";
 
-type ViewMode = "month" | "week" | "day";
+import { YearView } from "./YearView";
 
-const DISPLAY_META: Record<
-  CalendarEventDisplayType,
-  { label: string; shortLabel: string; icon: typeof Gavel; dot: string }
-> = {
-  hearing: { label: "Hearing or listing", shortLabel: "Hearing", icon: Gavel, dot: "bg-[var(--color-accent)]" },
-  task_date: { label: "Task date", shortLabel: "Task", icon: ListTodo, dot: "bg-[var(--color-info-500)]" },
-  filing_deadline: { label: "Legal filing deadline", shortLabel: "Filing", icon: Timer, dot: "bg-red-600" },
-  internal_target: { label: "Internal target", shortLabel: "Target", icon: Target, dot: "bg-amber-500" },
-  renewal: { label: "Renewal date", shortLabel: "Renewal", icon: RefreshCw, dot: "bg-emerald-600" },
-  client_instruction: { label: "Client-instruction date", shortLabel: "Client", icon: Inbox, dot: "bg-cyan-700" },
-  reminder: { label: "Reminder time", shortLabel: "Reminder", icon: Mail, dot: "bg-violet-600" },
-  deadline: { label: "Other deadline", shortLabel: "Deadline", icon: CalendarCheck, dot: "bg-[var(--color-warning-500)]" },
-};
+const VIEW_MODES = ["month", "week", "day", "year"] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
 
-function displayTypeForEvent(event: CalendarEventRecord): CalendarEventDisplayType {
-  if (event.display_type) return event.display_type;
-  if (event.kind === "hearing") return "hearing";
-  if (event.kind === "task") return "task_date";
-  return "deadline";
+function parseViewMode(value: string | null): ViewMode {
+  return VIEW_MODES.find((mode) => mode === value) ?? "month";
 }
+
+// Provider sync accepts at most 92 days; the Year view never offers a
+// whole-year range that the API refuses.
+const YEAR_RANGE_ACTION_REASON =
+  "Sync covers up to 92 days. Switch to Month, Week or Day to sync that range.";
 
 function hearingTimeLabel(event: CalendarEventRecord): string | null {
   if (event.hearing_time) return `${event.hearing_time.slice(0, 5)} ${event.timezone ?? ""}`.trim();
@@ -95,13 +93,6 @@ function startOfWeekMonday(d: Date): Date {
   const offsetToMonday = (out.getDay() + 6) % 7;
   out.setDate(out.getDate() - offsetToMonday);
   return out;
-}
-
-function isoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function formatDateTime(value: string | null): string {
@@ -133,27 +124,37 @@ function candidateStatusLabel(status: EmailInvitationCandidateRecord["status"]):
   }
 }
 
-function buildMonthGrid(monthStart: Date): Date[] {
-  const firstWeekday = monthStart.getDay();
-  const offsetToMonday = (firstWeekday + 6) % 7;
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(monthStart.getDate() - offsetToMonday);
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    return d;
-  });
-}
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
 export default function CalendarPage() {
-  const [view, setView] = useState<ViewMode>("month");
-  const [cursor, setCursor] = useState<Date>(() => new Date());
+  // View and date live in the URL (?view=year&date=2026-01-15) so a reload
+  // or a shared link restores what the lawyer was looking at.
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<ViewMode>(() => parseViewMode(searchParams.get("view")));
+  const [cursor, setCursor] = useState<Date>(() => parseIsoDate(searchParams.get("date")) ?? new Date());
+  const cursorKey = isoDate(cursor);
+  const urlStateTouched = useRef(false);
+  // A Year-view click replaces the grid the lawyer scrolled through; move
+  // focus (and the viewport) to the opened month or day so it is never
+  // rendered off-screen with focus lost on the removed button.
+  const viewRegionRef = useRef<HTMLDivElement>(null);
+  const focusViewAfterOpen = useRef(false);
+  useEffect(() => {
+    if (!focusViewAfterOpen.current) return;
+    focusViewAfterOpen.current = false;
+    viewRegionRef.current?.scrollIntoView?.({ block: "start" });
+    viewRegionRef.current?.focus({ preventScroll: true });
+  }, [view, cursorKey]);
+  useEffect(() => {
+    // Leave a bare /app/calendar visit alone until the lawyer changes something.
+    if (!urlStateTouched.current) {
+      urlStateTouched.current = true;
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("view") === view && url.searchParams.get("date") === cursorKey) return;
+    url.searchParams.set("view", view);
+    url.searchParams.set("date", cursorKey);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [view, cursorKey]);
   const [outlookMessage, setOutlookMessage] = useState<string | null>(null);
   const [googleMessage, setGoogleMessage] = useState<string | null>(null);
   const [gmailMessage, setGmailMessage] = useState<string | null>(null);
@@ -164,6 +165,10 @@ export default function CalendarPage() {
   // /api/calendar/events endpoint serves all three; only the slice
   // size changes.
   const { rangeFrom, rangeTo, label } = useMemo(() => {
+    if (view === "year") {
+      const year = cursor.getFullYear();
+      return { rangeFrom: new Date(year, 0, 1), rangeTo: new Date(year, 11, 31), label: String(year) };
+    }
     if (view === "month") {
       const monthStart = startOfMonth(cursor);
       const grid = buildMonthGrid(monthStart);
@@ -192,11 +197,26 @@ export default function CalendarPage() {
     };
   }, [view, cursor]);
 
+  const isYear = view === "year";
   const query = useQuery({
     queryKey: ["calendar", view, isoDate(rangeFrom), isoDate(rangeTo)],
     queryFn: () =>
       fetchCalendarEvents({ from: isoDate(rangeFrom), to: isoDate(rangeTo) }),
+    // The event list is capped at 92 days; the Year view reads counts only.
+    enabled: !isYear,
   });
+  const summaryQuery = useQuery({
+    queryKey: ["calendar", "summary", isoDate(rangeFrom), isoDate(rangeTo)],
+    queryFn: () =>
+      fetchCalendarSummary({ from: isoDate(rangeFrom), to: isoDate(rangeTo) }),
+    enabled: isYear,
+  });
+  const activeQuery = isYear ? summaryQuery : query;
+  const daysByDate = useMemo(() => {
+    const map = new Map<string, CalendarDaySummary>();
+    for (const day of summaryQuery.data?.days ?? []) map.set(day.occurs_on, day);
+    return map;
+  }, [summaryQuery.data]);
   const connectionsQuery = useQuery({
     queryKey: ["calendar", "connections"],
     queryFn: listCalendarConnections,
@@ -420,6 +440,11 @@ export default function CalendarPage() {
 
   const navigate = (delta: 1 | -1) => {
     setCursor((c) => {
+      if (view === "year") {
+        const year = c.getFullYear() + delta;
+        const lastDay = new Date(year, c.getMonth() + 1, 0).getDate();
+        return new Date(year, c.getMonth(), Math.min(c.getDate(), lastDay));
+      }
       const next = new Date(c);
       if (view === "month") next.setMonth(c.getMonth() + delta);
       else if (view === "week") next.setDate(c.getDate() + delta * 7);
@@ -450,7 +475,7 @@ export default function CalendarPage() {
             role="tablist"
             aria-label="Calendar view"
           >
-            {(["month", "week", "day"] as const).map((v) => (
+            {(["year", "month", "week", "day"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -504,26 +529,69 @@ export default function CalendarPage() {
           {/* iCal export: authenticated visible-range download.
               Direct provider subscription needs a public/tokenized feed
               or OAuth connector. */}
-          <a
-            href={icsHref}
-            className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
-            data-testid="calendar-ics-download"
-            download="caseops-calendar.ics"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            Export .ics
-          </a>
+          {isYear ? (
+            <div
+              className="ml-2 inline-flex flex-wrap items-center gap-1"
+              role="group"
+              aria-label={`Export ${label} as .ics, one quarter per file`}
+              aria-describedby="calendar-year-export-note"
+              data-testid="calendar-ics-quarters"
+            >
+              <Download className="h-3.5 w-3.5 text-[var(--color-mute)]" aria-hidden />
+              {yearQuarters(cursor.getFullYear()).map((quarter) => (
+                <a
+                  key={quarter.label}
+                  href={`${API_BASE_URL}/api/calendar/events.ics?from=${quarter.from}&to=${quarter.to}`}
+                  className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-2.5 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+                  data-testid={`calendar-ics-${quarter.label.toLowerCase()}`}
+                  download={`caseops-calendar-${cursor.getFullYear()}-${quarter.label.toLowerCase()}.ics`}
+                  aria-label={`Export ${quarter.label} ${cursor.getFullYear()} (${quarter.from} to ${quarter.to}) as .ics`}
+                >
+                  {quarter.label}
+                </a>
+              ))}
+            </div>
+          ) : (
+            <a
+              href={icsHref}
+              className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+              data-testid="calendar-ics-download"
+              download="caseops-calendar.ics"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Export .ics
+            </a>
+          )}
         </div>
+        {isYear ? (
+          <p
+            id="calendar-year-export-note"
+            className="w-full text-xs text-[var(--color-mute)]"
+            data-testid="calendar-year-export-note"
+          >
+            Exports are limited to 92 days, so a year downloads as four quarterly .ics files.
+          </p>
+        ) : null}
       </header>
 
       {/* Legend */}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--color-mute)]">
-        {(["filing_deadline", "internal_target", "hearing", "renewal", "task_date"] as const).map((displayType) => {
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--color-mute)]"
+        role="list"
+        aria-label="Calendar legend"
+        data-testid="calendar-legend"
+      >
+        {DISPLAY_ORDER.map((displayType) => {
           const meta = DISPLAY_META[displayType];
           const Icon = meta.icon;
           return (
-            <span key={displayType} className="inline-flex items-center gap-1.5">
-              <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
+            <span
+              key={displayType}
+              role="listitem"
+              className="inline-flex items-center gap-1.5"
+              data-testid={`calendar-legend-${displayType}`}
+            >
+              <span className={cn("h-2 w-2 rounded-full", meta.dot)} data-legend-dot={displayType} />
               <Icon className="h-3.5 w-3.5" aria-hidden />
               <span>{meta.label}</span>
             </span>
@@ -787,7 +855,8 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => syncRangeMutation.mutate()}
-                    disabled={syncRangeMutation.isPending || !connectionsQuery.isSuccess || connectionsQuery.data?.provider_available !== true || !syncStatusQuery.isSuccess}
+                    disabled={isYear || syncRangeMutation.isPending || !connectionsQuery.isSuccess || connectionsQuery.data?.provider_available !== true || !syncStatusQuery.isSuccess}
+                    aria-describedby={isYear ? "calendar-outlook-sync-year-reason" : undefined}
                     className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                     data-testid="calendar-outlook-sync-range"
                     aria-label={`Sync visible range ${label} to Outlook`}
@@ -796,6 +865,11 @@ export default function CalendarPage() {
                       ? "Syncing…"
                       : "Sync visible range to Outlook"}
                   </button>
+                  {isYear ? (
+                    <span id="calendar-outlook-sync-year-reason" className="text-xs text-[var(--color-mute)]">
+                      {YEAR_RANGE_ACTION_REASON}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -874,15 +948,21 @@ export default function CalendarPage() {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={icsHref}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
-              data-testid="calendar-google-ics-download"
-              download="caseops-calendar.ics"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              Download .ics
-            </a>
+            {isYear ? (
+              <span className="text-xs text-[var(--color-mute)]" data-testid="calendar-google-ics-year-note">
+                Download the year one quarter at a time with Q1 to Q4 above.
+              </span>
+            ) : (
+              <a
+                href={icsHref}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+                data-testid="calendar-google-ics-download"
+                download="caseops-calendar.ics"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Download .ics
+              </a>
+            )}
             <Link
               href="/app/admin/integrations"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
@@ -897,7 +977,8 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => syncGoogleRangeMutation.mutate()}
-                    disabled={syncGoogleRangeMutation.isPending || !googleConfigured}
+                    disabled={isYear || syncGoogleRangeMutation.isPending || !googleConfigured}
+                    aria-describedby={isYear ? "calendar-google-sync-year-reason" : undefined}
                     className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
                     data-testid="calendar-google-sync-range"
                     aria-label={`Sync visible range ${label} to Google Calendar`}
@@ -906,6 +987,11 @@ export default function CalendarPage() {
                       ? "Syncing..."
                       : "Sync visible range to Google"}
                   </button>
+                  {isYear ? (
+                    <span id="calendar-google-sync-year-reason" className="text-xs text-[var(--color-mute)]">
+                      {YEAR_RANGE_ACTION_REASON}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -1043,12 +1129,14 @@ export default function CalendarPage() {
         </div>
       </section>
 
-      {query.isError ? (
-        <QueryErrorState
-          title="Could not load calendar"
-          error={query.error}
-          onRetry={query.refetch}
-        />
+      {activeQuery.isError ? (
+        <div data-testid="calendar-load-error">
+          <QueryErrorState
+            title={isYear ? `Could not load the ${label} summary` : "Could not load calendar"}
+            error={activeQuery.error}
+            onRetry={() => activeQuery.refetch()}
+          />
+        </div>
       ) : null}
 
       {/* BUG-019 (Ram 2026-04-26): when the tenant has zero events
@@ -1058,13 +1146,14 @@ export default function CalendarPage() {
           will populate from hearings + tasks + deadlines on its
           matters. The grid still renders below so the user sees the
           date layout immediately and confirms the calendar is alive. */}
-      {!query.isPending && !query.isError && (query.data?.events ?? []).length === 0 ? (
+      {!activeQuery.isPending && !activeQuery.isError
+        && (isYear ? summaryQuery.data?.total === 0 : (query.data?.events ?? []).length === 0) ? (
         <div
           className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-sm text-[var(--color-ink-2)]"
           data-testid="calendar-empty-state"
         >
           <div className="font-medium text-[var(--color-ink)]">
-            No events on the calendar yet
+            {isYear ? `No open hearings, tasks or deadlines in ${label}` : "No events on the calendar yet"}
           </div>
           <div className="text-xs text-[var(--color-mute)]">
             The calendar populates from hearings, tasks, and deadlines
@@ -1093,7 +1182,33 @@ export default function CalendarPage() {
         </div>
       ) : null}
 
-      {view === "month" ? (
+      <div
+        ref={viewRegionRef}
+        tabIndex={-1}
+        aria-label={`Calendar, ${label}`}
+        className="min-w-0 scroll-mt-4 focus:outline-none"
+        data-testid="calendar-view-region"
+      >
+      {isYear ? (
+        summaryQuery.isError ? null : (
+          <YearView
+            year={cursor.getFullYear()}
+            daysByDate={daysByDate}
+            isPending={summaryQuery.isPending}
+            todayKey={todayKey}
+            onOpenDay={(day) => {
+              focusViewAfterOpen.current = true;
+              setCursor(day);
+              setView("day");
+            }}
+            onOpenMonth={(monthStart) => {
+              focusViewAfterOpen.current = true;
+              setCursor(monthStart);
+              setView("month");
+            }}
+          />
+        )
+      ) : view === "month" ? (
         <MonthView
           monthStart={startOfMonth(cursor)}
           eventsByDay={eventsByDay}
@@ -1115,6 +1230,7 @@ export default function CalendarPage() {
           todayKey={todayKey}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   fetchCalendarEventsMock,
+  fetchCalendarSummaryMock,
   fetchCalendarSyncStatusMock,
   extractEmailInvitationCandidatesMock,
   fetchGmailMailboxStatusMock,
@@ -35,6 +36,7 @@ const {
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchCalendarEventsMock: vi.fn(),
+  fetchCalendarSummaryMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
   extractEmailInvitationCandidatesMock: vi.fn(),
   fetchGmailMailboxStatusMock: vi.fn(),
@@ -56,6 +58,7 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   extractEmailInvitationCandidates: extractEmailInvitationCandidatesMock,
   fetchCalendarEvents: fetchCalendarEventsMock,
+  fetchCalendarSummary: fetchCalendarSummaryMock,
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
   fetchGmailMailboxStatus: fetchGmailMailboxStatusMock,
   importRecentGmailMessages: importRecentGmailMessagesMock,
@@ -76,6 +79,10 @@ vi.mock("@/lib/capabilities", () => ({
   useCapability: useCapabilityMock,
 }));
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 import CalendarPage from "./page";
 import { calendarEventListResponse, calendarSyncStatusResponse } from "@/lib/api/schemas";
 import { calendarStatusFixture } from "@/test/calendar-status-fixtures";
@@ -94,7 +101,9 @@ function isoToday(): string {
 
 describe("CalendarPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/calendar");
     fetchCalendarEventsMock.mockReset();
+    fetchCalendarSummaryMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
     extractEmailInvitationCandidatesMock.mockReset();
     fetchGmailMailboxStatusMock.mockReset();
@@ -1246,5 +1255,175 @@ describe("CalendarPage", () => {
     await screen.findByTestId("calendar-outlook-connect");
     expect(screen.queryByTestId("calendar-outlook-sync-range")).toBeNull();
     expect(syncOutlookVisibleRangeMock).not.toHaveBeenCalled();
+  });
+
+  describe("Year view (ENH-017)", () => {
+    const DAY_MS = 86_400_000;
+    // Honest mock: the event list refuses more than 92 days, exactly like the API.
+    const honestEvents = () =>
+      fetchCalendarEventsMock.mockImplementation(async ({ from, to }: { from: string; to: string }) => {
+        if ((Date.parse(to) - Date.parse(from)) / DAY_MS > 92) {
+          throw new Error("Calendar range is capped at 92 days. Request a narrower window.");
+        }
+        return { range_from: from, range_to: to, events: [] };
+      });
+    const summary2026 = {
+      range_from: "2026-01-01",
+      range_to: "2026-12-31",
+      total: 7,
+      days: [
+        { occurs_on: "2026-09-26", total: 6, by_display_type: { hearing: 5, task_date: 1 } },
+        { occurs_on: "2026-03-04", total: 1, by_display_type: { task_date: 1 } },
+      ],
+    };
+
+    it("opens the Year tab with one bounded summary call and twelve month grids", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      window.history.replaceState(null, "", "/app/calendar?date=2026-05-10");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+      await user.click(await screen.findByTestId("calendar-view-year"));
+
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("2026");
+      await waitFor(() => expect(screen.getAllByTestId(/^calendar-year-month-\d{4}-\d{2}$/)).toHaveLength(12));
+      expect(fetchCalendarSummaryMock).toHaveBeenCalledTimes(1);
+      expect(fetchCalendarSummaryMock).toHaveBeenCalledWith({ from: "2026-01-01", to: "2026-12-31" });
+      for (const [args] of fetchCalendarEventsMock.mock.calls) {
+        expect((Date.parse(args.to) - Date.parse(args.from)) / DAY_MS).toBeLessThanOrEqual(92);
+      }
+      expect(new URLSearchParams(window.location.search).get("view")).toBe("year");
+      expect(screen.queryByTestId("calendar-load-error")).toBeNull();
+    });
+
+    it("restores ?view=year&date= on mount and moves one year with Previous and Next", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockImplementation(async ({ from, to }: { from: string; to: string }) => ({
+        range_from: from, range_to: to, total: 0, days: [],
+      }));
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-01-15");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("2026");
+      expect(screen.getByTestId("calendar-view-year")).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByTestId("calendar-empty-state")).toHaveTextContent(
+        "No open hearings, tasks or deadlines in 2026",
+      );
+      await user.click(screen.getByTestId("calendar-prev-month"));
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("2025");
+      await waitFor(() =>
+        expect(fetchCalendarSummaryMock).toHaveBeenLastCalledWith({ from: "2025-01-01", to: "2025-12-31" }),
+      );
+      expect(new URLSearchParams(window.location.search).get("date")).toBe("2025-01-15");
+      await user.click(screen.getByTestId("calendar-next-month"));
+      await user.click(screen.getByTestId("calendar-next-month"));
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("2027");
+      expect(fetchCalendarEventsMock).not.toHaveBeenCalled();
+    });
+
+    it("names each day's counts by type and opens the day in Day view", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+
+      const busy = await screen.findByTestId("calendar-year-day-2026-09-26");
+      expect(busy).toHaveAccessibleName(
+        "26 Sep 2026: 6 events — 5 hearings, 1 task date. Open in Day view",
+      );
+      expect(busy).toHaveAttribute("data-total", "6");
+      expect(busy).toHaveTextContent("6");
+      expect(
+        Array.from(busy.querySelectorAll("[data-display-type]")).map((dot) => dot.getAttribute("data-display-type")),
+      ).toEqual(["hearing", "task_date"]);
+      expect(busy).toHaveAttribute("tabindex", "0");
+      expect(screen.getByTestId("calendar-year-day-2026-09-27")).toHaveAttribute("tabindex", "-1");
+
+      await user.click(busy);
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("26 September 2026");
+      await waitFor(() => expect(screen.getByTestId("calendar-view-region")).toHaveFocus());
+      expect(screen.getByTestId("calendar-view-day")).toHaveAttribute("aria-selected", "true");
+      expect(new URLSearchParams(window.location.search).get("view")).toBe("day");
+      expect(new URLSearchParams(window.location.search).get("date")).toBe("2026-09-26");
+      await waitFor(() =>
+        expect(fetchCalendarEventsMock).toHaveBeenCalledWith({ from: "2026-09-26", to: "2026-09-26" }),
+      );
+    });
+
+    it("opens a month heading in Month view", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+      await user.click(await screen.findByRole("button", { name: "Open March 2026 in Month view" }));
+      expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("March 2026");
+      expect(screen.getByTestId("calendar-view-month")).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("shows a summary failure with Retry and never empty months", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockRejectedValueOnce(new Error("summary unavailable"));
+      fetchCalendarSummaryMock.mockResolvedValueOnce(summary2026);
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+      const error = await screen.findByTestId("calendar-load-error");
+      expect(error).toHaveTextContent("Could not load the 2026 summary");
+      expect(screen.queryByTestId("calendar-year-grid")).toBeNull();
+      expect(screen.queryByTestId("calendar-empty-state")).toBeNull();
+      await user.click(within(error).getByRole("button", { name: /try again/i }));
+      expect(await screen.findByTestId("calendar-year-day-2026-09-26")).toHaveAttribute("data-total", "6");
+    });
+
+    it("exports per quarter within the 92-day cap and disables range sync with the reason", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      const now = new Date().toISOString();
+      const outlook = {
+        id: "conn-1", company_id: "co-1", membership_id: "mem-1", provider: "outlook",
+        provider_account_id: "acct-1", display_email: "qa-bot@caseops.ai", status: "connected",
+        scopes: ["Calendars.ReadWrite"], connected_at: now, last_sync_at: null, created_at: now, updated_at: now,
+      };
+      listCalendarConnectionsMock.mockResolvedValue({
+        provider: "outlook", provider_available: true, unavailable_reason: null,
+        durable_automation: "blocked_pending_provider_approval", connections: [outlook],
+      });
+      const status = await fetchCalendarSyncStatusMock();
+      fetchCalendarSyncStatusMock.mockResolvedValue({ ...status, connections: [outlook] });
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      render(withClient(<CalendarPage />));
+
+      const quarters = await screen.findByTestId("calendar-ics-quarters");
+      const links = within(quarters).getAllByRole("link");
+      expect(links.map((link) => link.textContent)).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+      for (const link of links) {
+        const url = new URL(link.getAttribute("href") ?? "", "http://localhost");
+        const days = (Date.parse(url.searchParams.get("to") ?? "") - Date.parse(url.searchParams.get("from") ?? "")) / DAY_MS;
+        expect(days).toBeLessThanOrEqual(92);
+      }
+      expect(links[3]).toHaveAttribute("href", expect.stringContaining("from=2026-10-01&to=2026-12-31"));
+      expect(screen.getByTestId("calendar-year-export-note")).toHaveTextContent("limited to 92 days");
+      expect(screen.queryByTestId("calendar-ics-download")).toBeNull();
+      expect(screen.queryByTestId("calendar-google-ics-download")).toBeNull();
+      const sync = await screen.findByTestId("calendar-outlook-sync-range");
+      expect(sync).toBeDisabled();
+      expect(sync).toHaveAccessibleDescription(
+        "Sync covers up to 92 days. Switch to Month, Week or Day to sync that range.",
+      );
+      expect(syncOutlookVisibleRangeMock).not.toHaveBeenCalled();
+    });
+
+    it("lists every display type in the legend", async () => {
+      honestEvents();
+      render(withClient(<CalendarPage />));
+      const legend = await screen.findByTestId("calendar-legend");
+      expect(within(legend).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+        "Legal filing deadline", "Hearing or listing", "Internal target", "Renewal date",
+        "Task date", "Client-instruction date", "Reminder time", "Other deadline",
+      ]);
+    });
   });
 });
