@@ -5,6 +5,8 @@
 // which shares the month list's predicates, so a dot here always opens to the
 // same items in Day view.
 
+import { useRef, useState, type KeyboardEvent } from "react";
+
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { CalendarDaySummary } from "@/lib/api/schemas";
 import {
@@ -19,6 +21,8 @@ import {
 import { cn } from "@/lib/cn";
 
 const MAX_DOTS = 4;
+// Arrow keys move between days (one week per row), like a calendar grid.
+const KEY_STEP_DAYS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
 
 export function YearView({
   year,
@@ -35,8 +39,27 @@ export function YearView({
   onOpenDay: (day: Date) => void;
   onOpenMonth: (monthStart: Date) => void;
 }) {
+  // One tab stop for every day of the year (roving tabindex): Tab lands on
+  // today, or the first busy day, or 1 January; arrows reach any other day,
+  // including empty ones, and Enter opens it in Day view.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const inYear = (key: string | null | undefined): key is string => Boolean(key?.startsWith(`${year}-`));
+  const firstBusyKey = Array.from(daysByDate.keys()).filter(inYear).sort()[0];
+  const tabStopKey = inYear(activeKey) ? activeKey : inYear(todayKey) ? todayKey : firstBusyKey ?? `${year}-01-01`;
+  const moveFocus = (event: KeyboardEvent<HTMLButtonElement>, from: Date) => {
+    const step = KEY_STEP_DAYS[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const target = new Date(from.getFullYear(), from.getMonth(), from.getDate() + step);
+    if (target.getFullYear() !== year) return;
+    const key = isoDate(target);
+    setActiveKey(key);
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-testid="calendar-year-day-${key}"]`)?.focus();
+  };
   return (
     <div
+      ref={gridRef}
       className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       data-testid="calendar-year-grid"
       aria-busy={isPending}
@@ -86,22 +109,22 @@ export function YearView({
                       key={key}
                       type="button"
                       onClick={() => onOpenDay(d)}
-                      // Only dates with items are tab stops; the month heading
-                      // reaches every other date through Month view.
-                      tabIndex={total > 0 ? 0 : -1}
+                      onKeyDown={(event) => moveFocus(event, d)}
+                      onFocus={() => setActiveKey(key)}
+                      tabIndex={key === tabStopKey ? 0 : -1}
                       aria-label={`${describeDayCounts(d, summary?.by_display_type ?? {})}. Open in Day view`}
                       title={describeDayCounts(d, summary?.by_display_type ?? {})}
                       data-testid={`calendar-year-day-${key}`}
                       data-total={total}
                       className={cn(
-                        "flex min-h-11 min-w-0 flex-col items-center justify-start rounded-sm pt-0.5 text-[11px] tabular-nums hover:bg-[var(--color-line-1)] focus-visible:outline focus-visible:outline-2",
+                        "flex min-h-11 min-w-0 flex-col items-center justify-start rounded-sm pt-0.5 text-xs tabular-nums hover:bg-[var(--color-line-1)] focus-visible:outline focus-visible:outline-2",
                         isToday && "bg-[var(--color-accent-bg)] font-semibold text-[var(--color-accent)]",
                         !isToday && (total > 0 ? "font-semibold text-[var(--color-ink)]" : "text-[var(--color-mute)]"),
                       )}
                     >
                       <span>{d.getDate()}</span>
                       {total > 0 ? (
-                        <span className="mt-0.5 flex items-center gap-0.5" aria-hidden>
+                        <span className="mt-0.5 flex max-w-full flex-wrap items-center justify-center gap-0.5" aria-hidden>
                           {types.slice(0, MAX_DOTS).map((type) => (
                             <span
                               key={type}
@@ -110,7 +133,7 @@ export function YearView({
                             />
                           ))}
                           {total > 1 ? (
-                            <span className="text-[9px] font-medium leading-none text-[var(--color-ink-2)]">{total}</span>
+                            <span className="text-[11px] font-medium leading-none text-[var(--color-ink-2)]">{total}</span>
                           ) : null}
                         </span>
                       ) : null}

@@ -46,7 +46,7 @@ import {
   syncGoogleCalendarVisibleRange,
   syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
-import type { CalendarDaySummary, CalendarEventRecord } from "@/lib/api/schemas";
+import type { CalendarDaySummary, CalendarEventDisplayType, CalendarEventRecord } from "@/lib/api/schemas";
 import type { EmailInvitationCandidateRecord } from "@/lib/api/endpoints";
 import { API_BASE_URL } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
@@ -56,6 +56,7 @@ import {
   MONTH_NAMES,
   WEEKDAY_LABELS,
   buildMonthGrid,
+  describeDayCounts,
   displayTypeForEvent,
   isoDate,
   parseIsoDate,
@@ -155,6 +156,18 @@ export default function CalendarPage() {
     url.searchParams.set("date", cursorKey);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, [view, cursorKey]);
+  // Adopt a URL change made while the page stays mounted (the sidebar's bare
+  // /app/calendar link). Read the live URL rather than searchParams, which can
+  // lag behind this page's own replaceState, so a stale echo never undoes a
+  // newer click. Declared after the writer so a same-commit write lands first.
+  const searchKey = searchParams.toString();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlView = parseViewMode(params.get("view"));
+    const urlDate = parseIsoDate(params.get("date")) ?? new Date();
+    setView((current) => (current === urlView ? current : urlView));
+    setCursor((current) => (isoDate(current) === isoDate(urlDate) ? current : urlDate));
+  }, [searchKey]);
   const [outlookMessage, setOutlookMessage] = useState<string | null>(null);
   const [googleMessage, setGoogleMessage] = useState<string | null>(null);
   const [gmailMessage, setGmailMessage] = useState<string | null>(null);
@@ -440,14 +453,15 @@ export default function CalendarPage() {
 
   const navigate = (delta: 1 | -1) => {
     setCursor((c) => {
-      if (view === "year") {
-        const year = c.getFullYear() + delta;
-        const lastDay = new Date(year, c.getMonth() + 1, 0).getDate();
-        return new Date(year, c.getMonth(), Math.min(c.getDate(), lastDay));
+      if (view === "year" || view === "month") {
+        // Step whole months and clamp the day (31 Jan -> 28 Feb, 31 Oct ->
+        // 30 Nov) so Next never skips a month and the URL date stays valid.
+        const target = new Date(c.getFullYear(), c.getMonth() + (view === "year" ? delta * 12 : delta), 1);
+        const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+        return new Date(target.getFullYear(), target.getMonth(), Math.min(c.getDate(), lastDay));
       }
       const next = new Date(c);
-      if (view === "month") next.setMonth(c.getMonth() + delta);
-      else if (view === "week") next.setDate(c.getDate() + delta * 7);
+      if (view === "week") next.setDate(c.getDate() + delta * 7);
       else next.setDate(c.getDate() + delta);
       return next;
     });
@@ -597,6 +611,111 @@ export default function CalendarPage() {
             </span>
           );
         })}
+      </div>
+
+      {activeQuery.isError ? (
+        <div data-testid="calendar-load-error">
+          <QueryErrorState
+            title={isYear ? `Could not load the ${label} summary` : "Could not load calendar"}
+            error={activeQuery.error}
+            onRetry={() => activeQuery.refetch()}
+          />
+        </div>
+      ) : null}
+
+      {/* BUG-019 (Ram 2026-04-26): when the tenant has zero events
+          across the visible window the per-cell "No events" hints
+          read as broken UI. Render an explicit, actionable banner
+          ABOVE the grid so a fresh tenant understands the calendar
+          will populate from hearings + tasks + deadlines on its
+          matters. The grid still renders below so the user sees the
+          date layout immediately and confirms the calendar is alive. */}
+      {!activeQuery.isPending && !activeQuery.isError
+        && (isYear ? summaryQuery.data?.total === 0 : (query.data?.events ?? []).length === 0) ? (
+        <div
+          className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-sm text-[var(--color-ink-2)]"
+          data-testid="calendar-empty-state"
+        >
+          <div className="font-medium text-[var(--color-ink)]">
+            {/* Name the window, so an empty day opened from Year view
+                never reads as an empty calendar. */}
+            No open hearings, tasks or deadlines{" "}
+            {view === "day" ? `on ${label}` : view === "week" ? `in the week of ${label}` : `in ${label}`}
+          </div>
+          <div className="text-xs text-[var(--color-mute)]">
+            The calendar populates from hearings, tasks, and deadlines
+            attached to your matters. Schedule a hearing on any
+            matter — it will appear here within seconds.
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/app/matters"
+              data-testid="calendar-empty-cta-schedule"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand-700)] underline-offset-4 hover:underline"
+            >
+              Schedule a hearing
+              <ChevronRight className="h-3 w-3" aria-hidden />
+            </Link>
+            <Link
+              href="/app/matters"
+              data-testid="calendar-empty-cta-open-matters"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-ink-2)] underline-offset-4 hover:underline"
+            >
+              Open Matters
+              <ChevronRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      <div
+        ref={viewRegionRef}
+        tabIndex={-1}
+        aria-label={`Calendar, ${label}`}
+        className="min-w-0 scroll-mt-4 focus:outline-none"
+        data-testid="calendar-view-region"
+      >
+      {isYear ? (
+        summaryQuery.isError ? null : (
+          <YearView
+            year={cursor.getFullYear()}
+            daysByDate={daysByDate}
+            isPending={summaryQuery.isPending}
+            todayKey={todayKey}
+            onOpenDay={(day) => {
+              focusViewAfterOpen.current = true;
+              setCursor(day);
+              setView("day");
+            }}
+            onOpenMonth={(monthStart) => {
+              focusViewAfterOpen.current = true;
+              setCursor(monthStart);
+              setView("month");
+            }}
+          />
+        )
+      ) : view === "month" ? (
+        <MonthView
+          monthStart={startOfMonth(cursor)}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      ) : view === "week" ? (
+        <WeekView
+          weekStart={startOfWeekMonday(cursor)}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      ) : (
+        <DayView
+          day={cursor}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      )}
       </div>
 
       {syncStatusQuery.isError ? (
@@ -1128,109 +1247,6 @@ export default function CalendarPage() {
           ) : null}
         </div>
       </section>
-
-      {activeQuery.isError ? (
-        <div data-testid="calendar-load-error">
-          <QueryErrorState
-            title={isYear ? `Could not load the ${label} summary` : "Could not load calendar"}
-            error={activeQuery.error}
-            onRetry={() => activeQuery.refetch()}
-          />
-        </div>
-      ) : null}
-
-      {/* BUG-019 (Ram 2026-04-26): when the tenant has zero events
-          across the visible window the per-cell "No events" hints
-          read as broken UI. Render an explicit, actionable banner
-          ABOVE the grid so a fresh tenant understands the calendar
-          will populate from hearings + tasks + deadlines on its
-          matters. The grid still renders below so the user sees the
-          date layout immediately and confirms the calendar is alive. */}
-      {!activeQuery.isPending && !activeQuery.isError
-        && (isYear ? summaryQuery.data?.total === 0 : (query.data?.events ?? []).length === 0) ? (
-        <div
-          className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-sm text-[var(--color-ink-2)]"
-          data-testid="calendar-empty-state"
-        >
-          <div className="font-medium text-[var(--color-ink)]">
-            {isYear ? `No open hearings, tasks or deadlines in ${label}` : "No events on the calendar yet"}
-          </div>
-          <div className="text-xs text-[var(--color-mute)]">
-            The calendar populates from hearings, tasks, and deadlines
-            attached to your matters. Schedule a hearing on any
-            matter — it will appear here within seconds. (Verified
-            end-to-end 2026-04-28 against prod.)
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/app/matters"
-              data-testid="calendar-empty-cta-schedule"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand-700)] underline-offset-4 hover:underline"
-            >
-              Schedule a hearing
-              <ChevronRight className="h-3 w-3" aria-hidden />
-            </Link>
-            <Link
-              href="/app/matters"
-              data-testid="calendar-empty-cta-open-matters"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-ink-2)] underline-offset-4 hover:underline"
-            >
-              Open Matters
-              <ChevronRight className="h-3 w-3" aria-hidden />
-            </Link>
-          </div>
-        </div>
-      ) : null}
-
-      <div
-        ref={viewRegionRef}
-        tabIndex={-1}
-        aria-label={`Calendar, ${label}`}
-        className="min-w-0 scroll-mt-4 focus:outline-none"
-        data-testid="calendar-view-region"
-      >
-      {isYear ? (
-        summaryQuery.isError ? null : (
-          <YearView
-            year={cursor.getFullYear()}
-            daysByDate={daysByDate}
-            isPending={summaryQuery.isPending}
-            todayKey={todayKey}
-            onOpenDay={(day) => {
-              focusViewAfterOpen.current = true;
-              setCursor(day);
-              setView("day");
-            }}
-            onOpenMonth={(monthStart) => {
-              focusViewAfterOpen.current = true;
-              setCursor(monthStart);
-              setView("month");
-            }}
-          />
-        )
-      ) : view === "month" ? (
-        <MonthView
-          monthStart={startOfMonth(cursor)}
-          eventsByDay={eventsByDay}
-          isPending={query.isPending}
-          todayKey={todayKey}
-        />
-      ) : view === "week" ? (
-        <WeekView
-          weekStart={startOfWeekMonday(cursor)}
-          eventsByDay={eventsByDay}
-          isPending={query.isPending}
-          todayKey={todayKey}
-        />
-      ) : (
-        <DayView
-          day={cursor}
-          eventsByDay={eventsByDay}
-          isPending={query.isPending}
-          todayKey={todayKey}
-        />
-      )}
-      </div>
     </div>
   );
 }
@@ -1263,6 +1279,11 @@ function MonthView({
           const events = eventsByDay.get(key) ?? [];
           const showCount = events.slice(0, 3);
           const overflow = events.length - showCount.length;
+          const byType: Partial<Record<CalendarEventDisplayType, number>> = {};
+          for (const event of events) {
+            const type = displayTypeForEvent(event);
+            byType[type] = (byType[type] ?? 0) + 1;
+          }
           return (
             <div
               key={`${idx}-${key}`}
@@ -1281,15 +1302,40 @@ function MonthView({
                     type="button"
                     disabled={isPending || events.length === 0}
                     aria-label={`View all events on ${key}`}
+                    aria-describedby={!isPending && events.length > 0 ? `calendar-month-count-${key}` : undefined}
                     title={`View all events on ${key}`}
                     className={cn(
-                      "mb-1 inline-flex h-7 w-7 items-center justify-center text-[11px] font-medium enabled:hover:bg-[var(--color-line-1)] focus-visible:outline focus-visible:outline-2",
+                      // Phones: the button spans the cell and carries per-type
+                      // dots with a count, because chip text clipped to a few
+                      // pixels names nothing. Wider screens keep the chips.
+                      "mb-1 flex min-h-11 w-full flex-col items-center gap-0.5 pt-1 text-xs font-medium enabled:hover:bg-[var(--color-line-1)] focus-visible:outline focus-visible:outline-2 sm:inline-flex sm:h-7 sm:min-h-0 sm:w-7 sm:justify-center sm:pt-0 sm:text-[11px]",
                       inMonth
                         ? isToday ? "text-[var(--color-accent)]" : "text-[var(--color-ink)]"
                         : "text-[var(--color-mute)]",
                     )}
                   >
-                    {d.getDate()}
+                    <span>{d.getDate()}</span>
+                    {!isPending && events.length > 0 ? (
+                      <span
+                        id={`calendar-month-count-${key}`}
+                        className="flex max-w-full flex-wrap items-center justify-center gap-0.5 sm:hidden"
+                        data-testid={`calendar-month-count-${key}`}
+                        data-total={events.length}
+                      >
+                        <span className="sr-only">{describeDayCounts(d, byType)}</span>
+                        {DISPLAY_ORDER.filter((type) => (byType[type] ?? 0) > 0).slice(0, 4).map((type) => (
+                          <span
+                            key={type}
+                            aria-hidden
+                            className={cn("h-1.5 w-1.5 rounded-full", DISPLAY_META[type].dot)}
+                            data-display-type={type}
+                          />
+                        ))}
+                        <span aria-hidden className="text-[11px] leading-none text-[var(--color-ink-2)]">
+                          {events.length}
+                        </span>
+                      </span>
+                    ) : null}
                   </button>
                 </DialogTrigger>
                 <DialogContent>
@@ -1306,9 +1352,11 @@ function MonthView({
                 {isPending ? (
                   <Skeleton className="h-4 w-full" />
                 ) : (
-                  showCount.map((event) => (
-                    <CalendarEventChip key={event.id} event={event} />
-                  ))
+                  <div className="hidden flex-col gap-1 sm:flex">
+                    {showCount.map((event) => (
+                      <CalendarEventChip key={event.id} event={event} />
+                    ))}
+                  </div>
                 )}
                 {!isPending && overflow > 0 ? (
                   <Dialog>
@@ -1359,7 +1407,8 @@ function WeekView({
   });
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-line-2)]">
-      <div className="grid grid-cols-7">
+      {/* Phones stack the days so every chip keeps a readable width. */}
+      <div className="grid grid-cols-1 sm:grid-cols-7">
         {days.map((d, idx) => {
           const key = isoDate(d);
           const isToday = key === todayKey;
@@ -1368,10 +1417,9 @@ function WeekView({
             <div
               key={key}
               className={cn(
-                "flex min-h-[24rem] flex-col border-b border-r border-[var(--color-line-2)] p-2",
+                "flex min-w-0 flex-col border-[var(--color-line-2)] p-2 sm:min-h-[24rem]",
                 isToday && "bg-[var(--color-accent-bg)]",
-                idx === 6 && "border-r-0",
-                "border-b-0",
+                idx < 6 && "border-b sm:border-b-0 sm:border-r",
               )}
               data-testid={`calendar-week-day-${key}`}
             >

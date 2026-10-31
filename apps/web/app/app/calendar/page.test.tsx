@@ -828,6 +828,29 @@ describe("CalendarPage", () => {
     expect(await screen.findByTestId("calendar-event-task:t1")).toBeTruthy();
   });
 
+  it("names a month day's counts on its day button, which phones show instead of clipped chips", async () => {
+    const today = isoToday();
+    const base = { matter_id: "m1", matter_code: "BAIL-001", matter_title: "State v Accused", detail: null };
+    fetchCalendarEventsMock.mockResolvedValue({
+      range_from: today,
+      range_to: today,
+      events: [
+        { ...base, id: "hearing:h1", kind: "hearing", occurs_on: today, title: "Bail hearing", status: "scheduled", display_type: "hearing" },
+        { ...base, id: "hearing:h2", kind: "hearing", occurs_on: today, title: "Mention", status: "scheduled", display_type: "hearing" },
+        { ...base, id: "task:t1", kind: "task", occurs_on: today, title: "Draft reply", status: "todo", display_type: "task_date" },
+      ],
+    });
+    render(withClient(<CalendarPage />));
+    const badge = await screen.findByTestId(`calendar-month-count-${today}`);
+    expect(badge).toHaveAttribute("data-total", "3");
+    expect(Array.from(badge.querySelectorAll("[data-display-type]")).map((dot) => dot.getAttribute("data-display-type")))
+      .toEqual(["hearing", "task_date"]);
+    const trigger = screen.getByRole("button", { name: `View all events on ${today}` });
+    expect(trigger).toContainElement(badge);
+    expect(trigger.getAttribute("aria-describedby")).toBe(badge.id);
+    expect(badge).toHaveTextContent(/: 3 events — 2 hearings, 1 task date/);
+  });
+
   it("does not report an empty calendar while its events request is delayed", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 17, 12));
@@ -1257,6 +1280,24 @@ describe("CalendarPage", () => {
     expect(syncOutlookVisibleRangeMock).not.toHaveBeenCalled();
   });
 
+  describe("Month navigation clamps the day (ENH-017)", () => {
+    it.each([
+      ["2026-01-31", "calendar-next-month", "February 2026", "2026-02-28"],
+      ["2026-10-31", "calendar-next-month", "November 2026", "2026-11-30"],
+      ["2026-03-31", "calendar-prev-month", "February 2026", "2026-02-28"],
+    ])("from %s, %s shows %s with date %s", async (start, button, label, date) => {
+      fetchCalendarEventsMock.mockImplementation(async ({ from, to }: { from: string; to: string }) => ({
+        range_from: from, range_to: to, events: [],
+      }));
+      window.history.replaceState(null, "", `/app/calendar?view=month&date=${start}`);
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+      await user.click(await screen.findByTestId(button));
+      await waitFor(() => expect(screen.getByTestId("calendar-month-label")).toHaveTextContent(label));
+      await waitFor(() => expect(new URLSearchParams(window.location.search).get("date")).toBe(date));
+    });
+  });
+
   describe("Year view (ENH-017)", () => {
     const DAY_MS = 86_400_000;
     // Honest mock: the event list refuses more than 92 days, exactly like the API.
@@ -1338,8 +1379,8 @@ describe("CalendarPage", () => {
       expect(
         Array.from(busy.querySelectorAll("[data-display-type]")).map((dot) => dot.getAttribute("data-display-type")),
       ).toEqual(["hearing", "task_date"]);
-      expect(busy).toHaveAttribute("tabindex", "0");
-      expect(screen.getByTestId("calendar-year-day-2026-09-27")).toHaveAttribute("tabindex", "-1");
+      expect(screen.getByTestId("calendar-year-grid").querySelectorAll('[data-testid^="calendar-year-day-"][tabindex="0"]'))
+        .toHaveLength(1);
 
       await user.click(busy);
       expect(await screen.findByTestId("calendar-month-label")).toHaveTextContent("26 September 2026");
@@ -1414,6 +1455,85 @@ describe("CalendarPage", () => {
         "Sync covers up to 92 days. Switch to Month, Week or Day to sync that range.",
       );
       expect(syncOutlookVisibleRangeMock).not.toHaveBeenCalled();
+    });
+
+    it("reaches any day from one tab stop with the arrow keys and opens it with Enter", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue({
+        range_from: "2030-01-01", range_to: "2030-12-31", total: 1,
+        days: [{ occurs_on: "2030-03-04", total: 1, by_display_type: { task_date: 1 } }],
+      });
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2030-06-01");
+      const user = userEvent.setup();
+      render(withClient(<CalendarPage />));
+      const busy = await screen.findByTestId("calendar-year-day-2030-03-04");
+      // Today is outside 2030, so the single tab stop is the first busy day.
+      expect(screen.getByTestId("calendar-year-grid").querySelectorAll('[tabindex="0"][data-testid^="calendar-year-day-"]'))
+        .toHaveLength(1);
+      screen.getByRole("button", { name: "Open March 2030 in Month view" }).focus();
+      await user.tab();
+      expect(busy).toHaveFocus();
+      await user.keyboard("{ArrowRight}");
+      expect(screen.getByTestId("calendar-year-day-2030-03-05")).toHaveFocus();
+      await user.keyboard("{ArrowDown}");
+      const empty = screen.getByTestId("calendar-year-day-2030-03-12");
+      expect(empty).toHaveFocus();
+      expect(empty).toHaveAttribute("tabindex", "0");
+      expect(busy).toHaveAttribute("tabindex", "-1");
+      await user.keyboard("{Enter}");
+      await waitFor(() => expect(screen.getByTestId("calendar-month-label")).toHaveTextContent("Tue, 12 March 2030"));
+      expect(new URLSearchParams(window.location.search).get("date")).toBe("2030-03-12");
+      // An empty day names itself instead of claiming the calendar is empty.
+      expect(await screen.findByTestId("calendar-empty-state")).toHaveTextContent(
+        "No open hearings, tasks or deadlines on Tue, 12 March 2030",
+      );
+      expect(screen.getByTestId("calendar-empty-state")).not.toHaveTextContent("calendar yet");
+    });
+
+    it("disables Google range sync in Year view with the reason", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      const now = new Date().toISOString();
+      const google = {
+        id: "google-conn-1", company_id: "co-1", membership_id: "mem-1", provider: "google_calendar",
+        provider_account_id: "google-account-1", display_email: "owner@gmail.example", status: "connected",
+        scopes: ["https://www.googleapis.com/auth/calendar.events"], connected_at: now, last_sync_at: null,
+        created_at: now, updated_at: now,
+      };
+      const status = await fetchCalendarSyncStatusMock();
+      fetchCalendarSyncStatusMock.mockResolvedValue({
+        ...status,
+        provider_config: status.provider_config.map((config: { provider: string }) =>
+          config.provider === "google_calendar" ? { ...config, configured: true, missing_config_names: [] } : config),
+        connections: [google],
+      });
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      render(withClient(<CalendarPage />));
+      const sync = await screen.findByTestId("calendar-google-sync-range");
+      expect(sync).toBeDisabled();
+      expect(sync).toHaveAccessibleDescription(
+        "Sync covers up to 92 days. Switch to Month, Week or Day to sync that range.",
+      );
+      expect(screen.getByTestId("calendar-google-ics-year-note")).toBeInTheDocument();
+      expect(syncGoogleCalendarVisibleRangeMock).not.toHaveBeenCalled();
+    });
+
+    it("follows a same-page navigation back to the bare calendar URL", async () => {
+      honestEvents();
+      fetchCalendarSummaryMock.mockResolvedValue(summary2026);
+      window.history.replaceState(null, "", "/app/calendar?view=year&date=2026-06-01");
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const page = () => <QueryClientProvider client={client}><CalendarPage /></QueryClientProvider>;
+      const { rerender } = render(page());
+      expect(await screen.findByTestId("calendar-year-grid")).toBeInTheDocument();
+      // The sidebar's Calendar link: same mounted page, new URL.
+      act(() => window.history.replaceState(null, "", "/app/calendar"));
+      rerender(page());
+      await waitFor(() => expect(screen.getByTestId("calendar-view-month")).toHaveAttribute("aria-selected", "true"));
+      const now = new Date();
+      expect(screen.getByTestId("calendar-month-label")).toHaveTextContent(
+        `${now.toLocaleString("en-US", { month: "long" })} ${now.getFullYear()}`,
+      );
     });
 
     it("lists every display type in the legend", async () => {
