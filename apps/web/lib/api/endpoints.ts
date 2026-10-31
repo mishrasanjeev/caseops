@@ -11594,8 +11594,15 @@ export type IpDocketListParams = {
   cursor?: string | null;
   /** Page size, 1-200 (server default 100). */
   limit?: number;
+  /** Narrow the trademark record types listed; counts and pages follow. */
+  recordTypes?: readonly IpTrademarkDocketRecordType[];
   signal?: AbortSignal;
 };
+
+export type IpTrademarkDocketRecordType =
+  | "trademark"
+  | "international_registration"
+  | "international_designation";
 
 /**
  * One page of visible active trademark dockets, most recently updated first.
@@ -11608,6 +11615,7 @@ export async function fetchIpDockets(params: IpDocketListParams = {}): Promise<I
   if (query) search.set("query", query);
   if (typeof params.cursor === "string" && params.cursor) search.set("cursor", params.cursor);
   if (typeof params.limit === "number") search.set("limit", String(params.limit));
+  for (const recordType of params.recordTypes ?? []) search.append("record_type", recordType);
   const suffix = search.toString();
   return apiRequest(`/api/ip/dockets${suffix ? `?${suffix}` : ""}`, { signal: params.signal });
 }

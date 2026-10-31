@@ -88,6 +88,17 @@ describe("IpDocketPicker", () => {
     );
   });
 
+  it("asks the server for only the record types the caller can use, so totals stay honest", async () => {
+    fetchIpDocketsMock.mockResolvedValue(page([PINE], { total: 1 }));
+    renderPicker(<IpDocketPicker id="docket" value="" onChange={() => {}} recordTypes={["trademark"]} />);
+    await waitFor(() => expect(picker()).toBeEnabled());
+    expect(fetchIpDocketsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: "", cursor: null, limit: 50, recordTypes: ["trademark"] }),
+    );
+    expect(optionValues()).toEqual(["", "pine"]);
+    expect(picker()).toHaveValue("");
+  });
+
   it("shows loading, then says how much of the portfolio it shows, and pages by cursor", async () => {
     let resolveFirst: (value: IpDocketListPage) => void = () => {};
     fetchIpDocketsMock.mockImplementationOnce(
