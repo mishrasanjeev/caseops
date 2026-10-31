@@ -9508,12 +9508,26 @@ export type IpJournalPublication = {
   source_retrieved_at: string | null;
   parser_version: string;
   attribution_json: Record<string, unknown>;
+  /** What the operator captured with the entry (extract, saved-page reference, notes). */
+  raw_evidence_json: Record<string, unknown>;
   source_fingerprint: string;
   supersedes_publication_id: string | null;
   correction_reason: string | null;
   ingestion_delay_hours: number;
   created_at: string;
 };
+
+/** Manual capture of an official journal entry; at least one of extract or reference. */
+export type IpJournalCapturedEvidence = {
+  capture_method: "manual";
+  extract_text?: string;
+  evidence_reference?: string;
+  notes?: string;
+};
+
+export type IpJournalPublicationScope =
+  | { scope_kind: "full" }
+  | { scope_kind: "partial"; published_classes: number[] };
 
 export type IpWatchDisposition =
   | "new"
@@ -9593,9 +9607,19 @@ export type IpWatchHandoff = {
 export type IpWatchWorkspace = {
   profiles: IpWatchProfile[];
   hits: IpWatchHit[];
+  /** Hit-linked entries plus the most recent visible captures, hits or not. */
   publications: IpJournalPublication[];
   ingestion_runs: IpJournalIngestionRun[];
   handoffs: IpWatchHandoff[];
+  /** Visible profiles a capture is compared with, firm-wide; 0 means intake cannot run. */
+  intake_profile_count: number;
+};
+
+export type IpJournalIngestResult = {
+  run: IpJournalIngestionRun;
+  publications: IpJournalPublication[];
+  hits: IpWatchHit[];
+  idempotent_replay: boolean;
 };
 
 export type IpTrackedCaseReference = {
@@ -10568,6 +10592,8 @@ export type IpFeatureReadiness = {
   rollout_expires_at: string | null;
   manual_fallback_feature_id: string | null;
   blocked_by_incident_id: string | null;
+  /** Every failing gate in evaluation order; `reason` is the first one. */
+  blocked_reasons?: Array<Exclude<IpFeatureReadiness["reason"], "available">>;
 };
 
 export type IpWorkspaceConfiguration = {
@@ -12280,23 +12306,18 @@ export async function ingestIpJournal(input: {
     jurisdiction: string;
     class_numbers: number[];
     goods_services: Record<string, string[]>;
-    publication_scope: Record<string, unknown>;
+    publication_scope: IpJournalPublicationScope;
     source_url: string;
     source_page?: string | null;
     source_status: "available" | "unavailable" | "stale";
     source_retrieved_at?: string | null;
     parser_version: string;
     attribution: Record<string, unknown>;
-    raw_evidence: Record<string, unknown>;
+    raw_evidence: IpJournalCapturedEvidence;
     supersedes_publication_id?: string | null;
     correction_reason?: string | null;
   };
-}): Promise<{
-  run: IpJournalIngestionRun;
-  publications: IpJournalPublication[];
-  hits: IpWatchHit[];
-  idempotent_replay: boolean;
-}> {
+}): Promise<IpJournalIngestResult> {
   return apiRequest("/api/ip/watch/journal-ingestions", {
     method: "POST",
     body: {
