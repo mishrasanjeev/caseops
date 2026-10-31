@@ -1935,7 +1935,7 @@ describe("IpDocketPage", () => {
     );
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
-    expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
+    expect(within(deadlineWorkspace).getByText("unowned · unacknowledged")).toBeVisible();
     // 2026-08-16: these were free-text boxes demanding a membership UUID. They
     // are now pickers, so the assertion is that a lawyer can name a colleague.
     const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");

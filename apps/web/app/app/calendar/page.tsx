@@ -850,7 +850,7 @@ export default function CalendarPage() {
                   Connected as{" "}
                   {connectedGoogleConnection.display_email ?? "Google account"}
                   {connectedGoogleConnection.last_sync_at
-                    ? ` Â· Last sync ${formatDateTime(
+                    ? ` · Last sync ${formatDateTime(
                         connectedGoogleConnection.last_sync_at,
                       )}`
                     : ""}
@@ -955,12 +955,12 @@ export default function CalendarPage() {
                 <>
                   Connected as {connectedGmailConnection.display_email ?? "Gmail account"}
                   {connectedGmailConnection.last_import_at
-                    ? ` Â· Last import ${formatDateTime(
+                    ? ` · Last import ${formatDateTime(
                         connectedGmailConnection.last_import_at,
                       )}`
                     : ""}
                   {connectedGmailConnection.watch_expires_at
-                    ? ` Â· Watch expires ${formatDateTime(
+                    ? ` · Watch expires ${formatDateTime(
                         connectedGmailConnection.watch_expires_at,
                       )}`
                     : ""}

@@ -386,7 +386,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await expect(deadlineWorkspace).toContainText("Calculations are proposals");
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
   await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
-  await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
+  await expect(deadlineWorkspace.getByText("2026-08-18 · candidate · v1")).toBeVisible();
   await expect(
     deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
   ).toHaveAttribute("href", "https://official.example/ip-india/tm-rules");
@@ -411,7 +411,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
 
   await deadlineWorkspace.getByRole("button", { name: "Confirm legal deadline" }).click();
   await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/confirmed Â· v2/)).toBeVisible();
+  await expect(deadlineWorkspace.getByText(/confirmed · v2/)).toBeVisible();
 
   const confirmedWorkspace = await api.get(
     `${apiBaseUrl}/api/ip/dockets/${seeded.docketId}/deadline-workspace`,
@@ -485,7 +485,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
     .fill("Verified the official filing receipt and legal completion evidence.");
   await refreshed.getByRole("button", { name: "Complete with legal evidence" }).click();
   await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(refreshed.getByText(/completed Â· v3/)).toBeVisible();
+  await expect(refreshed.getByText(/completed · v3/)).toBeVisible();
 
   const governance = page.getByTestId("ip-deadline-governance");
   for (const name of [
