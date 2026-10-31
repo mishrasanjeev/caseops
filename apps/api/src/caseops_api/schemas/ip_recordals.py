@@ -205,11 +205,30 @@ class IpRecordalResponse(BaseModel):
     updated_at: datetime
 
 
+class IpRecordalListItemResponse(IpRecordalResponse):
+    """A list row also names its docket, so the list never shows a raw docket id."""
+
+    docket_title: str
+
+
 class IpRecordalPageResponse(BaseModel):
-    items: list[IpRecordalResponse]
+    items: list[IpRecordalListItemResponse]
     total: int
     limit: int
     offset: int
+
+
+class IpRecordalInstrumentOptionsResponse(BaseModel):
+    """Documents a recordal on one docket may cite as its supporting instruments.
+
+    Built from the same predicate the create and transaction validators apply:
+    linked to the docket or to one of its events or deadlines, and readable by
+    the viewer. `truncated` is true when more than the listed documents exist.
+    """
+
+    docket_id: str
+    items: list[IpDocumentRecord]
+    truncated: bool = False
 
 
 class IpRecordalTransactionResponse(BaseModel):
