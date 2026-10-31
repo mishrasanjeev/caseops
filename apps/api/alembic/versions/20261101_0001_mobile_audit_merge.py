@@ -20,4 +20,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    pass
+    raise RuntimeError(
+        "Mobile/audit migration merge is restore-forward; restore the reviewed backup."
+    )

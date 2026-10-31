@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -259,7 +260,10 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
 
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
+        current_head = ScriptDirectory.from_config(config).get_current_head()
+        assert current_head
         command.upgrade(config, "head")
+        require_revision(engine, current_head)
         shape(engine)
         gaps = database_foreign_key_gaps(inspect(engine))
         assert not gaps
@@ -275,12 +279,40 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
             connection.exec_driver_sql(f'DROP INDEX "{NAME}"')
             connection.exec_driver_sql(f'CREATE INDEX "{NAME}" ON audit_events (company_id)')
         conflicting = schema_catalog(engine)
-        with pytest.raises(
-            RuntimeError, match="Audit typed source-proof seek index has a conflicting shape"
-        ):
+        with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
+        assert str(refused.value) == (
+            "Mobile/audit migration merge is restore-forward; restore the reviewed backup."
+        )
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting
+        require_revision(engine, current_head)
+        retained_old_identity = old_index_identity(engine)
+        assert retained_old_identity == old_identity
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_dated_typed_source_proof_downgrade_conflict_preserves_revision_rows_and_catalog(
+    kind, tmp_path, monkeypatch,
+):
+    with fresh_engine(kind, tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, HEAD)
+        require_revision(engine, HEAD)
+        populate(engine)
+        old_identity = old_index_identity(engine)
+        with engine.begin() as connection:
+            connection.exec_driver_sql(f'DROP INDEX "{NAME}"')
+            connection.exec_driver_sql(f'CREATE INDEX "{NAME}" ON audit_events (company_id)')
+        before_rows, before_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
+        assert all(before_rows[table] for table in PRESERVED)
+        with pytest.raises(RuntimeError) as refused:
+            command.downgrade(config, PARENT)
+        assert str(refused.value) == (
+            "Audit typed source-proof seek index has a conflicting shape."
+        )
+        retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
+        assert retained_rows == before_rows and retained_catalog == before_catalog
         require_revision(engine, HEAD)
         retained_old_identity = old_index_identity(engine)
         assert retained_old_identity == old_identity
