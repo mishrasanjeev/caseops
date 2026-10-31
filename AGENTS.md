@@ -3617,3 +3617,10 @@ requirements when using the fallback.
   entrypoint imports. Prove disabled and invalid configurations in fresh
   processes, retain enabled-work delegation, and replay the unchanged offline
   image-startup deadline before full Docker acceptance.
+- A successful PR-range secret scan does not certify a scheduled all-refs scan.
+  Reconcile every failed history finding with its immutable source span before
+  classifying it. Reviewed public checksums, report labels and published test
+  vectors may use exact origin fingerprints only; preserve blob/span evidence
+  and regress changed bytes, new origins and the complete all-refs boundary.
+  Historical review tests must not require unselected deleted-branch objects
+  forever; report selection separately and reject any missing selected blob.

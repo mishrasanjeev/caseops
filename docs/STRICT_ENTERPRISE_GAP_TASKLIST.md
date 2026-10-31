@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 All-Refs Security Review: Release-Gated
+
+Partially implemented/NO-GO. Main's actual scheduled secret-scan failure was
+ten unreviewed historical spans, not infrastructure. All ten were inspected
+and identified as public checksums, test-report labels or the published OTP
+test seed; the dated security ledger pins each immutable blob/span. Candidate
+policy changes only exact origins and adds standard regression coverage.
+Require unchanged negative canaries, actual all-refs scan and fresh whole
+Docker/main/live evidence. Docker37 lacks completion after a workstation
+reboot; no Excel promotion or native-app acceptance follows from its76passes.
+
 ## October 31 Cold Admission Remains Release-Gated
 
 **Partially implemented / NO-GO.** AB50 Docker31 stopped before product tests:

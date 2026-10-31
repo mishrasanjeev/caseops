@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1575,6 +1577,132 @@ class ProvenanceTests(GitFixture):
         )
         self.assertEqual(absence.returncode, 1)
         self.assertIn(f"no such object: {names[0]}".encode(), absence.stderr.lower())
+
+
+class ReviewedHistoryPolicyTests(unittest.TestCase):
+    def reviewed_rows(self):
+        review = json.loads(
+            (ROOT / "docs/security/history-finding-review-2026-10-31.json").read_text()
+        )
+        rows = review["findings"]
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(len({row["fingerprint"] for row in rows}), 10)
+        policy = (ROOT / ".gitleaksignore").read_text()
+        start = "# 2026-10-31 scheduled all-refs:"
+        end = "# End 2026-10-31 review."
+        self.assertEqual(policy.count(start), 1)
+        self.assertEqual(policy.count(end), 1)
+        section = policy.split(start, 1)[1].split(end, 1)[0]
+        entries = {
+            line for line in section.splitlines() if line and not line.startswith("#")
+        }
+        self.assertEqual(entries, {row["fingerprint"] for row in rows})
+        for row in rows:
+            self.assertTrue(bool(re.fullmatch(
+                r"[0-9a-f]{40}:[A-Za-z0-9_./-]+:generic-api-key:[1-9][0-9]*",
+                row["fingerprint"],
+            )))
+            for field in ("blob_sha256", "span_sha256"):
+                self.assertTrue(bool(re.fullmatch(r"[0-9a-f]{64}", row[field])))
+        kinds = [row["kind"] for row in rows]
+        self.assertEqual(
+            {kind: kinds.count(kind) for kind in set(kinds)},
+            {"reviewed_file_checksum": 1, "certifi_bundle_checksum": 1,
+             "synthetic_receipt_kind": 1, "apk_public_key_digest": 6,
+             "rfc6238_public_test_vector": 1},
+        )
+        return rows
+
+    def assert_reachable_spans(self, rows, selected_commits):
+        blobs = {}
+        checked, not_selected = [], []
+        for row in rows:
+            commit, path, rule, number = row["fingerprint"].split(":")
+            if commit not in selected_commits:
+                not_selected.append(row["fingerprint"])
+                continue
+            key = commit + ":" + path
+            if key not in blobs:
+                blobs[key] = scan.git(ROOT, "show", key)
+            with self.subTest(fingerprint=row["fingerprint"]):
+                self.assertIsNotNone(re.fullmatch(r"[0-9a-f]{40}", commit))
+                self.assertEqual(rule, "generic-api-key")
+                blob = blobs[key]
+                self.assertLess(len(blob), 200_000)
+                self.assertEqual(hashlib.sha256(blob).hexdigest(), row["blob_sha256"])
+                span = blob.splitlines(keepends=True)[int(number) - 1]
+                self.assertEqual(hashlib.sha256(span).hexdigest(), row["span_sha256"])
+                text = blob.decode("utf-8")
+                line = span.decode("utf-8").strip()
+                if row["kind"] == "apk_public_key_digest":
+                    algorithm = row["algorithm"]
+                    length = {"SHA-256": 64, "SHA-1": 40, "MD5": 32}[algorithm]
+                    self.assertTrue(
+                        bool(
+                            re.fullmatch(
+                                r"V2 Signer: public key "
+                                + re.escape(algorithm)
+                                + r" digest: [a-f0-9]{"
+                                + str(length)
+                                + r"}",
+                                line,
+                            )
+                        ),
+                        "Reviewed line must remain a public-key fingerprint",
+                    )
+                    self.assertTrue("const SDK37_REPORT =" in text)
+                elif row["kind"] == "reviewed_file_checksum":
+                    self.assertTrue("const reviewedFiles =" in text)
+                    self.assertTrue("Object.entries(reviewedFiles)" in text)
+                    self.assertTrue(
+                        bool(re.search(r"""createHash\((['"])sha256\1\)""", text))
+                    )
+                elif row["kind"] == "certifi_bundle_checksum":
+                    self.assertTrue("CERTIFI_BYTES =" in text)
+                    self.assertTrue("sha(data) == CERTIFI_BYTES[key]" in text)
+                elif row["kind"] == "synthetic_receipt_kind":
+                    self.assertTrue("kind: plan.phase ===" in line)
+                    self.assertTrue("syntheticDataOnly: true" in text)
+                    self.assertTrue("fixture.v1.preparedOnly = true" in text)
+                else:
+                    self.assertEqual(row["kind"], "rfc6238_public_test_vector")
+                    value = re.fullmatch(r"const secret = '([A-Z2-7]+)';", line)
+                    self.assertTrue(
+                        bool(value), "Expected the reviewed public RFC test vector"
+                    )
+                    self.assertTrue(
+                        base64.b32decode(value.group(1)) == b"1234567890" * 2,
+                        "Reviewed seed must be the published RFC6238 vector",
+                    )
+                    self.assertTrue("assert.equal(totp(secret, 59000)" in text)
+                checked.append(row["fingerprint"])
+        return {"checked": checked, "not_selected": not_selected}
+
+    def test_october31_review_binds_exact_policy_and_selected_public_spans(self):
+        rows = self.reviewed_rows()
+        selected = set(scan.git(ROOT, "rev-list", "--all").decode().splitlines())
+        self.assertTrue(selected, "Review requires a nonempty all-refs inventory")
+        result = self.assert_reachable_spans(rows, selected)
+        self.assertEqual(len(result["checked"]) + len(result["not_selected"]), 10)
+        print("CASEOPS_HISTORY_REVIEW " + json.dumps({
+            "checked": len(result["checked"]),
+            "not_selected": len(result["not_selected"]),
+            "scope": "actual current all-refs selection; not-selected is not source verification",
+        }), flush=True)
+
+    def test_unselected_deleted_branch_origins_need_no_git_blob_retention(self):
+        rows = self.reviewed_rows()
+        with patch.object(scan, "git", side_effect=AssertionError("Unselected origin lookup")):
+            result = self.assert_reachable_spans(rows, set())
+        self.assertEqual(result["checked"], [])
+        self.assertEqual(len(result["not_selected"]), 10)
+
+    def test_missing_selected_origin_blob_remains_fail_closed(self):
+        rows = self.reviewed_rows()
+        selected = {rows[0]["fingerprint"].split(":")[0]}
+        with patch.object(scan, "git", side_effect=scan.ScanError("Missing selected blob")):
+            with self.assertRaisesRegex(scan.ScanError, "Missing selected blob"):
+                self.assert_reachable_spans(rows, selected)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,16 @@
 # CaseOps  - Work To Be Done
 
+## October 31 All-Refs Security And Interrupted Docker
+
+NO-GO: Docker37 passed76fixturecases but the13:55UTC workstation reboot stopped
+image export without a completion record. Preserve it as incomplete. Scheduled
+main Security41193137288 separately rejected ten historical non-credential
+findings outside the successful PR scan's range. Exact source review, ten
+origin-only fingerprints and standard regression are in the candidate; real
+all-refs scan, fresh full Docker, current CI/main, guarded deployment, exact
+production journeys and both actual Excel updates remain required. See the
+dated security review. App/Mac implementation stays with its owner.
+
 ## October 31 Worker Startup Replacement Pending
 
 **NO-GO.** Docker31 built AB50 and migrated a healthy stack, then stopped at the

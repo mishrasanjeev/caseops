@@ -2,6 +2,12 @@
 
 ## October 31 Actual Family And Mail Candidate Coverage
 
+Scheduled-history addition: J08/M08/J14/M14 now bind ten reviewed public
+historical spans to exact blob/span hashes and origin-only policy entries in
+the standard secret-scan regression inventory. A PR-range pass is not all-refs
+coverage. Actual full scanner/Docker/main/live proof remains pending; Docker37
+was reboot-interrupted after76fixturepasses, not a complete accepted release.
+
 IPLF-032/UJ-02/NFT-005/J14/M14 cover family hydration and exact fail-closed
 identity/access/lifecycle/source semantics. J19/M21/US-063 cover emulator lead-mail
 ownership, not new telemetry/leads or GSC activity. No new module or native/

@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## October 31 Historical Secret Findings: Partially Fixed
+
+Actual scheduled Security41193137288 rejected ten historical findings outside
+the green candidate PR-range scan. Independent immutable-source review proves
+public file/CA hashes, SDK public-key digest report fixtures, synthetic receipt
+labels and the RFC6238 public vector. The exact-origin correction and binding
+regression are candidate-only; real full-history scan and whole release remain
+unverified. No broad suppression, mobile change or credential activation.
+Docker37 passed76fixtures but rebooted during export, so remains incomplete.
+
 ## October 31 Cold Worker Admission: Partially Fixed
 
 AB50 Docker31 failed its disabled document-worker 30-second startup check, with
