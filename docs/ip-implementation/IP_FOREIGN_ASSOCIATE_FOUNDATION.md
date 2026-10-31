@@ -57,6 +57,7 @@ instruction reads, so controlled reopen cannot resurrect actionable work.
 ## API contract
 
 - `GET/POST /api/ip/foreign-associate-instructions`
+- `GET /api/ip/foreign-associate-instructions/create-options?docket_id=&target_jurisdiction=`
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}`
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}/workspace`
 - `POST /api/ip/foreign-associate-instructions/{instruction_id}/transactions`
@@ -65,6 +66,17 @@ instruction reads, so controlled reopen cannot resurrect actionable work.
 The list supports explicit outstanding-response and missing-filing-evidence
 filters. All reads and commands resolve the authenticated company and existing
 docket access policy; cross-company identifiers fail as not found.
+
+`create-options` (IP write or approve) serves the New instruction form from the
+create validator's own predicates: panel associates approved for the target
+jurisdiction, budgeted Matter assignments with the active estimates that fit
+them, active estimates, accepted proceed client instructions and linked
+documents, plus typed blockers that name the missing prerequisite and where it
+is created. Filing jurisdictions use one canonical vocabulary (ISO 3166-1
+alpha-2 plus EM, WO and EP; aliases such as UK and United Kingdom resolve to
+GB). Counsel profile text is normalized on read and match, never migrated;
+create refuses a target outside the vocabulary, while instructions stored
+before normalization keep the exact comparison.
 
 ## Migration and rollback
 
