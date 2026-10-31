@@ -18,7 +18,7 @@
  * pending-approval state.
  */
 import {
-  expect, test, type APIRequestContext, type Browser, type Locator, type Page, type Response,
+  expect, request as playwrightRequest, test, type APIRequestContext, type Browser, type Locator, type Page, type Response,
 } from "@playwright/test";
 
 import {
@@ -147,6 +147,20 @@ async function proposeCalendar(page: Page, card: Locator, name: string, key: str
   const response = await proposed;
   expect(response.status(), "The calendar proposal the tester submitted must be created").toBe(201);
   return response.json();
+}
+
+/**
+ * addLocalColleague logs the colleague in on the context it is given, and that
+ * login cookie would then authenticate later calls as the colleague. Give each
+ * colleague a throwaway context so Ram's oracle calls stay Ram's.
+ */
+async function colleague(rt: TesterRuntime, role: "admin" | "partner", name: string) {
+  const isolated = await playwrightRequest.newContext();
+  try {
+    return await addLocalColleague(rt, isolated, role, name);
+  } finally {
+    await isolated.dispose();
+  }
 }
 
 async function colleaguePage(browser: Browser, rt: TesterRuntime, credentials: TesterCredentials): Promise<Page> {
@@ -296,8 +310,8 @@ test("BUG-003/004/005/006 [local-only] three people govern a rule end to end thr
   const rt = await prepareTester(page, request, baseURL);
   expect(rt.local, "Activation needs three people; production Ram only proposes").toBe(true);
   const target = await localOpposition(rt, request);
-  const reviewer = await addLocalColleague(rt, request, "partner", "Bina Reviewer");
-  const approver = await addLocalColleague(rt, request, "admin", "Chetan Approver");
+  const reviewer = await colleague(rt, "partner", "Bina Reviewer");
+  const approver = await colleague(rt, "admin", "Chetan Approver");
 
   // 1. The empty opposition picker sends Ram to governance with the scope prefilled.
   const opponent = await openOpponent(page, rt, target);
