@@ -3256,6 +3256,32 @@ test('iOS simulator shell binds the admitted HOME as one Xcode build setting', {
   assert.equal(iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: actual.args.find(arg => arg.startsWith('HOME=')).slice(5) }).environment.HOME, home);
   assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: '/SYNTHETIC/operator-home' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
 });
+const capturedXcodeBundleMetadata = Object.freeze({
+  BUNDLE_CONTENTS_FOLDER_PATH_deep: 'Contents/', BUNDLE_EXECUTABLE_FOLDER_NAME_deep: 'MacOS',
+  BUNDLE_EXTENSIONS_FOLDER_PATH: 'Extensions', BUNDLE_FORMAT: 'shallow',
+  BUNDLE_FRAMEWORKS_FOLDER_PATH: 'Frameworks', BUNDLE_PLUGINS_FOLDER_PATH: 'PlugIns',
+  BUNDLE_PRIVATE_HEADERS_FOLDER_PATH: 'PrivateHeaders', BUNDLE_PUBLIC_HEADERS_FOLDER_PATH: 'Headers',
+});
+test('iOS actual Xcode bundle metadata is admitted and discarded before Node or Pods execution', () => {
+  for (const role of ['node', 'pod', 'neutral']) {
+    const f = iosProjectionFixture(), incoming = { ...capturedXcodeBundleMetadata, HOME: f.policy.paths.home };
+    const before = { ...incoming }, actual = iosHostCommandProjection(f.admitted, f.ref, role, [], incoming);
+    for (const key of Object.keys(capturedXcodeBundleMetadata)) assert.equal(actual.environment[key], undefined, key);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.deepEqual(incoming, before);
+  }
+});
+test('iOS Xcode metadata exceptions cannot admit Bundler configuration or changed metadata', () => {
+  for (const role of ['node', 'pod', 'neutral']) {
+    for (const key of Object.keys(capturedXcodeBundleMetadata)) {
+      const f = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], { ...capturedXcodeBundleMetadata, [key]: '../UNREVIEWED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+    for (const key of ['BUNDLE_GEMFILE', 'BUNDLE_PATH', 'BUNDLE_WITH', 'BUNDLE_WITHOUT', 'BUNDLE_APP_CONFIG', 'BUNDLE_USER_HOME', 'BUNDLE_UNKNOWN']) {
+      const f = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], { ...capturedXcodeBundleMetadata, [key]: 'Frameworks' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+  }
+});
 test('iOS cross-role rebind permits only the exact admitted previous recipe and rejects foreign overrides', () => {
   for (const field of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'HOME', 'RUBYOPT', 'HTTPS_PROXY', 'OPENSSL_CONF']) {
     const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { [field]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
@@ -3648,11 +3674,59 @@ function spawnSyncForIosEntry(file, env) {
 }
 test('iOS Node build names are pinned to actual retained phase evidence without owner or TLS override fields', () => {
   const raw = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), spec = JSON.parse(raw);
-  assert.equal(createHash('sha256').update(raw).digest('hex'), '050bd27cab9480e208d17141e5df2d5f98d8f7cdbadc73c31b085ff3be5f0ba6');
+  assert.equal(createHash('sha256').update(raw).digest('hex'), 'df8561756f00fe395608fe3769c876c0cb0970dcbd674887c605ea959df21843');
   assert.equal(spec.provenance.namesEvidenceSha256, '6670f54a23ed98e6c33ec02e43339bb56e5fa4abebc3a7dc7850fea51319f257');
-  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 586); assert.equal(new Set(spec.names).size, 586);
+  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 609); assert.equal(new Set(spec.names).size, 609);
+  assert.equal(spec.provenance.baseNameCount, 586); assert.equal(spec.provenance.supplements[0].addedNames.length, 23);
+  assert.equal(spec.provenance.supplements[0].namesEvidenceSha256, '2fbd819e92ad6aa263f809eece3b8d85a20b42ca9b59302126a7f57328e94128');
   assert.equal(spec.names.includes('LD_RUNPATH_SEARCH_PATHS'), true); assert.equal(spec.names.includes('BUILT_PRODUCTS_DIR'), true);
-  for (const key of ['HOME', 'USER', 'UID', 'PATH', 'NODE_OPTIONS', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'HTTPS_PROXY']) assert.equal(spec.names.includes(key), false, key);
+  for (const key of ['HOME', 'USER', 'UID', 'GROUP', 'GID', 'PATH', 'NODE_OPTIONS', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'HTTPS_PROXY']) assert.equal(spec.names.includes(key), false, key);
+});
+const retainedRnDepsBuildNames = [
+  'ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME', 'CLANG_ANALYZER_NONNULL', 'CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION',
+  'CLANG_ENABLE_OBJC_WEAK', 'CLANG_WARN_DOCUMENTATION_COMMENTS', 'CLANG_WARN_UNGUARDED_AVAILABILITY',
+  'LINK_FILE_LIST_normal_arm64', 'LINK_FILE_LIST_normal_x86_64',
+  'LM_AUX_CONST_METADATA_LIST_PATH_normal_arm64', 'LM_AUX_CONST_METADATA_LIST_PATH_normal_x86_64',
+  'MTL_FAST_MATH', 'OBJECT_FILE_DIR_normal', 'PODS_DEVELOPMENT_LANGUAGE', 'PODS_TARGET_SRCROOT',
+  'SDK_DIR_iphonesimulator', 'SDK_DIR_iphonesimulator27_1', 'SWIFT_COMPILATION_MODE', 'SWIFT_EMIT_MODULE_INTERFACE',
+  'SWIFT_OPTIMIZATION_LEVEL', 'SWIFT_RESPONSE_FILE_PATH_normal_arm64', 'SWIFT_RESPONSE_FILE_PATH_normal_x86_64', 'arch', 'variant',
+];
+function currentProcessMetadata() {
+  return { UID: String(process.getuid?.() ?? -1), GID: String(process.getgid?.() ?? -1), USER: os.userInfo().username, GROUP: 'unit_group' };
+}
+test('iOS retained RNDeps build names stay Node-only and current process metadata is discarded', () => {
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const supplied = Object.fromEntries(retainedRnDepsBuildNames.map(name => [name, 'SYNTHETIC_' + name]));
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  for (const name of retainedRnDepsBuildNames) assert.equal(actual.environment[name], supplied[name], name);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'pod', [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const role of ['node', 'pod', 'neutral']) {
+    const p = iosProjectionFixture(), owner = currentProcessMetadata(), before = { ...owner };
+    if (typeof process.getuid !== 'function' || typeof process.getgid !== 'function') {
+      assert.throws(() => iosHostCommandProjection(p.admitted, p.ref, role, [], owner), /IOS_HOST_PROCESS_METADATA/); continue;
+    }
+    const result = iosHostCommandProjection(p.admitted, p.ref, role, [], owner);
+    for (const key of ['UID', 'GID', 'USER', 'GROUP']) assert.equal(result.environment[key], undefined, key);
+    assert.deepEqual(owner, before);
+  }
+});
+test('iOS process metadata and observed build names cannot admit foreign identities or owner overrides', () => {
+  for (const key of ['UID', 'GID', 'USER', 'GROUP']) {
+    const f = iosProjectionFixture(), incomplete = currentProcessMetadata(); delete incomplete[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], incomplete), /IOS_HOST_PROCESS_METADATA/);
+    const wrong = { ...currentProcessMetadata(), [key]: key === 'GROUP' ? '../foreign' : 'FOREIGN' };
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], wrong), /IOS_HOST_PROCESS_METADATA/);
+  }
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  for (const key of [...retainedRnDepsBuildNames.map(name => name + '_UNREVIEWED'), 'PRIVATE_OPERATOR_TOKEN', 'react_native_path']) {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const key of ['NPM_CONFIG_CACHE', 'BUNDLE_GEMFILE', 'HTTPS_PROXY', 'NODE_EXTRA_CA_CERTS']) {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
 });
 test('iOS Node accepts only source-admitted typed derived build names while rebinding trust and preserving the parent', () => {
   const f = iosProjectionFixture(); f.admitted.nodeBuildNames = ['BUILT_PRODUCTS_DIR', 'CONFIGURATION', 'LD_RUNPATH_SEARCH_PATHS'];

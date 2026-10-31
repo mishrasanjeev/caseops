@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { userInfo } from 'node:os';
 import { createHash, X509Certificate, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { registerHooks } from 'node:module';
@@ -15,7 +16,7 @@ const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2d
 export const IOS_PODS_SOURCE_SHA256 = 'bcac5eb3bf33069d711759ba925b8ff54d474bc1f64b36176be52b6daec32947';
 const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
   'ios-simulator-build.sh': 'abee50f7e0a46eb5b3237cfd2e73e99b994f1fccc26cb01c71661493eaa0b5f0',
-  'ios-node-build-env.json': '050bd27cab9480e208d17141e5df2d5f98d8f7cdbadc73c31b085ff3be5f0ba6',
+  'ios-node-build-env.json': 'df8561756f00fe395608fe3769c876c0cb0970dcbd674887c605ea959df21843',
   'ios-git-readonly.py': '17b09505fbf0d95e71386d0bfe0f685c2f4c0802b1ddcd9443d1d8042ea207a9',
   'ios-local-qa-host.py': 'c79fedf8f144a311dbcf591d51bf10b6905ae7cc2351fa9ec972dbd0917f783d',
   'store-packaging-host.py': 'a7c9d00f7e9c87a3e2a27ce758b49464fa4c50da92001aac02ebb20ee2dc71bb',
@@ -155,8 +156,20 @@ const podBuildValues = Object.freeze({
   RCT_AGGREGATE_PRIVACY_FILES: Object.freeze(['0', '1']),
   RCT_NEW_ARCH_ENABLED: Object.freeze(['1']),
 });
+const processMetadataKeys = ['UID', 'GID', 'USER', 'GROUP'];
+function validateProcessMetadata(environment) {
+  const present = processMetadataKeys.filter(key => Object.hasOwn(environment, key));
+  if (!present.length) return;
+  assert.ok(present.length === 4 && processMetadataKeys.every(key => typeof environment[key] === 'string')
+    && typeof process.getuid === 'function' && typeof process.getgid === 'function', 'IOS_HOST_PROCESS_METADATA');
+  const actual = userInfo();
+  assert.ok(environment.UID === String(process.getuid()) && environment.GID === String(process.getgid())
+    && environment.USER === actual.username && /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(environment.GROUP), 'IOS_HOST_PROCESS_METADATA');
+  // GROUP is a discarded label. The numeric GID above is the identity fence.
+}
 export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
+  validateProcessMetadata(environment);
   const result = {}; let bytes = 0;
   for (const [key, value] of Object.entries(environment)) {
     assert.ok(typeof value === 'string' && !value.includes('\0') && Buffer.byteLength(value) <= 32768, 'IOS_HOST_ENVIRONMENT');
@@ -173,7 +186,7 @@ export function neutralIosEnvironment(environment, { buildNames = [], podBuildPa
       assert.ok(/^[0-9]{1,10}$/.test(value) && Number(value) >= 3 && Number(value) <= 0x7fffffff, 'IOS_HOST_INTERNAL_STATUS_FD');
       continue; // Pinned host-worker protocol marker, never business authority.
     }
-    if (unsafe.test(key) || key.startsWith('CASEOPS_HOST_') || key.startsWith('CASEOPS_IOS_HOST_')
+    if (processMetadataKeys.includes(key) || unsafe.test(key) || key.startsWith('CASEOPS_HOST_') || key.startsWith('CASEOPS_IOS_HOST_')
       || ['PWD', 'OLDPWD', 'SHLVL', '_', 'COCOAPODS_DISABLE_STATS', 'COCOAPODS_SKIP_UPDATE_MESSAGE', 'CASEOPS_IOS_PODS_TLS_POLICY', 'CASEOPS_IOS_POD_SOURCE_BASE64'].includes(key)) continue;
     const sdkName = key.toUpperCase();
     if (Object.hasOwn(podBuildValues, sdkName) || ['APP_PATH', 'REACT_NATIVE_PATH'].includes(sdkName))
@@ -213,7 +226,14 @@ export function reviewIosHostHome(home, end = Date.now() + 20000) {
   return { frame: fields.map(k => String(fs.lstatSync(home, { bigint: true })[k])), namespace: before };
 }
 function validateIncoming(p, nodeEnvironment, environment) {
-  const allowed = { HOME: [p.paths.home], CURL_HOME: [p.paths.home], XDG_CONFIG_HOME: [p.paths.home],
+  // Xcode exports these fixed bundle-layout facts. They are not Bundler
+  // configuration and neutralIosEnvironment still discards every BUNDLE_* key.
+  const allowed = {
+    BUNDLE_CONTENTS_FOLDER_PATH_deep: ['Contents/'], BUNDLE_EXECUTABLE_FOLDER_NAME_deep: ['MacOS'],
+    BUNDLE_EXTENSIONS_FOLDER_PATH: ['Extensions'], BUNDLE_FORMAT: ['shallow'],
+    BUNDLE_FRAMEWORKS_FOLDER_PATH: ['Frameworks'], BUNDLE_PLUGINS_FOLDER_PATH: ['PlugIns'],
+    BUNDLE_PRIVATE_HEADERS_FOLDER_PATH: ['PrivateHeaders'], BUNDLE_PUBLIC_HEADERS_FOLDER_PATH: ['Headers'],
+    HOME: [p.paths.home], CURL_HOME: [p.paths.home], XDG_CONFIG_HOME: [p.paths.home],
     SSL_CERT_FILE: [p.bundle.path, nodeEnvironment.SSL_CERT_FILE], SSL_CERT_DIR: [p.paths.empty, nodeEnvironment.SSL_CERT_DIR],
     NODE_OPTIONS: [nodeEnvironment.NODE_OPTIONS], NODE_EXTRA_CA_CERTS: p.fixtureCA ? [p.fixtureCA.path] : [],
     GEM_HOME: [p.podHome], GEM_PATH: [[p.podHome, p.rubyGems].join(':')], CP_HOME_DIR: [p.paths.pods], CP_CACHE_DIR: [p.paths.cache], CP_REPOS_DIR: [p.paths.repos], NODE_BINARY: [p.shims.node.path],
@@ -478,8 +498,8 @@ export async function verifyIosHostLaunch(policyRef, { end = Date.now() + 20000 
     try {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(namesInput.bytes));
       assert.ok(value.schemaVersion === 1 && value.kind === 'caseops-ios-node-build-environment-names'
-        && Array.isArray(value.names) && value.names.length === 586 && new Set(value.names).size === value.names.length
-        && value.names.every(k => /^[A-Z_][A-Z0-9_]*$/.test(k) && !unsafe.test(k)), 'IOS_HOST_BUILD_NAMES'); nodeBuildNames = value.names;
+        && Array.isArray(value.names) && value.names.length === 609 && new Set(value.names).size === value.names.length
+        && value.names.every(k => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !unsafe.test(k) && !processMetadataKeys.includes(k)), 'IOS_HOST_BUILD_NAMES'); nodeBuildNames = value.names;
     } finally { namesInput.bytes.fill(0); }
     const script = readIosHostInput(p.podScript, { end, maxBytes: 32768, system: true });
     try {
