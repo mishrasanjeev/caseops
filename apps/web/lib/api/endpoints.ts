@@ -13745,6 +13745,12 @@ export async function fetchIpNiceClasses(edition?: string): Promise<IpNiceClassC
   return ipNiceClassCatalogue.parse(data);
 }
 
+/** The mark kinds TrademarkParticularPayload.mark_kind accepts. */
+export const TRADEMARK_MARK_KINDS = [
+  "word", "device", "composite", "label", "colour", "shape", "sound", "other",
+] as const;
+export type TrademarkMarkKind = (typeof TRADEMARK_MARK_KINDS)[number];
+
 export async function createManualTrademarkApplication(input: {
   title: string;
   matterId?: string | null;
@@ -13757,6 +13763,7 @@ export async function createManualTrademarkApplication(input: {
   applicationNumber?: string | null;
   identifierSource: string;
   identifierEffectiveFrom: string;
+  markKind: TrademarkMarkKind;
   markText: string;
   /** One row per Nice class, validated against `niceEdition` (BUG-002). */
   classes: Array<{ classNumber: number; specification: string }>;
@@ -13793,7 +13800,7 @@ export async function createManualTrademarkApplication(input: {
       particulars: {
         form_key: "TM-A",
         form_version: "2026.1",
-        mark_kind: "word",
+        mark_kind: input.markKind,
         representation: {
           text: input.markText,
           evidence_reference: input.evidenceReference,

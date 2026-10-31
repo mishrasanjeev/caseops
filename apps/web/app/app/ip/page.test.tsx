@@ -111,6 +111,7 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  TRADEMARK_MARK_KINDS: ["word", "device", "composite", "label", "colour", "shape", "sound", "other"],
   fetchIpNiceClasses: fetchIpNiceClassesMock,
   listMatters: listMattersMock,
   fetchIpDocket: fetchIpDocketMock,

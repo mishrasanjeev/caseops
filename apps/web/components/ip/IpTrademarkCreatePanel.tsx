@@ -13,7 +13,13 @@ import { Label } from "@/components/ui/Label";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, apiErrorMessage, apiFieldErrors, apiValidationIssues } from "@/lib/api/config";
-import { createManualTrademarkApplication, listMatters, type IpDocket } from "@/lib/api/endpoints";
+import {
+  TRADEMARK_MARK_KINDS,
+  createManualTrademarkApplication,
+  listMatters,
+  type IpDocket,
+  type TrademarkMarkKind,
+} from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 
 /**
@@ -28,6 +34,8 @@ import type { Matter } from "@/lib/api/schemas";
 export const IP_NEW_TRADEMARK_PANEL_ID = "ip-new-trademark-panel";
 const HEADING_ID = "ip-new-trademark-heading";
 const SPECIFICATION_MIN = 3;
+// ManualTrademarkApplicationCreateRequest.asset_title: min_length=2.
+const MARK_MIN = 2;
 const SPECIFICATION_MAX = 4000;
 const MATTER_PAGE = 50;
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -41,6 +49,7 @@ const FIELD_IDS = {
   title: "ip-tm-title",
   matter: "ip-tm-matter",
   mark: "ip-tm-mark",
+  markKind: "ip-tm-mark-kind",
   applicant: "ip-tm-applicant",
   evidence: "ip-tm-evidence",
   jurisdiction: "ip-tm-jurisdiction",
@@ -54,6 +63,7 @@ const FIELD_MAP: Record<string, string> = {
   title: FIELD_IDS.title,
   matter_id: FIELD_IDS.matter,
   asset_title: FIELD_IDS.mark,
+  mark_kind: FIELD_IDS.markKind,
   "representation.text": FIELD_IDS.mark,
   "representation.evidence_reference": FIELD_IDS.evidence,
   "filing_manifest.evidence_reference": FIELD_IDS.evidence,
@@ -95,6 +105,17 @@ function classRowErrors(error: unknown): { rows: Record<number, { class_number?:
   }
   return { rows, list, edition };
 }
+
+const MARK_KIND_LABELS: Record<TrademarkMarkKind, string> = {
+  word: "Word mark",
+  device: "Device (logo) mark",
+  composite: "Composite (word and device) mark",
+  label: "Label mark",
+  colour: "Colour mark",
+  shape: "Shape mark",
+  sound: "Sound mark",
+  other: "Other mark",
+};
 
 function matterLabel(matter: Matter): string {
   return [matter.title, matter.matter_code, matter.client_name].filter(Boolean).join(" · ");
@@ -207,6 +228,7 @@ export function IpTrademarkCreatePanel({
   const nextKey = useRef(1);
   const [title, setTitle] = useState("");
   const [matterId, setMatterId] = useState("");
+  const [markKind, setMarkKind] = useState<TrademarkMarkKind>("word");
   const [markText, setMarkText] = useState("");
   const [rows, setRows] = useState<ClassRow[]>([{ key: 0, classNumber: null, specification: "" }]);
   const [applicant, setApplicant] = useState("");
@@ -235,7 +257,7 @@ export function IpTrademarkCreatePanel({
         title,
         matterId: matterId || null,
         restricted,
-        assetTitle: markText,
+        assetTitle: markText.trim(),
         jurisdiction,
         office,
         filingPhase,
@@ -243,7 +265,8 @@ export function IpTrademarkCreatePanel({
         applicationNumber: applicationNumber.trim() || null,
         identifierSource: numberSource,
         identifierEffectiveFrom: numberEffectiveFrom,
-        markText,
+        markKind,
+        markText: markText.trim(),
         classes: rows.map((row) => ({ classNumber: row.classNumber!, specification: row.specification.trim() })),
         niceEdition: catalogue.data!.edition,
         applicantName: applicant,
@@ -297,7 +320,10 @@ export function IpTrademarkCreatePanel({
   const filedAllocationValid = filingPhase !== "filed" || Boolean(applicationNumber.trim()) || pendingAllocation;
   const missing: string[] = [];
   if (title.trim().length < 2) missing.push("a docket title");
-  if (markText.trim().length < 1) missing.push("the word mark");
+  const markLabel = markKind === "word" ? "Word mark" : "Mark name or verbal element";
+  if (markText.trim().length < MARK_MIN) {
+    missing.push(`${markKind === "word" ? "the word mark" : "the mark name"} (at least ${MARK_MIN} characters)`);
+  }
   if (rows.some((row) => row.classNumber === null)) missing.push("a Nice class for every class row");
   if (rows.some((row) => row.specification.trim().length < SPECIFICATION_MIN)) missing.push("goods or services (at least 3 characters) for every class row");
   if (applicant.trim().length < 2) missing.push("the applicant");
@@ -349,7 +375,7 @@ export function IpTrademarkCreatePanel({
         onSubmit={(event) => { event.preventDefault(); if (valid && !mutation.isPending) mutation.mutate(); }}
       >
         <TextField ref={titleRef} id={FIELD_IDS.title} label="Docket title" value={title} error={fieldErrors[FIELD_IDS.title]} onChange={(event) => setTitle(event.target.value)} />
-        <TextField id={FIELD_IDS.mark} label="Word mark" value={markText} error={fieldErrors[FIELD_IDS.mark]} onChange={(event) => setMarkText(event.target.value)} />
+        <TextField id={FIELD_IDS.mark} label={markLabel} value={markText} error={fieldErrors[FIELD_IDS.mark]} onChange={(event) => setMarkText(event.target.value)} />
         <MatterSelect value={matterId} error={fieldErrors[FIELD_IDS.matter]} onChange={(matter) => setMatterId(matter?.id ?? "")} />
 
         <fieldset className="flex min-w-0 flex-col gap-3 md:col-span-2">
@@ -421,6 +447,22 @@ export function IpTrademarkCreatePanel({
         </fieldset>
 
         <TextField id={FIELD_IDS.applicant} label="Applicant" value={applicant} error={fieldErrors[FIELD_IDS.applicant]} onChange={(event) => setApplicant(event.target.value)} />
+        <div className="flex min-w-0 flex-col gap-1">
+          <Label htmlFor={FIELD_IDS.markKind}>Mark kind</Label>
+          <select
+            id={FIELD_IDS.markKind}
+            className={SELECT_CLASS}
+            value={markKind}
+            aria-invalid={fieldErrors[FIELD_IDS.markKind] ? true : undefined}
+            aria-describedby={fieldErrors[FIELD_IDS.markKind] ? `${FIELD_IDS.markKind}-error` : undefined}
+            onChange={(event) => setMarkKind(event.target.value as TrademarkMarkKind)}
+          >
+            {TRADEMARK_MARK_KINDS.map((kind) => (
+              <option key={kind} value={kind}>{MARK_KIND_LABELS[kind]}</option>
+            ))}
+          </select>
+          {fieldErrors[FIELD_IDS.markKind] ? <p id={`${FIELD_IDS.markKind}-error`} className={ERROR_CLASS}>{fieldErrors[FIELD_IDS.markKind]}</p> : null}
+        </div>
         <TextField id={FIELD_IDS.evidence} label="Representation evidence reference" value={evidence} placeholder="attachment:… or drive:…" error={fieldErrors[FIELD_IDS.evidence]} onChange={(event) => setEvidence(event.target.value)} />
         <TextField id={FIELD_IDS.jurisdiction} label="Jurisdiction" value={jurisdiction} error={fieldErrors[FIELD_IDS.jurisdiction]} onChange={(event) => setJurisdiction(event.target.value.toUpperCase())} />
         <TextField id={FIELD_IDS.office} label="Registry office" value={office} error={fieldErrors[FIELD_IDS.office]} onChange={(event) => setOffice(event.target.value)} />
