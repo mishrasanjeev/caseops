@@ -157,6 +157,8 @@ const podBuildValues = Object.freeze({
   RCT_NEW_ARCH_ENABLED: Object.freeze(['1']),
 });
 const processMetadataKeys = ['UID', 'GID', 'USER', 'GROUP'];
+const nodeEngineMetadataKeys = Object.freeze(['IDEBuildOperationMaxNumberOfConcurrentCompileTasks',
+  'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID', 'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations']);
 function validateProcessMetadata(environment) {
   const present = processMetadataKeys.filter(key => Object.hasOwn(environment, key));
   if (!present.length) return;
@@ -167,7 +169,7 @@ function validateProcessMetadata(environment) {
     && environment.USER === actual.username && /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(environment.GROUP), 'IOS_HOST_PROCESS_METADATA');
   // GROUP is a discarded label. The numeric GID above is the identity fence.
 }
-export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null } = {}) {
+export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null, discardNodeEngineMetadata = false } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
   validateProcessMetadata(environment);
   const result = {}; let bytes = 0;
@@ -175,6 +177,10 @@ export function neutralIosEnvironment(environment, { buildNames = [], podBuildPa
     assert.ok(typeof value === 'string' && !value.includes('\0') && Buffer.byteLength(value) <= 32768, 'IOS_HOST_ENVIRONMENT');
     bytes += Buffer.byteLength(key) + Buffer.byteLength(value) + 2;
     assert.ok(bytes <= 262144, 'IOS_HOST_ENVIRONMENT_BOUND');
+    if (nodeEngineMetadataKeys.includes(key)) {
+      assert.equal(discardNodeEngineMetadata, true, 'IOS_HOST_UNREVIEWED_ENVIRONMENT');
+      continue; // Bounded Xcode task metadata is discarded, never forwarded.
+    }
     if (key === '__CF_USER_TEXT_ENCODING') {
       const parts = value.split(':');
       assert.ok(typeof process.getuid === 'function' && parts.length === 3 && parts.every(v => /^(?:0x[0-9a-fA-F]+|[0-9]+)$/.test(v)
@@ -854,6 +860,8 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
     if (admitted.podBuildPaths) assert.equal(admitted.podBuildPaths.sourceRoot,
       path.resolve(path.dirname(p.helper.path), '../..'), 'IOS_HOST_POD_SOURCE_ROOT');
     const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [],
+      discardNodeEngineMetadata: role === 'node' && Array.isArray(admitted.nodeBuildNames) && admitted.nodeBuildNames.length === 618
+        && p.source['ios-node-build-env.json']?.sha256 === SOURCE_PINS['ios-node-build-env.json'],
       podBuildPaths: admitted.podBuildPaths?.values ?? null });
     Object.assign(neutral, { HOME: p.paths.home, CFFIXED_USER_HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
       CP_HOME_DIR: p.paths.pods, CP_CACHE_DIR: p.paths.cache, CP_REPOS_DIR: p.paths.repos, TMPDIR: p.paths.temporary,

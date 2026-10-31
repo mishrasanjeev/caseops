@@ -3780,6 +3780,65 @@ test('iOS retained RNDeps build names stay Node-only and current process metadat
     assert.deepEqual(owner, before);
   }
 });
+test('iOS Xcode engine metadata is discarded only for verified Node builds', () => {
+  const keys = ['IDEBuildOperationMaxNumberOfConcurrentCompileTasks', 'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID',
+    'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations'];
+  const namesBytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), names = JSON.parse(namesBytes).names;
+  assert.equal(names.length, 618);
+  const fixture = () => {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = [...names];
+    f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(namesBytes).digest('hex'), sizeBytes: namesBytes.length };
+    return f;
+  };
+  const supplied = Object.fromEntries(keys.map(key => [key, 'SYNTHETIC_METADATA'])), before = { ...supplied };
+  const f = fixture(), actual = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], supplied);
+  for (const key of keys) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.equal(actual.executable, f.policy.tools.node.path); assert.deepEqual(actual.args, ['--print', '1']);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  assert.equal(actual.environment.SSL_CERT_DIR, f.environment.SSL_CERT_DIR);
+  assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home);
+  assert.deepEqual(supplied, before);
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const other = fixture();
+    assert.throws(() => iosHostCommandProjection(other.admitted, other.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/, role);
+  }
+  for (const mutate of [
+    p => { delete p.admitted.nodeBuildNames; },
+    p => { p.admitted.nodeBuildNames = names.slice(1); },
+    p => { p.admitted.nodeBuildNames = [...names, ...keys]; },
+    p => { delete p.policy.source['ios-node-build-env.json']; },
+    p => { p.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); },
+  ]) {
+    const missing = fixture(); mutate(missing);
+    assert.throws(() => iosHostCommandProjection(missing.admitted, missing.ref, 'node', [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+});
+test('iOS Xcode engine metadata preserves bounds and foreign override refusals', () => {
+  const keys = ['IDEBuildOperationMaxNumberOfConcurrentCompileTasks', 'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID',
+    'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations'];
+  const namesBytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), names = JSON.parse(namesBytes).names;
+  const project = input => {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(namesBytes).digest('hex'), sizeBytes: namesBytes.length };
+    return iosHostCommandProjection(f.admitted, f.ref, 'node', [], input);
+  };
+  for (const key of keys) {
+    assert.equal(Object.hasOwn(project({ [key]: 'x'.repeat(32768) }).environment, key), false);
+    for (const value of [false, null, 1, {}, 'bad\0value', 'x'.repeat(32769), 'é'.repeat(16385)])
+      assert.throws(() => project({ [key]: value }), /IOS_HOST_ENVIRONMENT/, key);
+    for (const variant of [key.toLowerCase(), key.toUpperCase(), key + '_UNKNOWN'])
+      if (variant !== key) assert.throws(() => project({ [variant]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/, variant);
+  }
+  const large = Object.fromEntries([...keys, 'CONFIGURATION', 'ARCHS', 'BUILT_PRODUCTS_DIR', 'LD_RUNPATH_SEARCH_PATHS']
+    .map(key => [key, 'x'.repeat(32768)]));
+  assert.throws(() => project(large), /IOS_HOST_ENVIRONMENT_BOUND/);
+  for (const key of ['LLBUILD_UNKNOWN', 'PRIVATE_OPERATOR_TOKEN'])
+    assert.throws(() => project({ [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['HOME', 'CFFIXED_USER_HOME', 'NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+    'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'BUNDLE_GEMFILE'])
+    assert.throws(() => project({ LLBUILD_TASK_ID: 'SYNTHETIC', [key]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/, key);
+});
 test('iOS Hermes warning metadata reaches only the reviewed Node build environment', () => {
   const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
   const supplied = { GCC_WARN_INHIBIT_ALL_WARNINGS: 'YES' }, before = { ...supplied };
