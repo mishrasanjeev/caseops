@@ -43,7 +43,22 @@ import {
   workingCalendar,
 } from "@/test/ip-governance-fixtures";
 
-const HASH = "c".repeat(64);
+async function sha256(text: string): Promise<string> {
+  return Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/** Chooses a source file through the hidden file input and waits for its digest. */
+async function chooseSource(id: string, text: string, name = "source.pdf"): Promise<string> {
+  const digest = await sha256(text);
+  fireEvent.change(await screen.findByTestId(`${id}-file`), {
+    target: { files: [new File([text], name, { type: "application/pdf" })] },
+  });
+  await waitFor(() => expect(document.getElementById(`${id}-result`)).toHaveTextContent(digest));
+  return digest;
+}
 const docket = { id: "docket-1", title: "PINE LABS" } as IpDocket;
 
 function workspace(overrides: Partial<IpDeadlineWorkspace> = {}): IpDeadlineWorkspace {
@@ -126,20 +141,20 @@ describe("IpDeadlineGovernanceCard", () => {
     expect(within(card).queryAllByRole("textbox")).toHaveLength(0);
   });
 
-  it("BUG-005 calendar form validates the hash and holidays on the field before any request", async () => {
+  it("BUG-005 calendar form validates the source file and holidays on the field before any request", async () => {
     mocks.workspace.mockResolvedValue(workspace());
     renderCard();
 
     fireEvent.change(await screen.findByLabelText("Official source reference"), { target: { value: "https://ipindia.gov.in/holidays-2026" } });
     fireEvent.change(screen.getByLabelText("Holiday dates"), { target: { value: "26/01/2026, 31/02/2026" } });
-    fireEvent.change(screen.getByLabelText("Source SHA-256"), { target: { value: "abc123" } });
     const submit = screen.getByRole("button", { name: "Propose calendar version" });
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
 
-    const hash = screen.getByLabelText("Source SHA-256");
-    expect(hash).toHaveAttribute("aria-invalid", "true");
-    expect(described(hash)).toContain("Source SHA-256 must be exactly 64 hexadecimal characters (0-9, a-f); this has 6.");
+    const source = document.getElementById("calendar-source-hash") as HTMLElement;
+    expect(source).toHaveTextContent("Choose source file");
+    expect(described(source)).toContain("Choose the official source file so its SHA-256 can be computed.");
+    expect(screen.queryByRole("textbox", { name: /sha-?256/i })).not.toBeInTheDocument();
     const holidays = screen.getByLabelText("Holiday dates");
     expect(holidays).toHaveAttribute("aria-invalid", "true");
     expect(described(holidays)).toContain("\"31/02/2026\" is not a date.");
@@ -153,16 +168,16 @@ describe("IpDeadlineGovernanceCard", () => {
 
     fireEvent.change(await screen.findByLabelText("Official source reference"), { target: { value: "gazette:2026" } });
     fireEvent.change(screen.getByLabelText("Holiday dates"), { target: { value: "26/01/2026, 2026-08-15" } });
-    fireEvent.change(screen.getByLabelText("Source SHA-256"), { target: { value: HASH } });
+    const digest = await chooseSource("calendar-source-hash", "Gazette holiday list 2026");
     fireEvent.click(screen.getByRole("button", { name: "Propose calendar version" }));
 
     await waitFor(() => expect(mocks.proposeCalendar).toHaveBeenCalledOnce());
     expect(mocks.proposeCalendar).toHaveBeenCalledWith(expect.objectContaining({
       holidays: ["2026-01-26", "2026-08-15"],
       sourceReference: "gazette:2026",
-      sourceHash: HASH,
+      sourceHash: digest,
     }));
-    await waitFor(() => expect(screen.getByLabelText("Source SHA-256")).toHaveValue(""));
+    await waitFor(() => expect(document.getElementById("calendar-source-hash")).toHaveTextContent("Choose source file"));
   });
 
   it("BUG-005 maps a server 422 onto the source hash field", async () => {
@@ -173,26 +188,21 @@ describe("IpDeadlineGovernanceCard", () => {
     renderCard();
 
     fireEvent.change(await screen.findByLabelText("Official source reference"), { target: { value: "gazette:2026" } });
-    fireEvent.change(screen.getByLabelText("Source SHA-256"), { target: { value: HASH } });
+    await chooseSource("calendar-source-hash", "Gazette holiday list 2026");
     fireEvent.click(screen.getByRole("button", { name: "Propose calendar version" }));
 
-    await waitFor(() => expect(screen.getByLabelText("Source SHA-256")).toHaveAttribute("aria-invalid", "true"));
-    expect(described(screen.getByLabelText("Source SHA-256"))).toContain("String should match pattern");
+    const source = document.getElementById("calendar-source-hash") as HTMLElement;
+    await waitFor(() => expect(described(source)).toContain("String should match pattern"));
   });
 
   it("BUG-005 computes the SHA-256 from a chosen source file in the browser", async () => {
     mocks.workspace.mockResolvedValue(workspace());
     renderCard();
 
-    const file = new File(["IP India holiday list 2026"], "holidays-2026.pdf", { type: "application/pdf" });
-    fireEvent.change(await screen.findByTestId("calendar-source-hash-file"), { target: { files: [file] } });
-
-    const expected = Array.from(
-      new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("IP India holiday list 2026"))),
-      (byte) => byte.toString(16).padStart(2, "0"),
-    ).join("");
-    await waitFor(() => expect(screen.getByLabelText("Source SHA-256")).toHaveValue(expected));
-    expect(screen.getByText("Computed from holidays-2026.pdf in this browser; the file was not uploaded.")).toBeVisible();
+    const digest = await chooseSource("calendar-source-hash", "IP India holiday list 2026", "holidays-2026.pdf");
+    expect(document.getElementById("calendar-source-hash-result")).toHaveTextContent(
+      `SHA-256 ${digest} from holidays-2026.pdf (26 bytes), computed in this browser; the file was not uploaded.`,
+    );
   });
 
   it("BUG-005 the proposer of a candidate calendar sees why another approver must activate it", async () => {
@@ -233,7 +243,7 @@ describe("IpDeadlineGovernanceCard", () => {
     fireEvent.change(screen.getByLabelText("Period (months)"), { target: { value: "4" } });
     fireEvent.change(screen.getByLabelText("Rule citation"), { target: { value: "Trade Marks Act 1999, s.21(1)" } });
     fireEvent.change(screen.getByLabelText("Rule source reference"), { target: { value: "act:s21" } });
-    fireEvent.change(screen.getByLabelText("Rule source SHA-256"), { target: { value: "d".repeat(64) } });
+    const ruleDigest = await chooseSource("rule-source-hash", "Trade Marks Act 1999 section 21");
     fireEvent.change(screen.getByLabelText("Fixture trigger date"), { target: { value: "2026-01-10" } });
     fireEvent.change(screen.getByLabelText("Expected fixture deadline"), { target: { value: "2026-05-11" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose rule and fixture" }));
@@ -247,7 +257,7 @@ describe("IpDeadlineGovernanceCard", () => {
       calendarMethod: "month_anniversary",
       durationValue: 4,
       sourceReference: "act:s21",
-      sourceHash: "d".repeat(64),
+      sourceHash: ruleDigest,
       fixtureExpectedResultOn: "2026-05-11",
     }));
     expect(input.fixtureCalculation).toEqual(expect.objectContaining({

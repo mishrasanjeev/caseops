@@ -182,7 +182,7 @@ const SHA256_HEX = /^[0-9a-fA-F]{64}$/;
 /** Null when valid; otherwise the field message (mirrors the API pattern). */
 export function sourceHashError(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return "Enter the source SHA-256, or compute it from the source file.";
+  if (!trimmed) return "Choose the official source file so its SHA-256 can be computed.";
   if (SHA256_HEX.test(trimmed)) return null;
   return `Source SHA-256 must be exactly 64 hexadecimal characters (0-9, a-f); this has ${trimmed.length}.`;
 }

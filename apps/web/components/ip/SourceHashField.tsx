@@ -4,19 +4,17 @@ import { FileDigit } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { sha256HexOfFile } from "@/lib/ip/governance";
 
 /**
- * SHA-256 of an official source. Nobody can type a digest from memory, so the
- * usual path is "Compute from file": the browser hashes the chosen file
- * locally (WebCrypto) and the file itself is never uploaded. A pasted digest
- * is still accepted and validated by the caller.
+ * Evidence that a governed version was built from a specific official source.
+ * Nobody can type a SHA-256, and a pasted digest proves nothing about the file
+ * the lawyer actually read, so the only path is "Choose source file": the
+ * browser hashes the file locally (WebCrypto) and the file is never uploaded.
  */
 export function SourceHashField({
   id,
-  label = "Source SHA-256",
+  label = "Official source file",
   value,
   onChange,
   error,
@@ -30,47 +28,36 @@ export function SourceHashField({
   disabled?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const [computedFrom, setComputedFrom] = useState<string | null>(null);
+  const [computedFrom, setComputedFrom] = useState<{ name: string; size: number } | null>(null);
   const [computeError, setComputeError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
-  const hintId = `${id}-hint`;
+  const labelId = `${id}-label`;
+  const resultId = `${id}-result`;
   const errorId = `${id}-error`;
   const message = error ?? computeError;
+  const shownFrom = value ? computedFrom : null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <Label htmlFor={id} className="break-words leading-snug">{label}</Label>
-      <Input
-        id={id}
-        value={value}
-        disabled={disabled}
-        spellCheck={false}
-        autoComplete="off"
-        className="font-mono text-xs"
-        aria-invalid={message ? true : undefined}
-        aria-describedby={message ? `${errorId} ${hintId}` : hintId}
-        onChange={(event) => {
-          setComputedFrom(null);
-          onChange(event.target.value.trim());
-        }}
-        placeholder="64 hexadecimal characters"
-      />
+    <div className="flex min-w-0 flex-col gap-1" role="group" aria-labelledby={labelId}>
+      <span id={labelId} className="break-words text-sm font-medium leading-snug text-[var(--color-ink-2)]">{label}</span>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Button
+          id={id}
           type="button"
           size="sm"
           variant="secondary"
           disabled={disabled || computing}
+          aria-describedby={message ? `${errorId} ${resultId}` : resultId}
           onClick={() => fileInput.current?.click()}
         >
-          <FileDigit className="h-4 w-4" aria-hidden /> {computing ? "Computing…" : "Compute from file"}
+          <FileDigit className="h-4 w-4" aria-hidden />
+          {computing ? "Computing SHA-256…" : value ? "Choose a different file" : "Choose source file"}
         </Button>
         <input
           ref={fileInput}
           type="file"
-          className="sr-only"
-          tabIndex={-1}
-          aria-label={`${label}: source file to hash`}
+          hidden
+          aria-label={label}
           data-testid={`${id}-file`}
           onChange={async (event) => {
             const file = event.target.files?.[0];
@@ -79,21 +66,22 @@ export function SourceHashField({
             setComputing(true);
             setComputeError(null);
             try {
-              onChange(await sha256HexOfFile(file));
-              setComputedFrom(file.name);
+              const digest = await sha256HexOfFile(file);
+              setComputedFrom({ name: file.name, size: file.size });
+              onChange(digest);
             } catch {
-              setComputeError("This browser could not hash the file. Paste the SHA-256 instead.");
+              setComputeError("This browser could not read the file. Try another browser or a local copy of the file.");
             } finally {
               setComputing(false);
             }
           }}
         />
       </div>
-      <p id={hintId} className="min-w-0 break-words text-xs text-[var(--color-mute)]">
-        {computedFrom
-          ? `Computed from ${computedFrom} in this browser; the file was not uploaded.`
-          : "Choose the official source file to compute its SHA-256 here, or paste the published digest."}
-      </p>
+      <output id={resultId} aria-live="polite" className="min-w-0 break-all text-xs text-[var(--color-mute)]">
+        {value
+          ? <>SHA-256 <span className="font-mono">{value}</span>{shownFrom ? ` from ${shownFrom.name} (${shownFrom.size.toLocaleString("en-IN")} bytes), computed in this browser; the file was not uploaded.` : null}</>
+          : "Choose the official source you relied on. Its SHA-256 is computed in this browser and the file is not uploaded."}
+      </output>
       {message ? (
         <p id={errorId} className="min-w-0 break-words text-xs text-[var(--color-danger)]">{message}</p>
       ) : null}

@@ -25,7 +25,7 @@ describe("governance helpers", () => {
     expect(sourceHashError("A".repeat(64))).toBeNull();
     expect(sourceHashError("abc123")).toContain("this has 6");
     expect(sourceHashError("g".repeat(64))).toContain("hexadecimal");
-    expect(sourceHashError("")).toContain("compute it from the source file");
+    expect(sourceHashError("")).toBe("Choose the official source file so its SHA-256 can be computed.");
   });
 
   it("BUG-003 offers only company-selected active rules of the exact scope", () => {

@@ -557,7 +557,7 @@ function RuleProposalForm({
       <Field id="rule-source-reference" label="Rule source reference" error={errors["rule-source-reference"]}>
         {(describedBy, invalid) => <Input id="rule-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => setSourceReference(e.target.value)} />}
       </Field>
-      <SourceHashField id="rule-source-hash" label="Rule source SHA-256" value={sourceHash} onChange={setSourceHash} error={errors["rule-source-hash"]} />
+      <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={setSourceHash} error={errors["rule-source-hash"]} />
       <Field id="rule-fixture-calendar" label="Fixture working calendar">
         {(describedBy) => (
           <select
