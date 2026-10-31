@@ -248,6 +248,10 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Profiles" }).click();
+  // Each profile belongs to one docket, chosen in the form (BUG-014: no silent default).
+  const profileDocket = page.getByRole("combobox", { name: "Docket", exact: true });
+  await expect(profileDocket).toBeEnabled();
+  await profileDocket.selectOption(application.docket.id);
   await page.getByLabel("Profile name").fill("ASTER word, phonetic and class watch");
   await page.getByLabel("Word terms").fill("ASTER");
   await page.getByLabel("Phonetic terms").fill("ASTER");
@@ -392,7 +396,7 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
 
   expect(handoffTargets.size).toBe(5);
   await page.getByRole("button", { name: "Runs" }).click();
-  await expect(page.getByText("ipindia-journal-manual").first()).toBeVisible();
+  await expect(page.getByText("Manual journal intake", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Hits" }).click();
   await page.getByRole("button").filter({ hasText: "ASTER BLOCKED" }).click();
