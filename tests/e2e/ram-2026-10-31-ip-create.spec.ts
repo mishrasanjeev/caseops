@@ -2,7 +2,7 @@
  * BUG-001 / BUG-002 (Ram, 2026-10-30): on /app/ip, "New trademark" must
  * visibly open the form, classes are chosen from the WIPO Nice catalogue as
  * rows (goods/services per class, Nice edition recorded), the readiness line
- * states truthfully why each automation is unavailable, and the Documents
+ * states truthfully why each IP feature is unavailable, and the Documents
  * tab's Classification offers the product-provisioned taxonomy so a real
  * upload works.
  *
@@ -11,7 +11,7 @@
  * created only through the UI with a clock+serial title and retired at the
  * end; the API is used only as an oracle and for that cleanup.
  */
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 
 import {
   collectOpenPopoverOffenders, deadSelects, expectNoPageOverflow, expectOnScreen, json, markPositive,
@@ -49,7 +49,7 @@ function expectedSummary(features: Feature[], manual: boolean): string | null {
   if (blocked.length === 0) return null;
   const counts = ORDER.map(group => [group, blocked.filter(f => f.blocked_reasons.some(r => GROUP[r] === group)).length] as const)
     .filter(([, n]) => n > 0).map(([group, n]) => PHRASE[group](n));
-  const noun = blocked.length === 1 ? "automation is" : "automations are";
+  const noun = blocked.length === 1 ? "IP feature is" : "IP features are";
   return `${manual ? "Manual docketing is available. " : ""}${blocked.length} ${noun} unavailable: ${counts.join(", ")}.`;
 }
 
@@ -86,12 +86,16 @@ async function createTwoClassTrademark(page: Page, request: APIRequestContext, r
   // Readiness: the one-line summary is exactly what blocked_reasons says.
   const readiness = await json(await request.get(`${rt.api.origin}/api/ip/readiness`, { headers: rt.headers }), "Readiness oracle");
   const expected = expectedSummary(readiness.features, readiness.manual_docketing_available);
-  expect(await page.getByTestId("ip-automation-summary").allTextContents()).toEqual(expected === null ? [] : [expected]);
   await expect(page.getByText(/owner (integrations|legal-rules|product-ip|billing)/)).toHaveCount(0);
   const details = page.getByRole("button", { name: "Show details" });
-  await expect(details).toHaveCount(expected === null ? 0 : 1);
-  if (expected !== null) {
-    // Each unavailable automation lists every failing gate with who can change it.
+  if (expected === null) {
+    // Every IP feature is available, so the page has nothing to explain.
+    await expect(page.getByTestId("ip-automation-summary")).toHaveCount(0);
+    await expect(details).toHaveCount(0);
+  } else {
+    await expect(page.getByTestId("ip-automation-summary")).toHaveText(expected);
+    await expect(details).toHaveCount(1);
+    // Each unavailable feature lists every failing gate with who can change it.
     await details.click();
     for (const feature of (readiness.features as Feature[]).filter(f => !f.available)) {
       const row = page.getByTestId(`ip-automation-${feature.feature_id}`);
@@ -99,6 +103,8 @@ async function createTwoClassTrademark(page: Page, request: APIRequestContext, r
       for (const reason of feature.blocked_reasons) {
         await expect(row.locator(`[data-reason="${reason}"]`)).toContainText(TITLE[GROUP[reason]]);
       }
+      // Lawyers read what a role lacks, never a capability id.
+      await expect(row).not.toContainText("ip:");
     }
     if (mobile) await expectNoPageOverflow(page);
     await page.getByRole("button", { name: "Hide details" }).click();
@@ -162,46 +168,58 @@ async function createTwoClassTrademark(page: Page, request: APIRequestContext, r
   }
 }
 
+// BUG-002 (Documents): Classification lists the provisioned taxonomy and a UI upload works.
+async function uploadClassifiedDocument(
+  page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, docketId: string, mobile: boolean,
+) {
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]tab=documents(?:&|$)/);
+  const taxonomy = await json(await request.get(`${rt.api.origin}/api/ip/document-taxonomy`, { headers: rt.headers }), "Taxonomy oracle");
+  const active = taxonomy.entries.filter((entry: { is_active: boolean }) => entry.is_active);
+  expect(active.length, "An enabled IP workspace always has document classifications").toBeGreaterThanOrEqual(14);
+  const classification = page.getByLabel("Classification", { exact: true });
+  await expect(classification).toBeEnabled();
+  const offered = await classification.locator("option:not([disabled])").evaluateAll(o => o.map(x => (x as HTMLOptionElement).value));
+  expect(offered).toEqual(active.map((entry: { key: string }) => entry.key));
+  if (mobile) await expectNoPageOverflow(page);
+
+  const title = stamp(`BUG-002 evidence ${mobile ? "mobile" : "desktop"}`);
+  await page.getByLabel("Original file", { exact: true }).setInputFiles({
+    name: `bug-002-${Date.now()}.txt`, mimeType: "text/plain",
+    buffer: Buffer.from(`Ram batch-4 classification evidence ${rt.run} `.repeat(20)),
+  });
+  await page.getByLabel("Title", { exact: true }).fill(title);
+  await classification.selectOption(active[0].key);
+  await page.getByLabel("Linked docket", { exact: true }).selectOption(docketId);
+  await page.getByRole("button", { name: "Preview controlled name" }).click();
+  await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();
+  if (mobile) await expectNoPageOverflow(page);
+  const uploaded = page.waitForResponse(r => new URL(r.url()).pathname === "/api/ip/documents/upload" && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Upload reviewed document" }).click();
+  const upload = await uploaded;
+  expect(upload.status(), "Document upload").toBe(200);
+  const result = await upload.json();
+  expect(result.outcome).toBe("created");
+  // IP documents have no retire route: the evidence names the record this run left behind.
+  await markPositive(info, `ip-documents-upload-${mobile ? "mobile" : "desktop"}`, {
+    taxonomy: active.length, documentId: result.document?.id ?? null, documentTitle: title, docketId, local: rt.local,
+  });
+
+  // ?tab= deep link opens the Documents tab directly; an unknown tab falls back to Docket.
+  await page.goto(`${rt.web.origin}/app/ip?tab=documents`);
+  await expect(page.getByRole("tab", { name: "Documents", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.goto(`${rt.web.origin}/app/ip?tab=unknown`);
+  await expect(page.getByRole("tab", { name: "Docket", exact: true })).toHaveAttribute("aria-selected", "true");
+  if (mobile) await expectNoPageOverflow(page);
+}
+
 test("BUG-001 BUG-002 Ram creates a two-class trademark that opens in view and records its Nice edition", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, baseURL);
   const { docketId } = await createTwoClassTrademark(page, request, rt, false);
   try {
     await markPositive(info, "ip-create-desktop", { docketId, local: rt.local });
-
-    // BUG-002 (Documents): Classification lists the provisioned taxonomy and a UI upload works.
-    await page.getByRole("tab", { name: "Documents", exact: true }).click();
-    await expect(page).toHaveURL(/[?&]tab=documents(?:&|$)/);
-    const taxonomy = await json(await request.get(`${rt.api.origin}/api/ip/document-taxonomy`, { headers: rt.headers }), "Taxonomy oracle");
-    const active = taxonomy.entries.filter((entry: { is_active: boolean }) => entry.is_active);
-    expect(active.length, "An enabled IP workspace always has document classifications").toBeGreaterThanOrEqual(14);
-    const classification = page.getByLabel("Classification", { exact: true });
-    await expect(classification).toBeEnabled();
-    const offered = await classification.locator("option:not([disabled])").evaluateAll(o => o.map(x => (x as HTMLOptionElement).value));
-    expect(offered).toEqual(active.map((entry: { key: string }) => entry.key));
-
-    await page.getByLabel("Original file", { exact: true }).setInputFiles({
-      name: `bug-002-${Date.now()}.txt`, mimeType: "text/plain",
-      buffer: Buffer.from(`Ram batch-4 classification evidence ${rt.run} `.repeat(20)),
-    });
-    await page.getByLabel("Title", { exact: true }).fill(stamp("BUG-002 evidence"));
-    await classification.selectOption(active[0].key);
-    await page.getByLabel("Linked docket", { exact: true }).selectOption(docketId);
-    await page.getByRole("button", { name: "Preview controlled name" }).click();
-    await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();
-    const uploaded = page.waitForResponse(r => new URL(r.url()).pathname === "/api/ip/documents/upload" && r.request().method() === "POST");
-    await page.getByRole("button", { name: "Upload reviewed document" }).click();
-    const upload = await uploaded;
-    expect(upload.status(), "Document upload").toBe(200);
-    const result = await upload.json();
-    expect(result.outcome).toBe("created");
-    await markPositive(info, "ip-documents-upload", { taxonomy: active.length });
-
-    // ?tab= deep link opens the Documents tab directly.
-    await page.goto(`${rt.web.origin}/app/ip?tab=documents`);
-    await expect(page.getByRole("tab", { name: "Documents", exact: true })).toHaveAttribute("aria-selected", "true");
-    await page.goto(`${rt.web.origin}/app/ip?tab=unknown`);
-    await expect(page.getByRole("tab", { name: "Docket", exact: true })).toHaveAttribute("aria-selected", "true");
+    await uploadClassifiedDocument(page, request, rt, info, docketId, false);
   } finally {
     await retireDocket(request, rt, docketId);
   }
@@ -213,6 +231,7 @@ test("BUG-001 BUG-002 [mobile] Ram creates a two-class trademark on a phone with
   const { docketId } = await createTwoClassTrademark(page, request, rt, true);
   try {
     await markPositive(info, "ip-create-mobile", { docketId, local: rt.local });
+    await uploadClassifiedDocument(page, request, rt, info, docketId, true);
   } finally {
     await retireDocket(request, rt, docketId);
   }
