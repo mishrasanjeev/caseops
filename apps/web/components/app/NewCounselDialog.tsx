@@ -188,14 +188,16 @@ export function NewCounselDialog() {
           >
             <Input
               id="jurisdictions"
-              placeholder="Delhi, Bombay, SC"
+              placeholder="Delhi High Court, Bombay High Court, United Kingdom"
               aria-describedby="jurisdictions-hint"
               {...form.register("jurisdictions")}
             />
             <p id="jurisdictions-hint" className="text-xs text-[var(--color-mute)]">
               For a foreign filing associate, list the countries or offices it
               files in, by name or code: for example United Kingdom or GB, US,
-              EM (EUIPO), WO (WIPO), EP (EPO).
+              EM (EUIPO), WO (WIPO), EP (EPO). Codes that are also Indian state
+              or court abbreviations (such as SC, MH, TN, CH) count only as the
+              country name written out: Switzerland, not CH.
             </p>
           </FormField>
 
