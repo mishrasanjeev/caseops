@@ -129,8 +129,9 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     await expect(
       page.getByRole("heading", { name: "Intelligent review", exact: true }),
     ).toBeVisible();
-    await page.getByRole("combobox", { name: "Matter target" }).click();
-    await page.getByRole("option", { name: new RegExp(`^${matter.matter_code} ·`) }).click();
+    // The Matter target is the searchable native Matter picker (BUG-007 sibling).
+    await page.getByLabel("Search Matters").fill(matter.matter_code);
+    await page.getByRole("combobox", { name: "Matter target" }).selectOption(matter.id);
     await page.getByLabel("Fact 1 label").fill("First use");
     await page.getByLabel("Fact 1 value").fill("2018");
     await page.getByLabel("Fact 1 source").fill("Client instruction");
@@ -225,8 +226,9 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
 
   await test.step("IPLF-UJ-18-EXC-01 and IPLF-UJ-18-EXC-03 inaccessible-only sources abstain", async () => {
     await page.goto(`/app/research/reviews?report=${encodeURIComponent(blockedReport.id)}`);
-    await page.getByRole("combobox", { name: "Matter target" }).click();
-    await page.getByRole("option", { name: new RegExp(`^${matter.matter_code} ·`) }).click();
+    // The Matter target is the searchable native Matter picker (BUG-007 sibling).
+    await page.getByLabel("Search Matters").fill(matter.matter_code);
+    await page.getByRole("combobox", { name: "Matter target" }).selectOption(matter.id);
     await page.getByRole("button", { name: "Generate review" }).click();
     await expect(page.getByTestId("intelligent-review-detail").getByText(/^abstained$/i)).toBeVisible();
     await expect(

@@ -40,6 +40,7 @@ vi.mock("@/lib/api/intelligent-reviews", () => ({
 
 vi.mock("@/lib/capabilities", () => ({
   can: () => true,
+  useCapability: () => true,
   useResolvedCapabilities: () => [
     "recommendations:generate",
     "recommendations:decide",
@@ -288,8 +289,9 @@ describe("IntelligentReviewsPage", () => {
     mocks.create.mockResolvedValue(reviewFixture({ state: "queued", progress: 0 }));
     renderPage();
     await screen.findByText("Opposition authorities");
-    await user.click(screen.getByRole("combobox", { name: "Matter target" }));
-    await user.click(await screen.findByRole("option", { name: /IP-101/ }));
+    const target = screen.getByRole("combobox", { name: "Matter target" });
+    await waitFor(() => expect(target).toBeEnabled());
+    await user.selectOptions(target, "matter-1");
     await user.click(screen.getByRole("button", { name: "Generate review" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.create.mock.calls[0][0]).toEqual(expect.objectContaining({
@@ -298,6 +300,40 @@ describe("IntelligentReviewsPage", () => {
         ipDocketId: null,
         includedAuthorityIds: ["authority-support", "authority-contrary"],
       }));
+  });
+
+  it("BUG-007 sibling: finds a Matter target by server search and lists refused Matters with the reason", async () => {
+    const user = userEvent.setup();
+    mocks.listReviews.mockResolvedValue({ reviews: [] });
+    mocks.listMatters.mockImplementation(async (params: { q?: string }) =>
+      params.q
+        ? {
+            matters: [{ id: "matter-old", matter_code: "IP-OLD-7", title: "Older opposition", status: "on_hold" }],
+            next_cursor: null,
+          }
+        : {
+            matters: [
+              { id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" },
+              { id: "matter-2", matter_code: "IP-102", title: "Closed opposition", status: "closed" },
+            ],
+            next_cursor: null,
+          });
+    renderPage();
+    const target = await screen.findByRole("combobox", { name: "Matter target" });
+    expect(target.tagName).toBe("SELECT");
+    await waitFor(() => expect(target).toBeEnabled());
+    const closed = within(target).getByRole("option", { name: /IP-102/ }) as HTMLOptionElement;
+    expect(closed.disabled).toBe(true);
+    expect(closed.textContent).toMatch(/closed Matters cannot be reviewed/);
+
+    await user.type(screen.getByLabelText("Search Matters"), "IP-OLD{Enter}");
+    await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledWith(expect.objectContaining({ q: "IP-OLD" })));
+    await waitFor(() => expect(within(target).getByRole("option", { name: /IP-OLD-7/ })).toBeEnabled());
+    expect(mocks.create).not.toHaveBeenCalled();
+    await user.selectOptions(target, "matter-old");
+    await user.click(screen.getByRole("button", { name: "Generate review" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.create.mock.calls[0][0]).toEqual(expect.objectContaining({ matterId: "matter-old" }));
   });
 
   it("freezes a server-owned opposition proceeding for IP Draft handoff", async () => {
