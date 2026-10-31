@@ -2115,6 +2115,38 @@ export const ipDraftValidationReport = z.object({
   findings: z.array(ipDraftValidationFinding),
 });
 
+// BUG-002: WIPO Nice class catalogue served by GET /api/ip/nice-classes. The
+// picker refuses a partial catalogue rather than offering a subset of classes.
+export const ipNiceClass = z.object({
+  number: z.number().int().min(1).max(45),
+  kind: z.enum(["goods", "services"]),
+  heading: z.string().min(1),
+  note: z.string().nullable().optional(),
+});
+
+export const ipNiceClassCatalogue = z
+  .object({
+    edition: z.string().min(1),
+    in_force_from: z.string(),
+    source_url: z.string(),
+    source_data_url: z.string(),
+    retrieved_on: z.string(),
+    headings_sha256: z.string(),
+    attribution: z.string().min(1),
+    classes: z.array(ipNiceClass).length(45),
+  })
+  .superRefine((catalogue, context) => {
+    catalogue.classes.forEach((row, index) => {
+      if (row.number !== index + 1) {
+        context.addIssue({
+          code: "custom",
+          message: "Nice classes must run 1 to 45 in order",
+          path: ["classes", index, "number"],
+        });
+      }
+    });
+  });
+
 export const draftingDataFieldStatus = z.enum([
   "suggested",
   "needs_review",
@@ -2168,6 +2200,8 @@ export type IpPleadingTemplate = z.infer<typeof ipPleadingTemplate>;
 export type IpPleadingTemplateList = z.infer<typeof ipPleadingTemplateList>;
 export type IpDraftValidationFinding = z.infer<typeof ipDraftValidationFinding>;
 export type IpDraftValidationReport = z.infer<typeof ipDraftValidationReport>;
+export type IpNiceClass = z.infer<typeof ipNiceClass>;
+export type IpNiceClassCatalogue = z.infer<typeof ipNiceClassCatalogue>;
 export type DraftingDataFieldStatus = z.infer<typeof draftingDataFieldStatus>;
 export type DraftingDataConfidenceBand = z.infer<typeof draftingDataConfidenceBand>;
 export type DraftingDataField = z.infer<typeof draftingDataField>;

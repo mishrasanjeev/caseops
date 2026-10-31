@@ -44,6 +44,7 @@ import {
   type DraftType,
   type IpPleadingTemplateList,
   type IpDraftValidationReport,
+  type IpNiceClassCatalogue,
   type EmailRenderResponse,
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
@@ -188,6 +189,7 @@ import {
   draftList,
   ipPleadingTemplateList,
   ipDraftValidationReport,
+  ipNiceClassCatalogue,
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
@@ -8849,7 +8851,8 @@ export type IpTrademarkParticularVersion = {
   form_version: string;
   mark_kind: string;
   representation_json: Record<string, unknown>;
-  classes_json: Array<{ class_number: number; specification: string }>;
+  // nice_edition is absent on rows recorded before the Nice catalogue (BUG-002).
+  classes_json: Array<{ class_number: number; specification: string; nice_edition?: string }>;
   use_priority_json: Record<string, unknown> | null;
   parties_json: Array<{ role: string; name: string }>;
   agent_json: Record<string, unknown> | null;
@@ -13681,6 +13684,12 @@ export async function transitionIpOppositionStage(input: {
       },
     },
   );
+}
+
+/** The WIPO Nice class catalogue: the only source of selectable classes. */
+export async function fetchIpNiceClasses(): Promise<IpNiceClassCatalogue> {
+  const data = await apiRequest<unknown>("/api/ip/nice-classes");
+  return ipNiceClassCatalogue.parse(data);
 }
 
 export async function createManualTrademarkApplication(input: {

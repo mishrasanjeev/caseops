@@ -7181,6 +7181,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/nice-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Nice Class Catalogue */
+        get: operations["nice_class_catalogue_api_ip_nice_classes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/operational-deadlines": {
         parameters: {
             query?: never;
@@ -40452,6 +40469,45 @@ export interface components {
              */
             unverified: boolean;
         };
+        /** NiceClassCatalogueResponse */
+        NiceClassCatalogueResponse: {
+            /** Attribution */
+            attribution: string;
+            /** Classes */
+            classes: components["schemas"]["NiceClassRecord"][];
+            /** Edition */
+            edition: string;
+            /** Headings Sha256 */
+            headings_sha256: string;
+            /**
+             * In Force From
+             * Format: date
+             */
+            in_force_from: string;
+            /**
+             * Retrieved On
+             * Format: date
+             */
+            retrieved_on: string;
+            /** Source Data Url */
+            source_data_url: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** NiceClassRecord */
+        NiceClassRecord: {
+            /** Heading */
+            heading: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "goods" | "services";
+            /** Note */
+            note?: string | null;
+            /** Number */
+            number: number;
+        };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
             /** Amount Minor */
@@ -48211,6 +48267,11 @@ export interface components {
         TrademarkClassScope: {
             /** Class Number */
             class_number: number;
+            /**
+             * Nice Edition
+             * @default NCL 13-2026
+             */
+            nice_edition: string;
             /** Specification */
             specification: string;
         };
@@ -63455,6 +63516,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nice_class_catalogue_api_ip_nice_classes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NiceClassCatalogueResponse"];
                 };
             };
         };
