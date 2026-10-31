@@ -59253,6 +59253,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 query?: string | null;
+                record_type?: ("trademark" | "international_registration" | "international_designation")[] | null;
             };
             header?: never;
             path?: never;
