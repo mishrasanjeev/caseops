@@ -468,6 +468,25 @@ def test_422_detail_humanizes_acronyms_and_keeps_bare_messages() -> None:
     )
 
 
+def test_422_detail_keeps_a_custom_error_that_names_its_own_row() -> None:
+    body = _problem_payload(
+        status_code=422,
+        detail=[
+            {
+                "loc": ["body", "particulars", "classes", 1, "class_number"],
+                "msg": "Class row 2: choose a Nice class between 1 and 45.",
+                "type": "nice_class",
+            },
+            {"loc": ["body", "title"], "msg": "Field required", "type": "missing"},
+        ],
+        instance="/api/x",
+    )
+
+    assert body["detail"] == (
+        "Class row 2: choose a Nice class between 1 and 45.; Title: Field required"
+    )
+
+
 def test_422_field_names_never_change_the_resolved_problem_type() -> None:
     # PROBLEM_TYPE_MAP matches 422 + "verified citations"; a field whose name
     # contains that phrase must not turn a plain validation error into it.

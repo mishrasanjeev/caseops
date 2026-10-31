@@ -23,12 +23,13 @@ The response ``Content-Type`` is ``application/problem+json`` per spec.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic_core.core_schema import ErrorType
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.middleware.cors import CORSMiddleware
@@ -169,6 +170,7 @@ def _resolve_type_slug(status_code: int, detail: str) -> str:
 _VALIDATION_SOURCES = frozenset({"body", "query", "path", "header", "cookie"})
 # Pydantic wraps a validator's own ValueError/AssertionError message in these.
 _VALIDATOR_PREFIXES = ("Value error, ", "Assertion failed, ")
+_BUILTIN_ERROR_TYPES = frozenset(get_args(ErrorType))
 _ACRONYMS = {"id": "ID", "ids": "IDs", "ip": "IP", "uri": "URI", "url": "URL", "urls": "URLs"}
 
 
@@ -211,9 +213,16 @@ def _validation_message(item: Any) -> str:
 
 
 def _validation_detail(item: Any) -> str:
-    """One field-anchored line: ``<Field path>: <message>``."""
+    """One field-anchored line: ``<Field path>: <message>``.
+
+    A ``PydanticCustomError`` raised by our own validators already names the
+    visible row or field (``Class row 2: ...``), so only pydantic's built-in
+    error types get the path prefix.
+    """
 
     message = _validation_message(item)
+    if isinstance(item, dict) and item.get("type") not in _BUILTIN_ERROR_TYPES:
+        return message
     field = _humanized_field_path(item.get("loc")) if isinstance(item, dict) else ""
     return f"{field}: {message}" if field else message
 
