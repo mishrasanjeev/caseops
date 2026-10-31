@@ -10544,20 +10544,23 @@ export type IpCostReconciliationReport = {
   checksum_sha256: string;
 };
 
+export type IpFeatureBlockedReason =
+  | "unknown_feature"
+  | "missing_capability"
+  | "missing_entitlement"
+  | "rollout_disabled"
+  | "rollout_expired"
+  | "workspace_not_configured"
+  | "tenant_disabled"
+  | "readiness_test_failed"
+  | "incident_kill_switch";
+
 export type IpFeatureReadiness = {
   feature_id: string;
   available: boolean;
-  reason:
-    | "available"
-    | "unknown_feature"
-    | "missing_capability"
-    | "missing_entitlement"
-    | "rollout_disabled"
-    | "rollout_expired"
-    | "workspace_not_configured"
-    | "tenant_disabled"
-    | "readiness_test_failed"
-    | "incident_kill_switch";
+  reason: IpFeatureBlockedReason | "available";
+  /** Every failing gate, in server order; `reason` is its first entry. */
+  blocked_reasons?: IpFeatureBlockedReason[];
   owner: string;
   required_capabilities: string[];
   missing_capabilities: string[];
@@ -13749,8 +13752,10 @@ export async function createManualTrademarkApplication(input: {
   identifierSource: string;
   identifierEffectiveFrom: string;
   markText: string;
-  classNumber: number;
-  specification: string;
+  /** One row per Nice class, validated against `niceEdition` (BUG-002). */
+  classes: Array<{ classNumber: number; specification: string }>;
+  /** Edition of the catalogue the classes were chosen from (GET /api/ip/nice-classes). */
+  niceEdition: string;
   applicantName: string;
   evidenceReference: string;
 }): Promise<{
@@ -13787,9 +13792,11 @@ export async function createManualTrademarkApplication(input: {
           text: input.markText,
           evidence_reference: input.evidenceReference,
         },
-        classes: [
-          { class_number: input.classNumber, specification: input.specification },
-        ],
+        classes: input.classes.map((row) => ({
+          class_number: row.classNumber,
+          specification: row.specification,
+          nice_edition: input.niceEdition,
+        })),
         use_priority: null,
         parties: [{ role: "applicant", name: input.applicantName }],
         agent: null,

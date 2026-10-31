@@ -6,8 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IpWorkspaceConfiguration, IpWorkspaceReadiness } from "@/lib/api/endpoints";
 import { providerAdapterContractRecord } from "@/lib/api/schemas";
 
+const routerReplaceMock = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ replace: routerReplaceMock }),
+  usePathname: () => "/app/ip",
 }));
 
 vi.mock("@/components/app/InAppNotificationCenter", () => ({
@@ -15,6 +19,8 @@ vi.mock("@/components/app/InAppNotificationCenter", () => ({
 }));
 
 const {
+  fetchIpNiceClassesMock,
+  listMattersMock,
   enableIpWorkspaceMock,
   fetchIpDeadlineDependenciesMock,
   fetchIpDeadlineWorkspaceMock,
@@ -58,6 +64,8 @@ const {
   updateTrademarkApplicationPhaseMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  fetchIpNiceClassesMock: vi.fn(),
+  listMattersMock: vi.fn(),
   enableIpWorkspaceMock: vi.fn(),
   fetchIpDeadlineDependenciesMock: vi.fn(),
   fetchIpDeadlineWorkspaceMock: vi.fn(),
@@ -103,6 +111,8 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  fetchIpNiceClasses: fetchIpNiceClassesMock,
+  listMatters: listMattersMock,
   fetchIpDocket: fetchIpDocketMock,
   fetchIpDockets: fetchIpDocketsMock,
   fetchIpDocuments: fetchIpDocumentsMock,
@@ -199,6 +209,85 @@ vi.mock("@/lib/use-session", () => ({
 }));
 
 import IpDocketPage from "@/app/app/ip/page";
+
+const NICE_HEADINGS: Record<number, string> = {
+  9: "Scientific, research, navigation, surveying apparatus; computer software.",
+  35: "Advertising; business management, organization and administration; office functions.",
+};
+
+function niceCatalogue() {
+  return {
+    edition: "NCL 13-2026",
+    in_force_from: "2026-01-01",
+    source_url: "https://nclpub.wipo.int/enfr/?version=20260101",
+    source_data_url: "https://www.wipo.int/classifications/data/nice/20260101.zip",
+    retrieved_on: "2026-10-31",
+    headings_sha256: "a".repeat(64),
+    attribution: "Nice Classification, 13th edition, version 2026 (NCL 13-2026). Copyright World Intellectual Property Organization (WIPO).",
+    classes: Array.from({ length: 45 }, (_, index) => {
+      const number = index + 1;
+      return {
+        number,
+        kind: number <= 34 ? "goods" : "services",
+        heading: NICE_HEADINGS[number] ?? `Class ${number} heading.`,
+        note: null,
+      };
+    }),
+  };
+}
+
+// Production readiness for test-legal on 2026-10-31 (triage readiness.json):
+// manual docketing available, eight automations missing from the plan.
+function productionShapedReadiness() {
+  const feature = (featureId: string, available: boolean, blocked: string[]) => ({
+    feature_id: featureId,
+    available,
+    reason: blocked[0] ?? "available",
+    blocked_reasons: blocked,
+    owner: "product-ip",
+    required_capabilities: [],
+    missing_capabilities: [],
+    entitlement_key: `ip_${featureId}`,
+    entitled: !blocked.includes("missing_entitlement"),
+    rollout_flag: `ip_${featureId}_enabled`,
+    rollout_enabled: !blocked.includes("rollout_disabled"),
+    rollout_expires_at: null,
+    manual_fallback_feature_id: available ? null : "manual_docketing",
+  });
+  return {
+    timezone: "Asia/Kolkata",
+    workspace_available: true,
+    manual_docketing_available: true,
+    features: [
+      feature("workspace_core", true, []),
+      feature("manual_docketing", true, []),
+      feature("taxonomy_admin", true, []),
+      feature("registry_sync", false, ["missing_entitlement", "rollout_disabled"]),
+      feature("deadline_automation", false, ["missing_entitlement", "tenant_disabled"]),
+      feature("notification_automation", false, ["missing_entitlement"]),
+      feature("filing_prepare", false, ["missing_entitlement"]),
+      feature("filing_confirm", false, ["missing_entitlement"]),
+      feature("watch_operations", false, ["missing_entitlement"]),
+      feature("cost_operations", false, ["missing_entitlement"]),
+      feature("rule_governance", false, ["missing_capability", "missing_entitlement"]),
+    ],
+  };
+}
+
+async function chooseNiceClass(user: ReturnType<typeof userEvent.setup>, name: string, query: string, option: RegExp) {
+  const input = screen.getByRole("combobox", { name });
+  await waitFor(() => expect(input).toBeEnabled());
+  await user.click(input);
+  await user.type(input, query);
+  await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: option }));
+}
+
+async function fillRequiredTrademarkFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Docket title"), "Aster filing");
+  await user.type(screen.getByLabelText("Word mark"), "ASTER");
+  await user.type(screen.getByLabelText("Applicant"), "Aster Applicant LLP");
+  await user.type(screen.getByLabelText("Representation evidence reference"), "attachment:aster");
+}
 
 function withClient(children: ReactNode, companyUsers?: unknown) {
   const client = new QueryClient({
@@ -383,6 +472,11 @@ describe("IpDocketPage", () => {
     saveIpWorkspaceConfigurationMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
+    routerReplaceMock.mockReset();
+    fetchIpNiceClassesMock.mockReset();
+    fetchIpNiceClassesMock.mockResolvedValue(niceCatalogue());
+    listMattersMock.mockReset();
+    listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
     fetchIpWorkspaceReadinessMock.mockResolvedValue({
       timezone: "Asia/Calcutta",
       workspace_available: true,
@@ -821,9 +915,10 @@ describe("IpDocketPage", () => {
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
   });
 
-  it("creates a pre-filing application through one canonical command", async () => {
+  it("BUG-002 creates a two-class application with the catalogue edition on every row", async () => {
+    const user = userEvent.setup();
     createManualTrademarkApplicationMock.mockResolvedValue({
-      docket: { id: "ip-created" },
+      docket: activeDocket(),
       asset: { id: "asset-created" },
       application: { id: "application-created" },
       identifier: null,
@@ -831,27 +926,29 @@ describe("IpDocketPage", () => {
     });
     render(withClient(<IpDocketPage />));
 
-    fireEvent.click(await screen.findByRole("button", { name: "New trademark" }));
-    fireEvent.change(screen.getByLabelText("Docket title"), {
-      target: { value: "Aster filing" },
-    });
-    fireEvent.change(screen.getByLabelText("Word mark"), {
-      target: { value: "ASTER" },
-    });
-    fireEvent.change(screen.getByLabelText("Goods / services specification"), {
-      target: { value: "Downloadable software" },
-    });
-    fireEvent.change(screen.getByLabelText("Applicant"), {
-      target: { value: "Aster Applicant LLP" },
-    });
-    fireEvent.change(screen.getByLabelText("Representation evidence reference"), {
-      target: { value: "attachment:aster" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create application" }));
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    const submit = screen.getByRole("button", { name: "Create application" });
+    expect(submit).toBeDisabled();
+    expect(screen.getByText(/a Nice class for every class row/)).toBeVisible();
 
-    await waitFor(() =>
-      expect(createManualTrademarkApplicationMock).toHaveBeenCalledTimes(1),
-    );
+    await chooseNiceClass(user, "Nice class, row 1", "advertising", /^Class 35, services:/);
+    await user.type(screen.getByLabelText("Goods and services, row 1"), "Advertising services");
+    await user.click(screen.getByRole("button", { name: "Add class row" }));
+    // The class chosen in row 1 cannot be chosen again in row 2.
+    const second = screen.getByRole("combobox", { name: "Nice class, row 2" });
+    await user.click(second);
+    await user.type(second, "35");
+    expect(within(screen.getByRole("listbox")).getByRole("option", { name: /^Class 35, services: .*Already listed in another row\.$/ }))
+      .toHaveAttribute("aria-disabled", "true");
+    await user.clear(second);
+    await user.type(second, "9");
+    await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: /^Class 9, goods:/ }));
+    await user.type(screen.getByLabelText("Goods and services, row 2"), "Downloadable software");
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+
+    await waitFor(() => expect(createManualTrademarkApplicationMock).toHaveBeenCalledTimes(1));
     expect(createManualTrademarkApplicationMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Aster filing",
@@ -859,8 +956,133 @@ describe("IpDocketPage", () => {
         filingPhase: "pre_filing",
         applicationNumber: null,
         sourcePendingIdentifierAllocation: false,
+        matterId: null,
+        niceEdition: "NCL 13-2026",
+        classes: [
+          { classNumber: 35, specification: "Advertising services" },
+          { classNumber: 9, specification: "Downloadable software" },
+        ],
       }),
     );
+    expect(screen.queryByRole("region", { name: "New trademark application" })).not.toBeInTheDocument();
+  });
+
+  it("BUG-002 anchors a refused class row to that row's field", async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import("@/lib/api/config");
+    createManualTrademarkApplicationMock.mockRejectedValue(new ApiError(422,
+      "Particulars › Classes › Specification: Class row 2: describe the goods or services for Nice class 9 (at least 3 characters).",
+      { errors: [{ loc: ["body", "particulars", "classes", 1, "specification"], type: "nice_class",
+        msg: "Class row 2: describe the goods or services for Nice class 9 (at least 3 characters)." }] }));
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    await chooseNiceClass(user, "Nice class, row 1", "35", /^Class 35, services:/);
+    await user.type(screen.getByLabelText("Goods and services, row 1"), "Advertising services");
+    await user.click(screen.getByRole("button", { name: "Add class row" }));
+    await chooseNiceClass(user, "Nice class, row 2", "9", /^Class 9, goods:/);
+    await user.type(screen.getByLabelText("Goods and services, row 2"), "Apps");
+    await user.click(screen.getByRole("button", { name: "Create application" }));
+
+    const field = screen.getByLabelText("Goods and services, row 2");
+    await waitFor(() => expect(field).toHaveAttribute("aria-invalid", "true"));
+    const errorId = field.getAttribute("aria-describedby")!;
+    expect(document.getElementById(errorId)).toHaveTextContent(
+      "Class row 2: describe the goods or services for Nice class 9 (at least 3 characters).",
+    );
+    expect(screen.getByLabelText("Goods and services, row 1")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("BUG-002 keeps submit disabled with a reason while the Nice catalogue cannot load", async () => {
+    const user = userEvent.setup();
+    fetchIpNiceClassesMock.mockRejectedValue(new Error("offline"));
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    expect(await screen.findByText(/The Nice class list could not load/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add class row" })).toBeDisabled();
+    expect(createManualTrademarkApplicationMock).not.toHaveBeenCalled();
+  });
+
+  it("BUG-001 opens the form above the readiness summary, scrolls it into view and focuses it", async () => {
+    const user = userEvent.setup();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(productionShapedReadiness());
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) { scrolled.push(this); };
+    try {
+      render(withClient(<IpDocketPage />));
+      const toggle = await screen.findByRole("button", { name: "New trademark" });
+      expect(toggle).toHaveAttribute("type", "button");
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      await user.click(toggle);
+
+      const panel = screen.getByRole("region", { name: "New trademark application" });
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+      expect(scrolled).toContain(panel);
+      expect(screen.getByLabelText("Docket title")).toHaveFocus();
+      const summary = screen.getByTestId("ip-automation-summary");
+      expect(panel.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(summary).toHaveTextContent(
+        "Manual docketing is available. 8 automations are unavailable: 1 paused by CaseOps, 8 not in your plan, 1 needs setup, 1 your role cannot use.",
+      );
+      expect(screen.queryByText(/owner /)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("ip-automation-registry_sync")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("region", { name: "New trademark application" })).not.toBeInTheDocument();
+      await waitFor(() => expect(toggle).toHaveFocus());
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("BUG-001 explains each unavailable automation by who can change it", async () => {
+    const user = userEvent.setup();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(productionShapedReadiness());
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "Show details" }));
+    const registry = screen.getByTestId("ip-automation-registry_sync");
+    expect(within(registry).getByText(/^Not in your plan\./)).toBeVisible();
+    expect(within(registry).getByText(/^Paused by CaseOps\./)).toBeVisible();
+    const deadlines = screen.getByTestId("ip-automation-deadline_automation");
+    expect(within(deadlines).getByText(/^Needs setup\./)).toBeVisible();
+    const rules = screen.getByTestId("ip-automation-rule_governance");
+    expect(within(rules).getByText(/^Your role cannot use it\./)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Open workspace configuration" }));
+    expect(screen.getByTestId("ip-workspace-configuration-panel")).toBeInTheDocument();
+  });
+
+  it("opens the tab named by ?tab= and writes the tab back to the URL", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/app/ip?tab=documents");
+    try {
+      render(withClient(<IpDocketPage />));
+      expect(await screen.findByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+      await user.click(screen.getByRole("tab", { name: "Domain availability" }));
+      expect(routerReplaceMock).toHaveBeenLastCalledWith("/app/ip?tab=availability", { scroll: false });
+      await user.click(screen.getByRole("tab", { name: "Docket" }));
+      expect(routerReplaceMock).toHaveBeenLastCalledWith("/app/ip", { scroll: false });
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("falls back to the docket tab for an unknown ?tab= value", async () => {
+    window.history.replaceState(null, "", "/app/ip?tab=nonsense");
+    try {
+      render(withClient(<IpDocketPage />));
+      expect(await screen.findByRole("tab", { name: "Docket" })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("shows saved hearing source and complete reminder policy without treating queued as delivered", async () => {
@@ -1230,8 +1452,9 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     expect(await screen.findByRole("heading", { name: "IP workspace setup" })).toBeVisible();
-    expect(screen.getByText("The workspace plan does not include this feature · owner product-ip")).toBeVisible();
-    expect(screen.getByText("The safety rollout has not been enabled · owner integrations")).toBeVisible();
+    expect(screen.getByText("Not in your plan. Your workspace plan does not include it. A workspace admin can change the plan.")).toBeVisible();
+    expect(screen.getByText("Paused by CaseOps. CaseOps has not switched this automation on yet. Nothing in your workspace needs to change.")).toBeVisible();
+    expect(screen.queryByText(/owner (product-ip|integrations)/)).not.toBeInTheDocument();
     expect(screen.getByText("Manual fallback: manual docketing")).toBeVisible();
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "New trademark" })).not.toBeInTheDocument();
@@ -1278,8 +1501,12 @@ describe("IpDocketPage", () => {
 
     expect(await screen.findByText("No IP records yet")).toBeVisible();
     expect(screen.getByRole("button", { name: "New trademark" })).toBeVisible();
-    expect(screen.getByText("registry sync")).toBeVisible();
-    expect(screen.getByText("Manual fallback remains manual docketing.")).toBeVisible();
+    expect(screen.getByTestId("ip-automation-summary")).toHaveTextContent(
+      "Manual docketing is available. 1 automation is unavailable: 1 paused by CaseOps.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText("Registry sync")).toBeVisible();
+    expect(screen.getByText("Until then, use manual docketing.")).toBeVisible();
   });
 
   it("renders the complete setup and isolated-automation actions on narrow mobile", async () => {
