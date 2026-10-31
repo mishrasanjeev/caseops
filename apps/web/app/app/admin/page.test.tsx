@@ -328,9 +328,9 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     await user.type(screen.getByTestId("portal-invite-email"), "oc@example.com");
     await user.selectOptions(screen.getByTestId("portal-invite-role"), "outside_counsel");
     await waitFor(() =>
-      expect(screen.getByTestId("portal-invite-matter")).not.toBeDisabled(),
+      expect(screen.getByLabelText("Matter grant")).not.toBeDisabled(),
     );
-    await user.selectOptions(screen.getByTestId("portal-invite-matter"), "matter-1");
+    await user.selectOptions(screen.getByLabelText("Matter grant"), "matter-1");
     await user.click(screen.getByTestId("portal-invite-submit"));
 
     await waitFor(() =>
