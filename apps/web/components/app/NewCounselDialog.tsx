@@ -189,8 +189,14 @@ export function NewCounselDialog() {
             <Input
               id="jurisdictions"
               placeholder="Delhi, Bombay, SC"
+              aria-describedby="jurisdictions-hint"
               {...form.register("jurisdictions")}
             />
+            <p id="jurisdictions-hint" className="text-xs text-[var(--color-mute)]">
+              For a foreign filing associate, list the countries or offices it
+              files in, by name or code: for example United Kingdom or GB, US,
+              EM (EUIPO), WO (WIPO), EP (EPO).
+            </p>
           </FormField>
 
           <FormField

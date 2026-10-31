@@ -479,7 +479,12 @@ function AssignCounselDialog({
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
               placeholder="optional"
+              aria-describedby="oc-budget-hint"
             />
+            <p id="oc-budget-hint" className="mt-1 text-xs text-[var(--color-mute)]">
+              Foreign-associate IP instructions need a budget ceiling, and
+              the associate&apos;s quote must be in INR and within it.
+            </p>
           </div>
           <DialogFooter>
             <Button
