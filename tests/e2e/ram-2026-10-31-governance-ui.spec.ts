@@ -41,16 +41,21 @@ function slug(label: string): string {
 }
 
 /**
- * Local prerequisite only: a trademark docket with a confirmed opponent
- * opposition profile. Neither is what these bugs are about (the pickers and
- * governance are), and their own UI journeys are covered by IPLF-042.
+ * Local prerequisite only: a trademark docket linked to an operational Matter,
+ * with a confirmed opponent opposition profile. None of these is what these
+ * bugs are about (the pickers, governance and deadline confirmation are), and
+ * their own UI journeys are covered by the matter and IPLF-042 specs.
  */
 async function localOpposition(rt: TesterRuntime, request: APIRequestContext): Promise<Opposition> {
   const mark = stamp("BUG-003 TARGET MARK");
+  const matter = await json(await request.post(`${rt.api.origin}/api/matters`, {
+    headers: rt.headers,
+    data: { matter_code: slug("B4-OPP"), title: `${mark} opposition`, practice_area: "Intellectual Property", forum_level: "high_court" },
+  }), "Local matter prerequisite");
   const created = await json(await request.post(`${rt.api.origin}/api/ip/trademark-applications/manual`, {
     headers: rt.headers,
     data: {
-      title: mark, restricted: false, asset_title: mark, jurisdiction: "IN", office: "Trade Marks Registry Delhi",
+      title: mark, matter_id: matter.id, restricted: false, asset_title: mark, jurisdiction: "IN", office: "Trade Marks Registry Delhi",
       filing_phase: "draft", source_pending_identifier_allocation: false,
       application_number: { raw_value: slug("TM-APP-B4"), source: "local fixture", effective_from: "2026-08-23", is_primary: true },
       particulars: {

@@ -5,6 +5,7 @@ import { CalendarPlus, Check, FileArchive, Gavel, Link2, TimerReset } from "luci
 import { cloneElement, useEffect, useId, useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -319,7 +320,7 @@ export function IpOppositionSharedWorkflow({
     && reason.trim().length >= 5 && confirmation.trim().length >= 2 && refs(evidenceRefs).length,
   );
   const detailReady = actionKind === "deadline_extended"
-    ? Boolean(selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
+    ? Boolean(docket.matter_id && selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
     : actionKind === "further_evidence_leave_recorded"
       ? Boolean(leaveReference.trim() && leaveScope.trim().length >= 5 && leaveGrantedOn)
       : actionKind === "evidence_package_recorded"
@@ -357,6 +358,7 @@ export function IpOppositionSharedWorkflow({
           <Field label="Extended result date"><Input type="date" value={newDeadlineOn} onChange={(event) => setNewDeadlineOn(event.target.value)} /></Field>
           <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} /></div>
           <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} placeholder="Select a backup…" /></div>
+          {docket.matter_id ? null : <IpMatterLinkRequired id="shared-extension-matter-required" docketId={docket.id} />}
           {deadlineWorkspace.isError ? <p className="text-xs text-[var(--color-danger)] md:col-span-2 xl:col-span-4" role="alert">Colleagues who can own this deadline could not be loaded. <button type="button" className="underline" onClick={() => deadlineWorkspace.refetch()}>Retry</button></p> : null}
         </div> : null}
 

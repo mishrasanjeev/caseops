@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
 import { IpDeadlineGovernanceCard } from "@/components/ip/IpDeadlineGovernanceCard";
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
@@ -2457,16 +2458,21 @@ function DeadlineWorkspaceCard({
                       className="w-full sm:w-auto"
                       size="sm"
                       disabled={
+                        !docket.matter_id ||
                         !primaryId.trim() ||
                         (deadline.is_critical && !backupId.trim()) ||
                         ((deadline.result_on === null || deadline.certainty === "conflicting") &&
                           (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
                         deadlineActionPending
                       }
+                      aria-describedby={docket.matter_id ? undefined : `deadline-matter-required-${deadline.id}`}
                       onClick={() => confirm.mutate(deadline)}
                     >
                       Confirm legal deadline
                     </Button>
+                  ) : null}
+                  {(deadline.state === "candidate" || deadline.state === "provisional") && !docket.matter_id ? (
+                    <IpMatterLinkRequired id={`deadline-matter-required-${deadline.id}`} docketId={docket.id} />
                   ) : null}
                   {deadline.state === "confirmed" || deadline.state === "overdue" ? (
                     <>

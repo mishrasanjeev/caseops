@@ -47,7 +47,7 @@ const profileEvent = {
   event_kind: "opposition_profile",
   payload_json: {},
 };
-const docket = { id: "docket-1", lifecycle_version: 4 };
+const docket = { id: "docket-1", lifecycle_version: 4, matter_id: "matter-1" };
 const workspace = {
   proceeding: {
     id: "opposition-1",

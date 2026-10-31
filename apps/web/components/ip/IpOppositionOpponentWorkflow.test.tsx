@@ -48,7 +48,7 @@ function withClient(children: ReactNode) {
 }
 
 const profileEvent = { id: "profile-event-1", event_kind: "opposition_profile", payload_json: {} };
-const docket = { id: "docket-1", lifecycle_version: 4 };
+const docket = { id: "docket-1", lifecycle_version: 4, matter_id: "matter-1" };
 const proceeding = {
   id: "opposition-1",
   side: "opponent",
@@ -293,6 +293,32 @@ describe("IpOppositionOpponentWorkflow", () => {
     expect(within(backup).queryByRole("option", { name: /Asha Rao/ })).not.toBeInTheDocument();
     expect(screen.getByText("No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+  });
+
+  it("BUG-003 confirmation without a linked Matter is disabled and says where to link one", async () => {
+    fetchWorkflowMock.mockResolvedValue(workflow("file_notice", {
+      deadlines: [{ workflow_stage: "notice_filing_due", deadline }],
+    }));
+    render(withClient(
+      <IpOppositionOpponentWorkflow
+        docket={{ ...docket, matter_id: null } as never}
+        workspace={workspace as never}
+        canReview
+        currentMembershipId="membership-primary"
+      />,
+    ));
+
+    const backup = await screen.findByLabelText("Opponent backup lawyer");
+    await waitFor(() => expect(backup).toBeEnabled());
+    fireEvent.change(backup, { target: { value: "membership-backup" } });
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    expect(confirm).toBeDisabled();
+    const reason = document.getElementById(confirm.getAttribute("aria-describedby") ?? "") as HTMLElement;
+    expect(reason).toHaveTextContent("Link an operational Matter to this IP record before confirming");
+    expect(within(reason).getByRole("link", { name: "Open Access and links" })).toHaveAttribute(
+      "href", "/app/ip?docket=docket-1&view=access&tab=access#ip-matter-links",
+    );
+    expect(confirmMock).not.toHaveBeenCalled();
   });
 
   it("BUG-004 names a candidate calendar awaiting another approver", async () => {

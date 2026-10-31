@@ -27,6 +27,26 @@ export function oppositionReadinessLabel(gap: string): string {
   return READINESS_LABELS[gap] ?? `${gap.replaceAll("_", " ")}.`;
 }
 
+/** Where an operational Matter is linked to this IP record. */
+export function ipMatterLinksHref(docketId: string): string {
+  const params = new URLSearchParams({ docket: docketId, view: "access", tab: "access" });
+  return `/app/ip?${params.toString()}#ip-matter-links`;
+}
+
+/**
+ * Confirming (or extending) a legal deadline needs an operational Matter on the
+ * IP record: the confirmed date is tracked on that Matter. Shown in place of
+ * an enabled Confirm that could only be refused.
+ */
+export function IpMatterLinkRequired({ id, docketId }: { id: string; docketId: string }) {
+  return (
+    <p id={id} className="col-span-full min-w-0 break-words text-xs text-[var(--color-warn-text)]" data-testid={id}>
+      Link an operational Matter to this IP record before confirming: a confirmed deadline is tracked on its Matter.{" "}
+      <a className="font-medium underline underline-offset-2" href={ipMatterLinksHref(docketId)}>Open Access and links</a>
+    </p>
+  );
+}
+
 export function IpDeadlineProposalBlockers({
   id,
   gaps,
