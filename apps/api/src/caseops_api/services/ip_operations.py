@@ -1116,6 +1116,7 @@ def list_ip_dockets(
     limit: int = 100,
     query: str | None = None,
     cursor: str | None = None,
+    record_types: Iterable[str] | None = None,
 ) -> IpDocketListResponse:
     """One page of visible active trademark dockets, newest change first.
 
@@ -1123,12 +1124,20 @@ def list_ip_dockets(
     exact normalized identifier) plus the docket's own displayed primary
     identifier, so a picker finds a docket by what it shows. ``cursor`` is
     the keyset position (updated_at, id) returned as ``next_cursor``.
+    ``record_types`` narrows the trademark types listed (never widens them),
+    inside the scope, so ``total_count`` and the pages count only those.
     """
 
     search = (query or "").strip()
+    requested = set(record_types or ())
+    listed_types = tuple(
+        record_type
+        for record_type in TRADEMARK_RECORD_TYPES
+        if not requested or record_type in requested
+    )
     scope = [
         IpDocketRecord.company_id == context.company.id,
-        IpDocketRecord.record_type.in_(TRADEMARK_RECORD_TYPES),
+        IpDocketRecord.record_type.in_(listed_types),
         IpDocketRecord.is_active.is_(True),
         IpDocketRecord.archived_by_matter_disposal.is_(False),
         visible_ip_dockets_filter(session, context=context),
