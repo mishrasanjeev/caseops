@@ -356,6 +356,49 @@ jobs:
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-mobile --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-mobile
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-drafts-readonly --config=playwright.prod-ram.config.ts --project=batch3-drafts-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-drafts-readonly
 
+      - name: Run release-owned Batch4 tester acceptance
+        if: matrix.suite == 'test-legal-write-oct13'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]; then
+            if ! git merge-base --is-ancestor HEAD 01be7b86a45379fe89c89d10242adad1f5d35505; then
+              echo "::error::Newer serving release is missing Batch4 acceptance."
+              exit 1
+            fi
+            echo "::notice::Serving source predates Batch4 acceptance; no new-feature certification."
+            exit 0
+          fi
+          test -f tests/e2e/ram-2026-10-31-governance-ui.spec.ts
+          for key in CASEOPS_RAM_PROD_SLUG CASEOPS_RAM_PROD_EMAIL CASEOPS_RAM_PROD_PASSWORD CASEOPS_EXPECTED_RELEASE_SHA; do
+            value="${!key:-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then printf '::error::Missing Batch4 fixture key: %s\n' "$key" >&2; exit 1; fi
+          done
+          unset value
+          # BUG-003..006 can pass only while the serving release enables rule governance.
+          if ! governance="$(python scripts/prod_playwright_evidence.py batch4-governance)"; then
+            echo "::error::Serving release has no valid deploy/ip-rule-governance-state.json."
+            exit 1
+          fi
+          case "$governance" in
+            enabled|disabled) ;;
+            *) echo "::error::Unreviewed rule-governance state."; exit 1 ;;
+          esac
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-desktop --config=playwright.prod-ram.config.ts --project=batch4-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-desktop
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-mobile --config=playwright.prod-ram.config.ts --project=batch4-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-mobile
+          if [[ "$governance" == enabled ]]; then
+            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-desktop --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-desktop
+            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-mobile --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-mobile
+          else
+            echo "::notice::Rule governance is disabled at the serving release; BUG-003..006 production proof waits for the enabled state."
+          fi
+
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
         env:
@@ -614,6 +657,15 @@ jobs:
           esac
           if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
             required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
+          fi
+          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
+            required+=(batch4-desktop batch4-mobile)
+            governance="$(python scripts/prod_playwright_evidence.py batch4-governance)"
+            case "$governance" in
+              enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
+              disabled) ;;
+              *) exit 1 ;;
+            esac
           fi
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
 

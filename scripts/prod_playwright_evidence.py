@@ -66,6 +66,95 @@ BATCH3_MANDATORY_CASES = {
         "reload",
     ),
 }
+# Tester batch 4 (2026-10-31): every production-eligible case per role, exactly.
+# The governance roles are required only while the serving release's checked-in
+# rule-governance state is enabled; the other roles never select that file.
+_B4 = "ram-2026-10-31-{}.spec.ts".format
+_B4_CRAWL = "BUG-015 controls on {} are usable or explain themselves".format
+BATCH4_MANDATORY_CASES = {
+    "batch4-desktop": ("batch4-prod-chromium", (
+        (_B4("calendar-year"), "ENH-017 Year view shows Ram's UI-created hearing and task on "
+         "their days in distinct colours and survives reload"),
+        *((_B4("control-crawl"), _B4_CRAWL(route)) for route in (
+            "/app/ip", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid",
+            "/app/ip/recordals", "/app/ip/foreign-associates", "/app/ip/registry",
+            "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal", "/app/ip/patents",
+            "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
+            "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
+            "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
+        )),
+        (_B4("docket-sweep"), "DOCKET-SWEEP calendar-copy reviews: the daily docket counts "
+         "every pending review the server reports, not the first 100"),
+        (_B4("fixture-honesty"), "BUG-002 Ram's Documents Classification is provisioned, "
+         "never seeded, and previews a classified name"),
+        (_B4("foreign-associates"), "BUG-009/010/011/013 Ram walks a new instruction from "
+         "every empty picker to a created and retired instruction"),
+        (_B4("invoice-pdf"), "BUG-016 draft invoice PDF downloaded from the billing page is "
+         "legible, one page and marked DRAFT"),
+        (_B4("invoice-pdf"), "BUG-016 [prod-only] the reported invoices INVR-2026-028 and "
+         "INVR-2026-068 download legible (read-only)"),
+        (_B4("ip-create"), "BUG-001 BUG-002 Ram creates a two-class trademark that opens in "
+         "view and records its Nice edition"),
+        (_B4("madrid-portal"), "BUG-015 Madrid: Ram records an outbound IR choosing the basic "
+         "mark docket through the picker"),
+        (_B4("madrid-portal"), "BUG-015 client portal: every offered grant loads its "
+         "shareable versions or says why there are none"),
+        (_B4("madrid-portal"), "BUG-015 sweep: Madrid, client portal, renewals and reports "
+         "ask for no internal record ID"),
+        (_B4("matter-links"), "BUG-007 Ram finds a Matter by typing among 60+ Matters, links "
+         "it and retires it at 1440x900"),
+        (_B4("recordals"), "BUG-008 Ram uploads an instrument from the recordal form and both "
+         "parties cite it"),
+        (_B4("registry"), "BUG-012 Ram finds a docket beyond the first 50 by its number and "
+         "records manual registry evidence through structured fields"),
+        (_B4("watch"), "BUG-014 journal capture: 'Class 45' with captured evidence is "
+         "recorded, listed and shown on the hit; a bad class token is refused at its field"),
+    )),
+    "batch4-mobile": ("batch4-prod-mobile", (
+        (_B4("calendar-year"), "ENH-017 [mobile] Year view opens on screen in one column at "
+         "375 px, keeps chips legible, and opens a day"),
+        (_B4("docket-sweep"), "[mobile] DOCKET-SWEEP calendar-copy reviews: the count and "
+         "list state fit at 393px without horizontal page scroll"),
+        (_B4("fixture-honesty"), "BUG-002 [mobile] Classification and its upload gate stay "
+         "on screen without horizontal scroll"),
+        (_B4("foreign-associates"), "[mobile] BUG-009/010/011/013 Ram walks the new "
+         "instruction, records the quote and creates it at 393px"),
+        (_B4("invoice-pdf"), "BUG-016 [mobile] draft invoice PDF journey works at 393px "
+         "without page overflow"),
+        (_B4("invoice-pdf"), "BUG-016 [prod-only] [mobile] the reported invoices download "
+         "legible at 393px (read-only)"),
+        (_B4("ip-create"), "BUG-001 BUG-002 [mobile] Ram creates a two-class trademark on a "
+         "phone without horizontal scroll"),
+        (_B4("madrid-portal"), "BUG-015 Madrid [mobile]: intake pickers fit a phone and never "
+         "offer a dead choice"),
+        (_B4("madrid-portal"), "BUG-015 client portal [mobile]: grant and publish controls "
+         "fit a phone"),
+        (_B4("matter-links"), "BUG-007 [mobile] Ram finds, links and retires a Matter on a "
+         "phone without overflow"),
+        (_B4("recordals"), "BUG-008 [mobile] the recordal journey works at Pixel 5 width "
+         "without horizontal scroll"),
+        (_B4("registry"), "BUG-012 [mobile] the registry journey works at phone width without "
+         "horizontal scroll"),
+        (_B4("watch"), "[mobile] BUG-014 journal capture works at 393px without horizontal "
+         "page scroll"),
+    )),
+    "batch4-governance-desktop": ("batch4-governance-prod-chromium", (
+        (_B4("governance-ui"), "BUG-003/004 opposition governed-rule and calendar pickers are "
+         "never dead selects"),
+        (_B4("governance-ui"), "BUG-005/006 Ram proposes a calendar and sees the honest "
+         "pending-approval state"),
+    )),
+    "batch4-governance-mobile": ("batch4-governance-prod-mobile", (
+        (_B4("governance-ui"), "[mobile] BUG-003/004 opposition picker reasons and governance "
+         "link fit 393px"),
+        (_B4("governance-ui"), "[mobile] BUG-005 governance card controls fit 393px with a "
+         "computed source hash"),
+    )),
+}
+GOVERNANCE_STATE = Path("deploy/ip-rule-governance-state.json")
+GOVERNANCE_STATE_KEYS = {
+    "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
+}
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
 TESTER_PARTITION_CONTRACT = 1
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
@@ -171,11 +260,8 @@ def _tester_case_identity(row):
     )
 
 
-def _check_batch3_evidence(binding, document, *, execution=False):
-    expected = BATCH3_MANDATORY_CASES.get(binding["invocation"])
-    if expected is None:
-        return
-    project, file, title = expected
+def _check_mandatory_cases(batch, project, cases, binding, document, *, execution=False):
+    """Require exactly ``cases`` (file, title), each an actual zero-retry pass."""
     if (
         binding["config"] != "playwright.prod-ram.config.ts"
         or binding["project"] != project
@@ -186,27 +272,64 @@ def _check_batch3_evidence(binding, document, *, execution=False):
         or type(document["configuration"]["workers"]) is not int
         or document["configuration"]["workers"] != 1
     ):
-        raise EvidenceError("batch3_role_binding_mismatch")
+        raise EvidenceError(f"{batch}_role_binding_mismatch")
     rows = document["tests"]
-    if len(rows) != 1:
-        raise EvidenceError("mandatory_batch3_case_inventory_mismatch")
-    row = rows[0]
-    if (
+    # Evidence stores titles in their privacy-minimized form (a query string is redacted).
+    expected = Counter(
+        (_safe(file, {}), (_safe(file, {}), _safe(title, {}))) for file, title in cases
+    )
+    if len(rows) != len(cases) or Counter(
+        (row["file"], tuple(row["title_path"])) for row in rows
+    ) != expected or any(
         row["project_id"] != project or row["project_name"] != project
-        or row["file"] != file or row["title_path"] != [file, title]
         or type(row["retries"]) is not int or row["retries"] != 0
         or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+        for row in rows
     ):
-        raise EvidenceError("mandatory_batch3_case_inventory_mismatch")
-    if row["expected_status"] != "passed":
-        raise EvidenceError("mandatory_batch3_case_not_passed")
-    if execution and (
-        row["status"] != "expected" or len(row["results"]) != 1
-        or row["results"][0]["status"] != "passed"
-        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        raise EvidenceError(f"mandatory_{batch}_case_inventory_mismatch")
+    if any(row["expected_status"] != "passed" for row in rows) or execution and (
+        any(
+            row["status"] != "expected" or len(row["results"]) != 1
+            or row["results"][0]["status"] != "passed"
+            or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+            for row in rows
+        )
         or document["report_status"] != "passed" or document["global_error_count"] != 0
     ):
-        raise EvidenceError("mandatory_batch3_case_not_passed")
+        raise EvidenceError(f"mandatory_{batch}_case_not_passed")
+
+
+def _check_batch3_evidence(binding, document, *, execution=False):
+    expected = BATCH3_MANDATORY_CASES.get(binding["invocation"])
+    if expected is None:
+        return
+    project, file, title = expected
+    _check_mandatory_cases(
+        "batch3", project, ((file, title),), binding, document, execution=execution,
+    )
+
+
+def _check_batch4_evidence(binding, document, *, execution=False):
+    expected = BATCH4_MANDATORY_CASES.get(binding["invocation"])
+    if expected is None:
+        return
+    project, cases = expected
+    _check_mandatory_cases("batch4", project, cases, binding, document, execution=execution)
+
+
+def batch4_governance_state(root: Path) -> bool:
+    """Return the serving release's checked-in rule-governance switch, strictly."""
+    try:
+        state = _json(root / GOVERNANCE_STATE)
+    except EvidenceError:
+        raise EvidenceError("invalid_rule_governance_state") from None
+    if (
+        not isinstance(state, dict) or set(state) != GOVERNANCE_STATE_KEYS
+        or type(state["schema_version"]) is not int or state["schema_version"] != 1
+        or type(state["enabled"]) is not bool
+    ):
+        raise EvidenceError("invalid_rule_governance_state")
+    return state["enabled"]
 
 
 def _check_notes22_evidence(binding, document, *, execution=False):
@@ -822,6 +945,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         discovery["binding"] = public_binding
         _write(destination / "discovery.json", discovery)
         _check_batch3_evidence(binding, discovery)
+        _check_batch4_evidence(binding, discovery)
         _check_notes22_evidence(binding, discovery)
         partition = _tester_partition(binding)
         if partition is not None:
@@ -891,6 +1015,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
         _check_batch3_evidence(binding, result, execution=True)
+        _check_batch4_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, result, execution=True)
         if (
             process.returncode < 0
@@ -1056,6 +1181,8 @@ def validate(root: Path, required, expected: str) -> None:
         _reconcile(discovery, result)
         _check_batch3_evidence(binding, discovery)
         _check_batch3_evidence(binding, result, execution=True)
+        _check_batch4_evidence(binding, discovery)
+        _check_batch4_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, discovery)
         _check_notes22_evidence(binding, result, execution=True)
         _junit(directory / "native-results.xml", None, {}, result)
@@ -1112,12 +1239,16 @@ def main() -> int:
     validator.add_argument("--required", nargs="+", required=True)
     validator.add_argument("--tester-partition-union", action="store_true")
     modes.add_parser("tester-partition-contract")
+    modes.add_parser("batch4-governance")
     options = parser.parse_args()
     try:
         if options.mode == "tester-partition-contract":
             print(json.dumps({"tester_partition_contract": TESTER_PARTITION_CONTRACT,
                               "partitions": TESTER_PARTITION_COUNTS,
                               "catalog_file": TESTER_CATALOG_FILE}))
+            return 0
+        if options.mode == "batch4-governance":
+            print("enabled" if batch4_governance_state(ROOT) else "disabled")
             return 0
         if options.mode == "validate":
             validation = (

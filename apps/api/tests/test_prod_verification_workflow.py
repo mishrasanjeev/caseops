@@ -145,6 +145,251 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
     assert "launchOptions" not in mobile
 
 
+BATCH4_STEP = "Run release-owned Batch4 tester acceptance"
+BATCH4_BASE = "01be7b86a45379fe89c89d10242adad1f5d35505"
+BATCH4_ROLES = {
+    "batch4-desktop": "batch4-prod-chromium",
+    "batch4-mobile": "batch4-prod-mobile",
+    "batch4-governance-desktop": "batch4-governance-prod-chromium",
+    "batch4-governance-mobile": "batch4-governance-prod-mobile",
+}
+GOVERNANCE_STATE = {
+    "schema_version": 1, "enabled": False, "rollout_expires_at": None, "approved_by": None,
+    "evidence": None,
+}
+
+
+def _shard_step(name: str) -> dict:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    matches = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
+               if step.get("name") == name]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index(BATCH4_STEP) == names.index(
+        "Run release-owned Batch3 client and retained drafting acceptance"
+    ) + 1
+    step = steps[names.index(BATCH4_STEP)]
+    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["env"] == {
+        "CASEOPS_RAM_PROD_SLUG": "test-legal",
+        "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com",
+        "CASEOPS_RAM_PROD_PASSWORD": "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}",
+        "PROD_BASE_URL": "${{ vars.PROD_BASE_URL }}",
+        "PROD_API_BASE_URL": "${{ vars.PROD_API_BASE_URL }}",
+        "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+    }
+    # Every variable the Batch4 production runtime requires is supplied by the step.
+    support = (REPO_ROOT / "tests/e2e/support/ram-bugs4.ts").read_text()
+    for key in ("PROD_API_BASE_URL", "CASEOPS_EXPECTED_RELEASE_SHA", "CASEOPS_RAM_PROD_EMAIL",
+                "CASEOPS_RAM_PROD_PASSWORD"):
+        assert f'required("{key}")' in support
+        assert key in step["env"]
+    assert "process.env.CASEOPS_RAM_PROD_SLUG" in support
+    assert f"git merge-base --is-ancestor HEAD {BATCH4_BASE}" in step["run"]
+    for role, project in BATCH4_ROLES.items():
+        assert step["run"].count(
+            f'caseops-prod-playwright" {role} --config=playwright.prod-ram.config.ts '
+            f"--project={project} --workers=1 --retries=0 --reporter=list "
+            f"--output=test-results/{role}\n"
+        ) == 1
+    reconcile = next(item for item in steps
+                     if item.get("name") == "Reconcile required native Playwright evidence")
+    assert "required+=(batch4-desktop batch4-mobile)" in reconcile["run"]
+    assert "enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;" in (
+        reconcile["run"]
+    )
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    assert "const BATCH4_GOVERNANCE_SPEC = /ram-2026-10-31-governance-ui\\.spec\\.ts$/;" in config
+    for project in BATCH4_ROLES.values():
+        block = config.split(f'name: "{project}"', 1)[1].split("name:", 1)[0]
+        governance = "governance" in project
+        assert ("testMatch: BATCH4_GOVERNANCE_SPEC," in block) is governance
+        excluded = "testMatch: BATCH4_SPECS,\n      testIgnore: BATCH4_GOVERNANCE_SPEC,"
+        assert (excluded in block) is not governance
+        assert "retries: 0" in block and "fullyParallel: false" in block
+        assert "storageState: { cookies: [], origins: [] }" in block
+        assert 'trace: "off", screenshot: "off", video: "off"' in block
+        if project.endswith("-mobile"):
+            assert "grep: /\\[mobile\\]/," in block and "grepInvert: /\\[local-only\\]/," in block
+            assert "hasTouch: true" in block and "isMobile: true" in block
+        else:
+            assert "grepInvert: /\\[mobile\\]|\\[local-only\\]/," in block
+
+
+def _git_bash() -> str:
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    return bash
+
+
+def _batch4_checkout(tmp_path: Path, *, specs: bool, governance: object) -> Path:
+    root = tmp_path / "checkout"
+    (root / "scripts").mkdir(parents=True)
+    shutil.copy(REPO_ROOT / "scripts/prod_playwright_evidence.py", root / "scripts")
+    if specs:
+        (root / "tests/e2e").mkdir(parents=True)
+        for name in ("ram-2026-10-31-control-crawl.spec.ts", "ram-2026-10-31-governance-ui.spec.ts",
+                     "ram-2026-10-22-drafting.prod.spec.ts"):
+            (root / "tests/e2e" / name).touch()
+    if governance is not None:
+        (root / "deploy").mkdir()
+        text = governance if isinstance(governance, str) else json.dumps(
+            {**GOVERNANCE_STATE, "enabled": governance}
+        )
+        (root / "deploy/ip-rule-governance-state.json").write_text(text, encoding="utf-8")
+    return root
+
+
+def _run_offline_step(
+    tmp_path: Path, script: str, root: Path, env: dict[str, str], ancestor: int = 1,
+) -> tuple[subprocess.CompletedProcess[str], list[list[str]], list[str]]:
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    calls = tmp_path / "calls.log"
+    validated = tmp_path / "validated.log"
+    (runner / "caseops-prod-playwright").write_text(
+        'printf \'%s\\n\' "$*" >> "$CASEOPS_TEST_CALLS"\n', encoding="utf-8", newline="\n",
+    )
+    # Only shell shims run: no Playwright, network, or real git history is touched.
+    shims = (
+        'git() { [[ "$*" == "merge-base --is-ancestor HEAD ' + BATCH4_BASE + '" ]] || exit 97; '
+        'return "$CASEOPS_TEST_ANCESTOR"; }\n'
+        'python() { if [[ "${2:-}" == validate ]]; then '
+        'printf \'%s\\n\' "${@:4}" > "$CASEOPS_TEST_VALIDATED"; return 0; fi; '
+        '"$CASEOPS_TEST_PYTHON" "$@"; }\n'
+    )
+    environment = {
+        key: value for key, value in os.environ.items()
+        if not key.startswith(("CASEOPS_", "PROD_"))
+    }
+    environment.update({
+        "RUNNER_TEMP": runner.as_posix(), "CASEOPS_TEST_CALLS": calls.as_posix(),
+        "CASEOPS_TEST_VALIDATED": validated.as_posix(), "CASEOPS_TEST_ANCESTOR": str(ancestor),
+        "CASEOPS_TEST_PYTHON": Path(sys.executable).as_posix(), "PYTHONUTF8": "1", **env,
+    })
+    result = subprocess.run(
+        [_git_bash(), "-c", shims + script], cwd=root, env=environment,
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    invoked = [line.split() for line in calls.read_text().splitlines()] if calls.exists() else []
+    required = validated.read_text().split() if validated.exists() else []
+    return result, invoked, required
+
+
+BATCH4_PRESENT_ENV = {
+    "CASEOPS_RAM_PROD_SLUG": "test-legal", "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com",
+    "CASEOPS_RAM_PROD_PASSWORD": "offline-not-used", "CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40,
+}
+
+
+@pytest.mark.parametrize(("governance", "roles"), [
+    (False, ["batch4-desktop", "batch4-mobile"]),
+    (True, list(BATCH4_ROLES)),
+])
+def test_batch4_step_runs_exactly_the_roles_the_serving_governance_state_allows(
+    tmp_path: Path, governance: bool, roles: list[str],
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=True, governance=governance)
+    result, invoked, _ = _run_offline_step(
+        tmp_path, _shard_step(BATCH4_STEP)["run"], root, BATCH4_PRESENT_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    assert invoked == [[
+        role, "--config=playwright.prod-ram.config.ts", f"--project={BATCH4_ROLES[role]}",
+        "--workers=1", "--retries=0", "--reporter=list", f"--output=test-results/{role}",
+    ] for role in roles]
+    waits = "BUG-003..006 production proof waits for the enabled state."
+    assert (waits in result.stdout) is (not governance)
+
+
+@pytest.mark.parametrize(("ancestor", "code", "message"), [
+    (0, 0, "::notice::Serving source predates Batch4 acceptance; no new-feature certification."),
+    (1, 1, "::error::Newer serving release is missing Batch4 acceptance."),
+])
+def test_batch4_step_admits_only_an_ancestor_release_without_batch4_specs(
+    tmp_path: Path, ancestor: int, code: int, message: str,
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    result, invoked, _ = _run_offline_step(
+        tmp_path, _shard_step(BATCH4_STEP)["run"], root, BATCH4_PRESENT_ENV, ancestor=ancestor,
+    )
+    assert result.returncode == code
+    assert result.stdout.strip() == message
+    assert invoked == []
+
+
+@pytest.mark.parametrize("governance", [None, "not json", '{"enabled": "true"}', json.dumps(
+    {**GOVERNANCE_STATE, "enabled": "true"})])
+def test_batch4_step_fails_closed_without_a_valid_governance_state(
+    tmp_path: Path, governance: str | None,
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=True, governance=governance)
+    result, invoked, _ = _run_offline_step(
+        tmp_path, _shard_step(BATCH4_STEP)["run"], root, BATCH4_PRESENT_ENV,
+    )
+    assert result.returncode == 1
+    assert "::error::Serving release has no valid deploy/ip-rule-governance-state.json." in (
+        result.stdout
+    )
+    assert invoked == []
+
+
+@pytest.mark.parametrize("key", sorted(BATCH4_PRESENT_ENV))
+@pytest.mark.parametrize("value", [None, "", " \t"])
+def test_batch4_step_fails_before_any_browser_without_a_required_key(
+    tmp_path: Path, key: str, value: str | None,
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=True, governance=True)
+    env = dict(BATCH4_PRESENT_ENV)
+    if value is None:
+        env.pop(key)
+    else:
+        env[key] = value
+    result, invoked, _ = _run_offline_step(tmp_path, _shard_step(BATCH4_STEP)["run"], root, env)
+    assert result.returncode == 1
+    assert result.stderr.strip() == f"::error::Missing Batch4 fixture key: {key}"
+    assert "offline-not-used" not in result.stdout + result.stderr
+    assert invoked == []
+
+
+@pytest.mark.parametrize(("specs", "governance", "batch4"), [
+    (False, False, []),
+    (True, False, ["batch4-desktop", "batch4-mobile"]),
+    (True, True, list(BATCH4_ROLES)),
+])
+def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
+    tmp_path: Path, specs: bool, governance: bool, batch4: list[str],
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=specs, governance=governance)
+    result, _, required = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "test-legal-write-oct13"},
+    )
+    assert result.returncode == 0, result.stderr
+    batch3 = ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]
+    assert required == ["test-legal-write-oct13", *(batch3 if specs else []), *batch4]
+
+
+def test_batch4_receipts_fail_closed_without_a_valid_governance_state(tmp_path: Path) -> None:
+    root = _batch4_checkout(tmp_path, specs=True, governance='{"enabled": true}')
+    result, _, required = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "test-legal-write-oct13"},
+    )
+    assert result.returncode != 0
+    assert required == []
+
+
 def test_historical_provider_uat_explicitly_selects_legacy_qa_project() -> None:
     import shlex
 
