@@ -12018,7 +12018,8 @@ export async function recordIpRecordalTransaction(input: {
   expectedVersion: number;
   expectedLifecycleVersion: number;
   transactionKind: IpRecordalTransactionKind;
-  effectiveAt: string;
+  /** Null records the transaction at the server's current time. */
+  effectiveAt: string | null;
   responsibleMembershipId: string;
   reason: string;
   sourceUrl?: string | null;

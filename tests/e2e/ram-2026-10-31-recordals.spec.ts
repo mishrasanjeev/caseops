@@ -195,6 +195,9 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   await expect(row).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText(`assignor · ${deedTitle}`)).toBeVisible();
   await expect(page.getByText(partyName, { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open IP docket" })).toHaveAttribute("href", `/app/ip?docket=${docket.id}`);
+  // /app/ip/records does not exist (404); nothing on the page may link to it.
+  await expect(page.locator('a[href*="/app/ip/records"]')).toHaveCount(0);
   if (mobile) await expectNoPageOverflow(page);
   await markPositive(info, "bug008-recordal-from-uploaded-instrument", {
     local: rt.local, docket_id: docket.id, document_id: deedId, recordal_id: recordal.id, mobile,
@@ -206,7 +209,10 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   await transaction.getByLabel("Reason", { exact: true }).fill("BUG-008 acceptance run complete; withdraw the test recordal.");
   const withdrawn = page.waitForResponse(apiCall(rt, "POST", `/api/ip/recordals/${recordal.id}/transactions`));
   await transaction.getByRole("button", { name: "Record withdrawn" }).click();
-  const withdrawal = await json<{ recordal: { status: string } }>(await withdrawn, "Withdraw the test recordal", 201);
+  const withdrawnResponse = await withdrawn;
+  // The untouched Effective time is stamped by the server, never by the browser clock.
+  expect(withdrawnResponse.request().postDataJSON()).toEqual(expect.objectContaining({ effective_at: null, transaction_kind: "withdrawn" }));
+  const withdrawal = await json<{ recordal: { status: string } }>(withdrawnResponse, "Withdraw the test recordal", 201);
   expect(withdrawal.recordal.status).toBe("withdrawn");
   await expect(page.getByText("This recordal is closed.")).toBeVisible();
   await retireDocketThroughUi(page, rt, docket);

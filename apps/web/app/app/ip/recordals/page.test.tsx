@@ -14,6 +14,9 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   capability: vi.fn(),
+  addLinks: vi.fn(),
+  document: vi.fn(),
+  seed: vi.fn(),
   create: vi.fn(),
   docket: vi.fn(),
   dockets: vi.fn(),
@@ -32,7 +35,10 @@ vi.mock("@/lib/api/endpoints", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/endpoints")>("@/lib/api/endpoints");
   return {
     ...actual,
+    addIpDocumentLinks: mocks.addLinks,
     createIpRecordal: mocks.create,
+    fetchIpDocument: mocks.document,
+    seedIpDocumentTaxonomy: mocks.seed,
     fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
     fetchIpDocuments: mocks.documents,
@@ -527,6 +533,43 @@ describe("BUG-008 new recordal form", () => {
     expect(screen.queryByRole("button", { name: "Upload instrument" })).not.toBeInTheDocument();
   });
 
+  it("lets a classification admin load the standard classifications and then upload", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [], truncated: false });
+    mocks.taxonomy.mockResolvedValue({ taxonomy_version: "ip-document-taxonomy-v1", entries: [] });
+    mocks.seed.mockResolvedValue(TAXONOMY);
+    await openForm(user);
+    await chooseDocket(user);
+    expect(await screen.findByText(/none is configured for this workspace/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Load standard classifications" }));
+    await waitFor(() => expect(mocks.seed).toHaveBeenCalledTimes(1));
+    const classification = await screen.findByLabelText("Classification");
+    expect(classification).toHaveValue("assignment");
+    expect(within(classification).getByRole("option", { name: "Licence" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload instrument" })).toBeInTheDocument();
+  });
+
+  it("links an already stored copy to the docket instead of storing the file twice", async () => {
+    const user = userEvent.setup();
+    mocks.instruments.mockResolvedValueOnce({ docket_id: "docket-1", items: [], truncated: false });
+    const stored: IpDocument = { ...DOCUMENT, id: "document-stored", title: "Executed deed (stored)", current_version: 2 };
+    mocks.upload.mockResolvedValue({ outcome: "duplicate_found", document: null, duplicate_candidates: [{ document_id: "document-stored", display_name: "Executed deed (stored)" }] });
+    mocks.document.mockResolvedValue(stored);
+    mocks.addLinks.mockResolvedValue(stored);
+    await openForm(user);
+    await chooseDocket(user);
+    await user.upload(await screen.findByLabelText("Executed instrument file"), new File(["executed deed"], "Executed deed.pdf", { type: "application/pdf" }));
+    await user.click(screen.getByRole("button", { name: "Upload instrument" }));
+    expect(await screen.findByText(/already stored as .Executed deed \(stored\)./)).toBeVisible();
+    mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [stored], truncated: false });
+    await user.click(screen.getByRole("button", { name: "Link the stored copy to this docket" }));
+    await waitFor(() => expect(mocks.addLinks).toHaveBeenCalledWith({ documentId: "document-stored", expectedCurrentVersion: 2, docketId: "docket-1" }));
+    for (const party of [1, 2]) {
+      await waitFor(() => expect(instrumentPicker(party)).toBeEnabled());
+      expect(within(instrumentPicker(party)).getByRole("option", { name: /^Executed deed \(stored\)/ })).toBeInTheDocument();
+    }
+  });
+
   it("tells a role without document upload who can file the instrument", async () => {
     const user = userEvent.setup();
     mocks.instruments.mockResolvedValue({ docket_id: "docket-1", items: [], truncated: false });
@@ -580,10 +623,47 @@ describe("BUG-008 new recordal form", () => {
     expect(record).toHaveAccessibleDescription("Upload the corrected instrument to record the correction.");
     expect(await screen.findByRole("button", { name: "Upload instrument" })).toBeInTheDocument();
   });
-  it("records an untouched transaction time as now, never before the recordal's own latest event", async () => {
+  it("offers an upload of the corrected deed even when the original instrument is filed", async () => {
+    const user = userEvent.setup();
+    const defective = { ...RECORDAL, status: "defective", version: 4 };
+    mocks.recordals.mockResolvedValue({ items: [{ ...defective, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, recordal: defective });
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Record transaction" });
+    await user.selectOptions(screen.getByLabelText("Transaction"), "corrected");
+    expect(screen.getByRole("group", { name: "Corrected instrument" })).toBeVisible();
+    const toggle = screen.getByRole("button", { name: "Upload the corrected instrument" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Hide instrument upload" })).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("button", { name: "Upload instrument" })).toBeInTheDocument();
+  });
+
+  it("names the docket, never its id, while the recordal workspace loads, and deep-links it", async () => {
+    mocks.recordals.mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockReturnValue(new Promise(() => {}));
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    const link = await screen.findByRole("link", { name: "Open IP docket" });
+    expect(link).toHaveAttribute("href", "/app/ip?docket=docket-1");
+    expect(screen.getAllByText("ASTER registration").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("docket-1")).not.toBeInTheDocument();
+  });
+
+  it("says an instrument is unavailable instead of printing its id in the title view", async () => {
+    const user = userEvent.setup();
+    mocks.recordals.mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, documents: [] });
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByText("Assignment", { selector: "h2", exact: true });
+    await user.click(screen.getByRole("tab", { name: "Title at date" }));
+    expect(screen.getAllByText(/the source instrument is not available to you/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Instrument not available to you").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/document-1/)).not.toBeInTheDocument();
+  });
+
+  it("lets the server stamp an untouched transaction time and anchors a backdated refusal at the field", async () => {
     const user = userEvent.setup();
     const draft = { ...RECORDAL, status: "draft", version: 1 };
-    // The creation event can carry a later instant than the minute-precision field shows.
     const latest = new Date(Date.now() + 90_000).toISOString();
     mocks.recordals.mockResolvedValue({ items: [{ ...draft, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue({ ...WORKSPACE, recordal: draft, transactions: [{ ...WORKSPACE.transactions[0], effective_at: latest }] });
@@ -597,8 +677,9 @@ describe("BUG-008 new recordal form", () => {
     await user.selectOptions(screen.getByLabelText("Transaction"), "withdrawn");
     await user.type(screen.getByLabelText("Reason"), "Client withdrew the instruction.");
 
-    // An edited, earlier time that the API refuses is explained at the field.
     const effective = screen.getByLabelText("Effective time");
+    expect(effective).toHaveAccessibleDescription("Left unchanged, CaseOps records the time it receives the transaction.");
+    // An edited, earlier time that the API refuses is explained at the field.
     await user.clear(effective);
     await user.type(effective, "2026-07-01T10:00");
     await user.click(screen.getByRole("button", { name: "Record withdrawn" }));
@@ -609,6 +690,28 @@ describe("BUG-008 new recordal form", () => {
     await user.click(screen.getByRole("button", { name: "Use the current time" }));
     await user.click(screen.getByRole("button", { name: "Record withdrawn" }));
     await waitFor(() => expect(mocks.transaction).toHaveBeenCalledTimes(2));
-    expect(Date.parse(mocks.transaction.mock.calls[1][0].effectiveAt)).toBe(Date.parse(latest) + 1_000);
+    // Untouched: the server stamps its own clock, so neither browser clock skew
+    // nor a later event elsewhere on the docket can backdate the transaction.
+    expect(mocks.transaction.mock.calls[1][0].effectiveAt).toBeNull();
+  });
+
+  it("explains a backdated refusal of an untouched time without offering a no-op fix", async () => {
+    const user = userEvent.setup();
+    const draft = { ...RECORDAL, status: "draft", version: 1 };
+    mocks.recordals.mockResolvedValue({ items: [{ ...draft, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, recordal: draft });
+    mocks.transaction.mockRejectedValueOnce(Object.assign(new Error("Backdated events require acknowledgement of the recalculation preview."), {
+      name: "ApiError", status: 409, detail: "Backdated events require acknowledgement of the recalculation preview.", problemType: null, data: null,
+    }));
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Record transaction" });
+    await user.selectOptions(screen.getByLabelText("Transaction"), "withdrawn");
+    await user.type(screen.getByLabelText("Reason"), "Client withdrew the instruction.");
+    await user.click(screen.getByRole("button", { name: "Record withdrawn" }));
+    const effective = screen.getByLabelText("Effective time");
+    await waitFor(() => expect(effective).toHaveAttribute("aria-invalid", "true"));
+    expect(effective).toHaveAccessibleDescription(/already has an event dated after the current time/);
+    expect(mocks.transaction.mock.calls[0][0].effectiveAt).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use the current time" })).not.toBeInTheDocument();
   });
 });

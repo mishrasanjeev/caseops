@@ -345,6 +345,7 @@ export default function RecordalsPage() {
           {selectedRecordal ? (
             <RecordalDetail
               recordal={workspace.data?.recordal ?? selectedRecordal}
+              docketTitle={selectedRecordal.docket_title}
               workspace={workspace.data ?? null}
               allDockets={dockets.data?.dockets ?? (workspace.data ? [workspace.data.docket] : [])}
               workspacePending={workspace.isPending}
@@ -830,8 +831,9 @@ function RecordalList({ rows, selectedId, onSelect }: { rows: IpRecordalListItem
   );
 }
 
-function RecordalDetail({ recordal, workspace, allDockets, workspacePending, workspaceError, onWorkspaceRetry, membershipId, canWrite, canApprove, onFamilyCatalogRequested, onChanged }: {
+function RecordalDetail({ recordal, docketTitle, workspace, allDockets, workspacePending, workspaceError, onWorkspaceRetry, membershipId, canWrite, canApprove, onFamilyCatalogRequested, onChanged }: {
   recordal: IpRecordal;
+  docketTitle: string;
   workspace: IpRecordalWorkspace | null;
   allDockets: IpDocket[];
   workspacePending: boolean;
@@ -859,8 +861,8 @@ function RecordalDetail({ recordal, workspace, allDockets, workspacePending, wor
   return (
     <section className="min-w-0 border border-[var(--color-line)] bg-white">
       <header className="flex min-w-0 flex-col gap-3 border-b border-[var(--color-line)] p-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0"><p className="break-words text-sm text-[var(--color-mute)]">{docket?.title ?? recordal.docket_id}</p><h2 className="break-words text-xl font-semibold">{TYPE_OPTIONS.find((option) => option.value === recordal.recordal_type)?.label ?? readable(recordal.recordal_type)}</h2><div className="mt-2 flex flex-wrap gap-2"><Badge tone={recordal.status === "accepted" ? "success" : recordal.status === "defective" || recordal.status === "rejected" ? "warning" : "neutral"}>{readable(recordal.status)}</Badge><Badge tone="neutral">Version {recordal.version}</Badge></div></div>
-        <Link className="inline-flex items-center gap-1 text-sm font-medium underline" href="/app/ip">Open IP docket <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+        <div className="min-w-0"><p className="break-words text-sm text-[var(--color-mute)]">{docket?.title ?? docketTitle}</p><h2 className="break-words text-xl font-semibold">{TYPE_OPTIONS.find((option) => option.value === recordal.recordal_type)?.label ?? readable(recordal.recordal_type)}</h2><div className="mt-2 flex flex-wrap gap-2"><Badge tone={recordal.status === "accepted" ? "success" : recordal.status === "defective" || recordal.status === "rejected" ? "warning" : "neutral"}>{readable(recordal.status)}</Badge><Badge tone="neutral">Version {recordal.version}</Badge></div></div>
+        <Link className="inline-flex items-center gap-1 text-sm font-medium underline" href={`/app/ip?docket=${encodeURIComponent(recordal.docket_id)}`}>Open IP docket <ArrowUpRight className="h-3.5 w-3.5" /></Link>
       </header>
       <Tabs
         defaultValue="recordal"
@@ -930,7 +932,6 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeInput());
   const [effectiveAtEdited, setEffectiveAtEdited] = useState(false);
   const [effectiveAtError, setEffectiveAtError] = useState<string | null>(null);
-  const latestEventMs = Math.max(0, ...workspace.transactions.map((event) => Date.parse(event.effective_at)).filter(Number.isFinite));
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
   const [documentRefs, setDocumentRefs] = useState<string[]>([]);
@@ -939,6 +940,7 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
   const [snapshotId, setSnapshotId] = useState("");
   const [registryRecordedOn, setRegistryRecordedOn] = useState("");
   const [conflictReviewed, setConflictReviewed] = useState(false);
+  const [correctedUploadOpen, setCorrectedUploadOpen] = useState(false);
   const snapshots = registry.flatMap((item) => item.link.match_status === "confirmed" ? item.snapshots.map((snapshot) => ({ link: item, snapshot })) : []);
   const selectedSnapshot = snapshots.find((row) => row.snapshot.id === snapshotId) ?? null;
   const requiresApproval = ["review_approved", "accepted", "rejected"].includes(kind);
@@ -961,13 +963,10 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
         expectedVersion: workspace.recordal.version,
         expectedLifecycleVersion: docket.lifecycle_version,
         transactionKind: kind,
-        // An untouched field means now. The input shows whole minutes, so its
-        // value would date the transaction before an event recorded earlier in
-        // the same minute (for example the recordal's own creation), which the
-        // API rejects as backdated.
-        effectiveAt: effectiveAtEdited
-          ? new Date(effectiveAt).toISOString()
-          : new Date(Math.max(Date.now(), latestEventMs + 1_000)).toISOString(),
+        // An untouched field means now, stamped by the server's clock. The
+        // input shows whole minutes and the browser clock can lag, either of
+        // which would date the transaction before an event already recorded.
+        effectiveAt: effectiveAtEdited ? new Date(effectiveAt).toISOString() : null,
         responsibleMembershipId: membershipId,
         reason: reason.trim(),
         sourceUrl: selectedSnapshot?.snapshot.source_url ?? null,
@@ -990,7 +989,9 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
     onMutate: () => setEffectiveAtError(null),
     onError: (error) => {
       if (isApiErrorShape(error) && error.status === 409 && /backdated/i.test(error.detail)) {
-        setEffectiveAtError("This time is earlier than the docket's latest event. Use the current time, or record the earlier event from the IP docket, where its deadline recalculation is previewed first.");
+        setEffectiveAtError(effectiveAtEdited
+          ? "This time is earlier than the docket's latest event. Use the current time, or record the earlier event from the IP docket, where its deadline recalculation is previewed first."
+          : "The docket already has an event dated after the current time. Enter a time on or after that event, or correct that event from the IP docket.");
         return;
       }
       toast.error(apiErrorMessage(error, "Could not record transaction."));
@@ -1003,13 +1004,22 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
   return <form className="grid min-w-0 gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
     <h3 className="font-semibold md:col-span-2">Record transaction</h3>
     <Field label="Transaction"><select className={SELECT_CLASS} value={kind} onChange={(event) => setKind(event.target.value as IpRecordalTransactionKind)}>{options.filter((option) => !["review_approved", "accepted", "rejected"].includes(option) || canApprove).map((option) => <option key={option} value={option}>{readable(option)}</option>)}</select></Field>
-    <FormField id="recordal-transaction-effective-at" label="Effective time" error={effectiveAtError ?? undefined}>
-      <Input {...controlProps("recordal-transaction-effective-at", effectiveAtError ?? undefined)} type="datetime-local" value={effectiveAt} onChange={(event) => { setEffectiveAt(event.target.value); setEffectiveAtEdited(true); setEffectiveAtError(null); }} required />
+    <FormField id="recordal-transaction-effective-at" label="Effective time" hint={effectiveAtEdited ? undefined : "Left unchanged, CaseOps records the time it receives the transaction."} error={effectiveAtError ?? undefined}>
+      <Input {...controlProps("recordal-transaction-effective-at", effectiveAtError ?? undefined, effectiveAtEdited ? undefined : "recordal-transaction-effective-at-hint")} type="datetime-local" value={effectiveAt} onChange={(event) => { setEffectiveAt(event.target.value); setEffectiveAtEdited(true); setEffectiveAtError(null); }} required />
       {effectiveAtEdited ? <Button type="button" size="sm" variant="ghost" className="w-fit" onClick={() => { setEffectiveAt(localDateTimeInput()); setEffectiveAtEdited(false); setEffectiveAtError(null); }}>Use the current time</Button> : null}
     </FormField>
     <div className="md:col-span-2"><Field label="Reason"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} required minLength={5} /></Field></div>
     {requiresEvidence ? <div className="md:col-span-2"><Field label="Evidence references"><Textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} required /></Field></div> : null}
     {documents.length ? <CheckGroup legend={kind === "corrected" ? "Corrected instrument" : "Linked documents"} rows={documents.map((document) => ({ id: document.id, label: document.title }))} selected={documentRefs} onChange={setDocumentRefs} /> : null}
+    {kind === "corrected" && documents.length ? (
+      <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-fit" aria-expanded={correctedUploadOpen} aria-controls="recordal-corrected-instrument-upload" onClick={() => setCorrectedUploadOpen((value) => !value)}>
+          <Upload className="h-4 w-4" aria-hidden />
+          {correctedUploadOpen ? "Hide instrument upload" : "Upload the corrected instrument"}
+        </Button>
+        {correctedUploadOpen ? <div id="recordal-corrected-instrument-upload"><RecordalInstrumentUpload docket={docket} suggestedTaxonomyKey={suggestedInstrumentClassification(workspace.recordal.recordal_type as IpRecordalType)} onUploaded={async () => { setCorrectedUploadOpen(false); await onChanged(); }} /></div> : null}
+      </div>
+    ) : null}
     {kind === "corrected" && !documents.length ? (
       <div className="flex min-w-0 flex-col gap-3 md:col-span-2" data-testid="recordal-corrected-instrument-empty">
         <p id="recordal-corrected-instrument-status" role="status" className="rounded-md border border-[var(--color-warn-border)] bg-[var(--color-warn-bg)] p-3 text-sm text-[var(--color-warn-text)]">
@@ -1039,13 +1049,13 @@ function TitleAssessment({ docket, allDockets, documents }: { docket: IpDocket; 
   function downloadReport() {
     const lines = [
       `CaseOps title report`, `Right: ${docket.title}`, `As of: ${asOf}`, `Identifier: ${docket.primary_identifier ?? "Not recorded"}`, "",
-      "Registry-recorded position:", ...(registered.length ? registered.map(reportInterest) : ["- No recorded interest at this date"]), "",
-      "Beneficial/effective position:", ...(beneficial.length ? beneficial.map(reportInterest) : ["- No supported interest at this date"]), "",
+      "Registry-recorded position:", ...(registered.length ? registered.map((interest) => reportInterest(interest, documents)) : ["- No recorded interest at this date"]), "",
+      "Beneficial/effective position:", ...(beneficial.length ? beneficial.map((interest) => reportInterest(interest, documents)) : ["- No supported interest at this date"]), "",
       "Unresolved issues:", ...(issues.length ? issues.map((issue) => `- ${issue}`) : ["- None detected from accessible records"]),
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `title-report-${docket.id}-${asOf}.txt`; anchor.click(); URL.revokeObjectURL(url);
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `title-report-${reportFileStem(docket)}-${asOf}.txt`; anchor.click(); URL.revokeObjectURL(url);
   }
 
   return <div className="flex min-w-0 flex-col gap-6">
@@ -1066,7 +1076,7 @@ function assessTitle(docket: IpDocket, allDockets: IpDocket[], documents: IpDocu
     const classes = Array.isArray(interest.scope_json.affected_classes) ? interest.scope_json.affected_classes : [];
     if (interest.scope_json.scope_kind === "partial" || classes.length) issues.push(`${interest.party_name}: partial scope${classes.length ? ` in classes ${classes.join(", ")}` : ""}.`);
     const source = documents.find((document) => document.id === interest.evidence_reference);
-    if (!source) issues.push(`${interest.party_name}: canonical source document is unavailable; reference ${interest.evidence_reference}.`);
+    if (!source) issues.push(`${interest.party_name}: the source instrument is not available to you.`);
     else if (source.confidentiality !== "internal" || source.is_privileged) issues.push(`${interest.party_name}: source access is restricted (${source.confidentiality}${source.is_privileged ? ", privileged" : ""}).`);
   }
   for (const interest of docket.title_interests) {
@@ -1090,11 +1100,16 @@ function relationshipCycle(startId: string, dockets: IpDocket[]) {
   return (graph.get(startId) ?? []).some((id) => visit(id, new Set([startId])));
 }
 
-function reportInterest(interest: IpTitleInterest) { return `- ${interest.party_name}; ${interest.interest_type}; effective ${interest.effective_from}${interest.effective_until ? ` to ${interest.effective_until}` : " onward"}; recordal ${interest.recordal_status}; source ${interest.evidence_reference}`; }
+function reportFileStem(docket: IpDocket) {
+  const stem = (docket.primary_identifier ?? docket.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return stem || "ip-right";
+}
+
+function reportInterest(interest: IpTitleInterest, documents: IpDocument[]) { return `- ${interest.party_name}; ${interest.interest_type}; effective ${interest.effective_from}${interest.effective_until ? ` to ${interest.effective_until}` : " onward"}; recordal ${interest.recordal_status}; source ${documents.find((document) => document.id === interest.evidence_reference)?.title ?? "instrument not available to you"}`; }
 
 function InterestTable({ rows, documents, empty }: { rows: IpTitleInterest[]; documents: IpDocument[]; empty: string }) {
   if (!rows.length) return <p className="mt-3 text-sm text-[var(--color-mute)]">{empty}</p>;
-  return <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)]"><th className="p-2">Party</th><th className="p-2">Interest</th><th className="p-2">Effective</th><th className="p-2">Recordal</th><th className="p-2">Scope</th><th className="p-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b border-[var(--color-line)]"><td className="p-2 font-medium">{row.party_name}</td><td className="p-2">{readable(row.interest_type)}</td><td className="p-2">{displayDate(row.effective_from)}{row.effective_until ? ` to ${displayDate(row.effective_until)}` : " onward"}</td><td className="p-2"><Badge tone={row.recordal_status === "recorded" ? "success" : "warning"}>{readable(row.recordal_status)}</Badge></td><td className="p-2">{String(row.scope_json.scope_kind ?? "whole right").replaceAll("_", " ")}</td><td className="p-2 break-all">{documents.find((document) => document.id === row.evidence_reference)?.title ?? row.evidence_reference}</td></tr>)}</tbody></table></div>;
+  return <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)]"><th className="p-2">Party</th><th className="p-2">Interest</th><th className="p-2">Effective</th><th className="p-2">Recordal</th><th className="p-2">Scope</th><th className="p-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b border-[var(--color-line)]"><td className="p-2 font-medium">{row.party_name}</td><td className="p-2">{readable(row.interest_type)}</td><td className="p-2">{displayDate(row.effective_from)}{row.effective_until ? ` to ${displayDate(row.effective_until)}` : " onward"}</td><td className="p-2"><Badge tone={row.recordal_status === "recorded" ? "success" : "warning"}>{readable(row.recordal_status)}</Badge></td><td className="p-2">{String(row.scope_json.scope_kind ?? "whole right").replaceAll("_", " ")}</td><td className="p-2 break-all">{documents.find((document) => document.id === row.evidence_reference)?.title ?? "Instrument not available to you"}</td></tr>)}</tbody></table></div>;
 }
 
 function EvidencePanel({ recordal, docket, documents, registry, deadlines }: { recordal: IpRecordal; docket: IpDocket; documents: IpDocument[]; registry: IpRegistryWorkspace[]; deadlines: IpLegalDeadline[] }) {
