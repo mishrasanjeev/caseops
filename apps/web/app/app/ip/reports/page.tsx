@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, FileChartColumn, LoaderCircle, Play, RefreshCw, Send } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -219,7 +220,7 @@ export default function IpReportsPage() {
         <Card data-testid="portal-report-publication">
           <CardHeader><CardTitle as="h2">Publish reviewed report</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Client" htmlFor="report-client"><select id="report-client" className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={portalUserId} onChange={(event) => { setPortalUserId(event.target.value); setSelectedGrantIds([]); }}><option value="">Select client</option>{portalUsers.map((grant) => <option key={grant.portal_user_id} value={grant.portal_user_id}>{grant.portal_user_name} · {grant.portal_user_email}</option>)}</select></Field>
+            <Field label="Client" htmlFor="report-client"><select id="report-client" className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60" value={portalUserId} disabled={!portalUsers.length} aria-describedby={portalUsers.length ? undefined : "report-client-empty"} onChange={(event) => { setPortalUserId(event.target.value); setSelectedGrantIds([]); }}><option value="">{grants.isPending ? "Loading clients…" : portalUsers.length ? "Select client" : "No client has portal access"}</option>{portalUsers.map((grant) => <option key={grant.portal_user_id} value={grant.portal_user_id}>{grant.portal_user_name} · {grant.portal_user_email}</option>)}</select>{!portalUsers.length && !grants.isPending ? <p id="report-client-empty" className="text-sm text-[var(--color-mute)]">Reports publish only to clients with active IP portal access. <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/client-portal">Grant access in Client portal</Link>.</p> : null}</Field>
             <Field label="Client title" htmlFor="report-client-title"><Input id="report-client-title" value={publicationTitle} onChange={(event) => setPublicationTitle(event.target.value)} /></Field>
             <Field label="Publish at" htmlFor="report-publish-at"><Input id="report-publish-at" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></Field>
             <div className="flex items-end"><Button className="w-full" onClick={() => publication.mutate()} disabled={publication.isPending || !portalUserId || !selectedGrantIds.length || publicationTitle.trim().length < 2 || report.confidentiality !== "internal"}><Send className="h-4 w-4" />{scheduledFor ? "Schedule" : "Publish"}</Button></div>

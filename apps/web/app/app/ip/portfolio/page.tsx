@@ -73,6 +73,7 @@ import {
   type IpPortfolioSavedView,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { parseNiceClasses } from "@/lib/ip/nice-classes";
 
 const COLUMN_OPTIONS = [
   ["mark", "Mark"],
@@ -141,6 +142,12 @@ export default function IpPortfolioPage() {
   const canView = useCapability("ip:read");
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<IpPortfolioFilters>(EMPTY_FILTERS);
+  // What the person typed in the Nice class filter; null shows the applied classes.
+  const [classDraft, setClassDraft] = useState<string | null>(null);
+  const classParse = parseNiceClasses(classDraft ?? "");
+  const classFilterError = classDraft !== null && classParse.errors.length
+    ? classParse.errors.map((row) => row.message).join(" ")
+    : null;
   const [queryDraft, setQueryDraft] = useState("");
   const [columns, setColumns] = useState<ColumnKey[]>(DEFAULT_COLUMNS);
   const [selectedViewId, setSelectedViewId] = useState("none");
@@ -276,6 +283,7 @@ export default function IpPortfolioPage() {
     const view = savedViews.data?.views.find((candidate) => candidate.id === id);
     if (!view) return;
     setFilters(view.filters);
+    setClassDraft(null);
     setQueryDraft(view.filters.query ?? "");
     setColumns(view.columns.filter(isColumnKey));
     if (viewMode === "tracker") {
@@ -333,6 +341,7 @@ export default function IpPortfolioPage() {
               </Button>
               <Button size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"}
                 aria-label="Deadline tracker view" title="Deadline tracker view" onClick={() => {
+                  setClassDraft(null);
                   setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state?.slice(0, 1) ?? [],
                     application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
                     renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to });
@@ -493,20 +502,28 @@ export default function IpPortfolioPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="portfolio-class-filter">Nice class</Label>
+                <Label htmlFor="portfolio-class-filter">Nice classes</Label>
                 <Input
                   id="portfolio-class-filter"
-                  inputMode="numeric"
-                  value={filters.nice_class?.[0] ?? ""}
+                  value={classDraft ?? (filters.nice_class ?? []).join(", ")}
+                  placeholder="e.g. 9, 42"
+                  aria-invalid={classFilterError ? true : undefined}
+                  aria-describedby={classFilterError ? "portfolio-class-filter-error" : undefined}
                   onChange={(event) => {
-                    const value = Number(event.target.value);
-                    setFilters((current) => ({
-                      ...current,
-                      nice_class:
-                        Number.isInteger(value) && value >= 1 && value <= 45 ? [value] : [],
-                    }));
+                    const text = event.target.value;
+                    setClassDraft(text);
+                    const parsed = parseNiceClasses(text);
+                    // An unreadable token keeps the last valid filter instead of silently widening it.
+                    if (!parsed.errors.length) {
+                      setFilters((current) => ({ ...current, nice_class: parsed.classes }));
+                    }
                   }}
                 />
+                {classFilterError ? (
+                  <p id="portfolio-class-filter-error" className="text-sm text-[var(--color-danger-500)]">
+                    {classFilterError}
+                  </p>
+                ) : null}
               </div>
               <FilterSelect
                 label="Deadline state"

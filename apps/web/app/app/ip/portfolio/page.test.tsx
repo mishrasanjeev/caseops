@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -235,6 +236,28 @@ describe("IpPortfolioPage", () => {
         expect.objectContaining({ rowLimit: 50000, previewToken: "export-preview-token" }),
       ),
     );
+  });
+
+  it("BUG-014 filters by every typed Nice class and flags a token that is not a class", async () => {
+    render(withClient(<IpPortfolioPage />));
+    await waitFor(() => expect(fetchPortfolioMock).toHaveBeenCalledTimes(1));
+    await userEvent.setup().click(screen.getByRole("button", { name: "More portfolio filters" }));
+    const field = await screen.findByLabelText("Nice classes");
+    fireEvent.change(field, { target: { value: "Class 30, 43" } });
+    await waitFor(() =>
+      expect(fetchPortfolioMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nice_class: [30, 43] }),
+        expect.anything(),
+      ),
+    );
+    expect(field).toHaveValue("Class 30, 43");
+    expect(field).not.toHaveAttribute("aria-invalid");
+    const calls = fetchPortfolioMock.mock.calls.length;
+    fireEvent.change(field, { target: { value: "Class 30, X" } });
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(/"X" is not a Nice class number/);
+    // The last valid filter stays applied; nothing is silently widened.
+    expect(fetchPortfolioMock.mock.calls.length).toBe(calls);
   });
 
   it("renders paginated application families and switches grouping axes", async () => {
