@@ -1279,7 +1279,8 @@ function ReviewPanel({ hit, onChanged }: { hit: IpWatchHit; onChanged: () => Pro
 function HandoffPanel({ hit, publication, core, membershipId, handoffs, onChanged }: { hit: IpWatchHit; publication: IpJournalPublication; core: IpCoreRecords | undefined; membershipId: string; handoffs: IpWatchHandoff[]; onChanged: () => Promise<void> }) {
   const applications = core?.applications ?? [];
   const [kind, setKind] = useState<IpWatchHandoff["handoff_kind"]>("opposition");
-  const [applicationId, setApplicationId] = useState(publication.application_id ?? applications[0]?.id ?? "");
+  // The journal entry's own application, or none: never the docket's first application.
+  const [applicationId, setApplicationId] = useState(publication.application_id ?? "");
   const [title, setTitle] = useState(`Review ${publication.mark_text || publication.application_number}`);
   const [matterCode, setMatterCode] = useState("");
   const [dueOn, setDueOn] = useState("");
