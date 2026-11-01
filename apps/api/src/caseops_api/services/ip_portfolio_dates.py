@@ -225,8 +225,21 @@ def current_date_facts(candidates, *, company_id):
 
 
 def page_date_details(session, *, company_id, docket_ids):
+    """The canonical ``current_dates`` record for each docket on a page."""
+
+    return page_source_details(session, company_id=company_id, docket_ids=docket_ids)[0]
+
+
+def page_source_details(session, *, company_id, docket_ids):
+    """One whole-proof read per page: canonical dates and declared source status.
+
+    The date record is exactly ``current_dates`` under the SQL proof. The
+    declared source Status (B4-ADJ-11) is not a date fact, so it is returned
+    beside the record, gated by the same proof, instead of inside it.
+    """
+
     if not docket_ids:
-        return {}
+        return {}, {}
     rows = session.execute(
         select(IpTrademarkParticularVersion, imported_proof_expression())
         .join(
@@ -238,16 +251,15 @@ def page_date_details(session, *, company_id, docket_ids):
             ),
         )
         .where(IpDocketRecord.company_id == company_id, IpDocketRecord.id.in_(docket_ids))
-    )
-    return {
-        version.docket_id: {
-            **current_dates(
-                session, version=version, docket_id=version.docket_id, imported_proven=proven
-            ),
-            **_declared_status(version, proven),
-        }
+    ).all()
+    dates = {
+        version.docket_id: current_dates(
+            session, version=version, docket_id=version.docket_id, imported_proven=proven
+        )
         for version, proven in rows
     }
+    statuses = {version.docket_id: _declared_status(version, proven) for version, proven in rows}
+    return dates, statuses
 
 
 # Longest source Status wording shown back to the lawyer.
