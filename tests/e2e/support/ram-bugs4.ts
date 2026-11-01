@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
-  expect, type APIRequestContext, type APIResponse, type Locator, type Page, type TestInfo,
+  expect, type APIRequestContext, type APIResponse, type Locator, type Page, type Response, type TestInfo,
 } from "@playwright/test";
 
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
@@ -59,7 +59,13 @@ function required(name: string): string {
   return value;
 }
 
-export async function json<T = any>(response: APIResponse, operation: string, expected = 200): Promise<T> {
+/**
+ * An API oracle response or a response the page itself received
+ * (`page.waitForResponse`): both expose the status and the JSON body.
+ */
+export type JsonResponse = Pick<APIResponse, "status" | "json"> | Pick<Response, "status" | "json">;
+
+export async function json<T = any>(response: JsonResponse, operation: string, expected = 200): Promise<T> {
   expect(response.status(), `${operation} returned ${response.status()}; body intentionally not logged.`).toBe(expected);
   return response.json() as Promise<T>;
 }
