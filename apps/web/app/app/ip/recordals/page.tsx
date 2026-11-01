@@ -45,7 +45,7 @@ import {
 import {
   createIpRecordal,
   fetchIpDocket,
-  fetchIpDockets,
+  fetchEveryIpDocket,
   fetchIpRecordalInstruments,
   fetchIpRecordals,
   fetchIpRecordalWorkspace,
@@ -252,8 +252,8 @@ export default function RecordalsPage() {
   });
   const selectedRecordal = recordals.data?.items.find((row) => row.id === selectedId) ?? null;
   const dockets = useQuery({
-    queryKey: ["ip", "dockets", "catalog"],
-    queryFn: fetchIpDockets,
+    queryKey: ["ip", "dockets", "catalog", "every"],
+    queryFn: ({ signal }) => fetchEveryIpDocket({ signal }),
     enabled: canRead && docketCatalogRequested,
   });
   const workspace = useQuery({
@@ -347,7 +347,7 @@ export default function RecordalsPage() {
               recordal={workspace.data?.recordal ?? selectedRecordal}
               docketTitle={selectedRecordal.docket_title}
               workspace={workspace.data ?? null}
-              allDockets={dockets.data?.dockets ?? (workspace.data ? [workspace.data.docket] : [])}
+              allDockets={dockets.data ?? (workspace.data ? [workspace.data.docket] : [])}
               workspacePending={workspace.isPending}
               workspaceError={workspace.isError ? workspace.error : null}
               onWorkspaceRetry={() => workspace.refetch()}

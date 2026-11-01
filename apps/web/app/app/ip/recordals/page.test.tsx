@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   docket: vi.fn(),
   dockets: vi.fn(),
+  everyDockets: vi.fn(),
   documents: vi.fn(),
   instruments: vi.fn(),
   recordals: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@/lib/api/endpoints", async () => {
     seedIpDocumentTaxonomy: mocks.seed,
     fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
+    fetchEveryIpDocket: mocks.everyDockets,
     fetchIpDocuments: mocks.documents,
     fetchIpDocumentTaxonomy: mocks.taxonomy,
     fetchIpRecordalInstruments: mocks.instruments,
@@ -233,7 +235,7 @@ describe("post-registration workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.capability.mockReturnValue(true);
-    mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
+    mocks.everyDockets.mockResolvedValue([DOCKET]);
     mocks.documents.mockResolvedValue({ items: [DOCUMENT], total: 1 });
     mocks.recordals.mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(WORKSPACE);
@@ -308,7 +310,7 @@ describe("post-registration workspace", () => {
       });
       await act(async () => { notifications.splice(0).forEach((callback) => callback()); });
       expect(notifications).toHaveLength(0);
-      expect(mocks.dockets).not.toHaveBeenCalled();
+      expect(mocks.everyDockets).not.toHaveBeenCalled();
       expect(mocks.documents).not.toHaveBeenCalled();
       notifyManager.setScheduler(defaultScheduler);
       await screen.findByRole("heading", { name: "Record transaction" });
@@ -344,19 +346,19 @@ describe("post-registration workspace", () => {
   it("renders the selected recordal before corpus-wide catalogs resolve", async () => {
     const user = userEvent.setup();
     const pendingCatalog = new Promise<never>(() => undefined);
-    mocks.dockets.mockReturnValue(pendingCatalog);
+    mocks.everyDockets.mockReturnValue(pendingCatalog);
     mocks.documents.mockReturnValue(pendingCatalog);
 
     render(<RecordalsPage />, { wrapper: wrapper() });
 
     expect(await screen.findByRole("heading", { name: "Assignment" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Recordal" })).toBeVisible();
-    expect(mocks.dockets).not.toHaveBeenCalled();
+    expect(mocks.everyDockets).not.toHaveBeenCalled();
     expect(mocks.workspace).toHaveBeenCalledWith("recordal-1");
 
     await user.click(screen.getByRole("tab", { name: "Title at date" }));
     expect(screen.getByRole("heading", { name: "Registry-recorded position" })).toBeVisible();
-    expect(mocks.dockets).toHaveBeenCalledTimes(1);
+    expect(mocks.everyDockets).toHaveBeenCalledTimes(1);
   });
 
   it("keeps responsive tabs available while one aggregate request is pending", async () => {
@@ -371,7 +373,7 @@ describe("post-registration workspace", () => {
     }
     expect(screen.getByTestId("recordal-workspace-loading")).toBeVisible();
     expect(mocks.workspace).toHaveBeenCalledTimes(1);
-    expect(mocks.dockets).not.toHaveBeenCalled();
+    expect(mocks.everyDockets).not.toHaveBeenCalled();
     expect(mocks.documents).not.toHaveBeenCalled();
   });
 

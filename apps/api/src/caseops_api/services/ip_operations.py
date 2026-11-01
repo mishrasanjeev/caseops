@@ -1203,11 +1203,10 @@ def list_ip_dockets(
     scope = _visible_docket_scope(session, context=context)
     requested = set(record_types or ())
     if requested:
-        scope.append(
-            IpDocketRecord.record_type.in_(
-                tuple(record_type for record_type in TRADEMARK_RECORD_TYPES if record_type in requested)
-            )
+        listed_types = tuple(
+            record_type for record_type in TRADEMARK_RECORD_TYPES if record_type in requested
         )
+        scope.append(IpDocketRecord.record_type.in_(listed_types))
     if search:
         scope.append(
             or_(

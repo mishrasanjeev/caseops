@@ -4,7 +4,9 @@ const { call } = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("./client", () => ({
   apiRequest: call, apiBlobRequest: vi.fn(), fetchWithTimeout: vi.fn(), getCsrfHeaders: vi.fn(),
 }));
-import { fetchIpForeignAssociateInstructions, fetchIpRecordals, fetchMadridRecords } from "./endpoints";
+import {
+  fetchEveryIpDocket, fetchIpForeignAssociateInstructions, fetchIpRecordals, fetchMadridRecords,
+} from "./endpoints";
 
 const TOTAL = 230;
 
@@ -111,5 +113,32 @@ describe("IP offset-paged lists read the whole population", () => {
       })
       .mockRejectedValueOnce(new Error("Service unavailable"));
     await expect(fetchIpRecordals()).rejects.toThrow("Service unavailable");
+  });
+});
+
+describe("every IP docket follows the keyset cursor", () => {
+  beforeEach(() => call.mockReset());
+
+  function page(ids: string[], next: string | null, total: number) {
+    return { dockets: ids.map((id) => ({ id })), count: ids.length, has_more: next !== null, next_cursor: next, total_count: total };
+  }
+
+  it("returns docket 201 onwards for the recordal title check", async () => {
+    const ids = Array.from({ length: 230 }, (_, index) => `docket-${index}`);
+    call
+      .mockResolvedValueOnce(page(ids.slice(0, 200), "c1", 230))
+      .mockResolvedValueOnce(page(ids.slice(200), null, 230));
+    const every = await fetchEveryIpDocket();
+    expect(every.map((docket) => docket.id)).toEqual(ids);
+    expect(requested().map((url) => [url.searchParams.get("limit"), url.searchParams.get("cursor")])).toEqual([
+      ["200", null],
+      ["200", "c1"],
+    ]);
+  });
+
+  it("reads again, then fails visibly, when dockets keep moving mid-read", async () => {
+    call.mockResolvedValue(page(["docket-0"], null, 2));
+    await expect(fetchEveryIpDocket()).rejects.toThrow(/changed while it was loading/);
+    expect(call).toHaveBeenCalledTimes(2);
   });
 });

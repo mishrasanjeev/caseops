@@ -11752,6 +11752,27 @@ export async function fetchIpDockets(params: IpDocketListParams = {}): Promise<I
   return apiRequest(`/api/ip/dockets${suffix ? `?${suffix}` : ""}`, { signal: params.signal });
 }
 
+/**
+ * Every visible trademark docket, following the keyset cursor to the last
+ * page. For whole-portfolio checks (a relationship cycle can run through any
+ * docket); pickers page with IpDocketPicker instead.
+ */
+export async function fetchEveryIpDocket(options?: { signal?: AbortSignal }): Promise<IpDocket[]> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const rows = new Map<string, IpDocket>();
+    let total = 0;
+    let cursor: string | null = null;
+    do {
+      const page: IpDocketListPage = await fetchIpDockets({ cursor, limit: 200, signal: options?.signal });
+      total = page.total_count ?? total;
+      for (const docket of page.dockets) rows.set(docket.id, docket);
+      cursor = page.has_more ? page.next_cursor ?? null : null;
+    } while (cursor);
+    if (rows.size >= total) return [...rows.values()];
+  }
+  throw new Error("The docket list changed while it was loading. Try again to check every docket.");
+}
+
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
 }
