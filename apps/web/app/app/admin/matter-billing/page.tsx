@@ -227,7 +227,7 @@ export default function AdminMatterBillingPage() {
         throw new Error("Load a billing profile before adding a rate.");
       }
       return createMatterBillingRate({
-        profileId: profileForRate || profilesQuery.data?.profiles[0]?.id || "",
+        profileId: rateProfileId,
         body: {
           rate_scope: rateScope,
           amount_minor_per_hour: rupeesToMinor(rateValue),
@@ -264,6 +264,11 @@ export default function AdminMatterBillingPage() {
   }
 
   const profiles = profilesQuery.data?.profiles ?? [];
+  // The single default profile is the only possible target; with several, the
+  // user chooses (never the first by default). No profile: nothing to choose.
+  const rateProfileId = profiles.some((profile) => profile.id === profileForRate)
+    ? profileForRate
+    : profiles.length === 1 ? profiles[0].id : "";
 
   return (
     <div className="flex flex-col gap-5">
@@ -384,9 +389,14 @@ export default function AdminMatterBillingPage() {
           <Field label="Profile">
             <select
               className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 text-sm"
-              value={profileForRate || profiles[0]?.id || ""}
+              value={rateProfileId}
+              disabled={!profiles.length}
+              aria-describedby={profiles.length ? undefined : "matter-billing-rate-profile-reason"}
               onChange={(event) => setProfileForRate(event.target.value)}
             >
+              {profiles.length === 1 ? null : (
+                <option value="" disabled>{profiles.length ? "Select a profile" : "No billing profile yet"}</option>
+              )}
               {profiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.name}
@@ -422,10 +432,15 @@ export default function AdminMatterBillingPage() {
           <Button
             type="button"
             onClick={() => addRateMutation.mutate()}
-            disabled={!profilesQuery.isSuccess || !profiles.length || saveProfileMutation.isPending || addRateMutation.isPending || !rateValue}
+            disabled={!profilesQuery.isSuccess || !rateProfileId || saveProfileMutation.isPending || addRateMutation.isPending || !rateValue}
           >
             Add rate
           </Button>
+          {profilesQuery.isSuccess && !profiles.length ? (
+            <p id="matter-billing-rate-profile-reason" className="text-xs text-[var(--color-mute)] md:col-span-4">
+              Rates belong to a billing profile. Save the default profile above first.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
