@@ -1085,8 +1085,13 @@ def test_a1_pg_confirmation_then_disable_sees_the_confirmed_owners(
 
 
 def test_a1_pg_runtime_writers_left_no_ownership_violations(pg_engine) -> None:
-    """The same audit over every row the concurrent writers above created."""
+    """The same audit over every row the runtime writers created.
 
+    CI shards this module, so the writers above may run in another shard; one
+    governed company is written here so the audit never runs over nothing.
+    """
+
+    _governed(pg_engine)
     with pg_engine.connect() as connection:
         connection.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         audit = ownership_audit(connection)

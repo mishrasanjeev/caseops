@@ -119,7 +119,6 @@ const RETIRABLE: IpDocumentRetirementPreview = {
 function renderWorkspace(props: { canManage?: boolean; canUpload?: boolean } = {}) {
   return render(withClient(
     <IpDocumentWorkspace
-      dockets={[]}
       canUpload={props.canUpload ?? false}
       canManage={props.canManage ?? true}
       canReview={false}
