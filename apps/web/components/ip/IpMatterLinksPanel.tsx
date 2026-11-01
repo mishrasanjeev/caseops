@@ -212,7 +212,7 @@ export function IpMatterLinksPanel({
   });
 
   return (
-    <Card className="min-w-0" data-testid="ip-matter-links-panel">
+    <Card id="ip-matter-links" className="min-w-0 scroll-mt-24" data-testid="ip-matter-links-panel">
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div>
           <CardTitle as="h3">Matter relationships</CardTitle>

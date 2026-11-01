@@ -463,6 +463,14 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         session.add(wall)
         session.commit()
         wall_id = wall.id
+    # The responsibility pickers offer exactly what confirmation accepts.
+    walled_view = client.get(
+        f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
+    )
+    assert walled_view.status_code == 200, walled_view.text
+    walled_eligible = walled_view.json()["eligible_responsible_membership_ids"]
+    assert reviewer_id not in walled_eligible
+    assert {owner_id, legal_id} <= set(walled_eligible)
     blocked_by_ip_wall = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
         headers=legal_headers,
@@ -477,6 +485,12 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         wall = session.get(EthicalWall, wall_id)
         assert wall is not None
         session.delete(wall)
+        session.commit()
+    unwalled_view = client.get(
+        f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
+    )
+    assert reviewer_id in unwalled_view.json()["eligible_responsible_membership_ids"]
+    with get_session_factory()() as session:
         session.add_all(
             [
                 UserCalendarConnection(

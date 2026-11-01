@@ -191,6 +191,9 @@ IpGovernanceBlockReason = Literal[
     "proposer_unavailable",
     "proposer_cannot_self_approve",
     "no_qualified_reviewer",
+    # Too few other active owners, admins or partners: a calendar needs one
+    # approver other than its proposer, a rule two (reviewer and approver).
+    "no_other_approver",
     "fixtures_not_passing",
 ]
 
@@ -279,6 +282,10 @@ class IpRuleImpactResponse(BaseModel):
     open_deadline_count: int
     candidate_deadline_count: int
     confirmed_deadlines_preserved: bool = True
+    # Active versions of the same rule whose effective range the candidate
+    # collides with: activating it retires them, and only with explicit
+    # ``supersede_overlapping``. Always empty for an active version.
+    superseded_versions: list[int] = Field(default_factory=list)
 
 
 class IpCompanyRuleSelectionRequest(BaseModel):
@@ -342,6 +349,12 @@ class LegalCalendarActivationRequest(BaseModel):
     conflict_reviewed: bool = False
 
 
+class LegalCalendarWithdrawalRequest(BaseModel):
+    """The proposer withdraws its own candidate before anyone activates it."""
+
+    reason: str = Field(min_length=5, max_length=2000)
+
+
 class LegalCalendarVersionRecord(BaseModel):
     id: str
     calendar_id: str
@@ -368,6 +381,8 @@ class LegalCalendarVersionRecord(BaseModel):
     can_activate: bool = False
     activation_blocked_reason: IpGovernanceBlockReason | None = None
     activation_blocked_reasons: list[IpGovernanceBlockReason] = Field(default_factory=list)
+    # The viewer proposed this candidate and may still withdraw it.
+    can_withdraw: bool = False
 
 
 class IpResponsibilityInput(BaseModel):
@@ -507,6 +522,11 @@ class IpDeadlineWorkspaceResponse(BaseModel):
     docket_id: str
     rules: list[IpRuleVersionRecord]
     eligible_rule_version_ids: list[str] = Field(default_factory=list)
+    # Members the deadline confirmation validator accepts as responsible,
+    # backup or supervisor on this docket: active, with stable Matter and
+    # IP-record access (no ethical wall, a grant where the docket is
+    # restricted). Responsibility pickers offer exactly these.
+    eligible_responsible_membership_ids: list[str] = Field(default_factory=list)
     calendars: list[LegalCalendarVersionRecord]
     deadlines: list[IpDeadlineRecord]
     exceptions: list[IpDeadlineExceptionRecord]

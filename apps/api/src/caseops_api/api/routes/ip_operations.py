@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from caseops_api.api.dependencies import (
     DbSession,
     require_all_capabilities,
+    require_any_capability,
     require_capability,
 )
 from caseops_api.api.routes.ip_patents import router as patent_router
@@ -74,6 +75,7 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarActivationRequest,
     LegalCalendarVersionProposalRequest,
     LegalCalendarVersionRecord,
+    LegalCalendarWithdrawalRequest,
 )
 from caseops_api.schemas.ip_documents import (
     IpDocumentAddLinksRequest,
@@ -319,6 +321,7 @@ from caseops_api.services.ip_deadline_workflow import (
     rule_impact,
     select_company_rule_version,
     transition_rule_version,
+    withdraw_calendar_version,
 )
 from caseops_api.services.ip_document_workflow import (
     add_ip_document_links,
@@ -540,6 +543,12 @@ IpRuleProposer = Annotated[
 IpRuleActivator = Annotated[
     SessionContext,
     Depends(require_capability("ip:rules_activate")),
+]
+# Company rule selection is a compare-and-swap made by activators, so everyone
+# who may select (ip:rules_activate) or propose rules can read the current one.
+IpRulePolicyReader = Annotated[
+    SessionContext,
+    Depends(require_any_capability("ip:rules_propose", "ip:rules_activate")),
 ]
 IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
 IpWorkspaceAdmin = Annotated[
@@ -1283,7 +1292,7 @@ async def post_ip_deadline_rule_transition(
     response_model=list[IpCompanyRulePolicyRecord],
 )
 async def get_ip_rule_policies(
-    context: IpRuleProposer,
+    context: IpRulePolicyReader,
     session: DbSession,
 ) -> list[IpCompanyRulePolicyRecord]:
     return list_company_rule_policies(session, context=context)
@@ -1325,6 +1334,24 @@ async def post_ip_working_calendar_activation(
     session: DbSession,
 ) -> LegalCalendarVersionRecord:
     return activate_calendar_version(
+        session,
+        context=context,
+        calendar_version_id=calendar_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/working-calendars/{calendar_version_id}/withdraw",
+    response_model=LegalCalendarVersionRecord,
+)
+async def post_ip_working_calendar_withdrawal(
+    calendar_version_id: str,
+    payload: LegalCalendarWithdrawalRequest,
+    context: IpRuleProposer,
+    session: DbSession,
+) -> LegalCalendarVersionRecord:
+    return withdraw_calendar_version(
         session,
         context=context,
         calendar_version_id=calendar_version_id,

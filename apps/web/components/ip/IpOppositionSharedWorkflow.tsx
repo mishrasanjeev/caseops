@@ -5,16 +5,19 @@ import { CalendarPlus, Check, FileArchive, Gavel, Link2, TimerReset } from "luci
 import { cloneElement, useEffect, useId, useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { PersonChecklist, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpSharedHearing,
+  fetchIpDeadlineWorkspace,
   fetchIpOppositionSharedWorkflow,
   recordIpOppositionSharedAction,
   type IpDocket,
@@ -81,6 +84,14 @@ export function IpOppositionSharedWorkflow({
     queryKey,
     queryFn: () => fetchIpOppositionSharedWorkflow({ docketId: docket.id, proceedingId: proceeding.id }),
   });
+  // An extension re-confirms the deadline: offer exactly the people its
+  // confirmation accepts (stable Matter and IP-record access).
+  const deadlineWorkspace = useQuery({
+    queryKey: ["ip", "deadline-workspace", docket.id],
+    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
+  });
+  const responsibleIds = deadlineWorkspace.data?.eligible_responsible_membership_ids;
+  const responsibleEmpty = "No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.";
 
   const [actionKind, setActionKind] = useState<ActionKind>("deadline_extended");
   const [sourceReference, setSourceReference] = useState("");
@@ -309,7 +320,7 @@ export function IpOppositionSharedWorkflow({
     && reason.trim().length >= 5 && confirmation.trim().length >= 2 && refs(evidenceRefs).length,
   );
   const detailReady = actionKind === "deadline_extended"
-    ? Boolean(selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
+    ? Boolean(docket.matter_id && selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
     : actionKind === "further_evidence_leave_recorded"
       ? Boolean(leaveReference.trim() && leaveScope.trim().length >= 5 && leaveGrantedOn)
       : actionKind === "evidence_package_recorded"
@@ -345,8 +356,10 @@ export function IpOppositionSharedWorkflow({
         {actionKind === "deadline_extended" ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Active deadline"><select className={SELECT_CLASS} value={deadlineId} onChange={(event) => setDeadlineId(event.target.value)}><option value="">Select deadline</option>{workflow.data.active_deadlines.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.result_on ?? "unresolved"}</option>)}</select></Field>
           <Field label="Extended result date"><Input type="date" value={newDeadlineOn} onChange={(event) => setNewDeadlineOn(event.target.value)} /></Field>
-          <Field label="Primary membership ID"><Input value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} /></Field>
-          <Field label="Backup membership ID"><Input value={backupId} onChange={(event) => setBackupId(event.target.value)} /></Field>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} /></div>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} placeholder="Select a backup…" /></div>
+          {docket.matter_id ? null : <IpMatterLinkRequired id="shared-extension-matter-required" docketId={docket.id} />}
+          {deadlineWorkspace.isError ? <p className="text-xs text-[var(--color-danger)] md:col-span-2 xl:col-span-4" role="alert">Colleagues who can own this deadline could not be loaded. <button type="button" className="underline" onClick={() => deadlineWorkspace.refetch()}>Retry</button></p> : null}
         </div> : null}
 
         {actionKind === "further_evidence_leave_recorded" ? <div className="grid gap-3 md:grid-cols-3">
@@ -385,7 +398,7 @@ export function IpOppositionSharedWorkflow({
           <Field label="Evidence documents"><Input value={hearingEvidenceRefs} onChange={(event) => setHearingEvidenceRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Authorities"><Input value={authorityRefs} onChange={(event) => setAuthorityRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Written submissions"><Input value={submissionRefs} onChange={(event) => setSubmissionRefs(event.target.value)} placeholder="Comma separated" /></Field>
-          <Field label="Attendance membership IDs"><Input value={attendanceIds} onChange={(event) => setAttendanceIds(event.target.value)} placeholder="Comma separated" /></Field>
+          <PersonChecklist id="shared-hearing-attendance" legend="Attending colleagues" value={refs(attendanceIds)} onChange={(ids) => setAttendanceIds(ids.join(","))} />
           <Field label="Cause-list source"><Input value={causeListSource} onChange={(event) => setCauseListSource(event.target.value)} /></Field>
           {actionKind === "post_hearing_note_recorded" ? <Field label="Post-hearing note"><Textarea value={postHearingNotes} onChange={(event) => setPostHearingNotes(event.target.value)} /></Field> : null}
         </div> : null}

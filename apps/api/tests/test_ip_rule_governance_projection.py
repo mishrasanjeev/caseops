@@ -15,6 +15,8 @@ the projection enables is accepted and an option it blocks is refused:
 * ``GOV-PROJ-06`` failing fixtures, unsupported kinds and missing proposers
 * ``GOV-PROJ-07`` another tenant's versions, members and entitlement never leak
 * ``GOV-PROJ-08`` source hashes are SHA-256 hex: field-addressed 422s
+* ``GOV-PROJ-09`` too few other approvers is named, for calendars and rules
+* ``GOV-PROJ-10`` only the proposer withdraws its own candidate calendar
 """
 
 from __future__ import annotations
@@ -24,10 +26,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import CompanyMembership, LegalWorkingCalendarVersion
+from caseops_api.db.models import AuditEvent, CompanyMembership, LegalWorkingCalendarVersion
 from caseops_api.db.session import get_session_factory
 from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
 from tests.test_clients import _mk_matter
@@ -419,3 +421,106 @@ def test_gov_proj_08_legacy_non_hex_calendar_hash_refuses_calculation_explicitly
         headers=governed["legal"]["headers"],
     )
     assert workspace.status_code == 200, workspace.text
+
+
+def test_gov_proj_09_too_few_other_approvers_is_named(client: TestClient) -> None:
+    """Ram 2026-10-31 BUG-005/006: a proposer alone in the workspace was told
+    another approver must activate, with no way to learn none exists. A
+    calendar needs one other owner, admin or partner; a rule needs two."""
+
+    company = _with_docket(client, _company(client, "gov-proj-solo"))
+    calendar = client.post(
+        "/api/ip/working-calendars", headers=company["headers"], json=_calendar_payload()
+    )
+    assert calendar.status_code == 201, calendar.text
+    calendar_id = calendar.json()["id"]
+    assert calendar.json()["activation_blocked_reasons"] == [
+        "proposer_cannot_self_approve",
+        "no_other_approver",
+    ]
+    rule_id = _propose(client, company["headers"])["id"]
+    alone = _workspace(client, company, company["headers"])
+    assert _record(alone, "rules", rule_id)["activation_blocked_reasons"] == [
+        "proposer_cannot_self_approve",
+        "no_qualified_reviewer",
+    ]
+
+    approver = _user(client, company, name="Second Approver")
+    owner_view = _workspace(client, company, company["headers"])
+    assert _record(owner_view, "calendars", calendar_id)["activation_blocked_reasons"] == [
+        "proposer_cannot_self_approve"
+    ]
+    assert _record(owner_view, "rules", rule_id)["activation_blocked_reasons"] == [
+        "proposer_cannot_self_approve",
+        "no_other_approver",
+    ]
+    approver_view = _workspace(client, company, approver["headers"])
+    assert _record(approver_view, "calendars", calendar_id)["can_activate"] is True
+    assert _record(approver_view, "rules", rule_id)["activation_blocked_reasons"] == [
+        "no_qualified_reviewer"
+    ]
+
+    reviewer = _user(client, company, name="Third Approver")
+    complete = _workspace(client, company, company["headers"])
+    assert _record(complete, "rules", rule_id)["activation_blocked_reasons"] == [
+        "proposer_cannot_self_approve"
+    ]
+    approver_view = _workspace(client, company, approver["headers"])
+    assert _record(approver_view, "rules", rule_id)["can_activate"] is True
+    activated = client.post(
+        f"/api/ip/deadline-rules/{rule_id}/activate",
+        headers=approver["headers"],
+        json={"reviewer_membership_id": reviewer["membership_id"]},
+    )
+    assert activated.status_code == 200, activated.text
+
+
+def test_gov_proj_10_only_the_proposer_withdraws_a_candidate_calendar(
+    client: TestClient,
+) -> None:
+    company = _with_docket(client, _company(client, "gov-proj-withdraw"))
+    approver = _user(client, company, name="Calendar Approver")
+    member = _user(client, company, name="Calendar Member", role="member")
+    proposed = client.post(
+        "/api/ip/working-calendars", headers=company["headers"], json=_calendar_payload()
+    )
+    assert proposed.status_code == 201, proposed.text
+    calendar_id = proposed.json()["id"]
+    assert proposed.json()["can_withdraw"] is True
+    approver_view = _workspace(client, company, approver["headers"])
+    assert _record(approver_view, "calendars", calendar_id)["can_withdraw"] is False
+
+    url = f"/api/ip/working-calendars/{calendar_id}/withdraw"
+    reason = {"reason": "Proposed against the wrong holiday list."}
+    assert client.post(url, headers=approver["headers"], json=reason).status_code == 403
+    assert client.post(url, headers=member["headers"], json=reason).status_code == 403
+    assert client.post(url, headers=company["headers"], json={"reason": "no"}).status_code == 422
+
+    other = _company(client, "gov-proj-withdraw-other")
+    assert client.post(url, headers=other["headers"], json=reason).status_code == 404
+    unentitled = _company(client, "gov-proj-withdraw-plain", entitled=False)
+    refused = client.post(url, headers=unentitled["headers"], json=reason)
+    assert refused.status_code == 403, refused.text
+
+    withdrawn = client.post(url, headers=company["headers"], json=reason)
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert withdrawn.json()["status"] == "retired"
+    assert withdrawn.json()["can_withdraw"] is False
+    assert withdrawn.json()["can_activate"] is False
+    assert client.post(url, headers=company["headers"], json=reason).status_code == 409
+    late = client.post(
+        f"/api/ip/working-calendars/{calendar_id}/activate",
+        headers=approver["headers"],
+        json={"reason": "Activating a withdrawn calendar version."},
+    )
+    assert late.status_code == 409, late.text
+    with get_session_factory()() as session:
+        events = session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.action == "ip.working_calendar.withdrawn",
+                AuditEvent.target_id == calendar_id,
+            )
+        ).all()
+        assert len(events) == 1
+        assert events[0].company_id == company["company_id"]
+        assert json.loads(events[0].metadata_json or "{}")["reason"] == reason["reason"]

@@ -312,7 +312,7 @@ async function proposeAndConfirm(page: Page, backupMembershipId: string) {
   const proposed = page.waitForResponse((row) => row.url().endsWith("/opponent-deadlines") && row.request().method() === "POST");
   await opponent.getByRole("button", { name: "Propose deadline" }).click();
   expect((await proposed).status()).toBe(201);
-  await opponent.getByLabel("Opponent backup membership ID").fill(backupMembershipId);
+  await opponent.getByLabel("Opponent backup lawyer").selectOption(backupMembershipId);
   const confirmed = page.waitForResponse((row) => row.url().endsWith("/confirm") && row.request().method() === "POST");
   await opponent.getByRole("button", { name: "Confirm" }).click();
   expect((await confirmed).status()).toBe(200);

@@ -418,6 +418,9 @@ class IpOppositionOpponentWorkflowResponse(BaseModel):
         "record_reply_evidence_decision",
         "await_hearing_or_later_stage",
     ]
+    # Opposition-workspace readiness gaps that refuse a deadline proposal now
+    # (the proposer's own predicate); empty when a proposal may be made.
+    deadline_proposal_gaps: list[str] = Field(default_factory=list)
 
 
 class IpOppositionEvidencePackage(BaseModel):

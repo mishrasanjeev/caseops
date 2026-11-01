@@ -267,6 +267,12 @@ def get_opponent_workflow(
     profile = _profile(events)
     if profile is None:
         raise HTTPException(status_code=409, detail="Confirm the opposition profile first.")
+    readiness = get_opposition_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding.id,
+    ).readiness_gaps
     deadlines = _deadline_rows(session, proceeding=proceeding, events=events)
     number_confirmed = _number_is_confirmed(session, proceeding)
     rejection = _latest_action(actions, {"notice_filing_rejected"})
@@ -296,7 +302,39 @@ def get_opponent_workflow(
             actions=actions,
             deadlines=deadlines,
         ),
+        deadline_proposal_gaps=_blocking_readiness_gaps(readiness, _DEADLINE_PROPOSAL_READINESS),
     )
+
+
+# What each readiness gap asks the lawyer to add, for refusal messages.
+_READINESS_GAP_LABELS = {
+    "linked_application_required": "the opposed application",
+    "confirmed_application_identifier_required": "a confirmed application number",
+    "confirmed_opposition_identifier_required": "a confirmed opposition number",
+    "applicant_party_required": "the applicant party",
+    "opponent_party_required": "the opponent party",
+    "opposition_profile_required": "the confirmed opposition profile",
+    "applicable_rule_version_required": "the applicable rules version",
+    "forum_required": "the forum",
+    "source_notice_required": "the source notice",
+    "grounds_required": "at least one ground of opposition",
+    "challenged_scope_required": "the challenged goods and services",
+    "service_fact_required": "the service record",
+    "confirmed_client_instruction_required": "a confirmed client instruction",
+    "limitation_date_required": "the limitation date",
+    "relied_on_right_required": "at least one relied-on earlier right",
+}
+
+# A deadline proposal is checked like an instruction escalation: it may precede
+# both the opposition number and the client's confirmed instruction.
+_DEADLINE_PROPOSAL_READINESS = "client_instruction_escalated"
+
+
+def _blocking_readiness_gaps(readiness_gaps: list[str], action_kind: str) -> list[str]:
+    allowed = {"confirmed_opposition_identifier_required"}
+    if action_kind in {"client_instruction_escalated", "watch_hit_closed"}:
+        allowed.add("confirmed_client_instruction_required")
+    return [row for row in readiness_gaps if row not in allowed]
 
 
 def _assert_action_readiness(
@@ -313,14 +351,16 @@ def _assert_action_readiness(
         docket_id=docket.id,
         proceeding_id=proceeding.id,
     )
-    allowed = {"confirmed_opposition_identifier_required"}
-    if action_kind in {"client_instruction_escalated", "watch_hit_closed"}:
-        allowed.add("confirmed_client_instruction_required")
-    gaps = [row for row in workspace.readiness_gaps if row not in allowed]
+    gaps = _blocking_readiness_gaps(workspace.readiness_gaps, action_kind)
     if gaps:
+        missing = ", ".join(_READINESS_GAP_LABELS.get(row, row.replace("_", " ")) for row in gaps)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "ip_opposition_opponent_not_ready", "gaps": gaps},
+            detail={
+                "code": "ip_opposition_opponent_not_ready",
+                "gaps": gaps,
+                "detail": f"Complete the opposition workspace first: add {missing}.",
+            },
         )
 
 
@@ -535,7 +575,7 @@ def propose_opponent_deadline(
         context=context,
         docket=docket,
         proceeding=proceeding,
-        action_kind="client_instruction_escalated",
+        action_kind=_DEADLINE_PROPOSAL_READINESS,
     )
     expected_stage = {
         "notice_filing_due": "draft",

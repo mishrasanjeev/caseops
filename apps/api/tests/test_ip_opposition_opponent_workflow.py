@@ -327,6 +327,12 @@ def test_iplf_uj_13_normal_tracks_notice_rule45_and_rule47(client: TestClient) -
         docket=docket,
         proceeding=proceeding,
     )
+    ready = client.get(
+        _route(_OPPONENT_WORKFLOW_ROUTE, docket, proceeding),
+        headers=auth_headers(str(bootstrap["access_token"])),
+    )
+    assert ready.status_code == 200, ready.text
+    assert ready.json()["deadline_proposal_gaps"] == []
     _propose_and_confirm(
         client,
         bootstrap=bootstrap,
@@ -809,3 +815,56 @@ def test_opponent_actions_and_deadlines_fail_closed_out_of_sequence(
     )
     assert out_of_stage.status_code == 409, out_of_stage.text
     assert "requires opposition stage 'draft'" in out_of_stage.json()["detail"]
+
+
+def test_bug003_opponent_deadline_readiness_is_projected_and_readable(
+    client: TestClient,
+) -> None:
+    """Ram 2026-10-31 BUG-003: after the governed rule picker, "Propose deadline"
+    answered a bare "Conflict". The proposer's own readiness predicate is now on
+    the workflow, and its refusal names what to add."""
+
+    bootstrap, _, docket, proceeding = _fixture(client)
+    workspace = _complete_workspace(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        client_instruction_state="confirmed",
+        client_instruction_reference="client-instruction:042",
+        limitation_date="2026-09-22",
+        relied_on_rights=[],
+        service=None,
+    )
+    headers = auth_headers(str(bootstrap["access_token"]))
+    workflow = client.get(_route(_OPPONENT_WORKFLOW_ROUTE, docket, proceeding), headers=headers)
+    assert workflow.status_code == 200, workflow.text
+    assert workflow.json()["next_required_action"] == "propose_notice_filing_deadline"
+    assert workflow.json()["deadline_proposal_gaps"] == ["relied_on_right_required"]
+
+    rule, calendar, _, _ = _governed_rule(
+        client,
+        bootstrap=bootstrap,
+        workflow_stage="notice_filing_due",
+    )
+    refused = client.post(
+        _route(_OPPONENT_DEADLINES_ROUTE, docket, proceeding),
+        headers=headers,
+        json={
+            "workflow_stage": "notice_filing_due",
+            "trigger_event_id": workspace["profile_event"]["id"],
+            "rule_version_id": rule["id"],
+            "calendar_version_id": calendar["id"],
+            "base_date": "2026-08-23",
+            "base_date_certainty": "certain",
+            "date_precision": "date",
+            "is_critical": True,
+        },
+    )
+    assert refused.status_code == 409, refused.text
+    body = refused.json()
+    assert body["code"] == "ip_opposition_opponent_not_ready"
+    assert body["gaps"] == ["relied_on_right_required"]
+    assert body["detail"] == (
+        "Complete the opposition workspace first: add at least one relied-on earlier right."
+    )

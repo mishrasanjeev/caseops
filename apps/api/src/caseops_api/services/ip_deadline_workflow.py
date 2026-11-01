@@ -72,6 +72,7 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarSnapshot,
     LegalCalendarVersionProposalRequest,
     LegalCalendarVersionRecord,
+    LegalCalendarWithdrawalRequest,
     ResponsibilityEvidence,
 )
 from caseops_api.schemas.matters import MatterDeadlineUpdateRequest
@@ -497,6 +498,9 @@ class _GovernanceViewer:
     # resolved when the viewer itself can activate rules.
     reviewer_ids: frozenset[str]
     usable_proposer_ids: frozenset[str]
+    # Every active member holding ip:rules_activate, the viewer included. Only
+    # counted, never returned: it decides ``no_other_approver``.
+    approver_ids: frozenset[str] = frozenset()
 
     def projection(self) -> IpDeadlineGovernanceProjection:
         return IpDeadlineGovernanceProjection(**self.actions)
@@ -534,23 +538,23 @@ def _governance_viewer(
             rollout_flag=_RULE_GOVERNANCE.rollout_flag if fenced else None,
         )
     can_activate_rules = held["ip:rules_activate"]
-    reviewer_ids: frozenset[str] = frozenset()
-    if can_activate_rules:
-        candidates = session.scalars(
-            select(CompanyMembership)
-            .options(joinedload(CompanyMembership.user))
-            .where(
-                CompanyMembership.company_id == context.company.id,
-                CompanyMembership.is_active.is_(True),
-                CompanyMembership.id != viewer.id,
-            )
-            .order_by(CompanyMembership.id)
-        ).unique()
-        reviewer_ids = frozenset(
-            member.id
-            for member in candidates
-            if _member_holds_capability(session, member, "ip:rules_activate")
+    members = session.scalars(
+        select(CompanyMembership)
+        .options(joinedload(CompanyMembership.user))
+        .where(
+            CompanyMembership.company_id == context.company.id,
+            CompanyMembership.is_active.is_(True),
         )
+        .order_by(CompanyMembership.id)
+    ).unique()
+    approver_ids = frozenset(
+        member.id
+        for member in members
+        if _member_holds_capability(session, member, "ip:rules_activate")
+    )
+    reviewer_ids: frozenset[str] = (
+        approver_ids - {viewer.id} if can_activate_rules else frozenset()
+    )
     usable: frozenset[str] = frozenset()
     if proposer_ids:
         usable = frozenset(
@@ -571,6 +575,7 @@ def _governance_viewer(
         can_activate_rules=can_activate_rules,
         reviewer_ids=reviewer_ids,
         usable_proposer_ids=usable,
+        approver_ids=approver_ids,
     )
 
 
@@ -601,6 +606,13 @@ def _rule_activation_projection(
             eligible = sorted(viewer.reviewer_ids - {proposer})
             if not eligible:
                 reasons.append("no_qualified_reviewer")
+        # Activation needs a reviewer and a legal approver, both qualified and
+        # neither the proposer; say so to everyone, not only to activators.
+        if (
+            "no_qualified_reviewer" not in reasons
+            and len(viewer.approver_ids - {proposer}) < 2
+        ):
+            reasons.append("no_other_approver")
         if rule_set.rule_kind == "deadline":
             fixture_ids, passed_ids = _rule_fixture_results(row, rule_set)
             if not fixture_ids or set(fixture_ids) != set(passed_ids):
@@ -673,6 +685,8 @@ def _calendar_record(
     reasons.extend(viewer.actions["calendar_activation"].reasons)
     if row.status == "candidate" and row.proposed_by_membership_id == viewer.membership_id:
         reasons.append("proposer_cannot_self_approve")
+    if row.status == "candidate" and not viewer.approver_ids - {row.proposed_by_membership_id}:
+        reasons.append("no_other_approver")
     return LegalCalendarVersionRecord(
         id=row.id,
         calendar_id=calendar.id,
@@ -699,6 +713,12 @@ def _calendar_record(
         can_activate=not reasons,
         activation_blocked_reason=reasons[0] if reasons else None,
         activation_blocked_reasons=reasons,
+        # Mirrors ``withdraw_calendar_version``.
+        can_withdraw=(
+            row.status == "candidate"
+            and row.proposed_by_membership_id == viewer.membership_id
+            and viewer.actions["calendar_proposal"].available
+        ),
     )
 
 
@@ -985,10 +1005,10 @@ def rule_impact(
     # effective range it collides with, so their open records are in scope.
     # Retiring or disabling an already-active version affects only itself.
     scoped_ids = [row.id]
+    superseded: list[IpRuleVersion] = []
     if row.status == "candidate":
-        scoped_ids.extend(
-            item.id for item in _overlapping_active_versions(session, row=row)
-        )
+        superseded = _overlapping_active_versions(session, row=row)
+        scoped_ids.extend(item.id for item in superseded)
 
     policy_count = int(
         session.scalar(
@@ -1043,6 +1063,7 @@ def rule_impact(
         company_policy_count=policy_count,
         open_deadline_count=open_count,
         candidate_deadline_count=candidate_count,
+        superseded_versions=sorted(item.version for item in superseded),
     )
 
 
@@ -1852,6 +1873,67 @@ def activate_calendar_version(
     return _calendar_record(calendar, row, _governance_viewer(session, context=context))
 
 
+def withdraw_calendar_version(
+    session: Session,
+    *,
+    context: SessionContext,
+    calendar_version_id: str,
+    payload: LegalCalendarWithdrawalRequest,
+) -> LegalCalendarVersionRecord:
+    """The proposer withdraws its own candidate before anyone activates it.
+
+    Same gates as proposing: the company entitlement, then the locked
+    ``ip:rules_propose`` capability. Only the proposer, and only while the
+    version is still a candidate. The version is retired, never deleted, so its
+    source evidence and audit trail stay.
+    """
+
+    _assert_rule_governance_entitled(session, context=context)
+    context, _memberships = _lock_governance_memberships(
+        session,
+        context=context,
+        required_capability="ip:rules_propose",
+    )
+    row = session.scalar(
+        select(LegalWorkingCalendarVersion)
+        .where(
+            LegalWorkingCalendarVersion.id == calendar_version_id,
+            LegalWorkingCalendarVersion.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Calendar version not found.")
+    if row.proposed_by_membership_id != context.membership.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the proposer can withdraw this calendar version.",
+        )
+    if row.status != "candidate":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a candidate calendar version can be withdrawn.",
+        )
+    row.status = "retired"
+    record_from_context(
+        session,
+        context,
+        action="ip.working_calendar.withdrawn",
+        target_type="legal_working_calendar_version",
+        target_id=row.id,
+        metadata={
+            "calendar_id": row.calendar_id,
+            "version": row.version,
+            "reason": payload.reason,
+        },
+    )
+    session.commit()
+    session.refresh(row)
+    calendar = session.get(LegalWorkingCalendar, row.calendar_id)
+    assert calendar is not None
+    return _calendar_record(calendar, row, _governance_viewer(session, context=context))
+
+
 def _calendar_snapshot(row: LegalWorkingCalendarVersion) -> LegalCalendarSnapshot:
     if not re.fullmatch(SOURCE_HASH_PATTERN, row.source_hash or ""):
         # Calendar versions proposed before source hashes were required to be
@@ -2106,6 +2188,46 @@ def _lock_deadline(
     return row, docket
 
 
+def _can_hold_deadline_responsibility(
+    session: Session,
+    *,
+    context: SessionContext,
+    member: CompanyMembership,
+    docket: IpDocketRecord,
+) -> bool:
+    """Stable Matter and IP-record access for the life of a legal deadline."""
+
+    member_context = SessionContext(company=context.company, user=member.user, membership=member)
+    return can_stably_access_ip_docket(session, context=member_context, docket=docket)
+
+
+def _eligible_responsible_membership_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+) -> list[str]:
+    """Exactly the members ``_validate_responsibilities`` accepts on this docket."""
+
+    members = session.scalars(
+        select(CompanyMembership)
+        .options(joinedload(CompanyMembership.user))
+        .where(
+            CompanyMembership.company_id == context.company.id,
+            CompanyMembership.is_active.is_(True),
+        )
+        .order_by(CompanyMembership.id)
+    ).unique()
+    return [
+        member.id
+        for member in members
+        if member.user.is_active
+        and _can_hold_deadline_responsibility(
+            session, context=context, member=member, docket=docket
+        )
+    ]
+
+
 def _validate_responsibilities(
     session: Session,
     *,
@@ -2154,12 +2276,10 @@ def _validate_responsibilities(
     resolved: list[tuple[IpResponsibilityInput, CompanyMembership]] = []
     for item in values:
         member = _membership(session, context=context, membership_id=item.membership_id)
-        member_context = SessionContext(
-            company=context.company, user=member.user, membership=member
-        )
-        if not can_stably_access_ip_docket(
+        if not _can_hold_deadline_responsibility(
             session,
-            context=member_context,
+            context=context,
+            member=member,
             docket=docket,
         ):
             raise HTTPException(
@@ -2927,7 +3047,7 @@ def deadline_workspace(
     context: SessionContext,
     docket_id: str,
 ) -> IpDeadlineWorkspaceResponse:
-    _docket_or_404(session, context=context, docket_id=docket_id)
+    docket = _docket_or_404(session, context=context, docket_id=docket_id)
     company_selected = (
         select(CompanyIpRulePolicy.id)
         .where(
@@ -3038,6 +3158,9 @@ def deadline_workspace(
             for rule_set, row, selected in rule_rows
             if selected and row.status == "active" and rule_set.rule_kind == "deadline"
         ],
+        eligible_responsible_membership_ids=_eligible_responsible_membership_ids(
+            session, context=context, docket=docket
+        ),
         calendars=[_calendar_record(calendar, row, viewer) for calendar, row in calendar_rows],
         deadlines=[_deadline_record(session, row) for row in deadlines],
         exceptions=exceptions,

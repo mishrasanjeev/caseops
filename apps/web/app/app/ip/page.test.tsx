@@ -187,6 +187,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   recalculateIpLegalDeadline: vi.fn(),
   completeIpLegalDeadline: vi.fn(),
   proposeIpWorkingCalendar: vi.fn(),
+  fetchIpRulePolicies: vi.fn().mockResolvedValue([]),
+  selectIpRulePolicy: vi.fn(),
   activateIpWorkingCalendar: vi.fn(),
   proposeIpDeadlineRule: vi.fn(),
   fetchIpDeadlineRuleImpact: vi.fn(),
@@ -215,6 +217,7 @@ vi.mock("@/lib/use-session", () => ({
 }));
 
 import IpDocketPage from "@/app/app/ip/page";
+import { availableGovernance } from "@/test/ip-governance-fixtures";
 
 const NICE_HEADINGS: Record<number, string> = {
   9: "Scientific, research, navigation, surveying apparatus; computer software.",
@@ -513,7 +516,7 @@ describe("IpDocketPage", () => {
         weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
         source_reference: "official:calendar", source_hash: "a".repeat(64),
       }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     fetchIpDeadlineDependenciesMock.mockResolvedValue({
       deadline_id: "legal-deadline-1", docket_id: "ip-1", state: "candidate",
@@ -728,7 +731,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
       eligible_rule_version_ids: [],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     render(withClient(<IpDocketPage />));
 
@@ -772,7 +775,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
       eligible_rule_version_ids: [],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     await userEvent.click(within(workspace).getByRole("button", { name: "Retry deadline workspace" }));
     await within(workspace).findByText("No active working calendar");
@@ -798,7 +801,7 @@ describe("IpDocketPage", () => {
         { ...rule, id: "fee-rule", rule_kind: "fee" }],
       calendars: [calendar, { ...calendar, id: "calendar-2", version: 2 },
         { ...calendar, id: "candidate-calendar", status: "candidate" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     };
     fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -865,7 +868,7 @@ describe("IpDocketPage", () => {
       docket_id: "ip-1", eligible_rule_version_ids: ["rule-one", "rule-two"],
       rules: [rule, { ...rule, id: "rule-two", rule_set_id: "set-two" }],
       calendars: [calendar, { ...calendar, id: "calendar-two" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     };
     fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -913,7 +916,7 @@ describe("IpDocketPage", () => {
         status: "active", rule_kind: "deadline", jurisdiction: "IN", office: "IP India" }],
       calendars: [{ id: "calendar-1", name: "Approved calendar", version: 1,
         status: "active", timezone: "Asia/Kolkata" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     render(withClient(<IpDocketPage />));
     const workspace = await screen.findByTestId("ip-deadline-workspace");
@@ -2216,6 +2219,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
       eligible_rule_version_ids: ["rule-1", "rule-2"],
+      eligible_responsible_membership_ids: ["member-1", "member-2"],
       rules: [
         { id: "rule-1", key: "in-tm-response", version: 1, status: "active", source_reference: "https://official.example/ip-india/tm-rules" },
         { id: "rule-2", key: "in-tm-alternate", version: 2, status: "active", source_reference: "https://official.example/ip-india/tm-rules-alternate" },
@@ -2235,7 +2239,7 @@ describe("IpDocketPage", () => {
         updated_at: "2026-08-09T00:00:00Z", responsibilities: [],
       }],
       exceptions: [{ deadline_id: "legal-deadline-1", docket_id: "ip-1", exception_kinds: ["unowned", "unacknowledged"], critical: true, result_on: "2026-08-18", visible: true }],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
 
     render(withClient(<IpDocketPage />));
@@ -2246,7 +2250,10 @@ describe("IpDocketPage", () => {
     );
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
-    expect(within(deadlineWorkspace).getByText("unowned · unacknowledged")).toBeVisible();
+    // Readable labels and the deadline's title, never raw codes or ids.
+    expect(within(deadlineWorkspace).getByText("No responsible lawyer · Owner has not accepted")).toBeVisible();
+    expect(within(deadlineWorkspace).getByText(/Respond to examination report · 2026-08-18/)).toBeVisible();
+    expect(within(deadlineWorkspace).queryByText(/deadline legal-deadline-1/)).not.toBeInTheDocument();
     // 2026-08-16: these were free-text boxes demanding a membership UUID. They
     // are now pickers, so the assertion is that a lawyer can name a colleague.
     const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");

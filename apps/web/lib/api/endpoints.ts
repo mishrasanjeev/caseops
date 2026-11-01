@@ -10160,6 +10160,8 @@ export type IpOppositionOpponentWorkflow = {
     | "confirm_reply_evidence_deadline"
     | "record_reply_evidence_decision"
     | "await_hearing_or_later_stage";
+  /** Readiness gaps that refuse a deadline proposal now (the proposer's own predicate). */
+  deadline_proposal_gaps: string[];
 };
 
 export type IpOppositionSharedWorkflow = {
@@ -10607,6 +10609,8 @@ export type IpFeatureReadiness = {
   rollout_expires_at: string | null;
   manual_fallback_feature_id: string | null;
   blocked_by_incident_id: string | null;
+  /** Every failing gate in server order; `reason` is the first. Older APIs omit it. */
+  blocked_reasons?: Array<Exclude<IpFeatureReadiness["reason"], "available">>;
 };
 
 export type IpWorkspaceConfiguration = {
@@ -10676,6 +10680,37 @@ export type IpWorkspaceReadiness = {
   domains?: import("@/lib/ip/domain-catalog").IpDomainCapability[];
 };
 
+/** Why the current viewer cannot take a governance action (server order). */
+export type IpGovernanceBlockReason =
+  | "not_candidate"
+  | "rule_kind_unsupported"
+  | "rollout_disabled"
+  | "rollout_expired"
+  | "missing_entitlement"
+  | "missing_capability"
+  | "proposer_unavailable"
+  | "proposer_cannot_self_approve"
+  | "no_qualified_reviewer"
+  | "no_other_approver"
+  | "fixtures_not_passing";
+
+export type IpGovernanceActionDecision = {
+  available: boolean;
+  code: "available" | IpGovernanceBlockReason;
+  reasons: IpGovernanceBlockReason[];
+  required_capability: string;
+  entitlement_key: string;
+  /** Null for working calendars, which are outside the rollout fence. */
+  rollout_flag: string | null;
+};
+
+export type IpDeadlineGovernanceProjection = {
+  calendar_proposal: IpGovernanceActionDecision;
+  calendar_activation: IpGovernanceActionDecision;
+  rule_proposal: IpGovernanceActionDecision;
+  rule_activation: IpGovernanceActionDecision;
+};
+
 export type IpDeadlineRuleVersion = {
   id: string;
   rule_set_id: string;
@@ -10704,6 +10739,13 @@ export type IpDeadlineRuleVersion = {
   activated_at: string | null;
   disabled_at: string | null;
   created_at: string;
+  proposed_by_membership_id: string | null;
+  /** Viewer-scoped: the activation validator would accept this viewer now. */
+  can_activate: boolean;
+  activation_blocked_reason: IpGovernanceBlockReason | null;
+  activation_blocked_reasons: IpGovernanceBlockReason[];
+  /** Reviewers the activation validator accepts with this viewer as legal approver. */
+  eligible_reviewer_membership_ids: string[];
 };
 
 export type IpWorkingCalendarVersion = {
@@ -10728,6 +10770,12 @@ export type IpWorkingCalendarVersion = {
   approver_label_snapshot: string | null;
   approved_at: string | null;
   created_at: string;
+  proposed_by_membership_id: string | null;
+  can_activate: boolean;
+  activation_blocked_reason: IpGovernanceBlockReason | null;
+  activation_blocked_reasons: IpGovernanceBlockReason[];
+  /** The viewer proposed this candidate and may still withdraw it. */
+  can_withdraw: boolean;
 };
 
 export type IpLegalDeadline = {
@@ -10786,6 +10834,7 @@ export type IpDeadlineException = {
     | "uncertain"
     | "source_stale"
     | "rule_disabled"
+    | "rule_retired"
   >;
   critical: boolean;
   result_on: string | null;
@@ -10794,12 +10843,31 @@ export type IpDeadlineException = {
 
 export type IpDeadlineWorkspace = {
   eligible_rule_version_ids: string[];
+  /** Members deadline confirmation accepts on this docket (stable Matter and IP-record access). */
+  eligible_responsible_membership_ids: string[];
   docket_id: string;
   rules: IpDeadlineRuleVersion[];
   calendars: IpWorkingCalendarVersion[];
   deadlines: IpLegalDeadline[];
   exceptions: IpDeadlineException[];
   automation_state: "explicit_confirmation_only";
+  governance: IpDeadlineGovernanceProjection;
+};
+
+export type IpCompanyRulePolicy = {
+  id: string;
+  rule_set_id: string;
+  rule_set_key: string;
+  rule_kind: IpDeadlineRuleVersion["rule_kind"];
+  active_rule_version_id: string;
+  active_rule_version: number;
+  active_rule_status: IpDeadlineRuleVersion["status"];
+  auto_confirm_eligible: boolean;
+  auto_confirm_suspended_reason: string | null;
+  internal_target_policy: Record<string, unknown>;
+  version: number;
+  updater_label_snapshot: string;
+  updated_at: string;
 };
 
 export type IpDeadlineImpact = {
@@ -12998,11 +13066,25 @@ export async function activateIpWorkingCalendar(input: {
   );
 }
 
+/** The proposer withdraws its own candidate calendar; it is retired, never deleted. */
+export async function withdrawIpWorkingCalendar(input: {
+  calendarVersionId: string;
+  reason: string;
+}): Promise<IpWorkingCalendarVersion> {
+  return apiRequest(
+    `/api/ip/working-calendars/${encodeURIComponent(input.calendarVersionId)}/withdraw`,
+    { method: "POST", body: { reason: input.reason } },
+  );
+}
+
 export async function proposeIpDeadlineRule(input: {
   key: string;
   jurisdiction: string;
   office: string;
   rightKind: string;
+  /** Opposition rules carry their exact scope; docket-level rules send null. */
+  proceedingKind?: string | null;
+  role?: string | null;
   stage: string;
   sourceRecordId: string;
   sourceReference: string;
@@ -13010,7 +13092,7 @@ export async function proposeIpDeadlineRule(input: {
   effectiveFrom: string;
   triggerKind: string;
   durationValue: number;
-  calendarMethod: "calendar_days" | "business_days";
+  calendarMethod: "calendar_days" | "business_days" | "month_anniversary";
   ruleCitation: string;
   fixtureCalculation: Record<string, unknown>;
   fixtureExpectedState: "candidate" | "provisional";
@@ -13024,8 +13106,8 @@ export async function proposeIpDeadlineRule(input: {
       jurisdiction: input.jurisdiction,
       office: input.office || null,
       right_kind: input.rightKind,
-      proceeding_kind: null,
-      role: null,
+      proceeding_kind: input.proceedingKind ?? null,
+      role: input.role ?? null,
       stage: input.stage,
       source_record_id: input.sourceRecordId,
       source_hash: input.sourceHash,
@@ -13037,7 +13119,7 @@ export async function proposeIpDeadlineRule(input: {
         deadline_kind: "legal_deadline",
         trigger_kind: input.triggerKind,
         duration_value: input.durationValue,
-        duration_unit: "days",
+        duration_unit: input.calendarMethod === "month_anniversary" ? "months" : "days",
         calendar_method: input.calendarMethod,
         direction: "after",
         include_base_date: false,
@@ -13059,16 +13141,20 @@ export async function proposeIpDeadlineRule(input: {
   });
 }
 
-export async function fetchIpDeadlineRuleImpact(
-  ruleVersionId: string,
-): Promise<{
+export type IpDeadlineRuleImpact = {
   rule_version_id: string;
   impact_token: string;
   company_policy_count: number;
   open_deadline_count: number;
   candidate_deadline_count: number;
   confirmed_deadlines_preserved: true;
-}> {
+  /** Active versions a candidate's activation retires; needs explicit supersession. */
+  superseded_versions: number[];
+};
+
+export async function fetchIpDeadlineRuleImpact(
+  ruleVersionId: string,
+): Promise<IpDeadlineRuleImpact> {
   return apiRequest(
     `/api/ip/deadline-rules/${encodeURIComponent(ruleVersionId)}/impact`,
   );
@@ -13079,6 +13165,10 @@ export async function activateIpDeadlineRule(input: {
   reviewerMembershipId: string;
   impactAcknowledged: boolean;
   impactReason: string;
+  /** From the impact preview the activator saw; required once the rule set has policies or open deadlines. */
+  impactToken?: string | null;
+  /** Retire the overlapping active versions the preview named. */
+  supersedeOverlapping?: boolean;
 }): Promise<IpDeadlineRuleVersion> {
   return apiRequest(
     `/api/ip/deadline-rules/${encodeURIComponent(input.ruleVersionId)}/activate`,
@@ -13088,12 +13178,35 @@ export async function activateIpDeadlineRule(input: {
         reviewer_membership_id: input.reviewerMembershipId,
         impact_acknowledged: input.impactAcknowledged,
         impact_reason: input.impactReason,
+        impact_token: input.impactToken ?? null,
+        supersede_overlapping: input.supersedeOverlapping ?? false,
         select_for_company: true,
         auto_confirm_eligible: false,
         internal_target_policy: {},
       },
     },
   );
+}
+
+export async function fetchIpRulePolicies(): Promise<IpCompanyRulePolicy[]> {
+  return apiRequest("/api/ip/rule-policies");
+}
+
+/** RULE-GOV-04 compare-and-swap: null `expectedPolicyVersion` asserts no policy exists yet. */
+export async function selectIpRulePolicy(input: {
+  ruleVersionId: string;
+  expectedPolicyVersion: number | null;
+  autoConfirmEligible: boolean;
+}): Promise<IpCompanyRulePolicy> {
+  return apiRequest("/api/ip/rule-policies", {
+    method: "PUT",
+    body: {
+      rule_version_id: input.ruleVersionId,
+      expected_policy_version: input.expectedPolicyVersion,
+      auto_confirm_eligible: input.autoConfirmEligible,
+      internal_target_policy: {},
+    },
+  });
 }
 
 export async function transitionIpDeadlineRule(input: {

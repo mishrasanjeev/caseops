@@ -21,6 +21,8 @@ import { InAppNotificationCenter } from "@/components/app/InAppNotificationCente
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
+import { IpDeadlineGovernanceCard } from "@/components/ip/IpDeadlineGovernanceCard";
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
@@ -46,8 +48,6 @@ import {
   addIpCostItem,
   addIpRelatedRightObligation,
   addIpTitleInterest,
-  activateIpDeadlineRule,
-  activateIpWorkingCalendar,
   appendIpDocketEvent,
   bulkReassignIpCoverage,
   completeIpLegalDeadline,
@@ -66,7 +66,6 @@ import {
   fetchIpCoverageTransfersAwaitingMe,
   fetchIpDeadlineImpact,
   fetchIpDeadlineDependencies,
-  fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
   fetchIpDocket,
   fetchIpDockets,
@@ -77,9 +76,7 @@ import {
   previewIpDocketEvent,
   previewIpIdentifierDuplicates,
   previewIpDocketLifecycle,
-  proposeIpDeadlineRule,
   proposeIpLegalDeadline,
-  proposeIpWorkingCalendar,
   recalculateIpLegalDeadline,
   recordIpDeadlineIncidentAction,
   recordIpDeadlineIncidentImpact,
@@ -93,7 +90,6 @@ import {
   syncHearingToGoogleCalendar,
   syncHearingToOutlook,
   transitionIpDocketLifecycle,
-  transitionIpDeadlineRule,
   overrideIpLegalDeadline,
   type IpCoreRecords,
   type IpDocket,
@@ -114,6 +110,7 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
+import { deadlineExceptionLabel } from "@/lib/ip/governance";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -165,8 +162,6 @@ export default function IpDocketPage() {
   const canGenerateDraft = useCapability("drafts:generate");
   const canReviewDraft = useCapability("drafts:review");
   const canFinalizeDraft = useCapability("drafts:finalize");
-  const canProposeRules = useCapability("ip:rules_propose");
-  const canActivateRules = useCapability("ip:rules_activate");
   const canFinance = useCapability("ip:fees_manage");
   const canConfigure = useCapability("ip:taxonomy_admin");
   const canManageAccess = useCapability("matter_access:manage");
@@ -483,8 +478,6 @@ export default function IpDocketPage() {
               canReviewDraft={canReviewDraft}
               canFinalizeDraft={canFinalizeDraft}
               canFinance={canFinance}
-              canProposeRules={canProposeRules}
-              canActivateRules={canActivateRules}
               canManageAccess={canManageAccess}
               initialView={requestedDocketId === selected.id ? requestedView : "overview"}
               initialProceedingId={
@@ -1376,8 +1369,6 @@ function DocketWorkspace({
   canReviewDraft,
   canFinalizeDraft,
   canFinance,
-  canProposeRules,
-  canActivateRules,
   canManageAccess,
   initialView,
   initialProceedingId,
@@ -1394,8 +1385,6 @@ function DocketWorkspace({
   canReviewDraft: boolean;
   canFinalizeDraft: boolean;
   canFinance: boolean;
-  canProposeRules: boolean;
-  canActivateRules: boolean;
   canManageAccess: boolean;
   initialView: DocketView;
   initialProceedingId: string | null;
@@ -1501,12 +1490,7 @@ function DocketWorkspace({
               currentMembershipId={currentMembershipId}
               onChanged={onChanged}
             />
-            <DeadlineGovernanceCard
-              docket={docket}
-              canPropose={canProposeRules}
-              canActivate={canActivateRules}
-              currentMembershipId={currentMembershipId}
-            />
+            <IpDeadlineGovernanceCard docket={docket} />
           </div>
         </TabsContent>
         <TabsContent value="access">
@@ -2153,17 +2137,21 @@ function DeadlineWorkspaceCard({
             <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
               Exception queue
             </div>
-            {workspace.data.exceptions.map((item) => (
-              <div
-                key={item.deadline_id}
-                className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
-              >
-                <strong className="break-words">{item.exception_kinds.join(" · ")}</strong>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {item.result_on ?? "No reliable legal date"} · deadline {item.deadline_id}
+            {workspace.data.exceptions.map((item) => {
+              const affected = workspace.data.deadlines.find((row) => row.id === item.deadline_id);
+              return (
+                <div
+                  key={item.deadline_id}
+                  className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
+                  data-exception-kinds={item.exception_kinds.join(" ")}
+                >
+                  <strong className="break-words">{item.exception_kinds.map(deadlineExceptionLabel).join(" · ")}</strong>
+                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                    {affected ? `${affected.title} · ` : ""}{item.result_on ?? "No reliable legal date"}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -2242,7 +2230,16 @@ function DeadlineWorkspaceCard({
             <div className="col-span-full grid min-w-0 gap-2">
               {selectedRule ? <p id="ip-active-rule-detail" data-selected-option-value={selectedRule.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{deadlineRuleCaption(selectedRule)}</p> : null}
               {selectedCalendar ? <p id="ip-active-calendar-detail" data-selected-option-value={selectedCalendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarCaption(selectedCalendar)}</p> : null}
-              {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? <p id="ip-deadline-prerequisites" className="text-sm text-[var(--color-mute)]">Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.</p> : null}
+              {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? (
+                <p id="ip-deadline-prerequisites" className="min-w-0 break-words text-sm text-[var(--color-mute)]">
+                  {!activeRules.length ? "No active deadline rule is selected for company deadlines. " : ""}
+                  {!activeCalendars.length ? "No working calendar is active. " : ""}
+                  {workspace.data.governance?.rule_proposal.available || workspace.data.governance?.calendar_proposal.available
+                    ? "Propose them in Rule and calendar governance below; each version needs independent approval by another owner, admin or partner."
+                    : "See Rule and calendar governance below for why they cannot be proposed here."}{" "}
+                  <a className="font-medium underline underline-offset-2" href="#ip-deadline-governance">Open rule and calendar governance</a>
+                </p>
+              ) : null}
               <Button
                 className="h-auto min-h-10 w-fit max-w-full whitespace-normal py-2 text-left"
                 type="submit"
@@ -2264,7 +2261,13 @@ function DeadlineWorkspaceCard({
         {enabled && workspace.data?.deadlines.length ? (
           <div className={IP_FORM_GRID}>
             <Field label="Responsible lawyer" htmlFor="deadline-primary-owner">
-              <PersonPicker id="deadline-primary-owner" value={primaryId} onChange={setPrimaryId} />
+              <PersonPicker
+                id="deadline-primary-owner"
+                value={primaryId}
+                onChange={setPrimaryId}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
+                emptyText="No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter."
+              />
             </Field>
             <Field label="Backup" htmlFor="deadline-backup-owner">
               <PersonPicker
@@ -2272,6 +2275,7 @@ function DeadlineWorkspaceCard({
                 value={backupId}
                 onChange={setBackupId}
                 excludeMembershipIds={[primaryId]}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
                 placeholder="No backup"
               />
             </Field>
@@ -2372,16 +2376,21 @@ function DeadlineWorkspaceCard({
                       className="w-full sm:w-auto"
                       size="sm"
                       disabled={
+                        !docket.matter_id ||
                         !primaryId.trim() ||
                         (deadline.is_critical && !backupId.trim()) ||
                         ((deadline.result_on === null || deadline.certainty === "conflicting") &&
                           (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
                         deadlineActionPending
                       }
+                      aria-describedby={docket.matter_id ? undefined : `deadline-matter-required-${deadline.id}`}
                       onClick={() => confirm.mutate(deadline)}
                     >
                       Confirm legal deadline
                     </Button>
+                  ) : null}
+                  {(deadline.state === "candidate" || deadline.state === "provisional") && !docket.matter_id ? (
+                    <IpMatterLinkRequired id={`deadline-matter-required-${deadline.id}`} docketId={docket.id} />
                   ) : null}
                   {deadline.state === "confirmed" || deadline.state === "overdue" ? (
                     <>
@@ -2430,247 +2439,6 @@ function DeadlineWorkspaceCard({
           {workspace.data && workspace.data.deadlines.length === 0 ? (
             <p className="text-sm text-[var(--color-mute)]">No legal deadline proposals yet.</p>
           ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DeadlineGovernanceCard({
-  docket,
-  canPropose,
-  canActivate,
-  currentMembershipId,
-}: {
-  docket: IpDocket;
-  canPropose: boolean;
-  canActivate: boolean;
-  currentMembershipId: string | null;
-}) {
-  const queryClient = useQueryClient();
-  const workspace = useQuery({
-    queryKey: ["ip", "deadline-workspace", docket.id],
-    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
-  });
-  const [calendarKey, setCalendarKey] = useState("ip-india-working-calendar");
-  const [calendarName, setCalendarName] = useState("IP India working calendar");
-  const [jurisdiction, setJurisdiction] = useState("IN");
-  const [office, setOffice] = useState("IP India");
-  const [holidays, setHolidays] = useState("");
-  const [sourceReference, setSourceReference] = useState("");
-  const [sourceHash, setSourceHash] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(TODAY);
-  const [governanceReason, setGovernanceReason] = useState("");
-  const [ruleKey, setRuleKey] = useState("in-tm-response-deadline");
-  const [triggerKind, setTriggerKind] = useState("examination_report_received");
-  const [durationValue, setDurationValue] = useState("30");
-  const [ruleCitation, setRuleCitation] = useState("");
-  const [fixtureBaseDate, setFixtureBaseDate] = useState(TODAY);
-  const [fixtureExpectedDate, setFixtureExpectedDate] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
-
-  const activeCalendar = workspace.data?.calendars.find((row) => row.status === "active");
-  const refresh = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["ip", "deadline-workspace", docket.id],
-    });
-  };
-  const result = {
-    onSuccess: async () => {
-      toast.success("Deadline governance record updated");
-      await refresh();
-    },
-    onError: (error: unknown) =>
-      toast.error(apiErrorMessage(error, "Deadline governance rejected the change.")),
-  };
-  const proposeCalendar = useMutation({
-    mutationFn: () =>
-      proposeIpWorkingCalendar({
-        key: calendarKey,
-        name: calendarName,
-        jurisdiction,
-        office,
-        timezone: "Asia/Kolkata",
-        holidays: holidays
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        sourceReference,
-        sourceHash,
-        effectiveFrom,
-      }),
-    ...result,
-  });
-  const activateCalendar = useMutation({
-    mutationFn: (id: string) =>
-      activateIpWorkingCalendar({
-        calendarVersionId: id,
-        reason: governanceReason,
-        conflictReviewed: true,
-      }),
-    ...result,
-  });
-  const proposeRule = useMutation({
-    mutationFn: () => {
-      if (!activeCalendar) throw new Error("Activate a working calendar first.");
-      const calculation = {
-        deadline_kind: "legal_deadline",
-        trigger_kind: triggerKind,
-        base_date: fixtureBaseDate,
-        base_date_certainty: "certain",
-        duration_value: Number(durationValue),
-        duration_unit: "days",
-        calendar_method: "business_days",
-        direction: "after",
-        include_base_date: false,
-        next_working_day: true,
-        extension_days: 0,
-        rule_version_id: "governance-fixture-rule",
-        rule_citation: ruleCitation,
-        source_version: "governance-fixture-source",
-        engine_version: "caseops-ip-deadline-v1",
-        calendar: {
-          calendar_version_id: activeCalendar.id,
-          timezone: activeCalendar.timezone,
-          weekend_days: activeCalendar.weekend_days,
-          holidays: activeCalendar.holidays,
-          exceptional_working_days: activeCalendar.exceptional_working_days,
-          source_reference: activeCalendar.source_reference,
-          source_hash: activeCalendar.source_hash,
-        },
-      };
-      return proposeIpDeadlineRule({
-        key: ruleKey,
-        jurisdiction,
-        office,
-        rightKind: "trademark",
-        stage: "examination",
-        sourceRecordId: `verified-source-${effectiveFrom}`,
-        sourceReference,
-        sourceHash,
-        effectiveFrom,
-        triggerKind,
-        durationValue: Number(durationValue),
-        calendarMethod: "business_days",
-        ruleCitation,
-        fixtureCalculation: calculation,
-        fixtureExpectedState: "candidate",
-        fixtureExpectedResultOn: fixtureExpectedDate || null,
-      });
-    },
-    ...result,
-  });
-  const activateRule = useMutation({
-    mutationFn: (id: string) =>
-      activateIpDeadlineRule({
-        ruleVersionId: id,
-        reviewerMembershipId: reviewerId,
-        impactAcknowledged: true,
-        impactReason: governanceReason,
-      }),
-    ...result,
-  });
-  const disableRule = useMutation({
-    mutationFn: async (id: string) => {
-      const impact = await fetchIpDeadlineRuleImpact(id);
-      return transitionIpDeadlineRule({
-        ruleVersionId: id,
-        impactToken: impact.impact_token,
-        reason: governanceReason,
-        emergencyDisable: true,
-      });
-    },
-    ...result,
-  });
-
-  return (
-    <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-governance">
-      <CardHeader><CardTitle as="h3">Rule and calendar governance</CardTitle></CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-5">
-        <p className="text-sm text-[var(--color-mute)]">
-          Versioned sources require independent approval and server-evaluated fixtures. The
-          proposer cannot approve the same calendar, and rule proposal, fixture review, and
-          legal activation must use separate memberships.
-        </p>
-        {canPropose ? (
-          <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-5">
-            <form
-              className={IP_FORM_GRID}
-              onSubmit={(event) => { event.preventDefault(); proposeCalendar.mutate(); }}
-            >
-              <div className="col-span-full text-sm font-semibold">Propose working calendar</div>
-              <Field label="Calendar key"><Input value={calendarKey} onChange={(e) => setCalendarKey(e.target.value)} /></Field>
-              <Field label="Calendar name"><Input value={calendarName} onChange={(e) => setCalendarName(e.target.value)} /></Field>
-              <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} /></Field>
-              <Field label="Office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
-              <Field label="Holiday dates (comma separated)"><Input value={holidays} onChange={(e) => setHolidays(e.target.value)} placeholder="2026-01-26, 2026-08-15" /></Field>
-              <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></Field>
-              <Field label="Official source reference"><Input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} /></Field>
-              <Field label="Source SHA-256"><Input value={sourceHash} onChange={(e) => setSourceHash(e.target.value)} /></Field>
-              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!sourceReference || sourceHash.length !== 64 || proposeCalendar.isPending}>Propose calendar version</Button></div>
-            </form>
-            <form
-              className={IP_FORM_GRID}
-              onSubmit={(event) => { event.preventDefault(); proposeRule.mutate(); }}
-            >
-              <div className="col-span-full text-sm font-semibold">Propose tested deadline rule</div>
-              <Field label="Rule key"><Input value={ruleKey} onChange={(e) => setRuleKey(e.target.value)} /></Field>
-              <Field label="Trigger kind"><Input value={triggerKind} onChange={(e) => setTriggerKind(e.target.value)} /></Field>
-              <Field label="Business-day duration"><Input type="number" min={0} value={durationValue} onChange={(e) => setDurationValue(e.target.value)} /></Field>
-              <Field label="Rule citation"><Input value={ruleCitation} onChange={(e) => setRuleCitation(e.target.value)} /></Field>
-              <Field label="Fixture base date"><Input type="date" value={fixtureBaseDate} onChange={(e) => setFixtureBaseDate(e.target.value)} /></Field>
-              <Field label="Expected fixture date"><Input type="date" value={fixtureExpectedDate} onChange={(e) => setFixtureExpectedDate(e.target.value)} /></Field>
-              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!activeCalendar || !ruleCitation || !fixtureExpectedDate || !sourceReference || sourceHash.length !== 64 || proposeRule.isPending}>Propose rule and fixture</Button></div>
-            </form>
-          </div>
-        ) : null}
-
-        {canPropose || canActivate ? (
-          <div className={IP_FORM_GRID}>
-            <Field label="Independent fixture reviewer" htmlFor="rule-fixture-reviewer">
-              <PersonPicker id="rule-fixture-reviewer" value={reviewerId} onChange={setReviewerId} />
-            </Field>
-            <Field label="Governance / impact reason">
-              <Input value={governanceReason} onChange={(event) => setGovernanceReason(event.target.value)} />
-            </Field>
-            <div className="flex items-end text-xs text-[var(--color-mute)]">
-              Current actor: {currentMembershipId ?? "unavailable"}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Calendar versions</div>
-            {workspace.data?.calendars.map((row) => (
-              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
-                <div className="break-words font-semibold">{row.name} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} · {row.source_reference}</div>
-                {canActivate && row.status === "candidate" ? (
-                  <Button className="mt-3 w-full sm:w-auto" size="sm" disabled={governanceReason.trim().length < 5 || activateCalendar.isPending} onClick={() => activateCalendar.mutate(row.id)}>Independently activate calendar</Button>
-                ) : null}
-              </div>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Rule versions</div>
-            {workspace.data?.rules.map((row) => (
-              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
-                <div className="break-words font-semibold">{row.key} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} · {row.source_reference}</div>
-                {canActivate ? (
-                  <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {row.status === "candidate" ? (
-                      <Button className="w-full sm:w-auto" size="sm" disabled={!reviewerId || activateRule.isPending} onClick={() => activateRule.mutate(row.id)}>Run fixtures and activate rule</Button>
-                    ) : null}
-                    {row.status === "active" ? (
-                      <Button className="w-full sm:w-auto" size="sm" variant="secondary" disabled={governanceReason.trim().length < 5 || disableRule.isPending} onClick={() => disableRule.mutate(row.id)}>Preview impact and emergency-disable</Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
         </div>
       </CardContent>
     </Card>
