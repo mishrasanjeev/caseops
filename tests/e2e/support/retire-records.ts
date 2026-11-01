@@ -2,7 +2,8 @@
  * Retirement for records a production spec creates, through the product's
  * own endpoints. Production tenants retain every run's records, so a spec
  * leaves only retired residue: a retired IP docket (its scheduled hearings,
- * queued reminders and open work are cancelled with it) or a disposed Matter.
+ * queued reminders and open work are cancelled with it), a disposed Matter or
+ * a terminated Contract.
  */
 import { expect, type APIRequestContext } from "@playwright/test";
 
@@ -69,4 +70,27 @@ export async function disposeMatter(
   });
   expect(disposed.status(), "dispose the spec's own Matter").toBe(200);
   expect(((await disposed.json()) as Matter).status).toBe("disposed");
+}
+
+/**
+ * Terminates a Contract the spec created (idempotent). Termination is the
+ * Contract's retired state: it leaves the active register and its clauses,
+ * obligations and attachments stay as audit history.
+ */
+export async function terminateContract(
+  request: APIRequestContext,
+  apiOrigin: string,
+  headers: Record<string, string>,
+  contractId: string,
+): Promise<void> {
+  const read = await request.get(`${apiOrigin}/api/contracts/${contractId}`, { headers });
+  expect(read.status(), "read the spec's own Contract before terminating it").toBe(200);
+  const contract = (await read.json()) as { id: string; status: string };
+  expect(contract.id).toBe(contractId);
+  if (contract.status === "terminated") return;
+  const terminated = await request.patch(`${apiOrigin}/api/contracts/${contractId}`, {
+    headers, data: { status: "terminated" },
+  });
+  expect(terminated.status(), "terminate the spec's own Contract").toBe(200);
+  expect(((await terminated.json()) as { status: string }).status).toBe("terminated");
 }
