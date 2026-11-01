@@ -482,6 +482,8 @@ describe("IpDocumentWorkspace", () => {
       <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
     ));
     expect(screen.getByText(/No IP record to link yet\. Create the record first/)).toBeVisible();
+  });
+
   it("preselects a deep-linked record and closes the docket list when there is none", async () => {
     const two = [dockets[0], { ...dockets[0], id: "docket-pine", title: "PINE LABS" }];
     const view = render(withClient(
