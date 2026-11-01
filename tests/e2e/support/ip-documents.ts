@@ -6,9 +6,72 @@
  * a retirement while a live record still relies on the document, and keeps the
  * retired document readable in history.
  */
-import { expect, type Page, type Response } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
 
 import { expectNoPageOverflow, expectOnScreen, json, type TesterRuntime } from "./ram-bugs4";
+
+/**
+ * Runs failure-path cleanup steps without masking the journey's own error: a
+ * step that fails is reported as a `cleanup-failure` annotation and on stderr
+ * (the residue it leaves is named there), and the remaining steps still run.
+ * A passing journey retires everything through the UI, so its steps are no-ops.
+ */
+export async function runCleanup(steps: Array<[string, (() => Promise<unknown>) | null]>) {
+  for (const [label, step] of steps) {
+    // A null step names something the journey never created.
+    if (step === null) continue;
+    try {
+      await step();
+    } catch (error) {
+      const firstLine = error instanceof Error ? error.message.split(/\r?\n/)[0] : String(error);
+      const message = `${label} failed: ${firstLine}`;
+      test.info().annotations.push({ type: "cleanup-failure", description: message });
+      console.error(message);
+    }
+  }
+}
+
+/** Failure-path cleanup: retires the document unless it is already retired. */
+export async function retireDocumentByApi(request: APIRequestContext, rt: TesterRuntime, documentId: string) {
+  const document = await json(await request.get(`${rt.api.origin}/api/ip/documents/${documentId}`, { headers: rt.headers }),
+    "Read document for cleanup");
+  if (document.retirement) return;
+  await json(await request.post(`${rt.api.origin}/api/ip/documents/${documentId}/retire`, { headers: rt.headers, data: {
+    expected_current_version: document.current_version, reason: `Ram batch-4 acceptance cleanup ${rt.run}`,
+  } }), "Retire acceptance document");
+}
+
+/** Failure-path cleanup: retires the docket unless it is already closed. */
+export async function retireDocketByApi(request: APIRequestContext, rt: TesterRuntime, docketId: string) {
+  const docket = await json(await request.get(`${rt.api.origin}/api/ip/dockets/${docketId}`, { headers: rt.headers }),
+    "Read docket for cleanup");
+  if (docket.is_active === false) return;
+  const body = {
+    expected_lifecycle_version: docket.lifecycle_version, to_status: "retired", effective_at: new Date().toISOString(),
+    reason: `Ram batch-4 acceptance record ${rt.run}`, outcome: "test record retired", source: "manual_review",
+    evidence_ref: `e2e:${rt.run}`, successor_docket_id: null, acknowledged_exception_codes: [] as string[],
+    second_approver_membership_id: null, client_report_handling: "retain", linked_matter_handling: "not_linked",
+  };
+  const preview = await json(await request.post(`${rt.api.origin}/api/ip/dockets/${docketId}/lifecycle/preview`,
+    { headers: rt.headers, data: body }), "Preview docket retirement");
+  body.acknowledged_exception_codes = preview.blocker_codes ?? [];
+  await json(await request.post(`${rt.api.origin}/api/ip/dockets/${docketId}/lifecycle`, { headers: rt.headers, data: body }),
+    "Retire acceptance docket");
+}
+
+/** Failure-path cleanup: withdraws the recordal unless it is already withdrawn or rejected. */
+export async function withdrawRecordalByApi(request: APIRequestContext, rt: TesterRuntime, recordalId: string) {
+  const recordal = await json(await request.get(`${rt.api.origin}/api/ip/recordals/${recordalId}`, { headers: rt.headers }),
+    "Read recordal for cleanup");
+  if (["withdrawn", "rejected"].includes(recordal.status)) return;
+  const docket = await json(await request.get(`${rt.api.origin}/api/ip/dockets/${recordal.docket_id}`, { headers: rt.headers }),
+    "Read the recordal's docket for cleanup");
+  await json(await request.post(`${rt.api.origin}/api/ip/recordals/${recordalId}/transactions`, { headers: rt.headers, data: {
+    expected_version: recordal.version, expected_lifecycle_version: docket.lifecycle_version,
+    transaction_kind: "withdrawn", responsible_membership_id: rt.actor.membership.id,
+    reason: `Ram batch-4 acceptance cleanup ${rt.run}`,
+  } }), "Withdraw acceptance recordal", 201);
+}
 
 /** `json` for a browser `Response` (the shared helper takes an `APIResponse`). */
 export async function responseJson<T = any>(response: Response, operation: string, expected = 200): Promise<T> {
@@ -71,6 +134,25 @@ export async function openDocumentCard(page: Page, rt: TesterRuntime, documentId
 }
 
 /**
+ * A document listed only because its record is closed is read-only: the API
+ * says so, and the card offers Download and Retire but no state change, no new
+ * version and no bulk selection (each of those is refused by the API).
+ */
+async function expectClosedRecordCard(page: Page, rt: TesterRuntime, card: ReturnType<Page["getByTestId"]>, documentId: string) {
+  const detail = await json<{ read_only_reason: string | null; retirement: unknown }>(
+    await page.request.get(`${rt.api.origin}/api/ip/documents/${documentId}`, { headers: rt.headers }),
+    "Closed record's document detail");
+  expect(detail).toEqual(expect.objectContaining({ read_only_reason: "closed_record", retirement: null }));
+  await expect(card).toHaveAttribute("data-read-only", "true");
+  await expect(card.getByText("Closed record", { exact: true })).toBeVisible();
+  await expect(card.getByText(/Its record is closed/)).toBeVisible();
+  await expect(card.getByRole("button", { name: /Download original/ })).toBeEnabled();
+  await expect(card.getByRole("button", { name: /^Move to / })).toHaveCount(0);
+  await expect(card.getByLabel(/^New version for /)).toHaveCount(0);
+  await expect(card.getByRole("checkbox")).toHaveCount(0);
+}
+
+/**
  * Retires an uploaded document through the Documents tab: the reliance check,
  * the reason and the confirm, then asserts the server state and the history card.
  */
@@ -79,10 +161,11 @@ export async function retireDocumentThroughUi(
   rt: TesterRuntime,
   documentId: string,
   reason: string,
-  options: { history: boolean; mobile: boolean },
+  options: { history: boolean; mobile: boolean; closedRecord?: boolean },
 ) {
   const card = await openDocumentCard(page, rt, documentId, options.history);
   await expect(card).toHaveAttribute("data-retired", "false");
+  if (options.closedRecord) await expectClosedRecordCard(page, rt, card, documentId);
   const previewed = page.waitForResponse(apiCall(rt, "GET", `/api/ip/documents/${documentId}/retirement`));
   await card.getByRole("button", { name: "Retire", exact: true }).click();
   const preview = await responseJson<{ retirable: boolean; blockers: unknown[] }>(await previewed, "Check what relies on the document");

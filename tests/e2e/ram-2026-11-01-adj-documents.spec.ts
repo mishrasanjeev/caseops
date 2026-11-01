@@ -24,7 +24,9 @@
  */
 import { expect, test, type APIRequestContext, type Page, type Request, type TestInfo } from "@playwright/test";
 
-import { createDocketThroughUi, openDocumentCard, responseJson } from "./support/ip-documents";
+import {
+  createDocketThroughUi, openDocumentCard, responseJson, retireDocketByApi, retireDocumentByApi, runCleanup,
+} from "./support/ip-documents";
 import {
   expectNoPageOverflow,
   expectOnScreen,
@@ -41,23 +43,9 @@ test.describe.configure({ mode: "default", retries: 0 });
 const DESKTOP = { width: 1440, height: 900 };
 const PIXEL_5 = { width: 393, height: 851 };
 
-async function retireDocketByApi(request: APIRequestContext, rt: TesterRuntime, docketId: string) {
-  const docket = await json(await request.get(`${rt.api.origin}/api/ip/dockets/${docketId}`, { headers: rt.headers }),
-    "Read docket for cleanup");
-  const body = {
-    expected_lifecycle_version: docket.lifecycle_version, to_status: "retired", effective_at: new Date().toISOString(),
-    reason: `Ram batch-4 adjacent acceptance record ${rt.run}`, outcome: "test record retired", source: "manual_review",
-    evidence_ref: `e2e:${rt.run}`, successor_docket_id: null, acknowledged_exception_codes: [] as string[],
-    second_approver_membership_id: null, client_report_handling: "retain", linked_matter_handling: "not_linked",
-  };
-  const preview = await json(await request.post(`${rt.api.origin}/api/ip/dockets/${docketId}/lifecycle/preview`,
-    { headers: rt.headers, data: body }), "Preview docket retirement");
-  body.acknowledged_exception_codes = preview.blocker_codes ?? [];
-  await json(await request.post(`${rt.api.origin}/api/ip/dockets/${docketId}/lifecycle`, { headers: rt.headers, data: body }),
-    "Retire acceptance docket");
-}
-
-async function uploadFromDocumentsTab(page: Page, rt: TesterRuntime, docketId: string, title: string): Promise<string> {
+async function uploadFromDocumentsTab(
+  page: Page, rt: TesterRuntime, docketId: string, title: string, created: { documentId: string | null },
+): Promise<string> {
   await page.goto(`${rt.web.origin}/app/ip?docket=${docketId}&tab=documents`);
   const workspace = page.getByTestId("ip-document-workspace");
   await expect(workspace.locator("#ip-document-docket")).toHaveValue(docketId);
@@ -77,6 +65,8 @@ async function uploadFromDocumentsTab(page: Page, rt: TesterRuntime, docketId: s
     && response.request().method() === "POST");
   await workspace.getByRole("button", { name: "Upload reviewed document" }).click();
   const result = await responseJson<{ outcome: string; document: { id: string; title: string } }>(await uploaded, "Upload the document");
+  // Recorded before any further assertion, so failure-path cleanup can retire it.
+  created.documentId = result.document?.id ?? null;
   expect(result.outcome).toBe("created");
   expect(result.document.title).toBe(title);
   return result.document.id;
@@ -85,9 +75,10 @@ async function uploadFromDocumentsTab(page: Page, rt: TesterRuntime, docketId: s
 async function retirementJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   const docket = await createDocketThroughUi(page, rt, stamp(`ADJ-07 docket ${mobile ? "mobile" : "desktop"}`),
     mobile ? "ADJ07M" : "ADJ07D");
+  const created: { documentId: string | null } = { documentId: null };
   try {
     const title = stamp(`ADJ-07 mistaken upload ${mobile ? "mobile" : "desktop"}`);
-    const documentId = await uploadFromDocumentsTab(page, rt, docket.id, title);
+    const documentId = await uploadFromDocumentsTab(page, rt, docket.id, title, created);
 
     // Retire from the current list: the reliance check runs first.
     const card = await openDocumentCard(page, rt, documentId, false);
@@ -158,7 +149,13 @@ async function retirementJourney(page: Page, request: APIRequestContext, rt: Tes
       local: rt.local, docket_id: docket.id, document_id: documentId,
     });
   } finally {
-    await retireDocketByApi(request, rt, docket.id);
+    // The document is retired by the journey itself; this retires it only when
+    // a step failed first. The docket is this run's disposable record.
+    const documentId = created.documentId;
+    await runCleanup([
+      ["Retire the acceptance upload", documentId ? () => retireDocumentByApi(request, rt, documentId) : null],
+      ["Retire the acceptance docket", () => retireDocketByApi(request, rt, docket.id)],
+    ]);
   }
 }
 

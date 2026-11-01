@@ -19,12 +19,14 @@
  *   6. retires what it created through the product paths: withdraws the
  *      recordal, retires the docket, then retires the instrument from the
  *      Documents tab's history view.
+ *   If any step fails, the same three are released through the API in that
+ *   order, so a failed production run leaves no live tester record behind.
  *
  * Nothing the bug is about is created through the API or the database.
  * Traces, screenshots and video stay off because the runtime holds the
  * tester's credentials.
  */
-import { expect, test, type Page, type Response, type TestInfo } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response, type TestInfo } from "@playwright/test";
 
 import {
   deadSelects,
@@ -37,7 +39,8 @@ import {
   type TesterRuntime,
 } from "./support/ram-bugs4";
 import {
-  createDocketThroughUi, expectRetirementBlockedThroughUi, retireDocumentThroughUi,
+  createDocketThroughUi, expectRetirementBlockedThroughUi, retireDocketByApi, retireDocumentByApi,
+  retireDocumentThroughUi, runCleanup, withdrawRecordalByApi,
 } from "./support/ip-documents";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
@@ -81,8 +84,32 @@ async function retireDocketThroughUi(page: Page, rt: TesterRuntime, docket: { id
   expect(result).toEqual(expect.objectContaining({ docket_id: docket.id, status: "retired", is_active: false }));
 }
 
-async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
+/** What this run created, recorded as soon as the server returns it. */
+type Created = { docketId: string | null; deedId: string | null; recordalId: string | null };
+
+/**
+ * The journey, then failure-path cleanup in the order the retirement rule
+ * requires (withdraw the recordal, retire the docket, retire the deed). When
+ * the journey passed, each step finds its record already released and does
+ * nothing.
+ */
+async function recordalJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
+  const created: Created = { docketId: null, deedId: null, recordalId: null };
+  try {
+    await recordalSteps(page, rt, info, mobile, created);
+  } finally {
+    const { docketId, deedId, recordalId } = created;
+    await runCleanup([
+      ["Withdraw the acceptance recordal", recordalId ? () => withdrawRecordalByApi(request, rt, recordalId) : null],
+      ["Retire the acceptance docket", docketId ? () => retireDocketByApi(request, rt, docketId) : null],
+      ["Retire the acceptance instrument", deedId ? () => retireDocumentByApi(request, rt, deedId) : null],
+    ]);
+  }
+}
+
+async function recordalSteps(page: Page, rt: TesterRuntime, info: TestInfo, mobile: boolean, created: Created) {
   const docket = await createDocket(page, rt, stamp("BUG-008 recordal docket"));
+  created.docketId = docket.id;
 
   await page.goto(`${rt.web.origin}/app/ip/recordals`);
   await expect(page.getByRole("heading", { name: "Post-registration" })).toBeVisible();
@@ -138,6 +165,7 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   await uploadButton.click();
   const uploadBody = await json<{ outcome: string; document: { id: string; title: string; links: Array<{ target_type: string; target_id: string }> } }>(
     await uploaded, "Upload the instrument from the recordal form");
+  created.deedId = uploadBody.document?.id ?? null;
   expect(uploadBody.outcome).toBe("created");
   expect(uploadBody.document.title).toBe(deedTitle);
   expect(uploadBody.document.links).toEqual([expect.objectContaining({ target_type: "docket", target_id: docket.id })]);
@@ -170,12 +198,13 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   await expect(create).toBeEnabled();
   await create.scrollIntoViewIfNeeded();
   await expectOnScreen(create, "Create recordal is on screen");
-  const created = page.waitForResponse(apiCall(rt, "POST", "/api/ip/recordals"));
+  const createdResponse = page.waitForResponse(apiCall(rt, "POST", "/api/ip/recordals"));
   await create.click();
   const recordal = await json<{
     id: string; docket_id: string; status: string; affected_classes_json: number[];
     supporting_instrument_refs_json: string[]; parties_json: Array<{ role: string; evidence_reference: string }>;
-  }>(await created, "Create the recordal", 201);
+  }>(await createdResponse, "Create the recordal", 201);
+  created.recordalId = recordal.id;
   expect(recordal).toEqual(expect.objectContaining({
     docket_id: docket.id, status: "draft", affected_classes_json: [9, 42], supporting_instrument_refs_json: [deedId],
   }));
@@ -233,12 +262,12 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
 test("BUG-008 Ram uploads an instrument from the recordal form and both parties cite it", async ({ page, request, baseURL }, info) => {
   test.setTimeout(8 * 60_000);
   const rt = await prepareTester(page, request, baseURL, DESKTOP);
-  await recordalJourney(page, rt, info, false);
+  await recordalJourney(page, request, rt, info, false);
 });
 
 test("BUG-008 [mobile] the recordal journey works at Pixel 5 width without horizontal scroll", async ({ page, request, baseURL }, info) => {
   test.setTimeout(8 * 60_000);
   const rt = await prepareTester(page, request, baseURL, PIXEL_5);
   expect(page.viewportSize()).toEqual(PIXEL_5);
-  await recordalJourney(page, rt, info, true);
+  await recordalJourney(page, request, rt, info, true);
 });

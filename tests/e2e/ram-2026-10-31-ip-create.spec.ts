@@ -19,7 +19,7 @@ import {
   collectOpenPopoverOffenders, deadSelects, expectNoPageOverflow, expectOnScreen, json, markPositive,
   prepareTester, stamp, type TesterRuntime,
 } from "./support/ram-bugs4";
-import { retireDocumentThroughUi } from "./support/ip-documents";
+import { retireDocketByApi, retireDocumentByApi, retireDocumentThroughUi, runCleanup } from "./support/ip-documents";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -54,16 +54,6 @@ function expectedSummary(features: Feature[], manual: boolean): string | null {
     .filter(([, n]) => n > 0).map(([group, n]) => PHRASE[group](n));
   const noun = blocked.length === 1 ? "IP feature is" : "IP features are";
   return `${manual ? "Manual docketing is available. " : ""}${blocked.length} ${noun} unavailable: ${counts.join(", ")}.`;
-}
-
-/** Failure-path cleanup only: the passing journey retires the document through the UI. */
-async function retireDocumentByApi(request: APIRequestContext, rt: TesterRuntime, documentId: string) {
-  const document = await json(await request.get(`${rt.api.origin}/api/ip/documents/${documentId}`, { headers: rt.headers }),
-    "Read document for cleanup");
-  if (document.retirement) return;
-  await json(await request.post(`${rt.api.origin}/api/ip/documents/${documentId}/retire`, { headers: rt.headers, data: {
-    expected_current_version: document.current_version, reason: `Ram batch-4 acceptance cleanup ${rt.run}`,
-  } }), "Retire acceptance document");
 }
 
 async function retireDocket(request: APIRequestContext, rt: TesterRuntime, docketId: string) {
@@ -184,6 +174,7 @@ async function createTwoClassTrademark(page: Page, request: APIRequestContext, r
 // BUG-002 (Documents): Classification lists the provisioned taxonomy and a UI upload works.
 async function uploadClassifiedDocument(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, docketId: string, mobile: boolean,
+  created: { documentId: string | null },
 ) {
   await page.getByRole("tab", { name: "Documents", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=documents(?:&|$)/);
@@ -212,6 +203,8 @@ async function uploadClassifiedDocument(
   const upload = await uploaded;
   expect(upload.status(), "Document upload").toBe(200);
   const result = await upload.json();
+  // Recorded before any further assertion, so failure-path cleanup can retire it.
+  created.documentId = result.document?.id ?? null;
   expect(result.outcome).toBe("created");
   const documentId: string = result.document.id;
   await markPositive(info, `ip-documents-upload-${mobile ? "mobile" : "desktop"}`, {
@@ -230,23 +223,26 @@ async function uploadClassifiedDocument(
 /** Create, upload, then retire both: the docket first, then its document through the UI. */
 async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   const { docketId } = await createTwoClassTrademark(page, request, rt, mobile);
-  let documentId: string | null = null;
-  let documentRetired = false;
+  const created: { documentId: string | null } = { documentId: null };
   try {
-    try {
-      await markPositive(info, `ip-create-${mobile ? "mobile" : "desktop"}`, { docketId, local: rt.local });
-      documentId = await uploadClassifiedDocument(page, request, rt, info, docketId, mobile);
-    } finally {
-      await retireDocket(request, rt, docketId);
-    }
-    // The closed docket's document is reached through the history view and retired there.
-    expect(documentId, "The upload returned the created document").toBeTruthy();
-    await retireDocumentThroughUi(page, rt, documentId as string, `Ram batch-4 acceptance upload ${rt.run} retired after its docket.`,
-      { history: true, mobile });
-    documentRetired = true;
-    await markPositive(info, `ip-document-retired-${mobile ? "mobile" : "desktop"}`, { documentId, docketId, local: rt.local });
+    await markPositive(info, `ip-create-${mobile ? "mobile" : "desktop"}`, { docketId, local: rt.local });
+    await uploadClassifiedDocument(page, request, rt, info, docketId, mobile, created);
+    await retireDocket(request, rt, docketId);
+    // The closed docket's document is reached through the history view, shown
+    // read-only (no state change, new version or bulk selection), and retired there.
+    expect(created.documentId, "The upload returned the created document").toBeTruthy();
+    await retireDocumentThroughUi(page, rt, created.documentId as string,
+      `Ram batch-4 acceptance upload ${rt.run} retired after its docket.`, { history: true, mobile, closedRecord: true });
+    await markPositive(info, `ip-document-retired-${mobile ? "mobile" : "desktop"}`, {
+      documentId: created.documentId, docketId, local: rt.local,
+    });
   } finally {
-    if (documentId && !documentRetired) await retireDocumentByApi(request, rt, documentId);
+    // No-ops when the journey passed: the docket and document are already retired.
+    const documentId = created.documentId;
+    await runCleanup([
+      ["Retire the acceptance docket", () => retireDocketByApi(request, rt, docketId)],
+      ["Retire the acceptance upload", documentId ? () => retireDocumentByApi(request, rt, documentId) : null],
+    ]);
   }
 }
 
