@@ -1,4 +1,10 @@
-"""Offline native-SDK acceptance for the bounded Gemini fallback adapter."""
+"""Offline native-SDK acceptance for the bounded Gemini fallback adapter.
+
+The pinned fallback model moved from gemini-3.5-flash-lite to gemini-3.6-flash
+(owner decision, 2026-11-01); both follow the Gemini 3 no-temperature and
+no-prefill rules. Managed transports also reserve against the Gemini cap, which
+these tests back with an owned SQLite ledger.
+"""
 
 from __future__ import annotations
 
@@ -21,11 +27,16 @@ from caseops_api.core.automated_test_context import (
     reset_automated_test_request,
     set_automated_test_request,
 )
-from caseops_api.db.ai_spend_models import AiProviderSpendAdmission, AiProviderSpendMonth
+from caseops_api.db.ai_spend_models import (
+    AiGeminiSpendAdmission,
+    AiGeminiSpendMonth,
+    AiProviderSpendAdmission,
+    AiProviderSpendMonth,
+)
 from caseops_api.db.session import CaseOpsSession
-from caseops_api.services import ai_money_budget, llm, llm_types
+from caseops_api.services import ai_money_budget, gemini_spend_cap, llm, llm_types
 
-MODEL = "gemini-3.5-flash-lite"
+MODEL = "gemini-3.6-flash"
 PRIVATE = "offline-private-error-sentinel"
 
 
@@ -64,14 +75,22 @@ def no_paid_marker():
 
 
 @pytest.fixture
-def sdk(monkeypatch):
+def sdk(monkeypatch, tmp_path):
     from google import genai
 
+    ledger = create_engine(
+        "sqlite+pysqlite:///" + str(tmp_path / "gemini-cap.sqlite"), poolclass=NullPool
+    )
+    AiGeminiSpendMonth.__table__.create(ledger)
+    AiGeminiSpendAdmission.__table__.create(ledger)
+    ledger_factory = sessionmaker(bind=ledger, class_=CaseOpsSession, expire_on_commit=False)
+    monkeypatch.setattr(gemini_spend_cap, "get_session_factory", lambda: ledger_factory)
     state = SimpleNamespace(
         requests=[],
         constructors=[],
         clients=[],
         reservations=[],
+        cap_reservations=[],
         events=[],
         status=200,
         error_message=PRIVATE,
@@ -146,8 +165,15 @@ def sdk(monkeypatch):
             state.after_admission()
         return ticket
 
+    real_cap = llm.reserve_gemini_spend
+
+    def reserve_cap(**kwargs):
+        state.cap_reservations.append(kwargs)
+        return real_cap(**kwargs)
+
     monkeypatch.setattr(genai, "Client", client)
     monkeypatch.setattr(llm, "reserve_paid_ai_call", reserve)
+    monkeypatch.setattr(llm, "reserve_gemini_spend", reserve_cap)
     try:
         yield state
     finally:
@@ -155,6 +181,7 @@ def sdk(monkeypatch):
             client.close()
         state.http.close()
         asyncio.run(state.async_http.aclose())
+        ledger.dispose()
 
 
 @contextmanager
@@ -204,6 +231,8 @@ def test_native_wire_preserves_system_schema_and_bounded_attempt(sdk, mode, mana
     config = wire["generationConfig"]
     assert config["maxOutputTokens"] == 1024
     assert not {"temperature", "topP", "topK"}.intersection(config)
+    # The official SDK serializes this nested field with its proto name.
+    assert config["thinkingConfig"] == {"thinking_level": "LOW"}
     if mode == "structured":
         assert config["responseMimeType"] == "application/json"
         assert config["responseJsonSchema"] == _Answer.model_json_schema()
@@ -223,6 +252,16 @@ def test_native_wire_preserves_system_schema_and_bounded_attempt(sdk, mode, mana
         assert constructor["http_options"]["api_version"] == "v1"
         assert "api_key" not in constructor
         assert "/locations/global/" in sdk.requests[0].url.path
+        # The managed endpoint reserves its worst case against the Gemini cap.
+        assert sdk.cap_reservations == [
+            {
+                "model": MODEL,
+                "input_bytes": reservation["input_bytes"],
+                "output_tokens": 1024,
+            }
+        ]
+    else:
+        assert sdk.cap_reservations == []
 
 
 def test_older_gemini_text_retains_temperature_and_default_retry_contract(sdk):
@@ -882,7 +921,9 @@ def test_invalid_build_timeout_never_constructs_paid_adapter(monkeypatch, provid
         llm._build_inner_provider(_settings(provider), "recommendations", timeout_seconds=timeout)
 
 
-def test_openai_quota_code_in_structured_body_cannot_trigger_fallback():
+def test_openai_quota_code_in_structured_body_is_typed_quota_exhaustion():
+    # Since 2026-11-01 typed quota exhaustion is a fallback trigger; the body
+    # code must still classify as quota, never as a generic provider failure.
     import openai
 
     adapter = object.__new__(llm.OpenAIProvider)

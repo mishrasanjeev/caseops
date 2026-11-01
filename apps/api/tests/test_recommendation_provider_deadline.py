@@ -15,8 +15,12 @@ from caseops_api.core.automated_test_context import (
     reset_automated_test_request,
     set_automated_test_request,
 )
-from caseops_api.db.ai_spend_models import AiProviderSpendMonth
-from caseops_api.services import llm
+from caseops_api.db.ai_spend_models import (
+    AiGeminiSpendAdmission,
+    AiGeminiSpendMonth,
+    AiProviderSpendMonth,
+)
+from caseops_api.services import gemini_spend_cap, llm
 from caseops_api.services.llm_recommendation_fallback import RecommendationFallbackPlan
 from tests import test_ai_money_native_llm_transport
 from tests.test_ai_money_native_llm_transport import (
@@ -64,9 +68,19 @@ def deadline_native(native_boundary, monkeypatch):
         period = session.get(AiProviderSpendMonth, "2026-11")
         period.pricing_json = {
             **period.pricing_json,
-            "gemini:gemini-3.5-flash-lite": period.pricing_json["gemini:gemini-3.1-flash-lite"],
+            "gemini:gemini-3.6-flash": period.pricing_json["gemini:gemini-3.1-flash-lite"],
         }
         session.commit()
+    # Managed Gemini transports also reserve against the Gemini-only cap.
+    AiGeminiSpendMonth.__table__.create(state.engine)
+    AiGeminiSpendAdmission.__table__.create(state.engine)
+
+    def cap_session():
+        session = state.factory()
+        state.sessions.append(session)
+        return session
+
+    monkeypatch.setattr(gemini_spend_cap, "get_session_factory", lambda: cap_session)
     monkeypatch.setattr(llm.time, "perf_counter", lambda: state.now)
 
     class OfflineCredentials(Credentials):
@@ -213,7 +227,7 @@ def _run(state, *, mode="gemini", structured=True, tenant_preflight=False):
 
     def fallback(timeout):
         return llm.GeminiProvider(
-            model="gemini-3.5-flash-lite", project="offline-project", timeout_seconds=timeout
+            model="gemini-3.6-flash", project="offline-project", timeout_seconds=timeout
         )
 
     def revalidate():
@@ -342,8 +356,15 @@ def test_authoritative_marker_blocks_before_any_auth_or_admission(deadline_nativ
 def test_post_admission_paid_guards_remain_authoritative(deadline_native, boundary):
     state = deadline_native
     state.after_admission = boundary
-    with _human(state), pytest.raises(llm.AiMoneyBudgetError):
+    # The marker stays a typed denial. Since 2026-11-01 any other refusal of the
+    # fallback reports the primary outage plus the refusal; neither sends a request.
+    expected = llm.AiMoneyBudgetError if boundary == "marker" else llm.LLMTransientProviderError
+    with _human(state), pytest.raises(expected) as caught:
         _run(state)
+    if boundary == "month":
+        assert caught.value.fallback_refusal == (
+            "The AI budget period changed before dispatch. No external request was sent."
+        )
     assert len(_snapshot(state)[1]) == 1 and not state.requests
 
 

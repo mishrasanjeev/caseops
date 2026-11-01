@@ -1,4 +1,9 @@
-"""Bounded availability routing, never a financial or legal-safety bypass."""
+"""Bounded availability routing, never a financial or legal-safety bypass.
+
+Recommendations keep their own plan (source revalidation before every attempt
+and a shared two-attempt deadline) on top of the general OpenAI availability
+fallback settings in ``llm.build_gemini_fallback``.
+"""
 
 from __future__ import annotations
 
@@ -8,17 +13,19 @@ from typing import Any
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
-from caseops_api.services.ai_money_budget import (
-    AiMoneyBudgetError,
-    budget_applies,
-    current_budget_month,
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
+from caseops_api.services.llm import (
+    build_gemini_fallback,
+    provider_deadline,
+    provider_time_remaining,
+    with_fallback_refusal,
 )
-from caseops_api.services.llm import GeminiProvider, provider_deadline, provider_time_remaining
 from caseops_api.services.llm_types import (
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMTransientProviderError,
 )
 
@@ -26,10 +33,8 @@ from caseops_api.services.llm_types import (
 def recommendation_fallback_enabled() -> bool:
     settings = get_settings()
     return (
-        settings.llm_recommendation_fallback_enabled
+        settings.llm_fallback_enabled
         and settings.llm_provider.lower() == "openai"
-        and current_budget_month() >= "2026-11"
-        and budget_applies()
         and not paid_providers_blocked_for_request()
     )
 
@@ -37,16 +42,7 @@ def recommendation_fallback_enabled() -> bool:
 def build_recommendation_fallback(*, timeout_seconds: float) -> LLMProvider:
     if not recommendation_fallback_enabled():
         raise AiMoneyBudgetError("Recommendation fallback is not enabled for this request.")
-    settings = get_settings()
-    if not settings.llm_gemini_project:
-        raise AiMoneyBudgetError("The managed AI fallback is not configured.")
-    return GeminiProvider(
-        model=settings.llm_recommendation_fallback_model,
-        api_key=None,
-        project=settings.llm_gemini_project,
-        location=settings.llm_gemini_location,
-        timeout_seconds=timeout_seconds,
-    )
+    return build_gemini_fallback(timeout_seconds=timeout_seconds)
 
 
 class RecommendationFallbackPlan:
@@ -104,13 +100,20 @@ class RecommendationFallbackPlan:
     ) -> tuple[T, LLMCompletion]:
         try:
             return self._dispatch(messages, invoke)
-        except LLMTransientProviderError:
-            # Only the first primary availability failure may switch provider.
+        except (LLMQuotaExhaustedError, LLMTransientProviderError) as primary_error:
+            # Only the first primary quota/availability failure may switch provider.
             # Financial/policy/schema/refusal/safety failures never enter here.
             if self.fallback_used or self.attempts != 1:
                 raise
             self.fallback_used = True
-            return self._dispatch(messages, invoke)
+            try:
+                return self._dispatch(messages, invoke)
+            except AiMoneyBudgetError as refusal:
+                if paid_providers_blocked_for_request():
+                    raise
+                # A spending control refused before transport: keep the primary's
+                # safe failure so the user sees why OpenAI did not answer.
+                raise with_fallback_refusal(primary_error, refusal) from None
 
     def audit_metadata(self) -> dict[str, Any]:
         return {

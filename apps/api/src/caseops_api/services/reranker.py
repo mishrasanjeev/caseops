@@ -303,7 +303,7 @@ def build_reranker(provider: LLMProvider | None = None) -> RerankerProvider:
         if provider is None:
             try:
                 from caseops_api.services.llm import build_provider
-                provider = build_provider()
+                provider = build_provider(availability_fallback=False)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "LLM reranker unavailable; falling back to mock: %s", exc

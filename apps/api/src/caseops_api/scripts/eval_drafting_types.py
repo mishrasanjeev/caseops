@@ -421,7 +421,7 @@ def _build_eval_provider() -> LLMProvider:
         raise SystemExit(
             "Live drafting evaluation requires CASEOPS_LLM_PROVIDER=openai."
         )
-    return build_provider(purpose=PURPOSE_EVAL)
+    return build_provider(purpose=PURPOSE_EVAL, availability_fallback=False)
 
 
 def run(

@@ -115,7 +115,7 @@ def _expand_query_via_model(query: str) -> str:
     from caseops_api.services.llm import LLMMessage, build_provider
 
     try:
-        llm = build_provider()
+        llm = build_provider(availability_fallback=False)
     except Exception:  # noqa: BLE001
         return query
 

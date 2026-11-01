@@ -1779,7 +1779,11 @@ def generate_recommendation(
 
     matter_intelligence_context = _build_matter_intelligence_context(session, matter)
     _stage("build_matter_intelligence_context")
-    llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
+    # Recommendations own their fallback plan below (source revalidation before
+    # each attempt), so the general availability fallback is not layered on.
+    llm = provider or build_provider(
+        purpose=PURPOSE_RECOMMENDATIONS, availability_fallback=False
+    )
     messages = _build_prompt(
         rec_type=rec_type,
         matter=matter,
@@ -1865,6 +1869,7 @@ def generate_recommendation(
             primary_factory=lambda timeout: build_provider(
                 purpose=PURPOSE_RECOMMENDATIONS,
                 timeout_seconds=timeout,
+                availability_fallback=False,
             ),
             revalidate=_revalidate_before_provider,
         )

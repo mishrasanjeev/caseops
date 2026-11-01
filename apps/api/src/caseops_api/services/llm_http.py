@@ -17,12 +17,16 @@ def provider_failure_http_exception(
             detail=str(exc),
         )
     if isinstance(exc, LLMQuotaExhaustedError):
+        # When the Gemini fallback was refused before transport, say so after
+        # the primary's own quota message.
+        refusal = getattr(exc, "fallback_refusal", None)
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 f"Could not generate the {noun}: the configured AI provider "
                 "quota is exhausted. Restore or top up provider credits, then "
                 "retry. No output was saved."
+                + (f" {refusal}" if isinstance(refusal, str) and refusal else "")
             ),
         )
     return HTTPException(

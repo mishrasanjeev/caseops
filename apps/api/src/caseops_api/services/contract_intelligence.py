@@ -175,7 +175,8 @@ def _structured_with_retry(
             on_completion_accounted=account if phase is not None else None,
         )
         if phase is not None:
-            phase.finalize(purpose=context.purpose, model=p.model)
+            # Reauthorize the model that actually produced the output.
+            phase.finalize(purpose=context.purpose, model=completion.model)
             run = session.get(ModelRun, phase.pending_model_run_id)
             run.status = "ok"
         else:

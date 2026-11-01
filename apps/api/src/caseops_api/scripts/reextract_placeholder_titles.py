@@ -113,7 +113,9 @@ def run(
             if not settings.llm_api_key:
                 # Belt-and-braces: build_provider would complain too.
                 raise SystemExit("CASEOPS_LLM_API_KEY is not set")
-            provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+            provider = build_provider(
+                purpose=PURPOSE_METADATA_EXTRACT, availability_fallback=False
+            )
             report = run_reextract_sweep(
                 session,
                 provider=provider,
