@@ -814,7 +814,8 @@ def test_journal_watch_scheduler_is_durable_and_fail_closed(
         # B4-ADJ-20: an active manual-only profile has nothing to poll, so it
         # is not due even with a legacy next poll recorded.
         assert result.due_profiles == 1
-        assert result.checked_profiles == 1
+        # Pausing a profile because no provider is activated checks nothing.
+        assert result.checked_profiles == 0
         assert result.manual_profiles == 0
         assert result.provider_paused_profiles == 1
         session.refresh(manual_profile)

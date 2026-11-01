@@ -94,6 +94,7 @@ def test_scheduler_still_resets_a_manual_profile_cost_period(client: TestClient)
         row.poll_status = "paused_cost_quota"
         row.pause_reason = "Prior UTC-day quota exhausted."
         session.commit()
+        version_before = row.version
         result = run_journal_watch_scheduler(
             session, now=datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
         )
@@ -106,6 +107,10 @@ def test_scheduler_still_resets_a_manual_profile_cost_period(client: TestClient)
         assert row.poll_status == "active"
         assert row.pause_reason is None
         assert row.spent_cost_minor_in_period == 0
+        # The reset changed the profile, so a client holding the old version
+        # must reload before changing its status.
+        assert row.version == version_before + 1
+        assert row.next_poll_at is None
         assert row.last_polled_at == datetime(2026, 10, 31, 18, 0) or (
             row.last_polled_at == datetime(2026, 10, 31, 18, 0, tzinfo=UTC)
         )

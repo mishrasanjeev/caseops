@@ -105,7 +105,8 @@ SCHEDULER_RUN_PREFIX = "scheduler:"
 @dataclass(frozen=True, slots=True)
 class JournalWatchSchedulerResult:
     due_profiles: int
-    #: Profiles with an automated source that the scheduler acted on.
+    #: Profiles whose automated source was actually checked. No journal
+    #: provider is activated yet, so a profile paused for that is not one.
     checked_profiles: int
     cost_paused_profiles: int
     provider_paused_profiles: int
@@ -1621,7 +1622,6 @@ def run_journal_watch_scheduler(
             .with_for_update(of=IpWatchProfile)
         )
     )
-    checked = 0
     cost_paused = 0
     provider_paused = 0
     manual_profiles = 0
@@ -1644,8 +1644,9 @@ def run_journal_watch_scheduler(
         if profile.provider_key == MANUAL_JOURNAL_PROVIDER:
             # No automated source: nothing is polled, so no run is recorded
             # and nothing claims a check. The quota reset above was the only
-            # scheduled work.
+            # scheduled work; it changed the profile, so its version moves.
             profile.next_poll_at = None
+            profile.version += 1
             manual_profiles += 1
             continue
         scheduled = current.strftime("%Y%m%dT%H%M%SZ")
@@ -1684,12 +1685,12 @@ def run_journal_watch_scheduler(
         )
         profile.next_poll_at = None
         provider_paused += 1
-        checked += 1
         profile.version += 1
     session.commit()
     return JournalWatchSchedulerResult(
         due_profiles=len(profiles),
-        checked_profiles=checked,
+        # No activated journal provider exists, so nothing is checked yet.
+        checked_profiles=0,
         cost_paused_profiles=cost_paused,
         provider_paused_profiles=provider_paused,
         external_calls=0,
