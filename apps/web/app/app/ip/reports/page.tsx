@@ -23,7 +23,7 @@ import {
   type IpReportPreview,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
-import { displayValue } from "@/lib/display-value";
+import { displayCell, displayValue, isInternalIdKey, looksLikeInternalId, readableColumns } from "@/lib/display-value";
 import {
   fetchAdminPortalIpGrants,
   publishIpReportToPortal,
@@ -149,10 +149,9 @@ export default function IpReportsPage() {
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not publish the client report.")),
   });
-  const columns = useMemo(
-    () => Array.from(new Set((report?.rows ?? []).flatMap((row) => Object.keys(row)))).slice(0, 10),
-    [report?.rows],
-  );
+  // Internal ids and hashes (application_id, docket_id, matter_id, ...) are
+  // never report columns (B4-ADJ-02); the record is named by its title.
+  const columns = useMemo(() => readableColumns(report?.rows ?? [], 10), [report?.rows]);
 
   if (!canRead) {
     return (
@@ -244,8 +243,8 @@ function ReportResult({ report, columns }: { report: IpReportPreview; columns: s
       </CardHeader>
       <CardContent className="space-y-5">
         {report.freshness.unavailable_sources.length ? <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span>Unavailable sources: {report.freshness.unavailable_sources.map(label).join(", ")}.</span></div> : null}
-        <section aria-labelledby="report-summary-title"><h3 id="report-summary-title" className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Summary</h3><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(report.summary).map(([key, value]) => <div key={key} className="min-w-0 border-b border-[var(--color-line)] pb-2"><dt className="text-xs text-[var(--color-mute)]">{label(key)}</dt><dd className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">{displayValue(value)}</dd></div>)}</dl></section>
-        {report.rows.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] table-fixed text-left text-sm"><thead className="border-y border-[var(--color-line)] bg-[var(--color-bg-2)]"><tr>{columns.map((column) => <th key={column} className="w-48 px-3 py-2 font-semibold">{label(column)}</th>)}</tr></thead><tbody>{report.rows.map((row, index) => <tr key={index} className="border-b border-[var(--color-line)] align-top">{columns.map((column) => <td key={column} className="max-w-48 break-words px-3 py-3 text-[var(--color-ink-2)]">{displayValue(row[column])}</td>)}</tr>)}</tbody></table></div> : <EmptyState title={report.freshness.status === "unavailable" ? "Report source unavailable" : "No matching records"} />}
+        <section aria-labelledby="report-summary-title"><h3 id="report-summary-title" className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Summary</h3><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(report.summary).filter(([key, value]) => !isInternalIdKey(key) && !looksLikeInternalId(value)).map(([key, value]) => <div key={key} className="min-w-0 border-b border-[var(--color-line)] pb-2"><dt className="text-xs text-[var(--color-mute)]">{label(key)}</dt><dd className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">{displayValue(value)}</dd></div>)}</dl></section>
+        {report.rows.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] table-fixed text-left text-sm"><thead className="border-y border-[var(--color-line)] bg-[var(--color-bg-2)]"><tr>{columns.map((column) => <th key={column} className="w-48 px-3 py-2 font-semibold">{label(column)}</th>)}</tr></thead><tbody>{report.rows.map((row, index) => <tr key={index} className="border-b border-[var(--color-line)] align-top">{columns.map((column) => <td key={column} className="max-w-48 break-words px-3 py-3 text-[var(--color-ink-2)]">{displayCell(row[column])}</td>)}</tr>)}</tbody></table></div> : <EmptyState title={report.freshness.status === "unavailable" ? "Report source unavailable" : "No matching records"} />}
         <div className="grid gap-3 border-t border-[var(--color-line)] pt-4 text-xs text-[var(--color-mute)] sm:grid-cols-2"><p>Audience: Internal · Restricted records outside your access are omitted without a count.</p><p className="sm:text-right">Schema {report.schema_version}{report.truncated ? " · Result truncated at the selected row limit" : ""}</p></div>
       </CardContent>
     </Card>
