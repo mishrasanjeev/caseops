@@ -1414,13 +1414,26 @@ def search_journal_publications(
     )
 
 
+WATCH_RUN_LIMIT = 20
+
+
+def _count(session: Session, statement: Any) -> int:
+    return session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+
+
 def list_watch_workspace(
     session: Session,
     *,
     context: SessionContext,
     docket_id: str | None = None,
     limit: int = 100,
+    offset: int = 0,
 ) -> IpWatchWorkspaceResponse:
+    """One page of each watch list with its whole-list total (B4-ADJ-05).
+
+    The lists used to stop at `limit` with no total, and hits were read only
+    for the profiles on that page, so hits on later profiles never appeared.
+    """
     if docket_id:
         _docket_or_404(session, context=context, docket_id=docket_id, for_update=False)
     profile_statement = (
@@ -1446,22 +1459,42 @@ def list_watch_workspace(
     if docket_id:
         profile_statement = profile_statement.where(IpWatchProfile.docket_id == docket_id)
     profiles = list(
-        session.scalars(profile_statement.order_by(IpWatchProfile.updated_at.desc()).limit(limit))
+        session.scalars(
+            profile_statement.order_by(IpWatchProfile.updated_at.desc(), IpWatchProfile.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
     )
-    profile_ids = [item.id for item in profiles]
-    hits = (
+    profile_total = _count(session, profile_statement.with_only_columns(IpWatchProfile.id))
+    paused_profile_total = _count(
+        session,
+        profile_statement.with_only_columns(IpWatchProfile.id).where(
+            IpWatchProfile.poll_status != "active"
+        ),
+    )
+    hit_statement = select(IpWatchHit).where(
+        IpWatchHit.company_id == context.company.id,
+        IpWatchHit.profile_id.in_(profile_statement.with_only_columns(IpWatchProfile.id)),
+    )
+    hits = list(
+        session.scalars(
+            hit_statement.order_by(
+                IpWatchHit.hit_date.desc(), IpWatchHit.created_at.desc(), IpWatchHit.id.desc()
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+    hit_total = _count(session, hit_statement.with_only_columns(IpWatchHit.id))
+    listed_profile_ids = {item.id for item in profiles}
+    missing_profile_ids = {hit.profile_id for hit in hits} - listed_profile_ids
+    hit_profiles = (
         list(
             session.scalars(
-                select(IpWatchHit)
-                .where(
-                    IpWatchHit.company_id == context.company.id,
-                    IpWatchHit.profile_id.in_(profile_ids),
-                )
-                .order_by(IpWatchHit.hit_date.desc(), IpWatchHit.created_at.desc())
-                .limit(limit)
+                profile_statement.where(IpWatchProfile.id.in_(missing_profile_ids))
             )
         )
-        if profile_ids
+        if missing_profile_ids
         else []
     )
     publication_ids = list(dict.fromkeys(hit.publication_id for hit in hits))
@@ -1479,16 +1512,21 @@ def list_watch_workspace(
     )
     # List recent visible entries even without a hit, so a capture is visible
     # and can be corrected (visibility: _visible_publications_condition).
+    recent_statement = select(IpJournalPublication).where(
+        IpJournalPublication.company_id == context.company.id,
+        _visible_publications_condition(session, context=context),
+    )
     recent_publications = list(
         session.scalars(
-            select(IpJournalPublication)
-            .where(
-                IpJournalPublication.company_id == context.company.id,
-                _visible_publications_condition(session, context=context),
+            recent_statement.order_by(
+                IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc()
             )
-            .order_by(IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc())
+            .offset(offset)
             .limit(limit)
         )
+    )
+    publication_total = _count(
+        session, recent_statement.with_only_columns(IpJournalPublication.id)
     )
     publications = sorted(
         {item.id: item for item in [*hit_publications, *recent_publications]}.values(),
@@ -1517,19 +1555,31 @@ def list_watch_workspace(
         if hit_ids
         else []
     )
+    run_statement = select(IpJournalIngestionRun).where(
+        IpJournalIngestionRun.company_id == context.company.id
+    )
     runs = list(
         session.scalars(
-            select(IpJournalIngestionRun)
-            .where(IpJournalIngestionRun.company_id == context.company.id)
-            .order_by(IpJournalIngestionRun.created_at.desc())
-            .limit(20)
+            run_statement.order_by(
+                IpJournalIngestionRun.created_at.desc(), IpJournalIngestionRun.id.desc()
+            ).limit(WATCH_RUN_LIMIT)
         )
     )
+    run_total = _count(session, run_statement.with_only_columns(IpJournalIngestionRun.id))
     return IpWatchWorkspaceResponse(
+        limit=limit,
+        offset=offset,
         profiles=[IpWatchProfileResponse.model_validate(item) for item in profiles],
+        profile_total=profile_total,
+        paused_profile_total=paused_profile_total,
         hits=[IpWatchHitResponse.model_validate(item) for item in hits],
+        hit_total=hit_total,
+        hit_profiles=[IpWatchProfileResponse.model_validate(item) for item in hit_profiles],
         publications=[IpJournalPublicationResponse.model_validate(item) for item in publications],
+        publication_total=publication_total,
         ingestion_runs=[IpJournalIngestionRunResponse.model_validate(item) for item in runs],
+        ingestion_run_total=run_total,
+        ingestion_run_limit=WATCH_RUN_LIMIT,
         handoffs=[IpWatchHandoffResponse.model_validate(item) for item in handoffs],
         intake_profile_count=intake_profile_count or 0,
     )

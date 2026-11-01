@@ -35188,8 +35188,25 @@ export interface components {
         IpWatchWorkspaceResponse: {
             /** Handoffs */
             handoffs?: components["schemas"]["IpWatchHandoffResponse"][];
+            /** Hit Profiles */
+            hit_profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Hit Total
+             * @default 0
+             */
+            hit_total: number;
             /** Hits */
             hits?: components["schemas"]["IpWatchHitResponse"][];
+            /**
+             * Ingestion Run Limit
+             * @default 20
+             */
+            ingestion_run_limit: number;
+            /**
+             * Ingestion Run Total
+             * @default 0
+             */
+            ingestion_run_total: number;
             /** Ingestion Runs */
             ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
             /**
@@ -35197,8 +35214,33 @@ export interface components {
              * @default 0
              */
             intake_profile_count: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Paused Profile Total
+             * @default 0
+             */
+            paused_profile_total: number;
+            /**
+             * Profile Total
+             * @default 0
+             */
+            profile_total: number;
             /** Profiles */
             profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Publication Total
+             * @default 0
+             */
+            publication_total: number;
             /** Publications */
             publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
@@ -67618,6 +67660,7 @@ export interface operations {
             query?: {
                 docket_id?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;

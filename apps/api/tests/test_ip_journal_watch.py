@@ -674,10 +674,19 @@ def test_iplf_uj_21_exceptions_source_duplicate_cost_and_tenant_scope(
     )
     assert isolated.status_code == 200, isolated.text
     assert isolated.json() == {
+        "limit": 100,
+        "offset": 0,
         "profiles": [],
+        "profile_total": 0,
+        "paused_profile_total": 0,
         "hits": [],
+        "hit_total": 0,
+        "hit_profiles": [],
         "publications": [],
+        "publication_total": 0,
         "ingestion_runs": [],
+        "ingestion_run_total": 0,
+        "ingestion_run_limit": 20,
         "handoffs": [],
         "intake_profile_count": 0,
     }

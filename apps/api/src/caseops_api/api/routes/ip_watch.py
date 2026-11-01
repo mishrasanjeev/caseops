@@ -42,9 +42,10 @@ def watch_workspace(
     context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
     docket_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=250)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
 ) -> IpWatchWorkspaceResponse:
     return list_watch_workspace(
-        session, context=context, docket_id=docket_id, limit=limit
+        session, context=context, docket_id=docket_id, limit=limit, offset=offset
     )
 
 

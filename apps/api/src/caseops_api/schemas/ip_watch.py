@@ -461,12 +461,28 @@ class IpJournalPublicationSearchResponse(BaseModel):
 
 
 class IpWatchWorkspaceResponse(BaseModel):
+    # One page of each list. `limit` rows from `offset` of the visible profiles
+    # (newest change first), of the hits on every visible profile in scope
+    # (newest hit first) and of the recorded journal entries (newest first);
+    # each `*_total` counts the whole visible list, so a reader can say
+    # "showing N of M" and ask for the next offset.
+    limit: int = 100
+    offset: int = 0
     profiles: list[IpWatchProfileResponse] = Field(default_factory=list)
+    profile_total: int = 0
+    # Visible profiles not running (paused by a person, by cost or by CaseOps).
+    paused_profile_total: int = 0
     hits: list[IpWatchHitResponse] = Field(default_factory=list)
-    # Hit-linked publications plus the most recent visible journal entries, so a
+    hit_total: int = 0
+    # The profiles these hits were compared with, which may be on another page.
+    hit_profiles: list[IpWatchProfileResponse] = Field(default_factory=list)
+    # Hit-linked publications plus the page of recorded journal entries, so a
     # capture with no hits is still listed and can be corrected later.
     publications: list[IpJournalPublicationResponse] = Field(default_factory=list)
+    publication_total: int = 0
     ingestion_runs: list[IpJournalIngestionRunResponse] = Field(default_factory=list)
+    ingestion_run_total: int = 0
+    ingestion_run_limit: int = 20
     handoffs: list[IpWatchHandoffResponse] = Field(default_factory=list)
     # Profiles a journal capture is compared with, across every visible docket
     # (the set ingestion uses). Zero means a capture cannot be evaluated.

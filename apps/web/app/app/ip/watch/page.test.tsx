@@ -161,10 +161,19 @@ const HIT = {
 };
 
 const WORKSPACE = {
+  limit: 100,
+  offset: 0,
   profiles: [PROFILE],
+  profile_total: 1,
+  paused_profile_total: 0,
   publications: [PUBLICATION, ZERO_HIT_PUBLICATION],
+  publication_total: 2,
   hits: [HIT],
+  hit_total: 1,
+  hit_profiles: [],
   ingestion_runs: [],
+  ingestion_run_total: 0,
+  ingestion_run_limit: 20,
   handoffs: [],
   intake_profile_count: 1,
 };
@@ -262,6 +271,44 @@ describe("IP journal watch page", () => {
     usersMock.mockResolvedValue(USERS);
   });
 
+  it("B4-ADJ-05 states each list's total and reads the next page of hits, profiles and entries", async () => {
+    const user = userEvent.setup();
+    const hit = (index: number) => ({ ...HIT, id: `hit-${index}`, duplicate_of_hit_id: null, candidate_mark_json: { mark_text: `CANDIDATE ${index}` } });
+    const profile = (index: number) => ({ ...PROFILE, id: `profile-${index}`, name: `Profile ${index}` });
+    // Pages of 5 over 8 rows: the reader must cross into the second page.
+    workspaceMock.mockImplementation(async (_docket: string | null, { offset }: { offset: number }) => ({
+      ...WORKSPACE,
+      limit: 5,
+      offset,
+      profiles: Array.from({ length: offset ? 3 : 5 }, (_, index) => profile(offset + index)),
+      profile_total: 8,
+      paused_profile_total: 0,
+      hits: Array.from({ length: offset ? 3 : 5 }, (_, index) => hit(offset + index)),
+      hit_total: 8,
+      // The hits' profile is not on the loaded profile page; it comes with them.
+      hit_profiles: offset ? [] : [PROFILE],
+      publications: [PUBLICATION, ZERO_HIT_PUBLICATION],
+      publication_total: 2,
+      ingestion_runs: Array.from({ length: 20 }, (_, index) => ({ id: `run-${index}`, idempotency_key: `manual-${index}`, provider_key: "ipindia-journal-manual", status: "succeeded", publications_created: 1, publications_seen: 1, duplicate_hits: 0, hits_created: 0, stale_source_alert: false, cost_minor: 0, currency: "INR", error_redacted: null, started_at: "2026-10-01T00:00:00Z" })),
+      ingestion_run_total: 45,
+    }));
+    const page = renderWatchPage();
+    expect(await page.findByText("Showing 5 of 8 hits.")).toBeVisible();
+    expect(page.queryByTestId("watch-hit-hit-7")).toBeNull();
+    expect(page.queryByText("Profile not visible to you")).toBeNull();
+    await user.click(page.getByRole("button", { name: "Load more hits" }));
+    await waitFor(() => expect(workspaceMock).toHaveBeenLastCalledWith(null, { offset: 5 }));
+    expect(await page.findByText("8 hits.")).toBeVisible();
+    expect(page.getByTestId("watch-hit-hit-7")).toBeVisible();
+    expect(page.queryByRole("button", { name: "Load more hits" })).toBeNull();
+
+    await user.click(page.getByRole("button", { name: "Profiles" }));
+    expect(await page.findByText("8 watch profiles.")).toBeVisible();
+    expect(page.getByTestId("watch-profile-profile-7")).toBeVisible();
+    await user.click(page.getByRole("button", { name: "Runs" }));
+    expect(await page.findByTestId("watch-runs-cap")).toHaveTextContent("The 20 most recent of 45 runs are shown.");
+  });
+
   it("fails closed without IP read access", () => {
     capabilityMock.mockReturnValue(false);
     render(<IpJournalWatchPage />, { wrapper: wrapper() });
@@ -291,9 +338,9 @@ describe("IP journal watch page", () => {
     const user = userEvent.setup();
     const page = renderWatchPage();
     const scope = await chooseScopeDocket(user, page);
-    await waitFor(() => expect(workspaceMock).toHaveBeenLastCalledWith("docket-1"));
+    await waitFor(() => expect(workspaceMock).toHaveBeenLastCalledWith("docket-1", { offset: 0 }));
     await user.selectOptions(scope, "");
-    await waitFor(() => expect(workspaceMock).toHaveBeenLastCalledWith(null));
+    await waitFor(() => expect(workspaceMock).toHaveBeenLastCalledWith(null, { offset: 0 }));
     expect(scope).toHaveValue("");
     expect(scope.selectedOptions[0]).toHaveTextContent("All accessible dockets");
   });
@@ -430,7 +477,7 @@ describe("IP journal watch page", () => {
 
   it("BUG-014 offers the profile form instead of an intake that can only fail without an active profile", async () => {
     const user = userEvent.setup();
-    workspaceMock.mockResolvedValue({ ...WORKSPACE, profiles: [], hits: [], intake_profile_count: 0 });
+    workspaceMock.mockResolvedValue({ ...WORKSPACE, profiles: [], profile_total: 0, hits: [], hit_total: 0, intake_profile_count: 0 });
     const page = renderWatchPage();
     await user.click(await page.findByRole("button", { name: "Journal intake" }));
     expect(await page.findByText("No active watch profile to compare with")).toBeVisible();
