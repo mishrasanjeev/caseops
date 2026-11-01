@@ -104,6 +104,7 @@ from caseops_api.services.matter_write_fence import (
     lock_matter_private_authority,
     require_read_only_upload_session,
 )
+from caseops_api.services.provider_text import provider_plain_text
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -670,7 +671,9 @@ def _message_record(row: MailboxMessageImport) -> MailboxMessageImportRecord:
         subject=row.subject,
         sender_name=row.sender_name,
         occurred_at=row.occurred_at,
-        snippet=row.snippet,
+        # Gmail snippets are HTML-escaped; the stored provider text is decoded
+        # once for presentation.
+        snippet=provider_plain_text(row.snippet),
         labels=list(row.labels_json or []),
         attachment_count=row.attachment_count,
         status=row.status,  # type: ignore[arg-type]

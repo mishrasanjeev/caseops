@@ -75,6 +75,7 @@ from caseops_api.services.matter_write_fence import (
     lock_matter_private_authority,
     require_read_only_upload_session,
 )
+from caseops_api.services.provider_text import provider_plain_text
 from caseops_api.services.sendgrid_transport import _send_via_sendgrid as _send_via_sendgrid
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
@@ -142,6 +143,16 @@ def _timeline_preview(text: str | None, *, max_chars: int = 320) -> str | None:
     if len(cleaned) <= max_chars:
         return cleaned
     return cleaned[: max_chars - 1].rstrip() + "…"
+
+
+def _is_provider_mailbox_copy(row: Communication) -> bool:
+    """A Communication whose body is a provider's escaped mailbox snippet."""
+
+    metadata = row.metadata_json or {}
+    return isinstance(metadata, dict) and metadata.get("source") in {
+        "gmail_provider_import",
+        "mailbox_metadata_review",
+    }
 
 
 def _is_imported_email(row: Communication) -> bool:
@@ -410,7 +421,9 @@ def list_matter_communication_timeline(
                 visibility=_communication_visibility(row),
                 occurred_at=row.occurred_at,
                 title=_communication_title(row),
-                preview=_timeline_preview(row.body),
+                preview=_timeline_preview(
+                    provider_plain_text(row.body) if _is_provider_mailbox_copy(row) else row.body
+                ),
                 actor_label=_communication_actor(row),
                 direction=_as_value(row.direction),
                 channel=_as_value(row.channel),

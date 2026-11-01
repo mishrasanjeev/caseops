@@ -29,6 +29,7 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.provider_text import provider_plain_text
 from caseops_api.services.session_context import SessionContext
 
 _MAX_PREVIEW_CHARS = 280
@@ -658,8 +659,9 @@ def _candidate_record(
         detected_title=candidate.detected_title,
         detected_start_at=candidate.detected_start_at,
         detected_end_at=candidate.detected_end_at,
-        detected_location=candidate.detected_location,
-        source_preview=candidate.source_preview,
+        # Provider-escaped email text (Gmail snippets) is decoded once here.
+        detected_location=provider_plain_text(candidate.detected_location),
+        source_preview=provider_plain_text(candidate.source_preview),
         confidence_band=candidate.confidence_band,
         duplicate_of_candidate_id=candidate.duplicate_of_candidate_id,
         created_deadline_id=candidate.created_deadline_id,
