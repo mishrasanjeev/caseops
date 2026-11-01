@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -330,6 +330,80 @@ describe("IP registry reconciliation page", () => {
     });
   });
 
+  it("BUG-012 follows a later ?docket= navigation while the page is open", async () => {
+    window.history.replaceState(null, "", `/app/ip/registry?docket=${DOCKET.id}`);
+    const view = render(<IpRegistryPage />, { wrapper: wrapper() });
+    await waitFor(() => expect(docketPicker()).toHaveValue(DOCKET.id));
+
+    act(() => window.history.pushState(null, "", `/app/ip/registry?docket=${OTHER.id}`));
+    view.rerender(<IpRegistryPage />);
+    await waitFor(() => expect(docketPicker()).toHaveValue(OTHER.id));
+    await waitFor(async () => expect(await legalRecord()).toHaveValue("application:application-2"));
+  });
+
+  it("BUG-012 anchors a duplicate identity to the Identifier and a moved record to Legal record", async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import("@/lib/api/config");
+    createLinkMock
+      .mockRejectedValueOnce(new ApiError(409, "This registry identity is already linked.", null))
+      .mockRejectedValueOnce(new ApiError(404, "Trademark application not found on this docket.", null));
+    window.history.replaceState(null, "", `/app/ip/registry?docket=${OTHER.id}`);
+    render(<IpRegistryPage />, { wrapper: wrapper() });
+
+    await waitFor(async () => expect(await legalRecord()).toHaveValue("application:application-2"));
+    await user.type(screen.getByLabelText("Official source URL"), "https://tmrsearch.ipindia.gov.in/eregister/5550001");
+    await user.click(screen.getByRole("button", { name: "Add identity" }));
+    const identifier = screen.getByLabelText("Identifier");
+    await waitFor(() => expect(identifier).toHaveAttribute("aria-invalid", "true"));
+    expect(identifier).toHaveAccessibleDescription("This registry identity is already linked.");
+
+    await user.click(screen.getByRole("button", { name: "Add identity" }));
+    const record = await legalRecord();
+    await waitFor(() => expect(record).toHaveAttribute("aria-invalid", "true"));
+    expect(record).toHaveAccessibleDescription(/Trademark application not found on this docket/);
+  });
+
+  it("BUG-012 shows a register change by its field name and plain values, keeping the path as technical detail", async () => {
+    diffsMock.mockResolvedValue({
+      items: [{
+        id: "diff-1", version: 1, field_path: "/mark_name", mapped_field_path: null, change_kind: "added",
+        before_value_json: null, after_value_json: "ASTER", risk_level: "low", resolution_status: "pending",
+        deadline_recalculation_state: "not_required",
+      }],
+      total: 1, limit: 50, offset: 0,
+    });
+    render(<IpRegistryPage />, { wrapper: wrapper() });
+
+    const [item] = await screen.findAllByRole("listitem");
+    expect(item).toHaveTextContent("Mark as shown on the register");
+    expect(item).toHaveTextContent("BeforeNot shown");
+    expect(item).toHaveTextContent("AfterASTER");
+    expect(item).not.toHaveTextContent('"ASTER"');
+    expect(item).not.toHaveTextContent("null");
+    const path = within(item).getByText("/mark_name");
+    expect(path.closest("details")).not.toBeNull();
+    // On a phone the decisions sit in the change's own entry.
+    expect(within(item).getByRole("button", { name: "Reject" })).toBeInTheDocument();
+  });
+
+  it("BUG-012 [mobile] keeps court reference decisions inside each reference entry", async () => {
+    referencesMock.mockResolvedValue([{
+      id: "reference-1", version: 1, case_title: "Aster LLP v Registrar of Trade Marks", cnr_number: "DLHC010012342026",
+      case_number: null, court_name: "Delhi High Court", link_status: "active", update_count: 3,
+    }]);
+    window.history.replaceState(null, "", `/app/ip/registry?docket=${DOCKET.id}`);
+    render(<IpRegistryPage />, { wrapper: wrapper() });
+
+    const title = await screen.findAllByText("Aster LLP v Registrar of Trade Marks", { selector: "strong" });
+    const entry = title.map((node) => node.closest("li")).find(Boolean) as HTMLElement;
+    expect(entry.closest("ul")).toHaveClass("md:hidden");
+    expect(entry).toHaveTextContent("Delhi High Court");
+    expect(within(entry).getByRole("button", { name: "Mismatch" })).toBeInTheDocument();
+    expect(within(entry).getByRole("button", { name: "Retire" })).toBeInTheDocument();
+    // The wide table is for md and up only.
+    expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "md:block");
+  });
+
   it("BUG-012 explains a Madrid docket and offers no legal record", async () => {
     window.history.replaceState(null, "", `/app/ip/registry?docket=${MADRID.id}`);
     render(<IpRegistryPage />, { wrapper: wrapper() });
@@ -341,13 +415,19 @@ describe("IP registry reconciliation page", () => {
     expect(coreMock).not.toHaveBeenCalled();
   });
 
-  it("BUG-012 names the missing record and the path to create it on an empty docket", async () => {
+  it("BUG-012 says an application-less docket cannot be fixed here and links only to paths that create one", async () => {
     coreMock.mockResolvedValue(EMPTY_CORE);
     window.history.replaceState(null, "", `/app/ip/registry?docket=${DOCKET.id}`);
     render(<IpRegistryPage />, { wrapper: wrapper() });
 
-    expect(await screen.findByText(/has no trademark application or proceeding yet/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open this docket" })).toHaveAttribute("href", `/app/ip?docket=${DOCKET.id}`);
+    const status = await screen.findByText(/has no trademark application, so it cannot take a registry identity/);
+    expect(status).toBeVisible();
+    expect(status).toHaveTextContent(/cannot add an application to an existing docket/);
+    expect(status).toHaveTextContent(/each creates its own docket/);
+    expect(screen.getByRole("link", { name: "IP workspace (New trademark)" })).toHaveAttribute("href", "/app/ip");
+    expect(screen.getByRole("link", { name: "Portfolio import" })).toHaveAttribute("href", "/app/ip/portfolio/imports");
+    // No link back to the same docket: nothing there can add the missing application.
+    expect(screen.queryByRole("link", { name: "Open this docket" })).toBeNull();
     expect(await legalRecord()).toBeDisabled();
     const add = screen.getByRole("button", { name: "Add identity" });
     expect(add).toBeDisabled();

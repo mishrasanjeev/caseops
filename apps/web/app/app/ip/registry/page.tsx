@@ -33,7 +33,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
-import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors } from "@/lib/api/config";
+import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors, isApiErrorShape } from "@/lib/api/config";
 import {
   createIpRegistryLink,
   createIpTrackedCaseReference,
@@ -97,8 +97,25 @@ function stamp(value: string | null) {
   return value ? STAMP.format(new Date(value)) : "Never";
 }
 
-function jsonValue(value: unknown) {
-  return JSON.stringify(value, null, 2);
+/** A register value as a reader sees it: text as written, empty as "Not shown", lists joined. */
+function registerValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Not shown";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.length ? value.map(registerValue).join("; ") : "Not shown";
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, entry]) => `${key.replaceAll("_", " ")}: ${registerValue(entry)}`)
+    .join(", ");
+}
+
+/** The register's own field path, kept for audit but out of the reader's way. */
+function TechnicalPath({ path }: { path: string }) {
+  return (
+    <details className="mt-1 text-xs text-[var(--color-mute)]">
+      <summary className="cursor-pointer">Technical detail</summary>
+      <span className="block break-all font-mono">{path}</span>
+    </details>
+  );
 }
 
 function randomKey(prefix: string) {
@@ -151,8 +168,13 @@ export default function IpRegistryPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   // A `?docket=` deep link is the only default: the page never picks a docket itself.
-  const [selectedDocketId, setSelectedDocketId] = useState(() => searchParams.get("docket") ?? "");
+  const docketParam = searchParams.get("docket") ?? "";
+  const [selectedDocketId, setSelectedDocketId] = useState(docketParam);
   const [selectedLinkId, setSelectedLinkId] = useState("");
+  // Follow later navigations too (a "Reconcile with registry" link while this page is open).
+  useEffect(() => {
+    setSelectedDocketId(docketParam);
+  }, [docketParam]);
   const [workspaceOffset, setWorkspaceOffset] = useState(0);
 
   const docket = useQuery({
@@ -515,6 +537,9 @@ function CreateRegistryLink({
     onError: (error) => {
       const fields = apiFieldErrors(error, LINK_FIELD_MAP);
       const message = apiErrorMessage(error, "Could not add the registry identity.");
+      // A duplicate identity and a record no longer on this docket belong to their own fields.
+      if (isApiErrorShape(error) && error.status === 409) fields["registry-identifier"] = message;
+      if (isApiErrorShape(error) && error.status === 404 && /on this docket/i.test(error.detail)) fields["registry-target"] = message;
       setErrors(Object.keys(fields).length > 0 ? fields : { [API_FORM_ERROR_KEY]: message });
       toast.error(message);
     },
@@ -581,7 +606,7 @@ function CreateRegistryLink({
               ]}
             />
             <FieldError id="registry-target-error" message={errors["registry-target"]} />
-            <LegalRecordStatus docketId={docketId} core={core} empty={noRecords} />
+            <LegalRecordStatus core={core} empty={noRecords} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="registry-kind">Identifier type</Label>
@@ -646,7 +671,7 @@ function CreateRegistryLink({
   );
 }
 
-function LegalRecordStatus({ docketId, core, empty }: { docketId: string; core: UseQueryResult<IpCoreRecords>; empty: boolean }) {
+function LegalRecordStatus({ core, empty }: { core: UseQueryResult<IpCoreRecords>; empty: boolean }) {
   if (core.isPending) {
     return <p id="registry-target-status" role="status" className="mt-1 text-sm text-[var(--color-mute)]">Loading this docket&apos;s applications and proceedings…</p>;
   }
@@ -662,13 +687,19 @@ function LegalRecordStatus({ docketId, core, empty }: { docketId: string; core: 
     return (
       <div id="registry-target-status" role="status" className="mt-1 flex min-w-0 flex-col gap-1 text-sm text-[var(--color-mute)]">
         <span className="break-words">
-          This docket has no trademark application or proceeding yet, so a registry identity has
-          nothing to attach to. Applications are recorded with New trademark application or by
-          portfolio import; proceedings are opened from the docket.
+          This docket has no trademark application, so it cannot take a registry identity.
+          CaseOps cannot add an application to an existing docket. Record the mark with New
+          trademark in the IP workspace, or bring it in by portfolio import: each
+          creates its own docket with the application. Then reconcile that docket here.
         </span>
-        <Link className="font-semibold text-[var(--color-brand-700)] hover:underline" href={`/app/ip?docket=${encodeURIComponent(docketId)}`}>
-          Open this docket
-        </Link>
+        <span className="flex flex-wrap gap-x-4 gap-y-1">
+          <Link className="font-semibold text-[var(--color-brand-700)] hover:underline" href="/app/ip">
+            IP workspace (New trademark)
+          </Link>
+          <Link className="font-semibold text-[var(--color-brand-700)] hover:underline" href="/app/ip/portfolio/imports">
+            Portfolio import
+          </Link>
+        </span>
       </div>
     );
   }
@@ -768,7 +799,7 @@ function RegistryWorkspace({
       <Card>
         <CardHeader><CardTitle as="h3">Field reconciliation</CardTitle><p className="text-sm text-[var(--color-mute)]">High-risk proprietor, status, opposition, refusal, cancellation and deadline fields require IP approval.</p></CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
-          {diffs.isPending ? <Skeleton className="h-32" /> : diffs.isError ? <QueryErrorState error={diffs.error} title="Could not load unresolved registry changes" onRetry={() => diffs.refetch()} /> : (diffs.data?.items.length ?? 0) === 0 ? <p className="text-sm text-[var(--color-mute)]">No field changes are awaiting a decision.</p> : <><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="review-reason">Decision reason</Label><Input id="review-reason" className="mt-1" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></div><RecordSelect id="mapped-path" label="Map to CaseOps field" className={FIELD_CLASS} value={mappedPath} onChange={(event) => setMappedPath(event.target.value)} options={[{ value: "", label: "Only needed for Map", disabled: false }, ...mappableFields]} /></div><ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)] md:hidden">{diffs.data?.items.map((diff) => <li className="py-3 text-sm" key={diff.id}><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><span className="block break-all font-mono text-xs">{diff.mapped_field_path ?? diff.field_path}</span><span className="mt-1 block text-xs text-[var(--color-mute)]">{registerFieldLabel(diff.mapped_field_path ?? diff.field_path)}</span></div><div className="flex flex-wrap gap-1"><Badge tone="neutral">{diff.change_kind}</Badge><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge></div></div><dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"><dt className="text-[var(--color-mute)]">Before</dt><dd className="break-all font-mono">{jsonValue(diff.before_value_json)}</dd><dt className="text-[var(--color-mute)]">After</dt><dd className="break-all font-mono">{jsonValue(diff.after_value_json)}</dd></dl>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}<div className="mt-3">{diffActions(diff)}</div></li>)}</ul><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[920px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Field</th><th className="px-3 py-2">Change</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th><th className="px-3 py-2">Risk</th><th className="px-3 py-2">Decision</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>{diffs.data?.items.map((diff) => <tr className="border-b border-[var(--color-line)] align-top" key={diff.id}><td className="px-3 py-3"><span className="block font-mono text-xs">{diff.mapped_field_path ?? diff.field_path}</span><span className="mt-1 block text-xs text-[var(--color-mute)]">{registerFieldLabel(diff.mapped_field_path ?? diff.field_path)}</span></td><td className="px-3 py-3"><Badge tone="neutral">{diff.change_kind}</Badge></td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.before_value_json)}</td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.after_value_json)}</td><td className="px-3 py-3"><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}</td><td className="px-3 py-3"><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge></td><td className="px-3 py-3">{diffActions(diff)}</td></tr>)}</tbody></table></div>{(diffs.data?.total ?? 0) > 50 ? <div className="flex items-center justify-end gap-3"><Button size="sm" variant="ghost" disabled={diffOffset === 0} onClick={() => setDiffOffset(Math.max(0, diffOffset - 50))}>Previous</Button><span className="text-xs tabular-nums text-[var(--color-mute)]">{diffOffset + 1}-{Math.min(diffOffset + 50, diffs.data?.total ?? 0)} of {diffs.data?.total ?? 0}</span><Button size="sm" variant="ghost" disabled={diffOffset + 50 >= (diffs.data?.total ?? 0)} onClick={() => setDiffOffset(diffOffset + 50)}>Next</Button></div> : null}</>}
+          {diffs.isPending ? <Skeleton className="h-32" /> : diffs.isError ? <QueryErrorState error={diffs.error} title="Could not load unresolved registry changes" onRetry={() => diffs.refetch()} /> : (diffs.data?.items.length ?? 0) === 0 ? <p className="text-sm text-[var(--color-mute)]">No field changes are awaiting a decision.</p> : <><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="review-reason">Decision reason</Label><Input id="review-reason" className="mt-1" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></div><RecordSelect id="mapped-path" label="Map to CaseOps field" className={FIELD_CLASS} value={mappedPath} onChange={(event) => setMappedPath(event.target.value)} options={[{ value: "", label: "Only needed for Map", disabled: false }, ...mappableFields]} /></div><ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)] md:hidden">{diffs.data?.items.map((diff) => <li className="py-3 text-sm" key={diff.id}><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><span className="block break-words font-medium">{registerFieldLabel(diff.mapped_field_path ?? diff.field_path)}</span><TechnicalPath path={diff.mapped_field_path ?? diff.field_path} /></div><div className="flex flex-wrap gap-1"><Badge tone="neutral">{diff.change_kind}</Badge><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge></div></div><dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs"><dt className="text-[var(--color-mute)]">Before</dt><dd className="break-words">{registerValue(diff.before_value_json)}</dd><dt className="text-[var(--color-mute)]">After</dt><dd className="break-words">{registerValue(diff.after_value_json)}</dd></dl>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}<div className="mt-3">{diffActions(diff)}</div></li>)}</ul><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[920px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Field</th><th className="px-3 py-2">Change</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th><th className="px-3 py-2">Risk</th><th className="px-3 py-2">Decision</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>{diffs.data?.items.map((diff) => <tr className="border-b border-[var(--color-line)] align-top" key={diff.id}><td className="px-3 py-3"><span className="block break-words font-medium">{registerFieldLabel(diff.mapped_field_path ?? diff.field_path)}</span><TechnicalPath path={diff.mapped_field_path ?? diff.field_path} /></td><td className="px-3 py-3"><Badge tone="neutral">{diff.change_kind}</Badge></td><td className="max-w-48 break-words px-3 py-3">{registerValue(diff.before_value_json)}</td><td className="max-w-48 break-words px-3 py-3">{registerValue(diff.after_value_json)}</td><td className="px-3 py-3"><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}</td><td className="px-3 py-3"><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge></td><td className="px-3 py-3">{diffActions(diff)}</td></tr>)}</tbody></table></div>{(diffs.data?.total ?? 0) > 50 ? <div className="flex items-center justify-end gap-3"><Button size="sm" variant="ghost" disabled={diffOffset === 0} onClick={() => setDiffOffset(Math.max(0, diffOffset - 50))}>Previous</Button><span className="text-xs tabular-nums text-[var(--color-mute)]">{diffOffset + 1}-{Math.min(diffOffset + 50, diffs.data?.total ?? 0)} of {diffs.data?.total ?? 0}</span><Button size="sm" variant="ghost" disabled={diffOffset + 50 >= (diffs.data?.total ?? 0)} onClick={() => setDiffOffset(diffOffset + 50)}>Next</Button></div> : null}</>}
         </CardContent>
       </Card>
 
@@ -778,7 +809,7 @@ function RegistryWorkspace({
 
       <Card>
         <CardHeader><CardTitle as="h3">Evidence history</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-2"><div><h4 className="text-sm font-semibold">Snapshots</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.snapshots.length ? workspace.snapshots.map((snapshot) => <div className="py-3 text-sm" key={snapshot.id}><div className="flex items-center justify-between gap-2"><strong>{stamp(snapshot.source_retrieved_at)}</strong><a href={snapshot.source_url} target="_blank" rel="noreferrer" className="text-[var(--color-brand-700)]" aria-label="Open snapshot source"><ArrowUpRight className="h-4 w-4" /></a></div><div className="mt-1 break-all font-mono text-xs text-[var(--color-mute)]"><span className="font-sans">Fingerprint </span>{snapshot.normalized_sha256}</div>{snapshot.supersedes_snapshot_id ? <div className="mt-2 text-xs">Corrects the entry {correctedEntryLabel(workspace.snapshots, snapshot.supersedes_snapshot_id)} · {snapshot.correction_reason}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No snapshots recorded.</p>}</div></div><div><h4 className="text-sm font-semibold">Attempts</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.attempts.length ? workspace.attempts.map((attempt) => <div className="py-3 text-sm" key={attempt.id}><div className="flex items-center justify-between gap-2"><span><Badge tone={statusTone(attempt.status)}>{attempt.status}</Badge> <span className="ml-2">{attempt.operation_kind}</span></span><span className="text-xs text-[var(--color-mute)]">{stamp(attempt.started_at)}</span></div><div className="mt-2 text-xs text-[var(--color-mute)]">{attempt.external_call ? "External call" : "No external call"} · {attempt.response_class}</div>{attempt.error_redacted ? <div className="mt-2 text-xs text-amber-800">{attempt.error_redacted}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No attempts recorded.</p>}</div></div></CardContent>
+        <CardContent className="grid gap-4 lg:grid-cols-2"><div><h4 className="text-sm font-semibold">Snapshots</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.snapshots.length ? workspace.snapshots.map((snapshot) => <div className="py-3 text-sm" key={snapshot.id}><div className="flex items-center justify-between gap-2"><strong>{stamp(snapshot.source_retrieved_at)}</strong><a href={snapshot.source_url} target="_blank" rel="noreferrer" className="text-[var(--color-brand-700)]" aria-label="Open snapshot source"><ArrowUpRight className="h-4 w-4" /></a></div><div className="mt-1 text-xs text-[var(--color-mute)]">From {sourceHost(snapshot.source_url)}</div><details className="mt-1 text-xs text-[var(--color-mute)]"><summary className="cursor-pointer">Technical detail</summary><span className="block break-all font-mono">Fingerprint {snapshot.normalized_sha256}</span></details>{snapshot.supersedes_snapshot_id ? <div className="mt-2 text-xs">Corrects the entry {correctedEntryLabel(workspace.snapshots, snapshot.supersedes_snapshot_id)} · {snapshot.correction_reason}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No snapshots recorded.</p>}</div></div><div><h4 className="text-sm font-semibold">Attempts</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.attempts.length ? workspace.attempts.map((attempt) => <div className="py-3 text-sm" key={attempt.id}><div className="flex items-center justify-between gap-2"><span><Badge tone={statusTone(attempt.status)}>{attempt.status}</Badge> <span className="ml-2">{attempt.operation_kind}</span></span><span className="text-xs text-[var(--color-mute)]">{stamp(attempt.started_at)}</span></div><div className="mt-2 text-xs text-[var(--color-mute)]">{attempt.external_call ? "External call" : "No external call"} · {attempt.response_class}</div>{attempt.error_redacted ? <div className="mt-2 text-xs text-amber-800">{attempt.error_redacted}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No attempts recorded.</p>}</div></div></CardContent>
       </Card>
 
       {canSync ? (
@@ -1022,6 +1053,8 @@ function CourtReferences({ docket, core, references, bookmarks, canSync, onChang
   useEffect(() => { if (!trackedCaseId && eligible[0]) setTrackedCaseId(eligible[0].tracked_case_id); }, [eligible, trackedCaseId]);
   const create = useMutation({ mutationFn: () => createIpTrackedCaseReference({ docketId: docket.id, proceedingId, trackedCaseId, purpose, evidenceReference: evidence }), onSuccess: async () => { toast.success("Canonical court tracking reference added."); setEvidence(""); await onChanged(); }, onError: (error) => toast.error(apiErrorMessage(error, "Could not add the court reference.")) });
   const decide = useMutation({ mutationFn: ({ id, version, decision }: { id: string; version: number; decision: "confirm" | "mismatch" | "retire" }) => decideIpTrackedCaseReference({ linkId: id, expectedVersion: version, decision, reason }), onSuccess: async () => { toast.success("Court reference decision recorded."); setReason(""); await onChanged(); }, onError: (error) => toast.error(apiErrorMessage(error, "Could not update the court reference.")) });
+  // Phones get one entry per reference so Mismatch / Retire stay on screen; wider screens keep the table.
+  const referenceActions = (row: (typeof references)[number]) => canSync ? <div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" disabled={reason.trim().length < 5 || decide.isPending} onClick={() => decide.mutate({ id: row.id, version: row.version, decision: "mismatch" })}>Mismatch</Button><Button size="sm" variant="ghost" disabled={reason.trim().length < 5 || decide.isPending} onClick={() => decide.mutate({ id: row.id, version: row.version, decision: "retire" })}>Retire</Button></div> : null;
   const notice = (text: string) => <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{text}</div>;
   let addForm;
   if (!docket.matter_id) addForm = notice("Link this IP docket to a Matter before referencing court tracking.");
@@ -1030,5 +1063,5 @@ function CourtReferences({ docket, core, references, bookmarks, canSync, onChang
   else if (proceedings.length === 0) addForm = notice("This docket has no IP proceeding yet. Open an opposition or post-registration proceeding on the docket before referencing court tracking.");
   else if (eligible.length === 0) addForm = notice("Bookmark a tracked court case to the linked Matter first.");
   else addForm = <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5"><RecordSelect id="court-proceeding" label="IP proceeding" className={FIELD_CLASS} value={proceedingId} onChange={(event) => setProceedingId(event.target.value)} options={proceedings.map((row) => ({ value: row.id, label: row.label }))} /><div><Label htmlFor="tracked-case">Matter tracked case</Label><select id="tracked-case" className="mt-1 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={trackedCaseId} onChange={(event) => setTrackedCaseId(event.target.value)}>{eligible.map((row) => <option value={row.tracked_case_id} key={row.id}>{row.tracked_case.case_title}</option>)}</select></div><div><Label htmlFor="court-purpose">Purpose</Label><Input id="court-purpose" className="mt-1" value={purpose} onChange={(event) => setPurpose(event.target.value)} /></div><div><Label htmlFor="court-evidence">Evidence reference</Label><Input id="court-evidence" className="mt-1" value={evidence} onChange={(event) => setEvidence(event.target.value)} /></div><div className="flex items-end"><Button className="w-full" disabled={!proceedingId || !trackedCaseId || purpose.trim().length < 3 || evidence.trim().length < 3 || create.isPending} onClick={() => create.mutate()}><Link2 className="h-4 w-4" />Add reference</Button></div></div>;
-  return <Card><CardHeader><CardTitle as="h2">Court proceeding references</CardTitle><p className="text-sm text-[var(--color-mute)]">References reuse canonical TrackedCase and Matter bookmark data; court updates are never copied into the IP record.</p></CardHeader><CardContent className="flex flex-col gap-5">{references.length ? <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Case</th><th className="px-3 py-2">Court</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Updates</th><th className="px-3 py-2">Reference</th></tr></thead><tbody>{references.map((row) => <tr className="border-b border-[var(--color-line)]" key={row.id}><td className="px-3 py-3"><strong>{row.case_title}</strong><div className="mt-1 text-xs text-[var(--color-mute)]">{row.cnr_number ?? row.case_number ?? "No court identifier"}</div></td><td className="px-3 py-3">{row.court_name ?? "Not recorded"}</td><td className="px-3 py-3"><Badge tone={statusTone(row.link_status)}>{row.link_status}</Badge></td><td className="px-3 py-3 tabular-nums">{row.update_count}</td><td className="px-3 py-3">{canSync ? <div className="flex gap-1"><Button size="sm" variant="outline" disabled={reason.trim().length < 5 || decide.isPending} onClick={() => decide.mutate({ id: row.id, version: row.version, decision: "mismatch" })}>Mismatch</Button><Button size="sm" variant="ghost" disabled={reason.trim().length < 5 || decide.isPending} onClick={() => decide.mutate({ id: row.id, version: row.version, decision: "retire" })}>Retire</Button></div> : null}</td></tr>)}</tbody></table></div> : <p className="text-sm text-[var(--color-mute)]">No court tracking references are attached to this IP docket.</p>}{canSync ? <>{references.length ? <div><Label htmlFor="court-reference-reason">Decision reason</Label><Input id="court-reference-reason" className="mt-1" value={reason} onChange={(event) => setReason(event.target.value)} /></div> : null}{addForm}</> : null}</CardContent></Card>;
+  return <Card><CardHeader><CardTitle as="h2">Court proceeding references</CardTitle><p className="text-sm text-[var(--color-mute)]">References reuse canonical TrackedCase and Matter bookmark data; court updates are never copied into the IP record.</p></CardHeader><CardContent className="flex flex-col gap-5">{references.length ? <><ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)] md:hidden">{references.map((row) => <li className="py-3 text-sm" key={row.id}><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><strong className="block break-words">{row.case_title}</strong><span className="mt-1 block break-words text-xs text-[var(--color-mute)]">{row.cnr_number ?? row.case_number ?? "No court identifier"} · {row.court_name ?? "Court not recorded"}</span></div><Badge tone={statusTone(row.link_status)}>{row.link_status}</Badge></div><div className="mt-1 text-xs tabular-nums text-[var(--color-mute)]">{row.update_count} updates</div><div className="mt-2">{referenceActions(row)}</div></li>)}</ul><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Case</th><th className="px-3 py-2">Court</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Updates</th><th className="px-3 py-2">Reference</th></tr></thead><tbody>{references.map((row) => <tr className="border-b border-[var(--color-line)]" key={row.id}><td className="px-3 py-3"><strong>{row.case_title}</strong><div className="mt-1 text-xs text-[var(--color-mute)]">{row.cnr_number ?? row.case_number ?? "No court identifier"}</div></td><td className="px-3 py-3">{row.court_name ?? "Not recorded"}</td><td className="px-3 py-3"><Badge tone={statusTone(row.link_status)}>{row.link_status}</Badge></td><td className="px-3 py-3 tabular-nums">{row.update_count}</td><td className="px-3 py-3">{referenceActions(row)}</td></tr>)}</tbody></table></div></> : <p className="text-sm text-[var(--color-mute)]">No court tracking references are attached to this IP docket.</p>}{canSync ? <>{references.length ? <div><Label htmlFor="court-reference-reason">Decision reason</Label><Input id="court-reference-reason" className="mt-1" value={reason} onChange={(event) => setReason(event.target.value)} /></div> : null}{addForm}</> : null}</CardContent></Card>;
 }
