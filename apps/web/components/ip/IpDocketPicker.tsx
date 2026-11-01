@@ -16,6 +16,7 @@ import {
   fetchIpDockets,
   type IpDocket,
   type IpDocketListPage,
+  type IpTrademarkDocketRecordType,
 } from "@/lib/api/endpoints";
 import { cn } from "@/lib/cn";
 
@@ -48,6 +49,9 @@ import { cn } from "@/lib/cn";
  * - `pageSize`: dockets per page, default 50 (server maximum 200).
  * - `excludeIds`: dockets never offered here because the caller's API refuses
  *   them, for example the docket being transferred as its own successor.
+ * - `recordTypes`: list only these trademark record types (server-side, so
+ *   the totals and pages count only them), for example `["trademark"]`
+ *   where Madrid international records cannot be used.
  * - `id`, `required`, `disabled`, `className` behave as on a form field.
  *
  * Dockets are cached under ["ip", "dockets", ...]: invalidating
@@ -64,6 +68,7 @@ export type IpDocketPickerProps = {
   error?: string | null;
   pageSize?: number;
   excludeIds?: readonly string[];
+  recordTypes?: readonly IpTrademarkDocketRecordType[];
   required?: boolean;
   disabled?: boolean;
   className?: string;
@@ -111,6 +116,7 @@ export function IpDocketPicker({
   error,
   pageSize = 50,
   excludeIds,
+  recordTypes,
   required,
   disabled,
   className,
@@ -130,9 +136,9 @@ export function IpDocketPicker({
   }, [search]);
 
   const results = useInfiniteQuery({
-    queryKey: ["ip", "dockets", "picker", { query, pageSize }],
+    queryKey: ["ip", "dockets", "picker", { query, pageSize, recordTypes: recordTypes ?? null }],
     queryFn: ({ pageParam, signal }) =>
-      fetchIpDockets({ query, cursor: pageParam, limit: pageSize, signal }),
+      fetchIpDockets({ query, cursor: pageParam, limit: pageSize, recordTypes, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor ?? null,
     placeholderData: keepPreviousData,

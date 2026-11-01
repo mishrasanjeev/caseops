@@ -920,6 +920,13 @@ class ManualTrademarkApplicationCreateResponse(BaseModel):
     duplicate_candidates: list[IpIdentifierResponse] = Field(default_factory=list)
 
 
+# Record types GET /api/ip/dockets can filter on; the trademark domain's
+# TRADEMARK_RECORD_TYPES (a test keeps the two equal).
+IpTrademarkDocketRecordType = Literal[
+    "trademark", "international_registration", "international_designation"
+]
+
+
 class IpDocketListResponse(BaseModel):
     dockets: list[IpDocketRecordResponse]
     count: int

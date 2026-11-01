@@ -181,6 +181,7 @@ from caseops_api.schemas.ip_operations import (
     IpRelatedRightObligationCompleteRequest,
     IpRelatedRightObligationCreateRequest,
     IpTitleInterestCreateRequest,
+    IpTrademarkDocketRecordType,
     IpWorkspaceReadinessResponse,
     ManualTrademarkApplicationCreateRequest,
     ManualTrademarkApplicationCreateResponse,
@@ -2331,9 +2332,17 @@ async def get_ip_dockets(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     query: Annotated[str | None, Query(max_length=200)] = None,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
+    # Narrows the trademark docket types listed, so totals and pages count
+    # only those types (the registry picker lists national dockets only).
+    record_type: Annotated[list[IpTrademarkDocketRecordType] | None, Query()] = None,
 ) -> IpDocketListResponse:
     return list_ip_dockets(
-        session, context=context, limit=limit, query=query, cursor=cursor
+        session,
+        context=context,
+        limit=limit,
+        query=query,
+        cursor=cursor,
+        record_types=record_type,
     )
 
 

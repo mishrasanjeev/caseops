@@ -247,7 +247,9 @@ def _target_state(
             )
         )
         if target is None:
-            raise HTTPException(status_code=404, detail="Trademark application not found.")
+            raise HTTPException(
+                status_code=404, detail="Trademark application not found on this docket."
+            )
         state.update(
             {
                 "office": target.office,
@@ -264,7 +266,7 @@ def _target_state(
             )
         )
         if target is None:
-            raise HTTPException(status_code=404, detail="IP proceeding not found.")
+            raise HTTPException(status_code=404, detail="IP proceeding not found on this docket.")
         state.update(
             {
                 "office": target.office,
