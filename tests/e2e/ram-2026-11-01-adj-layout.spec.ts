@@ -468,7 +468,8 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   expect(body.transactions.length, "the recordal has history to show").toBeGreaterThan(0);
 
   await page.getByRole("tab", { name: "Title at date" }).click();
-  const interests = page.locator("section", { has: page.getByRole("heading", { name: "Registry-recorded position" }) }).locator("table");
+  // The heading's own section: an outer section holds both interest tables.
+  const interests = page.getByRole("heading", { name: "Registry-recorded position" }).locator("xpath=ancestor::section[1]").locator("table");
   const interest = interests.locator("tbody > tr").filter({ hasText: "Oldco Brands Limited" });
   await expect(interest).toHaveCount(1);
   await expectReachable(interest.locator('td[data-label="Source"]'), "Registry-recorded interest source");
