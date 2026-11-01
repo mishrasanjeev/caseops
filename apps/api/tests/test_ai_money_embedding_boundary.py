@@ -401,9 +401,15 @@ def test_mock_embeddings_remain_available_with_budget_enabled_and_no_paid_marker
 
 @pytest.mark.parametrize("env", ["local", "test", "ci", "cloud", "production", "ingest-worker"])
 @pytest.mark.parametrize("name", ["voyage", "gemini"])
-def test_default_december_policy_reaches_direct_sdk_adapters_in_every_runtime(
+def test_default_policy_leaves_paid_adapters_unbudgeted_and_explicit_enable_still_enforces(
     boundary, monkeypatch, env, name
 ):
+    """Owner decision 2026-11-01: the shared AI money guard is off by default.
+
+    OpenAI and Voyage are prepaid accounts and monthly provider spend cannot be
+    reconciled, so a missing month must never refuse customer work. The guard
+    stays available when an operator explicitly enables it.
+    """
     from secrets import token_urlsafe
 
     from caseops_api.core.settings import Settings
@@ -411,30 +417,33 @@ def test_default_december_policy_reaches_direct_sdk_adapters_in_every_runtime(
 
     monkeypatch.delenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", raising=False)
     monkeypatch.delenv("CASEOPS_AI_MONEY_BUDGET_START_MONTH", raising=False)
-    settings = Settings(_env_file=None, env=env, auth_secret=token_urlsafe(32), auto_migrate=False)
-    assert settings.ai_money_budget_enabled is True
-    assert settings.effective_ai_money_budget_enabled is True
-    assert settings.ai_money_budget_start_month == "2026-12"
+    base = {"_env_file": None, "env": env, "auth_secret": token_urlsafe(32), "auto_migrate": False}
+    settings = Settings(**base)
+    assert settings.ai_money_budget_enabled is False
+    assert settings.effective_ai_money_budget_enabled is False
     monkeypatch.setattr(embeddings, "get_settings", lambda: settings)
     monkeypatch.setattr(ai_money_budget, "get_settings", lambda: settings)
     monkeypatch.setattr(ai_money_budget, "budget_applies", boundary.original_budget_applies)
     adapter = provider(name)
 
-    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-11")
+    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-12")
     boundary.period_active = ai_money_budget.budget_applies()
     assert boundary.period_active is False
     with unmarked_offline_request():
-        adapter.embed(["November source"])
+        adapter.embed(["December source"])
     assert boundary.receipts == [] and len(boundary.transports) == 1
 
-    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-12")
+    enabled = Settings(**base, ai_money_budget_enabled=True)
+    monkeypatch.setattr(embeddings, "get_settings", lambda: enabled)
+    monkeypatch.setattr(ai_money_budget, "get_settings", lambda: enabled)
     boundary.period_active = ai_money_budget.budget_applies()
     assert boundary.period_active is True
     boundary.budget_error = "unknown_price"
     with unmarked_offline_request(), pytest.raises(embeddings.EmbeddingProviderError):
         adapter.embed(["December source"])
     assert boundary.receipts == [] and len(boundary.transports) == 1
-    assert len(boundary.reservations) == 2
+    # Only the explicitly enabled call reserves; the default call admits nothing.
+    assert len(boundary.reservations) == 1
     assert boundary.reservations[-1]["retry_count"] == (4 if name == "gemini" else 0)
 
 
