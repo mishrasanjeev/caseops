@@ -9,9 +9,13 @@
  * - a bad class token and missing evidence are refused at their fields, with
  *   no request sent;
  * - "Class 45" with a goods row and the journal extract is recorded (201),
- *   listed among recorded entries, and its evidence is shown on the hit;
+ *   listed among recorded entries, and its evidence is shown on the hit with
+ *   labelled similarity fields (no internal ids, no JSON);
  * - the test's own hit and profile are retired through the product
- *   (attorney disposition, profile pause). Journal entries are append-only.
+ *   (attorney disposition, profile pause), and the entry stays listed after
+ *   the profile is paused. Journal entries are append-only. If the journey
+ *   fails part-way, the finally block still retires the stamped hit and
+ *   profile by server id, so no active stamped profile is left in the tenant.
  *
  * Production retains every run's records, so everything is stamped and
  * selected by server identity. Locally the docket is created through the API:
@@ -31,6 +35,8 @@ test.describe.configure({ mode: "default", retries: 0 });
 
 const SOURCE_URL = "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal";
 const INTERNAL_FIELD = /\b(?:membership ids?|member ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
+const UUID_TEXT = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+const JSON_TEXT = /\{\s*"[a-z_]+"\s*:/i;
 const BLOCKED_CATEGORY: Record<string, string> = {
   incident_kill_switch: "Paused by CaseOps",
   rollout_disabled: "Paused by CaseOps",
@@ -72,10 +78,18 @@ async function watchDocket(rt: TesterRuntime, request: APIRequestContext): Promi
     }), "Local watch docket prerequisite", 201);
     return { id: created.docket.id, title: created.docket.title };
   }
-  const page = await json(await request.get(`${rt.api.origin}/api/ip/dockets?limit=50`, { headers: rt.headers }), "Tester dockets");
-  const docket = (page.dockets as Array<Docket & { record_type: string }>).find(row => row.record_type === "trademark");
-  expect(docket, "test-legal must have a visible trademark docket for a watch profile").toBeTruthy();
-  return { id: docket!.id, title: docket!.title };
+  // The docket list has no record-type filter: page through it until a trademark docket appears.
+  let cursor: string | null = null;
+  for (let pageNumber = 0; pageNumber < 20; pageNumber += 1) {
+    const params = new URLSearchParams({ limit: "200" });
+    if (cursor) params.set("cursor", cursor);
+    const page = await json(await request.get(`${rt.api.origin}/api/ip/dockets?${params}`, { headers: rt.headers }), "Tester dockets");
+    const docket = (page.dockets as Array<Docket & { record_type: string }>).find(row => row.record_type === "trademark");
+    if (docket) return { id: docket.id, title: docket.title };
+    if (!page.has_more || !page.next_cursor) break;
+    cursor = page.next_cursor;
+  }
+  throw new Error("test-legal must have a visible trademark docket for a watch profile");
 }
 
 async function internalFieldLabels(page: Page): Promise<string[]> {
@@ -88,8 +102,45 @@ async function internalFieldLabels(page: Page): Promise<string[]> {
   }, INTERNAL_FIELD.source);
 }
 
+type Created = { profileId: string | null; profilePaused: boolean; hitId: string | null; hitRetired: boolean };
+
+/** Fallback clean-up after a failed run, keyed by server id (the product path runs first). */
+async function retireLeftovers(request: APIRequestContext, rt: TesterRuntime, created: Created) {
+  if (!created.hitId && !created.profileId) return;
+  const workspace = await json(await request.get(`${rt.api.origin}/api/ip/watch?limit=250`, { headers: rt.headers }), "Watch workspace for clean-up");
+  if (created.hitId && !created.hitRetired) {
+    const hit = workspace.hits.find((row: { id: string }) => row.id === created.hitId);
+    if (hit && hit.disposition !== "not_relevant") {
+      await json(await request.post(`${rt.api.origin}/api/ip/watch/hits/${hit.id}/disposition`, {
+        headers: rt.headers,
+        data: { expected_version: hit.version, disposition: "not_relevant", reason: "BUG-014 journey clean-up after a failed run", source_confirmed: true },
+      }), "Retire the journey hit after a failure");
+    }
+  }
+  if (created.profileId && !created.profilePaused) {
+    const profile = workspace.profiles.find((row: { id: string }) => row.id === created.profileId);
+    if (profile && profile.poll_status === "active") {
+      await json(await request.post(`${rt.api.origin}/api/ip/watch/profiles/${profile.id}/status`, {
+        headers: rt.headers,
+        data: { expected_version: profile.version, poll_status: "paused", reason: "BUG-014 journey clean-up after a failed run" },
+      }), "Pause the journey profile after a failure");
+    }
+  }
+}
+
 async function captureJournalEntry(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean,
+) {
+  const created: Created = { profileId: null, profilePaused: false, hitId: null, hitRetired: false };
+  try {
+    await journey(page, request, rt, info, mobile, created);
+  } finally {
+    await retireLeftovers(request, rt, created);
+  }
+}
+
+async function journey(
+  page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean, created: Created,
 ) {
   const checkLayout = async () => { if (mobile) await expectNoPageOverflow(page); };
   const docket = await watchDocket(rt, request);
@@ -114,7 +165,9 @@ async function captureJournalEntry(
   for (const category of new Set(reasons.map(reason => BLOCKED_CATEGORY[reason]))) {
     await expect(automated.getByText(category, { exact: true })).toBeVisible();
   }
-  if (reasons.length === 0) await expect(automated.getByText("Available", { exact: true })).toBeVisible();
+  // No automated journal source exists, so "Available" is never claimed for polling.
+  await expect(automated.getByText("No journal source connected", { exact: true })).toBeVisible();
+  await expect(automated.getByText("Available", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("watch-readiness-manual").getByText("Available", { exact: true })).toBeVisible();
   await expect(page.getByTestId("watch-readiness-manual")).toContainText("This is the manual path");
   await checkLayout();
@@ -138,6 +191,7 @@ async function captureJournalEntry(
     response.url().endsWith("/api/ip/watch/profiles") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Create profile" }).click();
   const profile = await uiJson(await profileResponse, "Create watch profile through the UI", 201);
+  created.profileId = profile.id;
   expect(profile.class_numbers_json).toEqual([45]);
   expect(profile.recipient_membership_ids_json).toEqual([rt.actor.membership.id]);
   await expect(page.getByTestId(`watch-profile-${profile.id}`)).toContainText(`BUG-014 ${label}`);
@@ -187,6 +241,7 @@ async function captureJournalEntry(
   expect(entry.raw_evidence_json).toEqual({ capture_method: "manual", extract_text: extract });
   const ownHit = ingested.hits.find((hit: { profile_id: string }) => hit.profile_id === profile.id);
   expect(ownHit, "The stamped profile matches the stamped mark").toBeTruthy();
+  created.hitId = ownHit.id;
   const result = page.getByTestId("journal-intake-result");
   await expect(result).toContainText(`Recorded: Journal ${label} · Application ${applicationNumber} · ${mark}`);
   await expect(result).toContainText(`${ingested.hits.length} new watch ${ingested.hits.length === 1 ? "hit" : "hits"}`);
@@ -204,6 +259,12 @@ async function captureJournalEntry(
   await page.getByTestId(`watch-hit-${ownHit.id}`).click();
   await expect(page.getByRole("heading", { name: mark })).toBeVisible();
   await expect(page.getByText(extract)).toBeVisible();
+  const similarity = page.getByTestId("similarity-evidence");
+  await expect(similarity).toContainText("Word matches");
+  await expect(similarity).toContainText("Class 45");
+  const hitText = await page.locator("main").innerText();
+  expect(hitText, "The hit screen shows no internal id").not.toMatch(UUID_TEXT);
+  expect(hitText, "The hit screen shows no raw JSON").not.toMatch(JSON_TEXT);
   await checkLayout();
   await markPositive(info, mobile ? "bug-014-capture-mobile" : "bug-014-capture", {
     local: rt.local, publication_id: entry.id, hit_id: ownHit.id, profile_id: profile.id, readiness: reasons,
@@ -217,13 +278,23 @@ async function captureJournalEntry(
     response.url().endsWith(`/api/ip/watch/hits/${ownHit.id}/disposition`) && response.request().method() === "POST");
   await page.getByRole("button", { name: "Record review" }).click();
   expect((await uiJson(await reviewed, "Retire the journey hit")).disposition).toBe("not_relevant");
+  created.hitRetired = true;
   await page.getByRole("button", { name: "Profiles", exact: true }).click();
   const card = page.getByTestId(`watch-profile-${profile.id}`);
   const paused = page.waitForResponse(response =>
     response.url().endsWith(`/api/ip/watch/profiles/${profile.id}/status`) && response.request().method() === "POST");
   await card.getByRole("button", { name: "Pause" }).click();
   expect((await uiJson(await paused, "Pause the journey profile")).poll_status).toBe("paused");
+  created.profilePaused = true;
   await expect(card.getByText("paused", { exact: true })).toBeVisible();
+
+  // The recorded entry stays listed after its profile is paused, whatever the capture gate shows.
+  await page.getByRole("button", { name: "Journal intake", exact: true }).click();
+  const stillListed = page.getByTestId(`journal-entry-${entry.id}`);
+  await stillListed.scrollIntoViewIfNeeded();
+  await expectOnScreen(stillListed, "The recorded entry is still listed after the profile is paused");
+  await expect(stillListed).toContainText(`Application ${applicationNumber}`);
+  await checkLayout();
 }
 
 test("BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field", async ({ page, request, baseURL }, info) => {

@@ -345,7 +345,7 @@ test.describe.serial("Ram 2026-08-24 local and deployed regressions", () => {
     } else {
       await expect(page.getByRole("table")).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Started" })).toBeVisible();
-      await expect(page.getByRole("columnheader", { name: "Provider" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Source" })).toBeVisible();
     }
 
     await page.goto(`${BASE_URL}/law-firms`);

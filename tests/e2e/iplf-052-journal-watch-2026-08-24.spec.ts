@@ -265,20 +265,41 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
   expect(createdProfile.status(), await createdProfile.text()).toBe(201);
   await expect(page.getByRole("heading", { name: "ASTER word, phonetic and class watch" })).toBeVisible();
 
-  const originalItem = publication({
-    applicationId: application.application.id,
-    journalNumber: "TMJ-2248",
-    journalDate: "2026-08-21",
-    markText: "ASTER PRIME",
-    sourceStatus: "available",
-    sourceRetrievedAt: "2026-08-21T06:00:00Z",
-  });
-  const originalResponse = await ingest(api, headers, "iplf052-original-0001", originalItem);
+  // The original advertisement is captured the way a lawyer does it: through
+  // the intake form (BUG-014 escaped while this spec posted an API-shaped payload).
+  await page.getByRole("combobox", { name: "Docket scope", exact: true }).selectOption(application.docket.id);
+  await page.getByRole("button", { name: "Journal intake" }).click();
+  await page.getByRole("combobox", { name: "Linked trademark application" }).selectOption(application.application.id);
+  await page.getByLabel("Journal number", { exact: true }).fill("TMJ-2248");
+  await page.getByLabel("Journal date", { exact: true }).fill("2026-08-21");
+  await page.getByLabel("Registry application number", { exact: true }).fill("TM-CANDIDATE-052");
+  await page.getByLabel("Published word mark", { exact: true }).fill("ASTER PRIME");
+  await page.getByLabel("Published device image link", { exact: true }).fill("https://evidence.example/aster-watch-device.png");
+  await page.getByLabel("Published proprietor", { exact: true }).fill("Aster Candidate Technologies");
+  await page.getByLabel("Published Nice classes", { exact: true }).fill("Class 9, 42");
+  await page.getByLabel("Class 9 goods/services as published", { exact: true }).fill("downloadable legal software");
+  await page.getByLabel("Class 42 goods/services as published", { exact: true }).fill("SaaS");
+  await page.getByLabel("Only some classes").check();
+  await page.getByLabel("Class 9", { exact: true }).check();
+  await page.getByLabel("Class 42", { exact: true }).check();
+  await page.getByLabel("Official source URL", { exact: true }).fill("https://ipindia.gov.in/journal/TMJ-2248/page/412");
+  await page.getByLabel("Source page", { exact: true }).fill("412");
+  await page.getByLabel("Journal entry as published", { exact: true }).fill("Trade Marks Journal TMJ-2248, page 412: ASTER PRIME, classes 9 and 42.");
+  const originalCapture = page.waitForResponse(
+    (response) => response.url().endsWith("/api/ip/watch/journal-ingestions") && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Record and compare" }).click();
+  const originalResponse = await originalCapture;
   expect(originalResponse.status(), await originalResponse.text()).toBe(201);
   const original = await originalResponse.json();
   expect(original.hits).toHaveLength(1);
+  expect(original.publications[0].application_id).toBe(application.application.id);
+  expect(original.publications[0].publication_scope_json).toEqual({ scope_kind: "partial", published_classes: [9, 42] });
+  await expect(page.getByTestId("journal-intake-result")).toContainText("Recorded: Journal TMJ-2248 · Application TM-CANDIDATE-052 · ASTER PRIME");
 
-  const replayResponse = await ingest(api, headers, "iplf052-original-0001", originalItem);
+  // Replaying the exact request the form sent is idempotent.
+  const formRequest = originalResponse.request().postDataJSON();
+  const replayResponse = await api.post(`${apiBaseUrl}/api/ip/watch/journal-ingestions`, { headers, data: formRequest });
   expect(replayResponse.status(), await replayResponse.text()).toBe(201);
   const replay = await replayResponse.json();
   expect(replay.idempotent_replay).toBe(true);
@@ -293,7 +314,7 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
     sourceStatus: "available",
     sourceRetrievedAt: "2026-08-22T06:00:00Z",
   });
-  const conflict = await ingest(api, headers, "iplf052-original-0001", conflictingItem);
+  const conflict = await ingest(api, headers, formRequest.idempotency_key, conflictingItem);
   expect(conflict.status(), await conflict.text()).toBe(409);
 
   const unavailableResponse = await ingest(
@@ -349,8 +370,9 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
 
   await page.getByRole("button", { name: "Hits" }).click();
   await page.getByRole("button", { name: "Refresh" }).click();
-  await page.getByRole("button").filter({ hasText: "ASTER PRIME" }).first().click();
-  await expect(page.getByText(/Prior hit/)).toBeVisible();
+  // Select the correction hit by server identity; the queue also holds the original.
+  await page.getByTestId(`watch-hit-${correction.hits[0].id}`).click();
+  await expect(page.getByText(/Earlier hit: ASTER PRIME · Application TM-CANDIDATE-052/)).toBeVisible();
   await expect(page.getByText("AI assistance is advisory.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
     "href",
