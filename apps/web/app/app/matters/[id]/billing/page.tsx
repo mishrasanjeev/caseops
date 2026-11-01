@@ -273,8 +273,8 @@ export default function MatterBillingPage() {
             />
           ) : (
             // BUG-016: the invoice actions must not widen the page at 393px.
-            <div className="overflow-x-auto" data-testid="matter-invoices-table">
-            <table className="w-full text-sm tabular">
+            <div className="@container overflow-x-auto" data-testid="matter-invoices-table">
+            <table className="w-full text-sm tabular @max-[48rem]:stacked-table">
               <thead>
                 <tr className="border-b border-[var(--color-line)] bg-[var(--color-bg)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
                   <th className="px-4 py-2.5 text-left font-semibold">Invoice</th>
@@ -293,23 +293,23 @@ export default function MatterBillingPage() {
                       key={inv.id}
                       className="border-b border-[var(--color-line-2)] last:border-0"
                     >
-                      <td className="px-4 py-3 font-medium text-[var(--color-ink)]">
+                      <td data-label="Invoice" className="px-4 py-3 font-medium text-[var(--color-ink)]">
                         {inv.invoice_number}
                       </td>
-                      <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                      <td data-label="Issued" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                         {inv.issued_on ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td data-label="Total" className="px-4 py-3 text-right">
                         {formatMoney(inv.total_amount_minor, inv.currency)}
                       </td>
-                      <td className="px-4 py-3 text-right text-[var(--color-ink-2)]">
+                      <td data-label="Balance" className="px-4 py-3 text-right text-[var(--color-ink-2)]">
                         {formatMoney(inv.balance_due_minor, inv.currency)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Status" className="px-4 py-3">
                         <StatusBadge status={inv.status} />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                      <td data-label="Actions" className="px-4 py-3 text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-2 @max-[48rem]:justify-start">
                           {canIssueInvoice ? (
                             <Button
                               type="button"

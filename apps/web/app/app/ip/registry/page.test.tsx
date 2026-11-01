@@ -415,12 +415,15 @@ describe("IP registry reconciliation page", () => {
 
     const title = await screen.findAllByText("Aster LLP v Registrar of Trade Marks", { selector: "strong" });
     const entry = title.map((node) => node.closest("li")).find(Boolean) as HTMLElement;
-    expect(entry.closest("ul")).toHaveClass("md:hidden");
+    // The entry list serves any container narrower than the table needs (a phone,
+    // or a laptop beside the sidebar), so Mismatch and Retire are never off-screen.
+    expect(entry.closest("ul")).toHaveClass("@min-[760px]:hidden");
     expect(entry).toHaveTextContent("Delhi High Court");
     expect(within(entry).getByRole("button", { name: "Mismatch" })).toBeInTheDocument();
     expect(within(entry).getByRole("button", { name: "Retire" })).toBeInTheDocument();
-    // The wide table is for md and up only.
-    expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "md:block");
+    // The wide table only where its 760px fit.
+    expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "@min-[760px]:block");
+    expect(entry.closest("ul")?.parentElement).toHaveClass("@container");
   });
 
   it("BUG-012 explains a Madrid docket and offers no legal record", async () => {

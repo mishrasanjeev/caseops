@@ -246,6 +246,59 @@
   letter-spacing: -0.01em;
 }
 
+/* A table whose container is narrower than the table needs renders each row
+   as a labelled block, so every value and every row action stays on screen
+   without horizontal scrolling (B4-ADJ-13). Apply it with a container-query
+   variant at the table's own minimum width, inside an `@container` parent:
+   `@max-[900px]:stacked-table`. Each cell names its column in `data-label`;
+   the header row stays available to assistive technology. */
+@utility stacked-table {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+
+  & thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  & tbody {
+    display: block;
+  }
+
+  & tr {
+    display: block;
+    padding-block: 0.75rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  & td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0.25rem 0;
+    border-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  & td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--color-mute);
+  }
+}
+
 @utility grid-fade {
   background-image:
     linear-gradient(

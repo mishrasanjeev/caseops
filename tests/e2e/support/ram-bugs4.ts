@@ -16,7 +16,8 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
-  expect, type APIRequestContext, type APIResponse, type Locator, type Page, type TestInfo,
+  expect, request as playwrightRequest, type APIRequestContext, type APIResponse, type Locator, type Page,
+  type Response, type TestInfo,
 } from "@playwright/test";
 
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
@@ -59,7 +60,13 @@ function required(name: string): string {
   return value;
 }
 
-export async function json<T = any>(response: APIResponse, operation: string, expected = 200): Promise<T> {
+/**
+ * An API oracle response or a response the page itself received
+ * (`page.waitForResponse`): both expose the status and the JSON body.
+ */
+export type JsonResponse = Pick<APIResponse, "status" | "json"> | Pick<Response, "status" | "json">;
+
+export async function json<T = any>(response: JsonResponse, operation: string, expected = 200): Promise<T> {
   expect(response.status(), `${operation} returned ${response.status()}; body intentionally not logged.`).toBe(expected);
   return response.json() as Promise<T>;
 }
@@ -134,6 +141,41 @@ function grantLocalFullIp(actor: TesterActor, slug: string) {
     },
   });
   expect(result.status, "Local full-IP fixture grant failed; process output omitted.").toBe(0);
+}
+
+/**
+ * Local only: one issued SaaS invoice on this runtime's fresh tenant, for the
+ * tenant billing page's Invoices table. Only the platform operator issues SaaS
+ * invoices (the operator console, behind its own sign-in and MFA), so there is
+ * no tenant-facing path to drive; the row mirrors what that path writes.
+ * Restricted to the exact tenant this runtime bootstrapped on a loopback database.
+ */
+export function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
+  if (!rt.local || !rt.credentials.slug.startsWith("bugs4-") || rt.actor.company.slug !== rt.credentials.slug) {
+    throw new Error("Local SaaS invoice fixture requires the exact freshly bootstrapped tenant.");
+  }
+  const { database, python } = localDatabase();
+  const script = [
+    "import datetime, os",
+    "from caseops_api.db.models import BillingManualInvoice, Company",
+    "from caseops_api.db.session import get_session_factory",
+    "with get_session_factory()() as session:",
+    "    company = session.get(Company, os.environ['BUGS4_COMPANY_ID'])",
+    "    assert company and company.slug == os.environ['BUGS4_SLUG'] and company.slug.startswith('bugs4-')",
+    "    session.add(BillingManualInvoice(company_id=company.id, invoice_number=os.environ['BUGS4_INVOICE'],",
+    "        amount_minor=1250000, tax_amount_minor=225000, currency='INR', status='issued',",
+    "        issued_on=datetime.date.today(), due_on=datetime.date.today() + datetime.timedelta(days=30),",
+    "        metadata_json={'reason': 'bugs4 local layout fixture'}))",
+    "    session.commit()",
+  ].join("\n");
+  const result = spawnSync(python, ["-c", script], {
+    cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+    env: {
+      ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, BUGS4_COMPANY_ID: rt.actor.company.id,
+      BUGS4_SLUG: rt.credentials.slug, BUGS4_INVOICE: invoiceNumber, PYTHONPATH: path.join(repoRoot, "apps/api/src"),
+    },
+  });
+  expect(result.status, "Local SaaS invoice fixture failed; process output omitted.").toBe(0);
 }
 
 async function configureLocalWorkspace(request: APIRequestContext, api: URL, headers: Record<string, string>, actor: TesterActor) {
@@ -227,9 +269,17 @@ export async function addLocalColleague(
   const password = `Synthetic!${randomUUID()}`;
   await json(await request.post(`${rt.api.origin}/api/companies/current/users`, { headers: rt.headers,
     data: { full_name: fullName, email, password, role } }), `Create local ${role}`, 200);
-  const login = await json<TesterActor>(await request.post(`${rt.api.origin}/api/auth/login`, {
-    headers: noPaidProviderHeaders, data: { company_slug: rt.credentials.slug, email, password },
-  }), `Local ${role} login`);
+  // The login sets the colleague's session cookie on the context it runs in.
+  // Run it in a throwaway context so the caller's context stays the tester's.
+  const isolated = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+  let login: TesterActor;
+  try {
+    login = await json<TesterActor>(await isolated.post(`${rt.api.origin}/api/auth/login`, {
+      data: { company_slug: rt.credentials.slug, email, password },
+    }), `Local ${role} login`);
+  } finally {
+    await isolated.dispose();
+  }
   expect(login.company.id).toBe(rt.actor.company.id);
   return { credentials: { slug: rt.credentials.slug, email, password }, membershipId: login.membership.id };
 }
