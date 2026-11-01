@@ -17,6 +17,14 @@
  *   confirmed profile has no UI creation path in this journey, and test-legal
  *   opposition records are shared state; the fixture is built through the
  *   product API).
+ * - The hearing a specialized record accepts follows the API's served status
+ *   table: with a scheduled and a completed hearing, the hearing notice is
+ *   recorded on the scheduled one through the UI (201) while the completed
+ *   one is listed disabled with its reason, and attendance flips both.
+ * - The IP report preview printed application, docket, Matter and asset ids
+ *   as its first columns; the server still sends them, the table never shows
+ *   them (local only: the report needs a stamped IP record, which has no
+ *   disposal path in test-legal).
  */
 import { expect, test, type APIRequestContext, type Locator, type Page, type Response } from "@playwright/test";
 
@@ -34,6 +42,7 @@ const QUEUES = [
   { path: "/app/mailbox", label: "Matter for Link and Request", search: "Search Matters for Link and Request", list: "/api/mailbox/imports" },
   { path: "/app/calendar/conflicts", label: "Matter for Accept", search: "Search Matters for Accept", list: "/api/calendar/provider-event-candidates" },
 ] as const;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const INTERNAL_FIELD = /\b(?:(?:membership|member|matter|record|scope|application|event|docket|proceeding|hearing|target) ids?|uuid)\b/i;
 
 async function uiJson<T>(response: Response, operation: string, expected = 200): Promise<T> {
@@ -299,7 +308,7 @@ async function oppositionFixture(rt: TesterRuntime, request: APIRequestContext, 
         starts_response_period: true, evidence_refs: ["service:notice:adj"] },
       evidence_refs: ["evidence:notice:adj"], document_refs: ["document:notice:adj"],
     } }), "Fixture opposition profile");
-  return { docketId, proceedingId: proceeding.id };
+  return { docketId, proceedingId: proceeding.id, title: `${code} OPPOSED MARK` };
 }
 
 async function oppositionJourney(page: Page, rt: TesterRuntime, request: APIRequestContext, matter: MatterRow) {
@@ -380,6 +389,162 @@ test("B4-ADJ-22 [mobile] [local-only] opposition choices fit a phone", async ({ 
   try {
     await oppositionJourney(page, rt, request, matter);
     await markPositive(test.info(), "adj-22-opposition-mobile", { matterId: matter.id, width: viewport.width });
+  } finally {
+    await rt.release();
+  }
+});
+
+async function createHearing(rt: TesterRuntime, request: APIRequestContext, docketId: string, status: "scheduled" | "completed") {
+  const operational = status === "scheduled";
+  return json<{ id: string; status: string }>(await request.post(`${rt.api.origin}/api/ip/hearings`, { headers: rt.headers, data: {
+    docket_id: docketId, hearing_on: operational ? "2026-12-15" : "2026-10-01", forum_name: "Trade Marks Registry Delhi",
+    purpose: operational ? "Opposition final hearing" : "Earlier opposition hearing", status,
+    ...(operational
+      ? { attendee_membership_ids: [rt.actor.membership.id], responsible_membership_id: rt.actor.membership.id }
+      : { outcome_note: "Heard; orders reserved." }),
+  } }), `Fixture ${status} hearing`, 201);
+}
+
+async function hearingChoiceJourney(page: Page, rt: TesterRuntime, request: APIRequestContext, matter: MatterRow) {
+  const { docketId, proceedingId } = await oppositionFixture(rt, request, matter);
+  const scheduled = await createHearing(rt, request, docketId, "scheduled");
+  const completed = await createHearing(rt, request, docketId, "completed");
+  const workflowRead = page.waitForResponse((row) => new URL(row.url()).pathname
+    === `/api/ip/dockets/${docketId}/proceedings/${proceedingId}/opposition-shared-workflow`);
+  await page.goto(`${rt.web.origin}/app/ip?docket=${docketId}&view=proceedings`);
+  const workflow = await uiJson<{ hearing_statuses_by_action: Record<string, string[]>; shared_hearings: { id: string; status: string }[] }>(
+    await workflowRead, "Shared workflow read");
+  // The form's hearing rules are the API's table, not a copy.
+  expect(workflow.hearing_statuses_by_action).toMatchObject({
+    hearing_notice_recorded: ["adjourned", "scheduled"], attendance_recorded: ["completed"],
+  });
+  expect(workflow.shared_hearings.map((row) => `${row.id}:${row.status}`).sort()).toEqual(
+    [`${scheduled.id}:scheduled`, `${completed.id}:completed`].sort());
+
+  const specialized = page.getByTestId("ip-opposition-specialized-paths");
+  await expect(specialized).toBeVisible();
+  await specialized.getByTestId("ip-opposition-specialized-action").selectOption("hearing_notice_recorded");
+  const hearing = specialized.getByTestId("ip-opposition-specialized-hearing");
+  await expect(hearing).toBeEnabled();
+  await expect(hearing).toHaveValue("");
+  const completedOption = hearing.locator(`option[value="${completed.id}"]`);
+  await expect(completedOption).toBeDisabled();
+  await expect(completedOption).toContainText("not available for a completed hearing");
+  await expect(hearing.locator(`option[value="${scheduled.id}"]`)).toBeEnabled();
+  await hearing.selectOption(scheduled.id);
+  await expectFieldFits(page, hearing, "Canonical hearing on screen");
+  const label = stamp("NOTICE").replace(/\s+/g, "-");
+  await specialized.getByLabel("Source reference").fill(`registry:hearing-notice:${label}`);
+  await specialized.getByLabel("Lawyer confirmation").fill("Hearing notice reviewed by responsible counsel.");
+  await specialized.getByLabel("Notice received").fill("2026-11-01");
+  await specialized.getByLabel("Notice document").fill(`document:hearing-notice:${label}`);
+  await expect(specialized.getByLabel("Applicable rules")).toHaveValue("Trade Marks Rules, 2017");
+  await specialized.getByLabel("Policy confirmation").fill("Notice period checked against the rules.");
+  await specialized.getByLabel("Evidence references").fill(`evidence:hearing-notice:${label}`);
+  await specialized.getByLabel("Reason").fill("Registry hearing notice received for the scheduled hearing.");
+  const submit = specialized.getByTestId("ip-opposition-specialized-submit");
+  await expect(submit).toBeEnabled();
+  const posted = page.waitForResponse((row) => new URL(row.url()).pathname
+    === `/api/ip/dockets/${docketId}/proceedings/${proceedingId}/opposition-shared-actions` && row.request().method() === "POST");
+  await submit.click();
+  const after = await uiJson<{ shared_actions: { payload_json: { action_kind?: string; hearing_notice?: { shared_hearing_id?: string } } }[] }>(
+    await posted, "UI hearing notice", 201);
+  const notices = after.shared_actions.filter((row) => row.payload_json.action_kind === "hearing_notice_recorded");
+  expect(notices.map((row) => row.payload_json.hearing_notice?.shared_hearing_id)).toEqual([scheduled.id]);
+
+  // Attendance accepts only a completed hearing: the choice flips.
+  await specialized.getByTestId("ip-opposition-specialized-action").selectOption("attendance_recorded");
+  await expect(hearing).toHaveValue("");
+  await expect(hearing.locator(`option[value="${scheduled.id}"]`)).toBeDisabled();
+  await expect(hearing.locator(`option[value="${scheduled.id}"]`)).toContainText("mark the hearing completed first");
+  await expect(hearing.locator(`option[value="${completed.id}"]`)).toBeEnabled();
+  expect(await deadSelects(page, specialized), "specialized dead selects").toEqual([]);
+  await expectNoPageOverflow(page);
+}
+
+// Local only: same opposition fixture as the B4-ADJ-22 journeys above.
+test("B4-ADJ-22 [local-only] a specialized hearing record is accepted on the hearing the served table allows", async ({
+  page, request, baseURL,
+}) => {
+  test.setTimeout(420_000);
+  page.setDefaultTimeout(30_000);
+  const rt = await prepareTester(page, request, baseURL, { width: 1440, height: 900 });
+  expect(rt.local, "Opposition fixture is local-only acceptance").toBe(true);
+  const matter = await createMatterInUi(page, rt, false);
+  try {
+    await hearingChoiceJourney(page, rt, request, matter);
+    await markPositive(test.info(), "adj-22-hearing-choice-desktop", { matterId: matter.id });
+  } finally {
+    await rt.release();
+  }
+});
+
+test("B4-ADJ-22 [mobile] [local-only] the hearing choice and submit work on a phone", async ({ page, request, baseURL }) => {
+  test.setTimeout(420_000);
+  page.setDefaultTimeout(30_000);
+  const viewport = page.viewportSize() ?? { width: 393, height: 851 };
+  const rt = await prepareTester(page, request, baseURL, viewport);
+  expect(rt.local, "Opposition fixture is local-only acceptance").toBe(true);
+  const matter = await createMatterInUi(page, rt, true);
+  try {
+    await hearingChoiceJourney(page, rt, request, matter);
+    await markPositive(test.info(), "adj-22-hearing-choice-mobile", { matterId: matter.id, width: viewport.width });
+  } finally {
+    await rt.release();
+  }
+});
+
+async function reportJourney(page: Page, rt: TesterRuntime, request: APIRequestContext, matter: MatterRow) {
+  const { docketId, title } = await oppositionFixture(rt, request, matter);
+  await page.goto(`${rt.web.origin}/app/ip/reports`);
+  await page.getByLabel("Report", { exact: true }).selectOption("portfolio_register");
+  await page.getByLabel("Keyword").fill(title);
+  const preview = page.waitForResponse((row) => new URL(row.url()).pathname === "/api/ip/reports/preview"
+    && row.request().method() === "POST");
+  await page.getByRole("button", { name: "Generate" }).click();
+  const report = await uiJson<{ rows: Record<string, unknown>[] }>(await preview, "Report preview");
+  const row = report.rows.find((candidate) => candidate.docket_id === docketId);
+  expect(row, "The stamped IP record is in the preview").toBeTruthy();
+  // The server still sends internal ids; the table must not show them.
+  expect(Object.keys(row!)).toEqual(expect.arrayContaining(["application_id", "docket_id", "matter_id"]));
+  const result = page.getByTestId("ip-report-result");
+  const table = result.getByRole("table");
+  await expect(table).toContainText(title);
+  const headers = await result.getByRole("columnheader").allTextContents();
+  expect(headers).toContain("Docket title");
+  expect(headers.filter((header) => /\bid\b/i.test(header))).toEqual([]);
+  const text = (await table.textContent()) ?? "";
+  expect(text).not.toMatch(UUID);
+  expect(text).not.toContain(matter.id);
+  await expectOnScreen(result.getByRole("heading", { name: "Portfolio register" }), "Report heading on screen");
+  await expectNoPageOverflow(page);
+}
+
+// Local only: the report needs a stamped IP record, which has no disposal path in test-legal.
+test("B4-ADJ-02 [local-only] the IP report preview never shows internal id columns", async ({ page, request, baseURL }) => {
+  test.setTimeout(420_000);
+  page.setDefaultTimeout(30_000);
+  const rt = await prepareTester(page, request, baseURL, { width: 1440, height: 900 });
+  expect(rt.local, "Report fixture is local-only acceptance").toBe(true);
+  const matter = await createMatterInUi(page, rt, false);
+  try {
+    await reportJourney(page, rt, request, matter);
+    await markPositive(test.info(), "adj-02-report-columns-desktop", { matterId: matter.id });
+  } finally {
+    await rt.release();
+  }
+});
+
+test("B4-ADJ-02 [mobile] [local-only] the IP report preview fits a phone without id columns", async ({ page, request, baseURL }) => {
+  test.setTimeout(420_000);
+  page.setDefaultTimeout(30_000);
+  const viewport = page.viewportSize() ?? { width: 393, height: 851 };
+  const rt = await prepareTester(page, request, baseURL, viewport);
+  expect(rt.local, "Report fixture is local-only acceptance").toBe(true);
+  const matter = await createMatterInUi(page, rt, true);
+  try {
+    await reportJourney(page, rt, request, matter);
+    await markPositive(test.info(), "adj-02-report-columns-mobile", { matterId: matter.id, width: viewport.width });
   } finally {
     await rt.release();
   }
