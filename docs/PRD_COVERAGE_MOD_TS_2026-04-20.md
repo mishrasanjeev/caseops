@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## November 1 Native Host Coverage
+
+J20/M22/US-MOB-01..08: **Partially implemented**. Actual APK/Simulator builds
+and OnePlus startup remain separate from pending83-case native inventories.
+V1 Node70/Python101/independent7/CI-selection1 and Queue/Privacy+CX207 scoped
+checks passed; these are fixture/tooling coverage, not device passes. Fresh
+locked installed graphs, public-revision builds, complete native phases and
+distribution gates remain open in [the checkpoint](mobile/NATIVE_COMPLETION_2026-11-01.md).
+
 ## October 31 Actual Family And Mail Candidate Coverage
 
 Scheduled-history addition: J08/M08/J14/M14 now bind ten reviewed public

@@ -5,6 +5,9 @@ from pathlib import Path
 import tempfile
 from types import ModuleType, SimpleNamespace
 import unittest
+from unittest.mock import patch
+import os
+import sys
 
 HERE=Path(__file__).resolve().parent
 p=ModuleType('actual_client_fixture');exec(compile((HERE/'local-client-extension-fixture.py').read_bytes(),str(HERE/'local-client-extension-fixture.py'),'exec'),p.__dict__)
@@ -71,4 +74,43 @@ class Producer(unittest.TestCase):
         q={'companyId':uid(2),'matterId':uid(10),'membershipId':uid(3),'rows':self.q['retainedRows']}
         rows=p.retained_values(q);self.assertGreater(len(rows[0]['rationale']),16384);self.assertEqual(rows[1]['assumptions_json'],'[')
         self.assertEqual([x['id']for x in rows],[uid(7),uid(8)]);self.assertEqual(self.calls,[])
+    def test_existing_cli_dispatches_normal_login_mfa_with_marked_strict_clients_without_replaying_owner(self):
+        credential=self.root/'owner.json';raw=json.dumps({'email':'synthetic@example.invalid','password':'synthetic-offline-only','company_slug':self.q['companySlug'],'totp_secret':'SYNTHETICOFFLINE'}).encode();credential.write_bytes(raw);credential.chmod(0o600)
+        q={**self.q,'credentialEvidence':{'path':str(credential),'sha256':hashlib.sha256(raw).hexdigest(),'uid':os.getuid()}};request=self.root/'request.json';data=json.dumps(q).encode();request.write_bytes(data)
+        clients=[];requests=[]
+        class Client:
+            def __init__(client,**options):
+                client.options=options;client.headers=dict(options['headers']);client.cookies=SimpleNamespace(clear=lambda:requests.append(('clear-cookies',)));clients.append(client)
+            def __enter__(client):return client
+            def __exit__(client,*args):requests.append(('closed',client is clients[-1]))
+            def post(client,route,**options):
+                requests.append((route,options,dict(client.headers)))
+                if route=='/api/auth/login':return response({'access_token':'offline-response-token','user':{'id':uid(4)},'membership':{'id':uid(3)},'company':{'id':uid(2)}})
+                if route=='/api/auth/mfa/step-up':return response({'status':'verified'})
+                raise AssertionError('unexpected offline CLI route')
+        fake_http=SimpleNamespace(Client=Client);fake_otp=SimpleNamespace(TOTP=lambda value:SimpleNamespace(now=lambda:'123456'))
+        def normal(request,*,root,environment,http,owner,now):
+            self.assertEqual(request,q);actor=owner();self.assertIs(actor,clients[1]);self.assertEqual(actor.headers['Authorization'],'Bearer offline-response-token')
+            with self.assertRaises(AssertionError):owner()
+            return {'offlineDispatch':'normal','actualNativeAcceptance':False}
+        with patch.dict(os.environ,{**self.env,'CASEOPS_MOBILE_STATE':str(self.root)}),patch.dict(sys.modules,{'httpx':fake_http,'pyotp':fake_otp}),patch.object(p,'produce_normal',normal),patch.object(p,'produce',side_effect=AssertionError('retained dispatch must stay separate')):
+            result=p.main(str(request),hashlib.sha256(data).hexdigest())
+        self.assertEqual(result['offlineDispatch'],'normal');self.assertEqual(len(clients),2)
+        for client in clients:
+            self.assertEqual(client.options['headers'],{'X-CaseOps-Automated-Test':'no-paid-providers'});self.assertIs(client.options['verify'],True);self.assertIs(client.options['follow_redirects'],False);self.assertIs(client.options['trust_env'],False)
+        routes=[x for x in requests if x[0].startswith('/api/')];self.assertEqual([x[0]for x in routes],['/api/auth/login','/api/auth/mfa/step-up'])
+        self.assertTrue(all(x[2]['X-CaseOps-Automated-Test']=='no-paid-providers'for x in routes));self.assertTrue(all(x[1]['timeout']==5 for x in routes))
+    def test_private_reader_rejects_boolean_uid_and_erases_held_bytes_on_success_and_parse_failure(self):
+        file=self.root/'held.json';file.write_text('{"password":"offline-only"}');file.chmod(0o600);raw=file.read_bytes();ref={'path':str(file),'sha256':hashlib.sha256(raw).hexdigest(),'uid':os.getuid()}
+        for value in (True,False,-1,None):
+            with self.subTest(uid=value),patch.object(Path,'lstat',side_effect=AssertionError('INVALID_UID_MUST_NOT_REACH_FILESYSTEM')),self.assertRaisesRegex(AssertionError,'^$'):
+                p.held_json({**ref,'uid':value},self.root,private=True)
+        captured=[]
+        class Held(bytearray):
+            def __init__(self,*args):super().__init__(*args);captured.append(self)
+        with patch.object(p,'bytearray',Held,create=True):self.assertEqual(p.held_json(ref,self.root,private=True),{'password':'offline-only'})
+        self.assertTrue(captured);self.assertTrue(all(not any(value)for value in captured))
+        file.write_bytes(b'{invalid');ref['sha256']=hashlib.sha256(file.read_bytes()).hexdigest();captured.clear()
+        with patch.object(p,'bytearray',Held,create=True),self.assertRaises(json.JSONDecodeError):p.held_json(ref,self.root,private=True)
+        self.assertTrue(captured);self.assertTrue(all(not any(value)for value in captured))
 if __name__=='__main__':unittest.main(verbosity=2)

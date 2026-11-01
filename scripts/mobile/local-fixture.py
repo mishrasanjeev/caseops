@@ -89,15 +89,38 @@ def private_metadata_equal(first, second, *, named_path=False, windows=False):
                if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
 
 
-def _write_private(name, value, *, update=False):
+def _write_private(name, value, *, update=False, expected=None, expected_root=None):
     assert isinstance(name, str) and private_name(name) and Path(name).name == name, "Direct owned secret filename required"
     content = (json.dumps(value, indent=2) + "\n").encode("utf-8")
     target = ROOT / name
+    # Optional external producer admission is checked through the descriptor
+    # that will be truncated, never by a hash-then-reopen sequence.
+    identity_fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    namespace = None
+    def namespace_frame():
+        rows = []
+        assert ROOT.is_absolute() and ROOT.resolve(strict=True) == ROOT, "Canonical private root required"
+        for parent in (ROOT, *ROOT.parents):
+            item = parent.lstat()
+            assert stat.S_ISDIR(item.st_mode) and not stat.S_ISLNK(item.st_mode), "Private namespace required"
+            rows.append((str(parent), item.st_dev, item.st_ino, item.st_uid, item.st_gid, item.st_mode))
+        return rows
+    if expected_root is not None:
+        root_fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")
+        assert set(expected_root) == set(root_fields) and all(isinstance(item, str) and re.fullmatch(r"0|[1-9][0-9]*", item) for item in expected_root.values()), "Expected private root required"
+        namespace = namespace_frame()
+        assert all(getattr(ROOT.lstat(), key) == int(expected_root[key]) for key in root_fields), "Expected private root changed"
+    if expected is not None:
+        assert update and set(expected) == {"identity", "sha256"}, "Expected private update required"
+        assert set(expected["identity"]) == set(identity_fields), "Complete expected private identity required"
+        assert all(isinstance(item, str) and re.fullmatch(r"0|[1-9][0-9]*", item) for item in expected["identity"].values()), "Lossless private identity required"
+        assert re.fullmatch(r"[a-f0-9]{64}", expected["sha256"]), "Expected private digest required"
+        namespace = namespace_frame()
     previous = target.lstat() if update else None
     if previous is not None:
         _private_metadata(previous)
     assert os.name == "nt" or hasattr(os, "O_NOFOLLOW"), "No-follow private file support required"
-    flags = os.O_RDWR if update else os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags = os.O_RDWR if update else (os.O_RDWR if expected_root is not None else os.O_WRONLY) | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     descriptor = os.open(target, flags, 0o600)
     try:
@@ -112,8 +135,27 @@ def _write_private(name, value, *, update=False):
         _private_metadata(opened)
         _private_metadata(named)
         assert private_metadata_equal(opened, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed"
+        if namespace is not None:
+            assert namespace_frame() == namespace, "Private namespace changed before write"
         if previous is not None:
             assert private_metadata_equal(opened, previous, named_path=True, windows=os.name == "nt"), "Private fixture changed before update"
+            if expected is not None:
+                assert all(getattr(opened, key) == int(expected["identity"][key]) for key in identity_fields), "Expected private identity changed"
+                assert 0 < opened.st_size <= 16384, "Bounded private update required"
+                original = bytearray()
+                while len(original) <= opened.st_size:
+                    part = os.read(descriptor, min(65536, opened.st_size + 1 - len(original)))
+                    if not part:
+                        break
+                    original.extend(part)
+                try:
+                    assert len(original) == opened.st_size and hashlib.sha256(original).hexdigest() == expected["sha256"], "Expected private bytes changed"
+                    assert private_metadata_equal(opened, os.fstat(descriptor)), "Private fixture changed during admission"
+                    assert private_metadata_equal(opened, target.lstat(), named_path=True, windows=os.name == "nt"), "Private fixture path changed during admission"
+                    assert namespace_frame() == namespace, "Private namespace changed during admission"
+                finally:
+                    original[:] = b"\0" * len(original)
+                os.lseek(descriptor, 0, os.SEEK_SET)
             # Never use O_TRUNC: all ownership/path/descriptor checks precede it.
             os.ftruncate(descriptor, 0)
         remaining = memoryview(content)
@@ -129,6 +171,30 @@ def _write_private(name, value, *, update=False):
         assert (final.st_dev, final.st_ino, final.st_uid, final.st_gid, final.st_mode, final.st_nlink) == (
             opened.st_dev, opened.st_ino, opened.st_uid, opened.st_gid, opened.st_mode, opened.st_nlink), "Private fixture identity changed"
         assert final.st_size == len(content), "Private fixture write incomplete"
+        if namespace is not None:
+            assert namespace_frame() == namespace, "Private namespace changed during write"
+        if expected_root is not None:
+            # Publish the writer's own descriptor observation. A later path
+            # reopen cannot supply creation or update provenance.
+            assert 0 < final.st_size <= 16384, "Bounded private publication required"
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            actual = bytearray()
+            try:
+                while len(actual) <= final.st_size:
+                    part = os.read(descriptor, min(65536, final.st_size + 1 - len(actual)))
+                    if not part:
+                        break
+                    actual.extend(part)
+                assert bytes(actual) == content, "Private descriptor publication bytes changed"
+                assert private_metadata_equal(final, os.fstat(descriptor)), "Private descriptor changed before publication"
+                assert private_metadata_equal(final, target.lstat(), named_path=True, windows=os.name == "nt"), "Private publication pathname changed"
+                assert namespace_frame() == namespace, "Private publication namespace changed"
+                return {"evidence": {"path": str(target), "sha256": hashlib.sha256(actual).hexdigest(), "uid": final.st_uid},
+                        "mode": stat.S_IMODE(final.st_mode), "canonicalWriter": "local-fixture.py",
+                        "identity": {"dev": str(final.st_dev), "ino": str(final.st_ino), "uid": final.st_uid},
+                        "frame": {key: str(getattr(final, key)) for key in identity_fields}, "ownedNoFollowSingleLink": True}
+            finally:
+                actual[:] = b"\0" * len(actual)
     finally:
         os.close(descriptor)
 

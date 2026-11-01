@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { QP,hash,requireRequest,validateDataset,readReference,reference,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
+import { QP,requireRequest,validateDataset,readReference,reference,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { pendingProducer } from '../../apps/mobile/e2e/queue-privacy-fixture.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { pendingQPRequest } from './run-queue-privacy.mjs';
 import { V1_CONTROL_PROTOCOL } from './queue-privacy-controls.mjs';
+import { composeQPRegistration } from './queue-privacy-registration.mjs';
+import { writeClientProjection } from './client-extension-public-input.mjs';
+export { composeQPRegistration } from './queue-privacy-registration.mjs';
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export { writePrivatePeer } from '../../apps/mobile/e2e/queue-privacy-fixture.mjs';
 
@@ -31,7 +33,14 @@ export function composeQPFixture(q,{read=readReference,snapshot=sourceSnapshot}=
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{const[mode,file,digest,output]=process.argv.slice(2);
  if(mode==='--pending'){assert.equal(process.argv.length,3);console.log(JSON.stringify({request:pendingQPRequest(),producer:pendingProducer(),registration:pendingRegistration()},null,2));}
+ else if(mode==='--registration'){
+  assert.equal(process.argv.length,5);const q=readReference({path:file,sha256:digest},16384),r=composeQPRegistration(q),cache=path.dirname(q.dockerReceipt.path);
+  assert.equal(path.dirname(q.registrationOutput),cache);assert.equal(path.dirname(q.descriptorOutput),cache);assert.notEqual(q.registrationOutput,q.descriptorOutput);
+  const registration=Buffer.from(JSON.stringify(r.registration,null,2)+'\n'),registrationEvidence=writeClientProjection(q.registrationOutput,registration);
+  const descriptor=Buffer.from(JSON.stringify({...r.descriptor,registrationEvidence,registrationSha256:registrationEvidence.sha256},null,2)+'\n'),controlsEvidence=writeClientProjection(q.descriptorOutput,descriptor);
+  console.log(JSON.stringify({registrationEvidence,controlsEvidence,actualNativeAcceptance:false,privateReads:0,nativeActions:0}));
+ }
  else{assert.equal(mode,'--from-producer');assert.equal(process.argv.length,6);assert.ok(path.isAbsolute(output)&&!path.resolve(output).startsWith(ROOT+path.sep));
-  const q=readReference({path:file,sha256:digest},16384),r=composeQPFixture(q);const bytes=Buffer.from(JSON.stringify(r.fixture,null,2)+'\n');fs.writeFileSync(output,bytes,{flag:'wx',mode:0o600});console.log(JSON.stringify({fixtureEvidence:{path:output,sha256:hash(bytes)},actualNativeAcceptance:false,producerReplayed:false}));}}
+  const q=readReference({path:file,sha256:digest},16384),r=composeQPFixture(q);const bytes=Buffer.from(JSON.stringify(r.fixture,null,2)+'\n');const fixtureEvidence=writeClientProjection(output,bytes);console.log(JSON.stringify({fixtureEvidence,actualNativeAcceptance:false,producerReplayed:false}));}}
  catch{console.error('QUEUE_PRIVACY_FIXTURE_REFUSED_NO_REPLAY');process.exitCode=1;}
 }

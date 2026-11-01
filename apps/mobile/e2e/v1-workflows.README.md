@@ -1,5 +1,92 @@
 # Source, Work, Counsel and Inbox native supplement
 
+## Runnable normal-API producer bridge
+
+J20/M22, US-MOB-01/03..08; SOURCE-01..07, WORK-01..08, COUNSEL-01,
+INBOX-01. The current producer entry is:
+
+```text
+CASEOPS_NATIVE_V1_PRODUCER_GO=EXPLICIT_OWNED_SYNTHETIC_PRODUCER
+<accepted Node24.15.0> scripts/mobile/produce-v1-fixture.mjs <absolute-request.json> <sha256>
+```
+
+This creates fixture data only in the separately admitted isolated local API.
+It does not execute native cases, install an app, create device/browser
+observations, register controls, or turn a pending native fixture ready.
+`prepare-v1-fixture.mjs --from-producer` remains the subsequent evidence
+projection. All 17 native calls/51 phases per platform remain independently
+required.
+
+The public request has `schemaVersion:1`, `kind:"produce-v1-fixture"`,
+`readyForLive:true`, `preparedOnly:false`, the canonical `repoRoot`, the
+`runId`, and four ordered `plans` keys: `base`, `viewer`, `inbox`,
+`readthrough`. Each plan follows its existing producer validator. Plans contain
+normal API recipes and source-data facts; they cannot contain passwords,
+tokens, enrollment secrets or fabricated record IDs. A single claimed process
+executes the existing 510-second aggregate and original per-stage/API/observer
+bounds. Failure consumes its original claims; there is no resume or retry mode.
+
+`admission` contains the canonical `repoRoot`, `platform`, exact clean `source`
+snapshot (`sourceSha`, `sourceFingerprint`, `inputFileCount`, `sourceDirty:false`),
+`buildReceipt`, `dockerReceipt`, `installedEvidence`, `publicCa`, `codeClosure`
+and the existing native attestor's `deviceTarget` (UDID plus explicit Android
+transport/observer fields where applicable). Each reference is `{path,sha256}`.
+The code closure is `{code:[{path,sha256},...]}`, equal to
+`producerCodeInputs(V1_PRODUCER_INPUTS)` from `native-producer-admission.mjs`
+and `produce-v1-fixture.mjs`, resolved against the canonical checkout. Current
+source, actual artifact bytes and the installed app are independently checked
+before any actor file opens and at each before/after stage boundary. No old
+installed receipt is rebound to a new binary.
+
+`actors.owner` and `actors.member` each provide the actual `companyId`,
+`membershipId` and a private `credentialEvidence:{path,sha256,uid}`. Source,
+artifact, device, API and web admission precede their descriptor-verified read.
+The shared transport performs ordinary login, TOTP step-up and current identity,
+then retains only its own normal response token in memory. Each actual HTTP
+constructor supplies its own no-paid marker, validates TLS/hostname against the
+bound local CA, rejects redirects and obeys its remaining deadline. The returned
+`releaseSha` is explicitly the source bound by the real before/after build reads;
+it is not an invented response header. API/web origins come from the immutable
+Docker receipt's host-loopback `gatewayUrl`/`webGatewayUrl`.
+
+`outputRoot`, `privateRoot` and `workerCache` must already be owned canonical
+private directories outside the checkout. Outputs/claims are exclusive; every
+resolved stage plan, original receipt, dataset and aggregate is immutable.
+Later stage templates may use a sole `{$produced:"base.receiptEvidence"}` or
+another safe property/index path into an earlier acknowledged `base`, `viewer`
+or `inbox` result. For example the viewer's owner/credential provenance comes
+from `base.receipt.secondaryOwner`, and read-through's producer references come
+from the actual earlier `receiptEvidence`/`fixtureEvidence` values. Forward,
+prototype and executable references refuse. A resolved plan is written before
+its stage begins.
+
+`python`, `docker`, `canonicalWriter` and `privateAdapter` are exact executable/
+source `{path,sha256}` references. The last two must name checked-in
+`local-fixture.py` and `native-producer-private.py`. The pinned Python adapter
+receives private values through stdin only and executes held verified source
+bytes. Canonical private files are 0600 from creation. An MFA update checks the
+original full integer metadata frame and digest through the same descriptor
+before truncation; replacement, symlink, changed bytes and changed namespace
+refuse. A post-write error remains stopped/uncertain and is never presented as
+rollback. Existing internal `update_private` callers preserve their existing
+interface; external producer admission opts into the stricter expected frame.
+
+The Inbox bridge admits exactly the immutable receipt's current API container
+and image/project, read-only canonical `/mobile-fixture` mount and writable
+owned `/fixture-state` cache mount. It invokes only `local-v1-inbox.py` once,
+under the original remaining stage deadline, and retains its real journal and
+worker receipt. Each actual observer-charge event is reconciled with the
+aggregate. It cannot insert a notification, run a general worker scan, accept a
+different container, or retry an uncertain dispatch.
+
+Offline coverage lives in the existing `v1-workflows.test.mjs` selection
+(V1-PRODUCER-01..16) and `local-fixture.test.py`. It includes real loopback TLS
+dispatch, per-client markers, actual token/identity flow, trust and hostname
+failures, redirect/timeout/byte bounds, private filesystem replacement refusals,
+same-inode update, namespace changes and separately retained post-write failure.
+These tests do not establish live API, canonical worker, Windows ACL, installed
+device or native acceptance.
+
 This executable inventory has seventeen cases and 51 setup/call/teardown phases per
 platform. It is separate from the dated 23 core and 17 Files inventories. Source
 tests, a collected JavaScript inventory, a Simulator build and an Android APK

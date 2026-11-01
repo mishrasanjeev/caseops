@@ -21,6 +21,11 @@ scripts/mobile/queue-privacy.test.py text eol=lf
 scripts/mobile/queue-privacy-controls.mjs text eol=lf
 scripts/mobile/prepare-queue-privacy-fixture.mjs text eol=lf
 scripts/mobile/run-queue-privacy.mjs text eol=lf
+scripts/mobile/native-producer-*.mjs text eol=lf
+scripts/mobile/native-producer-private.py text eol=lf
+scripts/mobile/produce-v1-fixture.mjs text eol=lf
+scripts/mobile/produce-queue-privacy-fixture.mjs text eol=lf
+scripts/mobile/queue-privacy-registration.mjs text eol=lf
 apps/mobile/e2e/queue-privacy* text eol=lf
 
 apps/api/vendor/fpdf2-2.8.8/LICENSE text eol=lf

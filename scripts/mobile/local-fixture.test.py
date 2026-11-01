@@ -194,6 +194,86 @@ class PrivateMetadataContractTests(unittest.TestCase):
 
 
 @unittest.skipUnless(os.name == "posix", "POSIX descriptor/mode controls do not certify Windows cache ACLs")
+class ExternalPrivateProducerTests(unittest.TestCase):
+    def expected(self, target):
+        info = target.stat()
+        fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        return {"identity": {key: str(getattr(info, key)) for key in fields}, "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
+    def test_external_creation_parent_replacement_refuses_before_first_private_byte(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "private"
+            root.mkdir(mode=0o700)
+            initial, opened = root.stat(), os.open
+            expected_root = {key: str(getattr(initial, key)) for key in ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")}
+            def replace_parent(*args):
+                root.rename(root.with_name("retained"))
+                root.mkdir(mode=0o700)
+                return opened(*args)
+            with patch.object(fixture_module, "ROOT", root), patch.object(fixture_module.os, "open", side_effect=replace_parent), self.assertRaisesRegex(AssertionError, "namespace changed before write"):
+                fixture_module._write_private("credentials.json", {"synthetic": "private"}, expected_root=expected_root)
+            self.assertEqual((root / "credentials.json").read_bytes(), b"")
+            self.assertEqual(list(root.with_name("retained").iterdir()), [])
+
+    def test_external_publication_retains_writer_descriptor_identity_after_close_replacement(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory).resolve()):
+            root, closed = fixture_module.ROOT, os.close
+            expected_root = {key: str(getattr(root.stat(), key)) for key in ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")}
+            target, retained = root / "credentials.json", root / "retained-original.json"
+            def replace_after_close(descriptor):
+                closed(descriptor)
+                target.rename(retained)
+                target.write_bytes(b'{"synthetic":"replacement"}')
+                target.chmod(0o600)
+            with patch.object(fixture_module.os, "close", side_effect=replace_after_close):
+                result = fixture_module._write_private(target.name, {"synthetic": "original"}, expected_root=expected_root)
+            self.assertEqual(result["frame"]["st_ino"], str(retained.stat().st_ino))
+            self.assertNotEqual(result["frame"]["st_ino"], str(target.stat().st_ino))
+            self.assertEqual(result["evidence"]["sha256"], hashlib.sha256(retained.read_bytes()).hexdigest())
+            self.assertNotEqual(result["evidence"]["sha256"], hashlib.sha256(target.read_bytes()).hexdigest())
+
+    def test_external_namespace_change_after_descriptor_read_refuses_before_truncate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "private"
+            root.mkdir(mode=0o700)
+            with patch.object(fixture_module, "ROOT", root):
+                fixture_module.save("credentials.json", {"synthetic": "retained"})
+                target = root / "credentials.json"
+                original, expected, read = target.read_bytes(), self.expected(target), os.read
+                changed = False
+                def replace_parent(descriptor, count):
+                    nonlocal changed
+                    data = read(descriptor, count)
+                    if data and not changed:
+                        changed = True
+                        root.rename(root.with_name("retained"))
+                        root.symlink_to(root.with_name("retained"), target_is_directory=True)
+                    return data
+                with patch.object(fixture_module.os, "read", side_effect=replace_parent), self.assertRaisesRegex(AssertionError, "Canonical private root"):
+                    fixture_module._write_private(target.name, {"synthetic": "new"}, update=True, expected=expected)
+                self.assertTrue(changed)
+                self.assertEqual(target.read_bytes(), original)
+
+    def test_external_postwrite_failure_retains_partial_original_inode_without_rollback(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(fixture_module, "ROOT", Path(directory).resolve()):
+            target = fixture_module.ROOT / "credentials.json"
+            fixture_module.save(target.name, {"synthetic": "original"})
+            expected, original, inode = self.expected(target), target.read_bytes(), target.stat().st_ino
+            write, calls = os.write, []
+            def partial(descriptor, content):
+                calls.append(descriptor)
+                if len(calls) == 1:
+                    return write(descriptor, content[:5])
+                raise OSError("synthetic post-effect failure")
+            with patch.object(fixture_module.os, "write", side_effect=partial), self.assertRaisesRegex(OSError, "post-effect failure"):
+                fixture_module._write_private(target.name, {"synthetic": "new"}, update=True, expected=expected)
+            self.assertEqual(target.stat().st_ino, inode)
+            self.assertNotEqual(target.read_bytes(), original)
+            self.assertEqual(len(target.read_bytes()), 5)
+            with self.assertRaises(OSError):
+                os.fstat(calls[0])
+
+
 class PrivateFixtureFileTests(unittest.TestCase):
     def private_write_observer(self, module, observed):
         original = os.write

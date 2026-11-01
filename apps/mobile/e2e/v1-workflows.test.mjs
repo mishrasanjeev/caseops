@@ -19,6 +19,9 @@ import { selector } from './native-ui.mjs';
 import { pendingV1Request } from '../../../scripts/mobile/prepare-v1-fixture.mjs';
 import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from '../../../scripts/mobile/run-v1-workflows.mjs';
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
+import https from 'node:https';
+import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
+import { createV1PrivateWriter, resolveProducedReferences, createV1Worker } from '../../../scripts/mobile/produce-v1-fixture.mjs';
 
 const ids = ['SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'SOURCE-04', 'SOURCE-05', 'SOURCE-06', 'SOURCE-07', 'WORK-01', 'WORK-02', 'WORK-03', 'WORK-04', 'WORK-05', 'WORK-06', 'WORK-07', 'WORK-08', 'COUNSEL-01', 'INBOX-01'];
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -750,4 +753,136 @@ test('complete V1 admits separately signed QA observer identities for4K and16K w
 });
 test('V1 rejects changed observer signer UID or immutable reference before protected readers',async t=>{
  for(const mutate of[v=>v.observerUid++,v=>v.signerSha256='f'.repeat(64),v=>v.runAsUid=v.packageUid]){const x=layoutAdmission(),root=fs.mkdtempSync(path.join(os.tmpdir(),'caseops-v1-observer-negative-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const r=bindObserverTestIdentity(x.actual,root,x.f.binarySourceSha);for(const f of[x.f,x.b])f.privacyObserverEvidence=r;for(const ref of[x.q.deviceEvidence,x.q.installedEvidence]){const v=x.values.get(ref.path);delete v.runAsUid;Object.assign(v,structuredClone(x.actual));}mutate(x.values.get(x.q.deviceEvidence.path));await assert.rejects(admitV1BeforeMembers(x.q,x.dependencies));assert.equal(x.log.includes('private-reader'),false);}
+});
+
+// V1-PRODUCER-01..16: real loopback HTTPS and canonical filesystem adapter.
+// These are offline bridge contracts, never an API/device acceptance receipt.
+function producerRoot(t) { const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'caseops-producer-')));fs.chmodSync(root,0o700);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root; }
+function producerRef(file) { return {path:fs.realpathSync(file),sha256:producerHash(fs.readFileSync(file))}; }
+function producerPrivate(root,name='actor.json') { const file=path.join(root,name);fs.writeFileSync(file,JSON.stringify({email:'synthetic@example.invalid',password:'Synthetic-only-password-123456789',company_slug:'synthetic',totp_secret:'JBSWY3DPEHPK3PXP'}),{mode:0o600,flag:'wx'});return {...producerRef(file),uid:process.getuid()}; }
+async function producerServer(t,handler,{san='IP:127.0.0.1'}={}) {
+  const root=producerRoot(t),key=path.join(root,'synthetic-key.pem'),cert=path.join(root,'synthetic-ca.pem');
+  childProcess.execFileSync('/usr/bin/openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','1','-subj','/CN=synthetic-offline-producer','-addext','subjectAltName='+san],{stdio:'ignore',timeout:10000});
+  const seen=[],server=https.createServer({key:fs.readFileSync(key),cert:fs.readFileSync(cert)},async(req,res)=>{const chunks=[];for await(const chunk of req)chunks.push(chunk);const bytes=Buffer.concat(chunks);seen.push({method:req.method,url:req.url,headers:req.headers,body:bytes.length?JSON.parse(bytes):null});res.setHeader('X-Request-ID','offline-'+seen.length);handler(req,res,seen.at(-1));});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();server.close();});
+  const origin='https://127.0.0.1:'+server.address().port,events=[];
+  const host=createProducerHttp({apiOrigin:origin,webOrigin:origin,sourceSha:source,publicCa:producerRef(cert),deadlineMs:Date.now()+30000,persist:event=>events.push(event)});
+  t.after(()=>host.clear());return {root,cert,seen,events,host,origin};
+}
+test('V1-PRODUCER-01 real TLS login MFA identity and normal write retain per-constructor marker and private authority',async t=>{
+  const me={company:{id:uuid(1)},membership:{id:uuid(3),role:'owner',is_active:true},user:{id:uuid(4),is_active:true},capabilities:['company:manage_users']};
+  const s=await producerServer(t,(req,res)=>{res.end(JSON.stringify(req.url==='/api/auth/login'?{...me,access_token:'synthetic-normal-login-token'}:req.url==='/api/auth/mfa/step-up'?{status:'verified'}:me));});
+  const credentials=producerPrivate(s.root),charges=[];
+  assert.deepEqual(await s.host.login('owner',credentials,{charge:x=>charges.push(x),remaining:()=>10000}),me);
+  await s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic offline Matter'}});
+  assert.deepEqual(charges.map(x=>x.key),['actor-login','actor-mfa','actor-identity']);assert.equal(s.seen.length,4);
+  assert.ok(s.seen.every(x=>x.headers['x-caseops-automated-test']==='no-paid-providers'&&x.headers.cookie===undefined));
+  assert.equal(s.seen[0].headers.authorization,undefined);assert.ok(s.seen.slice(1).every(x=>x.headers.authorization==='Bearer synthetic-normal-login-token'));
+  const log=JSON.stringify(s.events);assert.ok(!log.includes('Synthetic-only-password')&&!log.includes('JBSWY3D')&&!log.includes('synthetic-normal-login-token'));
+});
+test('V1-PRODUCER-02 two-call login does not manufacture an identity GET or accept injected bearer',async t=>{
+  const s=await producerServer(t,(req,res)=>res.end(JSON.stringify(req.url==='/api/auth/login'?{access_token:'synthetic-token',user:{id:uuid(1)},membership:{id:uuid(2)},company:{id:uuid(3)},capabilities:[]}:{status:'verified'})));
+  const me=await s.host.login('member',producerPrivate(s.root),{charge(){},remaining:()=>10000,includeIdentity:false});assert.equal(me.membership.id,uuid(2));assert.equal(s.seen.length,2);
+  await assert.rejects(s.host.request({method:'GET',route:'/api/auth/me',accessTokenFromNormalBootstrap:'invented'}),/TOKEN_NOT_FROM_NORMAL_RESPONSE/);assert.equal(s.seen.length,2);
+});
+test('V1-PRODUCER-03 unknown CA and actual hostname mismatch refuse before HTTP dispatch',async t=>{
+  const a=await producerServer(t,(_req,res)=>res.end('{}')),b=await producerServer(t,(_req,res)=>res.end('{}'),{san:'DNS:wrong.invalid'});
+  const host=createProducerHttp({apiOrigin:a.origin,webOrigin:a.origin,sourceSha:source,publicCa:producerRef(b.cert),deadlineMs:Date.now()+10000,persist(){}});t.after(()=>host.clear());
+  await assert.rejects(host.request({method:'GET',route:'/api/build'}),/INCOMPLETE_NO_REPLAY/);
+  await assert.rejects(b.host.request({method:'GET',route:'/api/build'}),/INCOMPLETE_NO_REPLAY/);assert.equal(a.seen.length+b.seen.length,0);
+});
+test('V1-PRODUCER-04 redirect is not followed and poisoned command is never dispatched again',async t=>{
+  const s=await producerServer(t,(_req,res)=>{res.writeHead(307,{Location:'/api/should-not-run'});res.end('{}');});
+  await assert.rejects(s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic'}}),/INCOMPLETE_NO_REPLAY/);
+  await assert.rejects(s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic'}}),/OUTCOME_UNCERTAIN/);assert.equal(s.seen.length,1);
+});
+test('V1-PRODUCER-05 finite timeout and response byte bound stop real native HTTP without retry',async t=>{
+  const a=await producerServer(t,()=>{});await assert.rejects(a.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic'},timeoutMs:50}),/INCOMPLETE_NO_REPLAY/);assert.equal(a.seen.length,1);
+  const b=await producerServer(t,(_req,res)=>res.end(JSON.stringify({body:'x'.repeat(1000)})));await assert.rejects(b.host.request({method:'GET',route:'/api/build',maxResponseBytes:32}),/INCOMPLETE_NO_REPLAY/);assert.equal(b.seen.length,1);
+});
+test('V1-PRODUCER-06 external origins forbidden headers and pre-aborted requests never dispatch',async t=>{
+  const s=await producerServer(t,(_req,res)=>res.end('{}'));
+  assert.throws(()=>createProducerHttp({apiOrigin:'https://caseops.ai',webOrigin:s.origin,sourceSha:source,publicCa:producerRef(s.cert),deadlineMs:Date.now()+1000,persist(){}}),/LOCAL_TLS_REQUIRED/);
+  for(const headers of [{Cookie:'synthetic'},{Authorization:'Bearer invented'},{'X-CaseOps-Automated-Test':'paid'}])await assert.rejects(s.host.request({method:'POST',route:'/api/matters/',headers}));
+  await assert.rejects(s.host.request({method:'GET',route:'/api/build',signal:AbortSignal.abort()}));assert.equal(s.seen.length,0);
+});
+test('V1-PRODUCER-07 actual private reference rejects symlink hardlink changed hash and public mode',t=>{
+  const root=producerRoot(t),ref=producerPrivate(root);assert.equal(readProducerActor(ref).company_slug,'synthetic');
+  assert.throws(()=>readProducerActor({...ref,sha256:'0'.repeat(64)}),/DIGEST_CHANGED/);
+  fs.chmodSync(ref.path,0o644);assert.throws(()=>readProducerActor(ref));fs.chmodSync(ref.path,0o600);
+  fs.linkSync(ref.path,path.join(root,'hardlink'));assert.throws(()=>readProducerActor(ref));fs.unlinkSync(path.join(root,'hardlink'));
+  const link=path.join(root,'link');fs.symlinkSync(ref.path,link);assert.throws(()=>readProducerActor({...ref,path:link}));
+});
+test('V1-PRODUCER-08 exclusive claims and immutable output survive refused reuse and namespace replacement',t=>{
+  const root=producerRoot(t),store=createProducerStore(root),ref=store.write('original.json',{observed:false});store.claim('one-command');
+  assert.throws(()=>store.claim('one-command'));assert.throws(()=>store.write('original.json',{observed:true}));assert.deepEqual(readProducerReference(ref),{observed:false});
+  fs.renameSync(root,root+'-retained');fs.mkdirSync(root,{mode:0o700});t.after(()=>fs.rmSync(root+'-retained',{recursive:true,force:true}));assert.throws(()=>store.write('later.json',{}),/OUTPUT_CHANGED/);
+});
+function canonicalProducerWriter(t){
+  const root=producerRoot(t),repo=path.resolve(fileURLToPath(new URL('../../../',import.meta.url)));
+  const python=process.env.CASEOPS_MOBILE_PRODUCER_PYTHON||childProcess.execFileSync('python3',['-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
+  return {root,writer:createV1PrivateWriter({root,python:producerRef(python),canonicalWriter:producerRef(path.join(repo,'scripts/mobile/local-fixture.py')),adapter:producerRef(path.join(repo,'scripts/mobile/native-producer-private.py'))})};
+}
+const writerOptions={kind:'canonical-local-fixture-private-json',createExclusive:true,mode:0o600};
+test('V1-PRODUCER-09 canonical Python adapter creates privately then updates exact original inode',async t=>{
+  const {writer}=canonicalProducerWriter(t),value={email:'synthetic-adapter@example.invalid',password:'Synthetic-only-password-123456789'};
+  const first=await writer(value,writerOptions),after=await writer({...value,totp_secret:'JBSWY3DPEHPK3PXP'},{...writerOptions,createExclusive:false,expectedEvidence:first.evidence,sameOwnedDescriptor:true});
+  assert.deepEqual(after.identity,first.identity);assert.notEqual(after.evidence.sha256,first.evidence.sha256);assert.equal(after.mode,0o600);assert.equal(readProducerActor(after.evidence).totp_secret,'JBSWY3DPEHPK3PXP');
+});
+test('V1-PRODUCER-10 canonical update refuses replacement symlink and changed bytes before writing',async t=>{
+  for(const kind of ['replacement','symlink','content']){
+    const {writer,root}=canonicalProducerWriter(t),value={email:'synthetic-'+kind+'@example.invalid',password:'Synthetic-only-password-123456789'},first=await writer(value,writerOptions),original=fs.readFileSync(first.evidence.path);
+    if(kind==='content')fs.appendFileSync(first.evidence.path,' ');
+    else{fs.renameSync(first.evidence.path,path.join(root,'original-retained'));if(kind==='replacement')fs.writeFileSync(first.evidence.path,'{"replacement":true}',{mode:0o600});else fs.symlinkSync(path.join(root,'original-retained'),first.evidence.path);}
+    const before=fs.readFileSync(first.evidence.path);await assert.rejects(writer({...value,totp_secret:'JBSWY3DPEHPK3PXP'},{...writerOptions,createExclusive:false,expectedEvidence:first.evidence,sameOwnedDescriptor:true}),/WRITE_INCOMPLETE_NO_REPLAY/);
+    assert.deepEqual(fs.readFileSync(first.evidence.path),before);if(kind!=='content')assert.deepEqual(fs.readFileSync(path.join(root,'original-retained')),original);
+  }
+});
+test('V1-PRODUCER-11 output namespace refusal preserves bytes and one-shot private creation cannot replay',async t=>{
+  const {writer,root}=canonicalProducerWriter(t),value={email:'synthetic-namespace@example.invalid',password:'Synthetic-only-password-123456789'},first=await writer(value,writerOptions),bytes=fs.readFileSync(first.evidence.path);
+  await assert.rejects(writer(value,writerOptions),/CREATE_REPLAY_REFUSED/);
+  fs.renameSync(root,root+'-retained');fs.symlinkSync(root+'-retained',root);t.after(()=>{fs.rmSync(root,{force:true});fs.rmSync(root+'-retained',{recursive:true,force:true});});
+  await assert.rejects(writer({...value,totp_secret:'JBSWY3DPEHPK3PXP'},{...writerOptions,createExclusive:false,expectedEvidence:first.evidence,sameOwnedDescriptor:true}),/WRITE_INCOMPLETE_NO_REPLAY/);assert.deepEqual(fs.readFileSync(first.evidence.path),bytes);
+});
+test('V1-PRODUCER-12 acknowledged output references cannot select future stages or executable paths',()=>{
+  const actual={base:{receiptEvidence:ref('actual-base'),receipt:{secondaryOwner:{companyId:uuid(99)}}}};
+  assert.deepEqual(resolveProducedReferences({owner:{$produced:'base.receipt.secondaryOwner.companyId'}},actual),{owner:uuid(99)});
+  for(const key of ['inbox.receipt.notificationId','base.constructor','base.receipt.__proto__','../private'])assert.throws(()=>resolveProducedReferences({$produced:key},actual));
+  assert.equal(resolveProducedReferences({$produced:'base.rows.0.id'},{base:{rows:[{id:uuid(98)}]}}),uuid(98));
+});
+test('V1-PRODUCER-13 canonical worker adapter binds exact container and mounts and never repeats unknown dispatch',async t=>{
+  const root=producerRoot(t),repo=path.resolve(fileURLToPath(new URL('../../../',import.meta.url))),store=createProducerStore(root);
+  const receipt={containers:[{id:'a'.repeat(64),image:'sha256:'+'b'.repeat(64),name:'/synthetic-api-1'}],project:'synthetic',backendRevision:'synthetic-local-revision'};
+  const calls=[],worker=createV1Worker({docker:producerRef(process.execPath),dockerReceipt:receipt,cache:root,sourceSha:source,store},(_file,args)=>{
+    calls.push(args);
+    if(args[0]==='inspect'){assert.ok(args[2].includes('range .Config.Env')&&!args[2].includes('json .Config.Env'));return JSON.stringify({id:receipt.containers[0].id,image:receipt.containers[0].image,running:true,project:'synthetic',environment:['CASEOPS_ENV=local','CASEOPS_RELEASE_SHA='+source,'K_REVISION=synthetic-local-revision'],mounts:[{Source:root,Destination:'/fixture-state',RW:true},{Source:path.join(repo,'scripts/mobile'),Destination:'/mobile-fixture',RW:false}]});}
+    assert.deepEqual(args.slice(-3),['/fixture-state/v1-inbox-worker-request-v1-'+uuid(900)+'.json',requestEvidence.sha256,'/fixture-state/v1-inbox-worker-v1-'+uuid(900)+'.json']);
+    assert.equal(args[args.indexOf('python')+1],'-c');assert.ok(args[args.indexOf('python')+2].startsWith('__file__ = "/mobile-fixture/local-v1-inbox.py"\n'));assert.equal(args.includes('CASEOPS_ENV=local')||args.includes('K_SERVICE='),false);
+    throw Error('Synthetic lost actual command acknowledgement');
+  });
+  const requestEvidence=await worker.persistWorkerRequest({sourceSha:source,runId:'v1-'+uuid(900)}),sourceEvidence=producerRef(path.join(repo,'scripts/mobile/local-v1-inbox.py'));
+  const input={requestEvidence,sourceEvidence,timeoutMs:1000,automaticRetry:false,onObserverStatement(){assert.fail('Unknown worker cannot supply observer proof');}};
+  await assert.rejects(worker.executeWorker(input),/INCOMPLETE_NO_REPLAY/);assert.equal(calls.filter(x=>x[0]==='exec').length,1);
+  await assert.rejects(worker.executeWorker(input));assert.equal(calls.filter(x=>x[0]==='exec').length,1);
+});
+test('V1-PRODUCER-14 expired and fractional stage budgets refuse before credentials or an HTTP constructor',async t=>{
+  for(const value of [0,-1,0.5,NaN,Infinity])assert.throws(()=>producerTimeout(value),/DEADLINE_EXPIRED/);
+  const s=await producerServer(t,(_req,res)=>res.end('{}'));
+  await assert.rejects(s.host.login('owner',{path:'/absent-private-input',sha256:'0'.repeat(64),uid:process.getuid()},{charge(){assert.fail('Expired stage cannot charge auth');},remaining:()=>0}),/DEADLINE_EXPIRED/);
+  await assert.rejects(s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic'},deadlineMs:Date.now()-1}),/INCOMPLETE_NO_REPLAY/);assert.equal(s.seen.length,0);
+});
+test('V1-PRODUCER-15 actual public web identity needs no request ID and receives no API bearer',async t=>{
+  const me={user:{id:uuid(1)},membership:{id:uuid(2)},company:{id:uuid(3)},capabilities:[]};
+  const s=await producerServer(t,(req,res)=>{if(req.url==='/api/release-identity'){res.removeHeader('X-Request-ID');res.end(JSON.stringify({service:'web',release_sha:source,revision:'synthetic'}));}else if(req.url==='/api/auth/login')res.end(JSON.stringify({...me,access_token:'synthetic-token'}));else res.end(JSON.stringify({status:'verified'}));});
+  await s.host.login('owner',producerPrivate(s.root),{charge(){},remaining:()=>10000,includeIdentity:false});
+  const result=await s.host.request({method:'GET',route:'/api/release-identity',web:true});assert.equal(result.requestId,null);assert.equal(result.value.service,'web');assert.equal(s.seen.at(-1).headers.authorization,undefined);assert.equal(s.seen.at(-1).headers['x-caseops-automated-test'],'no-paid-providers');
+});
+test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision instead of erasing guards',async t=>{
+  for(const environment of [['CASEOPS_ENV=production','CASEOPS_RELEASE_SHA='+source,'K_REVISION=synthetic'],['CASEOPS_ENV=local','CASEOPS_RELEASE_SHA='+source,'K_REVISION=synthetic','K_SERVICE=cloud'],['CASEOPS_ENV=local','CASEOPS_RELEASE_SHA='+source,'K_REVISION=changed']]){
+    const root=producerRoot(t),repo=path.resolve(fileURLToPath(new URL('../../../',import.meta.url))),calls=[];
+    const receipt={containers:[{id:'a'.repeat(64),image:'sha256:'+'b'.repeat(64),name:'/synthetic-api-1'}],project:'synthetic',backendRevision:'synthetic'};
+    const worker=createV1Worker({docker:producerRef(process.execPath),dockerReceipt:receipt,cache:root,sourceSha:source,store:createProducerStore(root)},(_file,args)=>{calls.push(args);assert.equal(args[0],'inspect');return JSON.stringify({id:receipt.containers[0].id,image:receipt.containers[0].image,running:true,project:'synthetic',environment});});
+    const requestEvidence=await worker.persistWorkerRequest({sourceSha:source,runId:'v1-'+uuid(901)});
+    await assert.rejects(worker.executeWorker({requestEvidence,sourceEvidence:producerRef(path.join(repo,'scripts/mobile/local-v1-inbox.py')),timeoutMs:1000,automaticRetry:false,onObserverStatement(){assert.fail();}}));assert.equal(calls.length,1);
+  }
 });

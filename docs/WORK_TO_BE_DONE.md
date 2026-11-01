@@ -1,3 +1,13 @@
+## 2026-11-01 — actual mobile builds and remaining acceptance
+
+J20/M22 remains **Partially implemented; release NO-GO**. PR558 revision17113fbc
+has68successful CI checks/two skips. Actual OnePlus and16KiB emulator APKs and a
+signed Simulator app now exist; OnePlus installation/cold launch were bound.
+A later installed dependency/lock mismatch requires exclusive reinstall and
+fresh public-revision builds. Full83-case/249-phase suites per OS remain
+unexecuted. V1 and queue/privacy host adapters have complete offline controls,
+separate from native acceptance. See [the current evidence](mobile/NATIVE_COMPLETION_2026-11-01.md).
+
 ## 2026-10-31 — current mobile build-tool security follow-on
 
 J20/M22 remains **Partially implemented; release NO-GO**. Published PR #558 head `bcf881a8b6f8121f71ef52c9f45594fd2330748d` completed all70 CI checks (68success,2explicit skips). The earlier CI timeout regression passed that run. Those results do not certify an APK, Simulator app, connected device, store archive or a dependency advisory published afterwards.

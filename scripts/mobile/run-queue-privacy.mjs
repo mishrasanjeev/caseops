@@ -24,6 +24,7 @@ const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export function qpInputPaths(root=ROOT){return [...new Set([...OBSERVER_SOURCE_INPUTS,
  ...fs.readdirSync(path.join(root,'apps/mobile/e2e')).filter(n=>/\.(mjs|json)$/.test(n)).map(n=>'apps/mobile/e2e/'+n),
  'scripts/mobile/run-queue-privacy.mjs','scripts/mobile/prepare-queue-privacy-fixture.mjs','scripts/mobile/queue-privacy-controls.mjs',
+ 'scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/client-extension-public-input.mjs',
  'scripts/mobile/run-v1-workflows.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/android-files-privacy.mjs',
  'scripts/mobile/local-gateway.py','scripts/mobile/local-v1-controls.py','scripts/mobile/local-queue-privacy-controls.py','compose.mobile-local.yml'])].sort();}
 export function qpHarnessFingerprint(root=ROOT){const h=createHash('sha256');for(const name of qpInputPaths(root))h.update(name+'\0').update(fs.readFileSync(path.join(root,name))).update('\0');return h.digest('hex');}
@@ -55,7 +56,13 @@ export async function admitQPBeforeMembers(q,dependencies={}){
   assert.equal(controls[name].path,path.join(ROOT,'scripts/mobile',file));io.bytes(controls[name]);assert.ok(closure.code.some(r=>r.path===controls[name].path&&r.sha256===controls[name].sha256));}
  assert.equal(controls.registrationSha256,controls.registrationEvidence.sha256);assert.deepEqual(controls.protocol,V1_CONTROL_PROTOCOL);
  const registration=io.read(controls.registrationEvidence);assert.equal(registration.kind,'registered-queue-privacy-controls');assert.equal(registration.schemaVersion,1);assert.equal(registration.observed,true);assert.equal(registration.readyForLive,true);assert.equal(registration.preparedOnly,false);assert.equal(registration.sourceSha,source.sourceSha);assert.equal(registration.runId,isolation.gatewayRunId);
- assert.deepEqual(registration.authorityEvidence,controls.authorityEvidence);v1PrivateReference(controls.authorityEvidence);for(const actor of Object.values(registration.actors))v1PrivateReference(actor.credentialEvidence);
+ assert.deepEqual(Object.keys(registration.actors).sort(),['member','owner','second-company']);
+ for(const[name,actor]of Object.entries(registration.actors))for(const key of['userId','membershipId','companyId'])assert.equal(actor[key],dataset.actors?.[name]?.[key],'QP_ACTUAL_REGISTERED_ACTOR_REQUIRED');
+ v1PrivateReference(controls.authorityEvidence);for(const actor of Object.values(registration.actors))v1PrivateReference(actor.credentialEvidence);
+ const mount=io.read(controls.credentialMountEvidence);assert.equal(mount.kind,'actual-native-client-cache-mount-metadata');assert.equal(mount.observed,true);assert.equal(mount.project,isolation.project);assert.equal(mount.runId,isolation.gatewayRunId);assert.equal(mount.hostRoot,path.dirname(q.dockerReceipt.path));assert.equal(mount.containerRoot,'/fixture-state');assert.ok(Number.isSafeInteger(mount.containerEffectiveUid)&&mount.containerEffectiveUid>=0);
+ const mounted=ref=>{v1PrivateReference(ref);assert.equal(path.dirname(ref.path),mount.hostRoot);const rows=mount.files.filter(x=>x.hostEvidence.path===ref.path);assert.equal(rows.length,1);assert.deepEqual(rows[0].hostEvidence,ref);assert.equal(rows[0].containerUid,mount.containerEffectiveUid);return{...ref,path:'/fixture-state/'+path.basename(ref.path),uid:rows[0].containerUid};};
+ assert.deepEqual(registration.authorityEvidence,mounted(controls.authorityEvidence));assert.deepEqual(Object.keys(controls.actorCredentialMappings).sort(),['member','owner','second-company']);
+ for(const[name,actor]of Object.entries(registration.actors)){const mapping=controls.actorCredentialMappings[name];assert.deepEqual(mapping.runtimeEvidence,actor.credentialEvidence);assert.deepEqual(mounted(mapping.hostEvidence),mapping.runtimeEvidence);}
  assert.deepEqual(registration.ownerRecipes,ownerRecipes(dataset));assert.equal(registration.profile,QP.profile);assert.equal(registration.implementationSha256,controls.gatewayImplementationEvidence.sha256);assert.equal(registration.baseImplementationSha256,QP.baseSha256);
  assert.deepEqual(registration.caseControlLimits,QP.caseControls);assert.ok(registration.syntheticIds.length<=92);assert.equal(new Set(registration.syntheticIds).size,registration.syntheticIds.length);
  for(const actor of Object.values(registration.actors))for(const key of ['userId','membershipId','companyId'])assert.ok(registration.syntheticIds.includes(actor[key]),'QP_COMPLETE_ACTOR_CONTROL_IDENTITIES_REQUIRED');
@@ -71,7 +78,7 @@ export async function admitQPBeforeMembers(q,dependencies={}){
   const f=io.read(m.fixtureEvidence),auth=io.read(m.authObservation),actor=registration.actors[i?'second-company':'member'];
   for(const key of['backendSha','webSha','binarySourceSha'])assert.equal(f[key],source.sourceSha);
   assert.equal(f.binarySourceFingerprint,source.sourceFingerprint);assert.equal(f.udid,fixture.udid);assert.equal(f.appId,fixture.appId);assert.equal(f.auth.mfaRequired,true);
-  assert.deepEqual(f.buildReceipt,q.buildReceipt);assert.deepEqual(f.isolationEvidence,q.dockerReceipt);assert.equal(f.membershipId,actor.membershipId);assert.equal(f.companyId,actor.companyId);assert.deepEqual(m.credentialEvidence,actor.credentialEvidence);
+  assert.deepEqual(f.buildReceipt,q.buildReceipt);assert.deepEqual(f.isolationEvidence,q.dockerReceipt);assert.equal(f.membershipId,actor.membershipId);assert.equal(f.companyId,actor.companyId);assert.deepEqual(m.credentialEvidence,controls.actorCredentialMappings[i?'second-company':'member'].hostEvidence);
   for(const key of['observed','nativePrincipalVerified','nativeWorkspaceVerified','pkceUnchanged','logoutAcknowledged'])assert.equal(auth[key],true);
   assert.equal(auth.sessionCleanup,'passed');assert.equal(auth.udid,f.udid);assert.equal(auth.bundleId,f.appId);assert.equal(auth.membershipId,f.membershipId);assert.equal(auth.binaryHash,q.expectedBinaryHash);
   assert.deepEqual(auth.importedSource,source);assert.deepEqual(auth.buildReceipt,q.buildReceipt);assert.deepEqual(auth.dockerReceipt,q.dockerReceipt);assert.equal(auth.mfaStage,f.auth.mfaStage);assert.equal(auth.iosConsent,f.auth.iosConsent);

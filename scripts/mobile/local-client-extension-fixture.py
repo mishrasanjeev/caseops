@@ -21,6 +21,9 @@ def canonical(value): return json.dumps(value, sort_keys=True, separators=(",", 
 def sha(value): return hashlib.sha256(value).hexdigest()
 
 def held_json(reference, root, *, private=False):
+    if private:
+        assert set(reference) == {"path", "sha256", "uid"}
+        assert type(reference["uid"]) is int and reference["uid"] >= 0
     target = Path(reference["path"])
     assert target.parent == root and target.resolve() == target and root.resolve() == root
     fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
@@ -30,10 +33,12 @@ def held_json(reference, root, *, private=False):
         return [(str(p), meta(p.lstat())) for p in target.parents]
     parents = namespace(); before = target.lstat()
     assert stat.S_ISREG(before.st_mode) and not stat.S_ISLNK(before.st_mode) and before.st_nlink == 1 and 0 < before.st_size <= 16384
-    if private: assert before.st_uid == reference["uid"] == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600
+    if private:
+        assert before.st_uid == reference["uid"] == os.getuid() and stat.S_IMODE(before.st_mode) == 0o600
     fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    data = bytearray()
     try:
-        assert meta(os.fstat(fd)) == meta(before); data = bytearray()
+        assert meta(os.fstat(fd)) == meta(before)
         while len(data) <= 16384:
             part = os.read(fd, 16385 - len(data))
             if not part: break
@@ -42,7 +47,9 @@ def held_json(reference, root, *, private=False):
         assert meta(os.fstat(fd)) == meta(before) == meta(target.lstat()) and namespace() == parents
         assert sha(data) == reference["sha256"]
         value = json.loads(data.decode("utf-8", "strict")); assert isinstance(value, dict); return value
-    finally: os.close(fd)
+    finally:
+        if private: data[:] = b"\0" * len(data)
+        os.close(fd)
 
 def validate_request(q, environment, now):
     assert environment.get("CASEOPS_NATIVE_CLIENT_RETAINED_FIXTURE_GO") == "EXPLICIT_OWNED_SYNTHETIC_PRODUCER"
@@ -276,7 +283,8 @@ def main(request, digest):
     assert q["kind"] in ("native-client-normal-api-producer", "native-client-retained-row-producer")
     if q["kind"] == "native-client-retained-row-producer": validate_request(q, os.environ, time.time())
     import httpx
-    with httpx.Client(follow_redirects=False) as public, httpx.Client(base_url="http://api:8000", follow_redirects=False, headers={"X-CaseOps-Automated-Test": "no-paid-providers"}) as actor:
+    marker = {"X-CaseOps-Automated-Test": "no-paid-providers"}
+    with httpx.Client(follow_redirects=False, headers=marker, verify=True, trust_env=False) as public, httpx.Client(base_url="http://api:8000", follow_redirects=False, headers=marker, verify=True, trust_env=False) as actor:
         attempted = False
         def owner():
             nonlocal attempted

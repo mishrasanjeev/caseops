@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## QA30 — Native fixture host completion, November 1, 2026
+
+Verdict: **Partially fixed**. J20/M22/US-MOB-01..08. Existing V1 and queue/privacy
+producers lacked an executable Mac host bridge. The new bridges preserve normal
+API authentication, source/build/device admission, finite original budgets and
+uncertain-outcome refusal. Descriptor publication, retained worker execution,
+cloud/nonlocal refusal, deadline expiry and emulator/host-origin mapping have
+offline regression proof. Canonical private create/update remains backward
+compatible; no owned root or uncertain mutation is silently replaced/replayed.
+V1 Node70/Python101/inventory7 and Queue/Privacy+CX207 scoped checks pass.
+Full current-source83-case Android/iOS workflows remain unexecuted, so this is
+not native or production closure. Exact logs/hashes, actual historical artifacts
+and remaining boundaries are in [the checkpoint](mobile/NATIVE_COMPLETION_2026-11-01.md).
+
 ## October 29 PostgreSQL Provenance Work #558
 
 Not fixed. The unchanged API reproduced

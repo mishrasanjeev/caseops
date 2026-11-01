@@ -46,9 +46,13 @@ export async function produceQueuePrivacy(plan,{request,admit,persist,claim,pers
  const before=await admit(plan,{boundary:'before',charge:({method})=>{assert.ok(++requests<=74&&++admissions<=12);if(method==='POST')assert.ok(++posts<=53);},deadline});
  assert.equal(before.beforeMemberRead,true);assert.equal(before.sourceSha,plan.sourceSha);assert.equal(before.apiSourceSha,plan.sourceSha);assert.equal(before.webSourceSha,plan.sourceSha);
  for(const key of ['buildReceipt','dockerReceipt','installedEvidence','codeClosure','baseActorEvidence','admissionEvidence'])assert.deepEqual(before[key],plan[key],'QP_EXACT_PREREQUISITE_ADMISSION_REQUIRED');
- for(const[actor,id,user]of[['member',plan.membershipId,plan.memberUserId],['owner',plan.ownerMembershipId,null],['second-company',null,plan.secondUserId],['foreign-owner',null,null]]){
+ const actors={};for(const[actor,id,user]of[['member',plan.membershipId,plan.memberUserId],['owner',plan.ownerMembershipId,null],['second-company',null,plan.secondUserId],['foreign-owner',plan.foreignOwnerMembershipId,null]]){
   const me=await call('identity-'+actor,actor,'GET','/api/auth/me');if(id)assert.equal(me.membership.id,id);if(user)assert.equal(me.user.id,user);
+  for(const value of[me.company.id,me.membership.id,me.user.id])v1Identity(value);
+  actors[actor]={companyId:me.company.id,membershipId:me.membership.id,userId:me.user.id};
  }
+ assert.equal(actors.owner.companyId,plan.companyId);assert.equal(actors.member.companyId,plan.companyId);
+ assert.notEqual(actors['second-company'].companyId,plan.companyId);assert.equal(actors['foreign-owner'].companyId,actors['second-company'].companyId);
  const peers=[];for(let i=0;i<2;i++){
   const credentials={email:'qp-'+plan.runId+'-'+i+'@example.com',full_name:'Synthetic queue peer '+i,password:'Aa1!'+randomBytes(24).toString('base64url')};
   const saved=await persistPrivate(plan.privatePeerFiles[i],credentials);assert.equal(saved.createdBeforeFirstPost,true);assert.ok(saved.credentialEvidence?.sha256);
@@ -90,7 +94,7 @@ export async function produceQueuePrivacy(plan,{request,admit,persist,claim,pers
  for(const key of ['buildReceipt','dockerReceipt','installedEvidence','codeClosure','baseActorEvidence','admissionEvidence'])assert.deepEqual(after[key],plan[key],'QP_EXACT_PREREQUISITE_ADMISSION_REQUIRED');
  const anchor=pages[0].value.items.at(-1);
  const result={schemaVersion:1,kind:'actual-normal-api-queue-privacy-fixture',inventoryId:QP.inventoryId,observed:true,nativeReady:false,sourceSha:plan.sourceSha,runId:plan.runId,
-  companyId:plan.companyId,membershipId:plan.membershipId,memberUserId:plan.memberUserId,secondUserId:plan.secondUserId,teamPeerId,peers,matter:main,
+  companyId:plan.companyId,membershipId:plan.membershipId,memberUserId:plan.memberUserId,secondUserId:plan.secondUserId,actors,teamPeerId,peers,matter:main,
   tasks,pages,privacyBefore,secondPrivacyBefore,anchor:{id:anchor.id,matterId:main.id,due_on:anchor.due_on,changedDueOn:day(plan.legalDay,90)},
   requests,posts,patches,admissions,startedAtMs:start,completedAtMs:now(),automaticRetry:false,mutationUncertain:false,directDatabaseWrites:false,noPaidMarker:'no-paid-providers',
   prerequisiteEvidence:plan.baseActorEvidence,admissionEvidence:plan.admissionEvidence};

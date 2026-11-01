@@ -28,6 +28,55 @@ their first normal user POST. Their passwords never enter public plans/events.
 `produceQueuePrivacy` is the finite normal-API producer, using the same explicit
 admitted owner-transport interface as `produceV1Dataset`. Its callbacks must be
 bound in the live code closure; a test double is not an actual API adapter.
+`node scripts/mobile/produce-queue-privacy-fixture.mjs --pending` now emits its
+host request. Its `--request <absolute-json> <sha256>` dispatches that exact
+producer only with
+`CASEOPS_NATIVE_QUEUE_PRIVACY_PRODUCER_GO=EXPLICIT_OWNED_SYNTHETIC_PRODUCER`.
+The host binds the canonical checkout, clean source snapshot, actual build and
+installed observation, complete code closure, current API/web revisions and
+hash-pinned public CA before opening private actor files. It uses the shared
+`native-producer-host.mjs` HTTPS transport with normal login/MFA, mandatory
+no-paid headers on every request, certificate/hostname verification, bounded
+responses and no redirect or retry. `releaseSha` on its adapter result records
+the actual before/after serving admission; it is not an invented response header.
+Host requests use the Docker receipt's loopback gateway URLs. The build's
+mobile origins remain unchanged: Android emulator builds use `10.0.2.2`, while
+USB reverse and Simulator builds use `127.0.0.1`. The exact receipt/build
+origins, transport mode and matching API/web port pairs are checked before
+constructing the host transport.
+
+The host request contains the existing `plan`, `admission`, four `actors`
+(`owner`, `member`, `second-company`, `foreign-owner`) and an outside-source
+owned private `outputRoot`. Both new peer paths must be direct children of
+that root. `plan.baseActorEvidence` binds a public input manifest
+`{sourceSha,runId,actors}`; `plan.admissionEvidence` binds
+`{sourceSha,runId,admission}`. These manifests state expectations and do not
+claim observed identities: real login and `/api/auth/me` responses establish
+all four exact company/membership/user IDs. The admission object is the shared
+`native-producer-admission.mjs` contract, and its code closure includes
+`QP_PRODUCER_INPUTS`. The returned `datasetEvidence` is used as
+`producerEvidence` by the existing public fixture projection. New claim,
+operation and dataset files are exclusive and retained on failure. Passwords,
+TOTP material and Bearer tokens are never published in those files.
+
+`prepare-queue-privacy-fixture.mjs --registration <request> <sha256>` composes
+the public registration and descriptor into two new files beside the Docker
+receipt. Its request binds dataset/build/Docker/code-closure and actual cache
+mount metadata, the three control actors' private references, authority
+reference, expiry and the two output paths. Actual dataset auth-context IDs
+must match all three actors. Host paths and descriptor UIDs remain separate
+from the independently observed `/fixture-state` paths and container UID.
+Duplicate/stale mount metadata, old datasets without actor observations and
+old descriptors without these mappings refuse before any private read. This
+public composer checks the retained mount metadata; it does not observe Docker
+mounts itself. The operational owner must retain fresh Docker inspection and
+bounded exact-file container metadata, tied to that immutable epoch and digest.
+Host and container readers still independently verify current bytes and UID.
+The command does not load controls or overwrite gateway configuration. The
+separately owned gateway publication must retain the original immutable
+configuration and use its newly bound epoch; native admission independently
+checks the actual active profile and registration digest.
+
 The before admission owns API+web reads and the four normal login/MFA pairs
 (10 charged calls); after admission owns two final identity reads. All actors'
 credentials must be admitted against current source/artifact/device/API+web
@@ -46,6 +95,24 @@ peer, completed, disposed parent, foreign company). Legal dates and exact UTC
 microseconds come from original acknowledgements. All10 ownership/date pages
 and both own-account null reads are authoritative normal API readbacks.
 An uncertain response consumes its key and stops; failed setup files survive.
+
+PRD mapping remains J20/M22: US-MOB-01 (normal workspace identity), US-MOB-02
+(authorized work), US-MOB-04 (one acknowledged mutation) and US-MOB-08 (native
+privacy/control behavior), within the US-MOB-01..08 client scope. The selected
+offline queue/privacy module now exercises the complete producer through its
+host, unknown-POST/no-replay filesystem retention, current mounted registration
+against the actual Python validator, and refusal of old/mismatched mappings.
+These are component controls; neither platform's two native cases or complete
+83-case inventory has thereby passed.
+
+The existing client-extension producer is already runnable through
+`local-client-extension-fixture.py <request> <sha256>` with separate normal-API
+and retained-row modes. It is not replaced by another producer here. Its public
+fixture/registration/policy projections remain in `prepare-client-extensions.mjs`;
+the policy transition retains its 64 GiB/100,000-inode capacity prerequisite.
+Existing CLI dispatch controls exercise the real normal login/MFA callback,
+both marked strict HTTP constructors, exact UID rejection and private-buffer
+erasure. The separate 24-case client-extension native inventory stays required.
 
 The disabled-default gateway profile is selected only by the literal
 `CASEOPS_MOBILE_V1_PROFILE=queue-privacy-v1`. The default old profile and its

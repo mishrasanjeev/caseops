@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## November 1 PR558 Native Completion
+
+J20/M22 status: **Partially implemented; release NO-GO**. Actual Android and
+Simulator artifacts supersede stale missing-artifact descriptions. Installed
+dependency/lock drift and Appium bundled advisories require fresh dependency
+and native acceptance. Current17113fbc CI has68successes/two skips; V1 and
+queue/privacy host components have complete offline controls. All83cases/
+249phases per OS, hardware/signing and organization submission gates remain
+explicit in [the checkpoint](mobile/NATIVE_COMPLETION_2026-11-01.md).
+
 ## October 29 PostgreSQL Source-Proof Plan #558
 
 Release remains NO-GO; repair verdict Not fixed. A fresh
