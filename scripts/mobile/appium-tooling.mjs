@@ -386,10 +386,12 @@ export function advisoryInventory(rows) {
 
 export const DOWNLOAD_LIMITS = Object.freeze({ archiveBytes: 67108864, totalBytes: 201326592, milliseconds: 600000 });
 /** One deadline and byte budget shared by every official archive download. */
-export function downloadSession(limits = DOWNLOAD_LIMITS, request = globalThis.fetch) {
+export function downloadSession(limits = DOWNLOAD_LIMITS, request = globalThis.fetch, { environment = {} } = {}) {
   const deadline = Date.now() + limits.milliseconds; let total = 0;
   return async function downloadOfficialArchive(url, integrity) {
     assert.notEqual(process.env.NODE_TLS_REJECT_UNAUTHORIZED, '0', 'APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED');
+    // A caller may impose an additional refusal, never replace the live guard.
+    assert.notEqual(environment.NODE_TLS_REJECT_UNAUTHORIZED, '0', 'APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED');
     assert.ok(url.startsWith('https://registry.npmjs.org/') && /^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity), 'APPIUM_TOOLING_OFFICIAL_ARCHIVE_REQUIRED');
     const remaining = deadline - Date.now(); assert.ok(remaining > 0, 'APPIUM_TOOLING_DOWNLOAD_DEADLINE');
     const response = await request(url, { redirect: 'error', headers: { 'X-CaseOps-Automated-Test': 'no-paid-providers' },
@@ -415,6 +417,63 @@ function run(command, args, options) {
   const child = spawn(command, args, { stdio: 'inherit', windowsHide: true, ...options });
   return new Promise((resolve, reject) => { child.once('error', reject);
     child.once('exit', (status, signal) => signal ? reject(new Error('APPIUM_TOOLING_CHILD_SIGNAL')) : resolve(status)); });
+}
+export const DRIVER_LIST_LIMITS = Object.freeze({ entries: 512, bytes: 1048576, milliseconds: 60000 });
+/** Keep the child's original stdout descriptor until its JSON and name are reconciled. */
+export async function readInstalledDrivers(runtime, { limits = DRIVER_LIST_LIMITS } = {}) {
+  limits = Object.freeze({ entries: limits.entries, bytes: limits.bytes, milliseconds: limits.milliseconds });
+  for (const key of Object.keys(DRIVER_LIST_LIMITS))
+    assert.ok(Number.isSafeInteger(limits[key]) && limits[key] >= 0 && limits[key] <= DRIVER_LIST_LIMITS[key], 'APPIUM_TOOLING_DRIVER_LIST_LIMIT');
+  const deadline = Date.now() + limits.milliseconds, budget = inventoryBudget(limits);
+  const root = path.resolve(runtime), listed = path.join(root, 'driver-list.json');
+  assert.equal(runtime, root, 'APPIUM_TOOLING_DRIVER_LIST_ROOT');
+  const identity = stat => ['dev', 'ino', 'mode', 'nlink', 'uid', 'gid'].map(key => String(stat[key])).join(':');
+  const directoryIdentity = stat => ['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(stat[key])).join(':');
+  const ancestors = []; let current = root;
+  while (true) {
+    ancestors.push([current, directoryIdentity(directory(current, budget))]);
+    const parent = path.dirname(current); if (parent === current) break; current = parent;
+  }
+  assert.equal(fs.realpathSync(root), root, 'APPIUM_TOOLING_DRIVER_LIST_ROOT');
+  const list = fs.openSync(listed, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+  try {
+    const original = fs.fstatSync(list, { bigint: true });
+    const owner = process.getuid?.();
+    assert.ok(original.isFile() && original.nlink === 1n && (owner === undefined || original.uid === BigInt(owner)) &&
+      (process.platform === 'win32' || (original.mode & 0o777n) === 0o600n), 'APPIUM_TOOLING_DRIVER_LIST_FILE');
+    const names = listing(root, budget);
+    const reconcile = expected => {
+      for (const [file, before] of ancestors)
+        assert.equal(directoryIdentity(directory(file, budget)), before, 'APPIUM_TOOLING_DRIVER_LIST_NAMESPACE');
+      assert.deepEqual(listing(root, budget), names, 'APPIUM_TOOLING_DRIVER_LIST_NAMESPACE');
+      const named = observe(listed, budget), held = fs.fstatSync(list, { bigint: true });
+      assert.ok(named.isFile() && !named.isSymbolicLink() && held.isFile() && held.nlink === 1n &&
+        identity(held) === identity(original) && frame(named, true) === frame(held, true) &&
+        (!expected || frame(held) === frame(expected)), 'APPIUM_TOOLING_DRIVER_LIST_CHANGED');
+      return held;
+    };
+    reconcile(original);
+    const remaining = deadline - Date.now(); assert.ok(remaining > 0, 'APPIUM_TOOLING_DRIVER_LIST_DEADLINE');
+    const status = await run(process.execPath, [path.join(root, 'node_modules/appium/index.js'), 'driver', 'list', '--installed', '--json'],
+      { cwd: root, env: { ...process.env, APPIUM_HOME: root }, stdio: ['ignore', list, 'inherit'], timeout: remaining, killSignal: 'SIGKILL' });
+    assert.equal(status, 0, 'APPIUM_TOOLING_DRIVER_LIST');
+    assert.ok(Date.now() < deadline, 'APPIUM_TOOLING_DRIVER_LIST_DEADLINE');
+    const written = reconcile();
+    assert.ok(written.size <= BigInt(limits.bytes), 'APPIUM_TOOLING_DRIVER_LIST_BOUND');
+    const bytes = Buffer.alloc(Number(written.size) + 1); let count = 0;
+    while (count < bytes.length) {
+      budget.tick(); const read = fs.readSync(list, bytes, count, Math.min(65536, bytes.length - count), count);
+      budget.read(read); if (!read) break; count += read;
+    }
+    assert.equal(count, Number(written.size), 'APPIUM_TOOLING_DRIVER_LIST_CHANGED');
+    reconcile(written);
+    const installed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, count)));
+    assert.ok(installed && typeof installed === 'object' && !Array.isArray(installed), 'APPIUM_TOOLING_DRIVER_IDENTITY');
+    for (const spec of DRIVER_REBUNDLES)
+      assert.ok(installed[spec.driver]?.installed === true && installed[spec.driver].version === spec.localVersion, 'APPIUM_TOOLING_DRIVER_IDENTITY');
+    reconcile(written); budget.tick();
+    return installed;
+  } finally { fs.closeSync(list); }
 }
 /**
  * Install the repaired Appium project into a new runtime (also its APPIUM_HOME)
@@ -443,15 +502,9 @@ export async function prepareAppiumTooling(runtime, { request = globalThis.fetch
   for (const name of ['package.json', 'package-lock.json'])
     fs.copyFileSync(path.join(REPO, APPIUM_TOOLING_PROJECT, name), path.join(runtime, name), fs.constants.COPYFILE_EXCL);
   const npm = [path.join(REPO, 'scripts/mobile/npm-tooling.mjs'), 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'];
-  assert.equal(await run(process.execPath, npm, { cwd: runtime }), 0, 'APPIUM_TOOLING_INSTALL');
-  const appium = path.join(runtime, 'node_modules/appium/index.js'), listed = path.join(runtime, 'driver-list.json');
-  const list = fs.openSync(listed, 'wx', 0o600);
-  try { assert.equal(await run(process.execPath, [appium, 'driver', 'list', '--installed', '--json'],
-    { cwd: runtime, env: { ...process.env, APPIUM_HOME: runtime }, stdio: ['ignore', list, 'inherit'] }), 0, 'APPIUM_TOOLING_DRIVER_LIST'); }
-  finally { fs.closeSync(list); }
-  const installed = JSON.parse(fs.readFileSync(listed, 'utf8'));
-  for (const spec of DRIVER_REBUNDLES)
-    assert.ok(installed[spec.driver]?.installed === true && installed[spec.driver].version === spec.localVersion, 'APPIUM_TOOLING_DRIVER_IDENTITY');
+  const installStatus = await run(process.execPath, npm, { cwd: runtime });
+  assert.equal(installStatus, 0, 'APPIUM_TOOLING_INSTALL');
+  await readInstalledDrivers(runtime);
 
   const inventories = { locked: lockedAdvisoryInventory(path.join(runtime, 'package-lock.json')), physical: physicalAdvisoryInventory(runtime) };
   const audits = {};

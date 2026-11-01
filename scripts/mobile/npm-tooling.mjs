@@ -41,8 +41,14 @@ function parents(file, end, scopeRoot = null) {
 // Windows ownership is an ACL fact, not its synthetic stat.uid. Only the pinned
 // public archive may use a safe Administrators-owned checkout source. Executed
 // copies require the current token's normal owner and a private write scope.
+const WINDOWS_OWNER_PHASES = new Set(['ARCHIVE_PRE_READ', 'ARCHIVE_POST_READ', 'RUNTIME_PRE_WRITE', 'RUNTIME_POST_SCAN']);
+const windowsOwnerDiagnostics = new WeakMap();
+/** Only facts from this invocation's validated native response may be reported. */
+export function npmWindowsOwnerDiagnostic(error) {
+  return error && typeof error === 'object' ? windowsOwnerDiagnostics.get(error) ?? null : null;
+}
 /** Decode only fixed ownership facts; never include SID/path/ACL bytes in errors. */
-export function reviewNpmWindowsOwnerOutput(output, publicPinnedData = false) {
+function decodeNpmWindowsOwnerOutput(output, publicPinnedData) {
   assert.equal(typeof publicPinnedData, 'boolean', 'NPM_TOOLING_WINDOWS_OWNER_ADMISSION');
   assert.ok(typeof output === 'string' && output.length > 0 && output.length <= 4096
     && Buffer.byteLength(output) <= 4096, 'NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_BOUND');
@@ -54,23 +60,44 @@ export function reviewNpmWindowsOwnerOutput(output, publicPinnedData = false) {
   for (const key of ['runtimeOwner', 'reviewedAdminSource', 'writeScopeSafe', 'tokenUserPresent'])
     assert.equal(typeof value[key], 'boolean', 'NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_BOOLEAN');
   assert.ok(typeof value.aclSha256 === 'string' && /^[a-f0-9]{64}$/.test(value.aclSha256), 'NPM_TOOLING_WINDOWS_OWNER_PROTOCOL_HASH');
+  return value;
+}
+export function reviewNpmWindowsOwnerOutput(output, publicPinnedData = false) {
+  const value = decodeNpmWindowsOwnerOutput(output, publicPinnedData);
   assert.ok(value.tokenUserPresent, 'NPM_TOOLING_WINDOWS_OWNER_TOKEN_REQUIRED');
   assert.ok(value.writeScopeSafe, 'NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED');
   assert.ok(value.runtimeOwner || publicPinnedData && value.reviewedAdminSource, 'NPM_TOOLING_WINDOWS_OWNER_SID_REFUSED');
   return value.aclSha256;
 }
-function windowsOwner(file, kind, publicPinnedData, end) {
+function windowsOwner(file, kind, publicPinnedData, end, phase) {
   if (process.platform !== 'win32') return;
   assert.ok(path.isAbsolute(process.env.SystemRoot || ''), 'NPM_TOOLING_WINDOWS_OWNER_REQUIRED');
   assert.ok(kind === 'file' || kind === 'directory', 'NPM_TOOLING_WINDOWS_OWNER_KIND');
+  assert.ok(WINDOWS_OWNER_PHASES.has(phase), 'NPM_TOOLING_WINDOWS_OWNER_PHASE');
   const code = "$ErrorActionPreference='Stop';try{$p=$env:CASEOPS_NPM_ACL_PATH;$sections=[Security.AccessControl.AccessControlSections]'Access,Owner';if($env:CASEOPS_NPM_ACL_KIND -eq 'file'){$a=[IO.File]::GetAccessControl($p,$sections)}elseif($env:CASEOPS_NPM_ACL_KIND -eq 'directory'){$a=[IO.Directory]::GetAccessControl($p,$sections)}else{throw 'NPM_ACL_KIND'};$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$present=![string]::IsNullOrEmpty($u);$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;$owner=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$public=($present -and $o -eq 'S-1-5-32-544' -and $t -eq $u);$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};$hash=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($a.GetSecurityDescriptorBinaryForm())).Replace('-','').ToLowerInvariant();[Console]::Out.Write('{\"runtimeOwner\":'+$owner.ToString().ToLowerInvariant()+',\"reviewedAdminSource\":'+$public.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+',\"tokenUserPresent\":'+$present.ToString().ToLowerInvariant()+',\"aclSha256\":\"'+$hash+'\"}')}catch{[Console]::Error.WriteLine('NPM_TOOLING_WINDOWS_ACL_QUERY_FAILED');exit 1}";
-  const result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', windowsHide: true,
+  let result, transportValidated = false;
+  try {
+    result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], { encoding: 'utf8', windowsHide: true,
       timeout: Math.max(1, Math.min(5000, Math.floor(end - performance.now()))), maxBuffer: 4096,
       env: { SystemRoot: process.env.SystemRoot, WINDIR: process.env.SystemRoot, CASEOPS_NPM_ACL_PATH: file, CASEOPS_NPM_ACL_KIND: kind } });
-  check(end); assert.ok(!result.error && result.status === 0 && result.signal === null
-    && result.stderr === '', 'NPM_TOOLING_WINDOWS_OWNER_COMMAND_REFUSED');
-  return reviewNpmWindowsOwnerOutput(result.stdout, publicPinnedData);
+    check(end); assert.ok(!result.error && result.status === 0 && result.signal === null
+      && result.stderr === '', 'NPM_TOOLING_WINDOWS_OWNER_COMMAND_REFUSED');
+    transportValidated = true;
+    return reviewNpmWindowsOwnerOutput(result.stdout, publicPinnedData);
+  } catch (error) {
+    const diagnostic = { phase };
+    if (transportValidated) {
+      // Re-decode the same bounded response only for diagnostics. A malformed
+      // protocol supplies no facts, and the original thrown Error is unchanged.
+      try {
+        const value = decodeNpmWindowsOwnerOutput(result.stdout, publicPinnedData);
+        for (const key of ['runtimeOwner', 'reviewedAdminSource', 'writeScopeSafe', 'tokenUserPresent', 'aclSha256']) diagnostic[key] = value[key];
+      } catch {}
+    }
+    if (error && typeof error === 'object') windowsOwnerDiagnostics.set(error, Object.freeze(diagnostic));
+    throw error;
+  }
 }
 export function readPinnedArchive(file, end = performance.now() + 30000) {
   let fd;
@@ -80,13 +107,13 @@ export function readPinnedArchive(file, end = performance.now() + 30000) {
     namedFile(named, before);
     assert.ok(before.isFile() && before.nlink === 1n && before.size === BigInt(NPM_ARTIFACT.sizeBytes), 'NPM_TOOLING_ARCHIVE_EXTENT');
     if (process.getuid) assert.equal(before.uid, BigInt(process.getuid()), 'NPM_TOOLING_ARCHIVE_OWNER');
-    const location = canonical(file), ns = parents(location, end), acl = windowsOwner(file, 'file', true, end);
+    const location = canonical(file), ns = parents(location, end), acl = windowsOwner(file, 'file', true, end, 'ARCHIVE_PRE_READ');
     const bytes = Buffer.alloc(NPM_ARTIFACT.sizeBytes + 1); let n = 0;
     while (n < bytes.length) { check(end); const width = fs.readSync(fd, bytes, n, Math.min(65536, bytes.length - n), n); if (!width) break; n += width; }
     assert.equal(n, NPM_ARTIFACT.sizeBytes, 'NPM_TOOLING_ARCHIVE_EXTENT');
     assert.ok(equal(frame(before), frame(fs.fstatSync(fd, { bigint: true })))
       && equal(frame(named), frame(fs.lstatSync(file, { bigint: true }))) && location === canonical(file)
-      && equal(ns, parents(location, end)) && acl === windowsOwner(file, 'file', true, end), 'NPM_TOOLING_ARCHIVE_CHANGED');
+      && equal(ns, parents(location, end)) && acl === windowsOwner(file, 'file', true, end, 'ARCHIVE_POST_READ'), 'NPM_TOOLING_ARCHIVE_CHANGED');
     const kept = bytes.subarray(0, n); assert.equal(digest(kept), NPM_ARTIFACT.sha256, 'NPM_TOOLING_ARCHIVE_DIGEST');
     return kept;
   } finally { if (fd !== undefined) fs.closeSync(fd); }
@@ -220,7 +247,7 @@ export function prepareNpm({ parent = os.tmpdir(), archive = fileURLToPath(new U
   const entryRow = { path: 'caseops-entry.mjs', mode: 0o644, bytes: entryBytes, sha256: entrySha256 };
   const stagedRows = [...rows, ...shimRows, entryRow];
   const root = fs.mkdtempSync(path.join(canonical(parent), 'caseops-npm-')); fs.chmodSync(root, 0o700);
-  const initial = fs.lstatSync(root, { bigint: true }), ns = parents(root, end), acl = windowsOwner(root, 'directory', false, end);
+  const initial = fs.lstatSync(root, { bigint: true }), ns = parents(root, end), acl = windowsOwner(root, 'directory', false, end, 'RUNTIME_PRE_WRITE');
   assert.ok(initial.isDirectory() && !initial.isSymbolicLink(), 'NPM_TOOLING_OWNED_ROOT');
   if (process.getuid) assert.equal(initial.uid, BigInt(process.getuid()));
   const logDirectory = path.join(root, 'transport'); fs.mkdirSync(logDirectory, { mode: 0o700 });
@@ -237,7 +264,7 @@ export function prepareNpm({ parent = os.tmpdir(), archive = fileURLToPath(new U
     check(end);
   }
   assert.ok(equal(frame(initial, directoryFields), frame(fs.lstatSync(root, { bigint: true }), directoryFields))
-    && equal(ns, parents(root, end)) && acl === windowsOwner(root, 'directory', false, end), 'NPM_TOOLING_RUNTIME_NAMESPACE_CHANGED');
+    && equal(ns, parents(root, end)) && acl === windowsOwner(root, 'directory', false, end, 'RUNTIME_POST_SCAN'), 'NPM_TOOLING_RUNTIME_NAMESPACE_CHANGED');
   const inheritedPath = Object.keys(process.env).find(key => key.toUpperCase() === 'PATH');
   const bootstrap = npmRegistryBootstrap(entrySha256);
   const environment = { CASEOPS_PINNED_NPM_NODE: process.execPath, CASEOPS_PINNED_NPM_ROOT: root,
@@ -315,5 +342,11 @@ export async function runNpm(args, options = {}) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { process.exitCode = await runNpm(process.argv.slice(2)); }
-  catch (error) { const label = /^NPM_TOOLING_[A-Z_]+$/.test(error?.message || '') ? error.message : 'NPM_TOOLING_REFUSED'; console.error(label); process.exitCode = 1; }
+  catch (error) {
+    const label = /^NPM_TOOLING_[A-Z_]+$/.test(error?.message || '') ? error.message : 'NPM_TOOLING_REFUSED';
+    console.error(label);
+    const diagnostic = npmWindowsOwnerDiagnostic(error);
+    if (diagnostic) console.error(JSON.stringify({ kind: 'caseops-npm-windows-owner-diagnostic-v1', ...diagnostic }));
+    process.exitCode = 1;
+  }
 }

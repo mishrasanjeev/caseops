@@ -163,6 +163,25 @@ const codegenShellKeys = Object.freeze(['RCT_SCRIPT_RN_DIR', 'RCT_SCRIPT_APP_PAT
   'RCT_SCRIPT_TYPE', 'SCRIPT_PHASES_SCRIPT', 'WITH_ENVIRONMENT']);
 const bundleShellKeys = Object.freeze(['PROJECT_ROOT', 'ENTRY_FILE', 'CLI_PATH', 'BUNDLE_COMMAND', 'NODE_ARGS']);
 const nodeScriptKeys = Object.freeze([...codegenShellKeys, ...bundleShellKeys]);
+// Retained M9 Generate Specs exports belong to the ad-hoc Simulator shell.
+// Validate their complete observed cohort, then discard it from the Node child.
+const codegenMetadataValues = Object.freeze({ AppIdentifierPrefix: 'FAKETEAMID.', CLANG_ENABLE_MODULE_DEBUGGING: 'NO',
+  EXECUTABLE_EXTENSION: 'a', EXECUTABLE_PREFIX: 'lib', EXECUTABLE_SUFFIX: '.a', REZ_EXECUTABLE: 'YES',
+  SWIFT_COMPILE_FOR_STATIC_LINKING: 'YES', TeamIdentifierPrefix: 'FAKETEAMID.' });
+const codegenMetadataKeys = Object.freeze([...Object.keys(codegenMetadataValues), 'SCRIPT_OUTPUT_FILE_0']);
+function validateCodegenMetadata(environment, buildRoot) {
+  const supplied = Object.keys(environment).filter(key => codegenMetadataKeys.some(name => name.toUpperCase() === key.toUpperCase()));
+  if (!supplied.length) return;
+  assert.ok(supplied.every(key => codegenMetadataKeys.includes(key)), 'IOS_HOST_CODEGEN_METADATA_NAME');
+  assert.ok(absolute(buildRoot) && codegenShellKeys.every(key => Object.hasOwn(environment, key)), 'IOS_HOST_CODEGEN_METADATA_CONTEXT');
+  assert.equal(supplied.length, codegenMetadataKeys.length, 'IOS_HOST_CODEGEN_METADATA_COHORT');
+  const derived = path.join(buildRoot, 'DerivedData/Build/Intermediates.noindex/Pods.build/Release-iphonesimulator/ReactCodegen.build/DerivedSources');
+  const context = { CODE_SIGN_IDENTITY: '-', CONFIGURATION: 'Release', PLATFORM_NAME: 'iphonesimulator',
+    EFFECTIVE_PLATFORM_NAME: '-iphonesimulator', TARGET_NAME: 'ReactCodegen', SCRIPT_OUTPUT_FILE_COUNT: '1', DERIVED_FILE_DIR: derived };
+  for (const [key, value] of Object.entries(context)) assert.equal(environment[key], value, 'IOS_HOST_CODEGEN_METADATA_CONTEXT');
+  for (const [key, value] of Object.entries({ ...codegenMetadataValues, SCRIPT_OUTPUT_FILE_0: path.join(derived, 'react-codegen.log') }))
+    assert.equal(environment[key], value, 'IOS_HOST_CODEGEN_METADATA_VALUE');
+}
 function iosNodeScriptValues(root) {
   const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios');
   // Pods sets PODFILE_DIR to $(SRCROOT)/..; retain its observed /Pods/..
@@ -200,7 +219,7 @@ function validateProcessMetadata(environment) {
     && environment.USER === actual.username && /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(environment.GROUP), 'IOS_HOST_PROCESS_METADATA');
   // GROUP is a discarded label. The numeric GID above is the identity fence.
 }
-export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null, discardNodeEngineMetadata = false, nodeScriptValues = null } = {}) {
+export function neutralIosEnvironment(environment, { buildNames = [], podBuildPaths = null, discardNodeEngineMetadata = false, nodeScriptValues = null, codegenBuildRoot = null } = {}) {
   assert.ok(environment && typeof environment === 'object' && !Array.isArray(environment), 'IOS_HOST_ENVIRONMENT');
   const entries = Object.entries(environment), incoming = Object.fromEntries(entries);
   validateProcessMetadata(incoming);
@@ -211,7 +230,9 @@ export function neutralIosEnvironment(environment, { buildNames = [], podBuildPa
     assert.ok(bytes <= 262144, 'IOS_HOST_ENVIRONMENT_BOUND');
   }
   validateNodeScriptCohort(incoming, nodeScriptValues);
+  validateCodegenMetadata(incoming, codegenBuildRoot);
   for (const [key, value] of entries) {
+    if (codegenMetadataKeys.includes(key)) continue;
     if (nodeScriptKeys.includes(key.toUpperCase())) {
       assert.equal(key, key.toUpperCase(), 'IOS_HOST_UNREVIEWED_ENVIRONMENT');
       // Codegen consumes only OUTPUT_DIR in Node; the remaining selectors have
@@ -402,7 +423,7 @@ export function renderIosHostBuildEntry(helper) {
 // modules are consumed from their checked descriptors, including the relative
 // registry import when this host helper itself was loaded from a held data URL.
 const NPM_INPUTS = Object.freeze({
-  tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: '7509dda7422c23f3eaf55a9c48c9aafe5cd796f5988b581a55d28f62445e2c7f', sizeBytes: 25889 }),
+  tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: 'a116c49fd7a530ef7bdebdcaa9fb436ee246368f50048f2fb6bb8c75bb6dba58', sizeBytes: 27532 }),
   registry: Object.freeze({ relative: 'scripts/mobile/npm-registry.mjs', sha256: 'f354a9d943ebcb78cb7afdb78c83bc0961fc01bbe183a6791486464cad6db9de', sizeBytes: 12058 }),
   archive: Object.freeze({ relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', sha256: 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052', sizeBytes: 4043346 }),
 });
@@ -909,6 +930,7 @@ export function iosHostCommandProjection(admitted, policyRef, role, args, enviro
     validateIncoming(p, admitted.node.environment, environment, scriptValues);
     const neutral = neutralIosEnvironment(environment, { buildNames: role === 'node' ? admitted.nodeBuildNames ?? [] : [],
       discardNodeEngineMetadata: verifiedNodeBuild, nodeScriptValues: scriptValues,
+      codegenBuildRoot: scriptValues && p.role === 'native-qa' ? p.paths.build : null,
       podBuildPaths: admitted.podBuildPaths?.values ?? null });
     Object.assign(neutral, { HOME: p.paths.home, CFFIXED_USER_HOME: p.paths.home, CURL_HOME: p.paths.home, XDG_CONFIG_HOME: p.paths.home,
       CP_HOME_DIR: p.paths.pods, CP_CACHE_DIR: p.paths.cache, CP_REPOS_DIR: p.paths.repos, TMPDIR: p.paths.temporary,

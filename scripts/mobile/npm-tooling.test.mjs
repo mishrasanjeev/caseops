@@ -11,7 +11,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import https from 'node:https';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
-import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, verifyInstalledNpm } from './npm-tooling.mjs';
+import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, npmWindowsOwnerDiagnostic, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, runNpm, verifyInstalledNpm } from './npm-tooling.mjs';
 import { installNpmRegistryTransport } from './npm-registry.mjs';
 
 const archive = process.env.CASEOPS_TEST_NPM_ARCHIVE || fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', import.meta.url));
@@ -45,6 +45,11 @@ function withFs(overrides, fn) {
   const prior = Object.fromEntries(Object.keys(overrides).map(k => [k, fs[k]]));
   for (const [k, wrap] of Object.entries(overrides)) fs[k] = (...args) => wrap(prior[k], ...args);
   try { return fn(); } finally { Object.assign(fs, prior); }
+}
+async function withFsAsync(overrides, fn) {
+  const prior = Object.fromEntries(Object.keys(overrides).map(k => [k, fs[k]]));
+  for (const [k, wrap] of Object.entries(overrides)) fs[k] = (...args) => wrap(prior[k], ...args);
+  try { return await fn(); } finally { Object.assign(fs, prior); }
 }
 function installed(t) {
   const root = fixture(t), file = path.join(root, 'ordinary'), bytes = Buffer.from('ordinary'); fs.writeFileSync(file, bytes); fs.chmodSync(file, 0o644);
@@ -343,6 +348,52 @@ test('a private npm runtime cannot inherit the pinned public archive owner excep
   const children = fs.readdirSync(root); assert.equal(children.length, 1); assert.match(children[0], /^caseops-npm-/);
   assert.deepEqual(fs.readdirSync(path.join(root, children[0])), []);
 });
+test('Windows npm ACL diagnostics identify all four fixed boundaries before any worker execution', async t => {
+  const phases = ['ARCHIVE_PRE_READ', 'ARCHIVE_POST_READ', 'RUNTIME_PRE_WRITE', 'RUNTIME_POST_SCAN'];
+  for (const [index, phase] of phases.entries()) {
+    const root = fixture(t); let calls = 0, workers = 0, caught;
+    const originalSpawn = childProcess.spawn;
+    childProcess.spawn = () => { workers++; throw new Error('CONTROL_UNEXPECTED_NPM_WORKER'); };
+    syncBuiltinESMExports();
+    try {
+      const pending = withWindowsAcl(root, () => ({ status: 0, signal: null, stderr: '',
+        stdout: JSON.stringify(windowsAclFact({ writeScopeSafe: ++calls !== index + 1 })) }),
+      () => runNpm(['--cli-health'], { parent: root, archive }));
+      try { await pending; assert.fail('Expected the unchanged Windows ownership refusal'); } catch (error) { caught = error; }
+    } finally { childProcess.spawn = originalSpawn; syncBuiltinESMExports(); }
+    assert.equal(caught.message, 'NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED');
+    assert.deepEqual(npmWindowsOwnerDiagnostic(caught), { phase, ...windowsAclFact({ writeScopeSafe: false }) });
+    assert.equal(Object.isFrozen(npmWindowsOwnerDiagnostic(caught)), true);
+    assert.equal(calls, index + 1); assert.equal(workers, 0);
+    if (phase === 'RUNTIME_PRE_WRITE') {
+      const children = fs.readdirSync(root); assert.equal(children.length, 1);
+      assert.deepEqual(fs.readdirSync(path.join(root, children[0])), []);
+    }
+  }
+});
+
+test('Windows npm diagnostics retain the original Error and exclude unvalidated and spoofed facts', t => {
+  const root = fixture(t), sentinel = new Error('CONTROL_DO_NOT_REFLECT_PATH_SID_ENV'); let caught;
+  withWindowsAcl(root, () => { throw sentinel; }, () => {
+    try { readPinnedArchive(archive); } catch (error) { caught = error; }
+  });
+  assert.equal(caught, sentinel);
+  assert.deepEqual(npmWindowsOwnerDiagnostic(caught), { phase: 'ARCHIVE_PRE_READ' });
+  for (const result of [
+    { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact({ privateUnknownField: sentinel.message })) },
+    { status: 0, signal: null, stderr: sentinel.message, stdout: JSON.stringify(windowsAclFact()) },
+  ]) {
+    withWindowsAcl(root, () => result, () => {
+      try { readPinnedArchive(archive); assert.fail('Expected the unchanged protocol/transport refusal'); } catch (error) { caught = error; }
+    });
+    assert.match(caught.message, /^NPM_TOOLING_WINDOWS_OWNER_(PROTOCOL_FIELDS|COMMAND_REFUSED)$/);
+    assert.deepEqual(npmWindowsOwnerDiagnostic(caught), { phase: 'ARCHIVE_PRE_READ' });
+    assert.equal(JSON.stringify(npmWindowsOwnerDiagnostic(caught)).includes(sentinel.message), false);
+  }
+  const spoof = Object.assign(new Error(sentinel.message), { phase: 'ARCHIVE_PRE_READ', writeScopeSafe: false });
+  assert.equal(npmWindowsOwnerDiagnostic(spoof), null); assert.equal(npmWindowsOwnerDiagnostic(null), null);
+});
+
 test('installed file descriptors precede pathname checks and reject replacement before any payload read', t => {
   const value = installed(t), events = [];
   withFs({
@@ -588,9 +639,118 @@ test('appium archive download streams official archives under one bound and dead
   await assert.rejects(fresh({}, async () => archiveResponse(bytes))(url, sri(Buffer.from('other'))), /APPIUM_TOOLING_DOWNLOAD_INTEGRITY/);
   await assert.rejects(fresh({ milliseconds: -1 }, async () => assert.fail('no request'))(url, integrity), /APPIUM_TOOLING_DOWNLOAD_DEADLINE/);
   await assert.rejects(fresh({}, async () => assert.fail('no request'))('https://example.com/x.tgz', integrity), /APPIUM_TOOLING_OFFICIAL_ARCHIVE_REQUIRED/);
-  const prior = process.env.NODE_TLS_REJECT_UNAUTHORIZED; process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  try { await assert.rejects(fresh({}, async () => assert.fail('no request'))(url, integrity), /APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED/); }
-  finally { if (prior === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prior; }
+});
+
+test('appium downloader additional TLS refusal is checked at each entry without changing live TLS settings', async () => {
+  const prior = process.env.NODE_TLS_REJECT_UNAUTHORIZED, environment = {}, bytes = Buffer.from('official archive bytes'); let requests = 0;
+  const download = appiumTooling.downloadSession({ archiveBytes: 64, totalBytes: 1024, milliseconds: 60000 },
+    async () => { requests++; return archiveResponse(bytes); }, { environment });
+  const url = 'https://registry.npmjs.org/x/-/x-1.0.0.tgz';
+  assert.ok((await download(url, sri(bytes))).equals(bytes)); assert.equal(requests, 1);
+  environment.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  await assert.rejects(download(url, sri(bytes)), /APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED/);
+  assert.equal(requests, 1); assert.equal(process.env.NODE_TLS_REJECT_UNAUTHORIZED, prior);
+  let refusedRequests = 0;
+  const refused = appiumTooling.downloadSession(appiumTooling.DOWNLOAD_LIMITS, async () => { refusedRequests++; assert.fail('no request'); }, { environment });
+  await assert.rejects(refused(url, sri(bytes)), /APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED/);
+  assert.equal(refusedRequests, 0); assert.equal(process.env.NODE_TLS_REJECT_UNAUTHORIZED, prior);
+  const source = fs.readFileSync(new URL('./appium-tooling.mjs', import.meta.url), 'utf8');
+  assert.match(source, /return async function downloadOfficialArchive\(url, integrity\) \{\s*assert\.notEqual\(process\.env\.NODE_TLS_REJECT_UNAUTHORIZED, '0'/);
+});
+
+function driverListFixture(t, action = 'process.stdout.write(JSON.stringify(drivers));') {
+  const root = fixture(t), appium = path.join(root, 'node_modules/appium'); fs.mkdirSync(appium, { recursive: true, mode: 0o700 });
+  const drivers = Object.fromEntries(appiumTooling.DRIVER_REBUNDLES.map(spec => [spec.driver, { installed: true, version: spec.localVersion }]));
+  fs.writeFileSync(path.join(appium, 'index.js'), `const assert = require('node:assert/strict'), fs = require('node:fs');
+assert.deepEqual(process.argv.slice(2), ['driver', 'list', '--installed', '--json']);
+assert.equal(process.env.APPIUM_HOME, process.cwd());
+const drivers = ${JSON.stringify(drivers)};
+${action}\n`, { mode: 0o600 });
+  return { root, drivers, listed: path.join(root, 'driver-list.json') };
+}
+async function observeDriverListClose(v, fn, overrides = {}) {
+  let opened, opens = 0, closes = 0, reads = 0;
+  await withFsAsync({
+    openSync(original, file, ...args) { const fd = original(file, ...args); if (file === v.listed) { opened = fd; opens++; assert.ok(args[0] & fs.constants.O_RDWR); } return fd; },
+    closeSync(original, fd) { if (fd === opened) closes++; return original(fd); },
+    readSync(original, fd, ...args) { if (fd === opened) { reads++; assert.equal(typeof args[3], 'number'); } return original(fd, ...args); },
+    readFileSync(original, file, ...args) { assert.notEqual(file, v.listed, 'driver stdout must never be reopened'); return original(file, ...args); },
+    ...overrides,
+  }, () => fn(() => opened));
+  assert.equal(opens, 1); assert.equal(closes, 1); assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  return { reads };
+}
+test('appium driver listing reads actual child stdout on the original descriptor and closes after JSON validation', async t => {
+  const v = driverListFixture(t);
+  const observed = await observeDriverListClose(v, async () => assert.deepEqual(await appiumTooling.readInstalledDrivers(v.root), v.drivers));
+  assert.ok(observed.reads >= 2); // positional data read plus EOF; child advanced the shared stdout offset
+});
+test('appium driver listing refuses actual child pathname replacement and late namespace entries before reading', async t => {
+  for (const action of [
+    `try { fs.renameSync('driver-list.json', 'retained-original.json'); fs.writeFileSync('driver-list.json', JSON.stringify(drivers)); }
+catch (error) { assert.equal(process.platform, 'win32'); assert.equal(error.code, 'EPERM'); fs.writeFileSync('replacement-denied.json', '{}'); }
+process.stdout.write(JSON.stringify(drivers));`,
+    `try { fs.unlinkSync('driver-list.json'); fs.writeFileSync('driver-list.json', JSON.stringify(drivers)); }
+catch (error) { assert.equal(process.platform, 'win32'); assert.equal(error.code, 'EPERM'); fs.writeFileSync('replacement-denied.json', '{}'); }
+process.stdout.write(JSON.stringify(drivers));`,
+    `fs.writeFileSync('late-entry.json', '{}'); process.stdout.write(JSON.stringify(drivers));`,
+  ]) {
+    const v = driverListFixture(t, action);
+    const sameNames = action.startsWith("try { fs.unlinkSync") && process.platform !== 'win32';
+    const pattern = sameNames ? /APPIUM_TOOLING_DRIVER_LIST_CHANGED/ : /APPIUM_TOOLING_DRIVER_LIST_(NAMESPACE|CHANGED)/;
+    const observed = await observeDriverListClose(v, async () => assert.rejects(appiumTooling.readInstalledDrivers(v.root), pattern));
+    assert.equal(observed.reads, 0);
+    if (sameNames) assert.deepEqual(fs.readdirSync(v.root).sort(), ['driver-list.json', 'node_modules']);
+  }
+});
+test('appium driver listing closes on actual child failure, malformed JSON, identity mismatch and oversized output', async t => {
+  for (const [action, pattern, limits] of [
+    ['process.exitCode = 7;', /APPIUM_TOOLING_DRIVER_LIST/],
+    ["process.stdout.write('{');", /SyntaxError/],
+    ['drivers.uiautomator2.version = "wrong"; process.stdout.write(JSON.stringify(drivers));', /APPIUM_TOOLING_DRIVER_IDENTITY/],
+    ['process.stdout.write("x".repeat(65));', /APPIUM_TOOLING_DRIVER_LIST_BOUND/, { ...appiumTooling.DRIVER_LIST_LIMITS, bytes: 64 }],
+  ]) {
+    const v = driverListFixture(t, action);
+    await observeDriverListClose(v, async () => assert.rejects(appiumTooling.readInstalledDrivers(v.root, { limits }), pattern));
+  }
+  const v = driverListFixture(t), mutable = { ...appiumTooling.DRIVER_LIST_LIMITS, bytes: 64 };
+  await observeDriverListClose(v, async () => {
+    const pending = appiumTooling.readInstalledDrivers(v.root, { limits: mutable });
+    mutable.bytes = appiumTooling.DRIVER_LIST_LIMITS.bytes;
+    await assert.rejects(pending, /APPIUM_TOOLING_DRIVER_LIST_BOUND/);
+  });
+});
+test('appium driver listing closes on descriptor read failure and rejects metadata drift', async t => {
+  for (const mutate of [false, true]) {
+    const v = driverListFixture(t); let opened;
+    await observeDriverListClose(v, async getFd => { opened = getFd;
+      await assert.rejects(appiumTooling.readInstalledDrivers(v.root), mutate ? /APPIUM_TOOLING_DRIVER_LIST_CHANGED/ : /CONTROL_DRIVER_READ_FAILURE/);
+    }, { readSync(original, fd, ...args) {
+      if (fd === opened?.()) {
+        if (!mutate) throw new Error('CONTROL_DRIVER_READ_FAILURE');
+        const count = original(fd, ...args); fs.ftruncateSync(fd, 0); return count;
+      }
+      return original(fd, ...args);
+    } });
+  }
+});
+test('appium driver listing charges final reconciliation and bounds the actual child deadline', async t => {
+  const v = driverListFixture(t, "process.on('SIGTERM', () => {}); process.stdout.write('READY_WITH_SIGTERM_HANDLER\\n'); setInterval(() => {}, 1000);");
+  await observeDriverListClose(v, async () => assert.rejects(appiumTooling.readInstalledDrivers(v.root,
+    { limits: { ...appiumTooling.DRIVER_LIST_LIMITS, milliseconds: 1000 } }), /APPIUM_TOOLING_(CHILD_SIGNAL|DRIVER_LIST_DEADLINE)/));
+  assert.equal(fs.readFileSync(v.listed, 'utf8'), 'READY_WITH_SIGTERM_HANDLER\n');
+  const full = driverListFixture(t); let entries = 0;
+  await withFsAsync({ lstatSync(original, ...args) { entries++; return original(...args); },
+    readdirSync(original, ...args) { const names = original(...args); entries += names.length; return names; } },
+  () => appiumTooling.readInstalledDrivers(full.root));
+  const short = driverListFixture(t);
+  const shortLimits = { ...appiumTooling.DRIVER_LIST_LIMITS, entries: entries - 1 };
+  const observed = await observeDriverListClose(short, async () => {
+    const pending = appiumTooling.readInstalledDrivers(short.root, { limits: shortLimits });
+    shortLimits.entries = appiumTooling.DRIVER_LIST_LIMITS.entries;
+    await assert.rejects(pending, /APPIUM_TOOLING_INVENTORY_ENTRY_BOUND/);
+  });
+  assert.ok(observed.reads >= 2, 'entry exhaustion must follow actual child completion and descriptor readback');
 });
 
 test('committed appium tooling lock pins the rebundled driver and only fixed glob/minimatch identities', () => {

@@ -3851,6 +3851,116 @@ test('iOS Codegen shell cohort rejects partial foreign and cross-role contexts w
   for (const key of ['RCT_SCRIPT_UNKNOWN', 'SCRIPT_PHASES_SCRIPT_UNKNOWN', 'RN_DIR'])
     assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
 });
+// IOS-CODEGEN-01..05: retained M9 Generate Specs exports, not native acceptance.
+// The authoritative public capture is retained outside source:
+// ios-m9-codegen-env-actual-block-02/capture.json, actualNineValues; raw private
+// environment capture is neither imported nor needed by these controls.
+const retainedCodegenScalars = Object.freeze({ AppIdentifierPrefix: 'FAKETEAMID.', CLANG_ENABLE_MODULE_DEBUGGING: 'NO',
+  EXECUTABLE_EXTENSION: 'a', EXECUTABLE_PREFIX: 'lib', EXECUTABLE_SUFFIX: '.a', REZ_EXECUTABLE: 'YES',
+  SWIFT_COMPILE_FOR_STATIC_LINKING: 'YES', TeamIdentifierPrefix: 'FAKETEAMID.' });
+function iosCodegenMetadataFixture(f = iosSdkScriptFixture()) {
+  f.policy.role = 'native-qa';
+  const derived = path.join(f.policy.paths.build, 'DerivedData/Build/Intermediates.noindex/Pods.build/Release-iphonesimulator/ReactCodegen.build/DerivedSources');
+  const incoming = { ...iosCodegenShellValues(f), CODE_SIGN_IDENTITY: '-', CONFIGURATION: 'Release', PLATFORM_NAME: 'iphonesimulator',
+    EFFECTIVE_PLATFORM_NAME: '-iphonesimulator', TARGET_NAME: 'ReactCodegen', SCRIPT_OUTPUT_FILE_COUNT: '1', DERIVED_FILE_DIR: derived,
+    ...retainedCodegenScalars, SCRIPT_OUTPUT_FILE_0: path.join(derived, 'react-codegen.log') };
+  return { ...f, incoming, keys: [...Object.keys(retainedCodegenScalars), 'SCRIPT_OUTPUT_FILE_0'] };
+}
+test('IOS-CODEGEN-01 retained M9 metadata is validated and discarded before a real Node child', () => {
+  const f = iosCodegenMetadataFixture(), before = { ...f.incoming }, args = ['scripts/generate-codegen-artifacts.js', '--path', f.incoming.RCT_SCRIPT_APP_PATH,
+    '--outputPath', f.incoming.RCT_SCRIPT_OUTPUT_DIR, '--targetPlatform', 'ios'];
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, f.incoming);
+  assert.deepEqual(actual.args, args); assert.deepEqual(f.incoming, before);
+  for (const key of f.keys) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.equal(actual.environment.RCT_SCRIPT_OUTPUT_DIR, f.incoming.RCT_SCRIPT_OUTPUT_DIR);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  const childEnvironment = { ...process.env, RCT_SCRIPT_OUTPUT_DIR: actual.environment.RCT_SCRIPT_OUTPUT_DIR };
+  for (const key of f.keys) { delete childEnvironment[key]; if (Object.hasOwn(actual.environment, key)) childEnvironment[key] = actual.environment[key]; }
+  const observed = JSON.parse(execFileSync(process.execPath, ['-e', 'const keys=' + JSON.stringify(f.keys) + ';process.stdout.write(JSON.stringify({retained:keys.filter(k=>Object.hasOwn(process.env,k)),output:process.env.RCT_SCRIPT_OUTPUT_DIR}))'],
+    { env: childEnvironment, encoding: 'utf8', timeout: 5000, maxBuffer: 4096 }));
+  assert.deepEqual(observed, { retained: [], output: f.incoming.RCT_SCRIPT_OUTPUT_DIR });
+});
+test('IOS-CODEGEN-02 partial changed typed or aliased M9 metadata refuses even through a generic build-name grant', () => {
+  for (const key of iosCodegenMetadataFixture().keys) {
+    const f = iosCodegenMetadataFixture(), missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_CODEGEN_METADATA_COHORT/);
+    for (const value of ['FOREIGN', f.incoming[key] + ' ', false, null, 1, {}, 'bad\0value', 'x'.repeat(32769)])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: value }), /IOS_HOST_(?:CODEGEN_METADATA_VALUE|ENVIRONMENT)/);
+    const alias = key === key.toUpperCase() ? key.toLowerCase() : key.toUpperCase();
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [alias]: f.incoming[key] }), /IOS_HOST_CODEGEN_METADATA_NAME/);
+    assert.throws(() => neutralIosEnvironment({ [key]: f.incoming[key] }, { buildNames: [key] }), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  }
+});
+test('IOS-CODEGEN-03 output is the exact policy-owned Generate Specs log in a one-output Release Simulator context', () => {
+  const f = iosCodegenMetadataFixture();
+  for (const value of ['/FOREIGN/react-codegen.log', f.incoming.SCRIPT_OUTPUT_FILE_0 + '/..', f.incoming.SCRIPT_OUTPUT_FILE_0.replace('/build/', '/build-sibling/'),
+    f.incoming.SCRIPT_OUTPUT_FILE_0.replace('/DerivedSources/', '/DerivedSources/../DerivedSources/'), f.incoming.SCRIPT_OUTPUT_FILE_0.replace('react-codegen.log', 'other.log')])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, SCRIPT_OUTPUT_FILE_0: value }), /IOS_HOST_CODEGEN_METADATA_VALUE/);
+  for (const [key, value] of [['DERIVED_FILE_DIR', '/FOREIGN/DerivedSources'], ['SCRIPT_OUTPUT_FILE_COUNT', '2'], ['CONFIGURATION', 'Debug'],
+    ['CODE_SIGN_IDENTITY', 'Apple Distribution'], ['PLATFORM_NAME', 'iphoneos'], ['EFFECTIVE_PLATFORM_NAME', '-iphoneos'], ['TARGET_NAME', 'CaseOps']])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: value }), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  for (const key of ['DERIVED_FILE_DIR', 'SCRIPT_OUTPUT_FILE_COUNT', 'CODE_SIGN_IDENTITY', 'TARGET_NAME']) {
+    const missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  }
+});
+test('IOS-CODEGEN-04 M9 metadata never grants another role source cohort TLS loader or SDK path authority', () => {
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const f = iosCodegenMetadataFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], f.incoming), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  for (const mutate of [f => { f.policy.role = 'base'; }, f => { delete f.admitted.nodeBuildNames; },
+    f => { f.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); }, f => { delete f.admitted.podBuildPaths; }]) {
+    const f = iosCodegenMetadataFixture(); mutate(f); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], f.incoming), /IOS_HOST_(?:CODEGEN_METADATA_CONTEXT|NODE_SCRIPT_CONTEXT)/);
+  }
+  for (const key of Object.keys(iosCodegenShellValues(iosSdkScriptFixture()))) {
+    const f = iosCodegenMetadataFixture(), missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_NODE_SCRIPT_COHORT/);
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: '/FOREIGN/source' }), /IOS_HOST_NODE_SCRIPT_VALUE/);
+  }
+  for (const key of ['NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'DYLD_INSERT_LIBRARIES', 'LD_PRELOAD']) {
+    const f = iosCodegenMetadataFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  const f = iosCodegenMetadataFixture(), names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  assert.equal(names.length, 618); for (const key of f.keys) assert.equal(names.includes(key), false, key);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, SCRIPT_OUTPUT_FILE_1: f.incoming.SCRIPT_OUTPUT_FILE_0 }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+test('IOS-CODEGEN-05 original SDK shell retains log redirects and exact CLI output across the offline Node boundary', t => {
+  const root = fs.realpathSync(trustRoot()); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source'), mobile = path.join(sourceRoot, 'apps/mobile'), pods = path.join(mobile, 'ios/Pods');
+  fs.mkdirSync(pods, { recursive: true, mode: 0o700 }); fs.mkdirSync(path.join(mobile, 'node_modules/react-native'), { recursive: true, mode: 0o700 });
+  const f = iosSdkScriptFixture(); f.policy.helper.path = path.join(sourceRoot, 'scripts/mobile/ios-host-launch.mjs');
+  f.admitted.podBuildPaths.sourceRoot = sourceRoot; f.policy.paths.build = path.join(root, 'build');
+  const supplied = iosCodegenMetadataFixture(f); fs.mkdirSync(supplied.incoming.DERIVED_FILE_DIR, { recursive: true, mode: 0o700 });
+  const packageRoot = path.resolve(fileURLToPath(new URL('../../apps/mobile/node_modules/react-native', import.meta.url)));
+  const shellBytes = fs.readFileSync(path.join(packageRoot, 'scripts/react_native_pods_utils/script_phases.sh'));
+  const shell = path.join(root, 'sdk-script-phases.sh'), fixtureFile = path.join(root, 'fixture.json'), journal = path.join(root, 'boundary.jsonl');
+  fs.writeFileSync(shell, shellBytes, { mode: 0o600, flag: 'wx' });
+  fs.writeFileSync(fixtureFile, JSON.stringify({ admitted: f.admitted, ref: f.ref, incoming: supplied.incoming, keys: supplied.keys }), { mode: 0o600, flag: 'wx' });
+  const adapter = path.join(root, 'offline-node.mjs'), entry = path.join(root, 'node');
+  fs.writeFileSync(adapter, `import fs from 'node:fs';import assert from 'node:assert/strict';import{execFileSync}from'node:child_process';
+import{iosHostCommandProjection}from${JSON.stringify(new URL('./ios-host-launch.mjs', import.meta.url).href)};
+const f=JSON.parse(fs.readFileSync(${JSON.stringify(fixtureFile)},'utf8')),args=process.argv.slice(2);
+const incoming=Object.fromEntries(Object.keys(f.incoming).map(k=>[k,process.env[k]]));
+const projected=iosHostCommandProjection(f.admitted,f.ref,'node',args,incoming);
+assert.deepEqual(projected.args,args);for(const k of f.keys)assert.equal(Object.hasOwn(projected.environment,k),false);
+const env={...process.env,RCT_SCRIPT_OUTPUT_DIR:projected.environment.RCT_SCRIPT_OUTPUT_DIR};for(const k of f.keys)delete env[k];
+const resolve=['--print',"require('path').dirname(require.resolve('@react-native/codegen/package.json'))"];
+if(JSON.stringify(args)===JSON.stringify(resolve)){process.stdout.write(execFileSync(process.execPath,args,{cwd:${JSON.stringify(packageRoot)},env,encoding:'utf8',timeout:5000,maxBuffer:4096}));}
+else{assert.deepEqual(args,['scripts/generate-codegen-artifacts.js','--path',f.incoming.RCT_SCRIPT_APP_PATH,'--outputPath',f.incoming.RCT_SCRIPT_OUTPUT_DIR,'--targetPlatform','ios']);
+ const observed=JSON.parse(execFileSync(process.execPath,['-e','process.stdout.write(JSON.stringify({keys:'+JSON.stringify(f.keys)+'.filter(k=>Object.hasOwn(process.env,k)),output:process.env.RCT_SCRIPT_OUTPUT_DIR}))'],{env,encoding:'utf8',timeout:5000,maxBuffer:4096}));
+ assert.deepEqual(observed,{keys:[],output:f.incoming.RCT_SCRIPT_OUTPUT_DIR});}
+fs.appendFileSync(${JSON.stringify(journal)},JSON.stringify({args,output:projected.environment.RCT_SCRIPT_OUTPUT_DIR})+'\\n',{mode:0o600});
+`, { mode: 0o600, flag: 'wx' });
+  fs.writeFileSync(entry, '#!/bin/sh\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(adapter) + ' "$@"\n', { mode: 0o700, flag: 'wx' });
+  // The owned offline dispatcher executes real Node and the actual resolver;
+  // it validates the real generation argv without running SDK generation.
+  execFileSync('/bin/bash', [shell], { env: { ...process.env, ...supplied.incoming, NODE_BINARY: entry }, encoding: 'utf8', timeout: 15000, maxBuffer: 16384 });
+  const events = fs.readFileSync(journal, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(events.length, 2); assert.equal(events[1].args[4], supplied.incoming.RCT_SCRIPT_OUTPUT_DIR);
+  const log = fs.readFileSync(supplied.incoming.SCRIPT_OUTPUT_FILE_0, 'utf8');
+  assert.match(log, /Generating codegen artifacts/); assert.match(log, /Done\./);
+  assert.deepEqual(fs.readFileSync(shell), shellBytes);
+});
 test('iOS Release bundle shell prefixes retain only exact source-derived Node values', () => {
   for (const size of [1, 2, 4, 5]) {
     const f = iosSdkScriptFixture(), values = iosBundleShellValues(f), incoming = Object.fromEntries(Object.entries(values).slice(0, size));
