@@ -16,7 +16,8 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
-  expect, type APIRequestContext, type APIResponse, type Locator, type Page, type Response, type TestInfo,
+  expect, request as playwrightRequest, type APIRequestContext, type APIResponse, type Locator, type Page,
+  type Response, type TestInfo,
 } from "@playwright/test";
 
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
@@ -233,9 +234,17 @@ export async function addLocalColleague(
   const password = `Synthetic!${randomUUID()}`;
   await json(await request.post(`${rt.api.origin}/api/companies/current/users`, { headers: rt.headers,
     data: { full_name: fullName, email, password, role } }), `Create local ${role}`, 200);
-  const login = await json<TesterActor>(await request.post(`${rt.api.origin}/api/auth/login`, {
-    headers: noPaidProviderHeaders, data: { company_slug: rt.credentials.slug, email, password },
-  }), `Local ${role} login`);
+  // The login sets the colleague's session cookie on the context it runs in.
+  // Run it in a throwaway context so the caller's context stays the tester's.
+  const isolated = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+  let login: TesterActor;
+  try {
+    login = await json<TesterActor>(await isolated.post(`${rt.api.origin}/api/auth/login`, {
+      data: { company_slug: rt.credentials.slug, email, password },
+    }), `Local ${role} login`);
+  } finally {
+    await isolated.dispose();
+  }
   expect(login.company.id).toBe(rt.actor.company.id);
   return { credentials: { slug: rt.credentials.slug, email, password }, membershipId: login.membership.id };
 }
