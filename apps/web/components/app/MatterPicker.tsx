@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { isApiErrorShape } from "@/lib/api/config";
-import { listMatters } from "@/lib/api/endpoints";
+import { fetchMatter, listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
@@ -31,7 +31,10 @@ import { cn } from "@/lib/cn";
  *
  * - `value` / `onChange(id, matter)`: controlled; the picker never selects a
  *   Matter by itself. The chosen Matter stays an option when a later search
- *   no longer returns it.
+ *   no longer returns it. A `value` the loaded pages do not contain (a deep
+ *   link or a pre-filled Matter older than the first page) is read by id
+ *   through the same wall-scoped API; a Matter the user may not open is
+ *   reported, never shown, and can be cleared.
  * - `disabledReason(matter)`: the caller's copy of its API validator. A
  *   Matter the write would reject is listed, disabled, with the reason, so
  *   the picker never offers a value the API refuses.
@@ -76,6 +79,39 @@ function errorText(error: unknown): string {
   if (isApiErrorShape(error) && error.detail.trim()) return error.detail;
   if (error instanceof Error && error.message.trim()) return error.message;
   return "Request failed.";
+}
+
+function isHidden(error: unknown): boolean {
+  return isApiErrorShape(error) && (error.status === 404 || error.status === 403);
+}
+
+/** One Matter read by id; shared by the picker and {@link MatterName}. */
+function useMatterById(matterId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["matters", "by-id", matterId],
+    queryFn: () => fetchMatter(String(matterId)),
+    enabled: Boolean(matterId) && enabled,
+    // A hidden Matter cannot appear on retry; other failures offer Retry.
+    retry: false,
+  });
+}
+
+/**
+ * A Matter reference shown by its caption, never by its internal id. A
+ * Matter the viewer may not open says so instead of leaking its title.
+ */
+export function MatterName({ matterId, fallback = "None" }: { matterId: string | null | undefined; fallback?: string }) {
+  const matter = useMatterById(matterId);
+  if (!matterId) return <>{fallback}</>;
+  if (matter.data) return <span className="break-words">{matterCaption(matter.data)}</span>;
+  if (matter.isError) {
+    return (
+      <span className="break-words">
+        {isHidden(matter.error) ? "A Matter you cannot open" : "Matter could not be loaded"}
+      </span>
+    );
+  }
+  return <span>Loading Matter…</span>;
 }
 
 /** Every reason on screen, grouped: "Already linked as Litigation: TM-1, TM-2, TM-3 and 4 more." */
@@ -134,15 +170,25 @@ export function MatterPicker({
   const hasMore = Boolean(results.hasNextPage);
 
   const [chosen, setChosen] = useState<Matter | null>(null);
+  const loadedSelection = value ? loaded.find((matter) => matter.id === value) : undefined;
+  // A pre-filled Matter beyond the loaded pages is read by id, never dropped.
+  const lookupNeeded =
+    Boolean(value) && !results.isPending && !loadedSelection && chosen?.id !== value;
+  const lookup = useMatterById(value, lookupNeeded && enabled);
+  const lookupPending = lookupNeeded && lookup.isPending;
+  const lookupFailed = lookupNeeded && lookup.isError;
+  const lookupErrorId = `${selectId}-selected-error`;
   const selected =
-    (value ? loaded.find((matter) => matter.id === value) : undefined) ??
-    (chosen?.id === value ? chosen : null);
+    loadedSelection ??
+    (chosen?.id === value ? chosen : null) ??
+    (value && lookup.data?.id === value ? lookup.data : null);
   const matters = selected && !loaded.some((matter) => matter.id === selected.id)
     ? [selected, ...loaded]
     : loaded;
   const rows = matters.map((matter) => ({ matter, reason: disabledReason?.(matter) ?? null }));
   const options = [
     { value: "", label: results.isPending ? "Loading Matters…" : "Select a Matter", disabled: true },
+    ...(lookupPending ? [{ value, label: "Loading the selected Matter…", disabled: true }] : []),
     // The chosen Matter stays selectable so the field keeps showing it (with
     // its reason); the caller anchors that reason to the field.
     ...rows.map(({ matter, reason }) => ({
@@ -191,8 +237,8 @@ export function MatterPicker({
         options={options}
         required={required}
         disabled={disabled || results.isPending || (choosable === 0 && !value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={[statusId, error ? errorId : null].filter(Boolean).join(" ")}
+        aria-invalid={error || lookupFailed ? true : undefined}
+        aria-describedby={[statusId, lookupFailed ? lookupErrorId : null, error ? errorId : null].filter(Boolean).join(" ")}
         onChange={handleChange}
         className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-[var(--color-danger-500)]"
       />
@@ -256,6 +302,24 @@ export function MatterPicker({
           </>
         ) : null}
       </div>
+
+      {lookupFailed ? (
+        <div role="alert" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-danger-500)]">
+          <span id={lookupErrorId} className="min-w-0 break-words">
+            {isHidden(lookup.error)
+              ? "The selected Matter is not available to you or no longer exists."
+              : `The selected Matter could not be loaded: ${errorText(lookup.error)}`}
+          </span>
+          {isHidden(lookup.error) ? null : (
+            <Button type="button" size="sm" variant="outline" onClick={() => lookup.refetch()}>
+              Retry
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="ghost" onClick={() => onChange("", null)}>
+            Clear selection
+          </Button>
+        </div>
+      ) : null}
 
       {error ? (
         <p id={errorId} className="min-w-0 break-words text-sm text-[var(--color-danger-500)]">
