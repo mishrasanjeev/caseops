@@ -46,6 +46,9 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalFoundationContract,
     IpRenewalPortfolioCounts,
     IpRenewalPortfolioResponse,
+    IpRenewalReferenceDeadline,
+    IpRenewalReferenceDocument,
+    IpRenewalReferenceEvent,
     IpRenewalReminderIntentRecord,
     IpRenewalReminderScheduleRequest,
     IpRenewalReminderScheduleResponse,
@@ -54,6 +57,7 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalTermListResponse,
     IpRenewalTermRecord,
     IpRenewalTermTransitionRequest,
+    IpRenewalTransitionReferences,
     IpRenewalWorkflowRecord,
 )
 from caseops_api.services.audit import record_from_context
@@ -503,6 +507,47 @@ def _term(
     return docket, row
 
 
+def _verified_event_clauses(*, company_id: str, docket_id: str, kinds: set[str]):
+    """The rule for a renewal filing/acceptance reference (validator and picker)."""
+    return (
+        IpDocketEvent.company_id == company_id,
+        IpDocketEvent.docket_id == docket_id,
+        IpDocketEvent.candidate_status == "confirmed",
+        IpDocketEvent.event_kind.in_(sorted(kinds)),
+    )
+
+
+def _confirmed_deadline_clauses(*, company_id: str, docket_id: str, kind: str):
+    """The rule for a confirmed legal deadline reference (validator and picker)."""
+    return (
+        IpDeadline.company_id == company_id,
+        IpDeadline.docket_id == docket_id,
+        IpDeadline.state.in_(sorted(_CONFIRMED_DEADLINE_STATES)),
+        IpDeadline.deadline_kind == kind,
+    )
+
+
+def _accepted_certificate_clauses(*, company_id: str, docket_id: str):
+    """The rule for a renewal certificate: current version accepted, linked to the docket."""
+    return (
+        IpDocument.company_id == company_id,
+        IpDocument.id.in_(
+            select(IpDocumentLink.document_id).where(
+                IpDocumentLink.company_id == company_id,
+                IpDocumentLink.docket_id == docket_id,
+            )
+        ),
+        IpDocument.id.in_(
+            select(IpDocumentVersion.document_id).where(
+                IpDocumentVersion.company_id == company_id,
+                IpDocumentVersion.document_id == IpDocument.id,
+                IpDocumentVersion.version == IpDocument.current_version,
+                IpDocumentVersion.state == "accepted",
+            )
+        ),
+    )
+
+
 def _event(
     session: Session,
     *,
@@ -521,7 +566,15 @@ def _event(
     )
     if row is None:
         raise HTTPException(status_code=404, detail=f"{label} event not found.")
-    if row.candidate_status != "confirmed" or row.event_kind not in kinds:
+    verified = session.scalar(
+        select(IpDocketEvent.id).where(
+            IpDocketEvent.id == row.id,
+            *_verified_event_clauses(
+                company_id=context.company.id, docket_id=docket_id, kinds=kinds
+            ),
+        )
+    )
+    if verified is None:
         raise _conflict(
             "ip_renewal_event_not_verified",
             f"{label} must be a confirmed {', '.join(sorted(kinds))} event.",
@@ -547,7 +600,15 @@ def _deadline(
     )
     if row is None:
         raise HTTPException(status_code=404, detail=f"{label} deadline not found.")
-    if row.state not in _CONFIRMED_DEADLINE_STATES or row.deadline_kind != kind:
+    confirmed = session.scalar(
+        select(IpDeadline.id).where(
+            IpDeadline.id == row.id,
+            *_confirmed_deadline_clauses(
+                company_id=context.company.id, docket_id=docket_id, kind=kind
+            ),
+        )
+    )
+    if confirmed is None:
         raise _conflict(
             "ip_renewal_deadline_not_confirmed",
             f"{label} must be a confirmed {kind} legal deadline.",
@@ -702,21 +763,13 @@ def _document(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="IP renewal certificate not found.")
-    current_version = session.scalar(
-        select(IpDocumentVersion).where(
-            IpDocumentVersion.company_id == context.company.id,
-            IpDocumentVersion.document_id == row.id,
-            IpDocumentVersion.version == row.current_version,
+    accepted = session.scalar(
+        select(IpDocument.id).where(
+            IpDocument.id == row.id,
+            *_accepted_certificate_clauses(company_id=context.company.id, docket_id=docket_id),
         )
     )
-    linked = session.scalar(
-        select(IpDocumentLink.id).where(
-            IpDocumentLink.company_id == context.company.id,
-            IpDocumentLink.document_id == row.id,
-            IpDocumentLink.docket_id == docket_id,
-        )
-    )
-    if current_version is None or current_version.state != "accepted" or linked is None:
+    if accepted is None:
         raise _conflict(
             "ip_renewal_certificate_not_accepted",
             "The certificate must be an accepted current IP document linked to this docket.",
@@ -1653,6 +1706,78 @@ def acknowledge_client_instruction(
     session.commit()
     session.refresh(term)
     return _record(session, term)
+
+
+def list_renewal_transition_references(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    term_id: str,
+) -> IpRenewalTransitionReferences:
+    """What transition_renewal_term accepts as references for this term, by its own rules."""
+    docket, term = _term(
+        session, context=context, docket_id=docket_id, term_id=term_id, write=False
+    )
+    company_id = context.company.id
+
+    def events(kinds: set[str]) -> list[IpRenewalReferenceEvent]:
+        rows = session.scalars(
+            select(IpDocketEvent)
+            .where(
+                *_verified_event_clauses(company_id=company_id, docket_id=docket.id, kinds=kinds)
+            )
+            .order_by(IpDocketEvent.effective_at.desc(), IpDocketEvent.id)
+            .limit(100)
+        )
+        return [
+            IpRenewalReferenceEvent(
+                id=row.id,
+                event_kind=row.event_kind,
+                effective_at=row.effective_at,
+                source_reference=row.source_reference,
+                reason=row.reason,
+            )
+            for row in rows
+        ]
+
+    documents = session.scalars(
+        select(IpDocument)
+        .where(*_accepted_certificate_clauses(company_id=company_id, docket_id=docket.id))
+        .order_by(IpDocument.title, IpDocument.id)
+        .limit(100)
+    )
+    deadlines = session.scalars(
+        select(IpDeadline)
+        .where(
+            *_confirmed_deadline_clauses(
+                company_id=company_id, docket_id=docket.id, kind="renewal"
+            )
+        )
+        .order_by(IpDeadline.result_on, IpDeadline.id)
+        .limit(100)
+    )
+    return IpRenewalTransitionReferences(
+        term_id=term.id,
+        filing_events=events(_FILING_EVENT_KINDS),
+        acceptance_events=events(_ACCEPTANCE_EVENT_KINDS),
+        certificate_documents=[
+            IpRenewalReferenceDocument(
+                id=row.id, title=row.title, current_version=row.current_version
+            )
+            for row in documents
+        ],
+        next_term_deadlines=[
+            IpRenewalReferenceDeadline(
+                id=row.id,
+                title=row.title,
+                result_on=row.result_on,
+                state=row.state,
+                trigger_event_id=row.trigger_event_id,
+            )
+            for row in deadlines
+        ],
+    )
 
 
 def transition_renewal_term(
