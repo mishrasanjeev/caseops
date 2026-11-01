@@ -2499,6 +2499,13 @@ function ProsecutionCard({
   // the first one is an arbitrary pick (B4-ADJ-02 sibling sweep).
   const application = applications.find((candidate) => candidate.id === applicationId) ?? null;
   const applicationMissing = applications.length > 0 && !application;
+  // Events are named by sequence, kind and date, never by their internal id (B4-ADJ-02).
+  const eventCaption = (eventId: string) => {
+    const found = prosecution.data?.events.find((row) => row.id === eventId);
+    return found
+      ? `#${found.sequence} ${found.event_kind.replaceAll("_", " ")} · ${new Date(found.effective_at).toLocaleDateString()}`
+      : "an earlier event";
+  };
   const [eventKind, setEventKind] = useState<(typeof EVENT_KINDS)[number]>("formalities");
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
   const [reason, setReason] = useState("");
@@ -2659,12 +2666,12 @@ function ProsecutionCard({
             ) : null}
             {supersedesEventId ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-                Correction will supersede event {supersedesEventId}; the original remains in history.
+                Correction will supersede event {eventCaption(supersedesEventId)}; the original remains in history.
               </div>
             ) : null}
             {reconcilesEventId ? (
               <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950">
-                Reconciliation will append a decision for event {reconcilesEventId}.
+                Reconciliation will append a decision for event {eventCaption(reconcilesEventId)}.
               </div>
             ) : null}
             <Field label="Event type">
@@ -2776,7 +2783,7 @@ function ProsecutionCard({
                   }}
                 >
                   <option value="">Select the event to reconcile</option>
-                  {previewCurrent.duplicate_candidate_ids.map((id) => <option key={id} value={id}>{id}</option>)}
+                  {previewCurrent.duplicate_candidate_ids.map((id) => <option key={id} value={id}>{eventCaption(id)}</option>)}
                 </select>
               </div>
             ) : null}
@@ -2807,8 +2814,8 @@ function ProsecutionCard({
                   </div>
                   <div className="mt-1 break-words">{event.source} · {new Date(event.effective_at).toLocaleString()} · {event.before_phase ?? "—"} → {event.after_phase ?? "—"}</div>
                   {event.reason ? <div className="mt-1 break-words">{event.reason}</div> : null}
-                  {event.supersedes_event_id ? <div className="mt-1 break-words text-amber-800">Supersedes {event.supersedes_event_id}</div> : null}
-                  {event.reconciles_event_id ? <div className="mt-1 break-words text-blue-800">{event.reconciliation_decision?.replaceAll("_", " ")} · reconciles {event.reconciles_event_id}</div> : null}
+                  {event.supersedes_event_id ? <div className="mt-1 break-words text-amber-800">Supersedes {eventCaption(event.supersedes_event_id)}</div> : null}
+                  {event.reconciles_event_id ? <div className="mt-1 break-words text-blue-800">{event.reconciliation_decision?.replaceAll("_", " ")} · reconciles {eventCaption(event.reconciles_event_id)}</div> : null}
                   {eventCorrespondence?.direction ? (
                     <div className="mt-1 break-words text-[var(--color-mute)]">
                       {eventCorrespondence.direction} correspondence
@@ -2818,7 +2825,7 @@ function ProsecutionCard({
                   ) : null}
                   {event.document_refs_json.length || event.resulting_deadline_refs_json.length ? (
                     <div className="mt-1 break-words text-[var(--color-mute)]">
-                      {[...event.document_refs_json, ...event.resulting_deadline_refs_json].join(" · ")}
+                      {[...event.document_refs_json, ...(event.resulting_deadline_refs_json.length ? [`${event.resulting_deadline_refs_json.length} resulting ${event.resulting_deadline_refs_json.length === 1 ? "deadline" : "deadlines"}`] : [])].join(" · ")}
                     </div>
                   ) : null}
                   {enabled ? (

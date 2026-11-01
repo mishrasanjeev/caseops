@@ -2446,6 +2446,9 @@ describe("IpDocketPage", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
     const prosecution = await screen.findByTestId("ip-prosecution-workspace");
     fireEvent.click(await within(prosecution).findByRole("button", { name: "Correct event" }));
+    // B4-ADJ-02: the superseded event is named by sequence, kind and date, never its id.
+    expect(within(prosecution).getByText(/Correction will supersede event #\d+ /)).toBeVisible();
+    expect(prosecution.textContent).not.toContain("event-1");
     fireEvent.change(within(prosecution).getByLabelText("Correction reason"), {
       target: { value: "The official record corrects the event classification." },
     });
