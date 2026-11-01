@@ -135,7 +135,9 @@ def test_cross_docket_and_unknown_targets_are_registry_target_not_in_docket(
         assert "this docket" in error["msg"]
     assert _link_count(company_id) == 0
 
-    accepted = _post(client, headers, aster["id"], _link_body(application_id=aster_application["id"]))
+    accepted = _post(
+        client, headers, aster["id"], _link_body(application_id=aster_application["id"])
+    )
     assert accepted.status_code == 201, accepted.text
 
 
@@ -150,7 +152,10 @@ def test_other_tenant_target_reads_the_same_as_any_record_outside_the_docket(
     second_docket, _second_application = _national(client, second_headers, "SECOND MARK")
 
     refused = _post(
-        client, second_headers, second_docket["id"], _link_body(application_id=first_application["id"])
+        client,
+        second_headers,
+        second_docket["id"],
+        _link_body(application_id=first_application["id"]),
     )
     assert refused.status_code == 422, refused.text
     assert refused.json()["errors"][0]["type"] == "registry_target_not_in_docket"

@@ -108,7 +108,9 @@ def test_walled_admin_cannot_invite_a_portal_user_to_a_walled_matter(
 
     # Positive control: the same admin can invite to a Matter they can see,
     # and the owner (never walled) can invite to the walled Matter.
-    allowed = _invite(client, admin_headers, email="open-client@example.com", matter_ids=[open_matter])
+    allowed = _invite(
+        client, admin_headers, email="open-client@example.com", matter_ids=[open_matter]
+    )
     assert allowed.status_code == 201, allowed.text
     owner_invite = _invite(
         client, owner_headers, email="walled-client@example.com", matter_ids=[walled_matter]
@@ -125,7 +127,11 @@ def test_walled_admin_reinvite_cannot_rescope_an_existing_walled_grant(
     company_id = str(boot["company"]["id"])
     matter = _create_matter(client, str(boot["access_token"]), "PORTAL-WALL-2")
     owner_invite = _invite(
-        client, owner_headers, email="existing@example.com", matter_ids=[matter], role="outside_counsel"
+        client,
+        owner_headers,
+        email="existing@example.com",
+        matter_ids=[matter],
+        role="outside_counsel",
     )
     assert owner_invite.status_code == 201, owner_invite.text
     grant_id = owner_invite.json()["grants"][0]["id"]
@@ -197,7 +203,9 @@ def test_member_role_and_other_tenant_cannot_invite(client: TestClient) -> None:
     _member_id, member_token = _invite_member(
         client, str(boot["access_token"]), "member@asterlegal.in", role="member"
     )
-    forbidden = _invite(client, auth_headers(member_token), email="m@example.com", matter_ids=[matter])
+    forbidden = _invite(
+        client, auth_headers(member_token), email="m@example.com", matter_ids=[matter]
+    )
     assert forbidden.status_code == 403, forbidden.text
 
     client.cookies.clear()
@@ -260,7 +268,9 @@ def test_walled_admin_cannot_grant_list_or_revoke_a_walled_ip_docket(
     assert applied.status_code == 200, applied.text
     assert client.get(f"/api/ip/dockets/{docket['id']}", headers=admin_headers).status_code == 404
 
-    refused = _invite(client, admin_headers, email="ip-client@example.com", ip_docket_ids=[docket["id"]])
+    refused = _invite(
+        client, admin_headers, email="ip-client@example.com", ip_docket_ids=[docket["id"]]
+    )
     assert refused.status_code == 404, refused.text
     assert refused.json()["detail"] == "IP record not found."
     assert _portal_rows(company_id) == (0, 0)
