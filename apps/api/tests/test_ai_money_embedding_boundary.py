@@ -401,7 +401,7 @@ def test_mock_embeddings_remain_available_with_budget_enabled_and_no_paid_marker
 
 @pytest.mark.parametrize("env", ["local", "test", "ci", "cloud", "production", "ingest-worker"])
 @pytest.mark.parametrize("name", ["voyage", "gemini"])
-def test_default_november_policy_reaches_direct_sdk_adapters_in_every_runtime(
+def test_default_december_policy_reaches_direct_sdk_adapters_in_every_runtime(
     boundary, monkeypatch, env, name
 ):
     from secrets import token_urlsafe
@@ -414,25 +414,25 @@ def test_default_november_policy_reaches_direct_sdk_adapters_in_every_runtime(
     settings = Settings(_env_file=None, env=env, auth_secret=token_urlsafe(32), auto_migrate=False)
     assert settings.ai_money_budget_enabled is True
     assert settings.effective_ai_money_budget_enabled is True
-    assert settings.ai_money_budget_start_month == "2026-11"
+    assert settings.ai_money_budget_start_month == "2026-12"
     monkeypatch.setattr(embeddings, "get_settings", lambda: settings)
     monkeypatch.setattr(ai_money_budget, "get_settings", lambda: settings)
     monkeypatch.setattr(ai_money_budget, "budget_applies", boundary.original_budget_applies)
     adapter = provider(name)
 
-    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-10")
+    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-11")
     boundary.period_active = ai_money_budget.budget_applies()
     assert boundary.period_active is False
     with unmarked_offline_request():
-        adapter.embed(["October source"])
+        adapter.embed(["November source"])
     assert boundary.receipts == [] and len(boundary.transports) == 1
 
-    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-11")
+    monkeypatch.setattr(ai_money_budget, "current_budget_month", lambda: "2026-12")
     boundary.period_active = ai_money_budget.budget_applies()
     assert boundary.period_active is True
     boundary.budget_error = "unknown_price"
     with unmarked_offline_request(), pytest.raises(embeddings.EmbeddingProviderError):
-        adapter.embed(["November source"])
+        adapter.embed(["December source"])
     assert boundary.receipts == [] and len(boundary.transports) == 1
     assert len(boundary.reservations) == 2
     assert boundary.reservations[-1]["retry_count"] == (4 if name == "gemini" else 0)

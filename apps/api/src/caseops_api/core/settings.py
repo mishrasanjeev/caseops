@@ -425,12 +425,14 @@ class Settings(BaseSettings):
     ai_route_rate_limit_per_minute: int = Field(default=30, ge=1)
 
     llm_provider: str = Field(default="mock")
-    # October continues unchanged by owner instruction. The shared money gate
-    # starts only in an explicitly configured period; missing reconciliation
-    # then blocks transport rather than inventing a zero opening balance.
+    # October and November continue unchanged by owner instruction (November
+    # deferred on 2026-11-01: no reconciled month existed and every paid AI
+    # action was refused). The shared money gate starts only in an explicitly
+    # configured period; missing reconciliation then blocks transport rather
+    # than inventing a zero opening balance.
     ai_money_budget_enabled: bool = Field(default=True)
     ai_money_budget_start_month: str = Field(
-        default="2026-11", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+        default="2026-12", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
     )
     # Fallback model when a purpose-specific one is not set. Per-purpose
     # routing lets operators use an OpenAI reasoning model for legal drafting
