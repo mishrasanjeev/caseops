@@ -745,6 +745,61 @@ def test_batch4_validation_rejects_a_missing_required_role(capture):
         evidence.validate(state.root, ["batch4-desktop", "batch4-mobile"], BASE)
 
 
+def _damage_stored_mandatory_rows(document, damage):
+    """Per-row and execution damage that leaves the role binding untouched."""
+    row = document["tests"][-1]
+    if damage == "row_project":
+        row["project_id"] = row["project_name"] = "unreviewed-project"
+    elif damage == "row_retries":
+        row["retries"] = 1
+    elif damage == "row_repeat":
+        row["repeat_each_index"] = 1
+    elif damage == "flaky":
+        row["status"] = "flaky"
+    elif damage == "retried_pass":
+        failed = copy.deepcopy(row["results"][0])
+        failed["status"] = "failed"
+        row["results"][0]["retry"] = 1
+        row["results"].insert(0, failed)
+    elif damage == "result_retry":
+        row["results"][0]["retry"] = 1
+    elif damage == "result_not_passed":
+        row["results"][0]["status"] = "timedOut"
+    elif damage == "no_result":
+        row["results"] = []
+    elif damage == "report_failed":
+        document["report_status"] = "failed"
+    elif damage == "global_error":
+        document["global_error_count"] = 1
+
+
+@pytest.mark.parametrize("invocation", [*BATCH3_EXPECTED_CASES, *evidence.BATCH4_MANDATORY_CASES])
+@pytest.mark.parametrize(("damage", "kind"), [
+    ("row_project", "inventory"), ("row_retries", "inventory"), ("row_repeat", "inventory"),
+    ("flaky", "not_passed"), ("retried_pass", "not_passed"), ("result_retry", "not_passed"),
+    ("result_not_passed", "not_passed"), ("no_result", "not_passed"),
+    ("report_failed", "not_passed"), ("global_error", "not_passed"),
+])
+def test_mandatory_case_checker_pins_row_and_execution_rules_of_stored_evidence(
+    capture, invocation, damage, kind,
+):
+    # The generic producer rejects these today; the mandatory policy must reject
+    # them on its own, against the stored (validate-phase) receipt.
+    batch = "batch3" if invocation.startswith("batch3-") else "batch4"
+    state = (_batch3_capture if batch == "batch3" else _batch4_capture)(capture, invocation)
+    assert state.run() == 0
+    binding = json.loads((state.path / "completion.json").read_text())["binding"]
+    document = json.loads((state.path / "results.json").read_text())
+    checker = getattr(evidence, f"_check_{batch}_evidence")
+    checker(binding, copy.deepcopy(document), execution=True)
+    _damage_stored_mandatory_rows(document, damage)
+    with pytest.raises(evidence.EvidenceError, match=f"^mandatory_{batch}_case_{kind}"):
+        checker(binding, document, execution=True)
+    if kind == "not_passed":
+        # Discovery carries no results: execution-only rules apply only to results.
+        checker(binding, document, execution=False)
+
+
 def test_batch4_governance_state_is_read_from_the_checked_in_release_file():
     assert type(evidence.batch4_governance_state(ROOT)) is bool
 

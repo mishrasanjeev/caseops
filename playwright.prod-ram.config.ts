@@ -120,6 +120,8 @@ export default defineConfig({
       name: "tester-prod-chromium",
       testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /ram-2026-10-08-notices\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
       testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC],
+      // Mutating halves of read-only production checks run only against a local app.
+      grepInvert: /\[local-only\]/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

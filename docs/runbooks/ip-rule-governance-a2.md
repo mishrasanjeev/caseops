@@ -166,11 +166,22 @@ writes no evidence and tells the operator to read the service and roll back.
 
    Do not run the historical A0 gate (`run_historical_a0_gate`); it asserts
    the governance writers return the A0 `503` and fails once A2 is on.
-5. Run the governance and legal-deadline acceptance on `test-legal`: propose,
-   review and activate a deadline rule, select the company policy, and confirm
-   the five legal-deadline mutations still work. No dated production spec for
-   A2 exists in `tests/e2e` yet; record the manual journey and its audit
-   events in the evidence.
+
+   The `test-legal-write-oct13` shard reads the live rule-governance state as
+   Ram on `test-legal` (`scripts/prod_rule_governance_live.py`). With
+   production enabled it must run, and reconcile requires receipts for,
+   `batch4-governance-desktop` and `batch4-governance-mobile`
+   (`tests/e2e/ram-2026-10-31-governance-ui.spec.ts`, BUG-003..006), and it
+   prints a notice that production is ahead of the checked-in state. A run
+   that says governance is disabled in production means A2 did not take
+   effect. A release whose checked-in state is enabled while production
+   reports disabled fails.
+5. Record those two receipts in the evidence. They cover the governed rule
+   and working-calendar pickers and a proposal that the proposer withdraws.
+   Also run the rest of the governance and legal-deadline acceptance on
+   `test-legal`: review and activate a deadline rule, select the company
+   policy, and confirm the five legal-deadline mutations still work. Record
+   that manual journey and its audit events in the evidence.
 
 ## Rollback
 

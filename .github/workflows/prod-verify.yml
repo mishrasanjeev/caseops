@@ -357,6 +357,7 @@ jobs:
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-drafts-readonly --config=playwright.prod-ram.config.ts --project=batch3-drafts-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-drafts-readonly
 
       - name: Run release-owned Batch4 tester acceptance
+        id: batch4-tester
         if: matrix.suite == 'test-legal-write-oct13'
         env:
           CASEOPS_RAM_PROD_SLUG: test-legal
@@ -368,7 +369,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]; then
-            if ! git merge-base --is-ancestor HEAD 01be7b86a45379fe89c89d10242adad1f5d35505; then
+            if ! git merge-base --is-ancestor HEAD 02d0b0e48ec86e1ff59866cb9bc53f8c35ddf232; then
               echo "::error::Newer serving release is missing Batch4 acceptance."
               exit 1
             fi
@@ -381,22 +382,31 @@ jobs:
             if [[ -z "${value//[[:space:]]/}" ]]; then printf '::error::Missing Batch4 fixture key: %s\n' "$key" >&2; exit 1; fi
           done
           unset value
-          # BUG-003..006 can pass only while the serving release enables rule governance.
-          if ! governance="$(python scripts/prod_playwright_evidence.py batch4-governance)"; then
+          # BUG-003..006 can pass only while production serves rule governance
+          # enabled. IPLF-027B A2 enables it by config alone, ahead of the
+          # checked-in state, so the live state decides which roles are owed.
+          if ! checked_in="$(python scripts/prod_playwright_evidence.py batch4-governance)"; then
             echo "::error::Serving release has no valid deploy/ip-rule-governance-state.json."
             exit 1
           fi
-          case "$governance" in
-            enabled|disabled) ;;
+          if ! governance="$(python scripts/prod_rule_governance_live.py)"; then
+            echo "::error::Could not read the live production rule-governance state."
+            exit 1
+          fi
+          case "$checked_in:$governance" in
+            enabled:enabled|disabled:disabled) ;;
+            disabled:enabled) echo "::notice::Production enables rule governance ahead of the checked-in state (IPLF-027B A2); BUG-003..006 run against the live state." ;;
+            enabled:disabled) echo "::error::The serving release enables rule governance but production reports it disabled."; exit 1 ;;
             *) echo "::error::Unreviewed rule-governance state."; exit 1 ;;
           esac
+          echo "governance=$governance" >> "$GITHUB_OUTPUT"
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-desktop --config=playwright.prod-ram.config.ts --project=batch4-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-desktop
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-mobile --config=playwright.prod-ram.config.ts --project=batch4-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-mobile
           if [[ "$governance" == enabled ]]; then
             bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-desktop --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-desktop
             bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-mobile --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-mobile
           else
-            echo "::notice::Rule governance is disabled at the serving release; BUG-003..006 production proof waits for the enabled state."
+            echo "::notice::Rule governance is disabled in production; BUG-003..006 production proof waits for the enabled state."
           fi
 
       - name: Run legacy QA production regressions
@@ -637,6 +647,7 @@ jobs:
           RENEWAL_CONFIGURED: ${{ steps.renewal-prerequisites.outputs.configured }}
           COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
           PLATFORM_REPORT_READY: ${{ steps.platform-report-prerequisites.outputs.ready }}
+          BATCH4_GOVERNANCE: ${{ steps.batch4-tester.outputs.governance }}
         run: |
           set -euo pipefail
           case "$SUITE" in
@@ -660,11 +671,11 @@ jobs:
           fi
           if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
             required+=(batch4-desktop batch4-mobile)
-            governance="$(python scripts/prod_playwright_evidence.py batch4-governance)"
-            case "$governance" in
+            # The live state the Batch4 step cross-checked and ran against.
+            case "${BATCH4_GOVERNANCE:-}" in
               enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
               disabled) ;;
-              *) exit 1 ;;
+              *) echo "::error::Batch4 acceptance recorded no live rule-governance state."; exit 1 ;;
             esac
           fi
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
