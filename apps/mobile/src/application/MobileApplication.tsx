@@ -21,6 +21,7 @@ import {
   navigateRecordLink,
   type RecordLinkInbox,
 } from "../domain/record-links";
+import { selectTab } from "../domain/tab-selection";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
 import { createSourceRecordsRepository } from "../domain/source-records";
@@ -675,7 +676,7 @@ function ApplicationContent({
                 key={item.key}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: tab === item.key }}
-                onPress={() => guarded(() => setTab(item.key))}
+                onPress={() => selectTab(tab, item.key, guarded, setTab)}
                 style={{
                   flex: 1,
                   minWidth: 0,
