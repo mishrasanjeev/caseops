@@ -894,11 +894,14 @@ class RealGitleaksTests(GitFixture):
         head = self.commit("exact origin review without merging side")
         result = self.run_scan(head, {}, "schedule")
         self.assertNotIn(origin, self.git("rev-list", head).splitlines())
-        self.assertGreater(result["boundaries"]["history"]["existing_policy_translations"], 0)
+        inventory = json.loads((self.root / "evidence/inventory.json").read_text())
+        self.assertEqual(inventory["history_selection"], "--all")
+        self.assertIn(origin, inventory["commits"])
         self.assertEqual(result["boundaries"]["history"]["exit_code"], 0)
-        proof = json.loads((self.root / "evidence/history-policy-provenance.json").read_text())
-        self.assertTrue(all(row["accepted_existing_policy"] for row in proof["findings"]))
-        self.assertTrue(all(row["existing_fingerprint"].startswith(origin + ":") for row in proof["findings"]))
+        self.assertGreater(result["boundaries"]["history"]["scanned_bytes"], 0)
+        self.assertTrue(result["boundaries"]["history"]["cleanup_confirmed"])
+        report = json.loads((self.root / "evidence/history.sarif").read_text())
+        self.assertEqual(report["runs"][0]["results"], [])
 
     def assert_redacted_failure(self, expected_report):
         self.assert_incomplete()
