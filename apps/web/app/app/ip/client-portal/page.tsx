@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Textarea } from "@/components/ui/Textarea";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import { fetchIpDocumentTaxonomy } from "@/lib/api/endpoints";
 import {
   acknowledgePortalInstruction,
@@ -59,6 +59,7 @@ export default function IpClientPortalPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [docketId, setDocketId] = useState("");
+  const [docketError, setDocketError] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState("");
   const [categories, setCategories] = useState<string[] | null>(null);
   const [documentChoice, setDocumentChoice] = useState("");
@@ -101,8 +102,13 @@ export default function IpClientPortalPage() {
       canSubmitInstructions: true,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
     }),
-    onSuccess: async () => { setName(""); setEmail(""); setDocketId(""); setExpiresAt(""); setShareNoDocuments(false); toast.success("IP portal access granted."); await refresh(); },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not grant portal access.")),
+    onSuccess: async () => { setName(""); setEmail(""); setDocketId(""); setDocketError(null); setExpiresAt(""); setShareNoDocuments(false); toast.success("IP portal access granted."); await refresh(); },
+    onError: (error) => {
+      // A docket you can no longer see (a wall or restriction added after you chose it,
+      // or a closed docket) is refused like a missing one; say so at the docket field.
+      if (isApiErrorShape(error) && error.status === 404) setDocketError("This docket is no longer available to you. Choose another docket, or ask a workspace owner to grant this access.");
+      toast.error(apiErrorMessage(error, "Could not grant portal access."));
+    },
   });
   const revoke = useMutation({
     mutationFn: (grantId: string) => {
@@ -175,7 +181,7 @@ export default function IpClientPortalPage() {
     {canInvite ? <Card><CardHeader><CardTitle as="h2">Grant IP access</CardTitle><CardDescription>Only the selected docket, event/date categories, and approved document categories become visible.</CardDescription></CardHeader><CardContent><form className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); invite.mutate(); }}>
       <Field label="Client name" htmlFor="ip-client-name"><Input id="ip-client-name" value={name} onChange={(event) => setName(event.target.value)} /></Field>
       <Field label="Work email" htmlFor="ip-client-email"><Input id="ip-client-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field>
-      <IpDocketPicker id="ip-client-docket" className="md:col-span-2" label="IP docket" searchLabel="Find the client's docket" value={docketId} onChange={(id) => setDocketId(id)} required />
+      <IpDocketPicker id="ip-client-docket" className="md:col-span-2" label="IP docket" searchLabel="Find the client's docket" value={docketId} error={docketError} onChange={(id) => { setDocketId(id); setDocketError(null); }} required />
       <Field label="Access expires" htmlFor="ip-client-expiry"><Input id="ip-client-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></Field>
       <fieldset className="min-w-0 space-y-2 md:col-span-2 xl:col-span-3">
         <legend className="text-sm font-medium">Approved document categories</legend>

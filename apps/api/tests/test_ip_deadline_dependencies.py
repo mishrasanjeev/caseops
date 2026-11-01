@@ -16,7 +16,10 @@ from sqlalchemy import select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import IpDeadline, MatterDeadline, NotificationDeliveryIntent
 from caseops_api.db.session import get_session_factory
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -73,7 +76,9 @@ def _setup(client: TestClient):
         == 200
     )
     rule = client.post(
-        "/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     ).json()
     assert (
         client.post(

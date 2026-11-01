@@ -31,7 +31,10 @@ from sqlalchemy import select, update
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditEvent, CompanyMembership, LegalWorkingCalendarVersion
 from caseops_api.db.session import get_session_factory
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_for_company,
+)
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _calendar_payload, _docket_for_matter, _rule_payload
 from tests.test_ip_rule_emergency_disable import _governed_company, _propose_deadline
@@ -116,7 +119,11 @@ def test_gov_proj_01_action_gates_agree_with_the_writers(
     # Agreement: each writer answers exactly what its projection predicted.
     for action, path, payload in (
         ("calendar_proposal", "/api/ip/working-calendars", _calendar_payload()),
-        ("rule_proposal", "/api/ip/deadline-rules", _rule_payload()),
+        (
+            "rule_proposal",
+            "/api/ip/deadline-rules",
+            rule_payload_for_company(client, company["headers"], _rule_payload()),
+        ),
     ):
         response = client.post(path, headers=company["headers"], json=payload)
         decision = governance[action]
@@ -266,7 +273,7 @@ def test_gov_proj_06_fixture_kind_and_proposer_blockers_agree_with_activation(
     reviewer = _user(client, company, name="Fixture Reviewer")
     proposer = _user(client, company, name="Departing Proposer")
 
-    wrong = _rule_payload()
+    wrong = rule_payload_for_company(client, company["headers"], _rule_payload())
     wrong["key"] = "in-tm-wrong-fixture"
     wrong["fixtures"][0]["expected_result_on"] = "2026-08-19"
     failing = client.post("/api/ip/deadline-rules", headers=company["headers"], json=wrong)

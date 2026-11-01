@@ -537,9 +537,10 @@ function CreateRegistryLink({
     onError: (error) => {
       const fields = apiFieldErrors(error, LINK_FIELD_MAP);
       const message = apiErrorMessage(error, "Could not add the registry identity.");
-      // A duplicate identity and a record no longer on this docket belong to their own fields.
+      // A duplicate identity belongs to the identifier. A record that is no longer on this
+      // docket (422 registry_target_not_in_docket) and a kind the record cannot carry arrive
+      // as field errors on the legal record and identifier type.
       if (isApiErrorShape(error) && error.status === 409) fields["registry-identifier"] = message;
-      if (isApiErrorShape(error) && error.status === 404 && /on this docket/i.test(error.detail)) fields["registry-target"] = message;
       setErrors(Object.keys(fields).length > 0 ? fields : { [API_FORM_ERROR_KEY]: message });
       toast.error(message);
     },

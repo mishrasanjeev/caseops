@@ -25,7 +25,10 @@ from sqlalchemy import func, select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditEvent, IpRuleVersion
 from caseops_api.db.session import get_session_factory
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_for_company,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_deadline_workflow import (
     _calendar_payload,
@@ -77,6 +80,7 @@ def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str, str]:
 def _propose(client: TestClient, headers: dict[str, str], **overrides) -> dict:
     payload = _rule_payload()
     payload.update(overrides)
+    payload = rule_payload_for_company(client, headers, payload)
     response = client.post("/api/ip/deadline-rules", headers=headers, json=payload)
     assert response.status_code == 201, response.text
     return response.json()

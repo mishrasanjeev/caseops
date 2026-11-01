@@ -76,7 +76,10 @@ from caseops_api.services.notification_delivery import (
     process_notification_delivery_intent,
 )
 from caseops_api.services.session_context import SessionContext
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_google_calendar_sync import StubGoogleCalendarProvider
@@ -153,7 +156,7 @@ def _confirmed_deadline_environment(
     rule_response = client.post(
         "/api/ip/deadline-rules",
         headers=owner_headers,
-        json=_rule_payload(),
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     )
     assert rule_response.status_code == 201, rule_response.text
     rule = rule_response.json()

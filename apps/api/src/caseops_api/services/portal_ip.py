@@ -239,14 +239,15 @@ def list_admin_ip_grants(session: Session, *, context: SessionContext) -> Portal
             PortalUser.company_id == context.company.id,
             IpDocketRecord.company_id == context.company.id,
             general_ip_disclosure_filter(),
+            # A grant on a record the manager cannot see is not listed at all:
+            # its docket title and client would otherwise leak past the wall.
+            visible_ip_dockets_filter(session, context=context),
         )
         .order_by(MatterPortalGrant.granted_at.desc(), MatterPortalGrant.id)
         .limit(500)
     ).all()
     now = _now()
-    visible = _visible_docket_ids(
-        session, context=context, docket_ids={docket.id for _grant, _user, docket in rows}
-    )
+    visible = {docket.id for _grant, _user, docket in rows}
     records: list[PortalIpGrantRecord] = []
     for grant, user, docket in rows:
         block = _grant_publication_block(
@@ -294,6 +295,19 @@ def revoke_ip_grant(
     if row is None:
         raise HTTPException(status_code=404, detail="Portal grant not found.")
     grant, user, docket = row
+    if not can_access_ip_docket(session, context=context, docket=docket):
+        record_from_context(
+            session,
+            context,
+            action="access_denied",
+            target_type="portal_grant",
+            target_id=grant.id,
+            ip_docket_id=docket.id,
+            result="denied",
+            metadata={"reason": "ip_docket_visibility_denied"},
+            commit=True,
+        )
+        raise HTTPException(status_code=404, detail="Portal grant not found.")
     if grant.revoked_at is not None:
         raise _conflict("portal_grant_already_revoked", "The portal grant is already revoked.")
     if grant.row_version != payload.expected_row_version:

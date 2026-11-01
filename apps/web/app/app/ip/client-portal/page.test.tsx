@@ -79,6 +79,23 @@ describe("IpClientPortalPage", () => {
     })));
   });
 
+  it("B4-ADJ-01 anchors a refused docket grant to the docket field when the docket is walled after it was chosen", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    mocks.invite.mockRejectedValueOnce(new ApiError(404, "IP record not found.", null));
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText("Client name"), "Asha Rao");
+    await user.type(screen.getByLabelText("Work email"), "asha@example.com");
+    const docket = screen.getByRole<HTMLSelectElement>("combobox", { name: "IP docket" });
+    await waitFor(() => expect(docket).toBeEnabled());
+    await user.selectOptions(docket, "docket-1");
+    await user.click(screen.getByRole("button", { name: "Grant access" }));
+    await waitFor(() => expect(docket).toHaveAttribute("aria-invalid", "true"));
+    expect(docket).toHaveAccessibleDescription(/This docket is no longer available to you/);
+    await user.selectOptions(docket, "docket-1");
+    await waitFor(() => expect(docket).not.toHaveAttribute("aria-invalid"));
+  });
+
   it("BUG-015 lists only the versions the chosen grant can publish and publishes one", async () => {
     const user = userEvent.setup();
     renderPage();

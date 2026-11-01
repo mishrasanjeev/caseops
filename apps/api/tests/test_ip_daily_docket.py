@@ -28,7 +28,10 @@ from caseops_api.db.models import (
     MatterDeadlineStatus,
 )
 from caseops_api.db.session import get_session_factory
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
@@ -327,7 +330,11 @@ def test_uj50_exc04_unacknowledged_critical_item_re_escalates(
         headers=legal_headers,
         json={"reason": "Independent calendar review is complete."},
     )
-    rule = client.post("/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()).json()
+    rule = client.post(
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
+    ).json()
     client.post(
         f"/api/ip/deadline-rules/{rule['id']}/activate",
         headers=legal_headers,

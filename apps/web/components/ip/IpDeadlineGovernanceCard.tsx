@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PersonPicker } from "@/components/ui/PersonPicker";
-import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors, isApiErrorShape } from "@/lib/api/config";
+import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors, apiValidationIssues, isApiErrorShape } from "@/lib/api/config";
 import {
   activateIpDeadlineRule,
   activateIpWorkingCalendar,
@@ -35,12 +35,14 @@ import {
 } from "@/lib/api/endpoints";
 import {
   RULE_SCOPES,
+  activeCalendarsForJurisdiction,
   activeWorkingCalendars,
   awaitingActivationText,
   calendarKeyFor,
   describeGovernanceDecision,
   governanceReasonText,
   isRuleScopeId,
+  normalJurisdiction,
   parseHolidayDates,
   ruleKeyFor,
   ruleScopeLabel,
@@ -63,6 +65,13 @@ function problemCode(error: unknown): string | null {
   if (!isApiErrorShape(error) || !error.data || typeof error.data !== "object") return null;
   const code = (error.data as Record<string, unknown>).code;
   return typeof code === "string" ? code : null;
+}
+
+/** The API refused a rule because of its fixture calendar (proposal 422 or activation 409). */
+function isFixtureCalendarRefusal(error: unknown): boolean {
+  if (!isApiErrorShape(error)) return false;
+  return (problemCode(error) ?? "").startsWith("ip_rule_fixture_calendar_")
+    || apiValidationIssues(error.data).some((issue) => (issue.type ?? "").startsWith("ip_rule_fixture_calendar_"));
 }
 
 function Field({
@@ -430,11 +439,15 @@ function RuleProposalForm({
   initialScope: RuleScopeId;
   onSaved: () => Promise<void>;
 }) {
-  const calendars = activeWorkingCalendars(data);
-  const pendingCalendars = data.calendars.filter((row) => row.status === "candidate");
+  const [jurisdiction, setJurisdiction] = useState("IN");
+  const ruleJurisdiction = normalJurisdiction(jurisdiction);
+  // The API runs fixtures only on an active calendar of the rule's jurisdiction.
+  const allActiveCalendars = activeWorkingCalendars(data);
+  const calendars = activeCalendarsForJurisdiction(data, jurisdiction);
+  const otherJurisdictions = Array.from(new Set(allActiveCalendars.map((row) => normalJurisdiction(row.jurisdiction)))).sort();
+  const pendingCalendars = data.calendars.filter((row) => row.status === "candidate" && normalJurisdiction(row.jurisdiction) === ruleJurisdiction);
   const [scopeId, setScopeId] = useState<RuleScopeId>(initialScope);
   const scope = RULE_SCOPES.find((row) => row.id === scopeId) ?? RULE_SCOPES[0];
-  const [jurisdiction, setJurisdiction] = useState("IN");
   const [office, setOffice] = useState("IP India");
   const triggerKind = scope.triggerKind;
   const [method, setMethod] = useState<"business_days" | "calendar_days" | "month_anniversary">(scope.calendarMethod);
@@ -453,7 +466,8 @@ function RuleProposalForm({
     delete next[key];
     return next;
   });
-  const calendar = calendars.find((row) => row.id === calendarId) ?? calendars[0];
+  // One active calendar is the only choice; with several, the proposer picks one.
+  const calendar = calendars.length === 1 ? calendars[0] : calendars.find((row) => row.id === calendarId);
   const prerequisiteId = "rule-proposal-prerequisite";
 
   const propose = useMutation({
@@ -514,7 +528,7 @@ function RuleProposalForm({
       setErrors({});
       await onSaved();
     },
-    onError: (error) => {
+    onError: async (error) => {
       const fields = apiFieldErrors(error, {
         key: "rule-scope",
         jurisdiction: "rule-jurisdiction",
@@ -522,10 +536,17 @@ function RuleProposalForm({
         source_reference: "rule-source-reference",
         source_hash: "rule-source-hash",
         effective_from: "rule-effective-from",
+        calendar_version_id: "rule-fixture-calendar",
       });
       setErrors(Object.keys(fields).length
         ? fields
         : { [API_FORM_ERROR_KEY]: apiErrorMessage(error, "The deadline rule proposal was rejected.") });
+      if (isFixtureCalendarRefusal(error)) {
+        // The calendar changed under this form (replaced, withdrawn, edited):
+        // drop the stale choice and reload the calendars the API now accepts.
+        setCalendarId("");
+        await onSaved();
+      }
     },
   });
 
@@ -537,6 +558,7 @@ function RuleProposalForm({
     if (!sourceReference.trim()) next["rule-source-reference"] = "Enter the official source reference for this rule.";
     const hashError = sourceHashError(sourceHash);
     if (hashError) next["rule-source-hash"] = hashError;
+    if (calendars.length && !calendar) next["rule-fixture-calendar"] = "Choose the active working calendar the fixture is calculated on.";
     if (!fixtureBase) next["rule-fixture-base"] = "Choose the fixture trigger date.";
     if (!fixtureExpected) next["rule-fixture-expected"] = "Enter the deadline you expect for the fixture trigger date; the server checks it.";
     setErrors(next);
@@ -604,17 +626,19 @@ function RuleProposalForm({
         {(describedBy, invalid) => <Input id="rule-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setSourceReference(e.target.value); clear("rule-source-reference"); }} />}
       </Field>
       <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("rule-source-hash"); }} error={errors["rule-source-hash"]} />
-      <Field id="rule-fixture-calendar" label="Fixture working calendar">
-        {(describedBy) => (
+      <Field id="rule-fixture-calendar" label="Fixture working calendar" error={errors["rule-fixture-calendar"]}>
+        {(describedBy, invalid) => (
           <select
             id="rule-fixture-calendar"
             className={SELECT_CLASS}
             value={calendar?.id ?? ""}
             disabled={!calendars.length}
+            aria-invalid={invalid || undefined}
             aria-describedby={calendars.length ? describedBy : prerequisiteId}
-            onChange={(event) => setCalendarId(event.target.value)}
+            onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
           >
-            {!calendars.length ? <option value="">No active working calendar</option> : null}
+            {!calendars.length ? <option value="">{ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "Enter the jurisdiction first"}</option> : null}
+            {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
             {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
           </select>
         )}
@@ -627,10 +651,17 @@ function RuleProposalForm({
       </Field>
       {!calendars.length ? (
         <p id={prerequisiteId} className="col-span-full min-w-0 break-words text-sm text-[var(--color-warn-text)]">
-          A rule&apos;s fixture is calculated on an active working calendar.{" "}
-          {pendingCalendars.length
-            ? awaitingActivationText(pendingCalendars.map((row) => `${row.name} v${row.version}`))
-            : "Propose a working calendar first; another owner, admin or partner must activate it."}
+          {ruleJurisdiction
+            ? `A rule's fixture is calculated on an active working calendar of the rule's jurisdiction (${ruleJurisdiction}).`
+            : "Enter the rule's jurisdiction; its fixture is calculated on an active working calendar of that jurisdiction."}{" "}
+          {otherJurisdictions.length && ruleJurisdiction
+            ? `Active calendars exist only for ${otherJurisdictions.join(", ")}. `
+            : ""}
+          {!ruleJurisdiction
+            ? null
+            : pendingCalendars.length
+              ? awaitingActivationText(pendingCalendars.map((row) => `${row.name} v${row.version}`))
+              : `Propose a working calendar for ${ruleJurisdiction} first; another owner, admin or partner must activate it.`}
         </p>
       ) : null}
       <FormError id="rule-form-error" message={errors[API_FORM_ERROR_KEY]} />
@@ -819,6 +850,11 @@ function RuleVersionRow({
       const message = apiErrorMessage(failure, "The rule activation was rejected.");
       if (problemCode(failure) === "ip_rule_reviewer_unqualified") {
         setReviewerError(message);
+      } else if (isFixtureCalendarRefusal(failure)) {
+        // The record now carries the blocked reason; reload it so the
+        // activate control is withdrawn instead of failing again.
+        setError(message);
+        void onSaved();
       } else if (/preview again|impact must be reviewed|overlaps active version/i.test(message)) {
         // The impact moved after the preview: never activate on a stale one.
         setActivationImpact(null);

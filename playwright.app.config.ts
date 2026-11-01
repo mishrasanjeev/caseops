@@ -79,6 +79,7 @@ export default defineConfig({
     // Batch 4 (CaseOps_Bugs (4).xlsx): the same specs run here against a
     // fresh test-legal-shaped tenant and in prod-ram against test-legal.
     /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+    /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -158,6 +159,7 @@ export default defineConfig({
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
         /platform-leads-2026-10-21\.spec\.ts$/,
         /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+        /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

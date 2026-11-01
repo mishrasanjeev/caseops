@@ -95,7 +95,7 @@ export function IpOppositionApplicantWorkflow({
     ? "applicant_evidence_due" as const
     : "counterstatement_due" as const;
   const governedScope = { proceedingKind: "opposition", role: "applicant", stage: workflowStage };
-  const governed = resolveGovernedSelection(deadlineWorkspace.data, governedScope, ruleVersionId, calendarVersionId);
+  const governed = resolveGovernedSelection(deadlineWorkspace.data, governedScope, ruleVersionId, calendarVersionId, proceeding.jurisdiction);
   const selectedRule = governed.rule?.id ?? "";
   const selectedCalendar = governed.calendar?.id ?? "";
   const triggerEvent = workflowStage === "counterstatement_due"

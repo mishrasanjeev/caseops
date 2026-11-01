@@ -110,7 +110,7 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
-import { deadlineExceptionLabel } from "@/lib/ip/governance";
+import { deadlineExceptionLabel, normalJurisdiction, sameJurisdiction } from "@/lib/ip/governance";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -1986,12 +1986,23 @@ function DeadlineWorkspaceCard({
 
   const activeRules = workspace.data?.rules.filter((row) => row.status === "active"
     && row.rule_kind === "deadline" && workspace.data?.eligible_rule_version_ids?.includes(row.id)) ?? [];
-  const activeCalendars =
-    workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
-  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId) ? ruleVersionId : activeRules[0]?.id ?? "";
-  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId) ? calendarVersionId : activeCalendars[0]?.id ?? "";
+  // One eligible option is the only choice; with several the lawyer chooses,
+  // never the first by accident. A deadline is counted only on an active
+  // calendar of its rule's jurisdiction (the API refuses any other).
+  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId)
+    ? ruleVersionId
+    : activeRules.length === 1 ? activeRules[0].id : "";
   const selectedRule = activeRules.find((row) => row.id === selectedRuleId);
+  const allActiveCalendars =
+    workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
+  const activeCalendars = selectedRule
+    ? allActiveCalendars.filter((row) => sameJurisdiction(row.jurisdiction, selectedRule.jurisdiction))
+    : allActiveCalendars;
+  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId)
+    ? calendarVersionId
+    : activeCalendars.length === 1 ? activeCalendars[0].id : "";
   const selectedCalendar = activeCalendars.find((row) => row.id === selectedCalendarId);
+  const ruleJurisdiction = selectedRule ? normalJurisdiction(selectedRule.jurisdiction) : null;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({
@@ -2201,10 +2212,13 @@ function DeadlineWorkspaceCard({
                 value={selectedRuleId}
                 onChange={(event) => setRuleVersionId(event.target.value)}
                 disabled={!workspace.isSuccess || !activeRules.length}
-                aria-describedby={selectedRule ? "ip-active-rule-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
+                aria-describedby={selectedRule ? "ip-active-rule-detail" : workspace.isSuccess && !activeRules.length ? "ip-deadline-prerequisites" : undefined}
               >
                 {!workspace.isSuccess || !activeRules.length ? (
                   <option value="">{workspace.isPending ? "Loading deadline rules…" : workspace.isError ? "Deadline rules unavailable" : "No eligible active deadline rule"}</option>
+                ) : null}
+                {workspace.isSuccess && activeRules.length > 1 && !selectedRule ? (
+                  <option value="" disabled>Choose a rule version</option>
                 ) : null}
                 {activeRules.map((row) => (
                   <option key={row.id} value={row.id}>{deadlineRuleCaption(row)}</option>
@@ -2217,10 +2231,13 @@ function DeadlineWorkspaceCard({
                 value={selectedCalendarId}
                 onChange={(event) => setCalendarVersionId(event.target.value)}
                 disabled={!workspace.isSuccess || !activeCalendars.length}
-                aria-describedby={selectedCalendar ? "ip-active-calendar-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
+                aria-describedby={selectedCalendar ? "ip-active-calendar-detail" : workspace.isSuccess && !activeCalendars.length ? "ip-deadline-prerequisites" : undefined}
               >
                 {!workspace.isSuccess || !activeCalendars.length ? (
-                  <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : "No active working calendar"}</option>
+                  <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "No active working calendar"}</option>
+                ) : null}
+                {workspace.isSuccess && activeCalendars.length > 1 && !selectedCalendar ? (
+                  <option value="" disabled>Choose a working calendar</option>
                 ) : null}
                 {activeCalendars.map((row) => (
                   <option key={row.id} value={row.id}>{workingCalendarCaption(row)}</option>
@@ -2241,7 +2258,11 @@ function DeadlineWorkspaceCard({
               {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? (
                 <p id="ip-deadline-prerequisites" className="min-w-0 break-words text-sm text-[var(--color-mute)]">
                   {!activeRules.length ? "No active deadline rule is selected for company deadlines. " : ""}
-                  {!activeCalendars.length ? "No working calendar is active. " : ""}
+                  {!activeCalendars.length
+                    ? ruleJurisdiction && allActiveCalendars.length
+                      ? `No ${ruleJurisdiction} working calendar is active; the selected rule counts its deadline only on a calendar of its jurisdiction. `
+                      : "No working calendar is active. "
+                    : ""}
                   {workspace.data.governance?.rule_proposal.available || workspace.data.governance?.calendar_proposal.available
                     ? "Propose them in Rule and calendar governance below; each version needs independent approval by another owner, admin or partner."
                     : "See Rule and calendar governance below for why they cannot be proposed here."}{" "}

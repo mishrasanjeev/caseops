@@ -10717,7 +10717,9 @@ export type IpGovernanceBlockReason =
   | "proposer_cannot_self_approve"
   | "no_qualified_reviewer"
   | "no_other_approver"
-  | "fixtures_not_passing";
+  | "fixtures_not_passing"
+  | "fixture_calendar_not_active"
+  | "fixture_calendar_jurisdiction_mismatch";
 
 export type IpGovernanceActionDecision = {
   available: boolean;
@@ -12699,7 +12701,7 @@ export async function createIpRegistryLink(input: {
   proceedingId?: string | null;
   office: string;
   jurisdiction: string;
-  identifierKind: string;
+  identifierKind: IpIdentifier["identifier_kind"];
   rawIdentifier: string;
   sourceUrl: string;
   matchConfidence: number;

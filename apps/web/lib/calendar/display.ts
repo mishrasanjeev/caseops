@@ -48,10 +48,7 @@ export const DISPLAY_ORDER: CalendarEventDisplayType[] = [
 ];
 
 export function displayTypeForEvent(event: CalendarEventRecord): CalendarEventDisplayType {
-  if (event.display_type) return event.display_type;
-  if (event.kind === "hearing") return "hearing";
-  if (event.kind === "task") return "task_date";
-  return "deadline";
+  return event.display_type;
 }
 
 export function isoDate(d: Date): string {

@@ -341,12 +341,26 @@ describe("IP registry reconciliation page", () => {
     await waitFor(async () => expect(await legalRecord()).toHaveValue("application:application-2"));
   });
 
-  it("BUG-012 anchors a duplicate identity to the Identifier and a moved record to Legal record", async () => {
+  it("BUG-012 / B4-ADJ-12 anchors a duplicate identity, a record outside the docket and a mismatched kind to their fields", async () => {
     const user = userEvent.setup();
     const { ApiError } = await import("@/lib/api/config");
     createLinkMock
       .mockRejectedValueOnce(new ApiError(409, "This registry identity is already linked.", null))
-      .mockRejectedValueOnce(new ApiError(404, "Trademark application not found on this docket.", null));
+      // B4-ADJ-12: a target outside the docket is a field-anchored 422, not a 404.
+      .mockRejectedValueOnce(new ApiError(422, "Application id: This application is not a record of this docket.", {
+        errors: [{
+          loc: ["body", "application_id"],
+          msg: "This application is not a record of this docket. Choose an application or proceeding listed for this docket.",
+          type: "registry_target_not_in_docket",
+        }],
+      }))
+      .mockRejectedValueOnce(new ApiError(422, "Identifier kind: Application and registration numbers belong to an application.", {
+        errors: [{
+          loc: ["body", "identifier_kind"],
+          msg: "Application and registration numbers belong to an application; opposition, rectification, cancellation, non-use, appeal and court numbers belong to a proceeding.",
+          type: "registry_identifier_kind_mismatch",
+        }],
+      }));
     window.history.replaceState(null, "", `/app/ip/registry?docket=${OTHER.id}`);
     render(<IpRegistryPage />, { wrapper: wrapper() });
 
@@ -360,7 +374,12 @@ describe("IP registry reconciliation page", () => {
     await user.click(screen.getByRole("button", { name: "Add identity" }));
     const record = await legalRecord();
     await waitFor(() => expect(record).toHaveAttribute("aria-invalid", "true"));
-    expect(record).toHaveAccessibleDescription(/Trademark application not found on this docket/);
+    expect(record).toHaveAccessibleDescription(/This application is not a record of this docket/);
+
+    await user.click(screen.getByRole("button", { name: "Add identity" }));
+    const kind = screen.getByLabelText("Identifier type");
+    await waitFor(() => expect(kind).toHaveAttribute("aria-invalid", "true"));
+    expect(kind).toHaveAccessibleDescription(/belong to an application/);
   });
 
   it("BUG-012 shows a register change by its field name and plain values, keeping the path as technical detail", async () => {

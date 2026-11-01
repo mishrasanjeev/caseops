@@ -11,6 +11,7 @@ import type {
   IpWorkingCalendarVersion,
 } from "@/lib/api/endpoints";
 import {
+  activeCalendarsForJurisdiction,
   activeWorkingCalendars,
   awaitingActivationText,
   boundedNameList,
@@ -18,9 +19,11 @@ import {
   eligibleScopedRules,
   governedRuleCaption,
   ipGovernanceHref,
+  normalJurisdiction,
   ruleScopeFor,
   ruleScopeLabel,
   ruleVersionName,
+  sameJurisdiction,
   workingCalendarOptionCaption,
 } from "@/lib/ip/governance";
 
@@ -34,26 +37,42 @@ export type GovernedSelection = {
   calendars: IpWorkingCalendarVersion[];
   rule: IpDeadlineRuleVersion | undefined;
   calendar: IpWorkingCalendarVersion | undefined;
+  /** The proceeding's jurisdiction the rule must apply in, when known. */
+  jurisdiction: string | null;
+  /** The jurisdiction the working calendar must belong to: the chosen rule's, else the proceeding's. */
+  calendarJurisdiction: string | null;
 };
 
 /**
- * Options come from the validators' own predicate. A single eligible option is
- * preselected; with several, the lawyer must choose (a stale or missing choice
- * selects nothing rather than silently the first).
+ * Options come from the validators' own predicate: a rule of the exact scope
+ * and of the proceeding's jurisdiction, and an active calendar of the rule's
+ * jurisdiction (the API refuses any other, B4-ADJ-08). A single eligible
+ * option is preselected; with several, the lawyer must choose (a stale or
+ * missing choice selects nothing rather than silently the first).
  */
 export function resolveGovernedSelection(
   workspace: IpDeadlineWorkspace | undefined,
   scope: GovernedScope,
   ruleId: string,
   calendarId: string,
+  jurisdiction: string | null = null,
 ): GovernedSelection {
-  const rules = workspace ? eligibleScopedRules(workspace, scope) : [];
-  const calendars = workspace ? activeWorkingCalendars(workspace) : [];
+  const scoped = workspace ? eligibleScopedRules(workspace, scope) : [];
+  const rules = jurisdiction ? scoped.filter((row) => sameJurisdiction(row.jurisdiction, jurisdiction)) : scoped;
+  const rule = rules.find((row) => row.id === ruleId) ?? (rules.length === 1 ? rules[0] : undefined);
+  const calendarJurisdiction = rule?.jurisdiction ?? jurisdiction;
+  const calendars = !workspace
+    ? []
+    : calendarJurisdiction
+      ? activeCalendarsForJurisdiction(workspace, calendarJurisdiction)
+      : activeWorkingCalendars(workspace);
   return {
     rules,
     calendars,
-    rule: rules.find((row) => row.id === ruleId) ?? (rules.length === 1 ? rules[0] : undefined),
+    rule,
     calendar: calendars.find((row) => row.id === calendarId) ?? (calendars.length === 1 ? calendars[0] : undefined),
+    jurisdiction: jurisdiction ? normalJurisdiction(jurisdiction) : null,
+    calendarJurisdiction: calendarJurisdiction ? normalJurisdiction(calendarJurisdiction) : null,
   };
 }
 
@@ -99,10 +118,17 @@ export function IpGovernedDeadlinePickers({
   let ruleStatus: string[] = [];
   let calendarStatus: string[] = [];
   if (data && !selection.rules.length) {
-    const scoped = data.rules.filter((row) => sameScope(row, scope));
+    const anyJurisdiction = data.rules.filter((row) => sameScope(row, scope));
+    const scoped = selection.jurisdiction
+      ? anyJurisdiction.filter((row) => sameJurisdiction(row.jurisdiction, selection.jurisdiction))
+      : anyJurisdiction;
+    const elsewhere = anyJurisdiction.filter((row) => row.status === "active" && !scoped.includes(row));
     const pending = scoped.filter((row) => row.status === "candidate");
     const unselected = scoped.filter((row) => row.status === "active");
-    if (pending.length) {
+    if (!scoped.length && elsewhere.length && selection.jurisdiction) {
+      const names = elsewhere.map((row) => `${ruleVersionName(row)} (${normalJurisdiction(row.jurisdiction)})`);
+      ruleStatus = [`${boundedNameList(names)} ${names.length === 1 ? "applies" : "apply"} in another jurisdiction than this proceeding (${selection.jurisdiction}). Propose one for ${selection.jurisdiction} in Rule and calendar governance; another owner, admin or partner must activate it.`];
+    } else if (pending.length) {
       ruleStatus = [awaitingActivationText(pending.map(ruleVersionName))];
     } else if (unselected.length) {
       const names = unselected.map(ruleVersionName);
@@ -118,9 +144,16 @@ export function IpGovernedDeadlinePickers({
     }
   }
   if (data && !selection.calendars.length) {
-    const pending = data.calendars.filter((row) => row.status === "candidate");
+    const wanted = selection.calendarJurisdiction;
+    const pending = data.calendars.filter((row) => row.status === "candidate" && (!wanted || sameJurisdiction(row.jurisdiction, wanted)));
+    const elsewhere = Array.from(new Set(activeWorkingCalendars(data).map((row) => normalJurisdiction(row.jurisdiction)))).sort();
     if (pending.length) {
       calendarStatus = [awaitingActivationText(pending.map((row) => `${row.name} v${row.version}`))];
+    } else if (wanted && elsewhere.length) {
+      calendarStatus = [
+        `No active ${wanted} working calendar exists; active calendars exist only for ${elsewhere.join(", ")}.`,
+        `Propose one for ${wanted} in Rule and calendar governance; another owner, admin or partner must activate it.`,
+      ];
     } else {
       const blocked = governance ? describeGovernanceDecision(governance.calendar_proposal, "calendar", "propose") : [];
       calendarStatus = [
@@ -164,7 +197,7 @@ export function IpGovernedDeadlinePickers({
           aria-describedby={selection.calendar ? calendarCaptionId : data ? calendarStatusId : undefined}
           onChange={(event) => onCalendarChange(event.target.value)}
         >
-          {!selection.calendars.length ? <option value="">{placeholder("No active working calendar")}</option> : null}
+          {!selection.calendars.length ? <option value="">{placeholder(selection.calendarJurisdiction ? `No active ${selection.calendarJurisdiction} working calendar` : "No active working calendar")}</option> : null}
           {selection.calendars.length > 1 && !selection.calendar ? <option value="">Choose a working calendar…</option> : null}
           {selection.calendars.map((row) => (
             <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>
