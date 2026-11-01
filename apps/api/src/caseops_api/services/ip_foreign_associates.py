@@ -58,7 +58,12 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_docket_access import _docket_or_404
-from caseops_api.services.ip_document_workflow import list_ip_documents
+from caseops_api.services.ip_document_workflow import (
+    citable_ip_document_ids,
+    docket_scoped_document_links,
+    get_accessible_ip_document_ids,
+    list_ip_documents,
+)
 from caseops_api.services.ip_documents import ip_document_taxonomy_counts
 from caseops_api.services.ip_filing_jurisdictions import (
     FILING_JURISDICTIONS,
@@ -429,35 +434,49 @@ def _validate_initial_estimate_budget(
 def _document_refs(
     session: Session,
     *,
-    company_id: str,
+    context: SessionContext,
     docket_id: str,
     document_refs: list[str],
 ) -> list[IpDocument]:
+    """Documents the instruction may cite: the docket's citable set, current only.
+
+    The same predicate as GET /api/ip/documents?docket_id= (the form's picker):
+    linked to the docket or one of its events or deadlines, readable by this
+    member across every link, and not retired.
+    """
+
     unique_refs = set(document_refs)
     if not unique_refs:
         return []
-    rows = list(
+    company_id = context.company.id
+    linked = set(
         session.scalars(
-            select(IpDocument)
-            .join(
-                IpDocumentLink,
-                (IpDocumentLink.document_id == IpDocument.id)
-                & (IpDocumentLink.company_id == IpDocument.company_id),
+            select(IpDocumentLink.document_id).where(
+                docket_scoped_document_links(company_id=company_id, docket_id=docket_id),
+                IpDocumentLink.document_id.in_(unique_refs),
             )
-            .where(
-                IpDocument.company_id == company_id,
-                IpDocument.id.in_(unique_refs),
-                IpDocumentLink.docket_id == docket_id,
-            )
-            .distinct()
-        ).all()
+        )
     )
-    if {row.id for row in rows} != unique_refs:
+    current = citable_ip_document_ids(
+        session, company_id=company_id, document_ids=linked, lock=True
+    )
+    accessible = (
+        get_accessible_ip_document_ids(session, context=context, document_ids=current)
+        if current
+        else set()
+    )
+    if accessible != unique_refs:
         raise HTTPException(
             status_code=422,
-            detail="Every selected document must be linked to this IP docket.",
+            detail="Every selected document must be a current document linked to this IP docket.",
         )
-    return rows
+    return list(
+        session.scalars(
+            select(IpDocument)
+            .where(IpDocument.company_id == company_id, IpDocument.id.in_(unique_refs))
+            .order_by(IpDocument.id)
+        ).all()
+    )
 
 
 def ip_foreign_associate_create_options(
@@ -883,7 +902,7 @@ def create_ip_foreign_associate_instruction(
     _validate_initial_estimate_budget(estimate=estimate, assignment=assignment)
     documents = _document_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.selected_document_refs,
     )
@@ -1145,7 +1164,7 @@ def record_ip_foreign_associate_transaction(
     )
     _document_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.document_refs,
     )
@@ -1189,7 +1208,7 @@ def record_ip_foreign_associate_transaction(
         )
         documents = _document_refs(
             session,
-            company_id=context.company.id,
+            context=context,
             docket_id=docket.id,
             document_refs=row.selected_document_refs_json,
         )
@@ -1678,12 +1697,14 @@ def ip_foreign_associate_workspace(
     )
     docket = get_ip_docket(session, context=context, docket_id=row.docket_id)
     selected_document_ids = set(row.selected_document_refs_json)
+    # The instruction's own history keeps naming what it selected, retired or not.
     documents = [
         document
         for document in list_ip_documents(
             session,
             context=context,
             docket_id=row.docket_id,
+            include_history=True,
         ).items
         if document.id in selected_document_ids
     ]

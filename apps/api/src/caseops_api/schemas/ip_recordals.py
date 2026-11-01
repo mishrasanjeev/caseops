@@ -244,6 +244,8 @@ class IpRecordalWorkspaceResponse(BaseModel):
     recordal: IpRecordalResponse
     docket: IpDocketRecordResponse
     documents: list[IpDocumentRecord] = Field(default_factory=list)
+    # What this recordal cites, current or retired, for its own history labels.
+    cited_documents: list[IpDocumentRecord] = Field(default_factory=list)
     registry_workspaces: list[IpRegistryWorkspaceResponse] = Field(default_factory=list)
     deadline_workspace: IpDeadlineWorkspaceResponse
     transactions: list[IpDocketEventResponse]

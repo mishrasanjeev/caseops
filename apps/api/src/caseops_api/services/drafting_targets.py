@@ -382,6 +382,8 @@ def _load_source_manifest(
             select(IpDocument).where(
                 IpDocument.company_id == company_id,
                 IpDocument.id.in_(document_ids),
+                # A retired document is history, never a drafting source.
+                IpDocument.retired_at.is_(None),
             )
         )
     }

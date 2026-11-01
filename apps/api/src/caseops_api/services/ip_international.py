@@ -37,6 +37,7 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_document_workflow import (
+    citable_ip_document_ids,
     docket_scoped_document_links,
     get_accessible_ip_document_ids,
     list_linked_ip_documents,
@@ -468,12 +469,18 @@ def _validate_owned_refs(
                 )
             )
         )
-        if refs - linked_ids or refs - get_accessible_ip_document_ids(
-            session, context=context, document_ids=linked_ids
+        current_ids = citable_ip_document_ids(
+            session, company_id=company_id, document_ids=linked_ids, lock=True
+        )
+        if refs - current_ids or refs - get_accessible_ip_document_ids(
+            session, context=context, document_ids=current_ids
         ):
             raise HTTPException(
                 status_code=422,
-                detail="Madrid document references must be linked to this designation docket.",
+                detail=(
+                    "Madrid document references must be current documents linked to "
+                    "this designation docket."
+                ),
             )
 
 
