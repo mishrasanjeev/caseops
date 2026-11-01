@@ -102,6 +102,12 @@ const COLUMN_OPTIONS = [
 
 type ColumnKey = (typeof COLUMN_OPTIONS)[number][0];
 
+// The Mark column carries the record link and Edit dates, so it is always
+// shown first and stays pinned while the other columns scroll (B4-ADJ-13).
+function withMarkFirst(columns: ColumnKey[]): ColumnKey[] {
+  return ["mark", ...columns.filter((column) => column !== "mark")];
+}
+
 const DEFAULT_COLUMNS: ColumnKey[] = [
   "mark",
   "application_numbers",
@@ -285,7 +291,7 @@ export default function IpPortfolioPage() {
     setFilters(view.filters);
     setClassDraft(null);
     setQueryDraft(view.filters.query ?? "");
-    setColumns(view.columns.filter(isColumnKey));
+    setColumns(withMarkFirst(view.columns.filter(isColumnKey)));
     if (viewMode === "tracker") {
       const supported = new Set(["query", "renewal_tracker_state", "application_date_from",
         "application_date_to", "renewal_due_from", "renewal_due_to"]);
@@ -442,6 +448,7 @@ export default function IpPortfolioPage() {
               <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
               {COLUMN_OPTIONS.map(([key, label]) => {
                 const checked = columns.includes(key);
+                const pinned = key === "mark";
                 return (
                   <label
                     key={key}
@@ -450,6 +457,7 @@ export default function IpPortfolioPage() {
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={pinned}
                       onChange={() => {
                         setColumns((current) =>
                           checked
@@ -460,7 +468,7 @@ export default function IpPortfolioPage() {
                         );
                       }}
                     />
-                    <span>{label}</span>
+                    <span>{pinned ? `${label} (always shown)` : label}</span>
                   </label>
                 );
               })}
@@ -938,7 +946,12 @@ function PortfolioTable({ rows, columns, onEdit }: { rows: IpPortfolioRow[]; col
         <thead className="bg-[var(--color-bg-2)] text-xs font-semibold text-[var(--color-mute)]">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="w-44 px-3 py-2.5">
+              <th
+                key={column}
+                className={column === "mark"
+                  ? "sticky left-0 z-[1] w-56 bg-[var(--color-bg-2)] px-3 py-2.5 shadow-[1px_0_0_var(--color-line)]"
+                  : "w-44 px-3 py-2.5"}
+              >
                 {COLUMN_OPTIONS.find(([key]) => key === column)?.[1]}
               </th>
             ))}
@@ -946,9 +959,14 @@ function PortfolioTable({ rows, columns, onEdit }: { rows: IpPortfolioRow[]; col
         </thead>
         <tbody className="divide-y divide-[var(--color-line)]">
           {rows.map((row) => (
-            <tr key={row.application_id} className="align-top hover:bg-[var(--color-bg-2)]/60">
+            <tr key={row.application_id} className="group align-top hover:bg-[var(--color-bg-2)]">
               {columns.map((column) => (
-                <td key={column} className="px-3 py-3">
+                <td
+                  key={column}
+                  className={column === "mark"
+                    ? "sticky left-0 z-[1] bg-[var(--color-bg)] px-3 py-3 shadow-[1px_0_0_var(--color-line)] group-hover:bg-[var(--color-bg-2)]"
+                    : "px-3 py-3"}
+                >
                   <PortfolioValue row={row} column={column} onEdit={onEdit} />
                 </td>
               ))}
