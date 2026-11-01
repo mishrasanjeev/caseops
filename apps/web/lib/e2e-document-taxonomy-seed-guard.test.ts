@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 const ALLOWED_SEED_CALLERS: Record<string, string> = {
   "iplf-024a-document-foundation-2026-08-09.spec.ts":
     "API contract test of POST /api/ip/document-taxonomy/seed on a tenant with no IP workspace configuration (starts from an empty taxonomy and asserts the 14 seeded keys).",
+  "ram-2026-10-31-fixture-honesty.spec.ts":
+    "Names the seed path only to watch page requests and fail if anything calls it; the journey itself never calls the endpoint.",
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
