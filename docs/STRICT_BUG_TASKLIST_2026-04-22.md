@@ -4246,3 +4246,15 @@ The integrated27-path functional Node run passed719/719 with zero failures/skips
 Parent dc3d026b5f1eeb87c5279ec348b15b2fb24ba5b1 completed all five hosted workflows successfully:68checks passed, two intentionally skipped, zero failures, including all32 PostgreSQL shards and the browser suite. This supersedes the retained step-timeout regression for that revision; a new source revision needs its own CI.
 
 The original configure04 cache-bound refusal and backend04 VM-bind failure remain failed. Fresh source-bound backend fixtures, actual Android configuration/APK, Simulator app, full native inventories and physical camera/biometric/signed-link checks remain required. No store archive or release-ready claim is made.
+
+## QA29 — Isolate the SDK's empty Maven fallback (November 1, 2026)
+
+Verdict: **Inconclusive for native build and release acceptance**. J20/M22, US-MOB-01..08. Actual MODEL14 reached Gradle configuration and failed at `expo-dev-launcher`'s `mavenLocal()` declaration; APK compilation was unreached. The original URI was not logged. A separate pinned Gradle9.4.1 locator execution proved that the same fresh-HOME recipe selects its absent `.m2/repository`, with no Maven settings or overrides. This is mechanism evidence, not an observation of the original failed URI.
+
+The host role now captures a canonical, owned, empty0700 HOME, rejects the operating-system operator home and carries its identity and namespace in the verified role policy. Both Gradle entry points produce a bounded witness. The marker admits only that exact absent repository, rechecks the directory and namespace, and rejects settings, symlinks, overrides and foreign identities. Existing node_modules/Gradle roots, five JVM properties, HTTP marker, TLS, redirects and download guards remain unchanged.
+
+The complete tooling inventory passed422 unique cases with zero failures/errors/skips/cancellations/todo; every earlier419 case identity remains exactly once and in order. Receipt `android-empty-maven-full-tooling-root-02-acceptance.json`, SHA256175d956c47033633d199d84e1f1303d4f8880472efdbbbdca58a33c5a5b19a0d. Retain the preceding422 run's three failed historical byte projections. The correction removes only the new hash-pinned Maven layer in those three named projections; their original digest constants and required/forbidden assertions are unchanged.
+
+Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
+
+These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.

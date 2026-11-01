@@ -5,12 +5,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertHostNodeTrust } from './host-node-trust.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 
 export const ANDROID_HOST_ENV = Object.freeze({ file: 'CASEOPS_ANDROID_HOST_POLICY_FILE', sha256: 'CASEOPS_ANDROID_HOST_POLICY_SHA256' });
 export const ANDROID_MARKER = Object.freeze({ name: 'X-CaseOps-Automated-Test', value: 'no-paid-providers' });
+export const ANDROID_EMPTY_MAVEN_ENV = 'CASEOPS_ANDROID_EMPTY_MAVEN_REPOSITORY';
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const NODE = '/Users/sanjeevkumar/.nvm/versions/node/v24.15.0/bin/node';
 const PYTHON = '/Users/sanjeevkumar/.cache/caseops-mobile/release-tooling/python/cpython-3.13.17-macos-aarch64-none/bin/python3.13';
@@ -46,6 +48,47 @@ function namespace(file, end) {
 function privateDirectory(file, end) {
   check(end); const state = fs.lstatSync(file, { bigint: true });
   assert.ok(absolute(file) && fs.realpathSync(file) === file && state.isDirectory() && !state.isSymbolicLink() && typeof process.getuid === 'function' && state.uid === BigInt(process.getuid()) && (state.mode & 0o077n) === 0n, 'ANDROID_HOST_OWNED_DIRECTORY');
+}
+function mavenEnvironment(environment) {
+  for (const key of Object.keys(environment)) assert.ok(!/^(?:M2_HOME|MAVEN(?:_.*)?)$/i.test(key) && key.toUpperCase() !== ANDROID_EMPTY_MAVEN_ENV && !Object.values(ANDROID_HOST_ENV).some(expected => key.toUpperCase() === expected && key !== expected), 'ANDROID_HOST_MAVEN_OVERRIDE');
+}
+function absentMavenDirectory(home, end) {
+  const initial = fs.lstatSync(home, { bigint: true }), parents = namespace(home, end);
+  for (let pass = 0; pass < 2; pass++) {
+    check(end); let missing = false;
+    try { fs.lstatSync(path.join(home, '.m2')); } catch (error) { if (error.code === 'ENOENT') missing = true; else throw error; }
+    assert.ok(missing, 'ANDROID_HOST_MAVEN_DIRECTORY_MUST_BE_ABSENT');
+  }
+  assert.ok(same(initial, fs.lstatSync(home, { bigint: true })), 'ANDROID_HOST_MAVEN_HOME_CHANGED');
+  assert.deepEqual(namespace(home, end), parents, 'ANDROID_HOST_MAVEN_NAMESPACE_CHANGED');
+}
+/** Capture only before staging a fresh role; later reads may retain other owned HOME entries. */
+export function captureAndroidEmptyMavenRepository(home, environment = process.env, end = performance.now() + 5000) {
+  mavenEnvironment(environment);
+  const operatorHome = path.resolve(userInfo().homedir); assert.notEqual(home, operatorHome, 'ANDROID_HOST_OPERATOR_MAVEN_HOME');
+  privateDirectory(home, end); const initial = fs.lstatSync(home, { bigint: true }), parents = namespace(home, end);
+  assert.equal(initial.mode & 0o777n, 0o700n, 'ANDROID_HOST_MAVEN_HOME_MODE');
+  const directory = fs.opendirSync(home); let entry, bodyFailed = false;
+  try { check(end); entry = directory.readSync(); } catch (error) { bodyFailed = true; throw error; }
+  finally { try { directory.closeSync(); } catch (error) { if (!bodyFailed) throw error; } }
+  assert.ok(entry === null, 'ANDROID_HOST_MAVEN_HOME_NOT_FRESH_EMPTY');
+  assert.ok(same(initial, fs.lstatSync(home, { bigint: true })), 'ANDROID_HOST_MAVEN_HOME_CHANGED');
+  assert.deepEqual(namespace(home, end), parents, 'ANDROID_HOST_MAVEN_NAMESPACE_CHANGED');
+  absentMavenDirectory(home, end);
+  return { schemaVersion: 1, kind: 'caseops-android-empty-maven-repository-v1', path: path.join(home, '.m2', 'repository'), home: { path: home, identity: IDENTITY.map(key => String(initial[key])), namespace: parents }, operatorHome, preparedEmpty: true, operatorHomeRejected: true };
+}
+export function bindAndroidEmptyMavenRepository(environment, binding, policySha256, end = performance.now() + 5000) {
+  mavenEnvironment(environment); keys(binding, ['schemaVersion', 'kind', 'path', 'home', 'operatorHome', 'preparedEmpty', 'operatorHomeRejected']); keys(binding.home, ['path', 'identity', 'namespace']);
+  assert.ok(binding.schemaVersion === 1 && binding.kind === 'caseops-android-empty-maven-repository-v1' && binding.preparedEmpty === true && binding.operatorHomeRejected === true && /^[a-f0-9]{64}$/.test(policySha256), 'ANDROID_HOST_EMPTY_MAVEN_BINDING');
+  const home = environment.HOME; assert.ok(absolute(home), 'ANDROID_HOST_EMPTY_MAVEN_HOME');
+  assert.equal(binding.operatorHome, path.resolve(userInfo().homedir), 'ANDROID_HOST_MAVEN_OPERATOR_IDENTITY');
+  assert.notEqual(home, path.resolve(userInfo().homedir), 'ANDROID_HOST_OPERATOR_MAVEN_HOME');
+  assert.equal(binding.home.path, home, 'ANDROID_HOST_MAVEN_ROLE_HOME'); assert.equal(binding.path, path.join(home, '.m2', 'repository'), 'ANDROID_HOST_MAVEN_EXACT_REPOSITORY');
+  privateDirectory(home, end); const state = fs.lstatSync(home, { bigint: true }); assert.equal(state.mode & 0o777n, 0o700n, 'ANDROID_HOST_MAVEN_HOME_MODE');
+  assert.deepEqual(binding.home.identity, IDENTITY.map(key => String(state[key])), 'ANDROID_HOST_MAVEN_HOME_IDENTITY');
+  assert.deepEqual(binding.home.namespace, namespace(home, end), 'ANDROID_HOST_MAVEN_NAMESPACE_CHANGED'); absentMavenDirectory(home, end);
+  const witness = JSON.stringify({ ...binding, policySha256 }); assert.ok(Buffer.byteLength(witness) <= 32768, 'ANDROID_HOST_MAVEN_WITNESS_BOUND');
+  return { ...environment, [ANDROID_EMPTY_MAVEN_ENV]: witness };
 }
 export function readAndroidHostInput(reference, { end = performance.now() + 5000, limit = 1048576 } = {}) {
   keys(reference, Object.hasOwn(reference, 'sizeBytes') ? ['path', 'sha256', 'sizeBytes'] : ['path', 'sha256']);
@@ -204,6 +247,7 @@ export function prepareAndroidHostLauncher({ directory, nodePolicyReference, gra
   const report = assertHostNodeTrust({ policyRef: nodePolicyReference, role: 'base' }); assert.ok(report.expectedDefaultCount === 144 && report.defaultEnumerationVerified === true, 'ANDROID_HOST_NODE144_REQUIRED');
   const nodePolicy = readJson(nodePolicyReference, { end, limit: 32768 });
   sourceEnvironment(environment, end); const source = cleanSource(), sourceFiles = {};
+  const privateMavenRepository = captureAndroidEmptyMavenRepository(environment.HOME, environment, end);
   for (const [name, relative] of Object.entries({ helper: 'scripts/mobile/android-host-launch.mjs', marker: 'scripts/mobile/android-no-paid.gradle', platform: 'scripts/mobile/host-platform-trust.py', javaFixture: 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java' })) sourceFiles[name] = reference(path.join(ROOT, relative), end);
   assert.equal(nodePolicy.runtimeSource.helper.path, path.join(ROOT, 'scripts/mobile/host-node-trust.mjs'), 'ANDROID_HOST_NODE_SOURCE_ROOT');
   assert.equal(nodePolicy.runtimeSource.bootstrap.path, path.join(ROOT, 'scripts/mobile/host-node-trust-start.mjs'), 'ANDROID_HOST_NODE_SOURCE_ROOT');
@@ -220,14 +264,17 @@ export function prepareAndroidHostLauncher({ directory, nodePolicyReference, gra
   // Validate the public binding before staging either executable or policy.
   bindAndroidJavaHome({ HOME: privateJavaHome, TMPDIR: privateJavaTmp.path, JAVA_TOOL_OPTIONS: sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: gradlePolicyReference.sha256 }, { privateJavaHome, privateJavaTmp, sharedJavaOptions, javaOptions, gradlePolicyReference }, end);
   const nodeShim = writeAndroidHostOutput(path.join(directory, 'node'), renderAndroidNodeShim(process.execPath, nodeEnvironment, gradlePolicyReference, javaOptions), end, 0o500);
-  const value = { schemaVersion: 1, kind: 'caseops-android-host-role-v1', sourceRoot: ROOT, source, sourceFiles, sourcePath: environment.PATH, nodeExecutable: process.execPath, pythonExecutable: PYTHON, nodePolicyReference, gradlePolicyReference, nodeEnvironment, privateJavaHome, privateJavaTmp, sharedJavaOptions, javaOptions, nodeShim, limits: { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 } };
+  const value = { schemaVersion: 1, kind: 'caseops-android-host-role-v1', sourceRoot: ROOT, source, sourceFiles, sourcePath: environment.PATH, nodeExecutable: process.execPath, pythonExecutable: PYTHON, nodePolicyReference, gradlePolicyReference, nodeEnvironment, privateJavaHome, privateJavaTmp, privateMavenRepository, sharedJavaOptions, javaOptions, nodeShim, limits: { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 } };
   const policyReference = writeAndroidHostOutput(path.join(directory, 'policy.json'), Buffer.from(JSON.stringify(value) + '\n'), end);
   return { policyReference, descriptor: value, environment: { ...runtimeEnvironment, [ANDROID_HOST_ENV.sha256]: policyReference.sha256 }, actualGradleAdmission: 'required-fresh-before-dispatch', downloads: 0, nativeBuilds: 0 };
 }
 export function readAndroidHostPolicy(policyReference) {
   const end = performance.now() + 20000;
+  for (const [key, expected] of [[ANDROID_HOST_ENV.file, policyReference.path], [ANDROID_HOST_ENV.sha256, policyReference.sha256]]) {
+    if (Object.hasOwn(process.env, key)) assert.equal(process.env[key], expected, 'ANDROID_HOST_MAVEN_POLICY_REFERENCE');
+  }
   const value = readJson(policyReference, { end, limit: 131072 });
-  keys(value, ['schemaVersion', 'kind', 'sourceRoot', 'source', 'sourceFiles', 'sourcePath', 'nodeExecutable', 'pythonExecutable', 'nodePolicyReference', 'gradlePolicyReference', 'nodeEnvironment', 'privateJavaHome', 'privateJavaTmp', 'sharedJavaOptions', 'javaOptions', 'nodeShim', 'limits']);
+  keys(value, ['schemaVersion', 'kind', 'sourceRoot', 'source', 'sourceFiles', 'sourcePath', 'nodeExecutable', 'pythonExecutable', 'nodePolicyReference', 'gradlePolicyReference', 'nodeEnvironment', 'privateJavaHome', 'privateJavaTmp', 'privateMavenRepository', 'sharedJavaOptions', 'javaOptions', 'nodeShim', 'limits']);
   assert.ok(value.schemaVersion === 1 && value.kind === 'caseops-android-host-role-v1' && value.sourceRoot === ROOT && value.pythonExecutable === PYTHON && value.nodeExecutable === NODE && process.execPath === NODE, 'ANDROID_HOST_POLICY');
   sourceEnvironment(process.env, end);
   assert.deepEqual(value.limits, { compileSeconds: 1800, cleanupSeconds: 30, pipeBytes: 67108864 }); assert.deepEqual(value.source, cleanSource(), 'ANDROID_HOST_SOURCE_CHANGED');
@@ -238,10 +285,11 @@ export function readAndroidHostPolicy(policyReference) {
   assert.equal(value.nodeShim.path, path.join(path.dirname(policyReference.path), 'node'), 'ANDROID_HOST_NODE_SHIM_PATH');
   assertAndroidNodePath(process.env, value.nodeShim.path, value.sourcePath);
   bindAndroidJavaHome({ HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, JAVA_TOOL_OPTIONS: value.sharedJavaOptions, CASEOPS_HOST_PLATFORM_TRUST_POLICY_FILE: value.gradlePolicyReference.path, CASEOPS_HOST_PLATFORM_TRUST_POLICY_SHA256: value.gradlePolicyReference.sha256 }, { privateJavaHome: value.privateJavaHome, privateJavaTmp: value.privateJavaTmp, sharedJavaOptions: value.sharedJavaOptions, javaOptions: value.javaOptions, gradlePolicyReference: value.gradlePolicyReference }, end);
+  bindAndroidEmptyMavenRepository(process.env, value.privateMavenRepository, policyReference.sha256, end);
   const shim = readAndroidHostInput(value.nodeShim, { end }); try { assert.ok(shim.equals(renderAndroidNodeShim(value.nodeExecutable, value.nodeEnvironment, value.gradlePolicyReference, value.javaOptions)), 'ANDROID_HOST_NODE_SHIM_BYTES'); } finally { shim.fill(0); }
   assertHostNodeTrust({ policyRef: value.nodePolicyReference, role: 'base' }); neutralAndroidGradleEnvironment(process.env, value.nodeEnvironment); return value;
 }
-async function gradleEnvironment(policy, logFile, end) {
+async function gradleEnvironment(policy, logFile, end, policyReference) {
   const data = readAndroidHostInput(policy.sourceFiles.platform, { end }), neutral = neutralAndroidGradleEnvironment(process.env, policy.nodeEnvironment);
   const program = "import os,sys,json,base64,time\ns={'__name__':'retained_android_platform','__file__':sys.argv[1]};exec(compile(base64.b64decode(sys.argv[2]),sys.argv[1],'exec'),s)\ncharged=0\ndef record(value):\n global charged\n b=(json.dumps(value,separators=(',',':'))+'\\n').encode();charged+=len(b)\n if charged>1048576:raise RuntimeError('ANDROID_GRADLE_DIAGNOSTIC_BOUND')\n n=0\n while n<len(b):\n  w=os.write(3,b[n:]);assert w>0;n+=w\n os.fsync(3)\nenv=s['scoped_gradle_environment'](json.loads(sys.argv[3]),dict(os.environ),verification_log=record);print(json.dumps(env,separators=(',',':')))\n";
   let fd, output = Buffer.alloc(0), overflow = false, bodyFailed = false;
@@ -258,20 +306,25 @@ async function gradleEnvironment(policy, logFile, end) {
     assert.deepEqual(namespace(logFile, end), parents, 'ANDROID_GRADLE_DIAGNOSTIC_NAMESPACE'); check(end);
     const result = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(output));
     const binding = { privateJavaHome: policy.privateJavaHome, privateJavaTmp: policy.privateJavaTmp, sharedJavaOptions: policy.sharedJavaOptions, javaOptions: policy.javaOptions, gradlePolicyReference: policy.gradlePolicyReference };
-    return bindAndroidJavaHome(result, binding, end);
+    const bound = bindAndroidJavaHome(result, binding, end);
+    for (const [key, expected] of [[ANDROID_HOST_ENV.file, policyReference.path], [ANDROID_HOST_ENV.sha256, policyReference.sha256]]) {
+      if (Object.hasOwn(bound, key)) assert.equal(bound[key], expected, 'ANDROID_HOST_MAVEN_POLICY_REFERENCE');
+    }
+    const roleEnvironment = { ...bound, [ANDROID_HOST_ENV.file]: policyReference.path, [ANDROID_HOST_ENV.sha256]: policyReference.sha256 };
+    return bindAndroidEmptyMavenRepository(roleEnvironment, policy.privateMavenRepository, policyReference.sha256, end);
   } catch (error) { bodyFailed = true; throw error; }
   finally { data.fill(0); output.fill(0); if (fd !== undefined) closeOwned(fd, bodyFailed); }
 }
 /** Fresh shared-JDK admission only. It never starts Gradle or builds an app. */
 export async function prepareAndroidGradleEnvironment(policyReference) {
   const policy = readAndroidHostPolicy(policyReference), end = performance.now() + 60000;
-  return { environment: await gradleEnvironment(policy, path.join(path.dirname(policyReference.path), 'gradle-verification.jsonl'), end), policy };
+  return { environment: await gradleEnvironment(policy, path.join(path.dirname(policyReference.path), 'gradle-verification.jsonl'), end, policyReference), policy };
 }
 export async function runAndroidGradle(policyReference, args) {
   const policy = readAndroidHostPolicy(policyReference), cwd = path.join(ROOT, 'apps/mobile/android'); assert.equal(fs.realpathSync(process.cwd()), cwd, 'ANDROID_HOST_GENERATED_PROJECT_REQUIRED');
   assert.deepEqual(args, androidGradleArguments(process.env.JAVA_HOME, process.env.CASEOPS_ANDROID_JDK17_HOME), 'ANDROID_HOST_CANONICAL_GRADLE_ARGV');
   assert.equal(process.env.CASEOPS_ANDROID_COMPILE_READY_GO, policy.source.sourceSha, 'ANDROID_HOST_COMPILE_NOT_ARMED');
-  const end = performance.now() + 60000, logFile = path.join(path.dirname(policyReference.path), 'gradle-verification.jsonl'), env = await gradleEnvironment(policy, logFile, end);
+  const end = performance.now() + 60000, logFile = path.join(path.dirname(policyReference.path), 'gradle-verification.jsonl'), env = await gradleEnvironment(policy, logFile, end, policyReference);
   const executionArgs = androidGradleExecutionArguments(args, policy, env, end);
   env.CASEOPS_ANDROID_MARKED_SOURCE_ROOT = ROOT;
   const initDirectory = path.join(env.GRADLE_USER_HOME, 'init.d'); privateDirectory(env.GRADLE_USER_HOME, end); fs.mkdirSync(initDirectory, { mode: 0o700 });

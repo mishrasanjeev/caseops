@@ -30,6 +30,7 @@ import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs
 import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
 import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, prepareIosHomeDirectories, iosSimulatorInputEnvironment, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
+import { captureAndroidEmptyMavenRepository, bindAndroidEmptyMavenRepository, ANDROID_EMPTY_MAVEN_ENV } from './android-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -5370,7 +5371,7 @@ test('ANDROID-CDN-01 keeps eight repositories and admits only the official artif
 });
 
 test('ANDROID-CDN-02 preserves every original URI, marker, TLS, factory and Download fence byte', () => {
-  let restored = restoreAndroidEmptyAuthLocalResource(fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8'));
+  let restored = restoreAndroidEmptyAuthLocalResource(restoreAndroidEmptyMavenRepository(fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8')));
   const replacements = [
     ['configuredBases.size() <= 9', 'configuredBases.size() <= 10'],
     ['exactScopes.size() <= 9', 'exactScopes.size() <= 8'],
@@ -5440,6 +5441,21 @@ test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every lo
   assert.match(source, /assert\.equal\(sourceOpens,1\)/);
 });
 
+function restoreAndroidEmptyMavenRepository(source) {
+  const begin = '// BEGIN CASEOPS EXACT EMPTY MAVEN REPOSITORY\n', end = '// END CASEOPS EXACT EMPTY MAVEN REPOSITORY\n\n';
+  assert.equal(source.split(begin).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_BEGIN');
+  assert.equal(source.split(end).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_END');
+  const first = source.indexOf(begin), last = source.indexOf(end) + end.length, layer = source.slice(first, last);
+  assert.ok(last > first); assert.equal(Buffer.byteLength(layer), 5262);
+  assert.equal(createHash('sha256').update(layer).digest('hex'), 'e28e56f10790b257ab03f83e5e32447070a3329f5f20c0c4f61c7e48c63e177b', 'EXACT_REVIEWED_EMPTY_MAVEN_LAYER');
+  source = source.slice(0, first) + source.slice(last);
+  for (const line of ['import groovy.json.JsonSlurper\n', 'import java.nio.file.Files\n', 'import java.nio.file.Path\n', 'import java.nio.file.Paths\n', 'import java.nio.file.LinkOption\n', 'import java.nio.file.NoSuchFileException\n']) {
+    assert.equal(source.split(line).length - 1, 1, 'EXACT_EMPTY_MAVEN_IMPORT'); source = source.replace(line, '');
+  }
+  const checked = "if (!localRoots.any { inside(local, it) } && !CaseOpsEmptyMavenRepository.admits(local, System.getenv(), System.getProperties()))";
+  assert.equal(source.split(checked).length - 1, 1, 'EXACT_EMPTY_MAVEN_SCOPE_BRANCH');
+  return source.replace(checked, 'if (!localRoots.any { inside(local, it) })');
+}
 function restoreAndroidEmptyAuthLocalResource(source) {
   source = restoreAndroidBoundJavaEnvironment(source);
   const replacements = [
@@ -5461,7 +5477,7 @@ function restoreAndroidEmptyAuthLocalResource(source) {
 
 test('ANDROID-LOCAL-RESOURCE-01 empty-auth constructor has no HTTP delegate and every IO entry remains blocked', () => {
   const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
-  const restored = restoreAndroidEmptyAuthLocalResource(source);
+  const restored = restoreAndroidEmptyAuthLocalResource(restoreAndroidEmptyMavenRepository(source));
   assert.equal(createHash('sha256').update(restored).digest('hex'), 'd39b669c685898fabd3ba96f4ff9da7c19713783209e8df6ae4bb1a8261674c7');
   const blocked = source.split('final class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {')[1]?.split('final class CaseOpsMarkedHttpConnectorFactory')[0];
   assert.ok(blocked); assert.equal((blocked.match(/throw blocked\(\)/g) || []).length, 5);
@@ -5479,7 +5495,7 @@ function restoreAndroidBoundJavaEnvironment(source) {
 
 test('ANDROID-PRIVATE-TMP-01 actual daemon predicate requires exact bound JAVA5 and preserves every existing transport byte', () => {
   const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
-  const restored = restoreAndroidBoundJavaEnvironment(source);
+  const restored = restoreAndroidBoundJavaEnvironment(restoreAndroidEmptyMavenRepository(source));
   assert.equal(createHash('sha256').update(restored).digest('hex'), '40a112edff53b11c9004c76721284d398480b23a92b3de1eb542d088965b9eee');
   assert.ok(!source.includes('allThreeAbsentOrEmpty'));
   const host = fs.readFileSync(new URL('./android-host-launch.mjs', import.meta.url), 'utf8');
@@ -5576,4 +5592,71 @@ test('iOS local archive admission accepts the current full lock and refuses stal
     assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);
   } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
   assert.equal(archiveOpens, 0); assert.equal(fs.existsSync(output), false);
+});
+
+test('Android Maven fallback captures a fresh owned home and keeps only its absent exact repository', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-empty-maven-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    if (typeof process.getuid !== 'function') {
+      assert.throws(() => captureAndroidEmptyMavenRepository(home, {}), /ANDROID_HOST_OWNED_DIRECTORY/); return;
+    }
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'a'.repeat(64);
+    assert.equal(captured.path, path.join(home, '.m2', 'repository')); assert.equal(captured.preparedEmpty, true);
+    assert.notEqual(captured.operatorHome, home);
+    fs.writeFileSync(path.join(home, 'owned-runtime-state'), 'synthetic runtime state', { mode: 0o600 });
+    const bound = bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), witness = JSON.parse(bound[ANDROID_EMPTY_MAVEN_ENV]);
+    assert.equal(witness.policySha256, digest); assert.equal(witness.home.path, home); assert.equal(witness.path, path.join(home, '.m2', 'repository'));
+    assert.throws(() => captureAndroidEmptyMavenRepository(home, {}), /ANDROID_HOST_MAVEN_HOME_NOT_FRESH_EMPTY/);
+    fs.mkdirSync(path.join(home, '.m2'), { mode: 0o700 });
+    fs.writeFileSync(path.join(home, '.m2', 'settings.xml'), '<settings>synthetic-secret-must-not-be-read</settings>', { mode: 0o600 });
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_DIRECTORY_MUST_BE_ABSENT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Android Maven fallback rejects operator home, inherited aliases and forged role identities', () => {
+  assert.throws(() => captureAndroidEmptyMavenRepository(path.resolve(os.userInfo().homedir), {}), /ANDROID_HOST_OPERATOR_MAVEN_HOME/);
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-maven-denials-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    for (const key of ['M2_HOME', 'm2_home', 'MAVEN_HOME', 'maven_user_home', 'MAVEN_OPTS', ANDROID_EMPTY_MAVEN_ENV, ANDROID_EMPTY_MAVEN_ENV.toLowerCase(), 'caseops_android_host_policy_sha256']) {
+      assert.throws(() => captureAndroidEmptyMavenRepository(home, { [key]: '' }), /ANDROID_HOST_MAVEN_OVERRIDE/);
+    }
+    if (typeof process.getuid !== 'function') return;
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'b'.repeat(64);
+    for (const index of [0, 1, 2, 3, 4]) {
+      const forged = structuredClone(captured); forged.home.identity[index] = String(BigInt(forged.home.identity[index]) + 1n);
+      assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, forged, digest), /ANDROID_HOST_MAVEN_HOME_IDENTITY/);
+    }
+    const foreign = structuredClone(captured); foreign.operatorHome = root;
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, foreign, digest), /ANDROID_HOST_MAVEN_OPERATOR_IDENTITY/);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, 'unverified'), /ANDROID_HOST_EMPTY_MAVEN_BINDING/);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home, mAvEn_HoMe: root }, captured, digest), /ANDROID_HOST_MAVEN_OVERRIDE/);
+    const sibling = structuredClone(captured); sibling.path = path.join(home, '.m2', 'other-repository');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, sibling, digest), /ANDROID_HOST_MAVEN_EXACT_REPOSITORY/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Android Maven fallback retains namespace identity and feeds both actual Gradle entry points', () => {
+  const helper = fs.readFileSync(new URL('./android-host-launch.mjs', import.meta.url), 'utf8'), marker = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  assert.ok(helper.includes('return bindAndroidEmptyMavenRepository(roleEnvironment, policy.privateMavenRepository, policyReference.sha256, end)'));
+  assert.ok(helper.includes('gradle-verification.jsonl\'), end, policyReference)'));
+  assert.ok(helper.includes('gradleEnvironment(policy, logFile, end, policyReference)'));
+  assert.ok(marker.includes("final List<File> localRoots = [new File(sourceRoot, 'apps/mobile/node_modules').canonicalFile, gradleHome]"));
+  assert.ok(marker.includes('!CaseOpsEmptyMavenRepository.admits(local, System.getenv(), System.getProperties())'));
+  assert.ok(marker.includes("['javax.net.ssl.trustStore', 'javax.net.ssl.trustStoreType', 'javax.net.ssl.trustStorePassword', 'java.io.tmpdir', 'user.home']"));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-maven-namespace-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    if (typeof process.getuid !== 'function') return;
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'c'.repeat(64);
+    const changedNamespace = structuredClone(captured); changedNamespace.home.namespace[0][2] = String(BigInt(changedNamespace.home.namespace[0][2]) + 1n);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, changedNamespace, digest), /ANDROID_HOST_MAVEN_NAMESPACE_CHANGED/);
+    fs.symlinkSync(root, path.join(home, '.m2'), 'dir');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_DIRECTORY_MUST_BE_ABSENT/);
+    fs.unlinkSync(path.join(home, '.m2')); fs.renameSync(home, path.join(root, 'previous-home')); fs.mkdirSync(home, { mode: 0o700 });
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_HOME_IDENTITY/);
+    fs.rmdirSync(home); fs.symlinkSync(path.join(root, 'previous-home'), home, 'dir');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_OWNED_DIRECTORY/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
