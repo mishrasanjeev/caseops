@@ -2050,5 +2050,18 @@ class GatewayShutdownTests(unittest.TestCase):
         self.assertIs(state.handlers[-1], state.previous)
 
 
+class ComposeStartupOrderTests(unittest.TestCase):
+    def test_api_starts_only_after_every_readiness_dependency_is_healthy(self):
+        # The API's fixed readiness budget waits for the scanner; ClamAV's own
+        # healthcheck can take minutes to load signatures under load.
+        compose = (Path(__file__).resolve().parents[2] / "compose.mobile-local.yml").read_text(encoding="utf-8")
+        api = re.search(r"^  api:\n((?:    .*\n|\n)*)", compose, re.MULTILINE)
+        self.assertIsNotNone(api)
+        depends = re.search(r"^    depends_on:\n((?:      .*\n)*)", api.group(1), re.MULTILINE)
+        self.assertIsNotNone(depends)
+        conditions = dict(re.findall(r"^      ([a-z-]+):\n        condition: ([a-z_]+)$", depends.group(1), re.MULTILINE))
+        self.assertEqual(conditions, {"migrate": "service_completed_successfully", "valkey": "service_healthy", "scanner": "service_healthy"})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
