@@ -53,6 +53,8 @@ from caseops_api.schemas.portal_ip import (
     PortalPublicationRecord,
     PortalPublicationTargetRecord,
     PortalReportPublicationCreate,
+    PortalShareableDocumentListResponse,
+    PortalShareableDocumentRecord,
 )
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.ip_domain_policy import (
@@ -828,6 +830,141 @@ def _document_docket_id(session: Session, *, link: IpDocumentLink) -> str | None
     return str(row.docket_id) if row is not None else None
 
 
+_SHAREABLE_VERSION_STATES = frozenset({"approved", "filed", "served", "accepted"})
+
+
+def _document_publication_refusal(
+    session: Session,
+    *,
+    company_id: str,
+    document: IpDocument,
+    version: IpDocumentVersion,
+    taxonomy: IpDocumentTaxonomyEntry,
+    scope: PortalIpScope,
+    docket_id: str,
+) -> HTTPException | None:
+    """The single predicate for sharing a version on a grant's docket.
+
+    publish_document_to_portal raises what this returns, and the shareable
+    list offers only versions for which it returns None, so the picker can
+    never offer a version the publish endpoint refuses.
+    """
+    if (
+        document.is_privileged
+        or document.confidentiality != "internal"
+        or document.id not in disclosable_ip_document_ids(
+            session, company_id=company_id, document_ids={document.id}
+        )
+        or version.state not in _SHAREABLE_VERSION_STATES
+    ):
+        return _conflict(
+            "portal_document_not_shareable",
+            "Only an approved, non-privileged internal document version may be shared.",
+        )
+    if taxonomy.key.lower() not in scope.document_categories:
+        return _conflict(
+            "portal_document_category_not_granted",
+            "This document category is not enabled on the selected portal grant.",
+        )
+    links = list(
+        session.scalars(
+            select(IpDocumentLink).where(
+                IpDocumentLink.company_id == company_id,
+                IpDocumentLink.document_id == document.id,
+                or_(IpDocumentLink.version_id.is_(None), IpDocumentLink.version_id == version.id),
+            )
+        )
+    )
+    if docket_id not in {
+        resolved for link in links if (resolved := _document_docket_id(session, link=link))
+    }:
+        return HTTPException(status_code=404, detail="Approved IP document not found.")
+    return None
+
+
+def list_shareable_portal_documents(
+    session: Session,
+    *,
+    context: SessionContext,
+    grant_id: str,
+) -> PortalShareableDocumentListResponse:
+    """Document versions the publish endpoint accepts for one active grant."""
+    portal_user_id = session.scalar(
+        select(MatterPortalGrant.portal_user_id).where(
+            MatterPortalGrant.id == grant_id,
+            MatterPortalGrant.company_id == context.company.id,
+            MatterPortalGrant.ip_docket_record_id.is_not(None),
+        )
+    )
+    if portal_user_id is None:
+        raise HTTPException(status_code=404, detail="Active IP portal grant not found.")
+    _user, grant_rows = _publication_grants(
+        session,
+        context=context,
+        portal_user_id=portal_user_id,
+        grant_ids=[grant_id],
+    )
+    grant, docket = grant_rows[0]
+    scope = _scope(grant)
+    company_id = context.company.id
+
+    def on_docket(model):
+        return select(model.id).where(model.company_id == company_id, model.docket_id == docket.id)
+
+    linked_document_ids = select(IpDocumentLink.document_id).where(
+        IpDocumentLink.company_id == company_id,
+        or_(
+            IpDocumentLink.docket_id == docket.id,
+            IpDocumentLink.application_id.in_(on_docket(TrademarkApplication)),
+            IpDocumentLink.proceeding_id.in_(on_docket(IpProceeding)),
+            IpDocumentLink.event_id.in_(on_docket(IpDocketEvent)),
+            IpDocumentLink.deadline_id.in_(on_docket(IpDeadline)),
+        ),
+    )
+    candidates = session.execute(
+        select(IpDocument, IpDocumentVersion, IpDocumentTaxonomyEntry)
+        .join(IpDocumentVersion, IpDocumentVersion.document_id == IpDocument.id)
+        .join(IpDocumentTaxonomyEntry, IpDocumentTaxonomyEntry.id == IpDocument.taxonomy_entry_id)
+        .where(
+            IpDocument.company_id == company_id,
+            IpDocumentVersion.company_id == company_id,
+            IpDocumentTaxonomyEntry.company_id == company_id,
+            IpDocument.id.in_(linked_document_ids),
+            IpDocument.is_privileged.is_(False),
+            IpDocumentVersion.state.in_(_SHAREABLE_VERSION_STATES),
+        )
+        .order_by(IpDocument.title, IpDocument.id, IpDocumentVersion.version.desc())
+        .limit(200)
+    ).all()
+    return PortalShareableDocumentListResponse(
+        grant_id=grant.id,
+        docket_title=docket.title,
+        document_categories=scope.document_categories,
+        documents=[
+            PortalShareableDocumentRecord(
+                document_id=document.id,
+                document_title=document.title,
+                version_number=version.version,
+                version_state=version.state,
+                display_name=version.display_name,
+                taxonomy_key=taxonomy.key,
+                taxonomy_label=taxonomy.label,
+            )
+            for document, version, taxonomy in candidates
+            if _document_publication_refusal(
+                session,
+                company_id=company_id,
+                document=document,
+                version=version,
+                taxonomy=taxonomy,
+                scope=scope,
+                docket_id=docket.id,
+            )
+            is None
+        ],
+    )
+
+
 def publish_document_to_portal(
     session: Session,
     *,
@@ -860,36 +997,17 @@ def publish_document_to_portal(
     if row is None:
         raise HTTPException(status_code=404, detail="Approved IP document not found.")
     document, version, taxonomy = row
-    if (
-        document.is_privileged
-        or document.confidentiality != "internal"
-        or document.id not in disclosable_ip_document_ids(
-            session, company_id=context.company.id, document_ids={document.id}
-        )
-        or version.state not in {"approved", "filed", "served", "accepted"}
-    ):
-        raise _conflict(
-            "portal_document_not_shareable",
-            "Only an approved, non-privileged internal document version may be shared.",
-        )
-    if taxonomy.key.lower() not in scope.document_categories:
-        raise _conflict(
-            "portal_document_category_not_granted",
-            "This document category is not enabled on the selected portal grant.",
-        )
-    links = list(
-        session.scalars(
-            select(IpDocumentLink).where(
-                IpDocumentLink.company_id == context.company.id,
-                IpDocumentLink.document_id == document.id,
-                or_(IpDocumentLink.version_id.is_(None), IpDocumentLink.version_id == version.id),
-            )
-        )
+    refusal = _document_publication_refusal(
+        session,
+        company_id=context.company.id,
+        document=document,
+        version=version,
+        taxonomy=taxonomy,
+        scope=scope,
+        docket_id=docket.id,
     )
-    if docket.id not in {
-        resolved for link in links if (resolved := _document_docket_id(session, link=link))
-    }:
-        raise HTTPException(status_code=404, detail="Approved IP document not found.")
+    if refusal is not None:
+        raise refusal
     actor_label = _actor_label(context)
     publication_status, published_at = _publication_status(payload.scheduled_for)
     publication = PortalPublication(

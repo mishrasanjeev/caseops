@@ -140,6 +140,25 @@ class PortalDocumentPublicationCreate(BaseModel):
     scheduled_for: datetime | None = None
 
 
+class PortalShareableDocumentRecord(BaseModel):
+    """One document version the publish endpoint would accept for a grant."""
+
+    document_id: str
+    document_title: str
+    version_number: int
+    version_state: str
+    display_name: str
+    taxonomy_key: str
+    taxonomy_label: str
+
+
+class PortalShareableDocumentListResponse(BaseModel):
+    grant_id: str
+    docket_title: str
+    document_categories: list[str]
+    documents: list[PortalShareableDocumentRecord]
+
+
 class PortalPublicationTargetRecord(BaseModel):
     ip_docket_record_id: str
     docket_title: str

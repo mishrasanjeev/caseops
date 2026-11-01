@@ -7716,6 +7716,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portal/grants/{grant_id}/shareable-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portal Grant Shareable Documents */
+        get: operations["get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portal/report-publications": {
         parameters: {
             query?: never;
@@ -44196,6 +44213,37 @@ export interface components {
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
         };
+        /** PortalShareableDocumentListResponse */
+        PortalShareableDocumentListResponse: {
+            /** Docket Title */
+            docket_title: string;
+            /** Document Categories */
+            document_categories: string[];
+            /** Documents */
+            documents: components["schemas"]["PortalShareableDocumentRecord"][];
+            /** Grant Id */
+            grant_id: string;
+        };
+        /**
+         * PortalShareableDocumentRecord
+         * @description One document version the publish endpoint would accept for a grant.
+         */
+        PortalShareableDocumentRecord: {
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Taxonomy Label */
+            taxonomy_label: string;
+            /** Version Number */
+            version_number: number;
+            /** Version State */
+            version_state: string;
+        };
         /** PortalUserRecord */
         PortalUserRecord: {
             /** Company Id */
@@ -64891,6 +64939,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalPublicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalShareableDocumentListResponse"];
                 };
             };
             /** @description Validation Error */

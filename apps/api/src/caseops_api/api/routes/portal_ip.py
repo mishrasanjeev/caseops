@@ -26,6 +26,7 @@ from caseops_api.schemas.portal_ip import (
     PortalPublicationListResponse,
     PortalPublicationRecord,
     PortalReportPublicationCreate,
+    PortalShareableDocumentListResponse,
 )
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.portal_ip import (
@@ -36,6 +37,7 @@ from caseops_api.services.portal_ip import (
     list_firm_portal_instructions,
     list_portal_ip_records,
     list_portal_publications,
+    list_shareable_portal_documents,
     portal_document_download,
     publish_document_to_portal,
     publish_report_to_portal,
@@ -154,6 +156,19 @@ async def post_ip_portal_report_publication(
     session: DbSession,
 ) -> PortalPublicationRecord:
     return publish_report_to_portal(session, context=context, payload=payload)
+
+
+@internal_router.get(
+    "/portal/grants/{grant_id}/shareable-documents",
+    response_model=PortalShareableDocumentListResponse,
+)
+async def get_ip_portal_grant_shareable_documents(
+    grant_id: str,
+    context: PortalGrantManager,
+    _approval: IpApprover,
+    session: DbSession,
+) -> PortalShareableDocumentListResponse:
+    return list_shareable_portal_documents(session, context=context, grant_id=grant_id)
 
 
 @internal_router.post(
