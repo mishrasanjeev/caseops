@@ -104,10 +104,87 @@ describe("IpOppositionSpecializedPaths", () => {
       "madrid_designation_link_recorded",
     ]);
     fireEvent.change(selector, { target: { value: "adjournment_recorded" } });
-    expect(screen.getByLabelText("Canonical hearing")).toHaveValue("hearing-48");
+    // B4-ADJ-22: the hearing is never chosen for the user.
+    const hearing = screen.getByLabelText<HTMLSelectElement>("Canonical hearing");
+    expect(hearing).toHaveValue("");
+    expect(hearing).toBeEnabled();
+    fireEvent.change(hearing, { target: { value: "hearing-48" } });
+    expect(hearing).toHaveValue("hearing-48");
     expect(screen.getByLabelText("Allowed-count candidate")).toBeInTheDocument();
     fireEvent.change(selector, { target: { value: "attendance_recorded" } });
     fireEvent.change(screen.getByLabelText("Appearance"), { target: { value: "nonappearance" } });
     expect(screen.getByLabelText("Consequence candidate")).toBeInTheDocument();
+  });
+
+  it("offers only hearings the record accepts and explains a dead end instead of an empty select", async () => {
+    renderPaths();
+    const selector = await screen.findByTestId("ip-opposition-specialized-action");
+    // Attendance needs a completed hearing; the only hearing is scheduled.
+    fireEvent.change(selector, { target: { value: "attendance_recorded" } });
+    const hearing = screen.getByLabelText<HTMLSelectElement>("Canonical hearing");
+    expect(hearing).toBeDisabled();
+    const option = Array.from(hearing.options).find((row) => row.value === "hearing-48");
+    expect(option?.disabled).toBe(true);
+    expect(option?.textContent).toContain("mark the hearing completed first");
+    expect(screen.getByText(/No hearing is completed yet. Mark the hearing completed on the Hearings and deadlines tab first./)).toBeVisible();
+  });
+
+  it("takes disposition triggers and affected classes from the validator, never typed ids", async () => {
+    fetchWorkflowMock.mockResolvedValue({
+      ...workflow,
+      disposition_trigger_events: [{ id: "order-48", event_kind: "opposition_shared_action", resulting_stage: null, source_reference: "registry-order:48", effective_at: "2026-10-21T07:00:00Z", payload_json: { action_kind: "order_recorded" } }],
+    });
+    renderPaths();
+    await fillCommon();
+    fireEvent.change(screen.getByTestId("ip-opposition-specialized-action"), { target: { value: "disposition_review_recorded" } });
+    const trigger = screen.getByLabelText<HTMLSelectElement>("Trigger event");
+    // The withdrawn stage event in workspace.stage_events is not the validator's list.
+    expect(Array.from(trigger.options).map((row) => row.value)).toEqual(["", "order-48"]);
+    expect(trigger).toHaveValue("");
+    expect(screen.queryByLabelText(/scope IDs/i)).toBeNull();
+    fireEvent.change(trigger, { target: { value: "order-48" } });
+    fireEvent.click(screen.getByLabelText("Class 9: Downloadable software"));
+    fireEvent.change(screen.getByLabelText("Recommended application disposition"), { target: { value: "Review class 9 only." } });
+    fireEvent.change(screen.getByLabelText("Review reference"), { target: { value: "counsel-review:48" } });
+    fireEvent.click(screen.getByTestId("ip-opposition-specialized-submit"));
+    await waitFor(() => expect(recordActionMock).toHaveBeenCalledOnce());
+    expect(recordActionMock).toHaveBeenCalledWith(expect.objectContaining({
+      dispositionReview: expect.objectContaining({ trigger_event_id: "order-48", affected_application_scope_ids: ["scope-9"] }),
+    }));
+  });
+
+  it("disables the trigger select with the path to an outcome when none exists", async () => {
+    renderPaths();
+    fireEvent.change(await screen.findByTestId("ip-opposition-specialized-action"), { target: { value: "disposition_review_recorded" } });
+    expect(screen.getByLabelText("Trigger event")).toBeDisabled();
+    expect(screen.getByText(/This opposition has no order or outcome yet/)).toBeVisible();
+  });
+
+  it("offers related applications from this record only, and says so when there are none", async () => {
+    renderPaths();
+    const related = await screen.findByLabelText<HTMLSelectElement>("Related application");
+    expect(related).toBeDisabled();
+    expect(screen.getByText(/No other application is recorded on this IP record/)).toBeVisible();
+    expect(screen.queryByLabelText(/application ID/i)).toBeNull();
+  });
+
+  it("lists this record's other applications by number", async () => {
+    fetchWorkflowMock.mockResolvedValue({
+      ...workflow,
+      related_applications: [{ id: "application-div", application_number: "TM-DIV-48", office: "IP India", filing_phase: "filed" }],
+    });
+    renderPaths();
+    const related = await screen.findByLabelText<HTMLSelectElement>("Related application");
+    expect(related).toBeEnabled();
+    expect(Array.from(related.options).map((row) => row.textContent)).toEqual([
+      "No related application",
+      "Application TM-DIV-48 · IP India · Filed",
+    ]);
+  });
+
+  it("starts the applicable rules from the opposition profile", async () => {
+    render(withClient(<IpOppositionSpecializedPaths docket={docket as never} workspace={{ ...workspace, profile: { applicable_rule_version: "Trade Marks Rules, 2017" } } as never} canReview currentMembershipId="membership-48" />));
+    fireEvent.change(await screen.findByTestId("ip-opposition-specialized-action"), { target: { value: "hearing_notice_recorded" } });
+    expect(screen.getByLabelText("Applicable rules")).toHaveValue("Trade Marks Rules, 2017");
   });
 });
