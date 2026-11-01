@@ -6917,6 +6917,28 @@ export async function downloadMatterInvoicePdf(input: {
   );
 }
 
+/** Issues a draft matter invoice; anything but a draft is refused (409). */
+export async function issueMatterInvoiceDraft(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  return apiRequest<MatterInvoiceRecord>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/issue`,
+    { method: "POST" },
+  );
+}
+
+/** Voids a draft matter invoice; issued invoices are refused (409, credit note). */
+export async function voidMatterInvoiceDraft(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  return apiRequest<MatterInvoiceRecord>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/void`,
+    { method: "POST" },
+  );
+}
+
 export type CauseListPreviewInput = {
   date?: string | null;
   date_from?: string | null;

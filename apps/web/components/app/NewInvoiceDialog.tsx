@@ -94,7 +94,7 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
   });
   const manualItems = useFieldArray({ control: form.control, name: "manual_items" });
   // Ram-BUG-008 pre-flight: watch the two billable sources so we
-  // can disable the Issue button until at least one is present.
+  // can disable the create button until at least one is present.
   const includeTimeEntries = form.watch("include_uninvoiced_time_entries");
   const manualItemsValues = form.watch("manual_items") ?? [];
 
@@ -124,7 +124,9 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
       await queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "workspace"],
       });
-      toast.success("Invoice issued");
+      // BUG-016: the dialog creates a draft (createMatterInvoice sends status
+      // "draft"); the copy must not claim the invoice was issued.
+      toast.success("Draft invoice created");
       form.reset({
         invoice_number: "",
         issued_on: todayIso(),
@@ -158,10 +160,11 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Issue a new invoice</DialogTitle>
+          <DialogTitle>Create a draft invoice</DialogTitle>
           <DialogDescription>
             Uninvoiced billable time on this matter rolls in by default. Add
-            manual items for fixed fees or disbursements.
+            manual items for fixed fees or disbursements. Review the draft PDF,
+            then issue it from the invoice list.
           </DialogDescription>
         </DialogHeader>
 
@@ -187,7 +190,7 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
               id="issued-on"
-              label="Issued on"
+              label="Invoice date"
               error={form.formState.errors.issued_on?.message}
             >
               <Input
@@ -301,8 +304,8 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
               role="note"
             >
               Add at least one manual line item, or enable
-              <em> Include uninvoiced time entries</em>, before issuing
-              this invoice.
+              <em> Include uninvoiced time entries</em>, before creating
+              this draft invoice.
             </p>
           ) : null}
           <DialogFooter>
@@ -324,10 +327,10 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
             >
               {mutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Issuing…
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Creating draft…
                 </>
               ) : (
-                "Issue invoice"
+                "Create draft invoice"
               )}
             </Button>
           </DialogFooter>

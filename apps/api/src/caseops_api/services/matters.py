@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    InvoiceStatus,
     IpDocketRecord,
     Matter,
     MatterActivity,
@@ -57,7 +58,6 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
     MatterTimeEntry,
-    MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     Team,
@@ -217,6 +217,8 @@ MATTER_MUTATION_CAPABILITIES: dict[str, str] = {
     "request_matter_attachment_processing": "documents:manage",
     "create_time_entry": "time_entries:write",
     "create_matter_invoice": "invoices:issue",
+    "issue_matter_invoice_draft": "invoices:issue",
+    "void_matter_invoice_draft": "invoices:void",
 }
 NOTICE_TEXT_FIELDS = {
     "notice_source",
@@ -1122,13 +1124,6 @@ def _invoice_record(invoice: MatterInvoice) -> InvoiceRecord:
             )
             for attempt in invoice.payment_attempts
         ],
-    )
-
-
-def _raise_billing_permission_error() -> None:
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only owners and admins can create invoices.",
     )
 
 
@@ -6736,8 +6731,16 @@ def get_matter_invoice_pdf(
     matter_id: str,
     invoice_id: str,
 ) -> tuple[bytes, str, str]:
-    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
-        _raise_billing_permission_error()
+    from caseops_api.services.capabilities import membership_has_capability
+
+    # BUG-016: the billing page offers the PDF to every holder of
+    # invoices:issue (owner, admin and partner by default), the same predicate
+    # as the route dependency; an owner/admin-only check here refused partners.
+    if not membership_has_capability(session, context.membership, "invoices:issue"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Downloading an invoice PDF needs permission to create invoices.",
+        )
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
     invoice = session.scalar(
         select(MatterInvoice)
@@ -6754,3 +6757,167 @@ def get_matter_invoice_pdf(
     if invoice is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
     return render_invoice_pdf(session, context=context, invoice=invoice)
+
+
+def _locked_matter_invoice(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    invoice_id: str,
+) -> MatterInvoice:
+    invoice = session.scalar(
+        select(MatterInvoice)
+        .options(selectinload(MatterInvoice.line_items))
+        .where(
+            MatterInvoice.id == invoice_id,
+            MatterInvoice.matter_id == matter.id,
+            MatterInvoice.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
+    return invoice
+
+
+def _refreshed_invoice_record(session: Session, invoice_id: str) -> InvoiceRecord:
+    refreshed = session.scalar(
+        select(MatterInvoice)
+        .options(
+            joinedload(MatterInvoice.issued_by_membership).joinedload(CompanyMembership.user),
+            selectinload(MatterInvoice.line_items),
+        )
+        .where(MatterInvoice.id == invoice_id)
+    )
+    assert refreshed is not None
+    return _invoice_record(refreshed)
+
+
+def issue_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Issue a draft matter invoice.
+
+    BUG-016: the New invoice dialog creates drafts and a draft PDF is not
+    payable, but the only draft-to-issued path was a payment link, which a firm
+    without payment collection cannot create. Issuing is final here: the
+    invoice can no longer be voided in CaseOps and its PDF prints as the
+    firm's invoice.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["issue_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    _assert_matter_not_disposed(matter, operation="issue an invoice")
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a draft invoice can be issued.",
+        )
+    invoice.status = InvoiceStatus.ISSUED
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_issued",
+        title="Invoice issued",
+        detail=(
+            f"{invoice.invoice_number} issued with total {invoice.total_amount_minor} minor units."
+        ),
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.issued",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "total_amount_minor": invoice.total_amount_minor,
+            "balance_due_minor": invoice.balance_due_minor,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)
+
+
+def void_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Void a draft matter invoice and release its time entries.
+
+    BUG-016: a draft created by mistake had no way out of the matter's billing
+    list. Only a draft with no recorded payment can be voided here; an issued
+    invoice is a tax document and needs a credit note instead. A void invoice
+    has nothing to collect, so its balance is zeroed and every balance sum
+    (billing KPIs, matter brief, outside-counsel totals) drops it.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["void_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT or invoice.amount_received_minor > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only a draft invoice with no recorded payment can be voided. "
+                "An issued invoice needs a credit note."
+            ),
+        )
+    released = 0
+    for line in invoice.line_items:
+        if line.time_entry_id is not None:
+            line.time_entry_id = None
+            released += 1
+    previous_balance_minor = invoice.balance_due_minor
+    invoice.status = InvoiceStatus.VOID
+    invoice.balance_due_minor = 0
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_voided",
+        title="Draft invoice voided",
+        detail=f"{invoice.invoice_number} voided; {released} time entries released.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.voided",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "previous_balance_due_minor": previous_balance_minor,
+            "released_time_entries": released,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)
