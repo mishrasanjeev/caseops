@@ -357,6 +357,34 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     });
   });
 
+  it("anchors a refused Matter grant to the Matter field when the Matter is walled after it was chosen (B4-ADJ-01)", async () => {
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/admin/portal/invitations")) {
+        return new Response(JSON.stringify({ type: "https://httpstatuses.com/404", title: "Not Found", status: 404, detail: "Matter not found." }), {
+          status: 404,
+          headers: { "content-type": "application/problem+json" },
+        });
+      }
+      return base(input, init);
+    });
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+
+    await user.type(screen.getByTestId("portal-invite-name"), "Client One");
+    await user.type(screen.getByTestId("portal-invite-email"), "client@example.com");
+    await waitFor(() => expect(screen.getByLabelText("Matter grant")).not.toBeDisabled());
+    await user.selectOptions(screen.getByLabelText("Matter grant"), "matter-1");
+    await user.click(screen.getByTestId("portal-invite-submit"));
+
+    const matter = screen.getByLabelText("Matter grant");
+    await waitFor(() => expect(matter).toHaveAttribute("aria-invalid", "true"));
+    expect(matter).toHaveAccessibleDescription(/This Matter is no longer available to you/);
+    // Choosing again clears the anchored error.
+    await user.selectOptions(matter, "matter-1");
+    await waitFor(() => expect(matter).not.toHaveAttribute("aria-invalid"));
+  });
+
   it("never sends a portal invite when Enter is pressed in the Matter search (BUG-007 review)", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AdminPage />);
