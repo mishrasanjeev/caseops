@@ -102,7 +102,7 @@ export function IpOppositionOpponentWorkflow({
       ? "opponent_evidence_due" as const
       : "notice_filing_due" as const;
   const governedScope = { proceedingKind: "opposition", role: "opponent", stage: workflowStage };
-  const governed = resolveGovernedSelection(deadlineWorkspace.data, governedScope, ruleVersionId, calendarVersionId);
+  const governed = resolveGovernedSelection(deadlineWorkspace.data, governedScope, ruleVersionId, calendarVersionId, proceeding.jurisdiction);
   const selectedRule = governed.rule?.id ?? "";
   const selectedCalendar = governed.calendar?.id ?? "";
   const triggerEvent = workflowStage === "notice_filing_due"

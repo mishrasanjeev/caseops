@@ -832,10 +832,15 @@ describe("IpDocketPage", () => {
     const rules = within(workspace).getByLabelText("Active rule version");
     const calendars = within(workspace).getByLabelText("Active working calendar");
     await waitFor(() => expect(rules).toBeEnabled());
-    expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+    // B4-ADJ-08: with several eligible versions nothing is chosen for the lawyer.
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    expect(within(rules).getByRole("option", { name: "Choose a rule version" })).toBeDisabled();
+    expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value).filter(Boolean))
       .toEqual(["rule-1", "rule-2"]);
-    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value).filter(Boolean))
       .toEqual(["calendar-1", "calendar-2"]);
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
     await userEvent.selectOptions(rules, "rule-2");
     await userEvent.selectOptions(calendars, "calendar-2");
     expect(rules).toHaveValue("rule-2");
@@ -913,6 +918,10 @@ describe("IpDocketPage", () => {
     };
     const ruleCaption = `${rule.key} · version 7 · IN · Intellectual Property Office · active`;
     const calendarCaption = `${calendar.name} · version 8 · IN · Calendar Office · Asia/Kolkata · active`;
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    await userEvent.selectOptions(rules, "rule-one");
+    await userEvent.selectOptions(calendars, "calendar-one");
     assertDetail(rules, "rule-one", ruleCaption);
     assertDetail(calendars, "calendar-one", calendarCaption);
     await userEvent.selectOptions(rules, "rule-two");
@@ -926,6 +935,38 @@ describe("IpDocketPage", () => {
     await waitFor(() => expect(rules).toHaveValue("rule-one"));
     assertDetail(rules, "rule-one", ruleCaption);
     assertDetail(calendars, "calendar-one", calendarCaption);
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
+  it("B4-ADJ-08 offers only working calendars of the chosen rule's jurisdiction", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    const rule = { id: "rule-in", rule_set_id: "set-in", key: "in-tm-exam", version: 1, status: "active",
+      rule_kind: "deadline", jurisdiction: "IN", office: "IP India" };
+    const india = { id: "calendar-in", name: "IP India 2026", version: 1, status: "active", jurisdiction: "IN",
+      office: "IP India", timezone: "Asia/Kolkata" };
+    const uk = { ...india, id: "calendar-gb", name: "UK IPO 2026", jurisdiction: "GB", office: "UK IPO", timezone: "Europe/London" };
+    const data = {
+      docket_id: "ip-1", eligible_rule_version_ids: ["rule-in"], rules: [rule], calendars: [uk, india],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
+    };
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    const rules = within(workspace).getByLabelText("Active rule version");
+    const calendars = within(workspace).getByLabelText("Active working calendar");
+    await waitFor(() => expect(rules).toHaveValue("rule-in"));
+    // The GB calendar would be refused by the API for an IN rule, so it is not offered.
+    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value)).toEqual(["calendar-in"]);
+    expect(calendars).toHaveValue("calendar-in");
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], { ...data, calendars: [uk] }));
+    await waitFor(() => expect(calendars).toBeDisabled());
+    expect(within(calendars).getByRole("option", { name: "No active IN working calendar" })).toBeInTheDocument();
+    expect(document.getElementById(calendars.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+      "No IN working calendar is active; the selected rule counts its deadline only on a calendar of its jurisdiction.",
+    );
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
   });
 
