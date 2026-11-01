@@ -11,6 +11,10 @@ from caseops_api.db.models import (
     IpTrademarkParticularVersion,
 )
 from caseops_api.services.ip_coverage_read import _TERMINAL_DOCKET_STATUSES
+from caseops_api.services.ip_import_source_status import (
+    SOURCE_STATUS_ALIASES,
+    source_status_key,
+)
 from caseops_api.services.ip_portfolio_source import _imported_source_row
 
 
@@ -257,8 +261,6 @@ def _declared_status(version, proven):
     is its recognised key, or None when the wording is not recognised. Imports
     made before the mapping kept only the wording, so the key is derived from it.
     """
-
-    from caseops_api.services.ip_imports import SOURCE_STATUS_ALIASES, source_status_key
 
     imported = (version.representation_json or {}).get("portfolio_import")
     if not proven or not isinstance(imported, dict):
