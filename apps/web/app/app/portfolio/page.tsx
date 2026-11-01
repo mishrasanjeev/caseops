@@ -104,6 +104,7 @@ export default function PortfolioPage() {
               title="By practice area"
               description="Where your fee-earners are actually working."
               entries={health.practice_area_counts}
+              emptyLabel="Unspecified"
               renderLabel={(area) => (
                 <span className="text-sm font-medium text-[var(--color-ink)]">
                   {area}
@@ -171,17 +172,35 @@ function KpiCard({
   );
 }
 
+/**
+ * Merge the server's "no value" buckets (NULL and blank) into one, keyed apart
+ * from every real value, so a missing value never shares a row or React key
+ * with a value.
+ */
+function withOneEmptyBucket(entries: Bucket[]): Bucket[] {
+  const merged = new Map<string | null, number>();
+  for (const { key, count } of entries) {
+    const normalised = key && key.trim() ? key : null;
+    merged.set(normalised, (merged.get(normalised) ?? 0) + count);
+  }
+  return Array.from(merged, ([key, count]) => ({ key, count }));
+}
+
 function BucketCard({
   title,
   description,
-  entries,
+  entries: serverEntries,
+  emptyLabel = "—",
   renderLabel,
 }: {
   title: string;
   description: string;
   entries: Bucket[];
+  /** Label for Matters with no value for this field. */
+  emptyLabel?: string;
   renderLabel: (key: string) => React.ReactNode;
 }) {
+  const entries = withOneEmptyBucket(serverEntries);
   const total = entries.reduce((acc, bucket) => acc + bucket.count, 0);
   return (
     <Card>
@@ -194,15 +213,20 @@ function BucketCard({
       <CardContent>
         <ul className="flex flex-col gap-2">
           {entries.map(({ key: raw, count }) => {
-            const key = raw || "—";
             const pct = total > 0 ? (count / total) * 100 : 0;
             return (
               <li
-                key={key}
+                key={raw === null ? "empty-bucket" : `value:${raw}`}
                 className="rounded-md border border-[var(--color-line)] bg-white p-2.5"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div>{renderLabel(key)}</div>
+                  <div>
+                    {raw === null ? (
+                      <span className="text-sm font-medium text-[var(--color-mute)]">{emptyLabel}</span>
+                    ) : (
+                      renderLabel(raw)
+                    )}
+                  </div>
                   <div className="text-xs text-[var(--color-mute)]">
                     {count.toLocaleString()} · {pct.toFixed(0)}%
                   </div>

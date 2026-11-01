@@ -71,6 +71,28 @@ describe("PortfolioPage", () => {
     expect(listMattersMock).not.toHaveBeenCalled();
   });
 
+  it("labels Matters with no practice area as Unspecified in one row", async () => {
+    fetchMatterPortfolioHealthMock.mockResolvedValue({
+      ...HEALTH,
+      practice_area_counts: [
+        { key: "Commercial", count: 1224 },
+        { key: null, count: 3 },
+        { key: "", count: 2 },
+      ],
+      forum_level_counts: [{ key: "high_court", count: 1228 }, { key: null, count: 1 }],
+    });
+    render(withClient(<PortfolioPage />));
+    const area = (await screen.findByRole("heading", { name: "By practice area" })).closest("div[class]")!
+      .parentElement!;
+    const rows = Array.from(area.querySelectorAll("li")).map((row) => row.textContent);
+    expect(rows).toEqual(["Commercial1,224 · 100%", "Unspecified5 · 0%"]);
+    const forum = screen.getByRole("heading", { name: "By forum" }).closest("div[class]")!.parentElement!;
+    expect(Array.from(forum.querySelectorAll("li")).map((row) => row.textContent)).toEqual([
+      "high court1,228 · 100%",
+      "—1 · 0%",
+    ]);
+  });
+
   it("says when nothing is visible and retries a failed load", async () => {
     fetchMatterPortfolioHealthMock
       .mockRejectedValueOnce(new Error("network"))
