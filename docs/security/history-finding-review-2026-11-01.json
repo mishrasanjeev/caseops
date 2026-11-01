@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-11-01",
+  "source_run": 41301909540,
+  "reported_instances": 27,
+  "scope": "Fourteen exact deterministic test-label origins from the scheduled all-refs scan; no current-path, value-pattern, rule-wide or future-origin exemption.",
+  "findings": [
+    {
+      "fingerprint": "09323eb1df3fd089469ffd33e55e8e689ea4e94c:apps/api/tests/ip_rule_governance_support.py:generic-api-key:150",
+      "blob_sha256": "1d2f57ca78bc344dd6959d9f25d9843fa4b64e0b58a101e9249dc5e110ecf8fd",
+      "span_sha256": "2abd895576a55d95842eb12fd59f3a51b7245c51a21c651c423b46e6d602016a",
+      "kind": "calendar_fixture_key"
+    },
+    {
+      "fingerprint": "c874ae9838d2960bc7504e40ecde0343e6abe452:apps/api/tests/test_ip_deadline_jurisdiction_20261101.py:generic-api-key:210",
+      "blob_sha256": "642f09398890e768aa7de0491f60ae35052265dac5ab19975b1376f1ee247b1e",
+      "span_sha256": "4ce22fbeefae85d68e1db5c40eb6793c2825e3f28f76d0ae989e46c31aa98c35",
+      "kind": "matter_fixture_code"
+    },
+    {
+      "fingerprint": "448140dbee7b177bf4d7bd3a12f1ad2d910afbb7:tests/e2e/ram-2026-11-01-adj-access.spec.ts:generic-api-key:405",
+      "blob_sha256": "6bdf544045b0a7abf10df2ec8c680044b0046ca128ee3ff81d3aca36f984acc9",
+      "span_sha256": "e9bdfce07ee4972b32c188fdf31bf5d4d1c513803579ce4be0aef7654a800f14",
+      "kind": "calendar_fixture_call"
+    },
+    {
+      "fingerprint": "448140dbee7b177bf4d7bd3a12f1ad2d910afbb7:tests/e2e/ram-2026-11-01-adj-access.spec.ts:generic-api-key:489",
+      "blob_sha256": "6bdf544045b0a7abf10df2ec8c680044b0046ca128ee3ff81d3aca36f984acc9",
+      "span_sha256": "e9bdfce07ee4972b32c188fdf31bf5d4d1c513803579ce4be0aef7654a800f14",
+      "kind": "calendar_fixture_call"
+    },
+    {
+      "fingerprint": "b3243adb70f390ba37772c1f879b6e8541630b86:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1202",
+      "blob_sha256": "00635520771ccbb9229aced8e315b0a7e6a467d792bb0fe14655309533cc6bbb",
+      "span_sha256": "0529d97c57df28866739f0e6e71ffccfe897b878ba22972883324b33c3a12efa",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "b3243adb70f390ba37772c1f879b6e8541630b86:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1225",
+      "blob_sha256": "00635520771ccbb9229aced8e315b0a7e6a467d792bb0fe14655309533cc6bbb",
+      "span_sha256": "d468698bda947700daf4bd770094e2db9f40ecabc2fcb704674e07323711a33c",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1451",
+      "blob_sha256": "b568a4abb5a12b05d3e1aa23617789180acf7b12991c5ddd0429146678b9182a",
+      "span_sha256": "c92086b7bc0805109122c9a149da73ca9f733ccf4334668f6edc40cab15a9fb1",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1541",
+      "blob_sha256": "b568a4abb5a12b05d3e1aa23617789180acf7b12991c5ddd0429146678b9182a",
+      "span_sha256": "bc59f79d5e67756fa6a3f5939844b553f08ad5bbf3c8b251ebdd3f574b5fd0e9",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1551",
+      "blob_sha256": "b568a4abb5a12b05d3e1aa23617789180acf7b12991c5ddd0429146678b9182a",
+      "span_sha256": "b3b64cb7439da23c86c50ace0eee4149d6199c4f8838c19af81487d374ed0978",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1630",
+      "blob_sha256": "b568a4abb5a12b05d3e1aa23617789180acf7b12991c5ddd0429146678b9182a",
+      "span_sha256": "2a132fd54a21f8c62fd47430dc1c40598a3b4c10a05af868c73a7b5823ea1e3d",
+      "kind": "idempotency_fixture_key"
+    },
+    {
+      "fingerprint": "8cb55e637c850d8005a9606524c583e48b74d13d:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:392",
+      "blob_sha256": "05f3f993af46c2d6daf3d8fdf3dafb14732353a0147e6accbcfd4e66da384a4a",
+      "span_sha256": "737e88d71a31142e3cedd69f14b435796725de45cd182c04d9a9afbd0eab96a2",
+      "kind": "matter_fixture_code"
+    },
+    {
+      "fingerprint": "b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:539",
+      "blob_sha256": "086594c72f11884142456c4dc8cda4dcca0698ade3924f6a3ed29a0d2506cbf2",
+      "span_sha256": "0596541c04c2fca9ca41d502e9abe028a467d65ec610d18179d677021f4caf36",
+      "kind": "matter_fixture_code"
+    },
+    {
+      "fingerprint": "b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:646",
+      "blob_sha256": "086594c72f11884142456c4dc8cda4dcca0698ade3924f6a3ed29a0d2506cbf2",
+      "span_sha256": "576d3a2dda0105e9c0a6db0406a4db30423f33ee0cb4ce96f29fbda8469a8488",
+      "kind": "matter_fixture_code"
+    },
+    {
+      "fingerprint": "440278e2b86d5b994da960e44c30f5b35da5fcb7:tests/e2e/support/ram-bugs4.ts:generic-api-key:142",
+      "blob_sha256": "41ee8733422e3bb93fb1d148285a2f17da17ddc6d7fa5da3c101f8c82b6e4010",
+      "span_sha256": "82e21af32983ef5f22b9b8ea53b343977d4f9359b17601171fb9ba4a478dc2ac",
+      "kind": "calendar_policy_fixture_key"
+    }
+  ]
+}
