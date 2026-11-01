@@ -12954,6 +12954,39 @@ export async function acknowledgeIpRenewalInstruction(input: {
   );
 }
 
+/** Evidence the renewal transition validator accepts for this term, by its own rules. */
+export type IpRenewalReferenceEvent = {
+  id: string;
+  event_kind: string;
+  effective_at: string;
+  source_reference: string | null;
+  reason: string | null;
+};
+
+export type IpRenewalTransitionReferences = {
+  term_id: string;
+  filing_events: IpRenewalReferenceEvent[];
+  acceptance_events: IpRenewalReferenceEvent[];
+  certificate_documents: Array<{ id: string; title: string; current_version: number }>;
+  /** A next-term deadline is accepted only when trigger_event_id is the acceptance event used. */
+  next_term_deadlines: Array<{
+    id: string;
+    title: string;
+    result_on: string | null;
+    state: string;
+    trigger_event_id: string | null;
+  }>;
+};
+
+export async function fetchIpRenewalTransitionReferences(input: {
+  docketId: string;
+  termId: string;
+}): Promise<IpRenewalTransitionReferences> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.termId)}/transition-references`,
+  );
+}
+
 export async function transitionIpRenewalTerm(input: {
   docketId: string;
   term: IpRenewalTerm;

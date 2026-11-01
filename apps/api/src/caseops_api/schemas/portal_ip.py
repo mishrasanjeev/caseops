@@ -45,6 +45,18 @@ class PortalIpScope(BaseModel):
         return list(dict.fromkeys(cleaned))
 
 
+# Why the firm cannot publish to a grant right now. "docket_closed" covers a
+# closed, archived or non-disclosable docket; "docket_not_visible" is an
+# ethical wall or restricted docket the current user cannot open.
+PortalGrantPublicationBlock = Literal[
+    "revoked",
+    "expired",
+    "client_inactive",
+    "docket_closed",
+    "docket_not_visible",
+]
+
+
 class PortalIpGrantRecord(BaseModel):
     id: str
     portal_user_id: str
@@ -58,6 +70,8 @@ class PortalIpGrantRecord(BaseModel):
     revoked_at: datetime | None
     row_version: int
     active: bool
+    publishable: bool = False
+    publication_blocked_reason: PortalGrantPublicationBlock | None = None
 
 
 class PortalIpGrantListResponse(BaseModel):
@@ -138,6 +152,25 @@ class PortalDocumentPublicationCreate(BaseModel):
     version_number: int = Field(gt=0)
     title: str = Field(min_length=2, max_length=255)
     scheduled_for: datetime | None = None
+
+
+class PortalShareableDocumentRecord(BaseModel):
+    """One document version the publish endpoint would accept for a grant."""
+
+    document_id: str
+    document_title: str
+    version_number: int
+    version_state: str
+    display_name: str
+    taxonomy_key: str
+    taxonomy_label: str
+
+
+class PortalShareableDocumentListResponse(BaseModel):
+    grant_id: str
+    docket_title: str
+    document_categories: list[str]
+    documents: list[PortalShareableDocumentRecord]
 
 
 class PortalPublicationTargetRecord(BaseModel):

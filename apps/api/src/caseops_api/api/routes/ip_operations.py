@@ -262,6 +262,7 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalTermListResponse,
     IpRenewalTermRecord,
     IpRenewalTermTransitionRequest,
+    IpRenewalTransitionReferences,
 )
 from caseops_api.schemas.ip_reports import (
     IpReportFoundationContract,
@@ -485,6 +486,7 @@ from caseops_api.services.ip_renewals import (
     create_renewal_term,
     list_renewal_portfolio,
     list_renewal_terms,
+    list_renewal_transition_references,
     renewal_foundation_contract,
     schedule_renewal_instruction_reminders,
     transition_renewal_term,
@@ -931,6 +933,24 @@ async def post_ip_client_instruction_acknowledgement(
         term_id=term_id,
         instruction_id=instruction_id,
         payload=payload,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/transition-references",
+    response_model=IpRenewalTransitionReferences,
+)
+async def get_ip_renewal_transition_references(
+    docket_id: str,
+    term_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTransitionReferences:
+    return list_renewal_transition_references(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
     )
 
 

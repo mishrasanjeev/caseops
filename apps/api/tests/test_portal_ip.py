@@ -26,6 +26,7 @@ TESTED_PORTAL_IP_ROUTE_TEMPLATES = (
     "/api/admin/portal/ip-grants/{grant_id}/revoke",
     "/api/ip/portal/report-publications",
     "/api/ip/portal/document-publications",
+    "/api/ip/portal/grants/{grant_id}/shareable-documents",
     "/api/ip/portal/client-instructions",
     "/api/ip/portal/client-instructions/{instruction_id}/acknowledge",
     "/api/portal/ip-records",

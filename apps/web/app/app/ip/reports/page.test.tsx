@@ -112,7 +112,7 @@ describe("IpReportsPage", () => {
   it("publishes only an internal reviewed snapshot to selected active grants", async () => {
     const user = userEvent.setup();
     previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
-    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
+    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true, publishable: true, publication_blocked_reason: null }] });
     render(withClient(<IpReportsPage />));
     await screen.findByText("Generate", { selector: "button" });
     expect(screen.getByRole("button", { name: "Generate" })).toBeVisible();
@@ -133,7 +133,7 @@ describe("IpReportsPage", () => {
   it("retains the reviewed snapshot and client inputs when publication is rejected", async () => {
     const user = userEvent.setup();
     previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
-    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
+    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true, publishable: true, publication_blocked_reason: null }] });
     publishMock.mockRejectedValue(new Error("The reviewed source changed; generate a new snapshot."));
     render(withClient(<IpReportsPage />));
     await screen.findByText("Generate", { selector: "button" });
@@ -150,6 +150,32 @@ describe("IpReportsPage", () => {
     expect(screen.getByTestId("ip-report-result")).toHaveTextContent("OPP / 88 / 2026");
     expect(publishMock).toHaveBeenCalledTimes(1);
     expect(successToastMock).not.toHaveBeenCalled();
+  });
+
+  it("BUG-015 offers only clients whose grant can receive the report and explains a load failure", async () => {
+    const user = userEvent.setup();
+    previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
+    grantsMock.mockResolvedValue({ grants: [
+      { id: "grant-open", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true, publishable: true, publication_blocked_reason: null },
+      { id: "grant-closed", portal_user_id: "portal-user-2", portal_user_name: "Ravi Iyer", portal_user_email: "ravi@example.com", docket_title: "CLOSED MARK", active: true, publishable: false, publication_blocked_reason: "docket_closed" },
+    ] });
+    const { unmount } = render(withClient(<IpReportsPage />));
+    await user.click(await screen.findByText("Generate", { selector: "button" }));
+    const client = await screen.findByLabelText<HTMLSelectElement>("Client");
+    expect(Array.from(client.options, (option) => option.value)).toEqual(["", "portal-user-1"]);
+    unmount();
+
+    grantsMock.mockRejectedValue(new Error("Grant list unavailable."));
+    render(withClient(<IpReportsPage />));
+    await user.click(await screen.findByText("Generate", { selector: "button" }));
+    const failed = await screen.findByLabelText<HTMLSelectElement>("Client");
+    await waitFor(() => expect(failed.options[0]).toHaveTextContent("Clients could not be loaded"));
+    expect(failed).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Grant list unavailable.");
+    expect(screen.queryByText(/Reports publish only to clients/)).not.toBeInTheDocument();
+    grantsMock.mockResolvedValue({ grants: [] });
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(failed.options[0]).toHaveTextContent("No client has portal access"));
   });
 
   it("generates a filtered, classified report with identifier and freshness evidence", async () => {

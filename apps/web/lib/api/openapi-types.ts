@@ -6497,6 +6497,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition-references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Transition References */
+        get: operations["get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/title-interests": {
         parameters: {
             query?: never;
@@ -7748,6 +7765,23 @@ export interface paths {
         put?: never;
         /** Post Ip Portal Document Publication */
         post: operations["post_ip_portal_document_publication_api_ip_portal_document_publications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portal/grants/{grant_id}/shareable-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portal Grant Shareable Documents */
+        get: operations["get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -33620,6 +33654,44 @@ export interface components {
             /** Items */
             items: components["schemas"]["IpRenewalWorkflowRecord"][];
         };
+        /** IpRenewalReferenceDeadline */
+        IpRenewalReferenceDeadline: {
+            /** Id */
+            id: string;
+            /** Result On */
+            result_on: string | null;
+            /** State */
+            state: string;
+            /** Title */
+            title: string;
+            /** Trigger Event Id */
+            trigger_event_id: string | null;
+        };
+        /** IpRenewalReferenceDocument */
+        IpRenewalReferenceDocument: {
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** IpRenewalReferenceEvent */
+        IpRenewalReferenceEvent: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Event Kind */
+            event_kind: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+        };
         /** IpRenewalReminderIntentRecord */
         IpRenewalReminderIntentRecord: {
             /** Delivered At */
@@ -33877,6 +33949,26 @@ export interface components {
             status: "scheduled" | "active" | "sent" | "failed" | "missing_date" | "overdue" | "cancelled";
             /** Timezone */
             timezone: string;
+        };
+        /**
+         * IpRenewalTransitionReferences
+         * @description Records the transition validator accepts as this term's references.
+         *
+         *     Each list is built from the same predicate the transition endpoint
+         *     enforces. A next-term deadline is accepted only when its
+         *     trigger_event_id equals the acceptance event the transition uses.
+         */
+        IpRenewalTransitionReferences: {
+            /** Acceptance Events */
+            acceptance_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Certificate Documents */
+            certificate_documents: components["schemas"]["IpRenewalReferenceDocument"][];
+            /** Filing Events */
+            filing_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Next Term Deadlines */
+            next_term_deadlines: components["schemas"]["IpRenewalReferenceDeadline"][];
+            /** Term Id */
+            term_id: string;
         };
         /** IpRenewalWorkflowRecord */
         IpRenewalWorkflowRecord: {
@@ -44230,6 +44322,13 @@ export interface components {
             portal_user_id: string;
             /** Portal User Name */
             portal_user_name: string;
+            /** Publication Blocked Reason */
+            publication_blocked_reason?: ("revoked" | "expired" | "client_inactive" | "docket_closed" | "docket_not_visible") | null;
+            /**
+             * Publishable
+             * @default false
+             */
+            publishable: boolean;
             /** Revoked At */
             revoked_at: string | null;
             /** Row Version */
@@ -44628,6 +44727,37 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
+        };
+        /** PortalShareableDocumentListResponse */
+        PortalShareableDocumentListResponse: {
+            /** Docket Title */
+            docket_title: string;
+            /** Document Categories */
+            document_categories: string[];
+            /** Documents */
+            documents: components["schemas"]["PortalShareableDocumentRecord"][];
+            /** Grant Id */
+            grant_id: string;
+        };
+        /**
+         * PortalShareableDocumentRecord
+         * @description One document version the publish endpoint would accept for a grant.
+         */
+        PortalShareableDocumentRecord: {
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Taxonomy Label */
+            taxonomy_label: string;
+            /** Version Number */
+            version_number: number;
+            /** Version State */
+            version_state: string;
         };
         /** PortalUserRecord */
         PortalUserRecord: {
@@ -62585,6 +62715,38 @@ export interface operations {
             };
         };
     };
+    get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTransitionReferences"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_title_interest_api_ip_dockets__docket_id__title_interests_post: {
         parameters: {
             query?: never;
@@ -65399,6 +65561,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalPublicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalShareableDocumentListResponse"];
                 };
             };
             /** @description Validation Error */
