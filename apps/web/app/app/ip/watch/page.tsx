@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -964,8 +964,14 @@ function JournalIntake({
 function RecordedSummary({ result, onReviewHits, onDismiss }: { result: IpJournalIngestResult; onReviewHits: (hitId: string) => void; onDismiss: () => void }) {
   const entry = result.publications[0] ?? null;
   const paused = result.run.status === "paused_cost_quota";
+  const ref = useRef<HTMLElement>(null);
+  // The form is submitted from its foot; bring the outcome to where the user is looking.
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "center" });
+    ref.current?.focus({ preventScroll: true });
+  }, [result]);
   return (
-    <section role="status" aria-label="Journal intake result" data-testid="journal-intake-result" className={paused ? "border-l-2 border-amber-400 bg-amber-50 p-4 text-sm text-amber-950" : "border-l-2 border-[var(--color-brand-500)] bg-white p-4 text-sm"}>
+    <section ref={ref} tabIndex={-1} role="status" aria-label="Journal intake result" data-testid="journal-intake-result" className={paused ? "border-l-2 border-amber-400 bg-amber-50 p-4 text-sm text-amber-950" : "border-l-2 border-[var(--color-brand-500)] bg-white p-4 text-sm"}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {paused ? (

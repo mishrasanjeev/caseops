@@ -351,6 +351,8 @@ describe("IP journal watch page", () => {
     const result = await page.findByTestId("journal-intake-result");
     expect(result).toHaveTextContent("Recorded: Journal 2187 · Application BUG014-CAPTURE-1 · ZQXV CAPTURE");
     expect(result).toHaveTextContent("journal extract captured · 0 new watch hits");
+    // The form is submitted from its foot; the outcome is brought to the user.
+    await waitFor(() => expect(result).toHaveFocus());
     expect(toastError).not.toHaveBeenCalled();
   });
 
