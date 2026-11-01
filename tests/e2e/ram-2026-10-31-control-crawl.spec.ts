@@ -31,12 +31,14 @@ const TAB_NAMES = [
   "Docket", "Documents", "Domain availability", "Overview", "Proceedings", "Hearings and deadlines", "Access and links",
   "Journal intake", "Hits", "Runs", "Profiles", "Month", "Week", "Day", "Year",
 ];
-const INTERNAL_FIELD = /\b(?:membership ids?|member ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
+const INTERNAL_FIELD = /\b(?:(?:membership|member|matter|record|scope|application|event|docket|proceeding|hearing|target) ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
 
 const ROUTES = [
   "/app/ip", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
   "/app/ip/foreign-associates", "/app/ip/registry", "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal",
   "/app/ip/patents", "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
+  // B4-ADJ-02: review queues and notification rules that asked for typed ids.
+  "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
 ];
 // The reported records, selected by server identity (production retains them).
 const PROD_ROUTES = [
