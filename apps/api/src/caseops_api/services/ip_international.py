@@ -774,7 +774,6 @@ def international_workspace(
         docket_id=row.docket_id,
         event_ids=event_ids,
         deadline_ids=deadline_ids,
-        limit=100,
     )
 
     parent = None
@@ -787,15 +786,23 @@ def international_workspace(
         parent = TrademarkInternationalRecordResponse.model_validate(parent_row)
     designations = []
     if row.record_kind == "international_registration":
-        designation_page = list_international_records(
-            session,
-            context=context,
-            record_kind="international_designation",
-            parent_registration_id=row.id,
-            limit=100,
-            offset=0,
-        )
-        designations = designation_page.items
+        # Every designation of this registration: an IR may designate more
+        # contracting parties than one list page holds.
+        designations = [
+            TrademarkInternationalRecordResponse.model_validate(designation)
+            for designation in session.scalars(
+                _visible_records_statement(session, context=context)
+                .where(
+                    TrademarkInternationalRegistration.record_kind
+                    == "international_designation",
+                    TrademarkInternationalRegistration.parent_registration_id == row.id,
+                )
+                .order_by(
+                    TrademarkInternationalRegistration.updated_at.desc(),
+                    TrademarkInternationalRegistration.id,
+                )
+            ).all()
+        ]
 
     reconciled_ids = {
         event.reconciles_event_id for event in events if event.reconciles_event_id is not None
