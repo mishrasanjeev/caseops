@@ -159,16 +159,19 @@ describe("separate mandatory Batch3 production source inventory", () => {
 });
 
 const batch4Projects = {
-  "batch4-prod-chromium": 30,
-  "batch4-prod-mobile": 13,
+  "batch4-prod-chromium": 36,
+  "batch4-prod-mobile": 14,
   "batch4-governance-prod-chromium": 2,
   "batch4-governance-prod-mobile": 2,
 };
 const batch4Governance = "ram-2026-10-31-governance-ui.spec.ts";
+// The adjacent-defect picker journey is the one 2026-11-01 spec prod-ram runs.
+const batch4File = (name: string) => `ram-2026-${name.startsWith("adj-") ? "11-01" : "10-31"}-${name}.spec.ts`;
 const crawlRoutes = [
-  "/app/ip", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
+  "/app/ip", "/app/ip Documents tab", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
   "/app/ip/foreign-associates", "/app/ip/registry", "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal",
   "/app/ip/patents", "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
+  "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
   "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
   "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
 ];
@@ -189,6 +192,7 @@ const batch4Titles: Record<string, [string, string][]> = {
     ["recordals", "BUG-008 Ram uploads an instrument from the recordal form and both parties cite it"],
     ["registry", "BUG-012 Ram finds a docket beyond the first 50 by its number and records manual registry evidence through structured fields"],
     ["watch", "BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field"],
+    ["adj-pickers", "B4-ADJ-02 review queues find the Matter by typing and name it, never by id, at 1440x900"],
   ],
   "batch4-prod-mobile": [
     ["calendar-year", "ENH-017 [mobile] Year view opens on screen in one column at 375 px, keeps chips legible, and opens a day"],
@@ -204,6 +208,7 @@ const batch4Titles: Record<string, [string, string][]> = {
     ["recordals", "BUG-008 [mobile] the recordal journey works at Pixel 5 width without horizontal scroll"],
     ["registry", "BUG-012 [mobile] the registry journey works at phone width without horizontal scroll"],
     ["watch", "[mobile] BUG-014 journal capture works at 393px without horizontal page scroll"],
+    ["adj-pickers", "B4-ADJ-02 [mobile] review queue Matter pickers fit a phone and name the Matter"],
   ],
   "batch4-governance-prod-chromium": [
     ["governance-ui", "BUG-003/004 opposition governed-rule and calendar pickers are never dead selects"],
@@ -223,10 +228,10 @@ describe("separate mandatory Batch4 production source inventory", () => {
   it("collects every production-eligible case per role exactly, with local-only journeys excluded", () => {
     expect(counts(cases.map(row => row.project))).toEqual(batch4Projects);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
-    expect(new Set(cases.map(row => row.id)).size).toBe(47);
+    expect(new Set(cases.map(row => row.id)).size).toBe(54);
     for (const [project, titles] of Object.entries(batch4Titles)) {
       expect(cases.filter(row => row.project === project).map(row => [row.file, ...row.titles.slice(1)]).sort())
-        .toEqual(titles.map(([file, title]) => [`ram-2026-10-31-${file}.spec.ts`, title]).sort());
+        .toEqual(titles.map(([file, title]) => [batch4File(file), title]).sort());
     }
     expect(cases.every(row => !row.titles.some(title => title.includes("[local-only]")))).toBe(true);
   });
@@ -238,6 +243,6 @@ describe("separate mandatory Batch4 production source inventory", () => {
     }
     const projectFiles = new Set(cases.filter(row => !row.project.startsWith("batch4-governance-")).map(row => row.file));
     expect(projectFiles.has(batch4Governance)).toBe(false);
-    expect(projectFiles.size).toBe(12);
+    expect(projectFiles.size).toBe(13);
   });
 });

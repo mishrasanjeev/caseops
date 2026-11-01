@@ -150,8 +150,11 @@ test.afterAll(async () => {
   await context?.close();
 });
 
+// Evidence redacts query strings in titles, so the tab route is named in words.
+const crawlLabel = (path: string) => path.replace("?tab=documents", " Documents tab");
+
 for (const path of [...ROUTES, ...PROD_ROUTES]) {
-  test(`BUG-015 controls on ${path} are usable or explain themselves`, async ({}, info) => {
+  test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`, async ({}, info) => {
     test.setTimeout(6 * 60_000);
     test.skip(PROD_ROUTES.includes(path) && rt.local, "Reported production records exist only in test-legal.");
     const before = apiFailures.length;

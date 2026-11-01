@@ -70,16 +70,19 @@ BATCH3_MANDATORY_CASES = {
 # The governance roles are required only while the serving release's checked-in
 # rule-governance state is enabled; the other roles never select that file.
 _B4 = "ram-2026-10-31-{}.spec.ts".format
+_B4_ADJ = "ram-2026-11-01-adj-{}.spec.ts".format
 _B4_CRAWL = "BUG-015 controls on {} are usable or explain themselves".format
 BATCH4_MANDATORY_CASES = {
     "batch4-desktop": ("batch4-prod-chromium", (
         (_B4("calendar-year"), "ENH-017 Year view shows Ram's UI-created hearing and task on "
          "their days in distinct colours and survives reload"),
         *((_B4("control-crawl"), _B4_CRAWL(route)) for route in (
-            "/app/ip", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid",
+            "/app/ip", "/app/ip Documents tab", "/app/ip/portfolio", "/app/ip/renewals",
+            "/app/ip/madrid",
             "/app/ip/recordals", "/app/ip/foreign-associates", "/app/ip/registry",
             "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal", "/app/ip/patents",
             "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
+            "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
             "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
             "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
         )),
@@ -109,6 +112,8 @@ BATCH4_MANDATORY_CASES = {
          "records manual registry evidence through structured fields"),
         (_B4("watch"), "BUG-014 journal capture: 'Class 45' with captured evidence is "
          "recorded, listed and shown on the hit; a bad class token is refused at its field"),
+        (_B4_ADJ("pickers"), "B4-ADJ-02 review queues find the Matter by typing and name it, "
+         "never by id, at 1440x900"),
     )),
     "batch4-mobile": ("batch4-prod-mobile", (
         (_B4("calendar-year"), "ENH-017 [mobile] Year view opens on screen in one column at "
@@ -137,6 +142,8 @@ BATCH4_MANDATORY_CASES = {
          "horizontal scroll"),
         (_B4("watch"), "[mobile] BUG-014 journal capture works at 393px without horizontal "
          "page scroll"),
+        (_B4_ADJ("pickers"), "B4-ADJ-02 [mobile] review queue Matter pickers fit a phone and "
+         "name the Matter"),
     )),
     "batch4-governance-desktop": ("batch4-governance-prod-chromium", (
         (_B4("governance-ui"), "BUG-003/004 opposition governed-rule and calendar pickers are "

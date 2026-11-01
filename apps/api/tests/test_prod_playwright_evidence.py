@@ -525,20 +525,28 @@ BATCH4_GOVERNANCE_FILE = "ram-2026-10-31-governance-ui.spec.ts"
 def _batch4_source_cases():
     """Derive every production-eligible Batch4 case per role from the spec sources."""
     roles = {invocation: Counter() for invocation in evidence.BATCH4_MANDATORY_CASES}
-    for path in sorted((ROOT / "tests/e2e").glob("ram-2026-10-31-*.spec.ts")):
+    # The same files the prod-ram BATCH4_SPECS pattern selects.
+    paths = [*(ROOT / "tests/e2e").glob("ram-2026-10-31-*.spec.ts"),
+             ROOT / "tests/e2e/ram-2026-11-01-adj-pickers.spec.ts"]
+    for path in sorted(paths):
         source = path.read_text(encoding="utf-8")
         if path.name == "ram-2026-10-31-control-crawl.spec.ts":
             assert "for (const path of [...ROUTES, ...PROD_ROUTES]) {" in source
             assert source.count(
-                "test(`BUG-015 controls on ${path} are usable or explain themselves`"
+                "test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`"
             ) == 1
+            assert 'path.replace("?tab=documents", " Documents tab")' in source
             routes = []
             for name in ("ROUTES", "PROD_ROUTES"):
                 block = re.search(rf"\nconst {name} = \[(.*?)\];", source, re.S)
                 assert block is not None
                 routes += re.findall(r'"([^"]+)"', block.group(1))
-            titles = [f"BUG-015 controls on {route} are usable or explain themselves"
-                      for route in routes]
+            titles = [
+                "BUG-015 controls on {} are usable or explain themselves".format(
+                    route.replace("?tab=documents", " Documents tab")
+                )
+                for route in routes
+            ]
         else:
             assert "test(`" not in source, path.name
             titles = re.findall(r'(?<![.\w])test\(\s*"((?:[^"\\]|\\.)*)"', source)
@@ -571,7 +579,7 @@ def test_batch4_mandatory_inventory_is_every_production_case_in_the_specs():
         assert all(("[mobile]" in title) is invocation.endswith("-mobile") for _, title in cases)
         assert not any("[local-only]" in title for _, title in cases)
     assert {key: len(cases) for key, (_, cases) in evidence.BATCH4_MANDATORY_CASES.items()} == {
-        "batch4-desktop": 30, "batch4-mobile": 13,
+        "batch4-desktop": 36, "batch4-mobile": 14,
         "batch4-governance-desktop": 2, "batch4-governance-mobile": 2,
     }
 
