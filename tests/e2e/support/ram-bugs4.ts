@@ -52,6 +52,7 @@ export const IP_ENTITLEMENT_KEYS = [
 
 const loopback = (url: URL) => ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+const CENTRAL_HOLIDAY_CALENDAR = "IN-CENTRAL-2026";
 let serial = 0;
 
 function required(name: string): string {
@@ -181,7 +182,7 @@ export function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
 async function configureLocalWorkspace(request: APIRequestContext, api: URL, headers: Record<string, string>, actor: TesterActor) {
   const configured = await json(await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
     expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
-    timezone: "Asia/Kolkata", holiday_calendar_key: "IN-CENTRAL-2026", working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
+    timezone: "Asia/Kolkata", holiday_calendar_key: CENTRAL_HOLIDAY_CALENDAR, working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },
     document_taxonomy_version: "ip-taxonomy-2026.1", event_catalog_version: "ip-events-v1", deadline_rule_versions: { IN: "2026.1" },
     notification_channels: ["in_app"], critical_event_policy: { escalation_after_minutes: 30 },
     escalation_owner_membership_id: actor.membership.id, provider_keys: [], provider_terms_version: null, accept_provider_terms: false,

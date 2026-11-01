@@ -391,7 +391,8 @@ def test_bug016_void_refuses_issued_other_tenant_and_member(client: TestClient) 
     boot = _bootstrap(client, slug_seed="bug016-void-neg")
     token = str(boot["access_token"])
     slug = str(boot["company"]["slug"])
-    matter = _create_matter(client, token, "BUG016-VOID-NEG")
+    matter_code = "BUG016-VOID-NEG"
+    matter = _create_matter(client, token, matter_code)
     manual = [{"description": "Court fee", "amount_minor": 50000}]
     issued, _ = _invoice_pdf(client, token, str(matter["id"]), status="issued", manual_items=manual)
     draft, _ = _invoice_pdf(client, token, str(matter["id"]), status="draft", manual_items=manual)
@@ -536,7 +537,8 @@ def test_bug016_void_zeroes_balance_and_restores_billing_and_brief_totals(
 ) -> None:
     boot = _bootstrap(client, slug_seed="bug016-void-totals")
     token = str(boot["access_token"])
-    matter = _create_matter(client, token, "BUG016-VOID-TOTALS")
+    matter_code = "BUG016-VOID-TOTALS"
+    matter = _create_matter(client, token, matter_code)
     matter_id = str(matter["id"])
     _invoice_pdf(
         client, token, matter_id, status="issued",
@@ -643,7 +645,8 @@ def test_bug016_partner_downloads_and_issues_but_only_the_owner_voids(
     boot = _bootstrap(client, slug_seed="bug016-partner")
     token = str(boot["access_token"])
     slug = str(boot["company"]["slug"])
-    matter = _create_matter(client, token, "BUG016-PARTNER")
+    matter_code = "BUG016-PARTNER"
+    matter = _create_matter(client, token, matter_code)
     url = f"/api/matters/{matter['id']}/invoices"
     partner = _member_token(client, token, slug, "partner")
     admin = _member_token(client, token, slug, "admin")

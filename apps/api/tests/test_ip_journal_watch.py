@@ -40,6 +40,14 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_record_workflow import _application, _asset, _docket, _particulars
 
 
+# Journal ingestion run references used by the BUG-014 regressions.
+EMPTY_EVIDENCE_RUN = "bug014-empty-evidence-0001"
+HIDDEN_CORRECTION_RUN = "bug014-hidden-correction-0001"
+WALL_RECAP_FIRST_RUN = "bug014-wallrecap-0001"
+WALL_RECAP_SECOND_RUN = "bug014-wallrecap-0002"
+LEGACY_JURISDICTION_RUN = "bug014-legacyjur-0001"
+
+
 def _fixture(client: TestClient, title: str = "ASTER") -> tuple[dict, dict, dict, dict]:
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
@@ -1230,7 +1238,7 @@ def test_bug_014_ingest_422_names_the_field_without_parser_text(client: TestClie
         "/api/ip/watch/journal-ingestions",
         headers=headers,
         json={
-            "idempotency_key": "bug014-empty-evidence-0001",
+            "idempotency_key": EMPTY_EVIDENCE_RUN,
             "provider_key": "ipindia-journal-manual",
             "publications": [
                 _manual_capture(
@@ -1253,7 +1261,7 @@ def test_bug_014_ingest_422_names_the_field_without_parser_text(client: TestClie
         assert (
             session.scalar(
                 select(IpJournalIngestionRun).where(
-                    IpJournalIngestionRun.idempotency_key == "bug014-empty-evidence-0001"
+                    IpJournalIngestionRun.idempotency_key == EMPTY_EVIDENCE_RUN
                 )
             )
             is None
@@ -1467,7 +1475,7 @@ def test_bug_014_listed_capture_respects_docket_visibility(client: TestClient) -
         "/api/ip/watch/journal-ingestions",
         headers=admin,
         json={
-            "idempotency_key": "bug014-hidden-correction-0001",
+            "idempotency_key": HIDDEN_CORRECTION_RUN,
             "provider_key": "ipindia-journal-manual",
             "publications": [
                 _manual_capture(
@@ -1579,7 +1587,7 @@ def test_bug_014_recapture_of_a_walled_entry_does_not_reveal_it(client: TestClie
         client, headers, docket_id=restricted.json()["id"], word="ZQXV", recipient=owner_id
     )
     walled = _ingest(
-        client, headers=headers, key="bug014-wallrecap-0001", publication=_manual_capture()
+        client, headers=headers, key=WALL_RECAP_FIRST_RUN, publication=_manual_capture()
     )
     assert len(walled["hits"]) == 1
     admin = _colleague(
@@ -1589,7 +1597,7 @@ def test_bug_014_recapture_of_a_walled_entry_does_not_reveal_it(client: TestClie
         "/api/ip/watch/journal-ingestions",
         headers=admin,
         json={
-            "idempotency_key": "bug014-wallrecap-0002",
+            "idempotency_key": WALL_RECAP_SECOND_RUN,
             "provider_key": "ipindia-journal-manual",
             "publications": [_manual_capture(mark_text="ZQXV OTHER")],
         },
@@ -1668,7 +1676,7 @@ def test_bug_014_legacy_free_text_jurisdiction_still_matches(client: TestClient)
         stored.jurisdictions_json = ["INDIA"]
         session.commit()
     result = _ingest(
-        client, headers=headers, key="bug014-legacyjur-0001", publication=_manual_capture()
+        client, headers=headers, key=LEGACY_JURISDICTION_RUN, publication=_manual_capture()
     )
     assert len(result["hits"]) == 1
     assert result["hits"][0]["similarity_evidence_json"]["jurisdiction_match"] is True
