@@ -928,6 +928,9 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
   const options = TRANSITIONS[workspace.recordal.status];
   const [kind, setKind] = useState<IpRecordalTransactionKind>(options[0] ?? "acknowledgement_received");
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeInput());
+  const [effectiveAtEdited, setEffectiveAtEdited] = useState(false);
+  const [effectiveAtError, setEffectiveAtError] = useState<string | null>(null);
+  const latestEventMs = Math.max(0, ...workspace.transactions.map((event) => Date.parse(event.effective_at)).filter(Number.isFinite));
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
   const [documentRefs, setDocumentRefs] = useState<string[]>([]);
@@ -958,7 +961,13 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
         expectedVersion: workspace.recordal.version,
         expectedLifecycleVersion: docket.lifecycle_version,
         transactionKind: kind,
-        effectiveAt: new Date(effectiveAt).toISOString(),
+        // An untouched field means now. The input shows whole minutes, so its
+        // value would date the transaction before an event recorded earlier in
+        // the same minute (for example the recordal's own creation), which the
+        // API rejects as backdated.
+        effectiveAt: effectiveAtEdited
+          ? new Date(effectiveAt).toISOString()
+          : new Date(Math.max(Date.now(), latestEventMs + 1_000)).toISOString(),
         responsibleMembershipId: membershipId,
         reason: reason.trim(),
         sourceUrl: selectedSnapshot?.snapshot.source_url ?? null,
@@ -975,9 +984,17 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
     onSuccess: async (result) => {
       toast.success(`Recordal moved to ${readable(result.recordal.status)}.`);
       setReason(""); setEvidence(""); setDocumentRefs([]); setDeadlineRefs([]); setCostRefs([]); setSnapshotId(""); setRegistryRecordedOn(""); setConflictReviewed(false);
+      setEffectiveAt(localDateTimeInput()); setEffectiveAtEdited(false); setEffectiveAtError(null);
       await onChanged();
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record transaction.")),
+    onMutate: () => setEffectiveAtError(null),
+    onError: (error) => {
+      if (isApiErrorShape(error) && error.status === 409 && /backdated/i.test(error.detail)) {
+        setEffectiveAtError("This time is earlier than the docket's latest event. Use the current time, or record the earlier event from the IP docket, where its deadline recalculation is previewed first.");
+        return;
+      }
+      toast.error(apiErrorMessage(error, "Could not record transaction."));
+    },
   });
 
   if (!options.length) return <div className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 text-green-700" />This recordal is closed.</div>;
@@ -986,7 +1003,10 @@ function TransactionPanel({ workspace, docket, documents, registry, deadlines, m
   return <form className="grid min-w-0 gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
     <h3 className="font-semibold md:col-span-2">Record transaction</h3>
     <Field label="Transaction"><select className={SELECT_CLASS} value={kind} onChange={(event) => setKind(event.target.value as IpRecordalTransactionKind)}>{options.filter((option) => !["review_approved", "accepted", "rejected"].includes(option) || canApprove).map((option) => <option key={option} value={option}>{readable(option)}</option>)}</select></Field>
-    <Field label="Effective time"><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} required /></Field>
+    <FormField id="recordal-transaction-effective-at" label="Effective time" error={effectiveAtError ?? undefined}>
+      <Input {...controlProps("recordal-transaction-effective-at", effectiveAtError ?? undefined)} type="datetime-local" value={effectiveAt} onChange={(event) => { setEffectiveAt(event.target.value); setEffectiveAtEdited(true); setEffectiveAtError(null); }} required />
+      {effectiveAtEdited ? <Button type="button" size="sm" variant="ghost" className="w-fit" onClick={() => { setEffectiveAt(localDateTimeInput()); setEffectiveAtEdited(false); setEffectiveAtError(null); }}>Use the current time</Button> : null}
+    </FormField>
     <div className="md:col-span-2"><Field label="Reason"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} required minLength={5} /></Field></div>
     {requiresEvidence ? <div className="md:col-span-2"><Field label="Evidence references"><Textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} required /></Field></div> : null}
     {documents.length ? <CheckGroup legend={kind === "corrected" ? "Corrected instrument" : "Linked documents"} rows={documents.map((document) => ({ id: document.id, label: document.title }))} selected={documentRefs} onChange={setDocumentRefs} /> : null}

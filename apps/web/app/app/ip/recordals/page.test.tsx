@@ -580,4 +580,35 @@ describe("BUG-008 new recordal form", () => {
     expect(record).toHaveAccessibleDescription("Upload the corrected instrument to record the correction.");
     expect(await screen.findByRole("button", { name: "Upload instrument" })).toBeInTheDocument();
   });
+  it("records an untouched transaction time as now, never before the recordal's own latest event", async () => {
+    const user = userEvent.setup();
+    const draft = { ...RECORDAL, status: "draft", version: 1 };
+    // The creation event can carry a later instant than the minute-precision field shows.
+    const latest = new Date(Date.now() + 90_000).toISOString();
+    mocks.recordals.mockResolvedValue({ items: [{ ...draft, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, recordal: draft, transactions: [{ ...WORKSPACE.transactions[0], effective_at: latest }] });
+    mocks.transaction
+      .mockRejectedValueOnce(Object.assign(new Error("Backdated events require acknowledgement of the recalculation preview."), {
+        name: "ApiError", status: 409, detail: "Backdated events require acknowledgement of the recalculation preview.", problemType: null, data: null,
+      }))
+      .mockResolvedValue({ recordal: { ...draft, status: "withdrawn", version: 2 }, event: WORKSPACE.transactions[0], projected_title_interests: [], registry_projection_applied: false });
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Record transaction" });
+    await user.selectOptions(screen.getByLabelText("Transaction"), "withdrawn");
+    await user.type(screen.getByLabelText("Reason"), "Client withdrew the instruction.");
+
+    // An edited, earlier time that the API refuses is explained at the field.
+    const effective = screen.getByLabelText("Effective time");
+    await user.clear(effective);
+    await user.type(effective, "2026-07-01T10:00");
+    await user.click(screen.getByRole("button", { name: "Record withdrawn" }));
+    await waitFor(() => expect(effective).toHaveAttribute("aria-invalid", "true"));
+    expect(effective).toHaveAccessibleDescription(/earlier than the docket's latest event/);
+    expect(mocks.transaction.mock.calls[0][0].effectiveAt).toBe(new Date("2026-07-01T10:00").toISOString());
+
+    await user.click(screen.getByRole("button", { name: "Use the current time" }));
+    await user.click(screen.getByRole("button", { name: "Record withdrawn" }));
+    await waitFor(() => expect(mocks.transaction).toHaveBeenCalledTimes(2));
+    expect(Date.parse(mocks.transaction.mock.calls[1][0].effectiveAt)).toBe(Date.parse(latest) + 1_000);
+  });
 });
