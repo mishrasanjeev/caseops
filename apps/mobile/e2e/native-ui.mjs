@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+export const IOS_SWIPE_SETTLE_MS = 300;
+
 export function selector(platform, kind, value) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
   assert.ok(typeof value === 'string' && value.length > 0 && value.length <= 4000, 'NATIVE_LOCATOR_VALUE_REQUIRED');
@@ -125,6 +127,10 @@ export async function swipe(context, direction = 'down') {
     { type: 'pointerMove', duration: 0, x, y: direction === 'down' ? bottom : top },
     { type: 'pointerDown', button: 0 },
     { type: 'pointerMove', duration: 350, x, y: direction === 'down' ? top : bottom },
+    // Lifting a moving finger flings an iOS ScrollView: a short page jumps to
+    // its end and carries a row just below the fold under the fixed header, so
+    // no gesture ever leaves it visible. Hold still before lifting.
+    ...(context.platform === 'ios' ? [{ type: 'pause', duration: IOS_SWIPE_SETTLE_MS }] : []),
     { type: 'pointerUp', button: 0 },
   ] }]);
   await context.driver.releaseActions();

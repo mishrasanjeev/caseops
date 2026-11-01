@@ -299,9 +299,13 @@ export const scenarios = [
   { id: 'NATIVE-12', run: async (context) => {
     const before = await traffic(context), { task, draft } = context.fixture.work;
     await home(context, 'work');
-    await dispatchNativeClick(context, await row(context, task), 'id', `today-item-${task.kind}-${task.id}`);
+    // Work's default Task queue lists server-paged tasks; a task opens its own
+    // fresh detail, and Open Matter then loads that task's source workspace.
+    const queued = `queue-task-${task.id}`;
+    await dispatchNativeClick(context, await find(context, 'id', queued, { scroll: true }), 'id', queued);
+    assert.equal(await read(context, 'id', 'queue-task-title'), task.title, 'WORK_WRONG_TASK');
+    await click(context, 'id', 'queue-open-matter', { scroll: true });
     assert.equal(await read(context, 'id', 'matter-code'), task.matter.identityLabel, 'WORK_WRONG_SOURCE');
-    await expectText(context, task.title);
     if (draft.entry === 'reviews') {
       await home(context, 'work');
       await click(context, 'text', 'Reviews');

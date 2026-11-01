@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { absent, click, dispatchNativeClick, findQuery, home, input, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { absent, click, dispatchNativeClick, findQuery, home, input, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { freshNoteAbsent, scenarios, selectMatterActivity, selectMatterDraft, verifyIosCalendarRow } from '../../apps/mobile/e2e/journeys.mjs';
 
 function element(id, { displayed = true, accessible = 'false', label = 'CaseOps', value = label } = {}) {
@@ -598,11 +598,20 @@ test('iOS keyboard swipe uses the proven outer gutter and stays above its predic
   }
 });
 
+test('iOS swipe holds still before lifting so momentum cannot carry a short page past a row', async () => {
+  const fake = swipeDouble('ios', { count: 0 });
+  await swipe(fake.context);
+  assert.equal(IOS_SWIPE_SETTLE_MS, 300);
+  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pause', 'pointerUp']);
+  assert.deepEqual(fake.actions[0][0].actions[3], { type: 'pause', duration: 300 });
+});
+
 test('Android retains its original center swipe without any iOS geometry query', async () => {
   const fake = swipeDouble('android');
   await swipe(fake.context);
   assert.deepEqual(fake.actions[0][0].actions[0], { type: 'pointerMove', duration: 0, x: 201, y: 629 });
   assert.equal(fake.actions[0][0].actions[2].y, 245);
+  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pointerUp']);
   assert.deepEqual(fake.queries, []);
 });
 
