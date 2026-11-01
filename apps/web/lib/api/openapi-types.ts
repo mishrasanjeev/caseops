@@ -39500,6 +39500,11 @@ export interface components {
             missing_date_count: number;
             /** Missing Date Matters */
             missing_date_matters: components["schemas"]["MatterRecord"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Overdue Count */
             overdue_count: number;
             /** Overdue Matters */
@@ -73357,6 +73362,9 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
+                /** @description Read the rows of one queue only (the other list comes back empty). Both counts are always returned. */
+                queue?: ("overdue" | "missing_date") | null;
             };
             header?: never;
             path?: never;

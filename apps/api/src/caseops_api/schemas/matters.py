@@ -539,6 +539,9 @@ class MatterHearingFollowUpResponse(BaseModel):
     overdue_count: int
     missing_date_count: int
     limit: int
+    # Rows skipped in each returned queue; page with ``offset`` + ``limit``.
+    offset: int = 0
+    # True when a returned queue has rows after this page.
     truncated: bool
 
 

@@ -705,9 +705,15 @@ export async function fetchMatterHearingPortfolio(params?: {
 
 export async function fetchMatterHearingFollowUp(params?: {
   limit?: number;
+  /** Rows to skip in each returned queue. */
+  offset?: number;
+  /** Read one queue's rows only; both counts are always returned. */
+  queue?: "overdue" | "missing_date";
 }): Promise<MatterHearingFollowUp> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.queue) qs.set("queue", params.queue);
   const path = qs.toString()
     ? `/api/matters/hearing-follow-up?${qs.toString()}`
     : "/api/matters/hearing-follow-up";

@@ -218,27 +218,51 @@ describe("HearingsPage (portfolio aggregate)", () => {
     expect(screen.queryByText(/Showing 1 of/)).toBeNull();
   });
 
-  it("B4-ADJ-15 says when a follow-up queue holds more matters than it lists", async () => {
+  it("B4-ADJ-15 pages a follow-up queue to its last matter", async () => {
     fetchMatterHearingPortfolioMock.mockResolvedValue({
       company_id: "company-1", matters: [], total_count: 0, limit: 500, truncated: false, date: null,
     });
-    fetchMatterHearingFollowUpMock.mockResolvedValue({
-      company_id: "company-1",
-      overdue_matters: [{
-        id: "m-overdue", matter_code: "OD-1", title: "Overdue matter", status: "active",
-        practice_area: "Civil", forum_level: "high_court", next_hearing_on: "2026-05-01",
-        created_at: "2026-04-01T00:00:00Z", updated_at: "2026-04-15T00:00:00Z",
-      }],
-      missing_date_matters: [],
-      overdue_count: 250,
-      missing_date_count: 0,
-      limit: 200,
-      truncated: true,
-    });
+    const overdue = Array.from({ length: 53 }, (_, index) => ({
+      id: `m-overdue-${index}`, matter_code: `OD-${index}`, title: `Overdue matter ${index}`, status: "active",
+      practice_area: "Civil", forum_level: "high_court", next_hearing_on: "2026-05-01",
+      created_at: "2026-04-01T00:00:00Z", updated_at: "2026-04-15T00:00:00Z",
+    }));
+    fetchMatterHearingFollowUpMock.mockImplementation(
+      async ({ queue, offset = 0, limit }: { queue: string; offset?: number; limit: number }) => ({
+        company_id: "company-1",
+        overdue_matters: queue === "overdue" ? overdue.slice(offset, offset + limit) : [],
+        missing_date_matters: [],
+        overdue_count: overdue.length,
+        missing_date_count: 0,
+        limit,
+        offset,
+        truncated: queue === "overdue" && offset + limit < overdue.length,
+      }),
+    );
+    const user = userEvent.setup();
     render(withClient(<HearingsPage />));
-    expect(await screen.findByText("Past listing date (250)")).toBeInTheDocument();
-    expect(screen.getByText(/Showing 1 of 250\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "open the matter list" })).toHaveAttribute("href", "/app/matters");
+    expect(await screen.findByRole("heading", { name: "Past listing date (53)" })).toBeInTheDocument();
+    expect(screen.getByText("Showing 50 of 53.")).toBeInTheDocument();
+    expect(screen.queryByText("Overdue matter 52")).toBeNull();
+    // No unfiltered matter-list detour: the rest loads in place.
+    expect(screen.queryByRole("link", { name: "open the matter list" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Load more past-listing matters" }));
+    expect(await screen.findByText("Overdue matter 52")).toBeInTheDocument();
+    expect(fetchMatterHearingFollowUpMock).toHaveBeenCalledWith({ queue: "overdue", offset: 50, limit: 50 });
+    expect(screen.queryByText(/Showing \d+ of 53/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load more past-listing matters" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Missing hearing date (0)" })).toBeInTheDocument();
+  });
+
+  it("B4-ADJ-15 shows a retryable error when a follow-up queue cannot load", async () => {
+    fetchMatterHearingPortfolioMock.mockResolvedValue({
+      company_id: "company-1", matters: [], total_count: 0, limit: 500, truncated: false, date: null,
+    });
+    fetchMatterHearingFollowUpMock.mockRejectedValue(new Error("network"));
+    render(withClient(<HearingsPage />));
+    expect(await screen.findByText("Could not load the past listing date queue")).toBeInTheDocument();
+    expect(screen.getByText("Could not load the missing hearing date queue")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Try again" })).toHaveLength(2);
   });
 
   it("surfaces an error state when hearing portfolio loading fails", async () => {

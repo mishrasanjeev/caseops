@@ -193,6 +193,7 @@ export const matterHearingFollowUp = z.object({
   overdue_count: z.number().int().nonnegative(),
   missing_date_count: z.number().int().nonnegative(),
   limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative().default(0),
   truncated: z.boolean(),
 });
 

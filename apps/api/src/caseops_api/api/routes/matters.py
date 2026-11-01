@@ -432,11 +432,21 @@ async def current_company_matter_hearing_follow_up(
     context: CurrentContext,
     session: DbSession,
     limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    queue: Literal["overdue", "missing_date"] | None = Query(
+        default=None,
+        description=(
+            "Read the rows of one queue only (the other list comes back empty). "
+            "Both counts are always returned."
+        ),
+    ),
 ) -> MatterHearingFollowUpResponse:
     return list_matter_hearing_follow_up(
         session,
         context=context,
         limit=limit,
+        offset=offset,
+        queue=queue,
     )
 
 

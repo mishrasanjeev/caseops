@@ -2564,9 +2564,12 @@ def list_matter_hearing_follow_up(
     context: SessionContext,
     today: date | None = None,
     limit: int = 200,
+    offset: int = 0,
+    queue: str | None = None,
 ) -> MatterHearingFollowUpResponse:
     effective_today = today or date.today()
     page_size = max(1, min(limit, 500))
+    offset = max(0, offset)
     visible_filter = visible_matters_filter(session, context=context)
     active_filters = [
         Matter.company_id == context.company.id,
@@ -2578,30 +2581,40 @@ def list_matter_hearing_follow_up(
 
     overdue_count = session.scalar(select(func.count(Matter.id)).where(*overdue_filters)) or 0
     missing_count = session.scalar(select(func.count(Matter.id)).where(*missing_filters)) or 0
-    overdue = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    overdue: list[Matter] = []
+    if queue in (None, "overdue"):
+        overdue = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*overdue_filters)
+                .order_by(
+                    Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc()
+                )
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*overdue_filters)
-            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
-            .limit(page_size)
         )
-    )
-    missing = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    missing: list[Matter] = []
+    if queue in (None, "missing_date"):
+        missing = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*missing_filters)
+                .order_by(Matter.created_at.desc(), Matter.id.desc())
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*missing_filters)
-            .order_by(Matter.updated_at.desc(), Matter.id.desc())
-            .limit(page_size)
         )
-    )
+    overdue_more = queue in (None, "overdue") and overdue_count > offset + len(overdue)
+    missing_more = queue in (None, "missing_date") and missing_count > offset + len(missing)
     return MatterHearingFollowUpResponse(
         company_id=context.company.id,
         overdue_matters=[_matter_record(matter) for matter in overdue],
@@ -2609,7 +2622,8 @@ def list_matter_hearing_follow_up(
         overdue_count=overdue_count,
         missing_date_count=missing_count,
         limit=page_size,
-        truncated=overdue_count > len(overdue) or missing_count > len(missing),
+        offset=offset,
+        truncated=overdue_more or missing_more,
     )
 
 
