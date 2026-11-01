@@ -1030,8 +1030,7 @@ def post_portal_invitation(
         )
     portal_user, grants, token = invite_portal_user(
         session,
-        company_id=context.company.id,
-        inviting_membership_id=context.membership.id,
+        context=context,
         email=str(payload.email),
         full_name=payload.full_name,
         role=payload.role,

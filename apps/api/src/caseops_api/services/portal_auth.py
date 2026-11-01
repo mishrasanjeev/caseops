@@ -29,7 +29,13 @@ from caseops_api.db.models import (
     PortalUser,
     PortalUserRole,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
+from caseops_api.services.record_access_policy import (
+    visible_ip_dockets_filter,
+    visible_matters_filter,
+)
+from caseops_api.services.session_context import SessionContext
 
 # Per D2 in PHASE_C_KICKOFF_2026-04-24.md.
 MAGIC_LINK_TTL_MINUTES = 30
@@ -170,11 +176,41 @@ def list_active_grants(session: Session, *, portal_user_id: str) -> list[MatterP
     )
 
 
+def _deny_invisible_targets(
+    session: Session,
+    *,
+    context: SessionContext,
+    target_type: str,
+    hidden_ids: list[str],
+    detail: str,
+) -> None:
+    """Audit and refuse targets the inviter cannot see, like a missing record.
+
+    The answer is the same 404 a nonexistent or other-tenant id gets, so a
+    walled colleague learns nothing about the record's existence.
+    """
+
+    for hidden_id in hidden_ids:
+        record_from_context(
+            session,
+            context,
+            action="access_denied",
+            target_type=target_type,
+            target_id=hidden_id,
+            matter_id=hidden_id if target_type == "matter" else None,
+            ip_docket_id=hidden_id if target_type == "ip_docket_record" else None,
+            result="denied",
+            metadata={"reason": "portal_invitation_target_not_visible"},
+            commit=False,
+        )
+    session.commit()
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
 def invite_portal_user(
     session: Session,
     *,
-    company_id: str,
-    inviting_membership_id: str,
+    context: SessionContext,
     email: str,
     full_name: str,
     role: str,
@@ -190,7 +226,13 @@ def invite_portal_user(
 
     Returns ``(portal_user, grants, token)``. The plaintext token
     must be sent via AutoMail and never persisted by the caller.
+
+    Every target must be visible to the inviter under the same policy as
+    every other Matter or IP record read (ethical walls, restricted access,
+    team scoping). Owning the record's company is not enough.
     """
+    company_id = context.company.id
+    inviting_membership_id = context.membership.id
     if role not in {r.value for r in PortalUserRole}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -247,6 +289,23 @@ def invite_portal_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Matter not found.",
         )
+    visible_matter_ids = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.company_id == company_id,
+                Matter.id.in_(unique_matter_ids),
+                visible_matters_filter(session, context=context),
+            )
+        )
+    )
+    if len(visible_matter_ids) != len(unique_matter_ids):
+        _deny_invisible_targets(
+            session,
+            context=context,
+            target_type="matter",
+            hidden_ids=[item for item in unique_matter_ids if item not in visible_matter_ids],
+            detail="Matter not found.",
+        )
     owned_ip_docket_ids = set(
         session.scalars(
             select(IpDocketRecord.id).where(
@@ -260,6 +319,29 @@ def invite_portal_user(
     )
     if len(owned_ip_docket_ids) != len(unique_ip_docket_ids):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IP record not found.")
+    visible_ip_docket_ids = (
+        set(
+            session.scalars(
+                select(IpDocketRecord.id).where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.id.in_(unique_ip_docket_ids),
+                    visible_ip_dockets_filter(session, context=context),
+                )
+            )
+        )
+        if unique_ip_docket_ids
+        else set()
+    )
+    if len(visible_ip_docket_ids) != len(unique_ip_docket_ids):
+        _deny_invisible_targets(
+            session,
+            context=context,
+            target_type="ip_docket_record",
+            hidden_ids=[
+                item for item in unique_ip_docket_ids if item not in visible_ip_docket_ids
+            ],
+            detail="IP record not found.",
+        )
 
     portal_user = session.scalars(
         select(PortalUser).where(
