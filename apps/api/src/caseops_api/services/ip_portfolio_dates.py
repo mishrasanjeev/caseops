@@ -211,17 +211,32 @@ def page_date_details(session, *, company_id, docket_ids):
             **current_dates(
                 session, version=version, docket_id=version.docket_id, imported_proven=proven
             ),
-            "source_declared_status": _declared_status(version, proven),
+            **_declared_status(version, proven),
         }
         for version, proven in rows
     }
 
 
-def _declared_status(version, proven):
-    """The import's declared source status (B4-ADJ-11), unverified legal state."""
+# Longest source Status wording shown back to the lawyer.
+SOURCE_STATUS_TEXT_MAX = 120
 
-    from caseops_api.services.ip_imports import SOURCE_STATUS_ALIASES
+
+def _declared_status(version, proven):
+    """The import's declared source status (B4-ADJ-11), unverified legal state.
+
+    ``source_status_text`` is the wording the source used; ``source_declared_status``
+    is its recognised key, or None when the wording is not recognised. Imports
+    made before the mapping kept only the wording, so the key is derived from it.
+    """
+
+    from caseops_api.services.ip_imports import SOURCE_STATUS_ALIASES, source_status_key
 
     imported = (version.representation_json or {}).get("portfolio_import")
-    value = imported.get("declared_status") if isinstance(imported, dict) else None
-    return value if proven and value in set(SOURCE_STATUS_ALIASES.values()) else None
+    if not proven or not isinstance(imported, dict):
+        return {"source_declared_status": None, "source_status_text": None}
+    raw = imported.get("source_status")
+    text = " ".join(raw.split())[:SOURCE_STATUS_TEXT_MAX] if isinstance(raw, str) else ""
+    declared = imported.get("declared_status")
+    if declared not in set(SOURCE_STATUS_ALIASES.values()):
+        declared = source_status_key(text) if text else None
+    return {"source_declared_status": declared, "source_status_text": text or None}

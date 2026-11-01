@@ -97,6 +97,9 @@ REPRESENTATION_KINDS = {
 # last with a confirmed application number). Later legal milestones such as
 # registration are kept as the declared, unverified source status: only
 # registry evidence or a lifecycle event may record them as legal state.
+# Wording outside this table (registry exports vary) never blocks a row: it
+# imports in the draft phase with its source wording kept and shown as
+# unrecognised, exactly as every Status cell imported before this mapping.
 SOURCE_STATUS_ALIASES = {
     "draft": "draft",
     "not filed": "draft",
@@ -122,9 +125,11 @@ SOURCE_STATUS_ALIASES = {
     "examination": "examination",
     "objected": "objected",
     "objection": "objected",
+    "under objection": "objected",
     "examination report issued": "objected",
     "hearing": "hearing",
     "show cause hearing": "hearing",
+    "ready for show cause hearing": "hearing",
     "accepted": "accepted",
     "accepted and advertised": "advertised",
     "accepted advertised": "advertised",
@@ -467,7 +472,7 @@ def _validate_row(
     if "source_status" in mapped:
         declared = source_status_key(mapped["source_status"])
         if declared is None:
-            errors.append({"field": "source_status", "code": "unsupported_status"})
+            warnings.append({"field": "source_status", "code": "unrecognised_status"})
         else:
             phase = SOURCE_STATUS_PHASES.get(declared, "filed")
             normalized["declared_status"] = declared
@@ -1286,10 +1291,17 @@ def _particulars_for(normalized: dict[str, Any], *, row_id: str) -> IpImportPart
             else []
         ),
         agent={"name": normalized["agent_name"]} if normalized.get("agent_name") else None,
+        # Imported particulars stay unverified until someone attaches the
+        # source evidence; a mark the source says is already filed is
+        # verified against the registry record, not prepared for filing.
         filing_manifest=[
             {
                 "key": "portfolio_source_review",
-                "label": "Verify imported source before filing",
+                "label": (
+                    "Verify imported source against the registry record"
+                    if normalized.get("filing_phase") == "filed"
+                    else "Verify imported source before filing"
+                ),
                 "required": True,
                 "evidence_reference": None,
             }

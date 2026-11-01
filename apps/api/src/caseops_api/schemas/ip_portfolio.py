@@ -78,8 +78,12 @@ class IpPortfolioRow(BaseModel):
     source_renewal_alert_status: str | None = None
     source_renewal_alert_body: str | None = None
     #: Status a portfolio import declared (for example ``registered``). It is
-    #: unverified source evidence; ``filing_phase`` is the legal phase.
+    #: unverified source evidence; ``filing_phase`` is the legal phase. None
+    #: when the source wording is not a recognised status.
     source_declared_status: str | None = None
+    #: The source's own Status wording (for example ``Ready for Show Cause
+    #: Hearing``), at most 120 characters; None when the import had none.
+    source_status_text: str | None = None
     client_name: str | None = None
     responsible_lawyer: str | None = None
     responsible_membership_id: str | None = None
