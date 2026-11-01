@@ -311,12 +311,16 @@ describe("PersonPicker", () => {
     expect(await screen.findByText("No colleague matches that filter.")).toBeVisible();
   });
 
-  it("explains itself when the staff list cannot be loaded", async () => {
-    listCompanyUsersMock.mockRejectedValue(new Error("network"));
+  it("explains itself when the staff list cannot be loaded and offers a retry", async () => {
+    listCompanyUsersMock.mockRejectedValueOnce(new Error("network"));
 
     render(withClient(<PersonPicker id="p" value="" onChange={() => {}} />));
 
     expect(await screen.findByText(/staff list could not be loaded/)).toBeVisible();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByText(/staff list could not be loaded/)).toBeNull());
+    expect(screen.getByRole("combobox")).toBeEnabled();
   });
 });
 
