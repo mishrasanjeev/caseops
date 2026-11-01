@@ -330,7 +330,8 @@ export type PortalInstruction = {
   updated_at: string;
 };
 
-export async function fetchFirmPortalInstructions(): Promise<{ instructions: PortalInstruction[] }> {
+/** `instructions` is the newest `limit` of `total` visible instructions. */
+export async function fetchFirmPortalInstructions(): Promise<{ instructions: PortalInstruction[]; total: number; limit: number }> {
   return apiRequest("/api/ip/portal/client-instructions");
 }
 

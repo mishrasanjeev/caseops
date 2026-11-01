@@ -91,6 +91,73 @@ REPRESENTATION_KINDS = {
     "sound",
     "other",
 }
+# A source "Status" cell (B4-ADJ-11). Each recognised wording becomes a
+# declared status; the application is created in the filing phase the
+# interactive create command can set for it (draft, pre_filing or filed, the
+# last with a confirmed application number). Later legal milestones such as
+# registration are kept as the declared, unverified source status: only
+# registry evidence or a lifecycle event may record them as legal state.
+# Wording outside this table (registry exports vary) never blocks a row: it
+# imports in the draft phase with its source wording kept and shown as
+# unrecognised, exactly as every Status cell imported before this mapping.
+SOURCE_STATUS_ALIASES = {
+    "draft": "draft",
+    "not filed": "draft",
+    "unfiled": "draft",
+    "pre filing": "pre_filing",
+    "prefiling": "pre_filing",
+    "to be filed": "pre_filing",
+    "ready to file": "pre_filing",
+    "ready for filing": "pre_filing",
+    "filed": "filed",
+    "application filed": "filed",
+    "new application": "filed",
+    "pending": "filed",
+    "formalities chk pass": "formalities",
+    "formalities check pass": "formalities",
+    "formalities chk fail": "formalities",
+    "formalities check fail": "formalities",
+    "send to vienna codification": "formalities",
+    "sent to vienna codification": "formalities",
+    "marked for exam": "examination",
+    "marked for examination": "examination",
+    "under examination": "examination",
+    "examination": "examination",
+    "objected": "objected",
+    "objection": "objected",
+    "under objection": "objected",
+    "examination report issued": "objected",
+    "hearing": "hearing",
+    "show cause hearing": "hearing",
+    "ready for show cause hearing": "hearing",
+    "accepted": "accepted",
+    "accepted and advertised": "advertised",
+    "accepted advertised": "advertised",
+    "advertised": "advertised",
+    "advertised before acceptance": "advertised",
+    "advertised before accepted": "advertised",
+    "published": "advertised",
+    "opposed": "opposed",
+    "under opposition": "opposed",
+    "registered": "registered",
+    "renewed": "registered",
+    "refused": "refused",
+    "rejected": "refused",
+    "abandoned": "abandoned",
+    "withdrawn": "withdrawn",
+    "removed": "removed",
+    "removed from register": "removed",
+    "expired": "removed",
+}
+SOURCE_STATUS_PHASES = {"draft": "draft", "pre_filing": "pre_filing"}
+TERMINAL_SOURCE_STATUSES = frozenset({"refused", "abandoned", "withdrawn", "removed"})
+
+
+def source_status_key(value: Any) -> str | None:
+    """Declared status for a source Status cell, or None when unrecognised."""
+
+    text = " ".join(re.sub(r"[^0-9a-z]+", " ", str(value).casefold()).split())
+    return SOURCE_STATUS_ALIASES.get(text)
 
 
 @dataclass
@@ -295,8 +362,10 @@ def _validate_row(
             {
                 "source": header,
                 "target": target,
+                # The Status cell is retained as source evidence and also sets
+                # the filing phase, so it is canonical input.
                 "handling": "source_metadata"
-                if target in METADATA_FIELDS
+                if target in METADATA_FIELDS and target != "source_status"
                 else "canonical"
                 if target
                 else "unmapped",
@@ -400,6 +469,23 @@ def _validate_row(
     for field in METADATA_FIELDS - {"priority_date"}:
         if field in mapped:
             normalized[field] = source_value(mapped[field])
+    if "source_status" in mapped:
+        declared = source_status_key(mapped["source_status"])
+        if declared is None:
+            warnings.append({"field": "source_status", "code": "unrecognised_status"})
+        else:
+            phase = SOURCE_STATUS_PHASES.get(declared, "filed")
+            normalized["declared_status"] = declared
+            normalized["filing_phase"] = phase
+            # The same precondition the interactive create command applies.
+            if phase == "filed" and not normalized.get("application_number"):
+                errors.append(
+                    {"field": "application_number", "code": "required_for_source_status"}
+                )
+            if declared not in {"draft", "pre_filing", "filed"}:
+                warnings.append({"field": "source_status", "code": "declared_status_unverified"})
+            if declared in TERMINAL_SOURCE_STATUSES:
+                warnings.append({"field": "source_status", "code": "terminal_status_no_alert"})
 
     representation_kind = mapped.get("representation_kind")
     if representation_kind is not None:
@@ -1188,6 +1274,7 @@ def _particulars_for(normalized: dict[str, Any], *, row_id: str) -> IpImportPart
                         "application_date",
                         "renewal_due_date",
                         "source_status",
+                        "declared_status",
                         "image_reference",
                     )
                     if normalized.get(field) is not None
@@ -1204,10 +1291,17 @@ def _particulars_for(normalized: dict[str, Any], *, row_id: str) -> IpImportPart
             else []
         ),
         agent={"name": normalized["agent_name"]} if normalized.get("agent_name") else None,
+        # Imported particulars stay unverified until someone attaches the
+        # source evidence; a mark the source says is already filed is
+        # verified against the registry record, not prepared for filing.
         filing_manifest=[
             {
                 "key": "portfolio_source_review",
-                "label": "Verify imported source before filing",
+                "label": (
+                    "Verify imported source against the registry record"
+                    if normalized.get("filing_phase") == "filed"
+                    else "Verify imported source before filing"
+                ),
                 "required": True,
                 "evidence_reference": None,
             }
@@ -1401,7 +1495,7 @@ def _materialize_import_row(
                 asset_id=asset.id,
                 office=normalized["office"],
                 jurisdiction=normalized["jurisdiction"],
-                filing_phase="draft",
+                filing_phase=normalized.get("filing_phase", "draft"),
                 application_number=(
                     IpApplicationNumberCreate(
                         raw_value=application_number,
@@ -1416,12 +1510,18 @@ def _materialize_import_row(
         )
     from caseops_api.services.ip_renewals import schedule_imported_renewal_reminder
 
-    reminder = schedule_imported_renewal_reminder(
-        session,
-        context=context,
-        docket_id=docket.id,
-        row_id=row_id,
-        normalized=normalized,
+    # A source that says the mark was refused, abandoned, withdrawn or
+    # removed gets no renewal alert; the row says so in its preview notes.
+    reminder = (
+        None
+        if normalized.get("declared_status") in TERMINAL_SOURCE_STATUSES
+        else schedule_imported_renewal_reminder(
+            session,
+            context=context,
+            docket_id=docket.id,
+            row_id=row_id,
+            normalized=normalized,
+        )
     )
     source_row = session.get(IpImportRow, row_id)
     assert source_row is not None

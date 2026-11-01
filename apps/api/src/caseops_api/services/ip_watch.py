@@ -95,15 +95,40 @@ MAX_PROFILE_PUBLICATION_COMPARISONS = 2_500
 MAX_HITS_PER_INGEST = 250
 # Profiles a capture is evaluated against; ingestion resets a quota pause itself.
 INTAKE_PROFILE_STATUSES = ("active", "paused_cost_quota")
+# The operator records each journal entry; no journal source is polled.
+MANUAL_JOURNAL_PROVIDER = "manual-journal"
+# Prefix of scheduler-written runs; manual-profile ones were "succeeded 0/0"
+# rows that polled nothing (B4-ADJ-20) and are not ingestion history.
+SCHEDULER_RUN_PREFIX = "scheduler:"
 
 
 @dataclass(frozen=True, slots=True)
 class JournalWatchSchedulerResult:
     due_profiles: int
+    #: Profiles whose automated source was actually checked. No journal
+    #: provider is activated yet, so a profile paused for that is not one.
     checked_profiles: int
     cost_paused_profiles: int
     provider_paused_profiles: int
     external_calls: int
+    #: Manual-only profiles: no run is recorded and nothing is polled.
+    manual_profiles: int = 0
+
+
+def _assert_automated_watch_available(session: Session, *, context: SessionContext) -> None:
+    """Gate anything that claims an automated journal source.
+
+    Readiness models journal watch as the automated ``watch_operations``
+    feature with manual docketing as its fallback, and the watch page says
+    manual intake needs only journal-watch management. Manual profiles and
+    captures therefore stay capability-gated; an automated profile, its
+    reactivation, or a capture claiming an external call needs the complete
+    decision (capability, ip_watch entitlement and rollout).
+    """
+
+    from caseops_api.services.ip_capability_catalog import assert_ip_feature_available
+
+    assert_ip_feature_available(session, context=context, feature_id="watch_operations")
 
 
 def _now() -> datetime:
@@ -251,6 +276,8 @@ def create_watch_profile(
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )
+    if payload.provider_key.strip() != MANUAL_JOURNAL_PROVIDER:
+        _assert_automated_watch_available(session, context=locked)
     docket = _docket_or_404(session, context=locked, docket_id=payload.docket_id, for_update=True)
     recipient_ids = sorted(set(payload.recipient_membership_ids))
     recipients = list(
@@ -288,7 +315,8 @@ def create_watch_profile(
         spent_cost_minor_in_period=0,
         cost_currency=payload.cost_currency.upper(),
         poll_status="active",
-        next_poll_at=now,
+        # A manual profile is compared at intake; it has no poll to schedule.
+        next_poll_at=None if payload.provider_key.strip() == MANUAL_JOURNAL_PROVIDER else now,
         criteria_version=CRITERIA_VERSION,
         created_by_membership_id=locked.membership.id,
     )
@@ -322,9 +350,13 @@ def update_watch_profile_status(
     profile = _profile_or_404(session, context=locked, profile_id=profile_id, for_update=True)
     if profile.version != payload.expected_version:
         raise HTTPException(status_code=409, detail="Watch profile changed; reload and retry.")
+    manual = profile.provider_key == MANUAL_JOURNAL_PROVIDER
+    if payload.poll_status == "active" and not manual:
+        _assert_automated_watch_available(session, context=locked)
     profile.poll_status = payload.poll_status
     profile.pause_reason = None if payload.poll_status == "active" else payload.reason.strip()
-    profile.next_poll_at = _now() if payload.poll_status == "active" else None
+    # Only an automated source has a poll to schedule.
+    profile.next_poll_at = _now() if payload.poll_status == "active" and not manual else None
     profile.version += 1
     record_from_context(
         session,
@@ -688,6 +720,8 @@ def ingest_journal(
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )
+    if payload.external_call:
+        _assert_automated_watch_available(session, context=locked)
     request_sha256 = _fingerprint(payload.model_dump(mode="json", exclude={"idempotency_key"}))
     replay = session.scalar(
         select(IpJournalIngestionRun).where(
@@ -1085,7 +1119,11 @@ def ingest_journal(
     for profile in active_profiles:
         profile.spent_cost_minor_in_period += payload.cost_minor
         profile.last_polled_at = now
-        profile.next_poll_at = _next_poll(profile.frequency, now)
+        profile.next_poll_at = (
+            None
+            if profile.provider_key == MANUAL_JOURNAL_PROVIDER
+            else _next_poll(profile.frequency, now)
+        )
         profile.poll_status = "active"
         profile.pause_reason = None
         profile.version += 1
@@ -1556,7 +1594,12 @@ def list_watch_workspace(
         else []
     )
     run_statement = select(IpJournalIngestionRun).where(
-        IpJournalIngestionRun.company_id == context.company.id
+        IpJournalIngestionRun.company_id == context.company.id,
+        # Legacy scheduler rows for manual profiles polled nothing.
+        ~(
+            (IpJournalIngestionRun.provider_key == MANUAL_JOURNAL_PROVIDER)
+            & IpJournalIngestionRun.idempotency_key.startswith(SCHEDULER_RUN_PREFIX)
+        ),
     )
     runs = list(
         session.scalars(
@@ -1612,6 +1655,13 @@ def run_journal_watch_scheduler(
                     IpWatchProfile.next_poll_at.is_(None),
                     IpWatchProfile.next_poll_at <= current,
                 ),
+                # A manual-only profile has nothing to poll; it is due only
+                # when its cost-quota period ends.
+                or_(
+                    IpWatchProfile.provider_key != MANUAL_JOURNAL_PROVIDER,
+                    (IpWatchProfile.poll_status == "paused_cost_quota")
+                    & IpWatchProfile.next_poll_at.is_not(None),
+                ),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
                 or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
@@ -1620,9 +1670,9 @@ def run_journal_watch_scheduler(
             .with_for_update(of=IpWatchProfile)
         )
     )
-    checked = 0
     cost_paused = 0
     provider_paused = 0
+    manual_profiles = 0
     for profile in profiles:
         _reset_cost_period_if_due(profile, current)
         if (
@@ -1639,8 +1689,16 @@ def run_journal_watch_scheduler(
             profile.version += 1
             cost_paused += 1
             continue
-        manual = profile.provider_key == "manual-journal"
-        scheduler_key = f"scheduler:{profile.id}:{current.strftime('%Y%m%dT%H%M%SZ')}"
+        if profile.provider_key == MANUAL_JOURNAL_PROVIDER:
+            # No automated source: nothing is polled, so no run is recorded
+            # and nothing claims a check. The quota reset above was the only
+            # scheduled work; it changed the profile, so its version moves.
+            profile.next_poll_at = None
+            profile.version += 1
+            manual_profiles += 1
+            continue
+        scheduled = current.strftime("%Y%m%dT%H%M%SZ")
+        scheduler_key = f"{SCHEDULER_RUN_PREFIX}{profile.id}:{scheduled}"
         request_sha256 = _fingerprint(
             {
                 "profile_id": profile.id,
@@ -1653,7 +1711,7 @@ def run_journal_watch_scheduler(
             provider_key=profile.provider_key,
             idempotency_key=scheduler_key,
             request_sha256=request_sha256,
-            status="succeeded" if manual else "failed",
+            status="failed",
             external_call=False,
             cost_minor=0,
             currency=profile.cost_currency,
@@ -1662,33 +1720,27 @@ def run_journal_watch_scheduler(
             hits_created=0,
             duplicate_hits=0,
             stale_source_alert=False,
-            error_redacted=(
-                None
-                if manual
-                else "Journal provider is not activated; no external call was attempted."
-            ),
+            error_redacted="Journal provider is not activated; no external call was attempted.",
             requested_by_membership_id=profile.created_by_membership_id,
             started_at=current,
             completed_at=current,
         )
         session.add(run)
         profile.last_polled_at = current
-        if manual:
-            profile.next_poll_at = _next_poll(profile.frequency, current)
-            checked += 1
-        else:
-            profile.poll_status = "paused"
-            profile.pause_reason = (
-                "Journal provider activation, licensing, and credentials are required."
-            )
-            profile.next_poll_at = None
-            provider_paused += 1
+        profile.poll_status = "paused"
+        profile.pause_reason = (
+            "Journal provider activation, licensing, and credentials are required."
+        )
+        profile.next_poll_at = None
+        provider_paused += 1
         profile.version += 1
     session.commit()
     return JournalWatchSchedulerResult(
         due_profiles=len(profiles),
-        checked_profiles=checked,
+        # No activated journal provider exists, so nothing is checked yet.
+        checked_profiles=0,
         cost_paused_profiles=cost_paused,
         provider_paused_profiles=provider_paused,
         external_calls=0,
+        manual_profiles=manual_profiles,
     )

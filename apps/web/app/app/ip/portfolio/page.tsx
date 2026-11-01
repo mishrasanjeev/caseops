@@ -74,6 +74,7 @@ import {
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
+import { exportColumns, phaseLabel, portfolioStatus, recordStatusLabel, sourceStatusIsAhead } from "@/lib/ip/portfolio-status";
 
 const COLUMN_OPTIONS = [
   ["mark", "Mark"],
@@ -240,7 +241,7 @@ export default function IpPortfolioPage() {
   });
 
   const previewExport = useMutation({
-    mutationFn: () => previewIpPortfolioExport({ filters, columns, rowLimit: 50000 }),
+    mutationFn: () => previewIpPortfolioExport({ filters, columns: exportColumns(columns), rowLimit: 50000 }),
     onSuccess: setExportPreview,
     onError: (error) => toast.error(apiErrorMessage(error, "Could not preview the export.")),
   });
@@ -250,7 +251,7 @@ export default function IpPortfolioPage() {
       if (!exportPreview) throw new Error("Export preview is required.");
       return createIpPortfolioExport({
         filters,
-        columns,
+        columns: exportColumns(columns),
         rowLimit: 50000,
         previewToken: exportPreview.preview_token,
       });
@@ -425,9 +426,9 @@ export default function IpPortfolioPage() {
               onChange={(value) => setFilters((current) => ({ ...current, filing_phase: one(value) }))}
             />
             <FilterSelect
-              label="Status"
+              label="Record status"
               value={first(filters.docket_status)}
-              options={[["all", "All statuses"], ["draft", "Draft"], ["ready", "Ready"], ["on_hold", "On hold"], ["closed", "Closed"]]}
+              options={[["all", "All record statuses"], ["draft", "Particulars draft"], ["ready", "Particulars ready"], ["on_hold", "On hold"], ["closed", "Closed"]]}
               onChange={(value) => setFilters((current) => ({ ...current, docket_status: one(value) }))}
             />
           </div>
@@ -1031,10 +1032,28 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
       return row.jurisdiction ?? "Not recorded";
     case "office":
       return row.office ?? "Not recorded";
-    case "status":
-      return <Badge>{row.docket_status.replaceAll("_", " ")}</Badge>;
+    case "status": {
+      // B4-ADJ-11: the headline is the mark's status (its filing phase, or an
+      // import's source wording marked unverified); the docket's particulars
+      // state is labelled beneath it and never reads as the mark's status.
+      const status = portfolioStatus(row);
+      return (
+        <span className="flex min-w-0 flex-col items-start gap-1" data-testid={`ip-portfolio-status-${row.docket_id}`}>
+          <Badge tone={status.unverified ? "warning" : "neutral"}>{status.label}</Badge>
+          {status.unverified ? (
+            <span className="text-xs text-[var(--color-mute)]">Filing phase: {phaseLabel(row.filing_phase)}</span>
+          ) : null}
+          <span className="text-xs text-[var(--color-mute)]">{recordStatusLabel(row.docket_status)}</span>
+        </span>
+      );
+    }
     case "phase":
-      return row.filing_phase.replaceAll("_", " ");
+      return (
+        <span>
+          {phaseLabel(row.filing_phase)}
+          <DeclaredStatus row={row} />
+        </span>
+      );
     case "proprietors":
       return <ListValue values={row.proprietors} />;
     case "agents":
@@ -1087,6 +1106,16 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
     case "updated_at":
       return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(row.updated_at));
   }
+}
+
+/** Status a portfolio import's source declared; never shown as the legal phase. */
+function DeclaredStatus({ row }: { row: IpPortfolioRow }) {
+  if (!sourceStatusIsAhead(row)) return null;
+  return (
+    <span className="mt-1 block text-xs text-[var(--color-mute)]" data-testid={`ip-portfolio-declared-status-${row.docket_id}`}>
+      Source status: {row.source_status_text} (unverified)
+    </span>
+  );
 }
 
 function ListValue({ values, mono = false }: { values: string[]; mono?: boolean }) {

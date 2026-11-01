@@ -342,11 +342,15 @@ def _require_assignment(
 
 
 def _client_authority_statement(*, company_id: str, docket_id: str):
+    # One predicate for the create-options picker and the create validator. A
+    # renewal instruction authorises a renewal, never a foreign filing, even
+    # if a stored row pairs it with a proceed decision.
     return select(IpClientInstruction).where(
         IpClientInstruction.company_id == company_id,
         IpClientInstruction.docket_id == docket_id,
         IpClientInstruction.status == "accepted",
         IpClientInstruction.decision == "proceed",
+        IpClientInstruction.instruction_kind != "renewal",
     )
 
 

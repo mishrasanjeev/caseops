@@ -57,7 +57,9 @@ import {
   type IpForeignAssociateWorkspace,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { linkInvoiceChoices } from "@/lib/ip/foreign-associate-invoice";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
+import { parseReminderOffsetsHours, REMINDER_OFFSET_FORMAT_HINT } from "@/lib/reminder-offsets";
 import { useSession } from "@/lib/use-session";
 
 const SELECT_CLASS =
@@ -1089,13 +1091,22 @@ function TransactionForm({
   const needsApproval = kind ? ["approve", "approve_substantive_response", "approve_fee_change", "verify_filing_evidence", "complete", "reassign"].includes(kind) : false;
   // The API accepts only active (not voided or superseded) cost items.
   const estimates = docket.cost_items.filter((row) => row.cost_nature === "estimate" && row.lineage_status === "active" && (kind === "reassign" || row.id !== workspace.instruction.estimate_cost_item_id));
-  const actuals = docket.cost_items.filter((row) => row.cost_nature === "actual" && row.lineage_status === "active");
+  // Link invoice: options come from the server validator's predicates (B4-ADJ-14).
+  const invoiceChoices = linkInvoiceChoices({
+    costItems: docket.cost_items,
+    spends: counsel?.spend_records ?? [],
+    matterId: docket.matter_id,
+    counselId: workspace.instruction.outside_counsel_id,
+    assignmentId: workspace.instruction.assignment_id,
+    spendId,
+  });
+  const actuals = invoiceChoices.actuals;
   const assignments = docket.matter_id ? counsel?.assignments.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === replacementCounselId && ["approved", "active"].includes(row.status)) ?? [] : [];
   const docketHref = `/app/ip?docket=${encodeURIComponent(docket.id)}`;
   const documentsHref = `${docketHref}&tab=documents`;
   // Assignments and associate invoices are recorded with outside_counsel:manage; link only for those roles.
   const matterCounselHref = docket.matter_id && canManageCounsel ? `/app/matters/${encodeURIComponent(docket.matter_id)}/outside-counsel` : null;
-  const spends = counsel?.spend_records.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === workspace.instruction.outside_counsel_id) ?? [];
+  const spends = invoiceChoices.spends;
   const dispatches = communications.filter((row) => row.direction === "outbound" && ["logged", "sent", "delivered", "opened"].includes(row.status));
 
   useEffect(() => { setKind(options[0] ?? ""); }, [workspace.instruction.status]);
@@ -1172,22 +1183,28 @@ function TransactionForm({
     </> : null}
     {kind === "link_invoice" ? <>
       <ChoiceField
+        label="Associate invoice"
+        value={spendId}
+        onChange={(value) => { setSpendId(value); setActualCostId(""); }}
+        placeholder="Select invoice"
+        options={spends.map((row) => ({ value: row.id, label: `${row.invoice_reference} · ${money(row.amount_minor, row.currency)} · ${row.status}` }))}
+        required
+        caption={invoiceChoices.spendsWithoutReference ? `${invoiceChoices.spendsWithoutReference} invoice(s) from this associate have no invoice reference and cannot be linked until one is recorded on the Matter's Outside counsel tab.` : undefined}
+        empty={!docket.matter_id ? "Associate invoices are recorded against a Matter, and this record has no Matter." : invoiceChoices.spendsWithoutReference ? `This associate's invoice(s) on the Matter have no invoice reference. Record the reference on the Matter's Outside counsel tab first.` : matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "No invoice from this associate is recorded on the Matter. An owner, admin or partner (outside-counsel management) records it on the Matter's Outside counsel tab; your role cannot."}
+      />
+      <ChoiceField
         label="Actual filing cost"
         value={actualCostId}
         onChange={setActualCostId}
         placeholder="Select cost"
         options={actuals.map((row) => ({ value: row.id, label: `${row.description} · ${row.amount_withheld ? "Amount restricted" : money(row.amount_minor, row.currency)}` }))}
         required
-        empty={<>No active actual cost is recorded on this record. Record the associate&apos;s invoiced cost in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
-      />
-      <ChoiceField
-        label="Associate invoice"
-        value={spendId}
-        onChange={setSpendId}
-        placeholder="Select invoice"
-        options={spends.map((row) => ({ value: row.id, label: `${row.invoice_reference ?? row.description} · ${row.status}` }))}
-        required
-        empty={!docket.matter_id ? "Associate invoices are recorded against a Matter, and this record has no Matter." : matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "No invoice from this associate is recorded on the Matter. An owner, admin or partner (outside-counsel management) records it on the Matter's Outside counsel tab; your role cannot."}
+        caption={invoiceChoices.selectedSpend ? `Only actual costs linked to a client invoice for ${money(invoiceChoices.selectedSpend.amount_minor, invoiceChoices.selectedSpend.currency)} are listed; the associate invoice and the cost must reconcile.` : "Only actual costs already linked to a client invoice are listed."}
+        empty={invoiceChoices.activeActualCount === 0
+          ? <>No active actual cost is recorded on this record. Record the associate&apos;s invoiced cost in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>
+          : invoiceChoices.unbilledActualCount === invoiceChoices.activeActualCount
+            ? <>No actual cost on this record is linked to a client invoice yet. Link the cost to the client invoice in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>
+            : <>No billed actual cost matches {invoiceChoices.selectedSpend ? money(invoiceChoices.selectedSpend.amount_minor, invoiceChoices.selectedSpend.currency) : "this invoice"}. Correct the cost or its client-invoice link in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
       />
     </> : null}
     {kind === "reassign" ? <>
@@ -1247,13 +1264,19 @@ function ReminderPanel({ workspace, docket, canWrite }: { workspace: IpForeignAs
   const [inApp, setInApp] = useState(true);
   const [email, setEmail] = useState(false);
   const [escalationHours, setEscalationHours] = useState("24");
+  // The API accepts 0 to 720 hours, unique, at most 10 (B4-ADJ-19 sibling).
+  const parsedOffsets = parseReminderOffsetsHours(offsets, { maxHours: 720, maxCount: 10 });
+  const offsetError = parsedOffsets.ok ? undefined : parsedOffsets.error;
+  const escalation = Number(escalationHours);
+  const escalationError = /^\d+$/.test(escalationHours.trim()) && escalation >= 1 && escalation <= 168
+    ? undefined : "Enter whole hours from 1 to 168.";
   const schedule = useMutation({
     mutationFn: () => scheduleIpForeignAssociateReminders({
       instruction: workspace.instruction,
       expectedLifecycleVersion: docket.lifecycle_version,
-      reminderOffsetsHours: refs(offsets).map(Number),
+      reminderOffsetsHours: parsedOffsets.ok ? parsedOffsets.hours : [],
       channels: [...(inApp ? ["in_app" as const] : []), ...(email ? ["email" as const] : [])],
-      escalationAfterHours: Number(escalationHours),
+      escalationAfterHours: escalation,
       escalationMembershipId: session.context?.membership.id,
     }),
     onSuccess: async (result) => {
@@ -1263,10 +1286,10 @@ function ReminderPanel({ workspace, docket, canWrite }: { workspace: IpForeignAs
     onError: (error) => toast.error(apiErrorMessage(error, "Could not schedule reminders.")),
   });
   return <div className="min-w-0 space-y-4"><Card><CardHeader><CardTitle as="h3">Acknowledgement reminders</CardTitle></CardHeader><CardContent><form className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); schedule.mutate(); }}>
-    <Field label="Hours before due"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
-    <Field label="Escalate after hours"><Input type="number" min="1" max="168" value={escalationHours} onChange={(event) => setEscalationHours(event.target.value)} /></Field>
+    <Field id="fa-reminder-offsets" label="Reminder offsets before due" hint={parsedOffsets.ok ? `Before the acknowledgement is due: ${parsedOffsets.hours.join(", ")} hours. ${REMINDER_OFFSET_FORMAT_HINT}` : undefined} error={offsetError}><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
+    <Field id="fa-reminder-escalation" label="Escalate after hours" error={escalationError}><Input type="number" min="1" max="168" step="1" value={escalationHours} onChange={(event) => setEscalationHours(event.target.value)} /></Field>
     <Field label="Channels" wide><div className="flex min-w-0 flex-wrap gap-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={inApp} onChange={(event) => setInApp(event.target.checked)} />In app</label><label className="flex items-center gap-2"><input type="checkbox" checked={email} onChange={(event) => setEmail(event.target.checked)} />Email</label></div></Field>
-    <div className="flex min-w-0 md:col-span-2 xl:col-span-4"><Button className="w-full sm:w-auto" type="submit" disabled={schedule.isPending || !canWrite || workspace.instruction.status !== "dispatched" || workspace.acknowledgement_status !== "outstanding" || (!inApp && !email)}>{schedule.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}Schedule reminders</Button></div>
+    <div className="flex min-w-0 md:col-span-2 xl:col-span-4"><Button className="w-full sm:w-auto" type="submit" disabled={schedule.isPending || !canWrite || workspace.instruction.status !== "dispatched" || workspace.acknowledgement_status !== "outstanding" || (!inApp && !email) || !parsedOffsets.ok || Boolean(escalationError)}>{schedule.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}Schedule reminders</Button></div>
   </form></CardContent></Card>
   <div className="grid min-w-0 gap-2 sm:grid-cols-2">{workspace.reminders.map((row) => <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] bg-white p-3 text-sm"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 font-semibold">{row.event_type.includes("overdue") ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <MailCheck className="h-4 w-4" />}{readable(row.event_type)}</span><Status value={row.status} /></div><p className="mt-2 break-words text-xs text-[var(--color-mute)]">{row.channel} · {row.scheduled_for ? DATE.format(new Date(row.scheduled_for)) : "No schedule"}</p></div>)}</div>
   {!workspace.reminders.length ? <EmptyState title="No reminders scheduled" description="" /> : null}</div>;

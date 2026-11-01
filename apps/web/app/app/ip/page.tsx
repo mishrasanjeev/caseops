@@ -111,6 +111,8 @@ import {
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 import { deadlineExceptionLabel, normalJurisdiction, sameJurisdiction } from "@/lib/ip/governance";
+import { recordStatusLabel } from "@/lib/ip/portfolio-status";
+import { parseReminderOffsetsHours, REMINDER_OFFSET_FORMAT_HINT } from "@/lib/reminder-offsets";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -455,7 +457,7 @@ export default function IpDocketPage() {
                 >
                   <span className="block truncate font-semibold">{row.title}</span>
                   <span className="mt-1 block text-xs text-[var(--color-mute)]">
-                    {row.primary_identifier ?? "Unfiled"} · {row.status} · v{row.current_version}
+                    {row.primary_identifier ?? "Unfiled"} · {recordStatusLabel(row.status)} · v{row.current_version}
                   </span>
                 </button>
               ))}
@@ -1561,10 +1563,9 @@ function HearingWorkflowCard({
   const [previewing, setPreviewing] = useState(false);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [confirmationTimes, setConfirmationTimes] = useState<Record<string, string>>({});
-  const offsetValues = offsets
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value) && value >= 0);
+  const parsedOffsets = parseReminderOffsetsHours(offsets);
+  const offsetValues = parsedOffsets.ok ? parsedOffsets.hours : [];
+  const offsetError = parsedOffsets.ok ? null : parsedOffsets.error;
   const reminderChannels: Array<"email" | "in_app"> = [
     ...(emailReminder ? (["email"] as const) : []),
     ...(inAppReminder ? (["in_app"] as const) : []),
@@ -1694,7 +1695,18 @@ function HearingWorkflowCard({
             <Field label="Location"><Input value={locationText} onChange={(event) => setLocationText(event.target.value)} /></Field>
             <Field label="Virtual hearing link"><Input type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} /></Field>
             <Field label="Source"><Input value={source} onChange={(event) => setSource(event.target.value)} /></Field>
-            <Field label="Reminder offsets (hours)"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
+            <Field label="Reminder offsets" htmlFor="ip-hearing-reminder-offsets">
+              <Input
+                id="ip-hearing-reminder-offsets"
+                value={offsets}
+                aria-invalid={offsetError ? true : undefined}
+                aria-describedby="ip-hearing-reminder-offsets-help"
+                onChange={(event) => { setOffsets(event.target.value); setPreviewing(false); }}
+              />
+              <p id="ip-hearing-reminder-offsets-help" role={offsetError ? "alert" : undefined} className={`min-w-0 break-words text-xs ${offsetError ? "text-[var(--color-danger-500)]" : "text-[var(--color-mute)]"}`}>
+                {offsetError ?? `Before the hearing: ${offsetValues.join(", ")} hours. ${REMINDER_OFFSET_FORMAT_HINT}`}
+              </p>
+            </Field>
             <fieldset className="col-span-full min-w-0 rounded-md border border-[var(--color-line)] p-3">
               <legend className="px-1 text-sm font-semibold">Reminder channels</legend>
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1706,7 +1718,7 @@ function HearingWorkflowCard({
               <div className="col-span-full min-w-0 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" data-testid="ip-hearing-preview">
                 <strong>Confirm reminder policy</strong>
                 <div className="mt-1 break-words">{timeStatus === "exact" ? `Exact time ${hearingTime}` : timeStatus === "session" ? `Session: ${sessionLabel}` : "Date-based reminder only; no hearing time will be invented."}</div>
-                <div className="mt-1 break-words">Recipients: {recipientIds.join(", ") || "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
+                <div className="mt-1 break-words">Recipients: {recipientIds.length ? recipientIds.map((id, index) => <span key={id}>{index ? ", " : ""}<PersonName membershipId={id} /></span>) : "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
               </div>
             ) : null}
             <div className="col-span-full flex min-w-0 flex-wrap gap-2">

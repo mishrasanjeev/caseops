@@ -701,6 +701,20 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
+  it("B4-ADJ-11 labels the docket record status so an imported filed mark never reads as Draft", async () => {
+    window.history.replaceState(null, "", "/app/ip");
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [
+        { ...activeDocket(), status: "draft" },
+        { ...activeDocket(), id: "ip-2", title: "BIRCH", primary_identifier: "TM-2" },
+      ],
+      count: 2,
+    });
+    render(withClient(<IpDocketPage />));
+    expect(await screen.findByTestId("ip-docket-ip-1")).toHaveTextContent("TM-1 · Record: particulars draft · v1");
+    expect(screen.getByTestId("ip-docket-ip-2")).toHaveTextContent("TM-2 · Record: active · v1");
+  });
+
   it("BUG-012 links a national trademark docket to its registry reconciliation", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1");
 
@@ -1460,6 +1474,29 @@ describe("IpDocketPage", () => {
     expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps 48h reminder offsets instead of silently dropping them (B4-ADJ-19)", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    createIpSharedHearingMock.mockResolvedValue(unknownTimeHearing());
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const workflow = await screen.findByTestId("ip-hearing-workflow");
+    const offsets = within(workflow).getByLabelText("Reminder offsets");
+    const preview = within(workflow).getByRole("button", { name: "Preview recipients and policy" });
+
+    fireEvent.change(offsets, { target: { value: "48h, soon" } });
+    expect(offsets).toHaveAttribute("aria-invalid", "true");
+    expect(within(workflow).getByRole("alert")).toHaveTextContent('"soon" is not a reminder offset.');
+    expect(preview).toBeDisabled();
+
+    fireEvent.change(offsets, { target: { value: "48h, 1d" } });
+    expect(offsets).not.toHaveAttribute("aria-invalid");
+    expect(within(workflow).getByText(/Before the hearing: 48, 24 hours\./)).toBeVisible();
+    fireEvent.click(preview);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Confirm hearing and reminders" }));
+    await waitFor(() => expect(createIpSharedHearingMock).toHaveBeenCalledTimes(1));
+    expect(createIpSharedHearingMock.mock.calls[0][0].reminderOffsetsHours).toEqual([48, 24]);
+  });
+
   it("keeps typed numbers separate and resolves duplicates on narrow mobile", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
     fetchIpDocketsMock.mockResolvedValue({
@@ -2087,7 +2124,7 @@ describe("IpDocketPage", () => {
     expect(within(hearingWorkflow).getByLabelText("Hearing date")).toBeVisible();
     expect(within(hearingWorkflow).getByLabelText("Time precision")).toBeVisible();
     expect(within(hearingWorkflow).getByLabelText("Virtual hearing link")).toBeVisible();
-    expect(within(hearingWorkflow).getByLabelText("Reminder offsets (hours)")).toBeVisible();
+    expect(within(hearingWorkflow).getByLabelText("Reminder offsets")).toBeVisible();
     const previewReminders = within(hearingWorkflow).getByRole("button", {
       name: "Preview recipients and policy",
     });

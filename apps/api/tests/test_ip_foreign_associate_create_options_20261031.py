@@ -287,7 +287,27 @@ def test_every_offered_value_is_accepted_and_every_excluded_value_is_refused(
             created_by_membership_id=membership_id,
             creator_label_snapshot="Client GC",
         )
-        session.add_all([unbudgeted, gbp_estimate, accepted, pending])
+        # B4-ADJ-14: a stored renewal row paired with proceed is not authority
+        # for a foreign filing, in the picker or the validator.
+        renewal_proceed = IpClientInstruction(
+            company_id=company_id,
+            docket_id=docket["id"],
+            instruction_thread_key=f"renewal:{uuid4().hex}",
+            instruction_kind="renewal",
+            instruction_version=1,
+            decision="proceed",
+            status="accepted",
+            scope_json={},
+            options_json=[],
+            source_channel="email",
+            authority_name="Client GC",
+            received_at=datetime.now(UTC),
+            acknowledged_at=datetime.now(UTC),
+            acknowledged_by_membership_id=membership_id,
+            created_by_membership_id=membership_id,
+            creator_label_snapshot="Client GC",
+        )
+        session.add_all([unbudgeted, gbp_estimate, accepted, pending, renewal_proceed])
         session.commit()
         excluded_ids = {
             "inactive": inactive.id,
@@ -297,6 +317,7 @@ def test_every_offered_value_is_accepted_and_every_excluded_value_is_refused(
             "budgetless": budgetless.id,
             "gbp_estimate": gbp_estimate.id,
             "pending": pending.id,
+            "renewal_proceed": renewal_proceed.id,
         }
         accepted_id = accepted.id
     # Supersede the revised estimate: the replacement is active, the source is not.
@@ -389,6 +410,10 @@ def test_every_offered_value_is_accepted_and_every_excluded_value_is_refused(
         "currency": {"estimate_cost_item_id": excluded_ids["gbp_estimate"]},
         "pending": {
             "source_client_instruction_id": excluded_ids["pending"],
+            "client_authority_reference": None,
+        },
+        "renewal_proceed": {
+            "source_client_instruction_id": excluded_ids["renewal_proceed"],
             "client_authority_reference": None,
         },
     }

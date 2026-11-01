@@ -331,6 +331,45 @@ describe("foreign-associate coordinator workspace", () => {
     })));
   });
 
+  it("B4-ADJ-19 reads 48h/2d offsets and names an unreadable or repeated one at the field", async () => {
+    const user = userEvent.setup();
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Liberty IP LLP" });
+    await user.click(screen.getByRole("tab", { name: "Reminders" }));
+    const offsets = screen.getByLabelText("Reminder offsets before due");
+    const submit = screen.getByRole("button", { name: "Schedule reminders" });
+    for (const [input, message] of [
+      ["48h, soon", '"soon" is not a reminder offset.'],
+      ["24, 24", '"24" repeats an offset of 24 hours already entered.'],
+      ["31d", '"31d" is 744 hours; the most allowed is 720 hours.'],
+    ] as const) {
+      await user.clear(offsets);
+      await user.type(offsets, input);
+      expect(offsets).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("alert")).toHaveTextContent(message);
+      expect(submit).toBeDisabled();
+    }
+    const escalation = screen.getByLabelText("Escalate after hours");
+    await user.clear(offsets);
+    await user.type(offsets, "48h, 2d, 1w");
+    expect(screen.getByRole("alert")).toHaveTextContent('"2d" repeats an offset of 48 hours');
+    await user.clear(offsets);
+    await user.type(offsets, "48h, 1d, 0");
+    expect(offsets).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByText(/Before the acknowledgement is due: 48, 24, 0 hours\./)).toBeVisible();
+    await user.clear(escalation);
+    expect(escalation).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter whole hours from 1 to 168.");
+    expect(submit).toBeDisabled();
+    await user.type(escalation, "12");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(mocks.reminders).toHaveBeenCalledWith(expect.objectContaining({
+      reminderOffsetsHours: [48, 24, 0],
+      escalationAfterHours: 12,
+    })));
+  });
+
   it("reassigns a refused instruction with preserved correspondence and a new approved estimate", async () => {
     const user = userEvent.setup();
     const refused = { ...INSTRUCTION, status: "refused" as const, row_version: 4 };
@@ -360,6 +399,43 @@ describe("foreign-associate coordinator workspace", () => {
       evidenceRefs: ["associate-refusal:REF-101"],
     })));
     expect(mocks.createOptions).toHaveBeenCalledWith({ docketId: "docket-1", targetJurisdiction: "US" });
+  });
+
+  it("B4-ADJ-14 offers only invoices and actual costs that the link_invoice validator reconciles", async () => {
+    const user = userEvent.setup();
+    const invoiced = { ...INSTRUCTION, status: "evidence_verified" as const, assignment_id: "assignment-1", row_version: 6 };
+    mocks.instructions.mockResolvedValue({ items: [invoiced], total: 1, limit: 100, offset: 0 });
+    const base = workspace(invoiced);
+    mocks.workspace.mockResolvedValue({ ...base, docket: { ...base.docket, cost_items: [
+      { id: "actual-billed", description: "Billed US filing", amount_minor: 220000, currency: "USD", cost_nature: "actual", lineage_status: "active", billing_link_type: "invoice", billing_link_id: "client-invoice-1" },
+      { id: "actual-unbilled", description: "Unbilled US filing", amount_minor: 220000, currency: "USD", cost_nature: "actual", lineage_status: "active", billing_link_type: null, billing_link_id: null },
+      { id: "actual-other-amount", description: "Billed other amount", amount_minor: 1000, currency: "USD", cost_nature: "actual", lineage_status: "active", billing_link_type: "invoice", billing_link_id: "client-invoice-2" },
+    ] } });
+    mocks.counsel.mockResolvedValue({ ...COUNSEL, spend_records: [
+      { id: "spend-ok", matter_id: "matter-1", counsel_id: "counsel-1", assignment_id: "assignment-1", invoice_reference: "INV-101", description: "US filing", status: "approved", amount_minor: 220000, currency: "USD" },
+      { id: "spend-no-reference", matter_id: "matter-1", counsel_id: "counsel-1", assignment_id: "assignment-1", invoice_reference: null, description: "Unreferenced", status: "approved", amount_minor: 220000, currency: "USD" },
+      { id: "spend-other-assignment", matter_id: "matter-1", counsel_id: "counsel-1", assignment_id: "assignment-9", invoice_reference: "INV-999", description: "Other assignment", status: "approved", amount_minor: 220000, currency: "USD" },
+    ] });
+    mocks.transaction.mockResolvedValue({ instruction: { ...invoiced, status: "invoiced" }, event: {}, successor: null });
+
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Liberty IP LLP" });
+    await user.click(screen.getByRole("tab", { name: "Actions" }));
+    await user.selectOptions(screen.getByLabelText("Transaction"), "link_invoice");
+    const invoice = await screen.findByLabelText("Associate invoice");
+    await waitFor(() => expect(Array.from((invoice as HTMLSelectElement).options).map((option) => option.value)).toEqual(["", "spend-ok"]));
+    expect(screen.getByText(/1 invoice\(s\) from this associate have no invoice reference/)).toBeVisible();
+    const cost = screen.getByLabelText("Actual filing cost") as HTMLSelectElement;
+    expect(Array.from(cost.options).map((option) => option.value)).toEqual(["", "actual-billed", "actual-other-amount"]);
+    await user.selectOptions(invoice, "spend-ok");
+    expect(Array.from(cost.options).map((option) => option.value)).toEqual(["", "actual-billed"]);
+    await user.selectOptions(cost, "actual-billed");
+    await user.type(screen.getByLabelText("Correspondence/source evidence"), "associate-invoice:INV-101");
+    await user.type(screen.getByLabelText("Reason"), "Link the reconciled associate invoice.");
+    await user.click(screen.getByRole("button", { name: "Record Link invoice" }));
+    await waitFor(() => expect(mocks.transaction).toHaveBeenCalledWith(expect.objectContaining({
+      transactionKind: "link_invoice", actualCostItemId: "actual-billed", spendRecordId: "spend-ok",
+    })));
   });
 
   it("opens a completed instruction without action-only request fan-out", async () => {
