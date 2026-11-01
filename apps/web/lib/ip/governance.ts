@@ -32,6 +32,7 @@ const CATEGORY: Record<IpGovernanceBlockReason, GovernanceBlockCategory> = {
   no_other_approver: "Needs another approver",
   proposer_unavailable: "Needs setup",
   fixtures_not_passing: "Needs setup",
+  fixture_calendar_not_active: "Needs setup",
   not_candidate: "Needs setup",
   rule_kind_unsupported: "Needs setup",
 };
@@ -69,6 +70,8 @@ export function governanceReasonText(
       return "The proposer is no longer an active member. Propose this version again.";
     case "fixtures_not_passing":
       return "The server fixture check does not pass for this version. Propose a corrected version.";
+    case "fixture_calendar_not_active":
+      return "Its fixtures were calculated on a working calendar that is no longer active. Propose the rule again on the current active working calendar.";
     case "not_candidate":
       return "Only candidate versions can be activated.";
     case "rule_kind_unsupported":

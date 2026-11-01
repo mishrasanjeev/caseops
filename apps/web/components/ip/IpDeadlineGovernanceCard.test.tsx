@@ -321,6 +321,64 @@ describe("IpDeadlineGovernanceCard", () => {
     }));
   });
 
+  async function fillRule() {
+    fireEvent.change(await screen.findByLabelText("Period (months)"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Rule citation"), { target: { value: "Trade Marks Act 1999, s.21(1)" } });
+    fireEvent.change(screen.getByLabelText("Rule source reference"), { target: { value: "act:s21" } });
+    await chooseSource("rule-source-hash", "Trade Marks Act 1999 section 21");
+    fireEvent.change(screen.getByLabelText("Fixture trigger date"), { target: { value: "2026-01-10" } });
+    fireEvent.change(screen.getByLabelText("Expected fixture deadline"), { target: { value: "2026-05-11" } });
+  }
+
+  it("B4-ADJ-08 with several active calendars nothing is preselected and the choice is field-validated", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=docket-1&rule_scope=opponent_notice");
+    mocks.workspace.mockResolvedValue(workspace({
+      calendars: [
+        workingCalendar({ id: "cal-in", name: "IP India 2026" }),
+        workingCalendar({ id: "cal-delhi", name: "Delhi registry 2026", key: "delhi-2026" }),
+      ],
+    }));
+    mocks.proposeRule.mockResolvedValue(governedRule({ status: "candidate" }));
+    renderCard();
+
+    const calendar = await screen.findByLabelText("Fixture working calendar");
+    expect(calendar).toHaveValue("");
+    expect(within(calendar).getByRole("option", { name: "Choose a working calendar" })).toBeDisabled();
+    await fillRule();
+    fireEvent.click(screen.getByRole("button", { name: "Propose rule and fixture" }));
+    await waitFor(() => expect(calendar).toHaveAttribute("aria-invalid", "true"));
+    expect(described(calendar)).toContain("Choose the active working calendar the fixture is calculated on.");
+    expect(mocks.proposeRule).not.toHaveBeenCalled();
+
+    fireEvent.change(calendar, { target: { value: "cal-delhi" } });
+    expect(calendar).not.toHaveAttribute("aria-invalid");
+    fireEvent.click(screen.getByRole("button", { name: "Propose rule and fixture" }));
+    await waitFor(() => expect(mocks.proposeRule).toHaveBeenCalledOnce());
+    expect(mocks.proposeRule.mock.calls[0][0].fixtureCalculation.calendar).toEqual(
+      expect.objectContaining({ calendar_version_id: "cal-delhi" }),
+    );
+  });
+
+  it("B4-ADJ-08 a server refusal of the fixture calendar is anchored to the calendar field", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=docket-1&rule_scope=opponent_notice");
+    mocks.workspace.mockResolvedValue(workspace({ calendars: [workingCalendar({ id: "cal-active" })] }));
+    mocks.proposeRule.mockRejectedValue(new ApiError(422, "Fixtures › Calculation › Calendar › Calendar version ID: Choose an active working calendar of this workspace.", {
+      errors: [{
+        loc: ["body", "fixtures", 0, "calculation", "calendar", "calendar_version_id"],
+        msg: "Choose an active working calendar of this workspace. Propose a working calendar and have another owner, admin or partner activate it first.",
+        type: "ip_rule_fixture_calendar_not_active",
+      }],
+    }));
+    renderCard();
+
+    const calendar = await screen.findByLabelText("Fixture working calendar");
+    expect(calendar).toHaveValue("cal-active");
+    await fillRule();
+    fireEvent.click(screen.getByRole("button", { name: "Propose rule and fixture" }));
+    await waitFor(() => expect(calendar).toHaveAttribute("aria-invalid", "true"));
+    expect(described(calendar)).toContain("Choose an active working calendar of this workspace.");
+  });
+
   it("BUG-006 the reviewer picker offers exactly the server's eligible reviewers", async () => {
     mocks.workspace.mockResolvedValue(workspace({
       rules: [governedRule({

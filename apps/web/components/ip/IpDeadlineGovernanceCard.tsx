@@ -453,7 +453,8 @@ function RuleProposalForm({
     delete next[key];
     return next;
   });
-  const calendar = calendars.find((row) => row.id === calendarId) ?? calendars[0];
+  // One active calendar is the only choice; with several, the proposer picks one.
+  const calendar = calendars.length === 1 ? calendars[0] : calendars.find((row) => row.id === calendarId);
   const prerequisiteId = "rule-proposal-prerequisite";
 
   const propose = useMutation({
@@ -522,6 +523,7 @@ function RuleProposalForm({
         source_reference: "rule-source-reference",
         source_hash: "rule-source-hash",
         effective_from: "rule-effective-from",
+        calendar_version_id: "rule-fixture-calendar",
       });
       setErrors(Object.keys(fields).length
         ? fields
@@ -537,6 +539,7 @@ function RuleProposalForm({
     if (!sourceReference.trim()) next["rule-source-reference"] = "Enter the official source reference for this rule.";
     const hashError = sourceHashError(sourceHash);
     if (hashError) next["rule-source-hash"] = hashError;
+    if (calendars.length && !calendar) next["rule-fixture-calendar"] = "Choose the active working calendar the fixture is calculated on.";
     if (!fixtureBase) next["rule-fixture-base"] = "Choose the fixture trigger date.";
     if (!fixtureExpected) next["rule-fixture-expected"] = "Enter the deadline you expect for the fixture trigger date; the server checks it.";
     setErrors(next);
@@ -604,17 +607,19 @@ function RuleProposalForm({
         {(describedBy, invalid) => <Input id="rule-source-reference" value={sourceReference} aria-invalid={invalid || undefined} aria-describedby={describedBy} onChange={(e) => { setSourceReference(e.target.value); clear("rule-source-reference"); }} />}
       </Field>
       <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("rule-source-hash"); }} error={errors["rule-source-hash"]} />
-      <Field id="rule-fixture-calendar" label="Fixture working calendar">
-        {(describedBy) => (
+      <Field id="rule-fixture-calendar" label="Fixture working calendar" error={errors["rule-fixture-calendar"]}>
+        {(describedBy, invalid) => (
           <select
             id="rule-fixture-calendar"
             className={SELECT_CLASS}
             value={calendar?.id ?? ""}
             disabled={!calendars.length}
+            aria-invalid={invalid || undefined}
             aria-describedby={calendars.length ? describedBy : prerequisiteId}
-            onChange={(event) => setCalendarId(event.target.value)}
+            onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
           >
             {!calendars.length ? <option value="">No active working calendar</option> : null}
+            {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
             {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
           </select>
         )}

@@ -29695,11 +29695,11 @@ export interface components {
             /** Available */
             available: boolean;
             /** Code */
-            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing");
+            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active");
             /** Entitlement Key */
             entitlement_key: string;
             /** Reasons */
-            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
+            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active")[];
             /** Required Capability */
             required_capability: string;
             /** Rollout Flag */
@@ -33061,8 +33061,11 @@ export interface components {
             application_id?: string | null;
             /** Capability Version */
             capability_version: string;
-            /** Identifier Kind */
-            identifier_kind: string;
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
             /** Jurisdiction */
             jurisdiction: string;
             /** Match Confidence */
@@ -34402,9 +34405,9 @@ export interface components {
             /** Activated At */
             activated_at: string | null;
             /** Activation Blocked Reason */
-            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing") | null;
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active") | null;
             /** Activation Blocked Reasons */
-            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active")[];
             /**
              * Can Activate
              * @default false
@@ -36097,9 +36100,9 @@ export interface components {
         /** LegalCalendarVersionRecord */
         LegalCalendarVersionRecord: {
             /** Activation Blocked Reason */
-            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing") | null;
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active") | null;
             /** Activation Blocked Reasons */
-            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing")[];
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active")[];
             /** Approved At */
             approved_at: string | null;
             /** Approver Label Snapshot */
