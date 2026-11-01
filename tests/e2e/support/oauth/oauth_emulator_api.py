@@ -27,10 +27,12 @@ from caseops_api.services.calendar_sync import (  # noqa: E402
     MicrosoftGraphOutlookProvider,
 )
 from drive_import_emulator import install_drive_import_emulator  # noqa: E402
+from gmail_import_emulator import install_gmail_import_emulator  # noqa: E402
 from platform_console_emulator import install_platform_console_emulator  # noqa: E402
 from public_lead_emulator import install_public_lead_emulator  # noqa: E402
 
 install_drive_import_emulator(app)
+install_gmail_import_emulator(app)
 console_capture = install_platform_console_emulator(app)
 install_public_lead_emulator(app, console_capture)
 
