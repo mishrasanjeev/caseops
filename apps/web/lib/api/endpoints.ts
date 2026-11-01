@@ -11750,6 +11750,34 @@ export type IpPortalClientInstruction = {
   updated_at: string;
 };
 
+type IpOffsetPage<TItem> = { items: TItem[]; total: number; limit: number; offset: number };
+
+/**
+ * Every row of an offset-paged IP list. These lists are read whole by the
+ * pages that show them, and one request of 100 silently dropped row 101
+ * onwards. Rows are keyed by id so a record that moves between pages while
+ * paging is not shown twice.
+ */
+async function fetchAllIpOffsetPages<TItem extends { id: string }>(
+  path: string,
+  query: URLSearchParams,
+): Promise<IpOffsetPage<TItem>> {
+  const pageSize = 100;
+  const rows = new Map<string, TItem>();
+  let total = 0;
+  for (let offset = 0; ; offset += pageSize) {
+    const params = new URLSearchParams(query);
+    params.set("limit", String(pageSize));
+    params.set("offset", String(offset));
+    const page = await apiRequest<IpOffsetPage<TItem>>(`${path}?${params.toString()}`);
+    total = page.total;
+    for (const item of page.items) rows.set(item.id, item);
+    if (page.items.length < pageSize || offset + pageSize >= page.total) break;
+  }
+  const items = [...rows.values()];
+  return { items, total: Math.max(total, items.length), limit: items.length, offset: 0 };
+}
+
 export async function fetchIpForeignAssociateInstructions(input?: {
   docketId?: string | null;
   status?: IpForeignAssociateStatus | null;
@@ -11770,7 +11798,7 @@ export async function fetchIpForeignAssociateInstructions(input?: {
   if (input?.missingFilingEvidence !== undefined && input.missingFilingEvidence !== null) {
     query.set("missing_filing_evidence", String(input.missingFilingEvidence));
   }
-  return apiRequest(`/api/ip/foreign-associate-instructions?${query.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/foreign-associate-instructions", query);
 }
 
 export async function fetchIpForeignAssociateWorkspace(
@@ -11939,7 +11967,7 @@ export async function fetchIpRecordals(input?: {
   if (input?.docketId) query.set("docket_id", input.docketId);
   if (input?.recordalType) query.set("recordal_type", input.recordalType);
   if (input?.status) query.set("status", input.status);
-  return apiRequest(`/api/ip/recordals?${query.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/recordals", query);
 }
 
 export async function fetchIpRecordalWorkspace(
@@ -12048,7 +12076,7 @@ export async function fetchMadridRecords(input?: {
   if (input?.parentRegistrationId) {
     params.set("parent_registration_id", input.parentRegistrationId);
   }
-  return apiRequest(`/api/ip/international-registrations?${params.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/international-registrations", params);
 }
 
 export async function createMadridRecord(input: {
