@@ -219,6 +219,13 @@ async function wait(context, condition, timeout, code) {
 function validFrame(rect) {
   return rect && ['x', 'y', 'width', 'height'].every((key) => Number.isFinite(rect[key])) && rect.width > 0 && rect.height > 0;
 }
+// XCUITest rounds each element's frame to whole points independently, so a
+// Text that fills its marker View can report a bottom edge 1 pt past it.
+// Only a child-in-own-marker comparison admits that rounding.
+function containsRoundedChild(outer, inner) {
+  return inner.x >= outer.x - 1 && inner.y >= outer.y - 1
+    && inner.x + inner.width <= outer.x + outer.width + 1 && inner.y + inner.height <= outer.y + outer.height + 1;
+}
 function containsFrame(outer, inner) {
   return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width
     && inner.y + inner.height <= outer.y + outer.height;
@@ -275,7 +282,7 @@ export async function proveIosUploadPersisted(context, message) {
   const window = await context.driver.getWindowRect(), rootFrame = await context.driver.getElementRect(root.elementId);
   const messageFrame = await context.driver.getElementRect(message.elementId);
   assert.ok(validFrame(window) && validFrame(rootFrame) && validFrame(messageFrame), 'IOS_FILES_UPLOAD_ACK_FRAME_REQUIRED');
-  assert.ok(containsFrame(window, rootFrame) && containsFrame(rootFrame, messageFrame), 'IOS_FILES_UPLOAD_ACK_OUTSIDE_MARKER');
+  assert.ok(containsFrame(window, rootFrame) && containsRoundedChild(rootFrame, messageFrame), 'IOS_FILES_UPLOAD_ACK_OUTSIDE_MARKER');
   return { rootFrame, messageFrame };
 }
 export async function findIosUploadPersisted(context) {

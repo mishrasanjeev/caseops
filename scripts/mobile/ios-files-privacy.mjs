@@ -175,6 +175,23 @@ function providerMetadata(file) {
     && (value.mode & 0o7777n) === 0o600n && realpathSync(file) === file, 'PROVIDER_ORIGINAL_METADATA_REQUIRED');
   return Object.fromEntries(PROVIDER_FIELDS.map(key => [key, String(value[key])]));
 }
+// Picking a document makes iOS record com.apple.lastuseddate#PS on the
+// provider original, which moves only its ctime. Admit exactly that OS
+// bookkeeping: every other stat field must be unchanged, and a moved ctime
+// requires the item's extended attributes to stay within this allowlist.
+const PROVIDER_OS_XATTRS = new Set(['com.apple.provenance', 'com.apple.lastuseddate#PS']);
+function providerXattrs(file) {
+  return execFileSync('/usr/bin/xattr', [file], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 }).split('\n').filter(Boolean);
+}
+export function assertProviderPreserved(asset, listXattrs = providerXattrs) {
+  const current = providerMetadata(asset.path);
+  for (const key of PROVIDER_FIELDS) if (key !== 'ctimeNs') {
+    assert.equal(current[key], asset.providerMetadata[key], 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+  }
+  if (current.ctimeNs !== asset.providerMetadata.ctimeNs) {
+    assert.ok(listXattrs(asset.path).every((name) => PROVIDER_OS_XATTRS.has(name)), 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+  }
+}
 function writeProviderAsset(file, data, deadline) {
   const frame = value => PROVIDER_FIELDS.map(key => String(value[key]));
   const parents = () => {
@@ -292,13 +309,13 @@ export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, k
     assert.equal(asset.transferMethod, 'verified-buffer-exclusive-descriptor-write', 'VERIFIED_PROVIDER_TRANSFER_REQUIRED');
     assert.deepEqual(Object.keys(asset.providerMetadata || {}).sort(), [...PROVIDER_FIELDS].sort(), 'PROVIDER_STAGING_METADATA_REQUIRED');
     try {
-      const current = providerMetadata(asset.path); assert.deepEqual(current, asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+      assertProviderPreserved(asset);
       if (!verifyProviderBytes) return { id: asset.id, metadataPreserved: true, preserved: null, byteVerification: 'deferred-until-postflight' };
       assert.ok(providerBytesRead + asset.sizeBytes <= bounds.totalBytes, 'PROVIDER_FINAL_BYTE_BOUND');
       const beforeRead = byteBudget.bytes; let data;
       try { data = bytes(asset.path, asset.sizeBytes, asset.sha256, byteBudget); }
       finally { providerBytesRead += byteBudget.bytes - beforeRead; }
-      assert.deepEqual(providerMetadata(asset.path), asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED');
+      assertProviderPreserved(asset);
       return { id: asset.id, metadataPreserved: true, preserved: data.length === asset.sizeBytes, sha256: sha(data), sizeBytes: data.length };
     } catch { return { id: asset.id, metadataPreserved: false, preserved: verifyProviderBytes ? false : null }; }
   });
@@ -388,7 +405,7 @@ export function snapshotIosFilesPrivacy({ containers, stagingEvidence, output, k
   // Do not accept an original changed while the private-container scan ran.
   // This final fence consumes metadata only, including for a cold checkpoint.
   for (const [index, asset] of staging.assets.entries()) {
-    try { assert.deepEqual(providerMetadata(asset.path), asset.providerMetadata, 'PROVIDER_ORIGINAL_METADATA_CHANGED'); }
+    try { assertProviderPreserved(asset); }
     catch {
       providerOriginals[index].metadataPreserved = false;
       if (verifyProviderBytes) providerOriginals[index].preserved = false;

@@ -664,6 +664,12 @@ test('iOS persisted proof requires the exact visible acknowledgement inside its 
   const good=markerFixture();
   await proveIosUploadPersisted(good.context,good.message);
   await findIosUploadPersisted(good.context);
+  // Observed on iOS 27: marker 253+73, message 253+74 after whole-point rounding.
+  const marker=good.rects.get('files-upload-persisted');
+  const rounded=markerFixture();rounded.rects.set('ack-text',{...marker,height:marker.height+1});
+  await proveIosUploadPersisted(rounded.context,rounded.message);
+  const overhang=markerFixture();overhang.rects.set('ack-text',{...marker,height:marker.height+2});
+  await assert.rejects(proveIosUploadPersisted(overhang.context,overhang.message),/IOS_FILES_UPLOAD_ACK_OUTSIDE_MARKER/);
   for(const change of ['marker-only','wrong-text','wrong-frame','duplicate-marker','duplicate-message']){
     const fake=markerFixture();
     let message=fake.message;

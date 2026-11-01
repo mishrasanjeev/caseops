@@ -7,7 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { attestIosFilesContainers, stageIosFilesAssets, snapshotIosFilesPrivacy, assertIosFilesPrivacy, snapshotIosCameraPrivacy } from './ios-files-privacy.mjs';
+import { assertProviderPreserved, attestIosFilesContainers, stageIosFilesAssets, snapshotIosFilesPrivacy, assertIosFilesPrivacy, snapshotIosCameraPrivacy } from './ios-files-privacy.mjs';
 const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
 const plist = require('@expo/plist').default;
 const sha = (data) => createHash('sha256').update(data).digest('hex');
@@ -70,6 +70,18 @@ test('staging records provider metadata only after a settle window and allows on
     assert.equal(asset.providerMetadata.ctimeNs, String(now.ctimeNs), 'SETTLED_CTIME_RECORDED');
     assert.ok(BigInt(asset.providerMetadata.ctimeNs) > BigInt(asset.writeCtimeNs), 'INGESTION_CTIME_MOVE_OBSERVED');
   }
+});
+
+test('a provider original may gain only the OS last-used attribute, which moves ctime alone', async (t) => {
+  const f = fixture(t), staged = stageIosFilesAssets(f.options).staging.assets[0];
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  fs.chmodSync(staged.path, 0o600); // an attribute-only change: ctime moves, nothing else
+  assert.notEqual(String(fs.statSync(staged.path, { bigint: true }).ctimeNs), staged.providerMetadata.ctimeNs);
+  assertProviderPreserved(staged, () => ['com.apple.provenance', 'com.apple.lastuseddate#PS']);
+  assert.throws(() => assertProviderPreserved(staged, () => ['com.apple.lastuseddate#PS', 'com.example.app-wrote-this']), /PROVIDER_ORIGINAL_METADATA_CHANGED/);
+  assert.throws(() => assertProviderPreserved(staged, () => { throw new Error('xattr unavailable'); }), /xattr unavailable/);
+  fs.appendFileSync(staged.path, 'x');
+  assert.throws(() => assertProviderPreserved(staged, () => []), /PROVIDER_ORIGINAL_METADATA_CHANGED/);
 });
 
 test('staging refuses a provider original whose size changes while settling', async (t) => {
