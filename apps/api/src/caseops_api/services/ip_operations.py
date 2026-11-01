@@ -3529,6 +3529,13 @@ def add_ip_title_interest(
         required_capability="ip:approve",
     )
     docket = locked_dockets[docket_id]
+    from caseops_api.services.ip_document_workflow import reject_retired_document_refs
+
+    # Evidence is free text; when it names an IP document, document retirement
+    # counts this interest as a citation, so it must name a current document.
+    reject_retired_document_refs(
+        session, company_id=context.company.id, refs=[payload.evidence_reference.strip()]
+    )
     existing = list(
         session.scalars(
             select(IpTitleInterest)

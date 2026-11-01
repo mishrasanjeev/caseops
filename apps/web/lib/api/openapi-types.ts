@@ -28645,6 +28645,8 @@ export interface components {
             is_privileged: boolean;
             /** Links */
             links: components["schemas"]["IpDocumentLinkRecord"][];
+            /** Read Only Reason */
+            read_only_reason?: ("retired" | "closed_record") | null;
             retirement?: components["schemas"]["IpDocumentRetirementRecord"] | null;
             /** Taxonomy Key */
             taxonomy_key: string;

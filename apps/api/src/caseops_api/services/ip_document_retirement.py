@@ -17,7 +17,8 @@ it:
 * a title interest not tied to a recordal whose recordal status is not
   withdrawn or rejected;
 * a renewal term certificate;
-* a client portal publication of any version that is not revoked;
+* a client portal publication of any version (no product path revokes a
+  single publication, so a shared document stays that publication's record);
 * an immutable source pin of a patent or specialist record.
 
 Withdrawn, rejected, cancelled and superseded records allow it: they keep
@@ -340,7 +341,12 @@ def _publication_citations(
             label=f"Client portal publication: {row.title}",
             status=row.status,
             docket_id=None,
-            resolution="Revoke this client portal publication first.",
+            # No product path revokes a single publication; a document shared
+            # with the client stays that publication's record.
+            resolution=(
+                "Shared with the client through the portal; it stays as that "
+                "publication's record."
+            ),
             href="/app/ip/client-portal",
         )
         for row in rows

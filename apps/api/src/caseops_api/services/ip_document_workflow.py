@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from typing import BinaryIO, Literal
 from uuid import uuid4
@@ -16,8 +17,6 @@ from caseops_api.db.models import (
     CompanyMembership,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
-    IpDeadline,
-    IpDocketEvent,
     IpDocument,
     IpDocumentLink,
     IpDocumentTaxonomyAlias,
@@ -87,6 +86,7 @@ from caseops_api.services.ip_documents import (
     preview_ip_document_name,
 )
 from caseops_api.services.ip_domain_policy import (
+    IP_DOCUMENT_CHILD_TARGET_MODELS,
     disclosable_ip_document_ids,
 )
 from caseops_api.services.ip_operations import (
@@ -244,6 +244,50 @@ def citable_ip_document_ids(
     return set(session.scalars(statement).all())
 
 
+def reject_retired_document_refs(
+    session: Session,
+    *,
+    company_id: str,
+    refs: Iterable[object],
+) -> None:
+    """Refuse a free-text evidence reference that names a retired IP document.
+
+    Docket events and title interests store evidence references as free text.
+    When a value is the id of one of the tenant's IP documents, retirement
+    counts that row as a citation, so the writer refuses a retired document and
+    takes the same shared row lock as every other citing writer. Text that
+    names no IP document is left alone.
+    """
+
+    named = {ref for ref in refs if isinstance(ref, str) and ref}
+    if not named:
+        return
+    documents = set(
+        session.scalars(
+            select(IpDocument.id).where(
+                IpDocument.company_id == company_id,
+                IpDocument.id.in_(named),
+            )
+        ).all()
+    )
+    if not documents:
+        return
+    current = citable_ip_document_ids(
+        session, company_id=company_id, document_ids=documents, lock=True
+    )
+    if documents - current:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_document_retired",
+                "message": (
+                    "A cited evidence document was retired and is kept for history only. "
+                    "Cite a current document."
+                ),
+            },
+        )
+
+
 def _version_or_404(
     session: Session,
     *,
@@ -341,14 +385,48 @@ def assert_ip_document_access(
     )
 
 
+def _history_access_is_closed_record(
+    session: Session,
+    *,
+    context: SessionContext,
+    document_id: str,
+    allow_patent_history: bool,
+) -> bool:
+    """Authorize a history read; True when only the closed-record fence admits it.
+
+    Writes never pass ``include_closed_dockets``, so a document admitted only by
+    that fence is read-only and its card must not offer a state, version or bulk
+    change that the API would refuse.
+    """
+
+    try:
+        _assert_document_targets_accessible(
+            session,
+            context=context,
+            document_id=document_id,
+            allow_patent_history=allow_patent_history,
+        )
+        return False
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+    _assert_document_targets_accessible(
+        session, context=context, document_id=document_id, include_closed_dockets=True
+    )
+    return True
+
+
 def _serialize_document(
     session: Session,
     *,
     context: SessionContext,
     document: IpDocument,
+    closed_record: bool = False,
 ) -> IpDocumentRecord:
     with session.no_autoflush:
-        return _serialize_document_snapshot(session, context=context, document=document)
+        return _serialize_document_snapshot(
+            session, context=context, document=document, closed_record=closed_record
+        )
 
 
 def _serialize_document_snapshot(
@@ -356,6 +434,7 @@ def _serialize_document_snapshot(
     *,
     context: SessionContext,
     document: IpDocument,
+    closed_record: bool = False,
 ) -> IpDocumentRecord:
     taxonomy = session.get(IpDocumentTaxonomyEntry, document.taxonomy_entry_id)
     if taxonomy is None or taxonomy.company_id != document.company_id:
@@ -432,6 +511,13 @@ def _serialize_document_snapshot(
         versions=version_records,
         links=[IpDocumentLinkRecord.model_validate(row) for row in links],
         retirement=_retirement_record(session, document=document),
+        read_only_reason=(
+            "retired"
+            if document.retired_at is not None
+            else "closed_record"
+            if closed_record
+            else None
+        ),
     )
 
 
@@ -487,20 +573,32 @@ def list_ip_documents(
     )
     visible: list[IpDocumentRecord] = []
     for row in rows:
+        closed_record = False
         try:
-            _assert_document_targets_accessible(
-                session,
-                context=context,
-                document_id=row.id,
-                # Docket-scoped reads keep the patent and specialist history rule.
-                allow_patent_history=docket_id is not None,
-                include_closed_dockets=include_history,
-            )
+            if include_history:
+                closed_record = _history_access_is_closed_record(
+                    session,
+                    context=context,
+                    document_id=row.id,
+                    allow_patent_history=docket_id is not None,
+                )
+            else:
+                _assert_document_targets_accessible(
+                    session,
+                    context=context,
+                    document_id=row.id,
+                    # Docket-scoped reads keep the patent and specialist history rule.
+                    allow_patent_history=docket_id is not None,
+                )
         except HTTPException as exc:
             if exc.status_code == 404:
                 continue
             raise
-        visible.append(_serialize_document(session, context=context, document=row))
+        visible.append(
+            _serialize_document(
+                session, context=context, document=row, closed_record=closed_record
+            )
+        )
     return IpDocumentListResponse(items=visible, total=len(visible))
 
 
@@ -508,25 +606,27 @@ def docket_scoped_document_links(*, company_id: str, docket_id: str):
     """Links that make a document citable as evidence on one docket.
 
     A document is citable when it is linked to the docket itself or to one of
-    the docket's events or deadlines. Recordal and Madrid pickers and their write
-    validators share this predicate (plus the batched viewer access decision),
-    so a form never offers a document the API rejects or hides one it accepts.
+    the docket's applications, proceedings, events or deadlines: every link
+    target whose owner is the docket (``_target_docket_id``), the scope the
+    portal shareable list and the drafting source manifest already use. The
+    docket document list, the recordal, Madrid and foreign-associate pickers and
+    their write validators share this predicate (plus the batched viewer access
+    decision), so a form never offers a document the API rejects or hides one
+    it accepts.
     """
-    event_ids = select(IpDocketEvent.id).where(
-        IpDocketEvent.company_id == company_id,
-        IpDocketEvent.docket_id == docket_id,
-    )
-    deadline_ids = select(IpDeadline.id).where(
-        IpDeadline.company_id == company_id,
-        IpDeadline.docket_id == docket_id,
-    )
+
+    def on_docket(model):
+        return select(model.id).where(model.company_id == company_id, model.docket_id == docket_id)
+
     return and_(
         IpDocumentLink.company_id == company_id,
         or_(
             (IpDocumentLink.target_type == "docket") & (IpDocumentLink.target_id == docket_id),
-            (IpDocumentLink.target_type == "event") & (IpDocumentLink.target_id.in_(event_ids)),
-            (IpDocumentLink.target_type == "deadline")
-            & (IpDocumentLink.target_id.in_(deadline_ids)),
+            *(
+                (IpDocumentLink.target_type == target_type)
+                & (IpDocumentLink.target_id.in_(on_docket(model)))
+                for target_type, model in IP_DOCUMENT_CHILD_TARGET_MODELS.items()
+            ),
         ),
     )
 
@@ -594,14 +694,20 @@ def get_ip_document(
     context: SessionContext,
     document_id: str,
 ) -> IpDocumentRecord:
-    document = _document_or_404(
-        session,
-        context=context,
-        document_id=document_id,
-        allow_patent_history=True,
-        include_closed_dockets=True,
+    document = session.scalar(
+        select(IpDocument).where(
+            IpDocument.id == document_id,
+            IpDocument.company_id == context.company.id,
+        )
     )
-    return _serialize_document(session, context=context, document=document)
+    if document is None:
+        raise HTTPException(status_code=404, detail="IP document not found.")
+    closed_record = _history_access_is_closed_record(
+        session, context=context, document_id=document.id, allow_patent_history=True
+    )
+    return _serialize_document(
+        session, context=context, document=document, closed_record=closed_record
+    )
 
 
 def get_ip_document_policy(
@@ -1678,6 +1784,7 @@ __all__ = [
     "assert_ip_document_access",
     "authorize_ip_document_action",
     "citable_ip_document_ids",
+    "reject_retired_document_refs",
     "docket_scoped_document_links",
     "get_accessible_ip_document_ids",
     "get_ip_document",

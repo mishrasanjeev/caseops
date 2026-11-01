@@ -216,6 +216,10 @@ class IpDocumentRecord(BaseModel):
     # Present only once the document is retired; a retired document is kept for
     # history and audit but is never offered or accepted as evidence again.
     retirement: IpDocumentRetirementRecord | None = None
+    # Why the document is history only: ``retired``, or ``closed_record`` when
+    # it is listed only because its record is closed (the history view). Such a
+    # document can be downloaded or retired; no state, version or bulk change.
+    read_only_reason: Literal["retired", "closed_record"] | None = None
 
 
 class IpDocumentListResponse(BaseModel):
