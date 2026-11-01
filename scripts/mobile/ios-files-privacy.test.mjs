@@ -42,7 +42,7 @@ function fixture(t) {
   });
   const manifest = path.join(root, 'manifest.json');
   writeFileSync(manifest, JSON.stringify({ schemaVersion: 1, kind: 'ios-files-synthetic-fixtures', platform: 'ios', syntheticDataOnly: true, assets }));
-  const options = { containers, manifestEvidence: ref(manifest), runId: 'unit-run-1234', output: path.join(root, 'staging-receipt.json') };
+  const options = { containers, manifestEvidence: ref(manifest), runId: 'unit-run-1234', output: path.join(root, 'staging-receipt.json'), settleMs: 0 };
   const snapshot = (stagingEvidence, name, extra = {}) => snapshotIosFilesPrivacy({ containers, stagingEvidence, verifyProviderBytes: true, output: path.join(root, name), ...extra });
   return { root, app, group, commands, run, devicesRoot, containers, assets, manifest, options, snapshot };
 }
@@ -54,6 +54,31 @@ test('attestation binds exact read-only simctl mapping to actual app/provider me
   assert.ok(f.commands.every(({ args }) => args[0] === 'simctl' && ['list', 'get_app_container'].includes(args[1])));
   writeFileSync(path.join(f.group, META), plist.build({ MCMMetadataIdentifier: 'foreign.group' }));
   assert.throws(() => attestIosFilesContainers({ udid: UDID, devicesRoot: f.devicesRoot, run: f.run }), /CONTAINER_METADATA_IDENTITY_MISMATCH/);
+});
+
+test('staging records provider metadata only after a settle window and allows only ctime to move meanwhile', async (t) => {
+  const f = fixture(t);
+  // Simulate the provider daemon's post-write ingestion: an attribute write
+  // moves only ctime shortly after the file appears.
+  const { spawn } = await import('node:child_process');
+  const touch = spawn(process.execPath, ['-e', `setTimeout(() => { const fs = require('fs'); for (const name of fs.readdirSync(process.argv[1])) for (const dir of [require('path').join(process.argv[1], name)]) if (fs.statSync(dir).isDirectory()) for (const file of fs.readdirSync(dir)) fs.chmodSync(require('path').join(dir, file), 0o600); }, 300);`, f.containers.provider.storagePath]);
+  const result = stageIosFilesAssets({ ...f.options, settleMs: 1200 });
+  await new Promise((resolve) => touch.on('exit', resolve));
+  assert.equal(result.staging.providerSettleMs, 1200);
+  for (const asset of result.staging.assets) {
+    const now = fs.statSync(asset.path, { bigint: true });
+    assert.equal(asset.providerMetadata.ctimeNs, String(now.ctimeNs), 'SETTLED_CTIME_RECORDED');
+    assert.ok(BigInt(asset.providerMetadata.ctimeNs) > BigInt(asset.writeCtimeNs), 'INGESTION_CTIME_MOVE_OBSERVED');
+  }
+});
+
+test('staging refuses a provider original whose size changes while settling', async (t) => {
+  const f = fixture(t);
+  const { spawn } = await import('node:child_process');
+  const grow = spawn(process.execPath, ['-e', `setTimeout(() => { const fs = require('fs'), path = require('path'); for (const name of fs.readdirSync(process.argv[1])) { const dir = path.join(process.argv[1], name); if (fs.statSync(dir).isDirectory()) { const file = fs.readdirSync(dir)[0]; fs.appendFileSync(path.join(dir, file), 'x'); } } }, 300);`, f.containers.provider.storagePath]);
+  assert.throws(() => stageIosFilesAssets({ ...f.options, settleMs: 1200 }), /PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING/);
+  await new Promise((resolve) => grow.on('exit', resolve));
+  assert.throws(() => stageIosFilesAssets({ ...f.options, output: path.join(f.root, 'unbounded.json'), runId: 'unit-run-5678', settleMs: 60000 }), /BOUNDED_PROVIDER_SETTLE_REQUIRED/);
 });
 
 test('staging creates one exclusive provider folder with exact assets and immutable receipt, without app sharing changes', (t) => {

@@ -211,7 +211,31 @@ function writeProviderAsset(file, data, deadline) {
   } finally { closeSync(fd); }
 }
 
-export function stageIosFilesAssets({ containers, manifestEvidence, runId, output }) {
+// The iOS 27 Simulator's file-provider daemon ingests a newly staged item
+// after it appears and updates its ctime (0.6-1.5 s observed); the app has
+// not touched it. Record metadata only once every file has been unchanged for
+// the settle window, and refuse if anything other than ctime moved meanwhile.
+export const PROVIDER_SETTLE_MS = 3000;
+const PROVIDER_SETTLE_DEADLINE_MS = 20000;
+function settleProviderMetadata(staged, settleMs) {
+  const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  const end = Date.now() + settleMs + PROVIDER_SETTLE_DEADLINE_MS;
+  let last = staged.map(({ path: file }) => providerMetadata(file)), stableSince = Date.now();
+  while (Date.now() - stableSince < settleMs) {
+    assert.ok(Date.now() < end, 'PROVIDER_METADATA_NOT_SETTLED');
+    sleep(Math.min(250, settleMs));
+    const now = staged.map(({ path: file }) => providerMetadata(file));
+    if (JSON.stringify(now) !== JSON.stringify(last)) { last = now; stableSince = Date.now(); }
+  }
+  return staged.map((asset, index) => {
+    for (const key of PROVIDER_FIELDS) if (key !== 'ctimeNs') {
+      assert.equal(last[index][key], asset.providerMetadata[key], 'PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING');
+    }
+    return { ...asset, providerMetadata: last[index], writeCtimeNs: asset.providerMetadata.ctimeNs };
+  });
+}
+
+export function stageIosFilesAssets({ containers, manifestEvidence, runId, output, settleMs = PROVIDER_SETTLE_MS }) {
   const deadline = Date.now() + 30000;
   validateContainers(containers); outputPath(output, containers);
   assert.match(runId || '', /^[a-zA-Z0-9][a-zA-Z0-9-]{5,63}$/, 'UNIQUE_FILES_RUN_ID_REQUIRED');
@@ -222,18 +246,20 @@ export function stageIosFilesAssets({ containers, manifestEvidence, runId, outpu
   });
   const folderName = `CaseOpsFiles-${runId}`, folderPath = path.join(containers.provider.storagePath, folderName);
   mkdirSync(folderPath, { recursive: false, mode: 0o700 });
-  const staged = prepared.map(({ asset, data }) => {
+  assert.ok(Number.isSafeInteger(settleMs) && settleMs >= 0 && settleMs <= 10000, 'BOUNDED_PROVIDER_SETTLE_REQUIRED');
+  const written = prepared.map(({ asset, data }) => {
     const file = path.join(folderPath, asset.filename), metadata = writeProviderAsset(file, data, deadline);
     return { id: asset.id, filename: asset.filename, path: file, sha256: asset.sha256, sizeBytes: asset.sizeBytes,
       transferSha256: sha(data), transferMethod: 'verified-buffer-exclusive-descriptor-write', providerMetadata: metadata };
   });
+  const staged = settleProviderMetadata(written, settleMs);
   const receipt = { schemaVersion: 2, kind: 'ios-files-provider-assets', udid: containers.udid, appId: containers.appId,
     syntheticDataOnly: true, manifestEvidence, containers, folderName, folderPath, assets: staged,
     ownedStagingRoot: path.join(containers.appData.path, 'Library/Caches/caseops-matter-files-v1'),
     appPrivateImportRoots: ['Documents/Inbox', 'tmp', 'Library/Caches/DocumentPicker'].map((relativePath) => ({
       relativePath, path: path.join(containers.appData.path, relativePath), existsAtStaging: existsSync(path.join(containers.appData.path, relativePath)) })),
     providerOriginalsRead: false, providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight',
-    nativeUiExecuted: false, appSharingFlagsChanged: false };
+    nativeUiExecuted: false, appSharingFlagsChanged: false, providerSettleMs: settleMs };
   return { stagingEvidence: writeReceipt(output, receipt), staging: receipt };
 }
 
