@@ -130,7 +130,7 @@ export function PatentFamilyDetail({ familyId }: { familyId: string }) {
       : area === "relationships" ? <PatentFamilyGraph familyId={current.id} />
       : area === "parties" ? <PatentParties record={current} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
       : area === "lifecycle" ? <PatentFamilyLifecycle family={current} canReview={canReview} />
-      : area === "documents" ? <IpDocumentWorkspace dockets={[{ id: current.docket_id, title: current.facts.title }]}
+      : area === "documents" ? <IpDocumentWorkspace scopeDocketTitle={current.facts.title}
       assetType="Patent" scopeDocketId={current.docket_id} canUpload={current.is_active && canWrite && canUpload} canManage={current.is_active && canWrite && canManage}
       canReview={current.is_active && canReview} canConfigure={current.is_active && canConfigure} />
       : editing && current.is_active ? <FamilyForm initial={current} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); setVersion(undefined); }} />

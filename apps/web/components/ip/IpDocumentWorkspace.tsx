@@ -5,6 +5,7 @@ import { AlertTriangle, Download, FileText, Link2, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -25,7 +26,6 @@ import {
   transitionIpDocument,
   uploadIpDocument,
   uploadIpDocumentVersion,
-  type IpDocket,
   type IpDocument,
   type IpDocumentAliasImportResult,
   type IpDocumentBulkItem,
@@ -43,11 +43,6 @@ function formatList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-/** The deep-linked record when it is listed, else the first record. */
-function defaultDocketId(dockets: Pick<IpDocket, "id">[], preferred: string | undefined): string {
-  return preferred && dockets.some((row) => row.id === preferred) ? preferred : (dockets[0]?.id ?? "");
-}
-
 const NEXT_STATE: Partial<Record<IpDocumentState, IpDocumentState>> = {
   draft: "review",
   review: "approved",
@@ -58,27 +53,24 @@ const NEXT_STATE: Partial<Record<IpDocumentState, IpDocumentState>> = {
 };
 
 export function IpDocumentWorkspace({
-  dockets,
   canUpload,
   canManage,
   canReview,
   canConfigure,
   assetType = "Trademark",
   scopeDocketId,
-  docketsLoading = false,
-  docketsError = null,
-  onRetryDockets,
+  scopeDocketTitle,
   preferredDocketId,
 }: {
-  dockets: Pick<IpDocket, "id" | "title">[];
-  /** The caller's docket listing is still loading, so an empty list means nothing yet. */
-  docketsLoading?: boolean;
-  /** The caller's docket listing failed; shown with a retry instead of "no docket yet". */
-  docketsError?: unknown;
-  onRetryDockets?: () => void;
   assetType?: "Trademark" | "Patent";
+  /**
+   * A record's own document area: documents are listed for, and uploaded to,
+   * this docket only. Without it the linked docket is chosen from every
+   * docket the user can see (server search and paging, never a first page).
+   */
   scopeDocketId?: string;
-  /** Preselects this record as the linked docket when it is listed (deep links). */
+  scopeDocketTitle?: string;
+  /** Preselects this record as the linked docket (deep links); nothing else is preselected. */
   preferredDocketId?: string;
   canUpload: boolean;
   canManage: boolean;
@@ -96,7 +88,8 @@ export function IpDocumentWorkspace({
   const [proceedingNo, setProceedingNo] = useState("");
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [taxonomyKey, setTaxonomyKey] = useState("");
-  const [docketId, setDocketId] = useState(() => defaultDocketId(dockets, preferredDocketId));
+  const [chosenDocketId, setDocketId] = useState(() => preferredDocketId ?? "");
+  const docketId = scopeDocketId ?? chosenDocketId;
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
   >(assetType === "Patent" ? "restricted" : "internal");
@@ -167,15 +160,7 @@ export function IpDocumentWorkspace({
   const uploadRequirements = [
     !file ? "the original file" : null,
     !documentTaxonomyKey ? "a classification" : null,
-    !docketId
-      ? dockets.length
-        ? "a linked docket"
-        : docketsLoading
-          ? "a linked docket (the docket list is still loading)"
-          : docketsError
-            ? "a linked docket (the docket list could not load)"
-            : "a linked docket (create an IP docket first)"
-      : null,
+    !docketId ? "a linked docket" : null,
   ].filter((value): value is string => value !== null);
   const uploadHint = !taxonomyReady
     ? null
@@ -192,8 +177,9 @@ export function IpDocumentWorkspace({
     .filter(Boolean);
 
   useEffect(() => {
-    if (!docketId && dockets.length) setDocketId(defaultDocketId(dockets, preferredDocketId));
-  }, [docketId, dockets, preferredDocketId]);
+    // A new deep link chooses its record; the user's own choice is otherwise kept.
+    if (preferredDocketId) setDocketId(preferredDocketId);
+  }, [preferredDocketId]);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["ip", "documents"] });
   };
@@ -511,36 +497,24 @@ export function IpDocumentWorkspace({
                 ))}
               </select>
             </div>
-            <div className="min-w-0">
-              <Label htmlFor="ip-document-docket">Linked docket</Label>
-              <select
+            {scopeDocketId ? (
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--color-ink)]">Linked docket</p>
+                <p className="mt-1 break-words text-sm" data-testid="ip-document-scope-docket">
+                  {scopeDocketTitle ?? "This record"}
+                </p>
+              </div>
+            ) : (
+              <IpDocketPicker
                 id="ip-document-docket"
-                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:opacity-60"
-                value={docketId}
-                disabled={dockets.length === 0}
-                aria-describedby={dockets.length === 0 ? "ip-document-docket-empty" : undefined}
-                onChange={(event) => setDocketId(event.target.value)}
-              >
-                <option value="">Choose docket</option>
-                {dockets.map((docket) => <option key={docket.id} value={docket.id}>{docket.title}</option>)}
-              </select>
-              {dockets.length === 0 && docketsLoading ? (
-                <p id="ip-document-docket-empty" role="status" className="mt-1 text-xs text-[var(--color-mute)]">
-                  Loading dockets…
-                </p>
-              ) : dockets.length === 0 && docketsError ? (
-                <div id="ip-document-docket-empty" role="alert" className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--color-danger-text)]">
-                  <span className="min-w-0 break-words">{apiErrorMessage(docketsError, "The docket list could not load.")}</span>
-                  {onRetryDockets ? (
-                    <Button type="button" size="sm" variant="outline" onClick={onRetryDockets}>Try again</Button>
-                  ) : null}
-                </div>
-              ) : dockets.length === 0 ? (
-                <p id="ip-document-docket-empty" className="mt-1 text-xs text-[var(--color-mute)]">
-                  No IP record to link yet. Create the record first, then upload its documents.
-                </p>
-              ) : null}
-            </div>
+                className="min-w-0 md:col-span-2"
+                label="Linked docket"
+                searchLabel="Find the linked docket"
+                value={chosenDocketId}
+                onChange={(next) => setDocketId(next)}
+                required
+              />
+            )}
             <div className="min-w-0">
               <Label htmlFor="ip-document-confidentiality">Confidentiality</Label>
               <select

@@ -378,11 +378,7 @@ export default function IpDocketPage() {
             <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
           ) : (
             <IpDocumentWorkspace
-              dockets={portfolioDockets}
               preferredDocketId={requestedDocketId ?? undefined}
-              docketsLoading={listing.isLoading}
-              docketsError={listing.error ?? requestedDocket.error ?? null}
-              onRetryDockets={() => void (listing.isError ? listing.refetch() : requestedDocket.refetch())}
               canUpload={canWrite && canUploadDocuments}
               canManage={canWrite && canManageDocuments}
               canReview={canReview}
