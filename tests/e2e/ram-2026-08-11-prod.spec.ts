@@ -5,6 +5,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -183,11 +184,7 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
   );
   expect(direct.status(), await direct.text()).toBe(200);
 
-  const taxonomy = await page.request.post(
-    `${PROD_API_BASE_URL}/api/ip/document-taxonomy/seed`,
-    { headers },
-  );
-  expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(page.request, PROD_API_BASE_URL, headers);
   const uploaded = await page.request.post(
     `${PROD_API_BASE_URL}/api/ip/documents/upload`,
     {

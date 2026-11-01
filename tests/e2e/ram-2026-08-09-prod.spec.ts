@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -119,11 +120,7 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
   await signIn(page);
   const headers = await csrfHeaders(page);
 
-  const seeded = await page.request.post(
-    `${PROD_API_BASE_URL}/api/ip/document-taxonomy/seed`,
-    { headers },
-  );
-  expect(seeded.status(), await seeded.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(page.request, PROD_API_BASE_URL, headers);
 
   const aliasPreview = await page.request.post(
     `${PROD_API_BASE_URL}/api/ip/document-taxonomy/import-aliases`,
