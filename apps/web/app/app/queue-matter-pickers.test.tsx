@@ -54,11 +54,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchGoogleDriveStatus.mockResolvedValue({ configured: true, connections: [{ status: "connected" }] });
   mocks.fetchGmailMailboxStatus.mockResolvedValue({ configured: true, connections: [{ status: "connected" }] });
-  mocks.listMatters.mockResolvedValue({ matters: [MATTERS.open, MATTERS.closed], next_cursor: null });
-  mocks.fetchMatter.mockImplementation(async (id: string) => {
-    if (id === "matter-suggested") return { id, matter_code: "SUG-9", title: "Suggested matter", client_name: "Nova", status: "active" };
-    throw new ApiError(404, "Matter not found.", null);
+  // Rows name their Matter through the wall-scoped list (`?id=`); a walled
+  // Matter is simply absent. GET /api/matters/{id} audits a denial on every
+  // render for a walled viewer and must never be used to name a row.
+  mocks.listMatters.mockImplementation(async (params?: { id?: string }) => {
+    if (!params?.id) return { matters: [MATTERS.open, MATTERS.closed], next_cursor: null };
+    const found = params.id === "matter-suggested"
+      ? { id: params.id, matter_code: "SUG-9", title: "Suggested matter", client_name: "Nova", status: "active" }
+      : null;
+    return { matters: found ? [found] : [], next_cursor: null };
   });
+  mocks.fetchMatter.mockRejectedValue(new ApiError(404, "Matter not found.", null));
   mocks.fetchDriveCandidates.mockResolvedValue({
     pending_count: 2,
     candidates: [
@@ -154,5 +160,8 @@ describe("review queues choose Matters by name (B4-ADJ-02)", () => {
     renderPage(<DrivePage />);
     expect(await screen.findByText("A Matter you cannot open")).toBeVisible();
     expect(screen.queryByText(/matter-walled/)).toBeNull();
+    // Named through the wall-scoped list, never the audited by-id read.
+    expect(mocks.listMatters).toHaveBeenCalledWith(expect.objectContaining({ id: "matter-walled" }));
+    expect(mocks.fetchMatter).not.toHaveBeenCalled();
   });
 });

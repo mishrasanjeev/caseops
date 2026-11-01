@@ -294,14 +294,17 @@ describe("AdminNotificationsPage", () => {
     beforeEach(() => {
       useCapabilityMock.mockReturnValue(true);
       listAdminNotificationsMock.mockResolvedValue(quiet);
-      listMattersMock.mockReset().mockResolvedValue({
-        matters: [
-          { id: "matter-open", matter_code: "LIT-1", title: "Aster v Nova", client_name: "Aster", status: "active" },
-          { id: "matter-closed", matter_code: "LIT-2", title: "Closed dispute", client_name: "Aster", status: "closed" },
-        ],
+      const visible = [
+        { id: "matter-open", matter_code: "LIT-1", title: "Aster v Nova", client_name: "Aster", status: "active" },
+        { id: "matter-closed", matter_code: "LIT-2", title: "Closed dispute", client_name: "Aster", status: "closed" },
+      ];
+      // `?id=` is the wall-scoped lookup: a walled Matter is absent from it.
+      listMattersMock.mockReset().mockImplementation(async (params?: { id?: string }) => ({
+        matters: params?.id ? visible.filter((matter) => matter.id === params.id) : visible,
         next_cursor: null,
-      });
-      fetchMatterMock.mockReset().mockResolvedValue({ id: "matter-open", matter_code: "LIT-1", title: "Aster v Nova", client_name: "Aster", status: "active" });
+      }));
+      // The audited by-id read is never used to name a rule's Matter.
+      fetchMatterMock.mockReset().mockRejectedValue(new Error("GET /api/matters/{id} must not be called"));
       listCompanyUsersMock.mockResolvedValue({
         company_id: "company-1",
         company_slug: "firm",
@@ -325,6 +328,22 @@ describe("AdminNotificationsPage", () => {
       const userRule = screen.getByTestId("notification-rule-rule-u");
       await waitFor(() => expect(userRule).toHaveTextContent("Asha Rao"));
       expect(userRule).not.toHaveTextContent("member-1");
+      expect(fetchMatterMock).not.toHaveBeenCalled();
+    });
+
+    it("names a rule's walled Matter without the audited by-id read", async () => {
+      listNotificationRulesMock.mockResolvedValue({
+        durable_delivery: "wtd_5_3_foundation_available",
+        rules: [
+          { id: "rule-w", company_id: "c1", scope_type: "matter", scope_id: "matter-walled", event_type: "hearing_upcoming", channels: ["in_app"], offset_minutes: null, enabled: true, created_by_membership_id: "m1", durable_delivery: "wtd_5_3_foundation_available", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z" },
+        ],
+      });
+      render(withClient(<AdminNotificationsPage />));
+      const walled = await screen.findByTestId("notification-rule-rule-w");
+      await waitFor(() => expect(walled).toHaveTextContent("A Matter you cannot open"));
+      expect(walled).not.toHaveTextContent("matter-walled");
+      expect(listMattersMock).toHaveBeenCalledWith(expect.objectContaining({ id: "matter-walled" }));
+      expect(fetchMatterMock).not.toHaveBeenCalled();
     });
 
     it("offers a Matter picker for a Matter rule and a colleague picker for a user rule", async () => {

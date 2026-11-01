@@ -454,6 +454,8 @@ export async function updatePlatformForumAlias(
 }
 
 export type MatterListParams = {
+  /** One Matter by id through the wall-scoped list: absent when hidden, never audited as a denial. */
+  id?: string;
   limit?: number;
   cursor?: string | null;
   q?: string;
@@ -556,6 +558,7 @@ function appendMatterListParam(
 
 export async function listMatters(params?: MatterListParams): Promise<MattersList> {
   const qs = new URLSearchParams();
+  appendMatterListParam(qs, "id", params?.id);
   appendMatterListParam(qs, "limit", params?.limit);
   appendMatterListParam(qs, "cursor", params?.cursor);
   appendMatterListParam(qs, "q", params?.q);
@@ -10223,6 +10226,8 @@ export type IpOppositionSharedWorkflow = {
     filing_phase: string;
   }>;
   disposition_trigger_events: IpDocketEvent[];
+  /** Hearing statuses each hearing-bound record accepts, from the validators' table. */
+  hearing_statuses_by_action?: Record<string, string[]>;
   next_required_action:
     | "complete_role_workflow"
     | "record_evidence_package"

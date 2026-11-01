@@ -6,11 +6,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/config";
 
-const mocks = vi.hoisted(() => ({ listMatters: vi.fn(), fetchMatter: vi.fn() }));
+// `page` serves the picker's list; `byId` serves GET /api/matters/?id= (the
+// wall-scoped lookup). GET /api/matters/{id} is deliberately not mocked: it
+// audits a denial for a walled viewer and must not be used to name a Matter.
+const mocks = vi.hoisted(() => ({ page: vi.fn(), byId: vi.fn() }));
 
 vi.mock("@/lib/api/endpoints", () => ({
-  listMatters: mocks.listMatters,
-  fetchMatter: mocks.fetchMatter,
+  listMatters: (params?: { id?: string }) =>
+    params?.id
+      ? Promise.resolve(mocks.byId(params.id)).then((found) => ({ matters: found ? [found] : [], next_cursor: null }))
+      : mocks.page(params),
 }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: () => true }));
 
@@ -26,29 +31,30 @@ function wrapper() {
 }
 
 beforeEach(() => {
-  mocks.listMatters.mockReset();
-  mocks.fetchMatter.mockReset();
+  mocks.page.mockReset();
+  mocks.byId.mockReset();
 });
 
 describe("MatterPicker fetch-by-id (B4-ADJ-02)", () => {
   beforeEach(() => {
     // One page of 50 recent Matters, more behind the cursor: the pre-filled
     // Matter is older than every loaded row.
-    mocks.listMatters.mockResolvedValue({
+    mocks.page.mockResolvedValue({
       matters: Array.from({ length: 50 }, (_, index) => matter(`m-${index}`, `RECENT-${index}`)),
       next_cursor: "cursor-2",
     });
   });
 
   it("reads a pre-filled Matter beyond the loaded page by id and shows it as the selection", async () => {
-    mocks.fetchMatter.mockResolvedValue(matter("m-old", "OLD-2019"));
+    mocks.byId.mockResolvedValue(matter("m-old", "OLD-2019"));
     render(<MatterPicker value="m-old" onChange={vi.fn()} label="Matter" />, { wrapper: wrapper() });
 
     const select = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Matter" });
     await waitFor(() => expect(select).toHaveValue("m-old"));
-    expect(mocks.fetchMatter).toHaveBeenCalledWith("m-old");
+    expect(mocks.byId).toHaveBeenCalledWith("m-old");
     expect(Array.from(select.options, (option) => option.value)).toContain("m-old");
-    expect(screen.getAllByText("OLD-2019 · Title OLD-2019 · Aster Holdings").length).toBeGreaterThan(0);
+    // The select shows "Loading the selected Matter…" under the same value first; wait for the caption.
+    expect((await screen.findAllByText("OLD-2019 · Title OLD-2019 · Aster Holdings")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -56,13 +62,14 @@ describe("MatterPicker fetch-by-id (B4-ADJ-02)", () => {
     render(<MatterPicker value="m-3" onChange={vi.fn()} label="Matter" />, { wrapper: wrapper() });
     const select = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Matter" });
     await waitFor(() => expect(select).toHaveValue("m-3"));
-    expect(mocks.fetchMatter).not.toHaveBeenCalled();
+    expect(mocks.byId).not.toHaveBeenCalled();
   });
 
   it("reports a walled or deleted pre-filled Matter without its title and lets the user clear it", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    mocks.fetchMatter.mockRejectedValue(new ApiError(404, "Matter not found.", null));
+    // Walled or deleted: the wall-scoped list simply does not return it.
+    mocks.byId.mockResolvedValue(null);
     render(<MatterPicker value="m-walled" onChange={onChange} label="Matter" />, { wrapper: wrapper() });
 
     const alert = await screen.findByRole("alert");
@@ -78,27 +85,30 @@ describe("MatterPicker fetch-by-id (B4-ADJ-02)", () => {
 
   it("offers Retry when the by-id read fails for another reason", async () => {
     const user = userEvent.setup();
-    mocks.fetchMatter.mockRejectedValueOnce(new ApiError(503, "Service unavailable.", null));
-    mocks.fetchMatter.mockResolvedValueOnce(matter("m-old", "OLD-2019"));
+    mocks.byId.mockRejectedValueOnce(new ApiError(503, "Service unavailable.", null));
+    mocks.byId.mockResolvedValueOnce(matter("m-old", "OLD-2019"));
     render(<MatterPicker value="m-old" onChange={vi.fn()} label="Matter" />, { wrapper: wrapper() });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be loaded: Service unavailable.");
     await user.click(screen.getByRole("button", { name: "Retry" }));
     const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Matter" });
     await waitFor(() => expect(select).toHaveValue("m-old"));
+    expect((await screen.findAllByText("OLD-2019 · Title OLD-2019 · Aster Holdings")).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
 
 describe("MatterName", () => {
   it("shows the caption, never the id", async () => {
-    mocks.fetchMatter.mockResolvedValue(matter("m-9", "CODE-9"));
+    mocks.byId.mockResolvedValue(matter("m-9", "CODE-9"));
     render(<MatterName matterId="m-9" />, { wrapper: wrapper() });
     expect(await screen.findByText("CODE-9 · Title CODE-9 · Aster Holdings")).toBeVisible();
     expect(screen.queryByText("m-9")).toBeNull();
   });
 
   it("names a Matter the viewer cannot open without leaking it", async () => {
-    mocks.fetchMatter.mockRejectedValue(new ApiError(404, "Matter not found.", null));
+    // Walled or deleted: the wall-scoped list simply does not return it.
+    mocks.byId.mockResolvedValue(null);
     render(<MatterName matterId="m-walled" />, { wrapper: wrapper() });
     expect(await screen.findByText("A Matter you cannot open")).toBeVisible();
     expect(screen.queryByText("m-walled")).toBeNull();
@@ -107,6 +117,6 @@ describe("MatterName", () => {
   it("renders the fallback for no Matter", () => {
     render(<MatterName matterId={null} fallback="Unlinked" />, { wrapper: wrapper() });
     expect(screen.getByText("Unlinked")).toBeVisible();
-    expect(mocks.fetchMatter).not.toHaveBeenCalled();
+    expect(mocks.byId).not.toHaveBeenCalled();
   });
 });
