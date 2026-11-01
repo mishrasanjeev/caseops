@@ -738,7 +738,12 @@ test('appium driver listing charges final reconciliation and bounds the actual c
   const v = driverListFixture(t, "process.on('SIGTERM', () => {}); process.stdout.write('READY_WITH_SIGTERM_HANDLER\\n'); setInterval(() => {}, 1000);");
   await observeDriverListClose(v, async () => assert.rejects(appiumTooling.readInstalledDrivers(v.root,
     { limits: { ...appiumTooling.DRIVER_LIST_LIMITS, milliseconds: 1000 } }), /APPIUM_TOOLING_(CHILD_SIGNAL|DRIVER_LIST_DEADLINE)/));
-  assert.equal(fs.readFileSync(v.listed, 'utf8'), 'READY_WITH_SIGTERM_HANDLER\n');
+  // POSIX proves the child installed its SIGTERM handler before the SIGKILL
+  // deadline. Windows has no catchable SIGTERM and a slower child start, so
+  // only the deadline refusal and an unextended stdout are meaningful there.
+  const listedOutput = fs.readFileSync(v.listed, 'utf8');
+  if (process.platform === 'win32') assert.ok(['', 'READY_WITH_SIGTERM_HANDLER\n'].includes(listedOutput));
+  else assert.equal(listedOutput, 'READY_WITH_SIGTERM_HANDLER\n');
   const full = driverListFixture(t); let entries = 0;
   await withFsAsync({ lstatSync(original, ...args) { entries++; return original(...args); },
     readdirSync(original, ...args) { const names = original(...args); entries += names.length; return names; } },
@@ -780,7 +785,9 @@ test('appium tooling sources are in the native source fingerprint and its dirty 
     '-c', 'commit.gpgsign=false', ...args], { cwd: dir, windowsHide: true }).status, 0);
   const files = ['scripts/mobile/appium-tooling.mjs', 'scripts/mobile/appium-tooling/package.json', 'scripts/mobile/appium-tooling/package-lock.json'];
   for (const file of ['apps/mobile/index.ts', ...files]) { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), 'export {};\n'); }
-  git('init', '--quiet'); git('add', '.'); git('commit', '--quiet', '-m', 'Synthetic Appium tooling source');
+  // Hosted Windows git defaults to core.autocrlf=true, which would rewrite the
+  // LF fixtures on checkout and change the restored fingerprint.
+  git('init', '--quiet'); git('config', 'core.autocrlf', 'false'); git('add', '.'); git('commit', '--quiet', '-m', 'Synthetic Appium tooling source');
   const clean = sourceSnapshot(dir); assert.equal(clean.sourceDirty, false);
   for (const file of files) {
     fs.writeFileSync(path.join(dir, file), 'changed\n');
