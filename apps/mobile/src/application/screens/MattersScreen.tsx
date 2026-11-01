@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ScrollView, Text, TextInput } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { NativeButton } from "../../components/NativeControls";
 import { Empty, RecordRow, ResourceView } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
+import { StableTextInput } from "../../components/StableTextInput";
 import { displayDay } from "../../domain/contracts";
 import type { MatterRef } from "../../domain/contracts";
 import type { Repository } from "../../domain/repository";
@@ -41,7 +42,7 @@ export function MattersScreen({
       <Text style={styles.label}>
         Search permitted matter identifiers or title
       </Text>
-      <TextInput
+      <StableTextInput
         testID="matter-search"
         accessibilityLabel="Search matters"
         value={input}

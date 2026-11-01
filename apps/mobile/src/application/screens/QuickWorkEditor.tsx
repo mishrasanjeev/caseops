@@ -5,11 +5,11 @@ import {
   Platform,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { NativeButton, NativeSegments } from "../../components/NativeControls";
 import { styles } from "../../components/theme";
+import { StableTextInput } from "../../components/StableTextInput";
 import type { Matter } from "../../domain/contracts";
 import {
   createQuickWorkController,
@@ -110,7 +110,7 @@ export function QuickWorkEditor({
   ) => (
     <View key={key} style={{ gap: 4 }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
+      <StableTextInput
         testID={`quick-${key}`}
         accessibilityLabel={label}
         value={state.fields[key] || ""}

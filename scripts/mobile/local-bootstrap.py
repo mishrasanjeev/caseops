@@ -23,6 +23,8 @@ DEFAULT_CACHE = Path.home() / ".cache/caseops-mobile/local-docker-20261025"
 PLATFORMS = ("android", "ios")
 DEVICE_OUTPUT_LIMIT = 65536
 MARKER = {"X-CaseOps-Automated-Test": "no-paid-providers"}
+CORE_SCREEN_READS = frozenset({"GET /api/auth/native/sessions", "GET /api/account/deletion-requests",
+                               "GET /api/matter-work-queue"})
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
              "tests/fixtures/statutes/structured-schedule-api.json",
@@ -322,7 +324,9 @@ def extend_fixture(cache, config, args, stamp):
     body = json.loads(extended.read_text(encoding="utf-8"))
     routes_path = cache / "gateway-routes.json"
     previous = json.loads(routes_path.read_text(encoding="utf-8"))
-    routes = set(previous["routes"]) | {"GET /api/auth/native/sessions"}
+    # The current native Account and Work screens read these on every open, so
+    # Core needs them admitted; their mutations stay with Queue/Privacy.
+    routes = set(previous["routes"]) | CORE_SCREEN_READS
     for kind in ("lifecycleMatter", "accessMatter"):
         mid = body[kind]["id"]
         routes |= {f"GET /api/matters/{mid}", f"GET /api/matters/{mid}/workspace", f"POST /api/matters/{mid}/notes"}
