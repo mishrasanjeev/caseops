@@ -104,7 +104,7 @@ from caseops_api.services.matter_write_fence import (
     lock_matter_private_authority,
     require_read_only_upload_session,
 )
-from caseops_api.services.provider_text import provider_plain_text
+from caseops_api.services.provider_text import mailbox_text_is_escaped, provider_plain_text
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -658,6 +658,12 @@ def _connection_record(connection: UserMailboxConnection) -> MailboxConnectionRe
     )
 
 
+def _snippet_text(row: MailboxMessageImport) -> str | None:
+    if mailbox_text_is_escaped(row.connection.provider):
+        return provider_plain_text(row.snippet)
+    return row.snippet
+
+
 def _message_record(row: MailboxMessageImport) -> MailboxMessageImportRecord:
     return MailboxMessageImportRecord(
         id=row.id,
@@ -672,8 +678,8 @@ def _message_record(row: MailboxMessageImport) -> MailboxMessageImportRecord:
         sender_name=row.sender_name,
         occurred_at=row.occurred_at,
         # Gmail snippets are HTML-escaped; the stored provider text is decoded
-        # once for presentation.
-        snippet=provider_plain_text(row.snippet),
+        # once for presentation. Outlook previews are plain and stay as stored.
+        snippet=_snippet_text(row),
         labels=list(row.labels_json or []),
         attachment_count=row.attachment_count,
         status=row.status,  # type: ignore[arg-type]
@@ -1574,7 +1580,7 @@ def review_message_import(
                 created_by_membership_id=context.membership.id,
                 owner_membership_id=context.membership.id,
                 title=(payload.task_title or row.subject or "Review linked email")[:255],
-                description=payload.task_description or row.snippet,
+                description=payload.task_description or _snippet_text(row),
                 status=MatterTaskStatus.TODO,
                 priority=MatterTaskPriority.MEDIUM,
             )
@@ -1650,9 +1656,10 @@ def _default_note_body(row: MailboxMessageImport) -> str:
         lines.append(f"Sender: {row.sender_name}")
     if row.occurred_at:
         lines.append(f"Date: {row.occurred_at.isoformat()}")
-    if row.snippet:
+    snippet = _snippet_text(row)
+    if snippet:
         lines.append("")
-        lines.append(row.snippet)
+        lines.append(snippet)
     return "\n".join(lines)[:4000]
 
 

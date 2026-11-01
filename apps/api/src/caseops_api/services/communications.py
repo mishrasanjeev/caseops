@@ -75,7 +75,10 @@ from caseops_api.services.matter_write_fence import (
     lock_matter_private_authority,
     require_read_only_upload_session,
 )
-from caseops_api.services.provider_text import provider_plain_text
+from caseops_api.services.provider_text import (
+    communication_text_is_escaped,
+    provider_plain_text,
+)
 from caseops_api.services.sendgrid_transport import _send_via_sendgrid as _send_via_sendgrid
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
@@ -126,7 +129,7 @@ def list_matter_communications(
     )
     return CommunicationListResponse(
         matter_id=matter.id,
-        communications=[CommunicationRecord.model_validate(r) for r in rows],
+        communications=[_communication_record(r) for r in rows],
     )
 
 
@@ -145,14 +148,19 @@ def _timeline_preview(text: str | None, *, max_chars: int = 320) -> str | None:
     return cleaned[: max_chars - 1].rstrip() + "…"
 
 
-def _is_provider_mailbox_copy(row: Communication) -> bool:
-    """A Communication whose body is a provider's escaped mailbox snippet."""
+def _plain_body(row: Communication) -> str | None:
+    """The body as text: a Gmail-copied snippet is decoded once, nothing else is."""
 
-    metadata = row.metadata_json or {}
-    return isinstance(metadata, dict) and metadata.get("source") in {
-        "gmail_provider_import",
-        "mailbox_metadata_review",
-    }
+    if communication_text_is_escaped(row.metadata_json):
+        return provider_plain_text(row.body)
+    return row.body
+
+
+def _communication_record(row: Communication) -> CommunicationRecord:
+    record = CommunicationRecord.model_validate(row)
+    if communication_text_is_escaped(row.metadata_json):
+        record = record.model_copy(update={"body": provider_plain_text(record.body)})
+    return record
 
 
 def _is_imported_email(row: Communication) -> bool:
@@ -421,9 +429,7 @@ def list_matter_communication_timeline(
                 visibility=_communication_visibility(row),
                 occurred_at=row.occurred_at,
                 title=_communication_title(row),
-                preview=_timeline_preview(
-                    provider_plain_text(row.body) if _is_provider_mailbox_copy(row) else row.body
-                ),
+                preview=_timeline_preview(_plain_body(row)),
                 actor_label=_communication_actor(row),
                 direction=_as_value(row.direction),
                 channel=_as_value(row.channel),
@@ -542,7 +548,7 @@ def create_matter_communication(
     session.add(row)
     session.commit()
     session.refresh(row)
-    return CommunicationRecord.model_validate(row)
+    return _communication_record(row)
 
 
 def _normalised_provider(provider: str) -> str:
@@ -698,7 +704,7 @@ def _existing_import_response(
         attachment_ids = [body_attachment_id, *attachment_ids]
     return InboundEmailImportResponse(
         matter_id=matter_id,
-        communication=CommunicationRecord.model_validate(row),
+        communication=_communication_record(row),
         duplicate=True,
         body_attachment_id=body_attachment_id,
         attachment_ids=attachment_ids,
@@ -950,7 +956,7 @@ def import_inbound_email(
     session.refresh(row)
     return InboundEmailImportResponse(
         matter_id=matter.id,
-        communication=CommunicationRecord.model_validate(row),
+        communication=_communication_record(row),
         duplicate=False,
         body_attachment_id=body_attachment_id,
         attachment_ids=[attachment.id for attachment in imported_attachments],
@@ -1089,7 +1095,7 @@ def send_matter_email(
                 "fresh Compose dialog."
             ),
         )
-    return CommunicationRecord.model_validate(row)
+    return _communication_record(row)
 
 
 # SendGrid event names we promote to a CommunicationStatus.
