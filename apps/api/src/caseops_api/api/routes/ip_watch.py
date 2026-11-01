@@ -12,6 +12,7 @@ from caseops_api.schemas.ip_watch import (
     IpJournalIngestRequest,
     IpJournalIngestResponse,
     IpJournalPublicationResponse,
+    IpJournalPublicationSearchResponse,
     IpWatchHandoffRequest,
     IpWatchHandoffResponse,
     IpWatchHitDispositionRequest,
@@ -27,6 +28,7 @@ from caseops_api.services.ip_watch import (
     decide_watch_hit,
     ingest_journal,
     list_watch_workspace,
+    search_journal_publications,
     update_watch_profile_status,
 )
 from caseops_api.services.session_context import SessionContext
@@ -43,6 +45,21 @@ def watch_workspace(
 ) -> IpWatchWorkspaceResponse:
     return list_watch_workspace(
         session, context=context, docket_id=docket_id, limit=limit
+    )
+
+
+@router.get("/watch/publications", response_model=IpJournalPublicationSearchResponse)
+def watch_publication_search(
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
+    q: Annotated[str | None, Query(max_length=160)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> IpJournalPublicationSearchResponse:
+    return IpJournalPublicationSearchResponse(
+        publications=[
+            IpJournalPublicationResponse.model_validate(item)
+            for item in search_journal_publications(session, context=context, query=q, limit=limit)
+        ]
     )
 
 

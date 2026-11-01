@@ -15,6 +15,8 @@ from pydantic import (
     model_validator,
 )
 
+from caseops_api.core.jurisdictions import JURISDICTION_HINT, canonical_jurisdiction
+
 WatchDisposition = Literal[
     "new",
     "reviewing",
@@ -78,6 +80,26 @@ class IpWatchProfileCreateRequest(BaseModel):
         if any(not _http_url(ref) for ref in value):
             raise ValueError("Device references must use HTTP or HTTPS.")
         return value
+
+    @field_validator("jurisdictions")
+    @classmethod
+    def validate_jurisdictions(cls, value: list[str]) -> list[str]:
+        # Matching compares codes exactly; "India" would be saved and never match.
+        codes: list[str] = []
+        unknown: list[str] = []
+        for item in value:
+            code = canonical_jurisdiction(item)
+            if code is None:
+                unknown.append(item.strip() or "(blank)")
+            elif code not in codes:
+                codes.append(code)
+        if unknown:
+            names = ", ".join(f'"{item}"' for item in unknown)
+            verb = "is not a recognised jurisdiction" if len(unknown) == 1 else (
+                "are not recognised jurisdictions"
+            )
+            raise ValueError(f"{names} {verb}. {JURISDICTION_HINT}")
+        return codes
 
     @model_validator(mode="after")
     def validate_criteria(self) -> IpWatchProfileCreateRequest:
@@ -432,6 +454,10 @@ class IpWatchHandoffResponse(BaseModel):
     created_by_membership_id: str
     completed_at: datetime | None
     created_at: datetime
+
+
+class IpJournalPublicationSearchResponse(BaseModel):
+    publications: list[IpJournalPublicationResponse] = Field(default_factory=list)
 
 
 class IpWatchWorkspaceResponse(BaseModel):

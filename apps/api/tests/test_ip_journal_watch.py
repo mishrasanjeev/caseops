@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1148,6 +1150,16 @@ def test_bug_014_lawyer_capture_shape_is_accepted() -> None:
     assert model.raw_evidence["extract_text"].startswith("Journal 2187")
 
 
+def test_bug_014_web_form_payloads_satisfy_the_api_contract() -> None:
+    # apps/web/lib/ip/journal-capture.test.ts asserts the intake form builds
+    # exactly these payloads, so the web form and this contract cannot drift.
+    fixture = Path(__file__).parent / "fixtures" / "journal_capture_web_payloads.json"
+    payloads = json.loads(fixture.read_text(encoding="utf-8"))
+    assert len(payloads) == 2
+    for payload in payloads:
+        IpJournalPublicationCreate.model_validate(payload)
+
+
 @pytest.mark.parametrize(
     ("overrides", "loc", "fragment"),
     [
@@ -1309,78 +1321,172 @@ def test_bug_014_zero_hit_capture_is_listed_with_its_evidence(client: TestClient
     assert isolated.json()["intake_profile_count"] == 0
 
 
-def test_bug_014_listed_capture_respects_docket_visibility(client: TestClient) -> None:
-    bootstrap, headers, open_docket, _ = _fixture(client, "OPENWATCH")
-    restricted = client.post(
-        "/api/ip/dockets",
-        headers=headers,
-        json={"title": "WALLED", "restricted": True, "particulars": _particulars("WALLED")},
-    )
-    assert restricted.status_code == 201, restricted.text
-    walled_asset = _asset(client, headers, restricted.json()["id"], "WALLED")
-    walled_application = _application(
-        client, headers, restricted.json()["id"], walled_asset["id"]
-    )
-    _profile(
-        client,
-        headers=headers,
-        docket_id=open_docket["id"],
-        recipient_id=bootstrap["membership"]["id"],
-    )
-    linked = _ingest(
-        client,
-        headers=headers,
-        key="bug014-walled-0001",
-        publication=_manual_capture(
-            application_id=walled_application["id"], application_number="BUG014-WALLED"
-        ),
-        cost_minor=0,
-    )["publications"][0]
-    unlinked = _ingest(
-        client,
-        headers=headers,
-        key="bug014-unlinked-0001",
-        publication=_manual_capture(application_number="BUG014-UNLINKED"),
-        cost_minor=0,
-    )["publications"][0]
-
+def _colleague(
+    client: TestClient, headers: dict[str, str], *, email: str, role: MembershipRole
+) -> dict[str, str]:
     created = client.post(
         "/api/companies/current/users",
         headers=headers,
         json={
-            "full_name": "Watch Reading Partner",
-            "email": "watch-partner@asterlegal.in",
+            "full_name": f"Watch {role.value}",
+            "email": email,
             "role": "member",
-            "password": "PartnerPass123!",
+            "password": "ColleaguePass123!",
         },
     )
     assert created.status_code == 200, created.text
     with get_session_factory()() as session:
         membership = session.get(CompanyMembership, str(created.json()["membership_id"]))
         assert membership is not None
-        membership.role = MembershipRole.PARTNER
+        membership.role = role
         session.commit()
     login = client.post(
         "/api/auth/login",
-        json={
-            "company_slug": "aster-legal",
-            "email": "watch-partner@asterlegal.in",
-            "password": "PartnerPass123!",
-        },
+        json={"company_slug": "aster-legal", "email": email, "password": "ColleaguePass123!"},
     )
     assert login.status_code == 200, login.text
-    partner = client.get("/api/ip/watch", headers=auth_headers(login.json()["access_token"]))
-    assert partner.status_code == 200, partner.text
-    seen = {item["id"] for item in partner.json()["publications"]}
-    assert unlinked["id"] in seen
-    assert linked["id"] not in seen
-    owner_seen = {
-        item["id"] for item in client.get("/api/ip/watch", headers=headers).json()["publications"]
-    }
-    assert {linked["id"], unlinked["id"]} <= owner_seen
+    return auth_headers(login.json()["access_token"])
 
 
-def test_bug_014_recapture_with_different_details_conflicts_instead_of_dropping(
+def _word_profile(
+    client: TestClient, headers: dict[str, str], *, docket_id: str, word: str, recipient: str
+) -> dict:
+    response = client.post(
+        "/api/ip/watch/profiles",
+        headers=headers,
+        json={
+            "docket_id": docket_id,
+            "name": f"{word} word watch",
+            "word_terms": [word],
+            "frequency": "publication",
+            "recipient_membership_ids": [recipient],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _listed(client: TestClient, headers: dict[str, str], **params: str) -> set[str]:
+    workspace = client.get("/api/ip/watch", headers=headers, params=params)
+    assert workspace.status_code == 200, workspace.text
+    return {item["id"] for item in workspace.json()["publications"]}
+
+
+def _searched(client: TestClient, headers: dict[str, str], q: str | None = None) -> set[str]:
+    response = client.get(
+        "/api/ip/watch/publications", headers=headers, params={"q": q} if q else {}
+    )
+    assert response.status_code == 200, response.text
+    return {item["id"] for item in response.json()["publications"]}
+
+
+def test_bug_014_listed_capture_respects_docket_visibility(client: TestClient) -> None:
+    bootstrap, headers, open_docket, _ = _fixture(client, "OPENWATCH")
+    owner_id = bootstrap["membership"]["id"]
+    restricted = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={"title": "WALLED", "restricted": True, "particulars": _particulars("WALLED")},
+    )
+    assert restricted.status_code == 201, restricted.text
+    walled_docket = restricted.json()["id"]
+    walled_asset = _asset(client, headers, walled_docket, "WALLED")
+    walled_application = _application(client, headers, walled_docket, walled_asset["id"])
+    _word_profile(
+        client, headers, docket_id=open_docket["id"], word="OPENMARK", recipient=owner_id
+    )
+    _word_profile(client, headers, docket_id=walled_docket, word="WALLMARK", recipient=owner_id)
+
+    def capture(key: str, **overrides: object) -> dict:
+        return _ingest(
+            client, headers=headers, key=key, publication=_manual_capture(**overrides), cost_minor=0
+        )
+
+    linked = capture(
+        "bug014-walled-0001",
+        application_id=walled_application["id"],
+        application_number="BUG014-WALLED",
+    )["publications"][0]
+    open_hit = capture(
+        "bug014-openhit-0001", application_number="BUG014-OPENHIT", mark_text="OPENMARK"
+    )
+    walled_hit = capture(
+        "bug014-wallhit-0001",
+        application_number="BUG014-WALLHIT",
+        mark_text="WALLMARK",
+        raw_evidence={"extract_text": "Walled team capture notes.", "capture_method": "manual"},
+    )
+    zero_hit = capture("bug014-zerohit-0001", application_number="BUG014-ZEROHIT")
+    assert len(open_hit["hits"]) == 1
+    assert len(walled_hit["hits"]) == 1
+    assert zero_hit["hits"] == []
+    open_hit_id = open_hit["publications"][0]["id"]
+    walled_hit_id = walled_hit["publications"][0]["id"]
+    zero_hit_id = zero_hit["publications"][0]["id"]
+
+    partner = _colleague(
+        client, headers, email="watch-partner@asterlegal.in", role=MembershipRole.PARTNER
+    )
+    # A partner outside the wall sees the entry that hit a profile they can
+    # see, never the walled team's unlinked capture (with its notes), the
+    # walled application's entry, or a colleague's zero-hit capture.
+    for seen in (_listed(client, partner), _searched(client, partner)):
+        assert open_hit_id in seen
+        assert {linked["id"], walled_hit_id, zero_hit_id}.isdisjoint(seen)
+    assert _searched(client, partner, "wallmark") == set()
+    owner_seen = _listed(client, headers)
+    assert {linked["id"], open_hit_id, walled_hit_id, zero_hit_id} <= owner_seen
+    assert _searched(client, headers, "BUG014-WALLHIT") == {walled_hit_id}
+    # A typed wildcard never widens the search.
+    assert _searched(client, headers, "BUG014%HIT") == set()
+
+    admin = _colleague(
+        client, headers, email="watch-admin@asterlegal.in", role=MembershipRole.ADMIN
+    )
+    # Only a visible entry can be corrected; the walled one reads as not found.
+    hidden = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=admin,
+        json={
+            "idempotency_key": "bug014-hidden-correction-0001",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    application_number="BUG014-WALLHIT",
+                    publication_kind="correction",
+                    supersedes_publication_id=walled_hit_id,
+                    correction_reason="Corrected goods description.",
+                )
+            ],
+        },
+    )
+    assert hidden.status_code == 404, hidden.text
+    own = _ingest(
+        client,
+        headers=admin,
+        key="bug014-admin-own-0001",
+        publication=_manual_capture(application_number="BUG014-ADMINOWN"),
+        cost_minor=0,
+    )["publications"][0]
+    assert own["id"] in _listed(client, admin)
+    assert own["id"] not in _listed(client, partner)
+
+    other = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Beacon IP Partners",
+            "company_slug": "beacon-ip-search",
+            "company_type": "law_firm",
+            "owner_full_name": "Beacon Owner",
+            "owner_email": "owner@beacon-search.example",
+            "owner_password": "BeaconWatch123!",
+        },
+    )
+    assert other.status_code == 200, other.text
+    assert _searched(client, auth_headers(other.json()["access_token"]), "BUG014") == set()
+
+
+def test_bug_014_recapture_with_different_details_points_to_the_recorded_entry(
     client: TestClient,
 ) -> None:
     bootstrap, headers, docket, _ = _fixture(client, "RECAPTURE")
@@ -1394,7 +1500,7 @@ def test_bug_014_recapture_with_different_details_conflicts_instead_of_dropping(
         client, headers=headers, key="bug014-recapture-0002", publication=_manual_capture()
     )
     assert same["publications"][0]["id"] == first["publications"][0]["id"]
-    changed = client.post(
+    response = client.post(
         "/api/ip/watch/journal-ingestions",
         headers=headers,
         json={
@@ -1410,8 +1516,121 @@ def test_bug_014_recapture_with_different_details_conflicts_instead_of_dropping(
             ],
         },
     )
-    assert changed.status_code == 409, changed.text
-    assert "Record a correction or re-advertisement" in changed.json()["detail"]
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert body["type"] == "journal_entry_already_recorded"
+    assert body["publication_id"] == first["publications"][0]["id"]
+    assert "already recorded" in body["detail"]
+    assert "only if the journal itself published one" in body["detail"]
+
+
+def test_bug_014_recapture_of_a_walled_entry_does_not_reveal_it(client: TestClient) -> None:
+    bootstrap, headers, open_docket, _ = _fixture(client, "WALLRECAP")
+    owner_id = bootstrap["membership"]["id"]
+    restricted = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={"title": "WALLRECAP2", "restricted": True, "particulars": _particulars("WR2")},
+    )
+    assert restricted.status_code == 201, restricted.text
+    _word_profile(client, headers, docket_id=open_docket["id"], word="NOMATCH", recipient=owner_id)
+    _word_profile(
+        client, headers, docket_id=restricted.json()["id"], word="ZQXV", recipient=owner_id
+    )
+    walled = _ingest(
+        client, headers=headers, key="bug014-wallrecap-0001", publication=_manual_capture()
+    )
+    assert len(walled["hits"]) == 1
+    admin = _colleague(
+        client, headers, email="recap-admin@asterlegal.in", role=MembershipRole.ADMIN
+    )
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=admin,
+        json={
+            "idempotency_key": "bug014-wallrecap-0002",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [_manual_capture(mark_text="ZQXV OTHER")],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["publication_id"] is None
+
+
+def test_bug_014_correction_identity_error_names_the_application_number(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "IDENTITY")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    original = _ingest(
+        client, headers=headers, key="bug014-identity-0001", publication=_manual_capture()
+    )["publications"][0]
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "bug014-identity-0002",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    application_number="BUG014-SOMETHING-ELSE",
+                    publication_kind="correction",
+                    supersedes_publication_id=original["id"],
+                    correction_reason="Corrected goods description.",
+                )
+            ],
+        },
+    )
+    assert response.status_code == 422, response.text
+    errors = response.json()["errors"]
+    assert [tuple(error["loc"]) for error in errors] == [
+        ("body", "publications", 0, "application_number")
+    ]
+    assert original["application_number"] in errors[0]["msg"]
+
+
+def test_bug_014_profile_jurisdictions_use_the_canonical_vocabulary() -> None:
+    def profile(jurisdictions: list[str]) -> IpWatchProfileCreateRequest:
+        return IpWatchProfileCreateRequest.model_validate(
+            {
+                "docket_id": "docket-1",
+                "name": "Jurisdiction check",
+                "word_terms": ["ZQXV"],
+                "jurisdictions": jurisdictions,
+                "frequency": "daily",
+                "recipient_membership_ids": ["member-1"],
+            }
+        )
+
+    assert profile(["India", "in", " uk ", "EU", "WIPO"]).jurisdictions == ["IN", "GB", "EM", "WO"]
+    with pytest.raises(ValidationError) as caught:
+        profile(["India", "Narnia"])
+    errors = caught.value.errors()
+    assert [error["loc"] for error in errors] == [("jurisdictions",)]
+    assert '"Narnia" is not a recognised jurisdiction' in errors[0]["msg"]
+
+
+def test_bug_014_legacy_free_text_jurisdiction_still_matches(client: TestClient) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "LEGACYJUR")
+    created = _word_profile(
+        client,
+        headers,
+        docket_id=docket["id"],
+        word="ZQXV",
+        recipient=bootstrap["membership"]["id"],
+    )
+    with get_session_factory()() as session:
+        stored = session.get(IpWatchProfile, created["id"])
+        assert stored is not None
+        stored.jurisdictions_json = ["INDIA"]
+        session.commit()
+    result = _ingest(
+        client, headers=headers, key="bug014-legacyjur-0001", publication=_manual_capture()
+    )
+    assert len(result["hits"]) == 1
+    assert result["hits"][0]["similarity_evidence_json"]["jurisdiction_match"] is True
 
 
 def test_bug_014_hit_snapshot_keeps_the_captured_evidence(client: TestClient) -> None:

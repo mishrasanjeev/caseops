@@ -8679,6 +8679,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Watch Publication Search */
+        get: operations["watch_publication_search_api_ip_watch_publications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/working-calendars": {
         parameters: {
             query?: never;
@@ -29968,6 +29985,11 @@ export interface components {
             source_url: string;
             /** Supersedes Publication Id */
             supersedes_publication_id: string | null;
+        };
+        /** IpJournalPublicationSearchResponse */
+        IpJournalPublicationSearchResponse: {
+            /** Publications */
+            publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -67077,6 +67099,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpWatchProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_publication_search_api_ip_watch_publications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalPublicationSearchResponse"];
                 };
             };
             /** @description Validation Error */

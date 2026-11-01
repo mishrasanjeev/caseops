@@ -16,6 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from caseops_api.core.jurisdictions import canonical_jurisdiction
 from caseops_api.db.models import (
     CompanyMembership,
     IpDocketRecord,
@@ -406,6 +407,76 @@ def _intake_profiles_statement(session: Session, *, context: SessionContext) -> 
     )
 
 
+# A viewer's own recent captures stay visible to them without a hit. Bounded so
+# the listing query stays cheap; older own zero-hit captures fall back to the
+# hit and docket rules below.
+OWN_CAPTURE_RUN_WINDOW = 500
+
+
+def _visible_publications_condition(session: Session, *, context: SessionContext) -> Any:
+    """The one predicate for which journal entries a viewer may see.
+
+    An entry linked to an application is visible when that application's docket
+    is visible. An unlinked entry is visible when it produced a hit on a watch
+    profile the viewer can see, or the viewer recorded it. An unlinked capture
+    whose only hits are on walled dockets therefore stays behind the wall, with
+    its capture notes.
+    """
+
+    visible_applications = (
+        select(TrademarkApplication.id)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == TrademarkApplication.docket_id)
+            & (IpDocketRecord.company_id == TrademarkApplication.company_id),
+        )
+        .where(
+            TrademarkApplication.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+    visible_profiles = (
+        select(IpWatchProfile.id)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == IpWatchProfile.docket_id)
+            & (IpDocketRecord.company_id == IpWatchProfile.company_id),
+        )
+        .where(
+            IpWatchProfile.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+    has_visible_hit = (
+        select(IpWatchHit.id)
+        .where(
+            IpWatchHit.company_id == context.company.id,
+            IpWatchHit.publication_id == IpJournalPublication.id,
+            IpWatchHit.profile_id.in_(visible_profiles),
+        )
+        .exists()
+    )
+    own_ids: set[str] = set()
+    for ids in session.scalars(
+        select(IpJournalIngestionRun.publication_ids_json)
+        .where(
+            IpJournalIngestionRun.company_id == context.company.id,
+            IpJournalIngestionRun.requested_by_membership_id == context.membership.id,
+            IpJournalIngestionRun.publications_seen > 0,
+        )
+        .order_by(IpJournalIngestionRun.created_at.desc())
+        .limit(OWN_CAPTURE_RUN_WINDOW)
+    ):
+        own_ids.update(ids or [])
+    unlinked_visible = [has_visible_hit]
+    if own_ids:
+        unlinked_visible.append(IpJournalPublication.id.in_(sorted(own_ids)))
+    return or_(
+        IpJournalPublication.application_id.in_(visible_applications),
+        (IpJournalPublication.application_id.is_(None)) & or_(*unlinked_visible),
+    )
+
+
 def _similarity(profile: IpWatchProfile, publication: IpJournalPublication) -> dict[str, Any]:
     candidate = _normalize(publication.mark_text)
     word_rows = [
@@ -434,10 +505,14 @@ def _similarity(profile: IpWatchProfile, publication: IpJournalPublication) -> d
         if proprietor
         else []
     )
-    jurisdiction_match = (
-        not profile.jurisdictions_json
-        or publication.jurisdiction.upper() in profile.jurisdictions_json
-    )
+    # Normalised on match, so profiles saved before the canonical vocabulary
+    # (for example "INDIA") still match without migrating stored text.
+    profile_jurisdictions = {
+        canonical_jurisdiction(item) or item.strip().upper() for item in profile.jurisdictions_json
+    }
+    jurisdiction_match = not profile_jurisdictions or (
+        canonical_jurisdiction(publication.jurisdiction) or publication.jurisdiction.upper()
+    ) in profile_jurisdictions
     supplied_device = (publication.raw_evidence_json or {}).get("device_similarity")
     supplied_device_match = bool(
         isinstance(supplied_device, dict)
@@ -792,6 +867,8 @@ def ingest_journal(
                 select(IpJournalPublication).where(
                     IpJournalPublication.company_id == locked.company.id,
                     IpJournalPublication.id.in_(predecessor_ids),
+                    # Only an entry the operator can see can be corrected.
+                    _visible_publications_condition(session, context=locked),
                 )
             )
         )
@@ -800,20 +877,34 @@ def ingest_journal(
     )
     predecessors_by_id = {publication.id: publication for publication in predecessors}
     candidate_publications_by_id: dict[str, IpJournalPublication] = {}
-    for item, fingerprint in item_fingerprints:
+    for index, (item, fingerprint) in enumerate(item_fingerprints):
         publication = publications_by_fingerprint.get(fingerprint)
         if publication is not None and _publication_content(publication) != _publication_content(
             item
         ):
             # The record is append-only; silently keeping the old content would
-            # drop what the operator just captured.
+            # drop what the operator just captured. Point at the recorded entry
+            # (when the operator may see it); a correction is recorded only when
+            # the journal itself publishes one.
+            visible = session.scalar(
+                select(IpJournalPublication.id).where(
+                    IpJournalPublication.id == publication.id,
+                    _visible_publications_condition(session, context=locked),
+                )
+            )
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    f"Journal {publication.journal_number} already records application "
-                    f"{publication.application_number} with different details. Record a "
-                    "correction or re-advertisement instead of capturing it again."
-                ),
+                detail={
+                    "type": "journal_entry_already_recorded",
+                    "detail": (
+                        f"Journal {publication.journal_number}, application "
+                        f"{publication.application_number} is already recorded with "
+                        "different details or evidence. The first capture is kept "
+                        "unchanged. Review the recorded entry; record a correction or "
+                        "re-advertisement only if the journal itself published one."
+                    ),
+                    "publication_id": visible,
+                },
             )
         if publication is None:
             if item.application_id and item.application_id not in applications_by_id:
@@ -828,7 +919,16 @@ def ingest_journal(
                 ):
                     raise HTTPException(
                         status_code=422,
-                        detail="Correction must preserve the advertised application identity.",
+                        detail=[
+                            {
+                                "loc": ["body", "publications", index, "application_number"],
+                                "msg": (
+                                    "A correction keeps the application number of the entry "
+                                    f"it corrects ({predecessor.application_number})."
+                                ),
+                                "type": "value_error",
+                            }
+                        ],
                     )
             retrieved = item.source_retrieved_at
             delay = max(
@@ -1290,6 +1390,39 @@ def create_watch_handoff(
     return handoff
 
 
+def search_journal_publications(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str | None = None,
+    limit: int = 25,
+) -> list[IpJournalPublication]:
+    """Recorded journal entries the viewer may see, newest first, by text."""
+
+    statement = select(IpJournalPublication).where(
+        IpJournalPublication.company_id == context.company.id,
+        _visible_publications_condition(session, context=context),
+    )
+    term = (query or "").strip().lower()
+    if term:
+        # LIKE wildcards typed by the user are dropped so they cannot widen the search.
+        pattern = f"%{re.sub(r'[%_\\]', '', term)}%"
+        statement = statement.where(
+            or_(
+                func.lower(IpJournalPublication.journal_number).like(pattern),
+                func.lower(IpJournalPublication.application_number).like(pattern),
+                func.lower(func.coalesce(IpJournalPublication.mark_text, "")).like(pattern),
+            )
+        )
+    return list(
+        session.scalars(
+            statement.order_by(
+                IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc()
+            ).limit(limit)
+        )
+    )
+
+
 def list_watch_workspace(
     session: Session,
     *,
@@ -1353,30 +1486,14 @@ def list_watch_workspace(
         if publication_ids
         else []
     )
-    # Journal entries are firm records: list recent ones even without a hit, so
-    # a capture is visible and can be corrected. An entry linked to an
-    # application is listed only when that application's docket is visible.
-    visible_applications = (
-        select(TrademarkApplication.id)
-        .join(
-            IpDocketRecord,
-            (IpDocketRecord.id == TrademarkApplication.docket_id)
-            & (IpDocketRecord.company_id == TrademarkApplication.company_id),
-        )
-        .where(
-            TrademarkApplication.company_id == context.company.id,
-            visible_ip_dockets_filter(session, context=context),
-        )
-    )
+    # List recent visible entries even without a hit, so a capture is visible
+    # and can be corrected (visibility: _visible_publications_condition).
     recent_publications = list(
         session.scalars(
             select(IpJournalPublication)
             .where(
                 IpJournalPublication.company_id == context.company.id,
-                or_(
-                    IpJournalPublication.application_id.is_(None),
-                    IpJournalPublication.application_id.in_(visible_applications),
-                ),
+                _visible_publications_condition(session, context=context),
             )
             .order_by(IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc())
             .limit(limit)

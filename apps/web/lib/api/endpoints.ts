@@ -12238,6 +12238,15 @@ export async function fetchIpWatchWorkspace(
   return apiRequest(`/api/ip/watch?${params.toString()}`);
 }
 
+/** Recorded journal entries the viewer may see, searched on the server. */
+export async function searchIpJournalPublications(
+  query: string,
+): Promise<{ publications: IpJournalPublication[] }> {
+  const params = new URLSearchParams({ limit: "25" });
+  if (query.trim()) params.set("q", query.trim());
+  return apiRequest(`/api/ip/watch/publications?${params.toString()}`);
+}
+
 export async function createIpWatchProfile(input: {
   docketId: string;
   name: string;
