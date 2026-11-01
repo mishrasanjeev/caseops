@@ -214,6 +214,43 @@ test('iOS 27 history Back leaves a retained folder for the exact observed root b
   assert.equal(state, 'files');
   assert.deepEqual(clicks, ['choose', 'history-back', 'cancel']);
 });
+function ios27PickerDouble(context, initial) {
+  let state = 'files'; const clicks = [];
+  const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
+    click: async () => { clicks.push(name); state = next ?? state; } });
+  context.driver = {
+    async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_CONDITION_FAILED'); },
+    async $$(query) {
+      if (query === '~files-choose' && state === 'files') return [element('choose', initial)];
+      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','locations','folder'].includes(state) ? [element('bar')] : [];
+      // iOS 27 shows history Back at the root too; it leads to Locations.
+      if (query.includes('name == "DOC.navBarButton.backInHistory"')) return ['root','folder'].includes(state) ? [element('history-back', 'locations')] : [];
+      if (query.includes('name == "DOC.sidebar.item.On My iPhone"')) return state === 'locations' ? [element('location', 'root')] : [];
+      // The Locations cell repeats the root's name as a StaticText.
+      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return ['root','locations'].includes(state) ? [element('root-text')] : [];
+      if (query === context.provider.folderQuery) return state === 'root' ? [element('owned-folder', 'folder')] : [];
+      if (query.includes('Actions Menu')) return state === 'folder' ? [element('owned-folder-heading')] : [];
+      if (query.includes('name == "CaseOps-ios-txt-unit, txt"')) return state === 'folder' ? [element('exact-owned-file', 'selected')] : [];
+      if (query === '~files-matter-code') return ['files','selected'].includes(state) ? [element('matter-code')] : [];
+      if (query === '~files-selection' || query === '~files-upload' || query.includes('label == "')) return state === 'selected' ? [element('selection')] : [];
+      return [];
+    },
+  };
+  measuredFileDriver(context);
+  return { clicks, state: () => state };
+}
+test('iOS 27 picker opened at the root goes straight to the owned folder without history Back', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'root');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'owned-folder', 'exact-owned-file']);
+});
+test('iOS 27 Locations list opens the local location cell, never treating its label as the root', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'locations');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'location', 'owned-folder', 'exact-owned-file']);
+});
 function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false,
   localRootLabel = 'On My iPhone', actualRootLabel = localRootLabel } = {}) {
   const rootToken = actualRootLabel.replaceAll(' ', '-');

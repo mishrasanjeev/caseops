@@ -47,3 +47,11 @@ export function validateTraffic(state, baseline) {
   }
   return state;
 }
+
+// The app's compatibility gate reads this public policy through its
+// credential-free transport on every foreground, signed in or not; it carries
+// no token or code. Signed-out checks exclude exactly this GET and nothing else.
+export const PUBLIC_COMPATIBILITY_READ = '/api/auth/native/compatibility';
+export function withoutPublicCompatibilityReads(requests) {
+  return requests.filter((request) => !(request.method === 'GET' && request.route === PUBLIC_COMPATIBILITY_READ));
+}

@@ -5,6 +5,7 @@ import { browserOrigin } from './browser-handoff.mjs';
 import { delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
 import { absent, backgroundAndResume, click, dispatchNativeClick, find, findQuery, nativeAction, read, restart, selector, swipe, visible } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
+import { withoutPublicCompatibilityReads } from './traffic.mjs';
 
 const SHA = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -439,9 +440,14 @@ async function choose(context, asset, { cancel = false } = {}) {
         location = await visible(context.driver, pickerLocation);
       }
       if (!await visible(context.driver, heading)) {
-        if (parent) await navigate(parent);
-        else if (location) await navigate(location);
-        await findQuery(context, pickerRoot);
+        // A Locations list also shows the root's name inside its location
+        // cell, and iOS 27's history Back is present even at the root, where it
+        // leaves for Locations. Prefer the location cell, use Back only away
+        // from the root, and require the root without any location cell.
+        const atRoot = async () => !!await visible(context.driver, pickerRoot) && !await visible(context.driver, pickerLocation);
+        if (location) await navigate(location);
+        else if (parent && !await atRoot()) await navigate(parent);
+        await wait(context, atRoot, 10000, 'IOS_FILES_KNOWN_PICKER_LOCATION_REQUIRED');
         await navigate(await findQuery(context, observed.folderQuery));
       }
     }
@@ -728,5 +734,5 @@ export const iosFilesScenarios = Object.freeze([
   { id: 'FILES-14', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Stay'); await proveIosSelectedFile(context, validateAsset(context, 'txt')); await click(context, 'id', 'back'); await find(context, 'text', 'Discard file selection?'); await click(context, 'text', 'Leave Files'); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'selection-discard'); } },
   { id: 'FILES-15', run: async (context) => { await enterFiles(context); const before = await traffic(context); await choose(context, validateAsset(context, 'txt')); await restart(context); await enterFiles(context); await noSelection(context); await openReader(context, context.source); await find(context, 'id', 'viewer-text'); await restart(context); await assertIosViewerAbsent(context); await enterFiles(context); await noSelection(context); await noPosts(context, before); await privacy(context, 'process-restart'); } },
   { id: 'FILES-16', run: async (context) => { await enterFiles(context); await readText(context, context.source); const before = await traffic(context); await click(context, 'id', 'account-open'); await click(context, 'id', 'sign-out', { scroll: true }); await signedOut(context); const changes = delta(before, await traffic(context)), rows = changes.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/logout'); assert.equal(rows.length, 1, 'IOS_FILES_LOGOUT_NOT_ONCE'); assert.ok([200, 204].includes(rows[0].status), 'IOS_FILES_LOGOUT_NOT_ACKNOWLEDGED'); await assertIosViewerAbsent(context); await absent(context, 'id', 'files-selection'); await privacy(context, 'logout'); context.filesState.logoutAcknowledged = true; } },
-  { id: 'FILES-17', requires: ['FILES-16'], requiresSignedOut: true, run: async (context) => { validateIosFilesContext(context); assert.equal(context.filesState.logoutAcknowledged, true, 'IOS_FILES_PRIOR_LOGOUT_ACK_REQUIRED'); const before = await traffic(context); await restart(context); await signedOut(context); await assertIosViewerAbsent(context); for (const id of ['files-selection', 'files-matter-code']) await absent(context, 'id', id); assert.equal(delta(before, await traffic(context)).length, 0, 'IOS_FILES_SIGNED_OUT_RESTORED_PRIVATE_TRAFFIC'); await privacy(context, 'signed-out-restart'); } },
+  { id: 'FILES-17', requires: ['FILES-16'], requiresSignedOut: true, run: async (context) => { validateIosFilesContext(context); assert.equal(context.filesState.logoutAcknowledged, true, 'IOS_FILES_PRIOR_LOGOUT_ACK_REQUIRED'); const before = await traffic(context); await restart(context); await signedOut(context); await assertIosViewerAbsent(context); for (const id of ['files-selection', 'files-matter-code']) await absent(context, 'id', id); assert.equal(withoutPublicCompatibilityReads(delta(before, await traffic(context))).length, 0, 'IOS_FILES_SIGNED_OUT_RESTORED_PRIVATE_TRAFFIC'); await privacy(context, 'signed-out-restart'); } },
 ].map((scenario) => Object.freeze({ ...scenario, ...(scenario.requires ? { requires: Object.freeze([...scenario.requires]) } : {}) })));
