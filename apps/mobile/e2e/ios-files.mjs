@@ -200,7 +200,10 @@ const browsePicker = '-ios predicate string:type == "XCUIElementTypeButton" AND 
 const pickerBar = '-ios predicate string:type == "XCUIElementTypeNavigationBar" AND name == "FullDocumentManagerViewControllerNavigationBar"';
 function pickerRootControls(label) {
   return {
-    back: '-ios predicate string:type == "XCUIElementTypeButton" AND name == "BackButton" AND label == ' + JSON.stringify(label),
+    // iOS 27 replaced the parent-labelled BackButton with history navigation;
+    // either control must still land on the exact observed root below.
+    back: '-ios predicate string:type == "XCUIElementTypeButton" AND ((name == "BackButton" AND label == ' + JSON.stringify(label)
+      + ') OR (name == "DOC.navBarButton.backInHistory" AND label == "Back"))',
     root: '-ios predicate string:type == "XCUIElementTypeStaticText" AND name == ' + JSON.stringify(label) + ' AND label == ' + JSON.stringify(label),
     location: '-ios predicate string:type == "XCUIElementTypeCell" AND name == ' + JSON.stringify(`DOC.sidebar.item.${label}`)
       + ' AND label == ' + JSON.stringify(label),

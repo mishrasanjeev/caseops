@@ -191,6 +191,29 @@ test('real observed picker recipe handles retained folder cancellation and exten
     assert.equal(clicks.filter((value) => value === 'exact-provider-file').length, cancel ? 0 : 1);
   }
 });
+test('iOS 27 history Back leaves a retained folder for the exact observed root before cancelling', async (t) => {
+  const { context } = fixture(t);
+  let state = 'files'; const clicks = [];
+  const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
+    click: async () => { clicks.push(name); state = next ?? state; } });
+  context.driver = {
+    async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_CONDITION_FAILED'); },
+    async $$(query) {
+      if (query === '~files-choose' && state === 'files') return [element('choose', 'folder')];
+      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','folder'].includes(state) ? [element('bar')] : [];
+      if (query.includes('name == "Cancel"')) return state === 'root' ? [element('cancel', 'files')] : [];
+      // No parent-labelled BackButton exists; only the history control does.
+      if (query.includes('name == "DOC.navBarButton.backInHistory" AND label == "Back"')) return state === 'folder' ? [element('history-back', 'root')] : [];
+      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return state === 'root' ? [element('On-My-iPhone-root')] : [];
+      if (query === '~files-matter-code') return state === 'files' ? [element('matter-code')] : [];
+      return [];
+    },
+  };
+  measuredFileDriver(context);
+  await chooseIosFile(context, undefined, { cancel: true });
+  assert.equal(state, 'files');
+  assert.deepEqual(clicks, ['choose', 'history-back', 'cancel']);
+});
 function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false,
   localRootLabel = 'On My iPhone', actualRootLabel = localRootLabel } = {}) {
   const rootToken = actualRootLabel.replaceAll(' ', '-');
