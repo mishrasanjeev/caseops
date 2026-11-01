@@ -8,6 +8,13 @@ fresh public-revision builds. Full83-case/249-phase suites per OS remain
 unexecuted. V1 and queue/privacy host adapters have complete offline controls,
 separate from native acceptance. See [the current evidence](mobile/NATIVE_COMPLETION_2026-11-01.md).
 
+The first bridge publicationfa8ef620 then failed four actual Linux harness
+cases (1458P/4F/2S). Test-only Python portability repairs preserve production
+ownership and pass replacement Mac controls; fresh hosted Linux is pending.
+The approved VM expansion/restoration has actual capacity/state evidence with
+explicit daemon bridge/dynamic-port and reporting-clock qualifications in the
+same checkpoint. These results do not close native or store acceptance.
+
 ## 2026-10-31 — current mobile build-tool security follow-on
 
 J20/M22 remains **Partially implemented; release NO-GO**. Published PR #558 head `bcf881a8b6f8121f71ef52c9f45594fd2330748d` completed all70 CI checks (68success,2explicit skips). The earlier CI timeout regression passed that run. Those results do not certify an APK, Simulator app, connected device, store archive or a dependency advisory published afterwards.

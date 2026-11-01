@@ -14,6 +14,12 @@ Full current-source83-case Android/iOS workflows remain unexecuted, so this is
 not native or production closure. Exact logs/hashes, actual historical artifacts
 and remaining boundaries are in [the checkpoint](mobile/NATIVE_COMPLETION_2026-11-01.md).
 
+The first public bridgefa8ef620 retained four actual Linux fixture-host failures.
+Portable real Python/owned-venv tests preserve production refusal. Appium peer
+review additionally reproduced omitted main-lock reconciliation and dot-dot-name
+runtime admission; both now have fixes and regressions. Combined282/282 Mac
+controls pass, with replacement hosted and native verification still required.
+
 ## October 29 PostgreSQL Provenance Work #558
 
 Not fixed. The unchanged API reproduced

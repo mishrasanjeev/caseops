@@ -131,6 +131,9 @@ scripts/mobile/local-transport.py text eol=lf
 # Canonical pinned native verification installer bytes.
 scripts/mobile/npm-tooling.mjs text eol=lf
 scripts/mobile/npm-tooling.test.mjs text eol=lf
+scripts/mobile/appium-tooling.mjs text eol=lf
+scripts/mobile/appium-tooling/package.json text eol=lf
+scripts/mobile/appium-tooling/package-lock.json text eol=lf
 apps/mobile/vendor/npm-11.12.1-caseops-security/*.tgz -text
 apps/mobile/vendor/npm-11.12.1-caseops-security/*.json text eol=lf
 apps/mobile/vendor/npm-11.12.1-caseops-security/*.md text eol=lf

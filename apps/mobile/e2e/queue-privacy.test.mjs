@@ -14,9 +14,21 @@ import { admitQPBeforeMembers,pendingQPRequest,withQPActor } from '../../../scri
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
 import { composeQPRegistration } from '../../../scripts/mobile/queue-privacy-registration.mjs';
 import { pendingQueuePrivacyHost,runQueuePrivacyProducer } from '../../../scripts/mobile/produce-queue-privacy-fixture.mjs';
-import { createProducerStore } from '../../../scripts/mobile/native-producer-host.mjs';
+import { createProducerStore,producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
 import { spawnSync } from 'node:child_process';
 const ROOT=path.resolve(fileURLToPath(new URL('../../../',import.meta.url))),id=n=>'00000000-0000-4000-8000-'+n.toString(16).padStart(12,'0');
+function pythonCompleted(child,phase){
+ const diagnostic=JSON.stringify({phase,status:child.status,signal:child.signal,errorCode:child.error?.code??null,errorMessage:child.error?.message??null,stdout:child.stdout??'',stderr:child.stderr??''});
+ assert.equal(child.error,undefined,diagnostic);assert.equal(child.status,0,diagnostic);
+}
+function fixturePython(deadline){
+ let python=process.env.CASEOPS_MOBILE_PRODUCER_PYTHON;
+ if(python===undefined){
+  const discovered=spawnSync('python3',['-c','import sys; print(sys.executable)'],{encoding:'utf8',timeout:producerTimeout(deadline-performance.now()),maxBuffer:65536,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});
+  pythonCompleted(discovered,'python3-discovery');python=discovered.stdout.trim();
+ }
+ assert.ok(typeof python==='string'&&path.isAbsolute(python)&&path.normalize(python)===python,'QP_ABSOLUTE_TEST_HOST_PYTHON_REQUIRED');return python;
+}
 function producerDouble(){
  const dir=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'qp-producer-'));const calls=[],events=[],privateFiles=[],claims=[];const parents=new Map(),tasks=[],teams=new Map();let serial=100,clock=0,peers=0;
  const plan={...pendingProducer(),readyForLive:true,preparedOnly:false,sourceSha:'a'.repeat(40),runId:'qp-'+id(80),companyId:id(1),membershipId:id(2),ownerMembershipId:id(3),foreignOwnerMembershipId:id(4),memberUserId:id(5),secondUserId:id(6),legalDay:'2026-10-27',privatePeerFiles:[path.join(dir,'peer-one.json'),path.join(dir,'peer-two.json')],baseActorEvidence:{path:'/synthetic/base',sha256:'a'.repeat(64)},admissionEvidence:{path:'/synthetic/admit',sha256:'b'.repeat(64)}};
@@ -125,7 +137,8 @@ test('public QP registration projects observed actor IDs and exact mount ownersh
    actors:Object.fromEntries(['owner','member','second-company'].map(name=>[name,{...x.dataset.actors[name],credentialEvidence:x.controls.actorCredentialMappings[name].hostEvidence}]))};
   const io={read:x.io.read,bytes:x.io.bytes,snapshot:x.io.snapshot,now:()=>1000},r=composeQPRegistration(q,io);assert.equal(r.privateReads,0);assert.equal(r.registration.actors.member.credentialEvidence.path,'/fixture-state/private0');assert.equal(r.registration.actors.member.credentialEvidence.uid,0);assert.equal(r.descriptor.actorCredentialMappings.member.hostEvidence.uid,process.getuid());assert.equal(r.registration.ownerExactRoutes.length,3);
   const script="import json,sys;from types import ModuleType;from pathlib import Path;p=ModuleType('qp');exec(compile(Path(sys.argv[1]).read_bytes(),sys.argv[1],'exec'),p.__dict__);v=json.load(sys.stdin);p.validate_registration(v,source=v['sourceSha'],run=v['runId'],now=1000)";
-  const native=spawnSync('/Users/sanjeevkumar/.cache/caseops-mobile/release-tooling/python/cpython-3.13.17-macos-aarch64-none/bin/python3.13',['-c',script,path.join(ROOT,'scripts/mobile/local-queue-privacy-controls.py')],{input:JSON.stringify(r.registration),encoding:'utf8',timeout:10000,maxBuffer:65536});assert.equal(native.status,0,native.stderr);assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);
+  const deadline=performance.now()+10000,python=fixturePython(deadline);
+  const native=spawnSync(python,['-c',script,path.join(ROOT,'scripts/mobile/local-queue-privacy-controls.py')],{input:JSON.stringify(r.registration),encoding:'utf8',timeout:producerTimeout(deadline-performance.now()),maxBuffer:65536,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});pythonCompleted(native,'actual-queue-registration-validator');assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);
   for(const mutate of[v=>v.actors.owner.userId=id(99),v=>v.expiresAt=2000,v=>v.credentialMountEvidence=x.q.buildReceipt]){const bad=structuredClone(q);mutate(bad);assert.throws(()=>composeQPRegistration(bad,io));}
   const mount=x.map.get(q.credentialMountEvidence.path);mount.files.push(structuredClone(mount.files[0]));assert.throws(()=>composeQPRegistration(q,io));
  }finally{x.close();}

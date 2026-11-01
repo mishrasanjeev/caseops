@@ -93,6 +93,7 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/ios-node-build-env.json',
     'scripts/mobile/host-node-trust.mjs', 'scripts/mobile/host-node-trust-start.mjs',
     'scripts/mobile/source-gate-observer.mjs', 'scripts/mobile/npm-tooling.mjs', 'scripts/mobile/npm-registry.mjs',
+    'scripts/mobile/appium-tooling.mjs', 'scripts/mobile/appium-tooling/package.json', 'scripts/mobile/appium-tooling/package-lock.json',
     'scripts/mobile/android-observer-manifest.py', 'scripts/mobile/host-node-trust-start.source.mjs',
     'scripts/mobile/rebuild-host-node-bootstrap.mjs', 'scripts/mobile/host-node-trust-start.provenance.json',
     'scripts/mobile/store-packaging-host.py', 'scripts/mobile/store_process_owner.py',

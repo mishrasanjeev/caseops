@@ -195,3 +195,37 @@ Native CI now uses `node scripts/mobile/npm-tooling.mjs` for normal npm argument
 The archive and all149notice members are in `apps/mobile/vendor/npm-11.12.1-caseops-security/`; PROVENANCE.json identifies the13dependency roots/10range fields/accepted launcher change and MEMBERS.json pins every2149member payload/mode. Twenty-four Mac and24 actual Linux22 controls passed, including exact nested CLI identity against a hostile different-version global, native request marker/TLS/authentication/payload preservation, no added replay, kernel noexec refusal and complete root-present paired inventory refusals. Actual Windows acceptance remains pending. New preparation runtimes include the2594-object package root, enclosing root, two scoped launchers, one bin directory, one held entry file and one transport directory (2600objects total); none are claimed to be native app artifacts.
 
 The original Android build failure and backend preparation refusal remain retained. Current native APK/Simulator/device/store acceptance is still NO-GO.
+
+## November 1 Appium driver repair
+
+The official-release rule above can no longer pass: Appium 3.9.0, UiAutomator2 8.7.3 and XCUITest 12.22.2 resolve or bundle glob 13.0.6 and minimatch 10.2.6 (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249). UiAutomator2 8.7.3 is the newest stable release. The fresh 31 October four-inventory audit failed on exactly these two names, and no Appium runtime was admissible for native use.
+
+`node scripts/mobile/appium-tooling.mjs prepare /absolute/new-runtime` installs one npm project, `scripts/mobile/appium-tooling/`, with Appium 3.9.0, WebdriverIO 10.1.0 and both drivers. One project lets each driver's `appium` peer resolve to the installed core, and one lockfile covers the graph. The runtime is also `APPIUM_HOME`.
+
+- Appium and WebdriverIO consumers use scoped overrides to the reviewed `glob 14.0.2-caseops.1` and `minimatch 11.0.1`.
+- An override cannot reach a driver's bundled dependencies. Each driver is therefore rebuilt from its exact upstream archive (pinned sha512) as an openly versioned private `8.7.3-caseops.1` or `12.22.2-caseops.1`, not a disguised official version.
+  - The bundled `glob` and `minimatch` are replaced with those fixed packages. `@isaacs/nonrecursive-glob-match` 1.0.3 is added, and `path-scurry` 3.0.0 is nested under glob only.
+  - The bundled dependents declare the exact fixed versions: `@appium/support` and `readdir-glob` in both drivers, plus `appium-ios-remotexpc` in XCUITest.
+  - Every other upstream member is byte-identical. `CASEOPS-REBUNDLE.json` inside each package records each change.
+  - Each replacement must find the exact prior version. Each output tar digest and archive integrity is pinned.
+  - Each replacement and each driver must ship its own licence file. The provenance records its licence and file digest.
+- Official archives are downloaded from `registry.npmjs.org` with the no-paid marker and verified TLS. Downloads stream under per-archive and total byte bounds and one shared deadline before their integrity check.
+- The checked-in lock is installed by `npm ci` through the pinned npm, without lifecycle scripts.
+- The locked and complete physical graphs are both audited, including bundled packages and glob's embedded bundle sources. Any advisory refuses.
+- The physical inventory requires the root and its `node_modules` to be present.
+  - Manifests are read through held descriptors.
+  - It allows only `.bin` links to bins their sibling packages declare, npm's hidden lock and Appium's `.cache/appium` metadata. Any other dot entry, link or unmanifested code refuses.
+  - Every installed package must match the lockfile and hidden lock. Empty placeholder directories must be optional lock entries. Lock entries that are not installed must be optional and excluded by `os`, `cpu` or `libc` on this host.
+  - A final pass re-observes every listing, directory and file. Discovery and reconciliation are both charged to one entry, byte and deadline budget.
+- `appium-tooling.mjs` and its manifest and lock are native source-fingerprint and dirty-fence inputs.
+- Compatibility of the major updates was checked by API comparison.
+  - Glob 14 only widens types.
+  - Minimatch 11 removes `makeRe`, `AST` and `matchOne`. The bundled consumers use only APIs it keeps: `readdir-glob` uses `new Minimatch(...).match()`, and `appium-ios-remotexpc` uses `minimatch(path, pattern)` for AFC listing filters.
+
+Local results:
+- The two-driver runtime passed with 905 locked and 906 physical identities and zero advisories.
+- An isolated Appium 3.9.0 server loaded both drivers.
+- The rebuilt bundles resolve the fixed glob and minimatch in place.
+- Earlier, a UiAutomator2 session on the 16 KiB API 36 emulator located the real `sign-in` control.
+
+These results show tooling health only, not native acceptance. No iOS Simulator session has used the rebuilt XCUITest yet.

@@ -820,8 +820,25 @@ test('V1-PRODUCER-08 exclusive claims and immutable output survive refused reuse
 });
 function canonicalProducerWriter(t){
   const root=producerRoot(t),repo=path.resolve(fileURLToPath(new URL('../../../',import.meta.url)));
-  const python=process.env.CASEOPS_MOBILE_PRODUCER_PYTHON||childProcess.execFileSync('python3',['-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
-  return {root,writer:createV1PrivateWriter({root,python:producerRef(python),canonicalWriter:producerRef(path.join(repo,'scripts/mobile/local-fixture.py')),adapter:producerRef(path.join(repo,'scripts/mobile/native-producer-private.py'))})};
+  const command={encoding:'utf8',timeout:10000,maxBuffer:16384,env:{PATH:process.env.PATH}};
+  const host=producerRef(process.env.CASEOPS_MOBILE_PRODUCER_PYTHON||childProcess.execFileSync('python3',['-I','-c','import sys;print(sys.executable)'],command).trim());
+  const probe='import hashlib,json,os,sys,uuid;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version,"versionInfo":list(sys.version_info[:3]),"prefix":os.path.realpath(sys.prefix),"basePrefix":os.path.realpath(sys.base_prefix),"stdlibProbe":str(uuid.UUID("00000000-0000-4000-8000-000000000001")),"digest":hashlib.sha256(b"owned-python-fixture").hexdigest()}))';
+  const observe=python=>JSON.parse(childProcess.execFileSync(python,['-I','-c',probe],command)),before=observe(host.path);
+  const settings={root,canonicalWriter:producerRef(path.join(repo,'scripts/mobile/local-fixture.py')),adapter:producerRef(path.join(repo,'scripts/mobile/native-producer-private.py'))};
+  // Hosted Linux Python belongs to root. Keep that production refusal and give
+  // this offline fixture a real owned interpreter with its normal base/stdlib.
+  const unowned=[host.path,'/usr/bin/python3'].filter(fs.existsSync).map(file=>producerRef(file)).find(ref=>fs.statSync(ref.path).uid===0&&process.getuid()!==0);
+  assert.ok(unowned,'ACTUAL_ROOT_OWNED_PYTHON_CONTROL_REQUIRED');
+  assert.throws(()=>createV1PrivateWriter({...settings,python:unowned}),/FIXTURE_EVIDENCE_OWNER_REQUIRED/);
+  const environment=path.join(producerRoot(t),'python-env');
+  childProcess.execFileSync(host.path,['-I','-m','venv','--copies','--without-pip',environment],command);
+  const copied=path.join(environment,'bin','python3');assert.equal(fs.lstatSync(copied).isSymbolicLink(),false);
+  const python=producerRef(copied),after=observe(python.path);
+  assert.equal(fs.statSync(python.path).uid,process.getuid());assert.equal(python.sha256,host.sha256);
+  assert.notEqual(python.path,host.path);assert.equal(after.executable,python.path);assert.equal(after.prefix,environment);
+  assert.deepEqual({...after,executable:before.executable,prefix:before.prefix},before);
+  assert.equal(producerRef(host.path).sha256,host.sha256);
+  return {root,writer:createV1PrivateWriter({...settings,python})};
 }
 const writerOptions={kind:'canonical-local-fixture-private-json',createExclusive:true,mode:0o600};
 test('V1-PRODUCER-09 canonical Python adapter creates privately then updates exact original inode',async t=>{

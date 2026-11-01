@@ -1,0 +1,22 @@
+{
+  "name": "caseops-appium-tooling",
+  "private": true,
+  "dependencies": {
+    "appium": "3.9.0",
+    "appium-uiautomator2-driver": "file:vendor/appium-uiautomator2-driver-8.7.3-caseops.1.tgz",
+    "appium-xcuitest-driver": "file:vendor/appium-xcuitest-driver-12.22.2-caseops.1.tgz",
+    "glob": "file:vendor/glob-14.0.2-caseops.1.tgz",
+    "minimatch": "11.0.1",
+    "webdriverio": "10.1.0"
+  },
+  "overrides": {
+    "appium": {
+      "glob": "$glob",
+      "minimatch": "$minimatch"
+    },
+    "webdriverio": {
+      "glob": "$glob",
+      "minimatch": "$minimatch"
+    }
+  }
+}

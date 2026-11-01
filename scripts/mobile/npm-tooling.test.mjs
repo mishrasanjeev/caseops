@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import https from 'node:https';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
@@ -378,4 +378,254 @@ test('ordinary registry transport accepts only default or explicit verified TLS 
     }
     assert.equal(requests.length, 2);
   });
+});
+
+// Appium tooling repair: offline fixtures only; prepareAppiumTooling's network,
+// npm and Appium steps are exercised by the retained native receipt.
+const appiumTooling = await import('./appium-tooling.mjs');
+const { sourceSnapshot } = await import('./source-snapshot.mjs');
+const sri = b => 'sha512-' + createHash('sha512').update(b).digest('base64');
+function packageArchive(files) {
+  return gzipSync(appiumTooling.deterministicTar(Object.entries(files).map(([name, body]) =>
+    ({ path: 'package/' + name, mode: 0o644, bytes: Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)) }))));
+}
+function driverFixture() {
+  const archives = {
+    'appium-uiautomator2-driver': packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: ['build/lib'] },
+      'LICENSE': 'Apache', 'build/lib/driver.js': 'driver', 'node_modules/glob/package.json': { name: 'glob', version: '13.0.6' }, 'node_modules/glob/old.js': 'old',
+      'node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' },
+      'node_modules/@appium/support/package.json': { name: '@appium/support', version: '7.2.9', dependencies: { glob: '13.0.6', semver: '7.7.2' } },
+      'node_modules/readdir-glob/package.json': { name: 'readdir-glob', version: '3.0.0', dependencies: { minimatch: '^10.2.2' } },
+      'node_modules/parse-listing/.Makefile.un~': 'undo' }),
+    glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.2-caseops.1', dependencies: { minimatch: '^11.0.0' } }, 'LICENSE.md': 'BlueOak', 'dist/index.js': 'new' }),
+    minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' }, 'LICENSE.md': 'BlueOak' }),
+    '@isaacs/nonrecursive-glob-match': packageArchive({ 'package.json': { name: '@isaacs/nonrecursive-glob-match', version: '1.0.3' }, 'LICENSE.md': 'BlueOak' }),
+    'path-scurry': packageArchive({ 'package.json': { name: 'path-scurry', version: '3.0.0' }, 'LICENSE.md': 'BlueOak' }),
+  };
+  const spec = { ...appiumTooling.UIA2_REBUNDLE, tarSha256: null,
+    upstream: { ...appiumTooling.UIA2_REBUNDLE.upstream, integrity: sri(archives['appium-uiautomator2-driver']) },
+    replacements: appiumTooling.UIA2_REBUNDLE.replacements.map(r => r.vendored ? { ...r, sha256: hash(archives.glob) } : { ...r, integrity: sri(archives[r.name]) }) };
+  return { archives, spec };
+}
+const memberMap = tgz => new Map(appiumTooling.packageTarMembers(tgz).map(r => [r.path, r]));
+
+test('appium driver rebundle replaces only advisory glob/minimatch copies and records every change', () => {
+  const { archives, spec } = driverFixture(), first = appiumTooling.rebundleDriver(archives, spec);
+  assert.ok(first.tgz.equals(appiumTooling.rebundleDriver(archives, spec).tgz)); assert.equal(first.tgz[9], 3);
+  const rows = memberMap(first.tgz), json = name => JSON.parse(rows.get('package/' + name).bytes.toString('utf8'));
+  assert.deepEqual(json('package.json'), { name: 'appium-uiautomator2-driver', version: '8.7.3-caseops.1', files: ['build/lib', 'CASEOPS-REBUNDLE.json'] });
+  assert.equal(json('node_modules/glob/package.json').version, '14.0.2-caseops.1'); assert.ok(!rows.has('package/node_modules/glob/old.js'));
+  assert.equal(json('node_modules/minimatch/package.json').version, '11.0.1');
+  assert.equal(json('node_modules/glob/node_modules/path-scurry/package.json').version, '3.0.0');
+  assert.equal(json('node_modules/@isaacs/nonrecursive-glob-match/package.json').version, '1.0.3');
+  assert.deepEqual(json('node_modules/@appium/support/package.json').dependencies, { glob: '14.0.2-caseops.1', semver: '7.7.2' });
+  assert.deepEqual(json('node_modules/readdir-glob/package.json').dependencies, { minimatch: '11.0.1' });
+  assert.equal(rows.get('package/build/lib/driver.js').bytes.toString(), 'driver'); assert.ok(rows.has('package/node_modules/parse-listing/.Makefile.un~'));
+  const provenance = json('CASEOPS-REBUNDLE.json');
+  assert.deepEqual(provenance.dependentSpecs.map(r => [r.package, r.name, r.from, r.to]),
+    [['@appium/support@7.2.9', 'glob', '13.0.6', '14.0.2-caseops.1'], ['readdir-glob@3.0.0', 'minimatch', '^10.2.2', '11.0.1']]);
+  assert.deepEqual(provenance.replacements.map(r => [r.directory, r.from, r.to]), [['node_modules/glob', '13.0.6', '14.0.2-caseops.1'],
+    ['node_modules/minimatch', '10.2.6', '11.0.1'], ['node_modules/@isaacs/nonrecursive-glob-match', null, '1.0.3'], ['node_modules/glob/node_modules/path-scurry', null, '3.0.0']]);
+  assert.deepEqual(provenance.advisories, ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249']);
+  assert.throws(() => appiumTooling.rebundleDriver(archives, { ...spec, tarSha256: '0'.repeat(64) }), /APPIUM_TOOLING_REBUNDLE_DIGEST/);
+});
+
+test('appium driver rebundle refuses unpinned inputs, unexpected prior versions and duplicate vulnerable copies', () => {
+  const { archives, spec } = driverFixture();
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' }, 'x.js': '' }) }, spec), /APPIUM_TOOLING_REPLACEMENT_INTEGRITY/);
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.2-caseops.1' } }) }, spec), /APPIUM_TOOLING_VENDORED_DIGEST/);
+  const swapped = packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: [] }, 'node_modules/glob/package.json': { name: 'glob', version: '13.0.5' } });
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': swapped }, spec), /APPIUM_TOOLING_UPSTREAM_INTEGRITY/);
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': swapped },
+    { ...spec, upstream: { ...spec.upstream, integrity: sri(swapped) } }), /APPIUM_TOOLING_REPLACED_IDENTITY/);
+  const nested = packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: [] }, 'LICENSE': 'Apache',
+    'node_modules/glob/package.json': { name: 'glob', version: '13.0.6' }, 'node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' },
+    'node_modules/archiver/node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' } });
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': nested },
+    { ...spec, upstream: { ...spec.upstream, integrity: sri(nested) } }), /APPIUM_TOOLING_SINGLE_FIXED_COPY/);
+});
+
+test('appium package archive reader accepts long USTAR and GNU regular members but refuses unsafe members', () => {
+  const long = 'node_modules/' + 'a'.repeat(60) + '/' + 'b'.repeat(60) + '/index.js';
+  assert.deepEqual([...memberMap(packageArchive({ 'package.json': '{}', [long]: 'x' })).keys()], ['package/' + long, 'package/package.json']);
+  const header = (patch) => { const tar = appiumTooling.deterministicTar([{ path: 'package/a', mode: 0o644, bytes: Buffer.from('x') }]);
+    patch(tar); let sum = 0; for (let i = 0; i < 512; i++) sum += i >= 148 && i < 156 ? 32 : tar[i];
+    tar.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 'ascii'); return gzipSync(tar); };
+  assert.equal(appiumTooling.packageTarMembers(header(t => t.write('ustar  \0', 257, 'latin1'))).length, 1);
+  assert.throws(() => appiumTooling.packageTarMembers(header(t => { t[156] = 50; })), /APPIUM_TOOLING_TAR_REGULAR_ONLY/);
+  assert.throws(() => appiumTooling.packageTarMembers(header(t => { t.write('ustar  \0', 257, 'latin1'); t.write('pfx', 345); })), /APPIUM_TOOLING_TAR_REGULAR_ONLY/);
+  assert.throws(() => appiumTooling.packageTarMembers(header(t => t.write('0000777\0', 100))), /APPIUM_TOOLING_TAR_MODE/);
+  assert.throws(() => appiumTooling.packageTarMembers(header(t => t.write('package/../a\0', 0))), /APPIUM_TOOLING_TAR_PATH/);
+  assert.throws(() => appiumTooling.packageTarMembers(packageArchive({ A: '', a: '' })), /APPIUM_TOOLING_TAR_PATH/);
+  assert.throws(() => appiumTooling.packageTarMembers(packageArchive({ a: '', b: '' }), { maxMembers: 1 }), /APPIUM_TOOLING_TAR_MEMBER_BOUND/);
+  assert.throws(() => appiumTooling.deterministicTar([{ path: 'package/' + 'c'.repeat(120), mode: 0o644, bytes: Buffer.alloc(0) }]), /APPIUM_TOOLING_TAR_PATH_LENGTH/);
+});
+
+test('appium driver rebundle records each shipped licence and refuses a pinned replacement without one', () => {
+  const { archives, spec } = driverFixture(), provenance = appiumTooling.rebundleDriver(archives, spec).provenance;
+  assert.deepEqual(provenance.driverLicence.licenseFile.path, 'LICENSE');
+  assert.deepEqual(provenance.replacements.map(r => r.licenseFile.path), ['node_modules/glob/LICENSE.md', 'node_modules/minimatch/LICENSE.md',
+    'node_modules/@isaacs/nonrecursive-glob-match/LICENSE.md', 'node_modules/glob/node_modules/path-scurry/LICENSE.md']);
+  const bare = packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' } });
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, minimatch: bare },
+    { ...spec, replacements: spec.replacements.map(r => r.name === 'minimatch' ? { ...r, integrity: sri(bare) } : r) }), /APPIUM_TOOLING_LICENCE_REQUIRED/);
+});
+
+// A small root-present install with its lockfile and npm hidden lock.
+function installFixture(t, { bins = true } = {}) {
+  const root = fixture(t), write = (file, value) => { fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), typeof value === 'string' ? value : JSON.stringify(value)); };
+  const other = process.platform === 'darwin' ? 'linux' : 'darwin';
+  const packages = { 'node_modules/appium': { version: '3.9.0' }, 'node_modules/@scope/x': { version: '1.0.0' },
+    'node_modules/appium/node_modules/glob': { version: '14.0.2-caseops.1' }, 'node_modules/driver': { version: '1.0.0' },
+    'node_modules/driver/node_modules/@emnapi/runtime': { version: '1.11.3', optional: true, inBundle: true },
+    'node_modules/@img/sharp-other': { version: '0.34.5', optional: true, os: [other] } };
+  write('package-lock.json', { lockfileVersion: 3, packages: { '': { name: 'fixture' }, ...packages } });
+  write('node_modules/.package-lock.json', { lockfileVersion: 3, packages: Object.fromEntries(Object.entries(packages).filter(([key]) => !key.includes('sharp'))) });
+  write('node_modules/appium/package.json', { name: 'appium', version: '3.9.0', bin: { appium: 'index.js' } }); write('node_modules/appium/index.js', '');
+  write('node_modules/@scope/x/package.json', { name: '@scope/x', version: '1.0.0' });
+  write('node_modules/appium/node_modules/glob/package.json', { name: 'glob', version: '14.0.2-caseops.1' });
+  write('node_modules/appium/node_modules/glob/CASEOPS-BUNDLE-SOURCES.json', { sourceArchives: [{ name: 'minimatch', version: '11.0.1' }] });
+  write('node_modules/driver/package.json', { name: 'driver', version: '1.0.0' });
+  fs.mkdirSync(path.join(root, 'node_modules/driver/node_modules/@emnapi/runtime'), { recursive: true });
+  write('node_modules/.cache/appium/extensions.yaml', 'drivers: {}\n');
+  if (bins) {
+    fs.mkdirSync(path.join(root, 'node_modules/.bin'));
+    if (process.platform === 'win32') write('node_modules/.bin/appium.cmd', '@echo off');
+    else fs.symlinkSync('../appium/index.js', path.join(root, 'node_modules/.bin/appium'));
+  }
+  return { root, write };
+}
+const inventoryRefusal = (root, pattern, options) => assert.throws(() => appiumTooling.physicalAdvisoryInventory(root, options), pattern);
+
+test('appium physical inventory reconciles nested, scoped, embedded, placeholder, absent optional and bin identities with both locks', t => {
+  const { root } = installFixture(t), inventory = appiumTooling.physicalAdvisoryInventory(root);
+  assert.deepEqual(inventory.graph, { '@scope/x': ['1.0.0'], appium: ['3.9.0'], driver: ['1.0.0'], glob: ['14.0.2-caseops.1'], minimatch: ['11.0.1'] });
+  assert.deepEqual(inventory.emptyPlaceholders, ['node_modules/driver/node_modules/@emnapi/runtime']);
+  assert.deepEqual(inventory.absentOptional, ['node_modules/@img/sharp-other']);
+  assert.equal(inventory.binLinks, process.platform === 'win32' ? 0 : 1);
+  assert.ok(inventory.observations.entries > 0 && inventory.observations.bytes > 0);
+  assert.equal(appiumTooling.platformExcluded({ os: [process.platform] }), false); assert.equal(appiumTooling.platformExcluded({ os: ['!' + process.platform] }), true);
+  assert.equal(appiumTooling.platformExcluded({ cpu: [process.arch] }), false); assert.equal(appiumTooling.platformExcluded({}), false);
+});
+
+test('appium physical inventory refuses a missing root, unknown metadata and unreconciled lock identities', t => {
+  inventoryRefusal(path.join(fixture(t), 'absent'), /APPIUM_TOOLING_PHYSICAL_ROOT_REQUIRED/);
+  { const { root } = installFixture(t); fs.rmSync(path.join(root, 'node_modules'), { recursive: true }); inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_ROOT_REQUIRED/); }
+  { const { root, write } = installFixture(t); write('node_modules/.hidden-code/index.js', ''); inventoryRefusal(root, /APPIUM_TOOLING_UNKNOWN_METADATA/); }
+  { const { root, write } = installFixture(t); write('node_modules/.cache/appium/payload.js', ''); inventoryRefusal(root, /APPIUM_TOOLING_UNKNOWN_METADATA/); }
+  { const { root, write } = installFixture(t); write('node_modules/@scope/.x/index.js', ''); inventoryRefusal(root, /APPIUM_TOOLING_UNKNOWN_METADATA/); }
+  { const { root, write } = installFixture(t); write('node_modules/driver/node_modules/@emnapi/runtime/index.js', ''); inventoryRefusal(root, /APPIUM_TOOLING_UNMANIFESTED_PACKAGE/); }
+  { const { root, write } = installFixture(t); write('node_modules/extra/package.json', { name: 'extra', version: '1.0.0' }); inventoryRefusal(root, /APPIUM_TOOLING_UNLOCKED_PACKAGE/); }
+  { const { root, write } = installFixture(t); write('node_modules/@scope/x/package.json', { name: '@scope/x', version: '1.0.1' }); inventoryRefusal(root, /APPIUM_TOOLING_LOCK_IDENTITY_MISMATCH/); }
+  const lockEdit = (root, edit) => { const file = path.join(root, 'package-lock.json'), lock = JSON.parse(fs.readFileSync(file, 'utf8')); edit(lock.packages); fs.writeFileSync(file, JSON.stringify(lock)); };
+  { const { root } = installFixture(t); lockEdit(root, p => { delete p['node_modules/driver/node_modules/@emnapi/runtime'].optional; }); inventoryRefusal(root, /APPIUM_TOOLING_PLACEHOLDER_NOT_OPTIONAL/); }
+  { const { root } = installFixture(t); lockEdit(root, p => { p['node_modules/@img/sharp-other'].os = [process.platform]; }); inventoryRefusal(root, /APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT/); }
+  { const { root } = installFixture(t); lockEdit(root, p => { p['node_modules/required'] = { version: '1.0.0' }; }); inventoryRefusal(root, /APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT/); }
+  { const { root, write } = installFixture(t); write('node_modules/.package-lock.json', { lockfileVersion: 3, packages: { 'node_modules/appium': { version: '3.9.0' } } }); inventoryRefusal(root, /APPIUM_TOOLING_HIDDEN_LOCK_MISMATCH/); }
+});
+
+test('appium physical inventory refuses links, undeclared bins and insertion or change after discovery', t => {
+  if (process.platform !== 'win32') {
+    { const { root } = installFixture(t); fs.symlinkSync(path.join(root, 'node_modules/appium/index.js'), path.join(root, 'node_modules/.bin/other')); inventoryRefusal(root, /APPIUM_TOOLING_UNDECLARED_BIN/); }
+    { const { root } = installFixture(t); fs.rmSync(path.join(root, 'node_modules/@scope/x'), { recursive: true });
+      fs.symlinkSync(path.join(root, 'node_modules/appium'), path.join(root, 'node_modules/@scope/x')); inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_DIRECTORY/); }
+  } else { const { root, write } = installFixture(t); write('node_modules/.bin/other.cmd', ''); inventoryRefusal(root, /APPIUM_TOOLING_UNDECLARED_BIN/); }
+  { const { root, write } = installFixture(t);
+    inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_DRIFT/, { afterDiscovery: () => write('node_modules/late/package.json', { name: 'late', version: '1.0.0' }) }); }
+  { const { root, write } = installFixture(t);
+    inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_DRIFT/, { afterDiscovery: () => write('node_modules/@scope/x/package.json', { name: '@scope/x', version: '9.9.9', extra: 'changed bytes' }) }); }
+  { const { root } = installFixture(t), file = path.join(root, 'package-lock.json');
+    inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_DRIFT/, { afterDiscovery: () => {
+      const lock = JSON.parse(fs.readFileSync(file, 'utf8')); lock.packages['node_modules/@scope/x'].version = '9.0.0';
+      fs.writeFileSync(file, JSON.stringify(lock));
+    } }); }
+  { const { root } = installFixture(t);
+    inventoryRefusal(root, /APPIUM_TOOLING_PHYSICAL_DRIFT/, { afterDiscovery: () => fs.rmSync(path.join(root, 'node_modules/.cache'), { recursive: true }) }); }
+});
+
+test('appium runtime with a dot-dot name inside the repository refuses before writes or downloads', async t => {
+  const repo = fileURLToPath(new URL('../../', import.meta.url));
+  const runtime = path.join(repo, '..runtime-' + path.basename(fixture(t)));
+  assert.equal(fs.existsSync(runtime), false);
+  let writes = 0, requests = 0;
+  const mkdir = t.mock.method(fs, 'mkdirSync', () => { writes++; throw new Error('OFFLINE_UNEXPECTED_RUNTIME_WRITE'); });
+  try {
+    await assert.rejects(appiumTooling.prepareAppiumTooling(runtime, { request: async () => { requests++; throw new Error('OFFLINE_UNEXPECTED_DOWNLOAD'); } }),
+      /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/);
+    assert.equal(writes, 0); assert.equal(requests, 0); assert.equal(fs.existsSync(runtime), false);
+  } finally { mkdir.mock.restore(); }
+});
+
+test('appium physical inventory charges discovery and reconciliation to one entry, byte and deadline budget', t => {
+  const { root } = installFixture(t), full = appiumTooling.physicalAdvisoryInventory(root).observations;
+  inventoryRefusal(root, /APPIUM_TOOLING_INVENTORY_ENTRY_BOUND/, { limits: { ...appiumTooling.INVENTORY_LIMITS, entries: full.entries - 1 } });
+  inventoryRefusal(root, /APPIUM_TOOLING_INVENTORY_BYTE_BOUND/, { limits: { ...appiumTooling.INVENTORY_LIMITS, bytes: full.bytes - 1 } });
+  inventoryRefusal(root, /APPIUM_TOOLING_INVENTORY_DEADLINE/, { limits: { ...appiumTooling.INVENTORY_LIMITS, milliseconds: -1 } });
+  assert.deepEqual(appiumTooling.physicalAdvisoryInventory(root, { limits: { ...appiumTooling.INVENTORY_LIMITS, ...full } }).observations, full);
+});
+
+function archiveResponse(bytes, { status = 200, chunk = 4, length = true, cancelled } = {}) {
+  let offset = 0;
+  const body = new ReadableStream({ pull(controller) { if (offset >= bytes.length) return controller.close(); controller.enqueue(bytes.subarray(offset, offset += chunk)); },
+    cancel() { if (cancelled) cancelled.value = true; } });
+  return new Response(body, { status, headers: length ? { 'content-length': String(bytes.length) } : {} });
+}
+test('appium archive download streams official archives under one bound and deadline with the no-paid marker', async () => {
+  const bytes = Buffer.from('official archive bytes'), integrity = sri(bytes), url = 'https://registry.npmjs.org/x/-/x-1.0.0.tgz', seen = [];
+  const request = async (target, options) => { seen.push({ target, options }); return archiveResponse(bytes); };
+  const download = appiumTooling.downloadSession({ archiveBytes: 64, totalBytes: 40, milliseconds: 60000 }, request);
+  assert.ok((await download(url, integrity)).equals(bytes));
+  assert.equal(seen[0].options.headers['X-CaseOps-Automated-Test'], 'no-paid-providers'); assert.equal(seen[0].options.redirect, 'error');
+  assert.ok(seen[0].options.signal instanceof AbortSignal);
+  await assert.rejects(download(url, integrity), /APPIUM_TOOLING_DOWNLOAD_BOUND/); // the second archive exceeds the shared total
+  const fresh = (limits, respond) => appiumTooling.downloadSession({ archiveBytes: 64, totalBytes: 1024, milliseconds: 60000, ...limits }, respond);
+  await assert.rejects(fresh({}, async () => archiveResponse(bytes, { status: 403 }))(url, integrity), /APPIUM_TOOLING_DOWNLOAD_STATUS/);
+  await assert.rejects(fresh({ archiveBytes: 8 }, async () => archiveResponse(bytes))(url, integrity), /APPIUM_TOOLING_DOWNLOAD_BOUND/);
+  const cancelled = { value: false };
+  await assert.rejects(fresh({ archiveBytes: 8 }, async () => archiveResponse(bytes, { length: false, cancelled }))(url, integrity), /APPIUM_TOOLING_DOWNLOAD_BOUND/);
+  assert.equal(cancelled.value, true);
+  await assert.rejects(fresh({}, async () => archiveResponse(bytes))(url, sri(Buffer.from('other'))), /APPIUM_TOOLING_DOWNLOAD_INTEGRITY/);
+  await assert.rejects(fresh({ milliseconds: -1 }, async () => assert.fail('no request'))(url, integrity), /APPIUM_TOOLING_DOWNLOAD_DEADLINE/);
+  await assert.rejects(fresh({}, async () => assert.fail('no request'))('https://example.com/x.tgz', integrity), /APPIUM_TOOLING_OFFICIAL_ARCHIVE_REQUIRED/);
+  const prior = process.env.NODE_TLS_REJECT_UNAUTHORIZED; process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  try { await assert.rejects(fresh({}, async () => assert.fail('no request'))(url, integrity), /APPIUM_TOOLING_TLS_VERIFICATION_REQUIRED/); }
+  finally { if (prior === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prior; }
+});
+
+test('committed appium tooling lock pins the rebundled driver and only fixed glob/minimatch identities', () => {
+  const project = fileURLToPath(new URL('../../' + appiumTooling.APPIUM_TOOLING_PROJECT + '/', import.meta.url));
+  const manifest = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
+  const pins = JSON.parse(fs.readFileSync(fileURLToPath(new URL('./tooling.json', import.meta.url)), 'utf8'));
+  assert.equal(manifest.dependencies.appium, pins.appium); assert.equal(manifest.dependencies.webdriverio, pins.webdriverio);
+  assert.equal(appiumTooling.UIA2_REBUNDLE.upstream.version, pins.uiautomator2);
+  assert.equal(appiumTooling.XCUITEST_REBUNDLE.upstream.version, pins.xcuitest);
+  assert.deepEqual(appiumTooling.DRIVER_REBUNDLES.map(spec => spec.driver), ['uiautomator2', 'xcuitest']);
+  for (const spec of appiumTooling.DRIVER_REBUNDLES)
+    assert.equal(manifest.dependencies[spec.upstream.name], `file:vendor/${spec.upstream.name}-${spec.localVersion}.tgz`);
+  assert.equal(manifest.dependencies.glob, 'file:vendor/' + path.basename(appiumTooling.VENDORED_GLOB.relative));
+  assert.deepEqual(manifest.overrides, { appium: { glob: '$glob', minimatch: '$minimatch' }, webdriverio: { glob: '$glob', minimatch: '$minimatch' } });
+  const lockfile = path.join(project, 'package-lock.json'), lock = JSON.parse(fs.readFileSync(lockfile, 'utf8')).packages;
+  for (const spec of appiumTooling.DRIVER_REBUNDLES) {
+    assert.equal(lock[`node_modules/${spec.upstream.name}`].integrity, spec.tgzIntegrity);
+    assert.equal(lock[`node_modules/${spec.upstream.name}`].version, spec.localVersion);
+  }
+  assert.equal(hash(fs.readFileSync(fileURLToPath(new URL('../../' + appiumTooling.VENDORED_GLOB.relative, import.meta.url)))), appiumTooling.VENDORED_GLOB.sha256);
+  const graph = appiumTooling.lockedAdvisoryInventory(lockfile).graph;
+  assert.deepEqual(graph.glob, ['14.0.2-caseops.1']); assert.deepEqual(graph.minimatch, ['11.0.1']); assert.deepEqual(graph['path-scurry'], ['2.0.2', '3.0.0']);
+});
+
+test('appium tooling sources are in the native source fingerprint and its dirty fence', t => {
+  const dir = fixture(t), git = (...args) => assert.equal(spawnSync('git', ['-c', 'user.name=Offline fixture', '-c', 'user.email=offline@example.invalid',
+    '-c', 'commit.gpgsign=false', ...args], { cwd: dir, windowsHide: true }).status, 0);
+  const files = ['scripts/mobile/appium-tooling.mjs', 'scripts/mobile/appium-tooling/package.json', 'scripts/mobile/appium-tooling/package-lock.json'];
+  for (const file of ['apps/mobile/index.ts', ...files]) { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), 'export {};\n'); }
+  git('init', '--quiet'); git('add', '.'); git('commit', '--quiet', '-m', 'Synthetic Appium tooling source');
+  const clean = sourceSnapshot(dir); assert.equal(clean.sourceDirty, false);
+  for (const file of files) {
+    fs.writeFileSync(path.join(dir, file), 'changed\n');
+    const dirty = sourceSnapshot(dir); assert.equal(dirty.sourceDirty, true, file); assert.notEqual(dirty.sourceFingerprint, clean.sourceFingerprint, file);
+    git('checkout', '--quiet', '--', file);
+  }
+  assert.equal(sourceSnapshot(dir).sourceFingerprint, clean.sourceFingerprint);
 });

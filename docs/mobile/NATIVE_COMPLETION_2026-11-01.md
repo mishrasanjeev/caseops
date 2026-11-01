@@ -9,6 +9,16 @@ Public branch `codex/mobile-app-build-20261024`, revision
 68 successful and two explicit skips (staging deployment and post-Codex feedback).
 A new published revision requires fresh CI; neither skip proves deployment.
 
+The first bridge publication is `fa8ef620021c2d7715c190959a74e4f79d343bc4`
+(tree `a3aa04689dc50fd490cbeb171149de64786f2853`). Its actual Linux harness
+ran1464 cases:1458passed, four failed, two skipped. One new QP test hard-coded
+a Mac Python path; three V1 tests supplied root-owned Linux Python to a writer
+that correctly requires operator-owned tools. Preserve job124768013933 in
+run41279393236 as failed. Test-only repairs use actual portable Python discovery
+and a copied, byte-identical owned venv interpreter, preserving the production
+ownership refusal. Replacement Mac V1 70/70 and QP 29/29 controls pass; actual
+replacement hosted Linux remains required. No native or full-CI pass is inferred.
+
 ## Actual artifacts and their limits
 
 These artifacts were built from 17113fbc, with native source fingerprint
@@ -65,8 +75,30 @@ Closed-source offline results:
 
 These are fixture/tooling checks, not native passes. Earlier runtime,
 missing-dependency and review failures remain retained. Appium core and both
-drivers' bundled glob/minimatch repairs are under additional inventory/download
-review; initial local passes do not close current release acceptance.
+drivers now have deterministic pinned dependency rebundles with retained licence
+provenance. The prior fresh isolated runtime reported zero advisories across905
+locked/906 installed identities and loaded both drivers; it did not start an
+XCUITest session. Appium tooling joins the native source snapshot (229inputs),
+so final-source binaries and runtime acceptance must be rebuilt.
+
+Independent review of13aad43f reproduced two further guard failures: in-place
+main-lock drift escaped final reconciliation, and an inside-repository child
+named`..runtime` passed the outside-root check. Both are repaired with regression
+coverage. The final combined V1/QP/CX/Appium run passed282/282, including42
+Appium/installer cases, with zero failure/skip/cancellation/todo. Equal canonical
+source snapshots bracketed the run. Its complete log is
+`claude-pr558-20261101/combined-fixture-appium-controls-02/controls.log` under the
+mobile cache, SHA-256`7503616cc16b8bd34a893a07ff31c395f4dce82a4d7b77d8a65f5abfb10a4ce6`.
+Baseline review/RED receipt SHA-256 is
+`ecb63b758a5e54d45b843e7a796bbf392ee21217cdd921ee22d8b325dd893869`.
+Replacement hosted Linux/Windows and actual native acceptance remain required.
+
+R's exclusive canonical mobile reinstall completed511packages with exit0 and
+an unchanged lock; the ordinary complete dependency graph has no problems and
+includes glob14.0.2-caseops.1/minimatch11.0.1. Installed-graph JSON SHA-256 is
+`1928526355a7a71d6138b45fbd8af2e60ea6d649bab0546682571a588ebafe99`.
+This repairs the observed workstation graph mismatch; historical binaries stay
+separate and a fresh build is still required.
 
 ## Unchanged acceptance inventory
 
@@ -89,3 +121,23 @@ archives, verified production links, public support/privacy/deletion surfaces,
 reviewer access and store declarations remain separate submission work. The
 company website preview stays private under the owner's instruction. No merge,
 production deployment, store submission or launch date is claimed.
+
+## Approved VM capacity recovery
+
+The owner approved only the caseops-ios data disk112→172GiB and controlled
+restart. Actual guest Docker free space is118346014720bytes (~110.22GiB), with
+9966029free inodes. All15previously running containers were restored; all46
+stopped containers retained exact projected metadata. All14configured healthchecks
+are healthy, with no healthcheck configured for the gateway. Container/image/
+volume identities and all other configuration bytes were preserved.
+
+The exact conservation gate remains FAILED: Docker recreated its empty built-in
+bridge network ID and pg77's dynamically assigned loopback port changed32769→32768
+while its configured binding remained unchanged. Old port-bound receipts are
+stale; no foreign fixture was rewritten. Final native reads ended545.8seconds
+within the600-second window, but offline reporting ended608.3seconds. This is
+qualified capacity/restoration evidence, not an integrated600-second PASS.
+Report `claude-pr558-20261101/colima-disk-growth-112-172-01/state/qualified-completion.json`
+under the mobile cache has SHA-256
+`dfed1375327b70437be012c8582384329dfb6f1ca2be1f33d237dce5ce6e2481`.
+Fresh native fixture admission must bind the restored runtime observations.
