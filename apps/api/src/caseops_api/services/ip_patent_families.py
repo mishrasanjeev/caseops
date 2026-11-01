@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import BigInteger, cast, literal, null, select, tuple_
+from sqlalchemy import BigInteger, cast, column, literal, null, select, true, tuple_, values
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.util import ClauseAdapter
 
@@ -574,17 +574,40 @@ def list_patent_families(
         )
     rows = list(session.execute(statement.order_by(family_order).limit(limit + 1)))
     admitted_ids = rows[:limit]
+    family_hydration = select(IpPatentFamily).where(
+        IpPatentFamily.company_id == context.company.id,
+        IpPatentFamily.id.in_([row.id for row in admitted_ids]),
+    )
+    if postgres and admitted_ids:
+        # Resolve only admitted unique keys before tenant policy. A batch IN
+        # predicate can scan every wide family row under a custom/stale plan.
+        wanted = values(
+            column("id", IpPatentFamily.__table__.c.id.type),
+            name="admitted_patent_family_ids",
+        ).data([(row.id,) for row in admitted_ids])
+        picked = (
+            select(IpPatentFamily)
+            .where(IpPatentFamily.id >= wanted.c.id)
+            .order_by(IpPatentFamily.id)
+            .correlate(wanted)
+            .limit(1)
+            .lateral("admitted_patent_family_row")
+        )
+        hydrated_family = aliased(IpPatentFamily, picked)
+        family_hydration = (
+            select(hydrated_family)
+            .select_from(wanted.join(picked, true()))
+            .where(
+                hydrated_family.id == wanted.c.id,
+                hydrated_family.company_id == context.company.id,
+            )
+        )
     # Hydrate full families only after authorization and pagination, in one tenant batch.
     family_rows = (
         {
             family.id: family
             for family in session.scalars(
-                select(IpPatentFamily)
-                .where(
-                    IpPatentFamily.company_id == context.company.id,
-                    IpPatentFamily.id.in_([row.id for row in admitted_ids]),
-                )
-                .execution_options(populate_existing=True)
+                family_hydration.execution_options(populate_existing=True)
             )
         }
         if admitted_ids
@@ -616,19 +639,45 @@ def list_patent_families(
     if len(dockets) != len(families):
         raise _error("patent_family_access_changed", "Family access changed. Reload the list.")
     admitted = [(family, dockets[family.docket_id]) for family in families]
-    # Bound the history join before loading any disclosure content. Fresh imports
-    # can have stale planner statistics; a LIMIT above a three-table join did not
-    # bound the executor's intermediate work on PostgreSQL.
+    version_keys = [(family.id, docket.current_version) for family, docket in admitted]
+    version_hydration = select(IpPatentFamilyVersion).where(
+        IpPatentFamilyVersion.company_id == context.company.id,
+        tuple_(IpPatentFamilyVersion.family_id, IpPatentFamilyVersion.version).in_(version_keys),
+    )
+    if postgres and admitted:
+        wanted_versions = values(
+            column("family_id", IpPatentFamilyVersion.__table__.c.family_id.type),
+            column("version", IpPatentFamilyVersion.__table__.c.version.type),
+            name="admitted_patent_disclosure_keys",
+        ).data(version_keys)
+        # The complete unique key stays inside the per-key barrier. A range
+        # with an unknown generic LIMIT can scan/sort an entire tenant per key.
+        picked_version = (
+            select(IpPatentFamilyVersion)
+            .where(
+                IpPatentFamilyVersion.company_id == context.company.id,
+                IpPatentFamilyVersion.family_id == wanted_versions.c.family_id,
+                IpPatentFamilyVersion.version == wanted_versions.c.version,
+            )
+            .correlate(wanted_versions)
+            .limit(1)
+            .lateral("admitted_patent_disclosure_row")
+        )
+        hydrated_version = aliased(IpPatentFamilyVersion, picked_version)
+        version_hydration = (
+            select(hydrated_version)
+            .select_from(wanted_versions.join(picked_version, true()))
+            .where(
+                hydrated_version.company_id == context.company.id,
+                hydrated_version.family_id == wanted_versions.c.family_id,
+                hydrated_version.version == wanted_versions.c.version,
+            )
+        )
     versions = (
         {
             (row.family_id, row.version): row
             for row in session.scalars(
-                select(IpPatentFamilyVersion).where(
-                    IpPatentFamilyVersion.company_id == context.company.id,
-                    tuple_(IpPatentFamilyVersion.family_id, IpPatentFamilyVersion.version).in_(
-                        [(family.id, docket.current_version) for family, docket in admitted]
-                    ),
-                )
+                version_hydration.execution_options(populate_existing=True)
             )
         }
         if admitted

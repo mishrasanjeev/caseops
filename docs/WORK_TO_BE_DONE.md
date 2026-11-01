@@ -1,5 +1,430 @@
 # CaseOps  - Work To Be Done
 
+## October 31 All-Refs Security And Interrupted Docker
+
+NO-GO: Docker37 passed76fixturecases but the13:55UTC workstation reboot stopped
+image export without a completion record. Preserve it as incomplete. Scheduled
+main Security41193137288 separately rejected ten historical non-credential
+findings outside the successful PR scan's range. Exact source review, ten
+origin-only fingerprints and standard regression are in the candidate; real
+all-refs scan, fresh full Docker, current CI/main, guarded deployment, exact
+production journeys and both actual Excel updates remain required. See the
+dated security review. App/Mac implementation stays with its owner.
+
+## October 31 Worker Startup Replacement Pending
+
+**NO-GO.** Docker31 built AB50 and migrated a healthy stack, then stopped at the
+disabled document-worker's original 30-second offline startup check. No native
+or browser tests executed. Defer work-service imports until validated admission,
+prove fresh-process disabled/invalid/enabled paths, then rerun complete canonical
+Docker and current CI before normal PR567/main/deployment/live/D29/cadence and
+paired Excel publication. No app/Mac changes. Evidence is in the October 31
+continuation of `bugfix-document-worker-production-2026-10-10.md`.
+
+## October 31 Generic Disclosure Replacement Pending
+
+**NO-GO.** 3987's correlated range still scans roughly10000 versions per key
+under generic planning; four complete failing selections retained. Replace
+range/order with every exact unique-key equality inside the barrier, then
+replay all four original profiles plus integrity journey and full final-source
+CI/Docker. Main, guarded deploy, full live15sD29, private cadences and both
+actual Excel final publications remain required. No App/Mac/0008 work.
+
+## October 31 Disclosure Follow-Up Still Requires Full Release
+
+**NO-GO.** 9fd9 CI exposed two real later disclosure-work failures, not flaky
+timeouts: PG1/PG4 each150P/1F,10148/10156blocks over the original limit. New
+composite seeks, strict page work, exact returned keys, four successor-negative
+states and corrected raw-plan retention are unverified replacements. Preserve
+all original failures. Complete final-source Docker/CI, normal567/main/tree,
+guarded deployment/full original15sD29/cadences and both actual Excel updates.
+App/Mac/0008 remain excluded. No replacement production SHA is claimed.
+
+## October 31 Parallel Candidate And Still-Open Release Work
+
+**NO-GO.** Actual1985 CI41149650760 failed14notification+1family-work roots
+and2aggregates. ActualAPI10=1311P/14F/92S of1417; PG24=149P/1F of150/450phases,
+with custom family hydration10033rows>100. Head/merge tree25ceee9 matches.
+Security41149650788/Advanced41149650680 are independently green;17CodeQL
+annotations are9warnings/8notices/0failure, not no findings. Strict161audit/0skips
+and244P/732 compatibility remain actual components, with243P/1fixtureF retained.
+
+Mail ownership replacement is107P/321 including4PG races/39verified files after
+exact ordered48-case34P/14F reproduction; pure-owner8P/24. Actual expanded-map
+capture replacement is20P/60/12verified files. Preserve initial7P/1fixtureF and
+interrupted49-role38complete/34P/4F/11unverified. Frozen local61 has43P/0F at
+03:44UTC and18unverified; later790s fresh setup is not a body failure. Host180s
+setup timeout/zero pytest and fresh green03 are retained without a causal claim.
+
+Separate M2 at1985691010f1962fbbe0092e7ebeded8801c1be0 carries the seven
+byte-identical projected WIP files (parallel-ci-candidate-01.json). Only its PG
+test gains two unexecuted deletion edge cases: original3 race IDs/all21PG cases
+remain; expected63=23PG+20SQLite/API+20pure, original8scalar IDs retained within20.
+Versionless deletion targets are negative fault injection, not positive legal
+records; SQLite race parity remains a gap. Source M remains frozen. Map family
+IPLF-032/UJ-02/NFT-005/J14/M14 and mail J19/M21/US-063; no feature/native expansion.
+The dated lifecycle-admission brief contains the exact evidence and scope.
+
+Next required work is newALL-CI green and full canonicalDocker31. Retain full
+Docker28=3615P/2F of3617,29 incomplete61/3619,30 incomplete18/3619, and0browser
+execution (640discovery only). Then normal PR567/current-main proof, guarded
+exact-main deployment, exact-live originalD29 15s, post-QA clean private work,
+guarded scheduler resume and a distinct natural cadence, plus both original
+Excel updates. MainB994 is not a new-source API/web release; no deploy here.
+Interim08 stays36fixed/7partial/1inconclusive; onlyD29 may promote after prod.
+External legal/old-calendar/unknown-Matter/provider/owner-MFA holds and ACTIVE
+release-deferred SEO stay explicit; App/MacBook/native/0008 is excluded. Older
+checkpoints below are preserved history, not current replacement acceptance.
+
+## October 31 Actual Release Checkpoint
+
+Continuation: the75FA dependency/CodeQL blockers have a scoped candidate repair.
+All161 installed isolated dependencies pass strict audit, zero skips; all244
+offline compatibility cases pass732phases. The first243P/1new-fixtureF is
+preserved. Owned interrupted Docker29 retains61complete/184phases of3619
+intended,0browser: incomplete, not full green. Require fresh final committed
+Docker30/hosted security/CI before normal merge and canonical deployment.
+See the October31 lifecycle-admission brief. No app/Mac work is included.
+
+**Partially fixed / NO-GO.** Full998A Docker28 completed3617/10851phases:
+3615passed/2admission-race failures/0skips; browser0executed. Hosted998A rollup
+is55success/2skipped checks, not later-source acceptance. The new lifecycle
+read-bound and owned-harness repairs pass complete focused191/573, with
+both original failures reaching persistence assertions. Historical timeout
+causation remains Inconclusive; budgets/fences are unchanged. See the dated
+lifecycle-admission brief. Still require committed full replacement Docker,
+same-head CI/security, normal567/main merge/tree proof, guarded deployment,
+full exact-live Playwright/D29/cadences and both original Excel final updates.
+App/Mac/0008 and external legal/provider/consent/MFA holds remain separate.
+Older "latest" checkpoints below are historical, not this release's verdict.
+
+## October 30 Consolidated Remaining Failures
+
+Latest: full135-case component132P/3physical-planF/405phases/0S; all original
+observer/multi-order/finalizer/successful1,000-row/workspace cases passed.
+5FAA CI is37successful/4failed/2skipped jobs; three root cases plus aggregate.
+Exact broad docket/receipt plans require bounded scalar lookup correction and
+52-case semantic replacement, with nested plans retained in CI. Both originals
+are actual interim08. Full Docker/current CI/main/live/cadence still NO-GO;
+the earlier unexecuted/partial checkpoints below are historical, not latest.
+
+**Partially fixed / NO-GO.** D060 CI has57terminalchecks:42success/12failure/
+3skips. Complete shard reconciliation identifies seven historical UNION-hook
+failures, one worker outcome with missing underlying error, four callback-
+identity observer failures and independent CodeQL's one product error. Current
+repairs retain all original safety/timing assertions. Dual preflight RED proves
+1,000reads per resume; all48 new IP cases and27 ownership cases pass in the
+owned interrupted93/321 component (228unexecuted, no natural completion).
+Three physical-plan cases and consolidated new source remain unverified. Use
+bugfix-import-preflight-and-ci-observers-2026-10-30.md and the full canonical
+replacement, not these partial results, for release and workbook decisions.
+MacBook App and external legal/provider/consent/MFA holds remain separate.
+
+## October 30 Compliance Work And Workspace Freshness
+
+**Partially implemented / NO-GO pending full replacement release.** Docker26
+completed3516native cases with2failures and no browser execution. The next
+351-case affected run still has3call failures plus1teardown error; all39new
+workspace/metadata cases pass, but that is not Company-lock acceptance.
+Bounded metadata reads, clean-entry workspace refresh, stopped-observer
+ownership cleanup and one fresh notification decision now retain the original
+security/transaction contracts. Both pure roles pass15/45phases. GREEN03 ran
+392cases/1176phases:384P/8recorder failures; all26dual-database recipient and
+original concurrency cases passed. After correcting structured UNION inventory
+without relaxing work bounds, GREEN05 passes the complete41case profile and
+five exact original failing variants:46/138phases,0F/0S,unchanged source.
+Complete Docker/CI, protected main merge, guarded deployment,
+exact-live D29/whole QA/private cadence and actual paired Excel publication
+remain required. See bugfix-compliance-lock-work-2026-10-30.md. Preserve old
+failures and unknown historical causes; no deadline, GC or authority waiver.
+MacBook App work and all external legal/provider/consent/MFA holds stay separate.
+
+## October 30 Scanner Fixture Continuation
+
+**NO-GO pending complete replacement release.** E968's Security gate fails one
+positive real-container fixture at unacknowledged creation; the scanner's
+fail-closed response is correct. Bounded setup plus original <=1s attached
+transport and stronger exact-error/cleanup assertions pass all75local Docker
+cases with no skips. No product deadline/security policy changed. Preserve
+failed hosted evidence and interrupted prebuild Docker25; commit the corrected
+fixture, run full fresh Docker/hosted Security including tree/history scan,
+then main/deploy/live/cadence and actual workbook publication. See the dated
+scanner fixture brief. MacBook App work and external holds remain separate.
+
+## October 30 Private Invalidation Continuation
+
+**NO-GO pending complete replacement release.** Docker24 EB10 child02 is439P/
+1F, private invalidation6.7003345s against5s; child03 is explicitly interrupted
+and retained, no browser execution. Bounded Core results/resident rollback
+tracking now pass all275focused cases/825phases,0S/0F,167retained files. Large
+case1.8983929s preserves original counts/bounds/persistence/replay. Earlier
+invalid fixture/setup and failed/interrupted evidence remain preserved. Follow
+bugfix-private-invalidation-allocations-2026-10-30.md: full frozen Docker, new
+green committed CI, main/tree proof, guarded deploy, exact-live QA/D29, later
+clean cadences/scheduler recovery and actual paired Excel publication. App
+belongs to the MacBook; external legal/provider/consent/MFA holds stay separate.
+
+## October 29 Shared Writer CI Continuation
+
+**NO-GO pending full replacement release.** Complete540E CI has two source
+contract failures and a downstream aggregate failure, not a security waiver.
+Canonical actor/capability/lock-order assertions now follow the extracted writer;
+the public wrapper is pinned by its full synchronous definition/delegation.
+Fresh complete three-module Docker-PG component passes50/150phases; later
+definition-level tightening separately passes both exact original failures2/6.
+No product implementation changes. Docker22's pre-build storage timeout and
+Docker23's intentional pre-build interruption remain failed/incomplete, not
+application acceptance. A separate owned measurement passed2.414s with169GB
+available; it does not establish a permanent historical timeout cause. Fresh
+whole Docker/CI/main/tree/deploy/live/private-cadence and original workbook
+publication remain required. MacBook owns both app PRs; external holds stay.
+
+## October 29 Web Fixture Preflight Continuation
+
+**NO-GO pending new full acceptance.** Docker21 failed before images/main
+regression: process18has16P/2F, remaining57fixture checks and all expected
+3514native/640browser cases unexecuted. The old10s isolated driver timeout
+and EBUSY cleanup are preserved separately. Async bounded owned-root removal,
+exhaustion/no-child-retry control and exact19/51/6 inventories now pass all76
+fixture cases on Node22.14 with source equality and three owned trees reaped.
+Pinned browser typecheck passes. The unchanged product writer remains covered
+by GREEN46/138; neither component certifies a release. No driver/root-cause
+claim, timeout extension, App/native/readthrough0008 or shared supervisor edit.
+Require fresh committed full Docker/CI/main/deploy/live/private-cadence evidence
+and both actual workbook publications. External owner/provider/legal holds stay.
+
+## October 29 Import Materialization Continuation
+
+**NO-GO pending full replacement release.** Docker20 retains437P/2F over its
+complete439case group;3070native and640browser cases remain unexecuted. Both
+failures are original import90s deadline assertions, not export plan failures.
+The historical timing cause remains unknown. A deterministic3row RED separately
+proves27discarded rich DTO SELECTs. Shared canonical writer/public response
+separation now passes a complete46case/138phase seven-module replacement,
+including public DTO/transaction/recovery and unchanged201-row/source/export
+controls. All37retained files verify; no deadline or safety fence changed.
+Profile02's diagnostic failure remains INCOMPLETE. Full current-source Docker,
+new CI/Security/CodeQL, main/tree proof, guarded deployment, live CSV/private
+cadence and both original Excel publications remain required. The MacBook owns
+app work. Legal/provider/consent/owner-MFA and old Calendar holds stay separate.
+
+## October 29 Precommit Metadata Continuation
+
+**NO-GO pending full replacement release.** AFBC Docker19 retains1313P/1F
+over three complete groups, not acceptance. A separate deterministic RED shows
+a14-query precommit graph containing unrelated work. The metadata-only profile now
+passes all206affected cases/618phases (new6 plus unchanged16/32/122/30), with
+six3-query profiles and177retained files verified using extended Windows paths.
+The failed post-test verifier and both earlier incomplete/setup attempts remain
+preserved. No historical lock/barrier timing cause or production fix is claimed.
+See the precommit continuation in the dated Matter hydration brief. Full fresh
+Docker/CI/main/deploy/live/private cadence and both actual summaries remain
+required; app work belongs to the MacBook and external holds remain separate.
+
+## October 29 Exact Provenance Seek Replacement
+
+Release remains **NO-GO**. Source13D CI40823363939 has one actual PostgreSQL
+failure: the 200-row export proof performs81600recorded visits against820.
+The retained company-only index wins despite the composite index and earlier
+company/action-prefix retirement. A controlled local RED reproduces both fresh
+and stale-empty failures; analyzed success cannot close those failures.
+
+The replacement orders/seeks the complete audit key and rechecks all five
+exact predicates outside LIMIT1. Both indexes, source-row guards and the
+canonical Python reader stay unchanged. Fresh independent GREEN passes17cases/
+51phases: new5, unchanged cross-database proof4 and original export8. All three
+statistics states and the original failed case now record400visits, below820;
+retained-width controls also pass. This is component evidence only. Docker18
+was deliberately stopped after438native passes/1314phases, with3061native and
+640browser cases unexecuted; outerexit0 is not acceptance. Both originals are
+actually INTERIM07/NO-GO with36/7/1verdicts, not final certification. See
+bugfix-provenance-seek-2026-10-29.md. Require complete replacement Docker/CI,
+canonical main, guarded routing, exact-release E2E and private cadence before
+#561/#564/IP15-018 closure. Legal/provider/consent/MFA/Mac holds remain separate.
+
+## October 29 Matter Response Work Bound
+
+Current release remains **NO-GO**. Complete BFF Docker17 retained3483 native
+cases:3482passed/1failed/0skipped and10449phases; no640browsercases ran.
+The metadata-IP finalizer overlap failed its unchanged5second writer-result
+oracle after a successful durable commit. Complete transaction/phase evidence
+separates commit from response hydration; it does not establish a host/GC cause.
+The response repeated a workspace graph with ten unused collections.
+
+The narrow update_matter commitTrue-only candidate replaces13response queries
+with3, preserving all scalar/tag/stay/interim data. Independently migrated RED
+proves the original13queries with valid setup/teardown; fresh GREEN passes all
+16newMRH cases plus30unchanged original finalizer cases (46P/138phases, no skips).
+The added same-session follow-up also preserves the full workspace DTO.
+This is dirty-source component evidence, not a clean committed Docker result.
+Keep shared workspace/lifecycle loaders, locks, private revocation, audit and
+all original timeouts unchanged. See bugfix-matter-response-hydration-2026-10-29.md.
+Fresh full Docker/CI/main/deploy/live/cadence and actual workbook publication
+remain required; #561/#564 and IP15-018 stay open. DailySEO is ACTIVE but today's
+critical-path deferral is not a completed Google audit. Mac/native work is separate.
+
+## October 29 Local Invitation Race Evidence Hold
+
+Historical source `36a56e77` has green CI40733874352 (42 passed jobs and one
+intentional staging skip), Security40733874351 (8 passed), Advanced
+CodeQL40733874380 (3 passed) and independent results122977389785 (zero
+annotations). Docker16 nevertheless failed the accept-first administrator
+invitation/removal race at its unchanged 3-second rendezvous. Six complete
+native groups contain 2,612 passes, one failure and 7,839 phases. The first
+future was joined but not inspected on that failure path; its historical cause
+remains Inconclusive. The red run was deliberately interrupted after retaining
+the full failing group. Groups 7/8 and 640 browser cases did not run. The outer
+wrapper's exit0 is not acceptance.
+
+An isolated original-source passive diagnostic passed both orderings and six
+phases, with real hashing and unchanged locks/waits. It did not reproduce or
+explain the failure. The replacement adds test-only joined-actor sections and
+JUnit properties, bounded real-stage timing and 31 pure support regressions.
+All 31 pass with 93 reconciled phases. Both complete affected PostgreSQL files
+also pass: 27 cases, 81 phases, zero skips. All nine changed race identities
+have identical actual call-section and JUnit payloads. Accept/remove, reinvite,
+first-invite and reader/revocation-writer assertions remain authoritative under
+J14/M14/PRA-10..12. No product, KDF, deadline or lock change is introduced.
+Full replacement Docker, current-head hosted checks, protected main merge and
+exact-serving production replay remain required.
+
+Read-only Cloud Run evidence at October 28 20:52:41 UTC confirms main `b9946c71`
+and API/web `f49b274e` at 100% traffic. Both original workbooks were actually
+published and read back as INTERIM06/NO-GO at 21:11 UTC, with seven formulas and
+all 44 tracked verdicts preserved. No new release is claimed. The daily 07:30
+SEO heartbeat is ACTIVE with a non-interruption guard. The October 27 browser
+URL-safety stop remains; no fresh Google audit is claimed. Native #558,
+MacBook/readthrough0008, legal review, old-calendar consent and owner MFA remain
+separate. Evidence is under the primary workspace's
+`outputs/fix-561-20261026/portfolio-export-worker/platform-invite-race-20261028`.
+
+## October 28 Scanner Creation Race Replacement
+
+A729 Security40729502028 failed one of67 offline scanner tests: its cleanup
+receipt claimed absence, but a later inspect found the owned container. The
+deterministic regression confirms unsettled daemon creation can outlive the
+killed `docker run` client and appear after that absence snapshot. The new
+scanner acknowledges `create` before `start --attach` on its immutable ID,
+sharing the original deadline; unacknowledged creation remains unconfirmed.
+No timeout, network, digest pin, redaction, history or policy fence is weakened.
+All original67 identities plus8 regressions pass in the isolated proposal
+(75/75,113.867s), with real timeout/interruption/lost-ack cases and26 owned
+containers confirmed absent. The joined checkout and hosted gates still need
+fresh verification. The remaining observed-state helper note now returns the
+pytest failure explicitly, not a misplaced change to its capture callback.
+
+A729 CI40729501940 was deliberately cancelled for changed source (43jobs:
+8success/35cancelled), not accepted; CodeQL Advanced3P and independent results
+success with1note do not cancel Security failure. New current-head Security,
+independent results, CI, complete Docker and production replay remain required.
+Both original workbooks were actually published/read back as INTERIM05 at
+17:05UTC, retaining7formulas and44tracked36fixed/7partial/1inconclusive rows.
+IP15-018 remains partial; no new production51-row export or release is claimed.
+
+## October 28 Independent CodeQL Results Correction
+
+68c394b9 CI40710768303 succeeded (42 jobs passed, one intentional staging
+skip); Security40710768226 and CodeQL Advanced40710768204 also succeeded.
+However the separate GitHub Advanced Security CodeQL results check122895415429
+FAILED with two conditional-driver initialization errors and four quality notes.
+Earlier workflow-only green statements were incomplete, not release clearance.
+Driver initialization is now explicit; controller interruptions propagate while
+retaining incomplete completion evidence, with six additional supervised cases.
+The standard preflight now has75 tests (18 process,51 SQLite,6 controller), all
+passed locally with complete inventories/JUnit and unchanged source. No deadlines,
+policy, provider-cost fences, existing SQL or shared mobile/OAuth code changed.
+The other notes receive consistent callback returns and an explained fail-closed
+malformed404 handler. Fresh independent scan results and full gates remain open.
+
+Docker15 was deliberately interrupted before editing its frozen68C source.
+It retains1887 passing calls across four complete groups and one interrupted
+group, not3483-case acceptance; no browser execution or complete Docker PASS.
+Its owned processes and Compose resources were cleaned. New source needs fresh
+CI/results, complete Docker and exact production replay. Production remains
+F49; neither merge, new deployment nor final workbook certification is claimed.
+
+## October 28 CI Capacity Replacement
+
+DE333 CI40698272945 is cancelled, not green. Its PostgreSQL shard15 hit the
+12-minute job boundary after pytest, report upload and cleanup reported success;
+the aggregate correctly refused its cancelled prerequisite. Retained artifacts
+independently reconcile all3483 cases/10449 ordered phases and matching JUnit,
+but that is not an accepted CI run. Security8/8 and CodeQL3/3 passed separately.
+
+The unchanged partition algorithm now distributes the complete CI selection
+across24 rather than16 shards, preserving12minutes, concurrency4, fail-fastfalse,
+all phase/report guards and the browser dependency. Replaying observed costs
+estimates maximum phase work649.065s ->384.334s, excluding overhead/variance;
+actual new CI headroom still requires execution. Static guards, the actual
+24-child synthetic launcher and exact-once/error cases are included in replay.
+
+Docker14's69 fixture preflight passed, then its obsolete DE333 native run was
+explicitly interrupted for this changed candidate. It retains338 complete call
+passes,339 setup/338 teardown passes, session exit2 and interrupted/reaped receipt.
+The wrapper's exit0 is not acceptance: no full native/browser completion or PASS.
+All owned processes and Compose resources were cleaned; original evidence stays.
+New frozen-source full Docker and CI are required. No merge/deploy or new GSC
+audit is claimed; both original workbook snapshots remain INTERIM04/NO-GO.
+
+## October 28 Docker13 Completion And Browser Replacement
+
+This checkpoint supersedes the older candidate descriptions below. At5df10f35,
+full canonical PostgreSQL acceptance completed3483passes/10449phases with no
+failures, skips or retries and identical before/after source fingerprints.
+Feature CI40606343710, Security40606343777 and CodeQL40606343729 succeeded.
+Nevertheless Docker13 is **NO-GO**: desktop shard1/2 selected319 and finished
+308passed/4failed/5configured skips/2serially unexecuted;321other intended
+browser cases did not execute. No whole-release pass or production upgrade.
+
+The three patent failures include measured unbounded synchronous local grant
+gaps74.167s,47.105s and35.152s, not slow bootstrap HTTPs. The replacement local
+fixture is being integrated with explicit scope/default/foreign-key parity,
+asynchronous process supervision and no retries or deadline increases. Its
+proposal passed18process,51SQLite and51PostgreSQL component cases. The actual
+integrated18/51runner now passes with source and owned-tree reconciliation.
+Unchanged dated patent workflows, complete Docker and new CI remain
+unverified. See `bugfix-ip-fixture-budget-2026-10-28.md`.
+
+The Judge aliases loading failure remains unproved. An isolated unchanged
+natural walk and six-case accessibility/module prefix passed; a directed
+Company-lock/cancel overlap retained nine
+successful HTTP checks, including21ms health and four reads within501ms. Those
+negative reproductions do not close the historical failure. Do not speculate a
+shared transaction fix or rerun until a failure is hidden.
+
+Read-only12:21UTC Cloud Run metadata confirms API00504-478/web00481-qbn still
+route100%toF49; canonical main isB994. Both original Excel summaries were
+published as INTERIM04/NO-GO with exact Docker13 results, seven preserved
+formulas and unchanged44tracked-row verdicts36fixed/7partial/1inconclusive.
+IP15-018 remains partial pending actual new production desktop/mobile15s CSV
+acceptance. Legal/source, deferred MFA/Ram cleanup and provider holds remain.
+SEO automation was observed PAUSED; restore the owner's daily program after
+critical release coordination, without inventing a new GSC audit. Mobile558,
+MacA2A, native-security and read-through0008 remain separately owned.
+
+## October 28 Replacement Release Is Still Blocked
+
+PR567/6cc has green Security and CodeQL but one actual CI PostgreSQL failure
+at the unchanged fresh-statistics provenance bound. A full support index is
+not sufficient: unchanged PostgreSQL17.11 reproduction retains excessive
+company/action scans. Finish scoped query and CI-plan-retention repairs,
+prove fresh/analyzed work plus cross-database oracle parity, then complete a
+new frozen Docker/CI/main/deployment/production replacement. Docker11 was
+stopped, not accepted. The native155-case PDF/email component completed
+152P/3cacheS; platform/security/owner-Mac holds remain separately open.
+Both original workbooks still carry interim results, not final certification.
+The SEO daily automation is ACTIVE and must not compete with these gates.
+
+942 is also rejected: scalar LIMIT did not fix the cold plan. The original
+EXISTS query is retained. A SQL-only cold diagnostic shows69907 to106 visits
+after dropping only the redundant historical company/action prefix; this is
+not application acceptance. Finish guarded0002 consolidation/restoration and
+shared audit-reader coverage before the complete short-root replacement.
+Focused07's348P/1F failure is observed at a265-character Windows CSV rename;
+the unchanged short-root control passes. Keep the failed full inventory open.
+The native155-case compatibility replacement now has152P/3cacheS/0F with
+complete phases/JUnit; it is not whole Android/iOS or production acceptance.
+
 ## October 26 Export Completion Gate Found During Release
 
 Issue564 is a real production performance failure, not a failed header fix.

@@ -32,7 +32,7 @@ from caseops_api.services.ip_documents import (
 )
 from tests.fixtures_postgres_client import temporary_http_database
 
-PARENT = "20261026_0001"
+PARENT = "20261028_0002"
 REVISION = "20261031_0001"
 ACTION = "ip_document_taxonomy.defaults_provisioned"
 ROOT = Path(__file__).resolve().parents[1]

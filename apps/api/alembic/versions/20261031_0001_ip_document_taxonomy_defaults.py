@@ -1,7 +1,7 @@
 """Provision default IP document classifications for enabled IP workspaces.
 
 Revision ID: 20261031_0001
-Revises: 20261026_0001
+Revises: 20261028_0002
 DATA-GOVERNANCE-MAP: updated
 Map: docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml (current_change_note).
 Tenants whose IP workspace was enabled before default provisioning existed
@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from alembic import op
 
 revision = "20261031_0001"
-down_revision = "20261026_0001"
+down_revision = "20261028_0002"
 branch_labels = None
 depends_on = None
 
@@ -228,5 +228,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Deliberate no-op (restore-forward). Removing the rows would delete tenant
-    # data that documents may already reference; the rows are valid at 20261026_0001.
+    # data that documents may already reference; the rows are valid at 20261028_0002.
     return None

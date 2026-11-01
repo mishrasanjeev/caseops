@@ -77,6 +77,34 @@ and retains named main-drift/denial gates before routing and certification.
 
 ## Reopen And Verification Lessons
 
+### Cold Catalogue And Native Path Evidence
+
+The support index alone and a later scalar-LIMIT rewrite both fail the real
+fresh-statistics228-work cap. Actual942 plans visit69960/69960/67269 source
+rows after correct51-row output. The physical catalogue includes a historical
+company/action prefix absent from ORM declarations. A controlled SQL-only
+experiment creates all indexes before data, keeps pg_stats empty and table
+reltuples/pages at-1/0, and changes only that redundant index: work69907 to106
+for both original and scalar SQL, preserving all53 synthetic proofs. Default
+planner settings and an independently analyzed control are retained. This is
+diagnosis, not a replacement for the real source-scoped application test.
+
+The candidate keeps the original EXISTS reader. A separate0002 must verify
+the full five-key index is exact/valid/ready before concurrent retirement;
+restart must tolerate absence after a committed DROP. Immediate downgrade
+restores the exact legacy prefix transactionally and retains the full index,
+matching0001; later0001 owns its removal. Preserve append-only rows, all other
+indexes and shared action/time/order/access semantics. Reject missing/unready
+replacement or conflicting objects before retirement. EXW-PV06/07 apply.
+
+Separately, focused07 has348/349 passes and a real failed export. Observation
+retains FileNotFoundError errno2/winerror3 at os.replace:242-character temporary
+path,265-character CSV destination. The unchanged short-cache case completes
+with213-character paths. That identifies a path-sensitive native test root,
+not SQLite parser overflow. Preserve the failed complete run and every
+diagnostic; use a short owned basetemp for the full replacement without
+changing storage, access, deadlines, assertions or retry behavior.
+
 The initial local export gate could not prove Cloud Run's post-response CPU
 behavior. The exact-release production run correctly exposed that gap; neither
 an eventual artifact nor a longer test timeout would fix it. The worker now has

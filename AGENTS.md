@@ -1,5 +1,130 @@
 # CaseOps agent instructions
 
+- A parameterized LIMIT 1 does not tell a generic plan that only one row will
+  execute. A composite range plus partial-index incremental sort can read the
+  entire tenant per admitted key. Put every exact unique-key equality inside
+  the correlated lookup and prove physical work, not just output cardinality.
+
+- Page authorization is not a bound on later hydration. Reconcile family,
+  docket, disclosure and source-document plans separately using actual binds
+  under custom, generic and default planning. Exact composite seeks must reject
+  a later version, another family or tenant, and an absent successor. Keep raw
+  plans under the configured native evidence directory actually uploaded by CI.
+
+- Raw-owned emulator cleanup and pytest patch lifetime are separate owners.
+  Restore a nested override before closing its owning emulator, then undo the
+  outer patch before asserting baseline identity. Do not close an owner through
+  an unrelated patched cleanup function or put cleanup/dispatch/waits in asserts.
+- Capture actual post-expanded SQLAlchemy execution parameters, not cached
+  compiled defaults. Retain and replay the exact statement, driver SQL, binds
+  and expansion map, including tuple/empty predicates, the current cursor and
+  default planner modes; a synthetic query or stale map is not execution proof.
+
+- One scalar query is not proof of bounded database work. A candidate VALUES
+  join and correlated EXISTS can scan tenant-wide docket and receipt history.
+  Retain the exact driver SQL/binds and fresh/stale/analyzed default plans;
+  bound raw tuples, loops, heap fetches and buffers without planner overrides.
+  Keep nested EXPLAIN/catalog files in CI artifacts before asserting outcomes.
+- Before changing a workflow's artifact paths, inventory every existing exact
+  path contract, not only the newly added retention test. Preserve the exact
+  approved inventory, run those consumers together, and inspect the subsequent
+  downloaded artifact; a new uploader assertion does not cover older consumers.
+
+- A known-created-container cleanup test must actually reach acknowledged
+  creation before testing attached-client timeout. Keep setup bounded and cap
+  that real transport within the remaining total budget; assert the exact
+  propagated exception, ID and absence. Unknown create outcomes must retain
+  their fail-closed cleanup error. Do not turn setup latency into a scanner
+  defect, fabricate acknowledgements, reset deadlines or add blind retries.
+
+- A set-based update can still allocate one ORM identity and returned Row per
+  retained chunk. Bound client-side result consumption as well as SQL work;
+  preserve exact atomic predicates, source membership and loaded-object state.
+  Core-update synchronization must also register changed resident objects for
+  savepoint rollback, before and after flush. Retain real SQL/GC timing; do not
+  disable GC, move the measurement, or raise the original lock budget.
+
+- A shared-writer extraction must update source-inspection security inventories
+  as well as runtime callers. Keep capability and membership-before-parent
+  assertions on the canonical writer, and prove the public wrapper's complete
+  synchronous signature and exact delegation. A body-only comparison can miss
+  async functions, decorators or unforwarded arguments. Do not add duplicate
+  authorization or serialization work merely to satisfy stale inline checks.
+
+- A narrow postcommit response does not bound work while a writer owns tenant
+  admission. Measure the first transaction too: metadata and lifecycle DTOs
+  must not hydrate unrelated workspace history under Company/parent locks. Preserve fresh ACL,
+  assignment and lifecycle checks, current scalar/tag/order values, no-op and
+  caller-owned commit semantics, and subsequent full workspace reads. Keep
+  original lock/deadline race oracles; removing unused queries does not invent
+  missing historical barrier timings. Use extended-path IO for every retained
+  Windows artifact before mistaking verifier path failure for a failed test.
+  Lifecycle neutralization must keep its exact operational-child locks and
+  writes atomic, without eagerly reading unrelated notes, document chunks,
+  billing or activity history. Prove returned tag/order flags after commit as
+  well as disposal/reopen persistence and non-resurrection of neutralized work.
+
+- Removing one redundant index does not bound a correlated provenance read.
+  A different tenant-only prefix may still win under fresh or stale statistics.
+  Retain the real catalogue and statistics, then prove actual work with every
+  competitor present. An ordered full-key seek must check every exact identity
+  outside its LIMIT fence so unrelated successors, nulls and mixed duplicates
+  remain fail-closed. Preserve the canonical source oracle and cross-database
+  parity; a LIMIT or index name alone is never physical-work acceptance.
+
+- A committed write is not a completed response within its latency budget.
+  A refresh can replay a previously explicit workspace eager-load profile even
+  when commit expiry is disabled. Reload only the DTO-owned graph with pinned
+  tenant/record IDs and fresh values; preserve required children, authorization
+  and later workspace reads. Prove query/row work and DTO parity with retained
+  and expiring sessions, then replay the unchanged real concurrency oracle.
+  Eventual actor completion or a passing sibling cannot erase a deadline failure.
+
+- Validate the complete CI contract step, including branch-diff check-change
+  commands, before an expensive freeze. A valid rendered governance map does
+  not prove that each new migration has its required updated-map declaration.
+- Native DDL observation must normalize leading SQL whitespace. SQLAlchemy's
+  PostgreSQL DROP INDEX starts with a newline; match the actual compiled text
+  in callbacks and pg_stat_activity, retaining exact database/backend/index
+  ownership and native wait assertions. A missed observer is not a proved
+  migration interruption or a reason to weaken recovery assertions.
+
+- A mirror's null first-patched field is not proof that no official fix exists.
+  Reconcile the CVE's maintainer advisory, aliases, released commits and npm
+  tags before declaring an upstream blocker. A GitHub Releases404 can coexist
+  with a genuine signed/integrity-pinned npm release. Still require targeted
+  lock/installed resolution, parser regression and a fresh strict audit; do not
+  invent a patched version, waive an alert or claim distribution from metadata.
+- Concurrent index DROP has two durable invalidation waits. Test cancellation
+  before and after ready/live become false, retain native blocker/state proof,
+  then prove exact restart and responsive ordinary writes. A post-DROP hook
+  cannot substitute for cancellation while the dead index still exists.
+
+- A migrated index catalogue includes historical indexes absent from ORM
+  declarations. Inspect every actual candidate path: adding a full-key index
+  can leave a cheaper redundant prefix scan selected under fresh statistics.
+  Diagnose with indexes created before data and capture pg_class as well as
+  pg_stats; then prove the real retained-width journey. Retire a prefix only
+  after its healthy replacement is verified, preserve shared-reader semantics
+  and use reversible, restart-safe migration steps without planner overrides.
+- Keep native Windows verification basetemp roots short and outside OneDrive.
+  A temporary write can succeed while its longer final CSV rename fails at
+  MAX_PATH. Observe the actual worker exception and retained job before
+  teardown; an unchanged short-root control identifies harness sensitivity,
+  not a new passing full selection. Preserve the failed long-root inventory
+  and repeat the complete intended suite under the short owned root.
+
+- A support index does not prove bounded provenance work on fresh statistics.
+  Retain the actual read plans under both fresh and analyzed states, including
+  late target rows. Preserve every source/tenant/audit predicate and duplicate
+  match semantics; a scalar LIMIT bounds returned rows, not scanned work, so
+  the unchanged row-visit and latency assertions must still pass.
+- Diagnostic artifacts must match the actual CI upload glob. When CI uploads
+  direct JSONL children of CASEOPS_FINALIZER_EVIDENCE_DIR, retain measurement
+  and full plans there before asserting bounds; nested files beside a result
+  journal are not uploaded evidence. Regress the real workflow's paths on both
+  successful and failed bound checks, and retain the original missing evidence.
+
 - Security timestamp tests must control signing and validation observations
   independently. A future timestamp's skew shrinks while a request travels;
   a live `now + 301` is not a stable rejection test for a 300-second window.
@@ -1297,6 +1422,23 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- A timed-out Docker client can leave an unsettled create request even after a
+  momentary exact-name absence. A scanner must acknowledge creation before
+  starting the immutable container ID, share its original execution deadline,
+  and retain cleanup as unconfirmed when creation was not acknowledged. Prove
+  late creation, actual timeout/interruption and lost acknowledgement offline;
+  never turn a single not-found snapshot into whole-invocation cleanup proof.
+- Parameter values may contain backend names and literal test separators.
+  Reconcile canonical collected identities, phases and JUnit before adding
+  category totals; a substring count of hostile URL inputs is not a backend
+  inventory. Preserve a failed evidence adapter separately from actual results.
+
+- A successful CodeQL upload workflow is not a successful code-scanning result.
+  Reconcile the exact-head independent GitHub Advanced Security results check,
+  every annotation and required status before starting costly release gates or
+  claiming security is green. Preserve interrupted gate evidence when a missed
+  result requires changed source; never treat its outer shell exit as acceptance.
 
 - Request-based Cloud Run does not guarantee CPU after the HTTP response.
   Public enquiry admission and founder retries must only persist the outbox;
@@ -3405,3 +3547,126 @@ requirements when using the fallback.
   existing authorized serialized role; reconcile the complete semantic union
   and independent per-role inventories. Require an actual passed zero-retry
   receipt for the repaired journey, not a skip or a green collection alone.
+- A filtered cloud list with a small limit cannot prove resource absence: the
+  limit may precede the local identity filter. Read the exact owned ServiceUsage
+  resource against the verified numeric project, service name and state; read
+  only the dedicated Secret Manager resource name. Only bounded HTTP404 with
+  typed404/NOT_FOUND proves secret absence. Denials, malformed responses and
+  outages remain unverified, never permission to broaden API/IAM scope, accept
+  terms, bootstrap App Engine, read secret bytes or rotate an existing key.
+- Operational failure phases must come from a fixed allowlist, not raw cloud
+  exceptions, response bodies or credentials. Preserve canonical-main/runtime
+  checks immediately before each mutation and retain failed readbacks.
+- Windows pytest parameter IDs enter PYTEST_CURRENT_TEST and can exceed the
+  process environment bound before assertions run. Keep large response bodies
+  in fixtures with short explicit IDs, preserve setup/teardown failures and
+  require a complete replacement phase inventory; never weaken payload bounds.
+- Respect each package's supported host runtime before classifying a failure.
+  The native client requires Node24 (its tooling minimum is22.19), whereas the
+  web workspace pins22.14. Do not transpose that older web pin into native
+  descriptor or gateway checks. Preserve unsupported-host results separately,
+  rerun on the documented runtime and keep genuine remaining failures open.
+- A real session-provider page test has separate authentication and report
+  response stages. Control canonical responses and resolve each inside React
+  act before asserting its completed UI; also prove zero private reads before
+  authentication/MFA and no late private data after invalidation. Do not change
+  production deadlines, schema checks or role fences to silence a loading test.
+- Candidate-scoped SQL can still do tenant-wide provenance work at each row.
+  Inspect actual scan/filter/loop counts, not only returned rows or SQL length.
+  Regress late-imported retained records with both controlled fresh statistics
+  and explicit ANALYZE, retaining plans beside the structured test journal.
+  Add the matching bounded lookup index when required; do not hide a missing
+  access path with fixture-only ANALYZE, planner flags or a larger work budget.
+- Run cheap lint and schema-inventory checks before freezing a candidate for
+  long acceptance. Preserve any stopped supplemental gate as incomplete and
+  execute its full intended inventory in the final canonical replacement;
+  formatting errors and correct component results cannot certify a release.
+- After changing a model, index or governance map, regenerate and validate both
+  the governance inventory and its runtime data-class projection before freeze.
+  A rendered map alone leaves the exact-artifact runtime hashes stale. Review
+  generated differences to preserve admitted classes and policy decisions;
+  updating fingerprints is not new retention or disposition authority.
+- Attribute a browser deadline to measured phases. A fast bootstrap HTTP response
+  can be followed by an unbounded synchronous fixture process; HTTP success does
+  not bound setup or prove a later read is slow. Keep local fixture grants
+  asynchronous, lightweight, scope-checked and independently time-bounded. Prove
+  ORM-default parity on both databases, fatal malformed output and child reaping,
+  then replay the unchanged complete journey without extending its deadline.
+- A lock timeout near a loading failure does not identify its holder or caller.
+  Preserve the failed trace, observe actual waiter-to-holder edges, event-loop,
+  pool and session-close timing, and distinguish a controlled negative result
+  from reproducing the historical failure. Do not patch shared transaction or
+  cancellation behavior on a temporal correlation alone.
+- A GitHub job can be cancelled at its outer deadline after pytest and artifact
+  upload report success. Read the job annotation and reconcile every retained
+  case/phase before diagnosing assertions. Reduce per-job work with a complete,
+  disjoint shard plan; retain the original deadline, concurrency and exact-once
+  aggregate. A cancelled CI or interrupted Docker wrapper remains incomplete
+  even if its tests, cleanup, or outer shell return zero.
+- A PostgreSQL race's missed rendezvous does not reveal the first worker's
+  eventual result. Retain both joined actor outcomes and bounded real-stage
+  timings in the incremental phase report as well as JUnit, including on a body
+  assertion failure. Never infer KDF, database or scheduling causality from the
+  whole call duration or a later passing replay. Keep actual lock-edge checks,
+  real hashing, original deadlines and the original failure authoritative.
+- Reusing a canonical writer does not require building a discarded rich reader
+  response for every bulk row. Share the unchanged authorized writer, return
+  its internal record to ID-only orchestration, and preserve the public full
+  DTO plus caller-owned transaction semantics. Regress actual loader work,
+  persisted facts, rollback, partial success and replay. A later passing import
+  or an incomplete diagnostic profiler cannot establish an old timing cause;
+  keep original deadlines and require full replacement release acceptance.
+- Observing child close does not guarantee an owned Windows temp directory can
+  be removed immediately. Await bounded native filesystem cleanup retries after
+  the ownership check, propagate exhaustion and prove no application-child or
+  mutation retry occurs. Preserve all original process deadlines and reconcile
+  the added cleanup case with exact process/SQLite/controller inventories. A
+  later fast isolated driver import is not the cause of an earlier timeout.
+- A stopped diagnostic recorder must release its large buffers after workers
+  join and evidence is flushed, including failure paths. Avoid retained bound-
+  callback self-cycles; prove strong active registration and stopped-recorder/
+  native-cell release without forcing GC or changing its policy. An ownership
+  defect or a process-wide GC overlap alone is not historical latency causation.
+  Audit sibling race harnesses and retained session callbacks, not only the
+  originating finalizer. Unregister exact owned listeners and clear their
+  bound-method roots only after workers stop; partial removal retains ownership.
+  Closed sessions must not pin stopped harnesses through transaction callbacks.
+- A fresh workspace read must not overwrite caller-owned pending objects.
+  Capture new/dirty/deleted state before any query autoflush; refresh retained
+  graphs and eligibility only on a clean entry, and prove pending collection,
+  scalar, explicit commit and nested-savepoint rollback behavior separately.
+- A smaller query count does not justify a wider predicate or active-first
+  cap. Preserve bounded source arms and original raw inactive/overlap limits,
+  charge duplicate UNION rows, and verify actual expanded native bind positions
+  on both databases before trusting a LIMIT observer or tightening its oracle.
+- A bounded import batch does not bound its retained-claim preflight. Charge
+  every pending-row read on every resume, preserve ordered errors and the exact
+  provenance predicate, and discard batched facts before writer commits. Prove
+  all 1,000 rows and physical default-plan work, not only 201-row throughput.
+- Historical-schema ORM observers must inspect every grouped/compound SELECT
+  leaf without dropping duplicate arms or accepting unsupported branches.
+  Replay actual current manual and worker callers through the old-schema fence;
+  current-schema query parity alone does not cover that boundary.
+- A callback property returns a fresh bound-method object. Audit identity-
+  sensitive consumers when replacing stored callbacks, retain the exact active
+  registration for unraisable evidence, and replay existing interruption tests
+  as well as new ownership tests. Stopped servers restore only their own
+  unchanged dependency override after workers join; never discard active owners.
+- Test cleanup, dispatch and waits must execute outside assertions; optimized
+  Python may omit assert expressions entirely. Assert the observed results,
+  preserve the actual operation and deadline, and keep security scanning enabled
+  for regression code. An absent ASN.1 optional schema is not a value: compare
+  its explicit absence plus canonical bytes and populated fields, rather than
+  recursively equating an unpopulated schema object.
+- A disabled worker must validate its admission configuration before importing
+  queue, database or provider services. Warm in-process mocks do not cover cold
+  entrypoint imports. Prove disabled and invalid configurations in fresh
+  processes, retain enabled-work delegation, and replay the unchanged offline
+  image-startup deadline before full Docker acceptance.
+- A successful PR-range secret scan does not certify a scheduled all-refs scan.
+  Reconcile every failed history finding with its immutable source span before
+  classifying it. Reviewed public checksums, report labels and published test
+  vectors may use exact origin fingerprints only; preserve blob/span evidence
+  and regress changed bytes, new origins and the complete all-refs boundary.
+  Historical review tests must not require unselected deleted-branch objects
+  forever; report selection separately and reject any missing selected blob.

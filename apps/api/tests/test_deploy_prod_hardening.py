@@ -921,7 +921,7 @@ def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
     workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
     shards = workflow["jobs"]["postgres-validation-shards"]
-    assert shards["strategy"]["matrix"] == {"total_shards": [16], "shard": list(range(1, 17))}
+    assert shards["strategy"]["matrix"] == {"total_shards": [24], "shard": list(range(1, 25))}
     total = shards["strategy"]["matrix"]["total_shards"][0]
     assert shards["strategy"]["max-parallel"] == 4
     assert shards["name"] == (

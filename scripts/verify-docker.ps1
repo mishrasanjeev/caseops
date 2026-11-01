@@ -1227,6 +1227,10 @@ try {
     if (-not (Test-PathWithinRoot -Path $ApiPackage -Root $ApiDir)) {
         throw "Host API fixtures import caseops_api from '$ApiPackage', outside the candidate $ApiDir."
     }
+    Write-Host "[docker-acceptance] verifying bounded local IP fixture protocol and database parity"
+    & $ApiPython (Join-Path $RepoRoot "scripts\e2e_fixture_regression.py") `
+        --results-directory (Join-Path $ResultsDirectory "e2e-fixtures")
+    if ($LASTEXITCODE -ne 0) { throw "IP fixture protocol or database parity regression failed." }
     Assert-CandidateDataClassProjection
     Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs
 

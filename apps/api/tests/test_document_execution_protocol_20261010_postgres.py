@@ -19,6 +19,7 @@ from alembic.config import Config
 from sqlalchemy import MetaData, Table, create_engine, event, inspect, select, text
 from sqlalchemy.exc import DBAPIError, InvalidRequestError, ProgrammingError
 from sqlalchemy.orm import Load, Session, joinedload, registry, relationship, sessionmaker
+from sqlalchemy.sql.selectable import CompoundSelect, Select, SelectStatementGrouping
 
 from alembic import command
 from caseops_api.core.security import hash_password
@@ -72,6 +73,21 @@ def test_legacy_boundary_reports_early_future_outcome(outcome):
         _wait_for_legacy_boundary(entered, future, timeout=0)
 
 
+def _historical_select_descriptions(statement):
+    if isinstance(statement, Select):
+        return tuple(statement.column_descriptions)
+    if isinstance(statement, SelectStatementGrouping):
+        return _historical_select_descriptions(statement.element)
+    if isinstance(statement, CompoundSelect):
+        assert statement.selects, "Empty historical identity compound SELECT"
+        return tuple(
+            description
+            for branch in statement.selects
+            for description in _historical_select_descriptions(branch)
+        )
+    raise AssertionError(f"Unsupported historical identity SELECT: {type(statement).__name__}")
+
+
 @contextmanager
 def _historical_identity_columns(engine):
     columns = frozenset(column["name"] for column in inspect(engine).get_columns("users"))
@@ -84,7 +100,7 @@ def _historical_identity_columns(engine):
         if not state.is_select or state.session.get_bind() is not engine:
             return
         options = []
-        for description in state.statement.column_descriptions:
+        for description in _historical_select_descriptions(state.statement):
             entity = description.get("entity")
             if entity is None or description.get("expr") is not entity:
                 continue
@@ -108,6 +124,10 @@ def _historical_identity_columns(engine):
                 loader = loader.defer(getattr(target, key), raiseload=True)
             options.append(loader)
         if options:
+            # Entity deferral cannot be assumed to propagate across compound arms.
+            assert isinstance(state.statement, Select), (
+                "Historical identity entity loading requires a plain Select"
+            )
             state.statement = state.statement.options(*options)
 
     # Freeze only this historical database's read dependency column set. An

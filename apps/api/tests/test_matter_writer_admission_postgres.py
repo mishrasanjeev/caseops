@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import io
 import json
 import os
@@ -10,9 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from hashlib import sha256
 from pathlib import Path
 from threading import Event, Lock, local
-from time import monotonic, sleep
+from time import monotonic, monotonic_ns, sleep, time_ns
 from types import SimpleNamespace
 from uuid import uuid4
+from weakref import ref
 
 import pytest
 from fastapi import HTTPException
@@ -54,6 +56,7 @@ from caseops_api.services import (
     matters,
 )
 from caseops_api.services.private_retrieval import ensure_active_private_generation
+from tests.test_document_finalizer_overlap_20261009_postgres import _PassiveOverlapTiming
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
     _ip_race_context,
@@ -71,6 +74,7 @@ class _Race:
         self.observer = create_engine(engine.url, poolclass=NullPool)
         self.local, self.lock = local(), Lock()
         self.pool = ThreadPoolExecutor(max_workers=2)
+        self.workers_stopped, self.passive = False, None
         self.futures, self.pids, self.sql, self.names = [], {}, {}, {}
         self.paused, self.release = Event(), Event()
         self.pause_role, self.predicate, self.after = None, None, True
@@ -85,14 +89,19 @@ class _Race:
 
     def record(self, kind, **data):
         with self.lock:
-            self.evidence.write(json.dumps({"event": kind, **data}, default=str) + "\n")
+            self.evidence.write(json.dumps({
+                "event": kind, "mono_ns": monotonic_ns(), "utc_ns": time_ns(), **data,
+            }, default=str) + "\n")
             self.evidence.flush()
 
     def session(self, role):
         session = Session(self.engine, autoflush=self.autoflush, expire_on_commit=False)
         self.names.setdefault(role, f"matter-admission-{uuid4().hex}")
+        owner = ref(self)
 
         def label_transaction(session, transaction, connection):
+            harness = owner()
+            assert harness is not None, "Owned race is no longer available"
             if transaction.nested:
                 return
             connection.execute(text("SET LOCAL statement_timeout = '15s'"))
@@ -100,10 +109,10 @@ class _Race:
             connection.execute(text("SET LOCAL deadlock_timeout = '1s'"))
             connection.execute(
                 text("SELECT set_config('application_name', :name, true)"),
-                {"name": self.names[role]},
+                {"name": harness.names[role]},
             )
-            self.pids[role] = connection.scalar(text("SELECT pg_backend_pid()"))
-            self.record("transaction_backend", role=role, pid=self.pids[role])
+            harness.pids[role] = connection.scalar(text("SELECT pg_backend_pid()"))
+            harness.record("transaction_backend", role=role, pid=harness.pids[role])
 
         # NullPool HTTP fixtures replace the backend after every commit.
         event.listen(session, "after_begin", label_transaction)
@@ -112,6 +121,9 @@ class _Race:
 
     def before_sql(self, conn, cursor, statement, parameters, context, many):
         role = getattr(self.local, "role", None)
+        if self.passive is not None:
+            actor = {"matter": "mutation", "admin": "revocation"}.get(role, role)
+            self.passive.begin_select(actor, statement, context)
         if role:
             self.sql.setdefault(role, []).append(statement)
             if "FOR " in statement or statement.startswith(
@@ -128,6 +140,8 @@ class _Race:
 
     def after_sql(self, conn, cursor, statement, parameters, context, many):
         role = getattr(self.local, "role", None)
+        if self.passive is not None:
+            self.passive.end_select(context)
         if role and "FOR " in statement:
             self.record("sql_lock_acquired", role=role, statement=statement)
         self.maybe_pause(role, statement, after=True)
@@ -140,10 +154,16 @@ class _Race:
             and not self.paused.is_set()
             and self.predicate(statement)
         ):
+            self.record("pause_entered", role=role, after=after)
             self.paused.set()
-            assert self.release.wait(12), "Scheduled service boundary was not released"
+            try:
+                assert self.release.wait(12), "Scheduled service boundary was not released"
+            finally:
+                self.record("pause_exited", role=role, released=self.release.is_set())
 
     def error(self, context):
+        if self.passive is not None:
+            self.passive.end_select(context.execution_context, error=True)
         exc = context.original_exception
         self.record(
             "database_error",
@@ -156,8 +176,15 @@ class _Race:
     def submit(self, role, operation):
         def invoke():
             self.local.role = role
+            self.record("operation_started", role=role)
             try:
-                return operation()
+                result = operation()
+            except BaseException as exc:
+                self.record("operation_failed", role=role, error_type=type(exc).__name__)
+                raise
+            else:
+                self.record("operation_finished", role=role)
+                return result
             finally:
                 self.local.role = None
 
@@ -209,6 +236,18 @@ class _Race:
         self.record("wait_timeout", **self.snapshot())
         raise AssertionError(f"No {waiter} -> {holder} wait on {fragment}")
 
+    def detach_hooks(self):
+        assert self.workers_stopped, "Owned workers are still active"
+        if self.passive is not None:
+            assert not self.passive.enabled and self.passive.callback not in gc.callbacks, (
+                "Passive capture is active"
+            )
+            assert not self.passive.critical_pools, "Owned workers are still active"
+        for name, callback in self.hooks:
+            if event.contains(self.engine, name, callback):
+                event.remove(self.engine, name, callback)
+        self.hooks.clear()
+
     def close(self):
         self.release.set()
         _, pending = wait(self.futures, timeout=18)
@@ -218,11 +257,20 @@ class _Race:
                     conn.execute(text("SELECT pg_cancel_backend(:pid)"), {"pid": pid})
             _, pending = wait(self.futures, timeout=5)
         self.pool.shutdown(wait=True, cancel_futures=True)
-        for name, callback in self.hooks:
-            event.remove(self.engine, name, callback)
+        self.workers_stopped = True
+        timing = self.passive
+        if timing is not None:
+            timing.critical_pools = 0
+            timing.stop()
+        self.detach_hooks()
         snapshot = self.snapshot()
         self.observer.dispose()
         self.record("cleanup", pending=len(pending), **snapshot)
+        if timing is not None:
+            try:
+                timing.flush(self.record)
+            finally:
+                self.passive = None
         assert not pending
         assert not any(row["xact_start"] for row in snapshot["activity"])
 
@@ -240,10 +288,17 @@ def race(pg_engine, request, tmp_path_factory, autoflush):
     with path.open("x", encoding="utf-8") as evidence:
         harness = _Race(pg_engine, evidence, autoflush)
         harness.record("test", nodeid=request.node.nodeid)
+        timing = _PassiveOverlapTiming()
+        harness.passive = timing
+        timing.critical_pools = 1
+        timing.start()
         try:
             yield harness
         finally:
-            harness.close()
+            try:
+                harness.close()
+            finally:
+                timing.stop()
 
 
 def _fixture(engine, source="matter", *, active=True):

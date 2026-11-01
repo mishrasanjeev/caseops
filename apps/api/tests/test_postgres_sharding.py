@@ -30,7 +30,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     strategy = job["strategy"]
     assert strategy["fail-fast"] is False
     assert strategy.get("max-parallel") == 4
-    assert strategy["matrix"] == {"total_shards": [16], "shard": list(range(1, 17))}
+    assert strategy["matrix"] == {"total_shards": [24], "shard": list(range(1, 25))}
     total = strategy["matrix"]["total_shards"][0]
     assert job["name"] == "Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}"
     step = next(item for item in job["steps"] if item.get("name") == "Pytest -m postgres")
@@ -58,7 +58,11 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     assert upload["with"]["path"].splitlines() == [
         f"apps/api/postgres-shard-${{{{ matrix.shard }}}}.{extension}"
         for extension in ("json", "xml", "jsonl")
-    ] + ["apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl"]
+    ] + [
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.json",
+        "apps/api/postgres-shard-${{ matrix.shard }}-native/ip-preflight-plans/**/*.jsonl",
+    ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
     assert aggregate["if"] == "always() && !cancelled()"
@@ -108,7 +112,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     total = matrix["total_shards"][0]
     steps = job["steps"]
     assert job["timeout-minutes"] == 12
-    assert total == 16 and matrix["shard"] == list(range(1, total + 1))
+    assert total == 24 and matrix["shard"] == list(range(1, total + 1))
     step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
     command = shlex.split(step["run"])
     assert command[:2] == ["uv", "run"]
@@ -126,7 +130,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     )
     (tests / "conftest.py").write_text('pytest_plugins = ["tests.retained_results"]\n')
     (tests / "test_sample.py").write_text(
-        "import pytest\n@pytest.mark.postgres\n@pytest.mark.parametrize('item', range(16))\n"
+        "import pytest\n@pytest.mark.postgres\n@pytest.mark.parametrize('item', range(24))\n"
         "def test_marked(item):\n    assert item >= 0\n"
         "def test_unmarked():\n    raise AssertionError('Non-PostgreSQL test selected')\n"
     )
@@ -136,7 +140,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
                                   "CASEOPS_TEST_RESULT_JOURNAL",
                                   "CASEOPS_TEST_RESULT_JOURNAL_OWNER_PID"}}
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-    expected = sorted(f"tests/test_sample.py::test_marked[{item}]" for item in range(16))
+    expected = sorted(f"tests/test_sample.py::test_marked[{item}]" for item in range(24))
     executed = []
     for shard in matrix["shard"]:
         for key in ("PYTEST_ADDOPTS", "CASEOPS_TEST_RESULT_JOURNAL"):
@@ -178,7 +182,7 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     assert json.loads(result.stdout) == summary
 
 
-@pytest.mark.parametrize("total", [4, 8, 16])
+@pytest.mark.parametrize("total", [4, 8, 16, 24])
 def test_postgres_partition_is_complete_disjoint_and_order_independent(total):
     nodes = [f"tests/test_example.py::test_item[{index}]" for index in range(2301)]
     selections = [partition(nodes, shard, total) for shard in range(1, total + 1)]
@@ -211,9 +215,9 @@ def test_postgres_partition_rejects_incomplete_or_invalid_selections(nodes, shar
 @pytest.mark.parametrize(
     "fault", [None, "missing", "drift", "skipped", "failure", "error", "wrong-node"]
 )
-@pytest.mark.parametrize("total", [4, 8, 16])
+@pytest.mark.parametrize("total", [4, 8, 16, 24])
 def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, total):
-    nodes = [f"tests/test_example.py::TestCases::test_item[{index}]" for index in range(16)]
+    nodes = [f"tests/test_example.py::TestCases::test_item[{index}]" for index in range(24)]
     for shard in range(1, total + 1):
         selected = partition(nodes, shard, total)
         inventory = {"shard": shard, "total": total, "nodeids": nodes, "selected": selected}
@@ -232,7 +236,7 @@ def test_postgres_report_gate_requires_every_actual_success(tmp_path, fault, tot
         ElementTree.ElementTree(suite).write(tmp_path / f"postgres-shard-{shard}.xml")
     if fault is None:
         assert verify_reports(tmp_path, total) == {
-            "status": "passed", "shards": total, "collected": 16, "skipped": 0
+            "status": "passed", "shards": total, "collected": 24, "skipped": 0
         }
     else:
         with pytest.raises(ValueError):

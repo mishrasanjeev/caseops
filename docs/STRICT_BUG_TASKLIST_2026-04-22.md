@@ -399,6 +399,305 @@ enterprise-ledger status is named where one exists:
   `json()`, which expects an `APIResponse`), first at `:51-52`; Playwright runs it
   without type-checking.
 
+## October 31 Historical Secret Findings: Partially Fixed
+
+Actual scheduled Security41193137288 rejected ten historical findings outside
+the green candidate PR-range scan. Independent immutable-source review proves
+public file/CA hashes, SDK public-key digest report fixtures, synthetic receipt
+labels and the RFC6238 public vector. The exact-origin correction and binding
+regression are candidate-only; real full-history scan and whole release remain
+unverified. No broad suppression, mobile change or credential activation.
+Docker37 passed76fixtures but rebooted during export, so remains incomplete.
+
+## October 31 Cold Worker Admission: Partially Fixed
+
+AB50 Docker31 failed its disabled document-worker 30-second startup check, with
+zero native/browser cases executed. Services loaded before admission. The narrow
+deferred-import correction passes one isolated, network-disabled mounted-file
+startup, not a fresh-image/full-regression or production verdict. Preserve the
+failure and complete final-source Docker/CI/live gates before closure. Details:
+`bugfix-document-worker-production-2026-10-10.md`, October 31 continuation.
+
+## October 31 Generic Disclosure Regression Still Open
+
+3987 CI41170834397 has four retained physical-work failures,605complete cases/
+601P4F/1815phases/0S in those selections. Range plus generic unknown LIMIT
+produces million-row work. All three exact unique-key predicates now live
+inside the per-key barrier; original strict bounds/409/negative journeys stay.
+Unverified replacement, not a fixed/deployed verdict. Require complete final
+Docker/CI/main/live/cadence and paired Excel results before promotion.
+
+## October 31 Later Disclosure Work: Partially Fixed, NO-GO
+
+9fd9 CI41169038267 PG1/PG4 each150P/1F of151: disclosure hydration reads10001
+tenant tuples and10148/10156 blocks, violating original `<10000`. Exact composite
+seek and strict100-row disclosure regression are implemented but unverified.
+Correct CI native-plan retention and prove missing-version successor rejection.
+See the dated lifecycle-admission report. Full final-head Docker/CI/main/live
+and actual paired Excel publication are still required; no app work is included.
+
+## October 31 Disjoint CI Candidate: Partially Fixed, NO-GO
+
+1985 CI41149650760 actually failed 14 notification cases and one family-work
+case plus two aggregates. API10 is 1417 identities/1311P/14F/92S; PG24 is
+150 identities/450 phases/149P/1F, with actual custom hydration 10033 rows >100.
+Original-head/synthetic-merge tree25ceee9 agrees. Independent Security/Advanced
+are green with17 CodeQL annotations (9warnings/8notices/0failure), not full CI.
+Strict161 audit/0skips and244P/732 phases remain component evidence.
+
+Email ordered RED48 is34P/14F; owner-lifetime replacement is107P/321 phases,
+including4PG races,39files verified; pure ownership8P/24. Corrected actual SQLA
+execution-map role is20P/60 phases/12verified files. Preserve initial7P/1fixtureF,
+the interrupted49-role38complete/34P/4F/11unverified, and all older failures.
+The frozen61 snapshot at03:44UTC is43P/0F/18unverified, not complete; later790s
+fresh setup is not a body failure. No setup-cause claim follows from host180s.
+
+Disjoint M2 adds only two unexecuted PG deleted-ID edge cases and a shared
+existing409/warm-identity check. Preserve original retarget/delete/revoke and
+all21PG cases; expected expanded63=23PG+20SQLite/API+20pure, original8scalar
+IDs retained within20. Versionless targets are explicit negative fault injection,
+not positive legal records; SQLite race parity remains unverified. Source M stays
+frozen. Map IPLF-032/UJ-02/NFT-005/J14/M14 and J19/M21/US-063 mail ownership;
+no product/native/App/Mac/0008 expansion. Details and retained setup/plan evidence
+are in bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+
+Docker28 remains3615P/2F;29 incomplete61/3619;30 incomplete18/3619;0browser,
+not640executed. Require newALL-CI green/full canonicalDocker31 before guarded
+main/deploy/exact-live QA, originalD29 15s, post-QA clean private maintenance,
+guarded resume/distinct natural cadence and both actual Excel updates. Originals
+remain interim08 (36fixed/7partial/1inconclusive); onlyD29 may promote after prod.
+MainB994 is not a new-source serving API/web; no deploy occurred. External legal,
+old-calendar/unknown-Matter, provider and owner-MFA holds remain. Older sections
+below are retained history, not later-source acceptance.
+
+## October 31 Remaining Admission Failures: Partially Fixed
+
+Security continuation:75FA's pyasn1 audit and imperative test-assert CodeQL
+failures are repaired in the candidate without exclusions. Whole161-package
+strict audit is clean; complete244-case offline compatibility replay passes
+732phases/0skips. Preserve its first243P/1fixture-comparisonF and Docker29's
+owned interruption (61complete of3619intended,184phases,no session finish,
+0browser). Neither is full regression. Fresh final-head Docker/hosted/live
+proof is still mandatory; the dated lifecycle-admission brief retains details.
+
+Full998A Docker28 naturally completed3615P/2F/0S across3617cases/10851phases,
+with0browser execution. The two exact admission failures and their lock traces
+remain retained, not waived by hosted55success/2skipped checks. Valid REDs prove
+owned hook retention and12 unnecessary lifecycle history loads under real
+authority locks. Narrow runtime/ownership repairs pass191/573 focused, including
+all122 original races and independent persistence. Historical delay/GC causation
+remains Inconclusive. See bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+No original deadline/security/lifecycle/provider fence was relaxed. No deployed
+Playwright proof yet: remain Partially fixed/NO-GO, with both workbooks interim08.
+
+## October 30 Consolidated CI And Import: Partially Fixed
+
+Latest complete component:135cases/405phases,132P/3physicalF/0S. The original
+observer/multi-order/finalizer/successful1,000-row/workspace assertions pass;
+fresh/stale/analyzed plans expose broad history scans despite correct scalar
+facts. Keep every failed plan and original budget. Correlated scalar candidate
+seeks,52 semantic cases including NULL receipts, and CI nested plan retention
+need full replacement proof. Workbooks are interim08, not certification. Do not
+read historical unexecuted claims below as the current state.
+
+Retained-claim resume repeatedly read every pending docket. Valid SQLite/PG
+RED2/6phases proves1,000scalar reads, correct409/unchanged history and no ORM
+hydration. Scalar batched facts preserve exact provenance/ordered rejection and
+fresh actual row recovery. IP48 and ownership27 pass in interrupted93/321
+green02, not complete release. Historical UNION9/18 passes are incomplete;
+original callback interruption and worker-status fixes plus three physical
+plans remain unexecuted. Preserve D060's complete12failedchecks and Docker27's
+three failures. Unknown historical worker/latency causes stay Inconclusive.
+See bugfix-import-preflight-and-ci-observers-2026-10-30.md. Require complete
+new Docker/current CI/CodeQL/main/live/D29/cadence and actual paired workbooks
+before closing#561/#564/IP15-018. MacBook/native and external holds stay open.
+
+## October 30 Compliance Continuation
+
+Attachment/workspace corrections: **Partially fixed**, not deployed. Exact
+baseline readers reproduce stale orders/assignee eligibility; clean-entry
+refresh preserves pending work and caller transactions. All39new cases pass
+inside the failed351-case run. Recorder ownership and notification-decision
+roles pass15/45phases. GREEN03 completes392/1176phases with384P/8failures,
+all eight caused by the recorder misclassifying structured recipient UNIONs;
+all26SQLite/PostgreSQL parity cases and original concurrency variants passed.
+Corrected GREEN05 passes41profile plus5original variants:46/138phases,0F/0S,
+source unchanged. The historical inbound-peer cause remains **Inconclusive**;
+neither focused acceptance nor old hosted green closes production claims.
+Keep the complete Docker26 and GREEN02 failures, including the latter's
+call/teardown duplicate JUnit diagnosis. Require full PostgreSQL/Docker/current
+CI/main/deploy/production replay and original15second51-row export before
+closing#561/#564/IP15-018 or promoting either workbook. The dated compliance
+work brief records exact scope and external holds. App belongs to the MacBook.
+
+## October 30 Scanner Fixture: Partially Fixed Pending New Gates
+
+E968 Security's one-of75error is an actual unacknowledged Docker-create timeout,
+not a secret leak or scanner fence failure. The positive known-create fixture
+now separates bounded setup from its unchanged <=1s real attached transport,
+and asserts exact error identity, acknowledged ID and real absence. Product,
+cleanup and all negative deadline/unknown-ack controls are unchanged. Full local
+Linux Docker replacement75P/0S/0F and source equality pass; old failed log and
+prebuild-interrupted Docker25 remain retained. See the dated scanner fixture
+brief. New full Docker/hosted gates and exact production release remain open.
+
+## October 30 Private Invalidation: Partially Fixed, Not Deployed
+
+Docker24 EB10 has a real6.7003345s five-second private invalidation failure;
+439P/1F child02 and interrupted child03 are not full acceptance. Passive timing
+records4.7826358s GC overlap, not allocation provenance or a server-wait cause.
+Atomic Core updates now consume narrow metadata in bounded Row batches and
+synchronize returned resident IDs with savepoint rollback tracking. No predicate,
+source closure, GC policy or original bound changes. Complete fresh10-module
+replacement passes275cases/825phases/0S/0F,167retained files verified; large
+invalidation1.8983929s. Earlier fixture/setup errors remain retained, not product
+proofs. See bugfix-private-invalidation-allocations-2026-10-30.md. Whole Docker,
+new committed CI/main/live/D29/cadence and both actual workbooks remain required.
+External legal/provider/consent/MFA and MacBook holds are not closed.
+
+## October 29 Shared Writer CI: Partially Fixed, Not Deployed
+
+Complete540E CI40897543335 is38successful/3failed/2skipped jobs. Two call-phase
+source-inspection tests still examined the public inline writer; the third
+failure is their prerequisite aggregate. Security8/8 and Advanced3/3 pass;
+five independent reviewed annotations remain explicit, not zero findings.
+Both unchanged security predicates now inspect the shared canonical writer.
+A full-definition AST oracle additionally pins the public synchronous signature,
+defaults, decorators and exact writer/serializer forwarding. No product code,
+capability, lock order or transaction boundary changed in this correction.
+
+Fresh affected-module Docker-PG run passes50cases/150phases with no skips or
+failures,13retained files verified. The earlier pre-test connection failure
+and its stopped owned database remain retained as infrastructure failure.
+After static review identified a body-only guard gap, the stronger definition
+guard passes both original CI identities again:2cases/6phases,6retained files.
+Require new committed full CI/Docker and actual production replay; no workbook
+promotion, external legal/provider/consent/MFA hold or automatic closure follows.
+
+## October 29 Web Fixture Preflight: Partially Fixed
+
+Docker21 on82C8 stopped before images/main native/browser execution:18process
+cases16P/2F. The isolated driver probe exceeded the unchanged10s deadline and
+owned oversized-line cleanup hit EBUSY. Both complete TAP failures, source
+snapshots and failed scratch bytes are retained; no historical timing cause
+or lock holder is established. Later driver observations do not erase them.
+Awaited native bounded filesystem removal now propagates exhausted errors and
+keeps one application child. New control plus all original cases passes the
+complete76-case role (19process/51SQLite/6controller),0skip/retry/failure, three
+owned phase trees reaped, source equality and pinned Node22.14 typecheck.
+Main regression, new committed CI, guarded release and exact-live acceptance
+remain pending. No product/oracle/driver/timeout or shared native tool changed.
+
+## October 29 Bulk DTO: Partially Fixed, Not Deployed
+
+IPLF-032/UJ-02/NFT-005: Docker20's fresh resume148.586s and stale-empty initial
+commit143.540s violate unchanged90s bounds before export measurement. Its one
+complete group is437P/2F/1317phases, not whole acceptance;3070native/640browser
+cases were unexecuted after guarded interruption. No host/GC/planner cause is
+established. A separate deterministic RED proves27discarded rich queries for
+three imported rows, with all public/transaction/partial-success controls passed.
+Shared writer/public serializer separation now passes all46selected cases/
+138phases/0S, including the three original201-row cases and original export
+and provenance modules. Bulk rich queries0/public9;37retained files verify.
+Keep profile02's SQL-capture failure and process/journal mismatch preserved as
+INCOMPLETE. Fresh full Docker/CI/current-main/production and unchanged15second
+desktop/mobile CSV proof are still required. No external hold is promoted.
+
+## October 29 Precommit Metadata: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: Docker19's actual matter-first upload
+Company timeout remains retained; three complete groups1313P/1F do not certify
+the gate. PML-01..06 proves first-transaction graph work14->3 while preserving
+current values, tenant/assignment/lifecycle/ACL locks, no-op/caller transaction
+and later full workspace. Complete new6 plus unchanged response16/upload32/
+writer122/finalizer30 pass206/206/618phases without skip/retry or deadline change.
+All177retained files verify; supervisor1was a separate long-path verifier error,
+not an erased result. Prior failed/incomplete attempts remain open evidence.
+Require fresh whole-source Docker/CI and exact-serving browser/private cadence;
+no workbook verdict, legal/provider/consent/MFA/reopening hold is promoted here.
+
+## October 29 Provenance Seek: Partially Fixed, Not Deployed
+
+IPLF-030B/037, UJ-04, IP15-018, NFT-005: actual13D CI PostgreSQL20 retains
+144P/1F,145cases/435phases. The only assertion is81600recorded provenance
+visits against820; the aggregate failure is the expected shard guard. No
+browser job ran. Adding the full index and retiring one prefix did not prevent
+the alternative company-only scan. Local fresh/stale RED reproduces the same
+bound with successful setup/teardown and an analyzed passing control.
+
+An ordered five-key candidate plus outside exact match preserves every source,
+tenant/action/type/row/docket predicate and the unchanged Python oracle. No
+index drop, planner setting, production ANALYZE or raised limit is introduced.
+Full new5/parity4/export8 component passes17/17 with51phases, including SQLite,
+null/missing/duplicate/mixed proofs and all original export cases. Six actual
+plan receipts reconcile; fresh/stale/analyzed and the failed journey use400
+visits below820. Do not mark Properly fixed until the complete new Docker/CI
+and production browser workflow pass on the exact serving source. The original
+15second,51-row CSV contract and all external/legal holds remain authoritative.
+
+## October 29 Matter Response: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: BFF's complete Docker17 is3482P/1F,
+not acceptance. The only failed call is the metadata-IP finalizer overlap's
+writer.result(timeout=5); eventual commit/return does not satisfy that oracle.
+The original closed fixture and all10449phases/3483identities are retained.
+No browser cases ran. Historical Docker16 invitation evidence remains separate.
+
+MRH-01..16 adds deterministic response-query and full DTO/freshness/tenant/
+transaction regressions. The valid RED observes13queries; narrow reload GREEN
+observes3 and passes all46selected cases/138phases, including the complete,
+byte-identical30-case original finalizer file with unchanged timing and security
+assertions. Component verdict only: production remains unverified. No timeout,
+GC policy, lock, schema field or lifecycle protection is weakened. No existing
+legal/provider/MFA/old-calendar/unknown-reopen hold is closed. See the dated
+response-hydration brief; require fresh canonical Docker, CI and exact-live proof.
+
+## October 29 Invitation Race: Inconclusive
+
+PRA-10..12 / J14/M14: Docker16 on `36a56e77` has one preserved accept-first
+invitation/removal rendezvous failure. Six complete native groups contain
+2,612 passes and one failure; the remaining groups and browser inventory did
+not run. Both original orderings later passed a passive, independently migrated
+PostgreSQL diagnostic. That does not establish the historical cause or a fix.
+
+The replacement retains joined actor outcomes in both phase sections and
+JUnit, with bounded timing of the unchanged real stages. It also covers the
+adjacent first-invite, reinvite and revocation-reader races. No hash cache,
+deadline extension, barrier relocation, service change or assertion waiver is
+introduced. The 31 support cases and both affected native files (27 cases)
+pass, including nine identical actual call-section/JUnit payloads. Complete
+replacement acceptance and fresh hosted checks remain required.
+Issues #561/#564 and IP15-018 remain open pending exact-release production
+verification, including the original 15-second, 51-row export outcome.
+
+## October 28 Fresh-Statistics Export And Plan Evidence
+
+Still open. PR567/6cc CI40578349238 has one actual failure among3443 PG
+cases: fresh-statistics provenance work exceeds228 visits. All17 additive
+index migration cases and the analyzed variant pass; these do not close it.
+Default-server PostgreSQL17.11 reproduces69854/69854/67218 visits with the
+new index present. The selected company/action index filters1316 unrelated
+rows per candidate. Keep complete failed plans, phases and the original bound.
+Correlated scalar probes are a candidate, not proof of bounded scans.
+Four intended cross-database parity cases cover each source/audit predicate,
+duplicate matches, malformed JSON and manual overrides with the unchanged
+reader oracle. Two expected old-source unit failures prove plans were outside
+CI's direct native-JSONL upload glob. Correct retention without changing the
+work/latency/SQL-size bounds. Docker11 is stopped and incomplete; no merge,
+production routing or new acceptance is claimed. PRD EXW-PV01..05 apply.
+
+942 confirms scalar LIMIT is insufficient (69960/69960/67269 visits). Its
+complete349-case non-PG run has348P/1F; retained actual exception identifies
+Windows rename from242 to265 path characters. An unchanged short-root case
+passes; this does not make the failed full selection green. Full replacement
+uses a short owned basetemp. The cold catalogue experiment independently
+supports removal of the redundant migration-only company/action prefix,
+after validating the full-key replacement, with a new reversible0002 rather
+than rewriting0001. Original EXISTS semantics stay; shared audit readers,
+restart/cancel/rollback and complete real work bounds remain required.
+EXW-PV06/07 extend this still-open boundary.942 CI was parent-cancelled after
+the actual local failure; Security/CodeQL/review success is not release proof.
+
 ## October 27 Export Release Projection Stop
 
 Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional
