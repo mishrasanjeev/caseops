@@ -798,7 +798,7 @@ describe("CalendarPage", () => {
       events: [
         {
           id: "hearing:h1",
-          kind: "hearing",
+          kind: "hearing", display_type: "hearing",
           occurs_on: today,
           title: "Bail hearing",
           matter_id: "m1",
@@ -809,7 +809,7 @@ describe("CalendarPage", () => {
         },
         {
           id: "task:t1",
-          kind: "task",
+          kind: "task", display_type: "task_date",
           occurs_on: today,
           title: "Draft reply",
           matter_id: "m2",
@@ -855,7 +855,7 @@ describe("CalendarPage", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 9, 17, 12));
     const events = [15, 16].flatMap(day => Array.from({ length: 8 }, (_, index) => ({
-      id: `hearing:delayed-${day}-${index}`, kind: "hearing", occurs_on: `2026-10-${day}`,
+      id: `hearing:delayed-${day}-${index}`, kind: "hearing", display_type: "hearing", occurs_on: `2026-10-${day}`,
       title: "Delayed hearing", matter_id: `delayed-matter-${Math.floor(index / 2)}`,
       matter_code: `CAL-DELAY-${Math.floor(index / 2)}`, matter_title: "Delayed matter",
       status: "scheduled", court_label: `Configured court ${Math.floor(index / 2)}`,
@@ -904,7 +904,7 @@ describe("CalendarPage", () => {
   it("shows schema-rejected event responses as errors, never as empty success", async () => {
     fetchCalendarEventsMock.mockImplementationOnce(async () => calendarEventListResponse.parse({
       range_from: isoToday(), range_to: isoToday(),
-      events: [{ id: "hearing:invalid", kind: "hearing", occurs_on: isoToday(),
+      events: [{ id: "hearing:invalid", kind: "hearing", display_type: "hearing", occurs_on: isoToday(),
         title: "Invalid fixture", matter_id: "invalid-matter", matter_code: "CAL-INVALID",
         matter_title: "Invalid matter", time_status: "invalid_precision" }],
     }));
@@ -926,7 +926,7 @@ describe("CalendarPage", () => {
     expect(fetchCalendarEventsMock).toHaveBeenCalledTimes(1);
     fetchCalendarEventsMock.mockResolvedValueOnce({
       range_from: today, range_to: today,
-      events: [{ id: "hearing:recovered", kind: "hearing", occurs_on: today,
+      events: [{ id: "hearing:recovered", kind: "hearing", display_type: "hearing", occurs_on: today,
         title: "Recovered hearing", matter_id: "recovered-matter", matter_code: "CAL-RETRY",
         matter_title: "Recovered matter" }],
     });
@@ -946,7 +946,7 @@ describe("CalendarPage", () => {
       events: [
         {
           id: "hearing:h1",
-          kind: "hearing",
+          kind: "hearing", display_type: "hearing",
           occurs_on: today,
           title: "Bail hearing",
           matter_id: "m1",
@@ -955,7 +955,7 @@ describe("CalendarPage", () => {
         },
         {
           id: "task:t1",
-          kind: "task",
+          kind: "task", display_type: "task_date",
           occurs_on: today,
           title: "Draft reply",
           matter_id: "m2",
@@ -964,7 +964,7 @@ describe("CalendarPage", () => {
         },
         {
           id: "deadline:d1",
-          kind: "deadline",
+          kind: "deadline", display_type: "deadline",
           occurs_on: today,
           title: "Filing deadline",
           matter_id: "m3",
@@ -1017,7 +1017,7 @@ describe("CalendarPage", () => {
     const today = isoToday();
     const events = Array.from({ length: 5 }).map((_, i) => ({
       id: `hearing:overflow-${i}`,
-      kind: "hearing" as const,
+      kind: "hearing" as const, display_type: "hearing" as const,
       occurs_on: today,
       title: `Hearing ${i + 1}`,
       matter_id: `m${i}`,
@@ -1068,7 +1068,7 @@ describe("CalendarPage", () => {
   it("waits for all-events close focus restoration before overflow keyboard activation", async () => {
     const today = isoToday();
     const events = Array.from({ length: 8 }, (_, index) => ({
-      id: `hearing:lifecycle-${index}`, kind: "hearing" as const, occurs_on: today,
+      id: `hearing:lifecycle-${index}`, kind: "hearing" as const, display_type: "hearing" as const, occurs_on: today,
       title: `Lifecycle hearing ${index}`, matter_id: `lifecycle-${index}`,
       matter_code: `LIFE-${index}`, matter_title: `Lifecycle matter ${index}`,
     }));
@@ -1150,7 +1150,7 @@ describe("CalendarPage", () => {
   it("retains a stored hearing session without inventing an exact time", async () => {
     const today = isoToday();
     fetchCalendarEventsMock.mockResolvedValue({range_from: today, range_to: today, events: [{
-      id: "hearing:session", kind: "hearing", occurs_on: today, title: "Session hearing",
+      id: "hearing:session", kind: "hearing", display_type: "hearing", occurs_on: today, title: "Session hearing",
       matter_id: "m1", matter_code: "SESSION-1", matter_title: "Session matter",
       hearing_time: null, time_status: "session", session_label: "Afternoon",
       timezone: "Asia/Kolkata",

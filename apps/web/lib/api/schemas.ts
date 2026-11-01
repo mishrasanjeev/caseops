@@ -1844,25 +1844,27 @@ export const outsideCounsel = z.object({
   updated_at: z.string(),
 });
 
+// Every count and total is required by the API (OutsideCounselPortfolioSummary);
+// optional fields here let the page invent zeros for a malformed response.
 export const outsideCounselPortfolioSummary = z.object({
-  profile_count: z.number().int().optional(),
-  total_counsel_count: z.number().int().optional(),
-  active_assignment_count: z.number().int().optional(),
-  total_agreed_minor: z.number().int().optional(),
-  total_budget_minor: z.number().int().optional(),
-  total_spend_minor: z.number().int().optional(),
-  approved_spend_minor: z.number().int().optional(),
-  total_paid_minor: z.number().int().optional(),
-  total_pending_minor: z.number().int().optional(),
-  pending_invoice_count: z.number().int().optional(),
-  overdue_invoice_count: z.number().int().optional(),
+  profile_count: z.number().int(),
+  total_counsel_count: z.number().int(),
+  active_assignment_count: z.number().int(),
+  total_agreed_minor: z.number().int(),
+  total_budget_minor: z.number().int(),
+  total_spend_minor: z.number().int(),
+  approved_spend_minor: z.number().int(),
+  total_paid_minor: z.number().int(),
+  total_pending_minor: z.number().int(),
+  pending_invoice_count: z.number().int(),
+  overdue_invoice_count: z.number().int(),
   currency: z.string().default("INR"),
   currency_codes: z.array(z.string()).default(["INR"]),
-  currency_count: z.number().int().optional(),
-  multi_currency: z.boolean().optional(),
-  outstanding_invoice_minor: z.number().int().optional(),
-  profitability_signal_minor: z.number().int().optional(),
-  payment_status_counts: z.record(z.string(), z.number().int()).optional(),
+  currency_count: z.number().int(),
+  multi_currency: z.boolean(),
+  outstanding_invoice_minor: z.number().int(),
+  profitability_signal_minor: z.number().int(),
+  payment_status_counts: z.record(z.string(), z.number().int()),
 }).passthrough();
 
 // Hari-BUG-018/023 follow-up (2026-04-22): assignment status MUST
@@ -1943,8 +1945,8 @@ export const outsideCounselMatterSpendSummary = z.object({
   matter_code: z.string(),
   currency: z.string().default("INR"),
   currency_codes: z.array(z.string()).default(["INR"]),
-  currency_count: z.number().int().optional(),
-  multi_currency: z.boolean().optional(),
+  currency_count: z.number().int(),
+  multi_currency: z.boolean(),
   assigned_counsel_count: z.number().int(),
   invoice_count: z.number().int(),
   pending_invoice_count: z.number().int(),
@@ -2231,7 +2233,8 @@ export const calendarProvider = z.enum(["outlook", "google_calendar"]);
 export const calendarEventRecord = z.object({
   id: z.string(),
   kind: calendarEventKind,
-  display_type: calendarEventDisplayType.optional(),
+  // Required by the API (CalendarEventRecord); B4-ADJ-04 removed the optional drift.
+  display_type: calendarEventDisplayType,
   occurs_on: z.string(), // ISO yyyy-mm-dd
   title: z.string(),
   matter_id: z.string(),
