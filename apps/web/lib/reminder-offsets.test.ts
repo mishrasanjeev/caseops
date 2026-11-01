@@ -30,4 +30,13 @@ describe("parseReminderOffsetsHours (B4-ADJ-19)", () => {
     expect(parseReminderOffsetsHours(Array.from({ length: 13 }, (_, i) => String(i + 1)).join(","))).toMatchObject({ ok: false });
     expect(parseReminderOffsetsHours(" , ")).toMatchObject({ ok: false });
   });
+
+  it("applies a caller's API bounds and names them", () => {
+    expect(parseReminderOffsetsHours("30d", { maxHours: 720, maxCount: 10 })).toEqual({ ok: true, hours: [720] });
+    expect(parseReminderOffsetsHours("31d", { maxHours: 720, maxCount: 10 })).toEqual({
+      ok: false, error: '"31d" is 744 hours; the most allowed is 720 hours.',
+    });
+    expect(parseReminderOffsetsHours(Array.from({ length: 11 }, (_, i) => String(i)).join(","), { maxHours: 720, maxCount: 10 }))
+      .toEqual({ ok: false, error: "Enter at most 10 reminder offsets; 11 were entered." });
+  });
 });

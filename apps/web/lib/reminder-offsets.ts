@@ -4,8 +4,9 @@
  * Every token either becomes a whole number of hours or produces an error
  * naming it; nothing typed is silently dropped (B4-ADJ-19: "48h" used to
  * vanish through a Number.isInteger filter, so the hearing was scheduled
- * with fewer reminders than the lawyer asked for). Bounds mirror the API's
- * IpHearingReminderPolicyRequest: 0 to 8760 hours, unique, at most 12.
+ * with fewer reminders than the lawyer asked for). The default bounds mirror
+ * IpHearingReminderPolicyRequest (0 to 8760 hours, unique, at most 12); other
+ * reminder forms pass their own API bounds.
  */
 export const REMINDER_OFFSET_FORMAT_HINT =
   "Separate offsets with commas. Use hours (48 or 48h), days (2d) or weeks (1w).";
@@ -35,7 +36,7 @@ export function parseReminderOffsetsHours(
     }
     const value = Number(match[1]) * factor;
     if (value > maxHours) {
-      return { ok: false, error: `"${token}" is more than ${maxHours} hours (one year) before the hearing.` };
+      return { ok: false, error: `"${token}" is ${value} hours; the most allowed is ${maxHours} hours.` };
     }
     if (hours.includes(value)) {
       return { ok: false, error: `"${token}" repeats an offset of ${value} hours already entered.` };

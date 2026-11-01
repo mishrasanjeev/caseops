@@ -331,6 +331,45 @@ describe("foreign-associate coordinator workspace", () => {
     })));
   });
 
+  it("B4-ADJ-19 reads 48h/2d offsets and names an unreadable or repeated one at the field", async () => {
+    const user = userEvent.setup();
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Liberty IP LLP" });
+    await user.click(screen.getByRole("tab", { name: "Reminders" }));
+    const offsets = screen.getByLabelText("Reminder offsets before due");
+    const submit = screen.getByRole("button", { name: "Schedule reminders" });
+    for (const [input, message] of [
+      ["48h, soon", '"soon" is not a reminder offset.'],
+      ["24, 24", '"24" repeats an offset of 24 hours already entered.'],
+      ["31d", '"31d" is 744 hours; the most allowed is 720 hours.'],
+    ] as const) {
+      await user.clear(offsets);
+      await user.type(offsets, input);
+      expect(offsets).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("alert")).toHaveTextContent(message);
+      expect(submit).toBeDisabled();
+    }
+    const escalation = screen.getByLabelText("Escalate after hours");
+    await user.clear(offsets);
+    await user.type(offsets, "48h, 2d, 1w");
+    expect(screen.getByRole("alert")).toHaveTextContent('"2d" repeats an offset of 48 hours');
+    await user.clear(offsets);
+    await user.type(offsets, "48h, 1d, 0");
+    expect(offsets).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByText(/Before the acknowledgement is due: 48, 24, 0 hours\./)).toBeVisible();
+    await user.clear(escalation);
+    expect(escalation).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter whole hours from 1 to 168.");
+    expect(submit).toBeDisabled();
+    await user.type(escalation, "12");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(mocks.reminders).toHaveBeenCalledWith(expect.objectContaining({
+      reminderOffsetsHours: [48, 24, 0],
+      escalationAfterHours: 12,
+    })));
+  });
+
   it("reassigns a refused instruction with preserved correspondence and a new approved estimate", async () => {
     const user = userEvent.setup();
     const refused = { ...INSTRUCTION, status: "refused" as const, row_version: 4 };

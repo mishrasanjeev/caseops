@@ -59,6 +59,7 @@ import {
 import { useCapability } from "@/lib/capabilities";
 import { linkInvoiceChoices } from "@/lib/ip/foreign-associate-invoice";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
+import { parseReminderOffsetsHours, REMINDER_OFFSET_FORMAT_HINT } from "@/lib/reminder-offsets";
 import { useSession } from "@/lib/use-session";
 
 const SELECT_CLASS =
@@ -1263,13 +1264,19 @@ function ReminderPanel({ workspace, docket, canWrite }: { workspace: IpForeignAs
   const [inApp, setInApp] = useState(true);
   const [email, setEmail] = useState(false);
   const [escalationHours, setEscalationHours] = useState("24");
+  // The API accepts 0 to 720 hours, unique, at most 10 (B4-ADJ-19 sibling).
+  const parsedOffsets = parseReminderOffsetsHours(offsets, { maxHours: 720, maxCount: 10 });
+  const offsetError = parsedOffsets.ok ? undefined : parsedOffsets.error;
+  const escalation = Number(escalationHours);
+  const escalationError = /^\d+$/.test(escalationHours.trim()) && escalation >= 1 && escalation <= 168
+    ? undefined : "Enter whole hours from 1 to 168.";
   const schedule = useMutation({
     mutationFn: () => scheduleIpForeignAssociateReminders({
       instruction: workspace.instruction,
       expectedLifecycleVersion: docket.lifecycle_version,
-      reminderOffsetsHours: refs(offsets).map(Number),
+      reminderOffsetsHours: parsedOffsets.ok ? parsedOffsets.hours : [],
       channels: [...(inApp ? ["in_app" as const] : []), ...(email ? ["email" as const] : [])],
-      escalationAfterHours: Number(escalationHours),
+      escalationAfterHours: escalation,
       escalationMembershipId: session.context?.membership.id,
     }),
     onSuccess: async (result) => {
@@ -1279,10 +1286,10 @@ function ReminderPanel({ workspace, docket, canWrite }: { workspace: IpForeignAs
     onError: (error) => toast.error(apiErrorMessage(error, "Could not schedule reminders.")),
   });
   return <div className="min-w-0 space-y-4"><Card><CardHeader><CardTitle as="h3">Acknowledgement reminders</CardTitle></CardHeader><CardContent><form className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); schedule.mutate(); }}>
-    <Field label="Hours before due"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
-    <Field label="Escalate after hours"><Input type="number" min="1" max="168" value={escalationHours} onChange={(event) => setEscalationHours(event.target.value)} /></Field>
+    <Field id="fa-reminder-offsets" label="Reminder offsets before due" hint={parsedOffsets.ok ? `Before the acknowledgement is due: ${parsedOffsets.hours.join(", ")} hours. ${REMINDER_OFFSET_FORMAT_HINT}` : undefined} error={offsetError}><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
+    <Field id="fa-reminder-escalation" label="Escalate after hours" error={escalationError}><Input type="number" min="1" max="168" step="1" value={escalationHours} onChange={(event) => setEscalationHours(event.target.value)} /></Field>
     <Field label="Channels" wide><div className="flex min-w-0 flex-wrap gap-4 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={inApp} onChange={(event) => setInApp(event.target.checked)} />In app</label><label className="flex items-center gap-2"><input type="checkbox" checked={email} onChange={(event) => setEmail(event.target.checked)} />Email</label></div></Field>
-    <div className="flex min-w-0 md:col-span-2 xl:col-span-4"><Button className="w-full sm:w-auto" type="submit" disabled={schedule.isPending || !canWrite || workspace.instruction.status !== "dispatched" || workspace.acknowledgement_status !== "outstanding" || (!inApp && !email)}>{schedule.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}Schedule reminders</Button></div>
+    <div className="flex min-w-0 md:col-span-2 xl:col-span-4"><Button className="w-full sm:w-auto" type="submit" disabled={schedule.isPending || !canWrite || workspace.instruction.status !== "dispatched" || workspace.acknowledgement_status !== "outstanding" || (!inApp && !email) || !parsedOffsets.ok || Boolean(escalationError)}>{schedule.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}Schedule reminders</Button></div>
   </form></CardContent></Card>
   <div className="grid min-w-0 gap-2 sm:grid-cols-2">{workspace.reminders.map((row) => <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] bg-white p-3 text-sm"><div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 font-semibold">{row.event_type.includes("overdue") ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <MailCheck className="h-4 w-4" />}{readable(row.event_type)}</span><Status value={row.status} /></div><p className="mt-2 break-words text-xs text-[var(--color-mute)]">{row.channel} · {row.scheduled_for ? DATE.format(new Date(row.scheduled_for)) : "No schedule"}</p></div>)}</div>
   {!workspace.reminders.length ? <EmptyState title="No reminders scheduled" description="" /> : null}</div>;
