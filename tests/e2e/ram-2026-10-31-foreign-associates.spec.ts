@@ -91,7 +91,12 @@ async function createRecordInUi(page: Page, rt: TesterRuntime) {
   const card = page.locator("form").filter({ has: page.getByRole("button", { name: "Create application" }) });
   await card.getByLabel("Docket title", { exact: true }).fill(title);
   await card.getByLabel("Word mark", { exact: true }).fill("PINE");
-  await card.getByLabel("Goods / services specification", { exact: true }).fill("Payment terminals and point-of-sale software");
+  // The New trademark panel takes classes as Nice catalogue rows.
+  const nice = card.getByRole("combobox", { name: "Nice class, row 1" });
+  await nice.click();
+  await nice.fill("9");
+  await page.getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
+  await card.getByLabel("Goods and services, row 1").fill("Payment terminals and point-of-sale software");
   await card.getByLabel("Applicant", { exact: true }).fill("Pine Labs Private Limited");
   await card.getByLabel("Representation evidence reference", { exact: true }).fill(`e2e:bugs4:mark:${rt.run}`);
   const created = page.waitForResponse(isPost("/api/ip/trademark-applications/manual"));
