@@ -117,11 +117,12 @@ async function portfolioShowsDeclaredStatus(page: Page, request: APIRequestConte
   const searched = page.waitForResponse(r => new URL(r.url()).pathname === "/api/ip/portfolio" && new URL(r.url()).searchParams.get("query") === imported.number);
   await page.getByRole("button", { name: "Search portfolio" }).click();
   expect((await searched).status()).toBe(200);
-  const declared = page.getByTestId(`ip-portfolio-declared-status-${imported.docketId}`).first();
+  // The table renders at desktop and the cards at phone width; read whichever is shown.
+  const declared = page.getByTestId(`ip-portfolio-declared-status-${imported.docketId}`).filter({ visible: true }).first();
   await declared.scrollIntoViewIfNeeded();
   await expectOnScreen(declared, "The imported registered mark shows its unverified source status");
   await expect(declared).toHaveText("Source status: registered (unverified)");
-  await expect(page.getByText("Filing phase: filed").first()).toBeVisible();
+  await expect(page.getByText("Filing phase: filed").filter({ visible: true }).first()).toBeVisible();
 }
 
 /** B4-ADJ-19 on the docket's hearing form; nothing is submitted. */
@@ -138,7 +139,7 @@ async function reminderOffsets(page: Page, request: APIRequestContext, rt: Teste
   const error = form.locator("#ip-hearing-reminder-offsets-help");
   await expect(error).toHaveText(/^"soon" is not a reminder offset\./);
   await expect(error).toHaveAttribute("role", "alert");
-  await offsets.scrollIntoViewIfNeeded();
+  await error.scrollIntoViewIfNeeded();
   await expectOnScreen(error, "The unreadable offset is named under its field");
   await expect(preview).toBeDisabled();
 
