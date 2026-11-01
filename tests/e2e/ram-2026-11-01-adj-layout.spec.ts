@@ -103,9 +103,9 @@ async function importRowsJourney(page: Page, rt: TesterRuntime, info: TestInfo, 
   const committed = await commitImportThroughUi(page, rt, preview.job.id, 1);
   const created = committed.rows.find(row => row.row_number === 1)!;
   expect(created.created_docket_id).toBeTruthy();
-  const row = rowsRegion.locator("tbody > tr").filter({ hasText: number }).filter({ has: page.getByRole("button", { name: "Open record" }) });
+  const row = rowsRegion.locator("tbody > tr").filter({ hasText: number }).filter({ has: page.getByRole("link", { name: "Open record" }) });
   await expect(row).toHaveCount(1);
-  await expectReachable(row.getByRole("button", { name: "Open record" }), "Open record on the committed row");
+  await expectReachable(row.getByRole("link", { name: "Open record" }), "Open record on the committed row");
   await expectReachable(row.getByRole("button", { name: "Edit source renewal date" }), "Edit source renewal date");
   if (mobile) await expectNoPageOverflow(page);
   await markPositive(info, mobile ? "adj13-import-rows-mobile" : "adj13-import-rows", {
