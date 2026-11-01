@@ -833,9 +833,14 @@ describe("IpDocketPage", () => {
     const calendars = within(workspace).getByLabelText("Active working calendar");
     await waitFor(() => expect(rules).toBeEnabled());
     expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
-      .toEqual(["rule-1", "rule-2"]);
+      .toEqual(["", "rule-1", "rule-2"]);
     expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
-      .toEqual(["calendar-1", "calendar-2"]);
+      .toEqual(["", "calendar-1", "calendar-2"]);
+    // Nothing is chosen for the lawyer (B4-ADJ-02 sibling sweep): two eligible
+    // rules and two calendars, so the first of each would be an arbitrary pick.
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
     await userEvent.selectOptions(rules, "rule-2");
     await userEvent.selectOptions(calendars, "calendar-2");
     expect(rules).toHaveValue("rule-2");
@@ -855,9 +860,11 @@ describe("IpDocketPage", () => {
     await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
       ...data, eligible_rule_version_ids: ["rule-1"],
     }));
-    await waitFor(() => expect(rules).toHaveValue("rule-1"));
+    // The chosen rule is no longer eligible: dropped, not replaced by another.
+    await waitFor(() => expect(rules).toHaveValue(""));
     expect(within(rules).queryByRole("option", { name: /in-tm-alternate/ })).not.toBeInTheDocument();
     expect(calendars).toHaveValue("calendar-2");
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
 
     await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
@@ -913,6 +920,10 @@ describe("IpDocketPage", () => {
     };
     const ruleCaption = `${rule.key} · version 7 · IN · Intellectual Property Office · active`;
     const calendarCaption = `${calendar.name} · version 8 · IN · Calendar Office · Asia/Kolkata · active`;
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    await userEvent.selectOptions(rules, "rule-one");
+    await userEvent.selectOptions(calendars, "calendar-one");
     assertDetail(rules, "rule-one", ruleCaption);
     assertDetail(calendars, "calendar-one", calendarCaption);
     await userEvent.selectOptions(rules, "rule-two");
@@ -923,7 +934,12 @@ describe("IpDocketPage", () => {
     await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], {
       ...data, rules: [rule], calendars: [calendar],
     }));
-    await waitFor(() => expect(rules).toHaveValue("rule-one"));
+    // The chosen versions are gone: the fields empty instead of moving to the remaining ones.
+    await waitFor(() => expect(rules).toHaveValue(""));
+    expect(calendars).toHaveValue("");
+    expect(document.getElementById("ip-active-rule-detail")).toBeNull();
+    await userEvent.selectOptions(rules, "rule-one");
+    await userEvent.selectOptions(calendars, "calendar-one");
     assertDetail(rules, "rule-one", ruleCaption);
     assertDetail(calendars, "calendar-one", calendarCaption);
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
@@ -1500,6 +1516,15 @@ describe("IpDocketPage", () => {
     expect(within(identity).getByText("Opposition no.")).toBeVisible();
     expect(within(identity).getByText("OPP 17/2026")).toBeVisible();
     expect(await within(identity).findByText("ASTER EXISTING")).toBeVisible();
+    // The superseding number is the lawyer's choice: no candidate is pre-checked.
+    const candidate = within(identity).getByRole("radio");
+    expect(candidate).not.toBeChecked();
+    fireEvent.change(within(identity).getByLabelText("Decision reason"), {
+      target: { value: "Registry evidence confirms a separate filing." },
+    });
+    expect(within(identity).getByRole("button", { name: "Supersede this number" })).toBeDisabled();
+    fireEvent.click(candidate);
+    expect(within(identity).getByRole("button", { name: "Supersede this number" })).toBeEnabled();
     fireEvent.change(within(identity).getByLabelText("Decision reason"), {
       target: { value: "Registry evidence confirms a separate filing." },
     });
@@ -2374,7 +2399,14 @@ describe("IpDocketPage", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
     const prosecution = await screen.findByTestId("ip-prosecution-workspace");
     const select = await within(prosecution).findByRole<HTMLSelectElement>("combobox", { name: "Application" });
-    expect(select).toHaveValue("application-1");
+    // Two applications: neither is chosen for the lawyer, and Preview waits.
+    await waitFor(() => expect(select.options.length).toBe(3));
+    expect(select).toHaveValue("");
+    expect(select).toHaveAccessibleDescription("Choose the application this event belongs to.");
+    fireEvent.change(within(prosecution).getByLabelText("Reason"), { target: { value: "Reviewed official event evidence." } });
+    expect(within(prosecution).getByRole("button", { name: "Preview prosecution event" })).toBeDisabled();
+    fireEvent.change(select, { target: { value: "application-1" } });
+    expect(within(prosecution).getByRole("button", { name: "Preview prosecution event" })).toBeEnabled();
     expect(select).toHaveAccessibleName("Application");
     expect(select).toHaveAccessibleDescription(`IN · ${office} · response_filed`);
     fireEvent.change(select, { target: { value: "application-2" } });

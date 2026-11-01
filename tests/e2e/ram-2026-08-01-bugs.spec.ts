@@ -98,7 +98,7 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token:
   return { token, membershipId };
 }
 
-async function seedLinkedIpDocket(api: APIRequestContext, token: string, membershipId: string): Promise<void> {
+async function seedLinkedIpDocket(api: APIRequestContext, token: string, membershipId: string): Promise<string> {
   const headers = { Authorization: `Bearer ${token}` };
   const matterResponse = await api.post(`${apiBaseUrl}/api/matters/`, {
     headers,
@@ -152,6 +152,7 @@ async function seedLinkedIpDocket(api: APIRequestContext, token: string, members
     data: { matter_deadline_id: deadlineId, responsible_membership_id: membershipId, coverage_status: "accepted" },
   });
   expect(coverage.status()).toBe(200);
+  return (await application.json()).id as string;
 }
 
 async function signIn(page: Page, slug: string): Promise<void> {
@@ -248,7 +249,7 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     const api = await request.newContext();
     const slug = unique("ip-complete");
     const { token, membershipId } = await bootstrap(api, slug);
-    await seedLinkedIpDocket(api, token, membershipId);
+    const applicationId = await seedLinkedIpDocket(api, token, membershipId);
     await signIn(page, slug);
     await page.setViewportSize({ width: 360, height: 900 });
     await page.goto("/app/ip");
@@ -276,6 +277,8 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
 
     await page.getByRole("tab", { name: "Proceedings" }).click();
     const prosecution = page.getByTestId("ip-prosecution-workspace");
+    // The event's application is chosen, never defaulted (B4-ADJ-02 sibling sweep).
+    await prosecution.getByRole("combobox", { name: "Application" }).selectOption(applicationId);
     await prosecution.getByLabel("Reason").fill("Reviewed the official formalities evidence.");
     await prosecution.getByLabel("Evidence reference").fill("attachment:formalities-evidence");
     await prosecution.getByLabel("Document reference").fill("attachment:formalities-document");

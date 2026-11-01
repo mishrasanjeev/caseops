@@ -1273,11 +1273,7 @@ function IdentifierControl({ docket, identifier, enabled, onChanged }: {
     queryFn: () => previewIpIdentifierDuplicates(docket.id, identifier.id),
     enabled: identifier.reconciliation_status === "needs_review",
   });
-  useEffect(() => {
-    if (!candidateId && preview.data?.candidates[0]) {
-      setCandidateId(preview.data.candidates[0].identifier_id);
-    }
-  }, [candidateId, preview.data]);
+  // The number to supersede this one with is the lawyer's choice: never the first candidate.
   const resolve = useMutation({
     mutationFn: (decision: "distinct" | "supersede") => resolveIpIdentifierDuplicate({
       docketId: docket.id,
@@ -1988,8 +1984,10 @@ function DeadlineWorkspaceCard({
     && row.rule_kind === "deadline" && workspace.data?.eligible_rule_version_ids?.includes(row.id)) ?? [];
   const activeCalendars =
     workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
-  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId) ? ruleVersionId : activeRules[0]?.id ?? "";
-  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId) ? calendarVersionId : activeCalendars[0]?.id ?? "";
+  // Chosen by the lawyer, never the first eligible rule or calendar; a choice
+  // a fresh response no longer offers is dropped, not replaced.
+  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId) ? ruleVersionId : "";
+  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId) ? calendarVersionId : "";
   const selectedRule = activeRules.find((row) => row.id === selectedRuleId);
   const selectedCalendar = activeCalendars.find((row) => row.id === selectedCalendarId);
 
@@ -2205,7 +2203,7 @@ function DeadlineWorkspaceCard({
               >
                 {!workspace.isSuccess || !activeRules.length ? (
                   <option value="">{workspace.isPending ? "Loading deadline rules…" : workspace.isError ? "Deadline rules unavailable" : "No eligible active deadline rule"}</option>
-                ) : null}
+                ) : <option value="" disabled>Select a deadline rule</option>}
                 {activeRules.map((row) => (
                   <option key={row.id} value={row.id}>{deadlineRuleCaption(row)}</option>
                 ))}
@@ -2221,7 +2219,7 @@ function DeadlineWorkspaceCard({
               >
                 {!workspace.isSuccess || !activeCalendars.length ? (
                   <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : "No active working calendar"}</option>
-                ) : null}
+                ) : <option value="" disabled>Select a working calendar</option>}
                 {activeCalendars.map((row) => (
                   <option key={row.id} value={row.id}>{workingCalendarCaption(row)}</option>
                 ))}
@@ -2497,13 +2495,10 @@ function ProsecutionCard({
   });
   const [applicationId, setApplicationId] = useState("");
   const applications = core.data?.applications ?? [];
-  const application =
-    applications.find((candidate) => candidate.id === applicationId) ??
-    applications[0] ??
-    null;
-  useEffect(() => {
-    if (!applicationId && applications[0]) setApplicationId(applications[0].id);
-  }, [applicationId, applications]);
+  // The lawyer names the application the event belongs to: with several,
+  // the first one is an arbitrary pick (B4-ADJ-02 sibling sweep).
+  const application = applications.find((candidate) => candidate.id === applicationId) ?? null;
+  const applicationMissing = applications.length > 0 && !application;
   const [eventKind, setEventKind] = useState<(typeof EVENT_KINDS)[number]>("formalities");
   const [effectiveAt, setEffectiveAt] = useState(localDateTimeValue);
   const [reason, setReason] = useState("");
@@ -2611,6 +2606,7 @@ function ProsecutionCard({
     (eventSource !== "registry" || sourceReference.trim()) &&
     (!supersedesEventId || correctionReason.trim().length >= 5) &&
     (!reconcilesEventId || reconciliationDecision) &&
+    !applicationMissing &&
     (correspondenceDirection === "none" ||
       receivedAt || dueAt || preparedAt || approvedAt || filedAt || acceptedAt),
   );
@@ -2650,12 +2646,16 @@ function ProsecutionCard({
         {enabled ? (
           <form className="grid min-w-0 gap-3" onSubmit={(event) => { event.preventDefault(); preview.mutate(); }}>
             {applications.length ? (
-              <RecordSelect label="Application"
-                className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
-                value={application?.id ?? ""} onChange={event => setApplicationId(event.target.value)}
-                options={applications.map(candidate => ({ value: candidate.id,
-                  label: [candidate.jurisdiction, candidate.office, candidate.filing_phase].filter(Boolean).join(" · "),
-                }))} />
+              <div className="min-w-0">
+                <RecordSelect id="ip-prosecution-application" label="Application"
+                  className="h-10 min-w-0 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={application?.id ?? ""} onChange={event => setApplicationId(event.target.value)}
+                  aria-describedby={applicationMissing ? "ip-prosecution-application-hint" : undefined}
+                  options={[{ value: "", label: "Select the application", disabled: true }, ...applications.map(candidate => ({ value: candidate.id,
+                    label: [candidate.jurisdiction, candidate.office, candidate.filing_phase].filter(Boolean).join(" · "),
+                  }))]} />
+                {applicationMissing ? <p id="ip-prosecution-application-hint" className="mt-1 text-xs text-[var(--color-mute)]">Choose the application this event belongs to.</p> : null}
+              </div>
             ) : null}
             {supersedesEventId ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
