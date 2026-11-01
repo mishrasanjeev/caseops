@@ -429,24 +429,28 @@ async function choose(context, asset, { cancel = false } = {}) {
   else {
     const heading = folderHeading(observed.folderName);
     if (!await visible(context.driver, heading)) {
-      let parent = await visible(context.driver, pickerBackToRoot);
-      let location = await visible(context.driver, pickerLocation);
+      const parent = await visible(context.driver, pickerBackToRoot);
+      const location = await visible(context.driver, pickerLocation);
       if (!parent && !location && !await visible(context.driver, pickerRoot)) {
         await navigate(await findQuery(context, browsePicker));
         await wait(context, async () => !!await visible(context.driver, heading)
           || !!await visible(context.driver, pickerBackToRoot) || !!await visible(context.driver, pickerRoot)
           || !!await visible(context.driver, pickerLocation), 10000, 'IOS_FILES_KNOWN_PICKER_LOCATION_REQUIRED');
-        parent = await visible(context.driver, pickerBackToRoot);
-        location = await visible(context.driver, pickerLocation);
       }
       if (!await visible(context.driver, heading)) {
         // A Locations list also shows the root's name inside its location
-        // cell, and iOS 27's history Back is present even at the root, where it
-        // leaves for Locations. Prefer the location cell, use Back only away
-        // from the root, and require the root without any location cell.
+        // cell, and iOS 27's history Back is present even at the root and can
+        // land on Locations from a retained folder. Step under the navigation
+        // bound, preferring the location cell, until the root title shows
+        // without any location cell.
         const atRoot = async () => !!await visible(context.driver, pickerRoot) && !await visible(context.driver, pickerLocation);
-        if (location) await navigate(location);
-        else if (parent && !await atRoot()) await navigate(parent);
+        for (let step = 0; step < 3 && !await atRoot(); step++) {
+          const next = await visible(context.driver, pickerLocation) || await visible(context.driver, pickerBackToRoot);
+          if (!next) break;
+          await navigate(next);
+          await wait(context, async () => await atRoot() || !!await visible(context.driver, pickerLocation),
+            10000, 'IOS_FILES_KNOWN_PICKER_LOCATION_REQUIRED');
+        }
         await wait(context, atRoot, 10000, 'IOS_FILES_KNOWN_PICKER_LOCATION_REQUIRED');
         await navigate(await findQuery(context, observed.folderQuery));
       }

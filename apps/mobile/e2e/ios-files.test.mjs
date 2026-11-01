@@ -222,9 +222,9 @@ function ios27PickerDouble(context, initial) {
     async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_CONDITION_FAILED'); },
     async $$(query) {
       if (query === '~files-choose' && state === 'files') return [element('choose', initial)];
-      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','locations','folder'].includes(state) ? [element('bar')] : [];
+      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','locations','folder','old-folder'].includes(state) ? [element('bar')] : [];
       // iOS 27 shows history Back at the root too; it leads to Locations.
-      if (query.includes('name == "DOC.navBarButton.backInHistory"')) return ['root','folder'].includes(state) ? [element('history-back', 'locations')] : [];
+      if (query.includes('name == "DOC.navBarButton.backInHistory"')) return ['root','folder','old-folder'].includes(state) ? [element('history-back', 'locations')] : [];
       if (query.includes('name == "DOC.sidebar.item.On My iPhone"')) return state === 'locations' ? [element('location', 'root')] : [];
       // The Locations cell repeats the root's name as a StaticText.
       if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return ['root','locations'].includes(state) ? [element('root-text')] : [];
@@ -244,6 +244,12 @@ test('iOS 27 picker opened at the root goes straight to the owned folder without
   await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
   assert.equal(fake.state(), 'selected');
   assert.deepEqual(fake.clicks, ['choose', 'owned-folder', 'exact-owned-file']);
+});
+test('iOS 27 retained folder whose history Back lands on Locations still reaches the exact root', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'old-folder');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'history-back', 'location', 'owned-folder', 'exact-owned-file']);
 });
 test('iOS 27 Locations list opens the local location cell, never treating its label as the root', async (t) => {
   const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'locations');
