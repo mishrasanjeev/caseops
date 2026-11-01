@@ -259,6 +259,10 @@ class PortalInstructionRecord(BaseModel):
 
 class PortalInstructionListResponse(BaseModel):
     instructions: list[PortalInstructionRecord] = Field(default_factory=list)
+    #: Every visible non-superseded instruction; ``instructions`` is the
+    #: newest ``limit`` of them, so a reader can state the cap honestly.
+    total: int = 0
+    limit: int = 200
 
 
 class PortalInstructionAcknowledgeRequest(BaseModel):

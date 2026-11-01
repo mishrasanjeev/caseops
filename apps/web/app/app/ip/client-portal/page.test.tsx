@@ -53,7 +53,7 @@ describe("IpClientPortalPage", () => {
     mocks.shareable.mockResolvedValue({ grant_id: "grant-1", docket_title: "ASTER DEVICE", document_categories: ["evidence"], documents: [
       { document_id: "doc-safe", document_title: "Accepted evidence", version_number: 2, version_state: "accepted", display_name: "evidence.pdf", taxonomy_key: "evidence", taxonomy_label: "Evidence" },
     ] });
-    mocks.instructions.mockResolvedValue({ instructions: [{ id: "instruction-1", docket_title: "ASTER DEVICE", decision: "proceed", note: "Proceed with evidence", status: "pending", row_version: 1 }] });
+    mocks.instructions.mockResolvedValue({ instructions: [{ id: "instruction-1", docket_title: "ASTER DEVICE", decision: "proceed", note: "Proceed with evidence", status: "pending", row_version: 1 }], total: 1, limit: 200 });
     mocks.invite.mockResolvedValue({ portal_user: { id: "user-1" }, grants: [] });
     mocks.revoke.mockResolvedValue({ active: false });
     mocks.publishDocument.mockResolvedValue({ id: "publication-1" });
@@ -191,5 +191,19 @@ describe("IpClientPortalPage", () => {
     await user.type(screen.getByLabelText("Revocation reason for Asha Rao"), "Engagement scope ended.");
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(mocks.revoke).toHaveBeenCalledWith(expect.objectContaining({ grantId: "grant-1", rowVersion: 1 })));
+  });
+
+  it("B4-ADJ-14 states the instruction cap with the server total instead of dropping rows silently", async () => {
+    mocks.instructions.mockResolvedValue({ instructions: [{ id: "instruction-1", docket_title: "ASTER DEVICE", decision: "proceed", note: "Proceed with evidence", status: "pending", row_version: 1 }], total: 201, limit: 1 });
+    renderPage();
+    expect(await screen.findByTestId("portal-instructions-cap")).toHaveTextContent(
+      "Showing the newest 1 of 201 client instructions you can see; older ones are not listed here.",
+    );
+  });
+
+  it("B4-ADJ-14 says nothing about a cap when every visible instruction is listed", async () => {
+    renderPage();
+    expect(await screen.findByLabelText("Acknowledgement reason for ASTER DEVICE")).toBeVisible();
+    expect(screen.queryByTestId("portal-instructions-cap")).not.toBeInTheDocument();
   });
 });

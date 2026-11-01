@@ -1623,10 +1623,13 @@ def _instruction_record(
     )
 
 
-def list_firm_portal_instructions(
-    session: Session, *, context: SessionContext
-) -> PortalInstructionListResponse:
-    rows = session.execute(
+FIRM_PORTAL_INSTRUCTION_LIMIT = 200
+
+
+def _firm_portal_instructions_statement(session: Session, *, context: SessionContext):
+    # Visibility is part of the statement, so walled rows can neither use up
+    # the page nor hide visible ones behind the bound.
+    return (
         select(IpClientInstruction, IpDocketRecord)
         .join(IpDocketRecord, IpDocketRecord.id == IpClientInstruction.docket_id)
         .where(
@@ -1634,16 +1637,33 @@ def list_firm_portal_instructions(
             IpClientInstruction.source_portal_user_id.is_not(None),
             IpClientInstruction.status != "superseded",
             IpDocketRecord.company_id == context.company.id,
+            visible_ip_dockets_filter(session, context=context),
         )
-        .order_by(IpClientInstruction.received_at.desc())
-        .limit(200)
+    )
+
+
+def list_firm_portal_instructions(
+    session: Session, *, context: SessionContext
+) -> PortalInstructionListResponse:
+    total = session.scalar(
+        select(func.count()).select_from(
+            _firm_portal_instructions_statement(session, context=context)
+            .with_only_columns(IpClientInstruction.id)
+            .subquery()
+        )
+    )
+    rows = session.execute(
+        _firm_portal_instructions_statement(session, context=context)
+        .order_by(IpClientInstruction.received_at.desc(), IpClientInstruction.id.desc())
+        .limit(FIRM_PORTAL_INSTRUCTION_LIMIT)
     ).all()
     return PortalInstructionListResponse(
         instructions=[
             _instruction_record(session, instruction=instruction, docket=docket)
             for instruction, docket in rows
-            if can_access_ip_docket(session, context=context, docket=docket)
-        ]
+        ],
+        total=total or 0,
+        limit=FIRM_PORTAL_INSTRUCTION_LIMIT,
     )
 
 
