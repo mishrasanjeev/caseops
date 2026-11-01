@@ -39,9 +39,9 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_docket_access import _docket_or_404
+from caseops_api.services.ip_document_citations import citable_ip_document_ids
 from caseops_api.services.ip_document_workflow import (
     _serialize_document,
-    citable_ip_document_ids,
     docket_scoped_document_links,
     get_accessible_ip_document_ids,
     get_ip_document,

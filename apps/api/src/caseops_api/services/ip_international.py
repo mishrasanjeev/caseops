@@ -36,8 +36,8 @@ from caseops_api.schemas.ip_lifecycle import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
+from caseops_api.services.ip_document_citations import citable_ip_document_ids
 from caseops_api.services.ip_document_workflow import (
-    citable_ip_document_ids,
     docket_scoped_document_links,
     get_accessible_ip_document_ids,
     list_linked_ip_documents,
