@@ -2550,9 +2550,11 @@ requirements when using the fallback.
   text inside its own column, and non-Latin input; `%PDF` plus a checksum only
   proves a file exists. Glyph positions and extracted text also pass when text
   is drawn dark on dark: rasterize every page, measure each run's ink contrast
-  against its own background with the committed negative control in
-  `apps/api/tests/pdf_legibility.py`, assert the page count with no blank
-  trailing page, and never accept a downloaded file name. Build PDFs through
+  against its own background (measurement in `apps/api/tests/pdf_legibility.py`;
+  committed negative control
+  `apps/api/tests/test_bug016_invoice_pdf_legibility.py::test_bug016_raster_check_flags_dark_text_on_a_dark_fill`),
+  assert the page count with no blank trailing page, and never accept a
+  downloaded file name. Build PDFs through
   `services/pdf_layout.py`: fpdf2 cells neither clip nor wrap, `multi_cell`
   leaves the cursor at the right margin unless `new_x` is given, and
   `Table.row()` copies the caller's fill into every body cell.
@@ -2683,9 +2685,11 @@ requirements when using the fallback.
 - A tester-reported bug is accepted only in the reporting tester's own tenant
   and role on the exact serving release, from records the journey creates
   through the UI with fresh identifiers and preconditions read from server
-  data. An API-built fixture, another tenant, a locally enabled flag, three
-  local approvers, or a shared record whose state later runs change is local
-  evidence, never the verdict; until production runs it is `Inconclusive`.
+  data. An API-built fixture, another tenant, a freshly provisioned tenant
+  when the tester's data comes from a backfill migration, a locally enabled
+  flag, three local approvers, or a shared record whose state later runs
+  change is local evidence, never the verdict; until production runs it is
+  `Inconclusive`.
 - A `test.skip`, a `[local-only]` grep exclusion, an `if` that guards
   assertions, or a crawl that stops before the control is a skip, not a pass.
   Count only assertions production executed, list every journey production
@@ -2708,7 +2712,9 @@ requirements when using the fallback.
 - A fixture must not create the catalogue or tenant configuration its journey
   claims to test, and a production spec must not change shared tester
   configuration (AI policy, billing profile, workspace setup) or create a
-  record type the product cannot retire. Split the mutating half into a
+  record type the product cannot retire unless the owner has recorded a
+  residue exception (record type, per-run count, cleanup owner) in the bug
+  ledger before the release. Otherwise split the mutating half into a
   `[local-only]` test; the taxonomy guard is
   `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`.
 - A lane is done only when an independent adversarial review of its diff and

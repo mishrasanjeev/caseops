@@ -9,8 +9,17 @@ ENH-017), all reported on Chrome desktop in test-legal. Integration branch
 BUG-003..006 also need the IPLF-027B A1 release and the A2 governance enable.
 Every row below is therefore `Inconclusive - complete local proof; production
 verification as the reporting tester pending`. Local proof means the named
-Playwright spec passed on desktop and mobile against the lane build plus the
-listed pytest/vitest; it is not a production verdict. An independent review
+non-`[prod-only]` Playwright tests passed on desktop and mobile against the
+lane build, plus the listed pytest/vitest; it is not a production verdict.
+`[prod-only]` tests and the control crawl's locally skipped routes have not
+executed anywhere yet. Merged-tree verification is also pending: no typecheck,
+vitest, backend suite or batch-4 Playwright result is recorded on the
+integration HEAD after the 2026-11-01 lane merges and the integration fixes
+2d053832 and d1a02940, and all four must run before release. Release
+dependencies: migrations `20261031_0001` (IP document taxonomy backfill,
+trigger `release_backfill`, which Ram's Classification depends on) and
+`20261031_0002` (IP rule-set company ownership, IPLF-027B A1) are not on main
+and must deploy from main. An independent review
 found blocking or major defects in every lane's first implementation, and a fix
 pass closed them before merge; the reasons are recorded in
 `docs/BUG_REOPEN_LEARNINGS_2026-10-31_RAM.md`. Production runs are signed in as
@@ -27,7 +36,9 @@ does not run there and is recorded as such, not as a pass.
   4d074179..f53b3131. The first review found two older specs still driving the
   removed form (blocking); iplf-031b, ram-2026-08-01, iplf-040b/041/042/049 now
   drive the new panel. Open: each production run leaves one stamped document
-  because IP documents have no retire path (B4-ADJ-07); triage probe docket
+  because IP documents have no retire path (B4-ADJ-07). That breaks the new
+  AGENTS.md fixture rule, so before release the owner must record a residue
+  exception or the upload half moves to `[local-only]`; triage probe docket
   7ece82b7-f2fb-46db-bb09-2487ca1df185 remains for owner retirement.
 - BUG-002 Classification dropdown shows no classes. Status: Inconclusive -
   complete local proof; production verification as the reporting tester
@@ -37,12 +48,22 @@ does not run there and is recorded as such, not as a pass.
   `test_ip_trademark_class_rows_20261031.py`, `IpDocketClassScope.test.tsx`).
   (b) Documents Classification comes from workspace provisioning, never from
   the seed endpoint: `tests/e2e/ram-2026-10-31-fixture-honesty.spec.ts:117`,
-  `:131` [local-only] and `:176` [mobile], with the local provisioning-audit
-  assertion; guard `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`.
-  Open: the classified production upload stays `[local-only]` (`:131`), so
-  production proves options and naming preview only; opposition and
-  post-registration challenged scope carry no `nice_edition` (backend contract
-  decision).
+  `:131` [local-only] and `:176` [mobile]; guard
+  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`. The production
+  classified upload is `tests/e2e/ram-2026-10-31-ip-create.spec.ts:216` and
+  `:228` [mobile]: `uploadClassifiedDocument` (`:172-210`) asserts at least 14
+  active classifications, selects one and uploads through the UI with a 200
+  `created` outcome. For test-legal the entries come from the
+  `20261031_0001` backfill (`release_backfill`), proven by
+  `test_ip_document_taxonomy_defaults_migration_20261031.py`; the local
+  journeys used tenants provisioned at enablement. The first review rated
+  BUG-002 Partially fixed (bare class inputs on opposition and
+  post-registration, older specs on the removed form); fixed before merge.
+  Open: Ram's Classification depends on `20261031_0001` deploying from main,
+  and no browser journey ran against a backfilled tenant; the
+  provisioning-audit assertion (fixture-honesty `:131` and the `if (rt.local)`
+  count check at `:68`) runs locally only; opposition and post-registration
+  challenged scope carry no `nice_edition` (backend contract decision).
 - BUG-003 Governed rule dropdown empty; BUG-004 Working calendar dropdown
   empty; BUG-005 Propose calendar version does nothing; BUG-006 Propose rule
   does nothing. Status (each): Inconclusive - complete local proof; production
@@ -57,7 +78,13 @@ does not run there and is recorded as such, not as a pass.
   `test_ip_rule_governance.py`, `test_ip_rule_governance_projection.py`,
   `test_ip_deadline_workflow.py`, `test_ip_opposition_opponent_workflow.py`,
   `IpDeadlineGovernanceCard.test.tsx`, `PersonPicker.test.tsx`. Commits
-  758e349c..bad7af60. Open: production is reachable only after A2 sets
+  758e349c..bad7af60. The first review rated BUG-003 and BUG-006 Partially
+  fixed (blocking: the client acknowledged the activation impact review on the
+  user's behalf; opponent Propose deadline dead-ended on a bare 409) and
+  BUG-004/005 Properly fixed locally; the fix pass closed the named defects.
+  Open: one skipped backend test in the lane suite was not investigated, and
+  the control crawl was not run for this lane; production is reachable only
+  after A2 sets
   `deploy/ip-rule-governance-state.json` enabled; Ram alone can propose but
   activation needs two other approvers, so production shows the pending or
   `no_other_approver` state and the three-person journey is local only. Owner
@@ -78,7 +105,9 @@ does not run there and is recorded as such, not as a pass.
   `research/reviews/page.test.tsx`, `admin/page.test.tsx`. Commits
   e3d2b5b2..625fc520. Open: the portal-invite proof is local only because
   Ram's portal:invite capability in test-legal is not established; the
-  invitation API itself bypasses ethical walls (B4-ADJ-01).
+  invitation API itself bypasses ethical walls (B4-ADJ-01); MatterPicker cannot
+  fetch by id a Matter that a caller pre-fills from outside the loaded pages
+  (no current caller does).
 - BUG-008 Instrument dropdown shows only Select. Status: Inconclusive -
   complete local proof; production verification as the reporting tester
   pending. Instruments come from the validator's own predicate
@@ -122,8 +151,11 @@ does not run there and is recorded as such, not as a pass.
   `lib/ip/registry-evidence.test.ts`. Commits b13630f4..1be45481. Open:
   imported registered marks still read Draft (B4-ADJ-11); `identifier_kind` is
   not enum-validated and a cross-docket target is 404, not 422 (B4-ADJ-12);
-  wide tables (B4-ADJ-13); triage probe registry link
-  83b46b3c in test-legal awaits retirement.
+  wide tables (B4-ADJ-13); CourtReferences still auto-selects (B4-ADJ-21);
+  the lane has no base-commit reproduction: its vitest and Playwright
+  failures on the old code were reasoned, not run, which the bug protocol
+  requires; triage probe registry link 83b46b3c in test-legal awaits
+  retirement.
 - BUG-014 Journal intake list validation error. Status: Inconclusive - complete
   local proof; production verification as the reporting tester pending.
   Structured captured evidence with field-anchored 422s, `parseNiceClasses`,
@@ -140,7 +172,8 @@ does not run there and is recorded as such, not as a pass.
   limit 250 without a total (B4-ADJ-05); the double-call CTE 500 is fixed for
   watch only (B4-ADJ-10); "recorded by me" covers the last 500 capture runs;
   no API changelog for the stricter contract; no automated journal source
-  exists, which the page now states.
+  exists, which the page now states; scheduler, entitlement and
+  device-similarity items (B4-ADJ-20).
 - BUG-015 Autonomous full-application testing request. Status: Inconclusive -
   complete local proof; production verification as the reporting tester
   pending. Mapped in the PRD to FT-099, the tester-tenant control crawl, and
@@ -157,7 +190,9 @@ does not run there and is recorded as such, not as a pass.
   list and stops at record selection on per-record forms, so it is not the
   autonomous end-to-end QA the row asks for; no E2E drives renewal progression;
   shareable-document list has no ethical-wall test; Madrid designation member
-  code and office are free text; Parent IR has no search beyond the latest 100.
+  code and office are free text; Parent IR has no search beyond the latest 100;
+  possibly dead opposition selects (B4-ADJ-22); the spec fails
+  `tsc -p tsconfig.e2e.json` with TS2345 (B4-ADJ-24).
 - BUG-016 Invoice PDF unreadable. Status: Inconclusive - complete local proof;
   production verification as the reporting tester pending. Root cause: fpdf2
   `Table.row()` copied the title bar fill into every body cell (regression from
@@ -170,9 +205,12 @@ does not run there and is recorded as such, not as a pass.
   QA matter and invoice number, profile compared read-only before and after),
   `:408`/`:416` [local-only issue], `:424`/`:432` [prod-only, the reported
   INVR-2026-028 and INVR-2026-068 by server id];
-  `test_bug016_invoice_pdf_legibility.py` with the raster check and
-  dark-on-dark negative control in `apps/api/tests/pdf_legibility.py` across
-  all five PDF generators; `billing/page.test.tsx`,
+  `test_bug016_invoice_pdf_legibility.py` with the raster check across all
+  five PDF generators and the dark-on-dark negative control
+  `test_bug016_raster_check_flags_dark_text_on_a_dark_fill` (`:429`), the
+  contrast measurement living in `apps/api/tests/pdf_legibility.py`;
+  `[prod-only]` `:424`/`:432` have not executed anywhere yet;
+  `billing/page.test.tsx`,
   `admin/matter-billing/page.test.tsx`; hari BUG-052/BUG-055 specs now parse
   PDF content. Commits a61d68f3..bd9d8cd1. The first review rated it Partially
   fixed (two blocking: void left totals in KPIs; no issue path). Open:
@@ -193,7 +231,9 @@ does not run there and is recorded as such, not as a pass.
   20562025..92c9a21f. Open: Back uses `replaceState`; Year dots rely on colour
   on touch screens; no PostgreSQL EXPLAIN or index on `hearing_on`/`due_on`;
   tasks cannot be cancelled (product gap); the provider panels now render below
-  the grid at every width (owner awareness); `display_type` drift (B4-ADJ-04).
+  the grid at every width (owner awareness); `display_type` drift (B4-ADJ-04);
+  the phone header wraps Previous and the period label onto different rows;
+  calendar-copy previews show undecoded HTML entities (B4-ADJ-23).
 - Docket sweep (adjacent, Phase 1 audit): IP internal readers silently
   truncated at the first page. Status: Inconclusive - complete local proof;
   production verification as the reporting tester pending (the lane itself is
@@ -203,27 +243,35 @@ does not run there and is recorded as such, not as a pass.
   true total; calendar-copy reviews report a total; offset-list clients page
   to exhaustion and reread on a mid-read change; the recordal relationship-cycle
   check reads every docket (2d053832, found at integration). Evidence:
-  `tests/e2e/ram-2026-10-31-docket-sweep.spec.ts:84`, `:94` [mobile];
+  `tests/e2e/ram-2026-10-31-docket-sweep.spec.ts:84`, `:94` [mobile], which
+  exercise only the `total === 0` empty-state branch (`:61`) locally and almost
+  certainly in production, because calendar-copy reviews cannot be created
+  through the UI; the over-100 behaviour is proven only by vitest (100 of 137)
+  and the pytest population tests:
   `test_ip_docket_full_population.py` (chunk 40, 154 dockets, mid-read update),
   `test_ip_detail_lists_complete_20261101.py`, `lib/api/ip-offset-lists.test.ts`,
-  `lib/ip/docket-dropdowns.test.ts` (bare first-page docket dropdowns: only the
-  IP home page, which states its cap). Commits 6f0ecd7b..2952574f, 2d053832.
+  `lib/ip/docket-dropdowns.test.ts` (bare first-page docket reads are allowed
+  only in `app/app/ip/page.tsx`; the allowlist covers the whole file, so it
+  also hides the Documents Linked docket picker, B4-ADJ-18). Commits
+  6f0ecd7b..2952574f, 2d053832.
 - Integration fixes: e5262ef0 keeps self-addressed validator messages free of
   the field prefix (lanes re-fixed the 422 double prefix; the integration
   version is kept, `test_problem_details.py`); a duplicate TypeScript field
   produced by a merge was removed; openapi-types.ts regenerated from the merged
   schema.
 
-Adjacent defects found by the same audit (open unless stated):
+Adjacent defects found by the same audit. Each carries a bug verdict; the
+enterprise-ledger status is named where one exists:
 
-- B4-ADJ-01 Portal invitation ethical-wall bypass. Status: Missing. POST
+- B4-ADJ-01 Portal invitation ethical-wall bypass. Status: Not fixed
+  (enterprise gap EH-B4-01: Missing). POST
   `/api/admin/portal/invitations` (`api/routes/portal.py:1000`,
   `services/portal_auth.py:173`, Matter check at :237-248) validates only
   `Matter.company_id`, with no Matter access or ethical-wall check, so a walled
   admin with portal:invite can grant a client portal access to a walled Matter
   by id. The picker is wall-scoped; the API is not. Also
   `list_admin_ip_grants` shows walled docket titles to a walled manager.
-- B4-ADJ-02 Raw internal-id inputs: `drive/page.tsx:222` and
+- B4-ADJ-02 Status: Not fixed. Raw internal-id inputs: `drive/page.tsx:222` and
   `mailbox/page.tsx:267` ("Matter id for actions"),
   `calendar/conflicts/page.tsx:64` ("Matter id for accept"),
   `admin/notifications/page.tsx:318`, `matters/[id]/audit/page.tsx:158`,
@@ -232,18 +280,22 @@ Adjacent defects found by the same audit (open unless stated):
   free-text rule versions at :310-318, `IpPostRegistrationWorkspace.tsx:616`
   ("Rule version"); the client portal renders `JSON.stringify` of publication
   rows (`app/portal/ip/[id]/page.tsx:51`).
-- B4-ADJ-03 Matter lists capped at 100 and filtered on the client:
+- B4-ADJ-03 Status: Not fixed (EH-B4-02). Matter lists capped at 100 and
+  filtered on the client:
   `notices/page.tsx:233` feeding the unsearchable filter at :949,
   `drafting/page.tsx:27` and `recommendations/page.tsx:27` (limit 200 against a
   server cap of 100), `portfolio/page.tsx:42` (limit 500). Older Matters
   silently disappear. Convert to MatterPicker or server search.
-- B4-ADJ-04 Schema drift: web `calendarEventRecord.display_type` is optional
+- B4-ADJ-04 Status: Not fixed. Schema drift: web
+  `calendarEventRecord.display_type` is optional
   (`apps/web/lib/api/schemas.ts:2234`) while the backend requires it.
-- B4-ADJ-05 Watch workspace truncation: `fetchIpWatchWorkspace` sends
+- B4-ADJ-05 Status: Not fixed (EH-B4-02). Watch workspace truncation:
+  `fetchIpWatchWorkspace` sends
   `limit=250` (`apps/web/lib/api/endpoints.ts:12520`) and
   `IpWatchWorkspaceResponse` (`schemas/ip_watch.py:463`) has no total or
   has_more, so profiles and hits past the bound are dropped silently.
-- B4-ADJ-06 Docket-scoped document list returns direct docket links only
+- B4-ADJ-06 Status: Not fixed (EH-B4-03). Docket-scoped document list returns
+  direct docket links only
   (`services/ip_document_workflow.py:390`, `event_ids=set()`), while recordal
   and Madrid validators accept event- and deadline-linked documents. Consumers
   needing a picker-equals-validator test before widening:
@@ -252,52 +304,100 @@ Adjacent defects found by the same audit (open unless stated):
   SpecialistWorkflows, SpecialistWorkspace, foreign-associates. Madrid
   "Linked document" and PatentApplicationWorkspace "No source documents" have
   no in-form upload.
-- B4-ADJ-07 No document retirement path: IP documents cannot be retired, so
-  every production run of the ip-create and recordals journeys retains one
-  stamped document. Needs a product retire path or an owner decision.
-- B4-ADJ-08 A rule needing an active working calendar is enforced only in the
+- B4-ADJ-07 Status: Not fixed (EH-B4-04: Missing). No document retirement
+  path: IP documents cannot be retired, so every production run of the
+  ip-create (`ram-2026-10-31-ip-create.spec.ts:216`, `:228`) and recordals
+  (`ram-2026-10-31-recordals.spec.ts:221`, `:227`) journeys retains one
+  stamped document. These batch-4 production runs break the new AGENTS.md
+  rule against production specs creating a record type the product cannot
+  retire. Release blocker: before release, either the owner records a residue
+  exception (record type, per-run count, cleanup owner) in this ledger, or the
+  upload half moves to `[local-only]`. Needs a product retire path in the
+  long run.
+- B4-ADJ-08 Status: Not fixed (EH-B4-03: Missing). A rule needing an active
+  working calendar is enforced only in the
   browser (`IpDeadlineGovernanceCard.tsx:461`, :617, :630); the API accepts any
   embedded calendar snapshot. `propose_deadline` and the opposition proposers
   also do not check that rule/calendar jurisdiction and trigger kind match the
   proceeding.
-- B4-ADJ-09 Production specs that change shared tester configuration:
+- B4-ADJ-09 Status: Partially fixed (EH-B4-04). Production specs that change
+  shared tester configuration:
   `support/notice-upload-access.ts:166`, :170, :280 (opt-in member mutation on
   test-legal), `ram-2026-08-09-prod.spec.ts:153` (`dockets[0]`, not server
   identity), and caseops-ip-qa mutations in 08-10-prod, 027b-a0, 062b, 064b,
   065b, 066b. Fixed in this batch: the 09-02 AI-policy toggle (ca8b0e4d) and
   the 09-05 billing-profile write.
-- B4-ADJ-10 `visible_ip_dockets_filter` builds an anonymous
+- B4-ADJ-10 Status: Partially fixed (EH-B4-05; watch only).
+  `visible_ip_dockets_filter` builds an anonymous
   `.cte().prefix_with("MATERIALIZED")` (`services/record_access_policy.py:316`);
   two calls in one statement can produce same-named CTEs and a 500 (probe: 596
   of 600 compilations failed). Fixed for watch (eb421f4c); the root and its
   other call sites are open.
-- B4-ADJ-11 Portfolio import hard-codes `filing_phase="draft"` for Registered
+- B4-ADJ-11 Status: Not fixed. Portfolio import hard-codes
+  `filing_phase="draft"` for Registered
   sources (`services/ip_imports.py:1353`); imported registered marks read Draft
   and the first manual registry evidence queues a high-risk status change.
-- B4-ADJ-12 `RegistryIdentity.identifier_kind` is free text
+- B4-ADJ-12 Status: Not fixed. `RegistryIdentity.identifier_kind` is free text
   (`schemas/ip_registry.py:18`); a cross-docket registry target is 404, not the
   proposed 422 `registry_target_not_in_docket`.
-- B4-ADJ-13 Wide tables put row actions off-screen at 393px:
+- B4-ADJ-13 Status: Not fixed. Wide tables put row actions off-screen at
+  393px:
   `ip/portfolio/page.tsx:937` (980px), `ip/watch/page.tsx:1317` (850px),
   `ip/portfolio/imports/page.tsx:452` (900px).
-- B4-ADJ-14 Foreign-associate siblings: the IP cost evidence card defaults to
-  `official_fee`; POST `/api/ip/dockets/{id}/cost-items`
+- B4-ADJ-14 Status: Not fixed. Foreign-associate siblings (the cost evidence
+  card that always sent `official_fee` was fixed by the ip-create lane: it now
+  offers a Category select, `app/app/ip/page.tsx:3605`, :3787); POST
+  `/api/ip/dockets/{id}/cost-items`
   (`routes/ip_operations.py:3547`) does not enforce the ip_costs entitlement;
   the portal client-instruction list requires ip:write while create accepts
   ip:approve and caps at 200; `_require_client_authority` accepts renewal
   instructions; an actual filing cost offered for Link invoice can fail
   reconciliation.
-- B4-ADJ-15 Non-IP `limit=100` defaults not audited: calendar_sync,
+- B4-ADJ-15 Status: Inconclusive (not audited; EH-B4-02). Non-IP `limit=100`
+  defaults not audited: calendar_sync,
   notification_delivery, provider_operations, provider_costs, saas_billing,
   employees, hearing_reminders, matter_timeline. Unpaged `listClients` in
   PatentFamilyWorkspace and SpecialistWorkspace.
-- B4-ADJ-16 Shared e2e support: `tests/e2e/support/ram-bugs4.ts`
+- B4-ADJ-16 Status: Not fixed. Shared e2e support:
+  `tests/e2e/support/ram-bugs4.ts`
   `addLocalColleague` logs the colleague in on the caller's request context;
   the governance spec works around it with an isolated context.
-- B4-ADJ-17 Production test-record residue to retire before or with the
-  release: docket 7ece82b7-f2fb-46db-bb09-2487ca1df185, registry link 83b46b3c,
-  probe calendar 189148f7-0b1b-4b6a-9914-fbc30b877da2, and the billing-profile
-  policy in BUG-016.
+- B4-ADJ-17 Status: Not fixed (EH-B4-04). Production test-record residue to
+  retire before or with the release: docket
+  7ece82b7-f2fb-46db-bb09-2487ca1df185, registry link 83b46b3c, probe calendar
+  189148f7-0b1b-4b6a-9914-fbc30b877da2, and the billing-profile policy in
+  BUG-016.
+- B4-ADJ-18 Status: Not fixed (EH-B4-02). The Documents "Linked docket" picker
+  on `/app/ip`, the BUG-002 upload surface, lists only the portfolio's first
+  page: `IpDocumentWorkspace.tsx:515-525` renders `dockets`, which
+  `app/app/ip/page.tsx:381` passes from `portfolioDockets` (`:231`), built on
+  the bare `queryFn: fetchIpDockets` at `:214-216`. It has no search and states
+  no cap; the "Showing the 100 most recently updated records" note at `:442`
+  belongs to the home list, not this picker. `docket-dropdowns.test.ts`
+  allowlists all of `page.tsx`, so the guard cannot catch it.
+- B4-ADJ-19 Status: Not fixed. The IP docket reminder-offsets parser
+  (`app/app/ip/page.tsx:1568-1571`) silently drops "48h" through a
+  `Number.isInteger` filter.
+- B4-ADJ-20 Status: Not fixed. Journal watch: the scheduler records
+  "succeeded 0/0" runs for manual profiles (`services/ip_watch.py:1606`);
+  the manual journal routes (`api/routes/ip_watch.py`) have no API entitlement
+  gate (triage option (b) kept manual intake available); intake has no manual
+  device-similarity assertion.
+- B4-ADJ-21 Status: Not fixed. Registry CourtReferences still auto-selects the
+  first proceeding and the first tracked case
+  (`app/app/ip/registry/page.tsx:1052-1053`).
+- B4-ADJ-22 Status: Inconclusive (not reproduced). Possibly dead opposition
+  selects with no empty-state explanation: `IpOppositionSharedWorkflow.tsx:357`
+  (Active deadline), :395 (Shared hearing), :419 (Opposition order event);
+  `IpOppositionSpecializedPaths.tsx:290` (Canonical hearing), :320 (Trigger
+  event). The applicant Governed rule and Working calendar selects the lane
+  also listed were replaced by the governance lane in the merged tree.
+- B4-ADJ-23 Status: Not fixed. Calendar-copy candidate `source_preview`
+  renders undecoded HTML entities (`app/app/calendar/page.tsx:923`).
+- B4-ADJ-24 Status: Not fixed. `tests/e2e/ram-2026-10-31-madrid-portal.spec.ts`
+  fails `npx tsc -p tsconfig.e2e.json` with TS2345 (a page `Response` passed to
+  `json()`, which expects an `APIResponse`), first at `:51-52`; Playwright runs it
+  without type-checking.
 
 ## October 27 Export Release Projection Stop
 

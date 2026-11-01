@@ -22,7 +22,9 @@ has production runtime proof yet, so nothing is `Implemented`.
   population (`test_ip_docket_full_population.py`,
   `test_ip_detail_lists_complete_20261101.py`,
   `apps/web/lib/api/ip-offset-lists.test.ts`); bare first-page docket
-  dropdowns are pinned by `apps/web/lib/ip/docket-dropdowns.test.ts`. Open: the
+  dropdowns are pinned by `apps/web/lib/ip/docket-dropdowns.test.ts`, which
+  allowlists whole files. Open: the Documents "Linked docket" picker on
+  `/app/ip` (first 100 dockets, no search, no cap statement; B4-ADJ-18), the
   watch workspace (`limit=250`, no total), Matter lists on notices, drafting,
   recommendations and portfolio, and unaudited non-IP `limit=100` defaults. No
   repository-wide guard exists for a list read that neither pages to the end
@@ -45,7 +47,10 @@ has production runtime proof yet, so nothing is `Implemented`.
   owner-recorded residue budget per record type before a production spec may
   create it, and a static guard against configuration writes in production
   specs (only the IP document taxonomy has one:
-  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`).
+  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`). The batch-4
+  production ip-create and recordals journeys already upload one unretirable
+  IP document per run; the release needs the owner's residue exception or a
+  `[local-only]` split first (B4-ADJ-07).
 - EH-B4-05 Repeated record-access CTE. Status: Partially implemented.
   `visible_ip_dockets_filter` (`services/record_access_policy.py:316`) emits an
   anonymous materialized CTE; two calls in one statement produced a 500 on

@@ -154,7 +154,8 @@ agent MUST be able to answer YES to all of these:
       a one-page reader shown to fail?
 - [ ] Did no fixture create the catalogue or configuration the journey
       tests, and did the production spec leave shared tester
-      configuration unchanged and create only records it can retire?
+      configuration unchanged and create only records it can retire, or
+      ones covered by an owner-recorded residue exception?
 - [ ] Has an independent adversarial review of the diff and spec reported
       no blocking or major finding?
 - [ ] Did that spec PASS on the deployed commit SHA?

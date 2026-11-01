@@ -12,8 +12,9 @@ the reporting tester pending`. Nothing is deployed. BUG-003..006 also need the
 IPLF-027B A1 release and the A2 governance enable before Ram can reach them.
 The lane-level positions that matter for the next verdict:
 
-- The first independent reviews rated BUG-001, BUG-003, BUG-007, BUG-010 and
-  BUG-016 `Partially fixed`; a fix pass closed the named defects locally.
+- The first independent reviews rated seven rows `Partially fixed`: BUG-001,
+  BUG-002, BUG-003, BUG-006, BUG-007, BUG-010 and BUG-016. A fix pass closed
+  the named defects locally.
 - BUG-015 asks for autonomous full-application testing. The PRD maps it to
   FT-099, a control crawl of the tester tenant. That is narrower than the row.
 - The docket-sweep lane is `Partially fixed`: the watch workspace still drops
@@ -65,6 +66,15 @@ predict what Ram will see.
   on. In production Ram is alone and the flag is off.
 - The portal-invite proof is local because Ram's portal:invite capability in
   test-legal is not established.
+- BUG-002(b): every local tenant received its Classification entries when the
+  spec enabled the workspace through the API (`support/ram-bugs4.ts`,
+  `configureLocalWorkspace`). Ram's test-legal workspace was enabled before
+  that code existed, so its entries can only come from migration
+  `20261031_0001` (trigger `release_backfill`), which is not on main.
+  `test_ip_document_taxonomy_defaults_migration_20261031.py` proves the
+  backfill on tenants shaped like the pre-release state, but no browser journey
+  ran against a backfilled tenant. The ip-create lane's own review named this
+  dependency, and the first ledger draft dropped it.
 
 Permanent rule: accept a tester's bug only in the reporting tester's own tenant
 and role, on the exact serving release, from records the journey creates
@@ -84,7 +94,8 @@ state. The release workflow's required positive receipts
 
 ### 2. A conditional branch or a skip counted as a pass
 
-- Seven batch-4 journeys are `[local-only]` and skip in production:
+- Eight batch-4 tests in seven specs are `[local-only]` and skip in
+  production:
   - `invoice-pdf.spec.ts:408` and `:416` (issuing is final)
   - `governance-ui.spec.ts:357` (three approvers)
   - `matter-links.spec.ts:353` (portal invite)
@@ -92,8 +103,16 @@ state. The release workflow's required positive receipts
   - `madrid-portal.spec.ts:192` (publish)
   - `registry.spec.ts:327`
   - `fixture-honesty.spec.ts:131` (classified upload)
+- `invoice-pdf.spec.ts:424` and `:432` are `[prod-only]`; they have not
+  executed anywhere yet.
 - The control crawl skips reported-record routes locally
   (`control-crawl.spec.ts:154`).
+- The docket-sweep journey (`docket-sweep.spec.ts:84`, `:94`) branches on
+  `if (body.total === 0)` (`:61`). Calendar-copy reviews cannot be created
+  through the UI, so locally, and almost certainly in production, only the
+  empty-state branch runs. The over-100 behaviour is proven by vitest (100 of
+  137) and the pytest population tests, not by the journey. This is a known
+  limitation of this batch's own spec.
 - On the foreign-associate form, the crawl stopped before record selection.
   Every per-record select was legitimately disabled there, so "zero offenders"
   proved nothing.
@@ -122,9 +141,11 @@ measure each text run's contrast against its own background, assert the page
 count with no blank trailing page, and check the required fields. File-name,
 `%PDF`, checksum and text-extraction checks are not legibility proof.
 
-Guards: `apps/api/tests/pdf_legibility.py` has a committed dark-on-dark negative
-control. `apps/api/tests/test_bug016_invoice_pdf_legibility.py` covers all five
-PDF generators, including the stored taxable-value-0 outside-counsel state. The
+Guards: the committed dark-on-dark negative control is
+`apps/api/tests/test_bug016_invoice_pdf_legibility.py::test_bug016_raster_check_flags_dark_text_on_a_dark_fill`
+(`:429`); the contrast measurement it exercises lives in
+`apps/api/tests/pdf_legibility.py`. The same test file covers all five PDF
+generators, including the stored taxable-value-0 outside-counsel state. The
 hari specs now parse PDF content (bd9d8cd1). `invoice-pdf.spec.ts:424` and
 `:432` download Ram's two reported invoices by server id in production.
 
@@ -179,7 +200,8 @@ Gaps:
 - The docket-scoped document list still disagrees with the recordal and Madrid
   validators.
 - The rule-needs-calendar check is client-only.
-- Portal invitation checks company only (B4-ADJ-01, Missing).
+- Portal invitation checks company only (B4-ADJ-01, Not fixed; enterprise gap
+  EH-B4-01, Missing).
 
 ### 6. Lists that stop at the first page
 
@@ -190,6 +212,10 @@ Gaps:
 - The watch workspace at 250.
 - `list_linked_ip_documents` capped at 100 and returned `total=len(page)`.
 - Madrid designations and calendar-copy reviews.
+- The Documents "Linked docket" picker on `/app/ip`, the BUG-002 upload
+  surface, still lists the first 100 dockets with no search and no cap
+  statement (B4-ADJ-18). `docket-dropdowns.test.ts` allowlists the whole of
+  `app/app/ip/page.tsx`, so the guard cannot see it.
 - The docket-sweep lane's own regression used 153 rows against a 200-row page.
   A mutation run that read only one page still passed it.
 
@@ -208,7 +234,9 @@ Guards:
 - `apps/web/lib/ip/docket-dropdowns.test.ts`: exact allowlist of bare docket
   list reads
 
-Gap: Matter lists, watch, and non-IP `limit=100` defaults (EH-B4-02).
+Gaps: the docket-dropdown guard allowlists whole files, not individual reads;
+the Documents Linked docket picker, Matter lists, watch, and non-IP
+`limit=100` defaults remain (EH-B4-02).
 
 ### 7. Seeded fixtures that route around the real setup
 
@@ -281,10 +309,11 @@ Gap: nothing detects a second component for the same picker, so the
 
 ### 10. Lanes counted as done on the implementer's word
 
-The twelve first reviews above found 2 to 9 serious findings per lane.
-Implementers also wrote their own ledger text, and every suggested line said
-"Properly fixed". The reviewers rated five of those rows `Partially fixed`
-(BUG-001, BUG-003, BUG-007, BUG-010, BUG-016).
+The twelve first reviews above found 1 to 9 serious findings per lane.
+Implementers also wrote their own ledger text, and every suggested line except
+the docket-sweep lane's (which proposed `Partially fixed`) said "Properly
+fixed". The reviewers rated seven of those rows `Partially fixed` (BUG-001,
+BUG-002, BUG-003, BUG-006, BUG-007, BUG-010, BUG-016).
 
 Permanent rule: a lane is done only when an independent adversarial review of
 its diff and specs, run from the tester's workflow, reports no blocking or
@@ -297,6 +326,14 @@ Gap: no automated control enforces it.
 ## Where this batch's own process still falls short
 
 - Production verification has not run. Nothing here is a production fix.
+- No merged-tree typecheck, vitest, backend suite or batch-4 Playwright result
+  is recorded on the integration HEAD after the 2026-11-01 lane merges and the
+  integration fixes 2d053832 and d1a02940. Mechanism 9's guard has not yet run
+  for this merge.
+- The batch-4 production ip-create and recordals journeys upload an IP
+  document that the product cannot retire, which breaks this batch's own
+  fixture rule. Before release the owner must record a residue exception, or
+  the upload half moves to `[local-only]` (B4-ADJ-07).
 - These production records and residues need retirement or correction:
   - triage docket 7ece82b7
   - registry link 83b46b3c
@@ -307,5 +344,5 @@ Gap: no automated control enforces it.
 - Local Playwright runs needed raised webServer boot windows under workstation
   load (API cold import 146-192 s). That is an environment fault, not product
   evidence, and the timeout must not be raised in the canonical config.
-- The adjacent defects B4-ADJ-01..17 are recorded, not fixed. The portal
+- The adjacent defects B4-ADJ-01..24 are recorded, not fixed. The portal
   invitation wall bypass is a security gap that predates this batch.
