@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createNotificationRuleMock,
   deleteNotificationRuleMock,
+  fetchMatterMock,
+  listMattersMock,
   listAdminNotificationsMock,
   listCompanyUsersMock,
   listNotificationRulesMock,
@@ -18,6 +21,8 @@ const {
 } = vi.hoisted(() => ({
   createNotificationRuleMock: vi.fn(),
   deleteNotificationRuleMock: vi.fn(),
+  fetchMatterMock: vi.fn(),
+  listMattersMock: vi.fn(),
   listAdminNotificationsMock: vi.fn(),
   listCompanyUsersMock: vi.fn(),
   listNotificationRulesMock: vi.fn(),
@@ -32,6 +37,8 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   createNotificationRule: createNotificationRuleMock,
   deleteNotificationRule: deleteNotificationRuleMock,
+  fetchMatter: fetchMatterMock,
+  listMatters: listMattersMock,
   listAdminNotifications: listAdminNotificationsMock,
   listCompanyUsers: listCompanyUsersMock,
   listNotificationRules: listNotificationRulesMock,
@@ -277,5 +284,76 @@ describe("AdminNotificationsPage", () => {
 
     expect(await screen.findByText("No delivery intents")).toBeInTheDocument();
     await waitFor(() => expect(selfTest).toBeEnabled());
+  });
+
+  describe("B4-ADJ-02 rule scope is chosen by name", () => {
+    const quiet = {
+      total_queued: 0, total_sent: 0, total_delivered: 0, total_failed: 0, reminders: [], intents: [], suppressions: [],
+      metrics: { due: 0, attempted: 0, delivered: 0, suppressed: 0, bounced: 0, failed: 0, fallback: 0, stale_queue: 0, critical_alerts: 0 },
+    };
+    beforeEach(() => {
+      useCapabilityMock.mockReturnValue(true);
+      listAdminNotificationsMock.mockResolvedValue(quiet);
+      listMattersMock.mockReset().mockResolvedValue({
+        matters: [
+          { id: "matter-open", matter_code: "LIT-1", title: "Aster v Nova", client_name: "Aster", status: "active" },
+          { id: "matter-closed", matter_code: "LIT-2", title: "Closed dispute", client_name: "Aster", status: "closed" },
+        ],
+        next_cursor: null,
+      });
+      fetchMatterMock.mockReset().mockResolvedValue({ id: "matter-open", matter_code: "LIT-1", title: "Aster v Nova", client_name: "Aster", status: "active" });
+      listCompanyUsersMock.mockResolvedValue({
+        company_id: "company-1",
+        company_slug: "firm",
+        users: [{ membership_id: "member-1", full_name: "Asha Rao", email: "asha@firm.example", role: "member", membership_active: true, user_active: true }],
+      });
+      createNotificationRuleMock.mockResolvedValue({ id: "rule-new" });
+    });
+
+    it("names Matter and colleague rules instead of printing their ids", async () => {
+      listNotificationRulesMock.mockResolvedValue({
+        durable_delivery: "wtd_5_3_foundation_available",
+        rules: [
+          { id: "rule-m", company_id: "c1", scope_type: "matter", scope_id: "matter-open", event_type: "hearing_upcoming", channels: ["in_app"], offset_minutes: null, enabled: true, created_by_membership_id: "m1", durable_delivery: "wtd_5_3_foundation_available", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z" },
+          { id: "rule-u", company_id: "c1", scope_type: "user", scope_id: "member-1", event_type: "new_order_uploaded", channels: ["in_app"], offset_minutes: null, enabled: true, created_by_membership_id: "m1", durable_delivery: "wtd_5_3_foundation_available", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z" },
+        ],
+      });
+      render(withClient(<AdminNotificationsPage />));
+      const matterRule = await screen.findByTestId("notification-rule-rule-m");
+      await waitFor(() => expect(matterRule).toHaveTextContent("LIT-1 · Aster v Nova · Aster"));
+      expect(matterRule).not.toHaveTextContent("matter-open");
+      const userRule = screen.getByTestId("notification-rule-rule-u");
+      await waitFor(() => expect(userRule).toHaveTextContent("Asha Rao"));
+      expect(userRule).not.toHaveTextContent("member-1");
+    });
+
+    it("offers a Matter picker for a Matter rule and a colleague picker for a user rule", async () => {
+      const user = userEvent.setup();
+      render(withClient(<AdminNotificationsPage />));
+      const form = await screen.findByTestId("notification-rule-form");
+      expect(within(form).queryByPlaceholderText(/id/i)).toBeNull();
+      expect(within(form).getByText("Every Matter and colleague in the company.")).toBeVisible();
+
+      await user.click(within(form).getAllByRole("combobox")[0]);
+      await user.click(await screen.findByRole("option", { name: "Matter" }));
+      const matter = await within(form).findByRole<HTMLSelectElement>("combobox", { name: "Rule Matter" });
+      // The create button waits for the Matter; a closed Matter is listed with its reason.
+      expect(screen.getByTestId("notification-rule-create")).toBeDisabled();
+      await waitFor(() => expect(matter).toBeEnabled());
+      expect(Array.from(matter.options).find((option) => option.value === "matter-closed")?.disabled).toBe(true);
+      fireEvent.change(matter, { target: { value: "matter-open" } });
+      await waitFor(() => expect(screen.getByTestId("notification-rule-create")).toBeEnabled());
+      await user.click(screen.getByTestId("notification-rule-create"));
+      await waitFor(() => expect(createNotificationRuleMock).toHaveBeenCalled());
+      expect(createNotificationRuleMock.mock.calls[0][0]).toMatchObject({ scope_type: "matter", scope_id: "matter-open" });
+
+      await user.click(within(form).getAllByRole("combobox")[0]);
+      await user.click(await screen.findByRole("option", { name: "User" }));
+      const person = await within(form).findByLabelText<HTMLSelectElement>("Rule colleague");
+      await waitFor(() => expect(person).toBeEnabled());
+      expect(person).toHaveValue("");
+      fireEvent.change(person, { target: { value: "member-1" } });
+      await waitFor(() => expect(screen.getByTestId("notification-rule-create")).toBeEnabled());
+    });
   });
 });
