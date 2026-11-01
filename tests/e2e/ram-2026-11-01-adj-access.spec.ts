@@ -385,7 +385,11 @@ async function ipPortalWallJourney(page: Page, request: APIRequestContext, rt: T
     expect(firstResponse.status()).toBe(200);
     const before = await firstResponse.json() as { grants: IpGrant[] };
     expect(before.grants.map((row) => row.id), "Before the wall the admin manages Ram's grant").toContain(ownerGrantId);
-    await expect(page.getByText(`${ownerClient} · ${docket.title}`)).toHaveCount(1);
+    // Ram's grant is in the grant list and in the publication grant choice.
+    const grantRow = page.getByRole("textbox", { name: `Revocation reason for ${ownerClient}`, exact: true });
+    const grantOption = page.getByRole("combobox", { name: "Client grant" }).locator(`option[value="${ownerGrantId}"]`);
+    await expect(grantRow).toHaveCount(1);
+    await expect(grantOption).toHaveCount(1);
 
     await page.getByLabel("Client name").fill("Walled IP Client");
     await page.getByLabel("Work email").fill(`adj01-ip-walled-${tag}@example.com`);
@@ -427,6 +431,8 @@ async function ipPortalWallJourney(page: Page, request: APIRequestContext, rt: T
     const after = await secondResponse.json() as { grants: IpGrant[] };
     expect(after.grants.map((row) => row.id)).not.toContain(ownerGrantId);
     expect(JSON.stringify(after)).not.toContain(docket.title);
+    await expect(grantRow).toHaveCount(0);
+    await expect(grantOption).toHaveCount(0);
     await expect(page.getByText(`${ownerClient} · ${docket.title}`)).toHaveCount(0);
     const revoke = await admin.api.post(`${rt.api.origin}/api/admin/portal/ip-grants/${ownerGrantId}/revoke`, {
       data: { expected_row_version: 1, reason: "Walled admin must not reach this grant." },
