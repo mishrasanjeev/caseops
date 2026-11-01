@@ -57,6 +57,7 @@ import {
   type IpForeignAssociateWorkspace,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { linkInvoiceChoices } from "@/lib/ip/foreign-associate-invoice";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
 import { useSession } from "@/lib/use-session";
 
@@ -1089,13 +1090,22 @@ function TransactionForm({
   const needsApproval = kind ? ["approve", "approve_substantive_response", "approve_fee_change", "verify_filing_evidence", "complete", "reassign"].includes(kind) : false;
   // The API accepts only active (not voided or superseded) cost items.
   const estimates = docket.cost_items.filter((row) => row.cost_nature === "estimate" && row.lineage_status === "active" && (kind === "reassign" || row.id !== workspace.instruction.estimate_cost_item_id));
-  const actuals = docket.cost_items.filter((row) => row.cost_nature === "actual" && row.lineage_status === "active");
+  // Link invoice: options come from the server validator's predicates (B4-ADJ-14).
+  const invoiceChoices = linkInvoiceChoices({
+    costItems: docket.cost_items,
+    spends: counsel?.spend_records ?? [],
+    matterId: docket.matter_id,
+    counselId: workspace.instruction.outside_counsel_id,
+    assignmentId: workspace.instruction.assignment_id,
+    spendId,
+  });
+  const actuals = invoiceChoices.actuals;
   const assignments = docket.matter_id ? counsel?.assignments.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === replacementCounselId && ["approved", "active"].includes(row.status)) ?? [] : [];
   const docketHref = `/app/ip?docket=${encodeURIComponent(docket.id)}`;
   const documentsHref = `${docketHref}&tab=documents`;
   // Assignments and associate invoices are recorded with outside_counsel:manage; link only for those roles.
   const matterCounselHref = docket.matter_id && canManageCounsel ? `/app/matters/${encodeURIComponent(docket.matter_id)}/outside-counsel` : null;
-  const spends = counsel?.spend_records.filter((row) => row.matter_id === docket.matter_id && row.counsel_id === workspace.instruction.outside_counsel_id) ?? [];
+  const spends = invoiceChoices.spends;
   const dispatches = communications.filter((row) => row.direction === "outbound" && ["logged", "sent", "delivered", "opened"].includes(row.status));
 
   useEffect(() => { setKind(options[0] ?? ""); }, [workspace.instruction.status]);
@@ -1172,22 +1182,28 @@ function TransactionForm({
     </> : null}
     {kind === "link_invoice" ? <>
       <ChoiceField
+        label="Associate invoice"
+        value={spendId}
+        onChange={(value) => { setSpendId(value); setActualCostId(""); }}
+        placeholder="Select invoice"
+        options={spends.map((row) => ({ value: row.id, label: `${row.invoice_reference} · ${money(row.amount_minor, row.currency)} · ${row.status}` }))}
+        required
+        caption={invoiceChoices.spendsWithoutReference ? `${invoiceChoices.spendsWithoutReference} invoice(s) from this associate have no invoice reference and cannot be linked until one is recorded on the Matter's Outside counsel tab.` : undefined}
+        empty={!docket.matter_id ? "Associate invoices are recorded against a Matter, and this record has no Matter." : invoiceChoices.spendsWithoutReference ? `This associate's invoice(s) on the Matter have no invoice reference. Record the reference on the Matter's Outside counsel tab first.` : matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "No invoice from this associate is recorded on the Matter. An owner, admin or partner (outside-counsel management) records it on the Matter's Outside counsel tab; your role cannot."}
+      />
+      <ChoiceField
         label="Actual filing cost"
         value={actualCostId}
         onChange={setActualCostId}
         placeholder="Select cost"
         options={actuals.map((row) => ({ value: row.id, label: `${row.description} · ${row.amount_withheld ? "Amount restricted" : money(row.amount_minor, row.currency)}` }))}
         required
-        empty={<>No active actual cost is recorded on this record. Record the associate&apos;s invoiced cost in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
-      />
-      <ChoiceField
-        label="Associate invoice"
-        value={spendId}
-        onChange={setSpendId}
-        placeholder="Select invoice"
-        options={spends.map((row) => ({ value: row.id, label: `${row.invoice_reference ?? row.description} · ${row.status}` }))}
-        required
-        empty={!docket.matter_id ? "Associate invoices are recorded against a Matter, and this record has no Matter." : matterCounselHref ? <>No invoice from this associate is recorded on the Matter. Record it on the Matter&apos;s Outside counsel tab. <NewTabLink href={matterCounselHref}>Open the Matter&apos;s Outside counsel tab</NewTabLink></> : "No invoice from this associate is recorded on the Matter. An owner, admin or partner (outside-counsel management) records it on the Matter's Outside counsel tab; your role cannot."}
+        caption={invoiceChoices.selectedSpend ? `Only actual costs linked to a client invoice for ${money(invoiceChoices.selectedSpend.amount_minor, invoiceChoices.selectedSpend.currency)} are listed; the associate invoice and the cost must reconcile.` : "Only actual costs already linked to a client invoice are listed."}
+        empty={invoiceChoices.activeActualCount === 0
+          ? <>No active actual cost is recorded on this record. Record the associate&apos;s invoiced cost in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>
+          : invoiceChoices.unbilledActualCount === invoiceChoices.activeActualCount
+            ? <>No actual cost on this record is linked to a client invoice yet. Link the cost to the client invoice in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>
+            : <>No billed actual cost matches {invoiceChoices.selectedSpend ? money(invoiceChoices.selectedSpend.amount_minor, invoiceChoices.selectedSpend.currency) : "this invoice"}. Correct the cost or its client-invoice link in the IP record&apos;s cost evidence. <NewTabLink href={docketHref}>Open the IP record</NewTabLink></>}
       />
     </> : null}
     {kind === "reassign" ? <>
