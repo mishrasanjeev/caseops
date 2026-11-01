@@ -14762,7 +14762,7 @@ export type IpCalendarReconciliationCandidate = {
 export async function fetchIpCalendarReconciliationCandidates(input?: {
   includeResolved?: boolean;
   limit?: number;
-}): Promise<{ candidates: IpCalendarReconciliationCandidate[] }> {
+}): Promise<{ candidates: IpCalendarReconciliationCandidate[]; total: number }> {
   const params = new URLSearchParams();
   if (input?.includeResolved) params.set("include_resolved", "true");
   if (input?.limit) params.set("limit", String(input.limit));

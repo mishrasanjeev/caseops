@@ -13,7 +13,7 @@ import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.redaction import redact_provider_error
@@ -9095,14 +9095,13 @@ def check_ip_calendar_projection_drift(
     return findings
 
 
-def list_ip_calendar_projection_reconciliation_candidates(
+def _ip_calendar_reconciliation_candidate_scope(
     session: Session,
     *,
     context: SessionContext,
-    include_resolved: bool = False,
-    limit: int = 100,
-) -> list[CalendarProjectionReconciliationCandidate]:
-    """List only candidate evidence the caller may open through its docket."""
+    include_resolved: bool,
+):
+    """Candidate evidence the caller may open through its docket."""
 
     statement = (
         select(CalendarProjectionReconciliationCandidate)
@@ -9116,17 +9115,48 @@ def list_ip_calendar_projection_reconciliation_candidates(
             IpDocketRecord.company_id == context.company.id,
             visible_ip_dockets_filter(session, context=context),
         )
-        .order_by(
-            CalendarProjectionReconciliationCandidate.created_at.desc(),
-            CalendarProjectionReconciliationCandidate.id.desc(),
-        )
-        .limit(limit)
     )
     if not include_resolved:
         statement = statement.where(
             CalendarProjectionReconciliationCandidate.status == "pending"
         )
-    return list(session.scalars(statement).all())
+    return statement
+
+
+def list_ip_calendar_projection_reconciliation_candidates(
+    session: Session,
+    *,
+    context: SessionContext,
+    include_resolved: bool = False,
+    limit: int = 100,
+) -> list[CalendarProjectionReconciliationCandidate]:
+    """List only candidate evidence the caller may open through its docket."""
+
+    statement = _ip_calendar_reconciliation_candidate_scope(
+        session, context=context, include_resolved=include_resolved
+    )
+    return list(
+        session.scalars(
+            statement.order_by(
+                CalendarProjectionReconciliationCandidate.created_at.desc(),
+                CalendarProjectionReconciliationCandidate.id.desc(),
+            ).limit(limit)
+        ).all()
+    )
+
+
+def count_ip_calendar_projection_reconciliation_candidates(
+    session: Session,
+    *,
+    context: SessionContext,
+    include_resolved: bool = False,
+) -> int:
+    """How many candidates the caller may open, so a bounded list can say so."""
+
+    statement = _ip_calendar_reconciliation_candidate_scope(
+        session, context=context, include_resolved=include_resolved
+    )
+    return session.scalar(select(func.count()).select_from(statement.subquery())) or 0
 
 
 def decide_ip_calendar_projection_reconciliation_candidate(

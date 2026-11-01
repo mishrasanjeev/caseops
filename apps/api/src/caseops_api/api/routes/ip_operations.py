@@ -2085,6 +2085,7 @@ async def get_ip_calendar_reconciliation_candidates(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> IpCalendarReconciliationCandidateListResponse:
     from caseops_api.services.calendar_sync import (
+        count_ip_calendar_projection_reconciliation_candidates,
         list_ip_calendar_projection_reconciliation_candidates,
     )
 
@@ -2095,7 +2096,10 @@ async def get_ip_calendar_reconciliation_candidates(
         limit=limit,
     )
     return IpCalendarReconciliationCandidateListResponse(
-        candidates=[_calendar_reconciliation_candidate_record(row) for row in rows]
+        candidates=[_calendar_reconciliation_candidate_record(row) for row in rows],
+        total=count_ip_calendar_projection_reconciliation_candidates(
+            session, context=context, include_resolved=include_resolved
+        ),
     )
 
 

@@ -1288,6 +1288,8 @@ class IpCalendarReconciliationCandidateRecord(BaseModel):
 
 class IpCalendarReconciliationCandidateListResponse(BaseModel):
     candidates: list[IpCalendarReconciliationCandidateRecord] = Field(default_factory=list)
+    # Every candidate the caller may open; candidates holds at most ``limit``.
+    total: int
 
 
 class IpCalendarReconciliationDecisionRequest(BaseModel):
