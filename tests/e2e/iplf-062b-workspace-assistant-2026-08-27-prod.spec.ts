@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectStatus } from "./support/iplf058b";
+import { disposeMatter } from "./support/retire-records";
 
 const WEB = (process.env.PROD_BASE_URL ?? "https://caseops.ai").trim();
 const API = (process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai").trim();
@@ -70,6 +71,7 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({
   );
   const enabledPolicy = await enabledResponse.json();
 
+  let createdMatterId: string | undefined;
   try {
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const matter = await page.request.post(`${API}/api/matters/`, {
@@ -83,6 +85,7 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({
     });
     await expectStatus(matter, 200, "production assistant matter fixture");
     const matterRecord = await matter.json();
+    createdMatterId = matterRecord.id;
 
     await page.goto(WEB);
     await page.evaluate(
@@ -131,6 +134,17 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({
       ),
     ).toBe(false);
   } finally {
+    // Every run's synthetic Matter is disposed, pass or fail; the policy is
+    // restored even when disposal fails, and the disposal failure is reported.
+    let disposalError: unknown;
+    if (createdMatterId) {
+      try {
+        await disposeMatter(page.request, API, headers, createdMatterId,
+          "IPLF-062B production assistant fixture disposed after the run.");
+      } catch (error) {
+        disposalError = error;
+      }
+    }
     const restore = await page.request.patch(
       `${API}/api/admin/tenant-ai-policy`,
       {
@@ -145,5 +159,6 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({
       },
     );
     await expectStatus(restore, 200, "restore production QA assistant policy");
+    if (disposalError) throw disposalError;
   }
 });
