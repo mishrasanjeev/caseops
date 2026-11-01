@@ -75,6 +75,7 @@ async function uploadFromDocumentsTab(
 async function retirementJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   const docket = await createDocketThroughUi(page, rt, stamp(`ADJ-07 docket ${mobile ? "mobile" : "desktop"}`),
     mobile ? "ADJ07M" : "ADJ07D");
+  // The upload this run has not yet retired.
   const created: { documentId: string | null } = { documentId: null };
   try {
     const title = stamp(`ADJ-07 mistaken upload ${mobile ? "mobile" : "desktop"}`);
@@ -123,6 +124,7 @@ async function retirementJourney(page: Page, request: APIRequestContext, rt: Tes
     page.off("request", track);
     expect(retireRequests).toHaveLength(1);
     expect(body.retirement.reason).toBe(why);
+    created.documentId = null;
     await expect(card).toHaveCount(0);
 
     // Server truth: readable in history, gone from the lists and pickers.

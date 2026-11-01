@@ -223,24 +223,29 @@ async function uploadClassifiedDocument(
 /** Create, upload, then retire both: the docket first, then its document through the UI. */
 async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   const { docketId } = await createTwoClassTrademark(page, request, rt, mobile);
+  // What this run created and has not yet released.
   const created: { documentId: string | null } = { documentId: null };
+  let docketLive = true;
   try {
     await markPositive(info, `ip-create-${mobile ? "mobile" : "desktop"}`, { docketId, local: rt.local });
     await uploadClassifiedDocument(page, request, rt, info, docketId, mobile, created);
     await retireDocket(request, rt, docketId);
+    docketLive = false;
     // The closed docket's document is reached through the history view, shown
     // read-only (no state change, new version or bulk selection), and retired there.
     expect(created.documentId, "The upload returned the created document").toBeTruthy();
-    await retireDocumentThroughUi(page, rt, created.documentId as string,
+    const documentId = created.documentId as string;
+    await retireDocumentThroughUi(page, rt, documentId,
       `Ram batch-4 acceptance upload ${rt.run} retired after its docket.`, { history: true, mobile, closedRecord: true });
+    created.documentId = null;
     await markPositive(info, `ip-document-retired-${mobile ? "mobile" : "desktop"}`, {
-      documentId: created.documentId, docketId, local: rt.local,
+      documentId, docketId, local: rt.local,
     });
   } finally {
-    // No-ops when the journey passed: the docket and document are already retired.
+    // Nothing is left to release when the journey passed.
     const documentId = created.documentId;
     await runCleanup([
-      ["Retire the acceptance docket", () => retireDocketByApi(request, rt, docketId)],
+      ["Retire the acceptance docket", docketLive ? () => retireDocketByApi(request, rt, docketId) : null],
       ["Retire the acceptance upload", documentId ? () => retireDocumentByApi(request, rt, documentId) : null],
     ]);
   }

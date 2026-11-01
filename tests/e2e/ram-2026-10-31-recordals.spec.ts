@@ -84,7 +84,7 @@ async function retireDocketThroughUi(page: Page, rt: TesterRuntime, docket: { id
   expect(result).toEqual(expect.objectContaining({ docket_id: docket.id, status: "retired", is_active: false }));
 }
 
-/** What this run created, recorded as soon as the server returns it. */
+/** What this run created and has not yet released, recorded as soon as the server returns it. */
 type Created = { docketId: string | null; deedId: string | null; recordalId: string | null };
 
 /**
@@ -249,11 +249,14 @@ async function recordalSteps(page: Page, rt: TesterRuntime, info: TestInfo, mobi
   expect(withdrawnResponse.request().postDataJSON()).toEqual(expect.objectContaining({ effective_at: null, transaction_kind: "withdrawn" }));
   const withdrawal = await json<{ recordal: { status: string } }>(withdrawnResponse, "Withdraw the test recordal", 201);
   expect(withdrawal.recordal.status).toBe("withdrawn");
+  created.recordalId = null;
   await expect(page.getByText("This recordal is closed.")).toBeVisible();
   await retireDocketThroughUi(page, rt, docket);
+  created.docketId = null;
   // The withdrawn recordal no longer relies on the instrument: retire it from history.
   await retireDocumentThroughUi(page, rt, deedId, `BUG-008 acceptance instrument ${rt.run} retired after its recordal.`,
     { history: true, mobile });
+  created.deedId = null;
   await markPositive(info, "adj07-instrument-retired-after-recordal-and-docket", {
     local: rt.local, document_id: deedId, recordal_id: recordal.id, mobile,
   });
