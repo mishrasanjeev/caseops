@@ -56,10 +56,18 @@ async function press(context, key, locator) {
   browserStep(context, key, 'click');
   await dispatchNativeClick(context, control, observed.kind, observed.value);
 }
+export const FIREFOX_FIELD_SETTLE_MS = 5000;
 async function fill(context, key, value) {
   const control = await locate(context, key);
   browserStep(context, key, 'fill');
-  await control.setValue(typeof value === 'function' ? value() : value);
+  const text = typeof value === 'function' ? value() : value;
+  // WDIO setValue is clear then append. Gecko applies the clear asynchronously,
+  // so UiAutomator2 can append to stale or autofilled text and submit another
+  // identity. Replace the value in one native action, then require it back.
+  await context.driver.execute('mobile: replaceElementValue', { elementId: control.elementId, text });
+  if (key === 'password') return;
+  await context.driver.waitUntil(async () => await control.getText() === text,
+    { timeout: FIREFOX_FIELD_SETTLE_MS, interval: 150, timeoutMsg: 'FIREFOX_FIELD_VALUE_MISMATCH' });
 }
 async function text(context, key) {
   const control = await locate(context, key);

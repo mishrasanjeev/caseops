@@ -1394,6 +1394,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
   let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
+  // Field text as the browser reports it; options.autofill models Firefox prefill.
+  const typed = { ...(options.autofill || {}) }, fields = new Map();
+  let fieldSequence = 0;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { ...auth, mode: 'native-firefox', webOrigin: 'https://10.0.2.2:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } };
   const driver = {
@@ -1417,6 +1420,15 @@ function firefoxDouble(t, foreign = false, options = {}) {
         if (clock - start >= timeout) throw new Error(settings.timeoutMsg || 'UNIT_WAIT_UNSATISFIED');
         clock += Math.min(interval, timeout - (clock - start));
       }
+    },
+    execute: async (command, args) => {
+      assert.equal(command, 'mobile: replaceElementValue', 'UNIT_FIREFOX_REPLACE_ONLY');
+      const key = fields.get(args?.elementId);
+      assert.ok(key, 'UNIT_RESOLVED_FIELD_ID_REQUIRED');
+      writes.push([key, args.text]);
+      if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(args.text);
+      // A replace that does not take keeps the earlier (autofilled) text.
+      if (!options.replaceIgnored) typed[key] = args.text;
     },
     getWindowRect: async () => ({ width: 400, height: 800 }),
     performActions: async () => {
@@ -1460,9 +1472,11 @@ function firefoxDouble(t, foreign = false, options = {}) {
           && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
         : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0) : false;
       if (!shown) return [];
-      return [{ isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
-        setValue: async (value) => { writes.push([key, value]); if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(value); },
+      const elementId = `unit-firefox-${++fieldSequence}`;
+      fields.set(elementId, key);
+      return [{ elementId, isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
         getText: async () => {
+          if (Object.hasOwn(typed, key)) return typed[key];
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
             if (verified && options.changedAfterMfa) target.searchParams.set('state', 'c'.repeat(64));
@@ -1507,6 +1521,26 @@ test('Firefox waits for a delayed observed entry before any credential write wit
   assert.equal(fake.swipes.length, 0);
   assert.deepEqual(fake.writes.slice(0, 3).map(([key]) => key), ['companySlug', 'email', 'password']);
   assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 20000);
+});
+
+test('Firefox replaces autofilled login fields atomically and reads back each non-secret value', async t => {
+  browserEnvironment(t);
+  // Observed on emulator-5584: a stale operator email survived setValue's clear
+  // and the member email was appended, so the form refused the identity.
+  const fake = firefoxDouble(t, false, { autofill: { companySlug: 'other', email: 'operator@example.invalid', password: 'stale' } });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.writes.slice(0, 3), [['companySlug', 'unit'], ['email', 'unit@example.invalid'], ['password', 'unit-only-password']]);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+});
+
+test('Firefox refuses to submit when a replaced field does not read back exactly', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { autofill: { companySlug: 'unit', email: 'operator@example.invalid' }, replaceIgnored: true, chromeDelayMs: 0 });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await assert.rejects(browserLogin(fake.context), /FIREFOX_FIELD_VALUE_MISMATCH/);
+  assert.equal(fake.clicks.includes('submit'), false);
+  assert.deepEqual(fake.writes.map(([key]) => key), ['companySlug', 'email']);
+  assert.ok(!JSON.stringify(fake.records).includes('unit-only-password'));
 });
 
 const firefoxEntryClockMocks = new WeakMap();

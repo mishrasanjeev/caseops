@@ -246,6 +246,37 @@ test('Android home retains its visible-heading and original Back proof without i
   assert.ok(fake.queries.every((query) => !query.startsWith('xpath:')));
 });
 
+test('Android home waits through a Back transition that briefly shows neither the list nor another Back', async () => {
+  // Observed in run-06 NATIVE-08: Matter detail -> Back -> (transition) -> Matters list.
+  let backClicks = 0, polls = 0, transition = false;
+  const shown = (id) => [{ isDisplayed: async () => true, click: async () => { if (id === 'back') { backClicks++; transition = true; } } }];
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    $$: async (query) => {
+      if (query === selector('android', 'id', 'tab-matters')) return shown('tab');
+      if (query === selector('android', 'id', 'screen-matters')) return transition && ++polls > 3 ? shown('screen') : [];
+      if (query === selector('android', 'id', 'back')) return transition ? [] : shown('back');
+      assert.fail(`UNEXPECTED_QUERY ${query}`);
+    },
+  });
+  await home({ platform: 'android', driver }, 'matters');
+  assert.equal(backClicks, 1);
+  assert.ok(polls > 3);
+});
+
+test('Android home still fails with a typed state error when neither the list nor Back ever settles', async () => {
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    $$: async (query) => query === selector('android', 'id', 'tab-matters')
+      ? [{ isDisplayed: async () => true, click: async () => {} }] : [],
+  });
+  await assert.rejects(() => home({ platform: 'android', driver }, 'matters'), /NATIVE_HOME_STATE_NOT_READY/);
+});
+
 test('input forwards optional bounded scroll discovery while preserving its default lookup budget and exact value', async () => {
   for (const scroll of [false, true]) {
     let moved = !scroll;

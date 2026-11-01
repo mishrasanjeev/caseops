@@ -245,11 +245,29 @@ async function iosHomeScrollVisible(driver, tab) {
 export async function home(context, tab) {
   await click(context, 'id', `tab-${tab}`);
   for (let depth = 0; depth <= 4; depth++) {
-    if (await visible(context.driver, selector(context.platform, 'id', `screen-${tab}`))) return;
-    if (context.platform === 'ios' && await iosHomeScrollVisible(context.driver, tab)) return;
+    if (await homeOrBack(context, tab) === 'home') return;
     assert.ok(depth < 4, 'NATIVE_HOME_STACK_BOUND');
     await click(context, 'id', 'back');
   }
+}
+// A Back transition can briefly show neither the home marker nor a further
+// Back. Settle on one of them under the normal lookup bound; requiring another
+// Back immediately failed Android NATIVE-08 once the list had already arrived.
+async function homeOrBack(context, tab) {
+  let state, terminal;
+  await context.driver.waitUntil(async () => {
+    try {
+      if (await visible(context.driver, selector(context.platform, 'id', `screen-${tab}`))) state = 'home';
+      else if (context.platform === 'ios' && await iosHomeScrollVisible(context.driver, tab)) state = 'home';
+      else if (await visible(context.driver, selector(context.platform, 'id', 'back'))) state = 'back';
+      return !!state;
+    } catch (error) {
+      // Leave the polling loop; preserve ambiguity/proof refusals unchanged.
+      terminal = error; return true;
+    }
+  }, { timeout: 10000, interval: 150, timeoutMsg: 'NATIVE_HOME_STATE_NOT_READY' });
+  if (terminal) throw terminal;
+  return state;
 }
 export async function restart(context) {
   nativeAction(context, 'restart');
