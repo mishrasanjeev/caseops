@@ -10,8 +10,14 @@
  * Madrid registration choosing that docket through the docket picker and its
  * Indian application from the validator-backed list. Both dockets are closed
  * afterwards. Nothing the bug is about is created through the API.
+ *
+ * Client portal: in production Ram opens every client grant offered and each
+ * one must load its shareable versions or explain why there are none, never
+ * fail. Locally ([local-only], fresh tenant, no real email) Ram uploads and
+ * approves an evidence document, grants a client the evidence category,
+ * publishes exactly that version and revokes the grant, all through the UI.
  */
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
 
 import {
   deadSelects, expectNoPageOverflow, expectOnScreen, json, markPositive, prepareTester, stamp, type TesterRuntime,
@@ -56,6 +62,12 @@ async function closeDocket(page: Page, rt: TesterRuntime, docketId: string, reas
     expected_lifecycle_version: docket.lifecycle_version, to_status: "closed", effective_at: new Date().toISOString(),
     reason, outcome: "closed", source: "lawyer_review", evidence_ref: `acceptance:${rt.run}`, linked_matter_handling: "not_linked",
   } }), "Close acceptance docket");
+}
+
+/** Labels that ask a lawyer to type an internal record id ("... ID"). */
+async function internalIdFields(scope: Locator): Promise<string[]> {
+  const labels = await scope.locator("label").allInnerTexts();
+  return labels.map((label) => label.trim()).filter((label) => /\bIDs?$/.test(label));
 }
 
 async function openMadridIntake(page: Page, rt: TesterRuntime) {
@@ -113,9 +125,12 @@ test("BUG-015 Madrid: Ram records an outbound IR choosing the basic mark docket 
     const linkedDocument = page.getByRole("combobox", { name: "Linked document" });
     await expect(linkedDocument).toBeDisabled();
     await expect(page.getByRole("link", { name: "Upload one in the IP workspace Documents tab" }))
-      .toHaveAttribute("href", `/app/ip?docket=${record.docket_id}`);
+      .toHaveAttribute("href", `/app/ip?docket=${record.docket_id}&tab=documents`);
     await expect(page.getByRole("combobox", { name: "Linked deadline" })).toBeDisabled();
+    // A fee transaction needs an active cost; on an empty docket it is not offered.
+    await expect(page.getByRole("option", { name: /Fee recorded/ })).toHaveJSProperty("disabled", true);
     expect(await deadSelects(page, page.locator("main"))).toEqual([]);
+    expect(await internalIdFields(page.locator("main"))).toEqual([]);
     const stored = await json<{ basic_application_id: string }>(await page.request.get(
       `${rt.api.origin}/api/ip/international-registrations/${record.id}`, { headers: rt.headers }), "Read Madrid record");
     expect(stored.basic_application_id).toBe(basic.applicationId);
@@ -142,19 +157,113 @@ test("BUG-015 Madrid [mobile]: intake pickers fit a phone and never offer a dead
   await markPositive(info, "madrid-mobile", { local: rt.local });
 });
 
-test("BUG-015 client portal: the approved-version choice waits for a grant and never offers a dead select", async ({ page, request }, info) => {
-  test.setTimeout(4 * 60_000);
+type GrantRow = { id: string; publishable: boolean; publication_blocked_reason: string | null };
+
+test("BUG-015 client portal: every offered grant loads its shareable versions or says why there are none", async ({ page, request }, info) => {
+  test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, info.project.use.baseURL);
-  const grants = page.waitForResponse(apiResponse(rt, "GET", /\/api\/admin\/portal\/ip-grants$/));
+  const grantsResponse = page.waitForResponse(apiResponse(rt, "GET", /\/api\/admin\/portal\/ip-grants$/));
   await page.goto(`${rt.web.origin}/app/ip/client-portal`);
-  await json(await grants, "Read portal grants");
+  const { grants } = await json<{ grants: GrantRow[] }>(await grantsResponse, "Read portal grants");
   const version = page.getByRole("combobox", { name: "Approved version" });
   await expect(version).toBeDisabled();
   await expect(version.locator("option").first()).toHaveText("Choose a client grant first");
   await expect(page.getByRole("combobox", { name: "IP docket" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Approved document categories" })).toBeVisible();
   expect(await deadSelects(page, page.locator("main"))).toEqual([]);
-  await markPositive(info, "client-portal-controls", { local: rt.local });
+
+  // The grant choice offers exactly the grants the API says publishing accepts
+  // (production retains closed-docket grants from earlier runs; none may appear).
+  const grantSelect = page.getByRole("combobox", { name: "Client grant" });
+  const offered = (await grantSelect.locator("option").evaluateAll(
+    (options) => options.map((option) => (option as HTMLOptionElement).value))).filter(Boolean);
+  expect(offered.sort()).toEqual(grants.filter((row) => row.publishable).map((row) => row.id).sort());
+  for (const grantId of offered.slice(0, 8)) {
+    const shareable = page.waitForResponse(apiResponse(rt, "GET", new RegExp(`/api/ip/portal/grants/${grantId}/shareable-documents$`)));
+    await grantSelect.selectOption(grantId);
+    const body = await json<{ documents: unknown[] }>(await shareable, `Shareable versions for grant ${grantId}`);
+    if (body.documents.length) await expect(version).toBeEnabled();
+    else await expect(version.locator("option").first()).toHaveText("No shareable version on this docket");
+    await expect(page.locator("#publication-document-hint [role=alert]")).toHaveCount(0);
+  }
+  await markPositive(info, "client-portal-controls", { local: rt.local, grantsChecked: Math.min(offered.length, 8) });
+});
+
+test("BUG-015 client portal [local-only]: Ram publishes exactly the approved evidence version a new grant can receive", async ({ page, request }, info) => {
+  test.setTimeout(8 * 60_000);
+  const rt = await prepareTester(page, request, info.project.use.baseURL);
+  expect(rt.local, "This journey invites a client; it runs only in a fresh local tenant").toBe(true);
+  const title = stamp("PORTALDOC");
+  const basic = await createBasicMark(page, rt, title);
+  try {
+    // The Madrid/portal upload links land on the Documents tab with this docket chosen.
+    await page.goto(`${rt.web.origin}/app/ip?docket=${basic.docketId}&tab=documents`);
+    await expect(page.getByRole("tab", { name: "Documents", exact: true })).toHaveAttribute("aria-selected", "true");
+    await page.getByLabel("Original file", { exact: true }).setInputFiles({
+      name: `${title}.txt`, mimeType: "text/plain", buffer: Buffer.from(`Registry evidence for ${title}. `.repeat(40)),
+    });
+    await page.getByLabel("Title", { exact: true }).fill(`Evidence ${title}`);
+    await page.getByLabel("Client code", { exact: true }).fill("TESTLEGAL");
+    await page.getByLabel("Mark", { exact: true }).fill(title.split(" ")[0]);
+    await page.getByLabel("Classification", { exact: true }).selectOption("evidence");
+    await expect(page.getByLabel("Linked docket", { exact: true })).toHaveValue(basic.docketId);
+    await page.getByRole("button", { name: "Preview controlled name" }).click();
+    await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();
+    const uploaded = page.waitForResponse(apiResponse(rt, "POST", /\/api\/ip\/documents\/upload$/));
+    await page.getByRole("button", { name: "Upload reviewed document" }).click();
+    const upload = await json<{ document: { id: string; versions: Array<{ version: number }> } }>(await uploaded, "Upload evidence");
+    const documentId = upload.document.id;
+    const card = page.getByTestId(`ip-document-${documentId}`);
+    for (const state of ["review", "approved"]) {
+      const moved = page.waitForResponse(apiResponse(rt, "POST", new RegExp(`/api/ip/documents/${documentId}/versions/1/transition$`)));
+      await card.getByRole("button", { name: `Move to ${state}` }).click();
+      await json(await moved, `Move evidence to ${state}`);
+      await expect(card.getByText(`${state} · v1`)).toBeVisible();
+    }
+
+    await page.goto(`${rt.web.origin}/app/ip/client-portal`);
+    const clientName = `Client ${title}`;
+    await page.getByLabel("Client name").fill(clientName);
+    await page.getByLabel("Work email").fill(`client-${rt.run.toLowerCase().replace(/[^a-z0-9-]/g, "-")}@example.com`);
+    await page.getByLabel("Find the client's docket").fill(title);
+    const docket = page.getByRole("combobox", { name: "IP docket" });
+    await expect(docket.locator(`option[value="${basic.docketId}"]`)).toHaveCount(1);
+    await docket.selectOption(basic.docketId);
+    await expect(page.getByRole("checkbox", { name: "Evidence" })).toBeChecked();
+    const invited = page.waitForResponse(apiResponse(rt, "POST", /\/api\/admin\/portal\/invitations$/));
+    await page.getByRole("button", { name: "Grant access" }).click();
+    const invitation = await json<{ grants: Array<{ id: string; ip_docket_record_id: string | null }> }>(await invited, "Grant client access", 201);
+    const grant = invitation.grants.find((row) => row.ip_docket_record_id === basic.docketId);
+    expect(grant, "The new grant covers the chosen docket").toBeTruthy();
+
+    const grantSelect = page.getByRole("combobox", { name: "Client grant" });
+    await expect(grantSelect.locator(`option[value="${grant!.id}"]`)).toHaveCount(1);
+    const shareable = page.waitForResponse(apiResponse(rt, "GET", new RegExp(`/api/ip/portal/grants/${grant!.id}/shareable-documents$`)));
+    await grantSelect.selectOption(grant!.id);
+    const listed = await json<{ documents: Array<{ document_id: string; version_number: number }> }>(await shareable, "Shareable versions");
+    expect(listed.documents.map((row) => `${row.document_id}:${row.version_number}`)).toEqual([`${documentId}:1`]);
+    const version = page.getByRole("combobox", { name: "Approved version" });
+    await expect(version).toBeEnabled();
+    expect((await version.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))))
+      .toEqual(["", `${documentId}:1`]);
+    await version.selectOption(`${documentId}:1`);
+    await page.getByLabel("Client title").fill(`Evidence for ${clientName}`);
+    const published = page.waitForResponse(apiResponse(rt, "POST", /\/api\/ip\/portal\/document-publications$/));
+    await page.getByRole("button", { name: "Publish approved version" }).click();
+    const publication = await json<{ id: string }>(await published, "Publish approved evidence", 201);
+    expect(publication.id).toBeTruthy();
+    expect(await deadSelects(page, page.locator("main"))).toEqual([]);
+
+    await page.getByLabel(`Revocation reason for ${clientName}`).fill("Acceptance client access removed after verification.");
+    const revoked = page.waitForResponse(apiResponse(rt, "POST", new RegExp(`/api/admin/portal/ip-grants/${grant!.id}/revoke$`)));
+    await page.getByRole("button", { name: "Revoke" }).click();
+    const revokedGrant = await json<{ publishable: boolean; publication_blocked_reason: string | null }>(await revoked, "Revoke client grant");
+    expect([revokedGrant.publishable, revokedGrant.publication_blocked_reason]).toEqual([false, "revoked"]);
+    await expect(grantSelect.locator(`option[value="${grant!.id}"]`)).toHaveCount(0);
+    await markPositive(info, "client-portal-publish", { local: rt.local, publication: publication.id });
+  } finally {
+    await closeDocket(page, rt, basic.docketId, "Acceptance portal docket retired after verification.");
+  }
 });
 
 test("BUG-015 client portal [mobile]: grant and publish controls fit a phone", async ({ page, request }, info) => {
@@ -168,4 +277,16 @@ test("BUG-015 client portal [mobile]: grant and publish controls fit a phone", a
   await expectNoPageOverflow(page);
   expect(await deadSelects(page, page.locator("main"))).toEqual([]);
   await markPositive(info, "client-portal-mobile", { local: rt.local });
+});
+
+test("BUG-015 sweep: Madrid, client portal, renewals and reports ask for no internal record ID", async ({ page, request }, info) => {
+  test.setTimeout(4 * 60_000);
+  const rt = await prepareTester(page, request, info.project.use.baseURL);
+  for (const route of ["/app/ip/madrid", "/app/ip/client-portal", "/app/ip/renewals", "/app/ip/reports"]) {
+    await page.goto(`${rt.web.origin}${route}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    expect(await internalIdFields(page.locator("main")), route).toEqual([]);
+    expect(await deadSelects(page, page.locator("main")), route).toEqual([]);
+  }
+  await markPositive(info, "lane-no-id-fields", { local: rt.local });
 });
