@@ -2221,6 +2221,8 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
             detail="min_claim_amount_minor cannot exceed max_claim_amount_minor.",
         )
 
+    if filters.id:
+        stmt = stmt.where(Matter.id == filters.id.strip())
     if filters.q:
         needle = f"%{filters.q.strip()}%"
         stmt = stmt.where(
