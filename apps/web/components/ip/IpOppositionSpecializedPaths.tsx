@@ -49,15 +49,6 @@ const ACTIONS: Array<{ value: SpecializedAction; label: string }> = [
   { value: "madrid_designation_link_recorded", label: "Madrid designation" },
 ];
 
-// services/ip_opposition_shared.py _assert_specialized_action: the hearing
-// states each record accepts.
-const HEARING_STATUSES: Partial<Record<SpecializedAction, ReadonlySet<string>>> = {
-  hearing_notice_recorded: new Set(["scheduled", "adjourned"]),
-  adjournment_recorded: new Set(["scheduled", "adjourned"]),
-  written_arguments_recorded: new Set(["scheduled", "adjourned", "completed"]),
-  attendance_recorded: new Set(["completed"]),
-};
-
 function readable(value: string): string {
   return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
@@ -132,11 +123,14 @@ export function IpOppositionSpecializedPaths({
     evidence_refs: refs(fields.serviceEvidence ?? ""),
   };
   // Options come from the validators' predicates; nothing is chosen for the user (B4-ADJ-22).
-  const allowedHearingStatuses = HEARING_STATUSES[action];
+  // The hearing statuses this record accepts come from the API's own
+  // validator table (hearing_statuses_by_action); with no table every
+  // hearing is refused rather than guessed.
+  const allowedHearingStatuses = new Set(workflow.data?.hearing_statuses_by_action?.[action] ?? []);
   const hearingOptions: ExplainedOption[] = (workflow.data?.shared_hearings ?? []).map((row) => ({
     value: row.id,
     label: `${row.hearing_on} - ${row.forum_name} - ${row.status}`,
-    reason: allowedHearingStatuses && !allowedHearingStatuses.has(row.status)
+    reason: !allowedHearingStatuses.has(row.status)
       ? action === "attendance_recorded" ? "mark the hearing completed first" : `not available for a ${row.status} hearing`
       : null,
   }));

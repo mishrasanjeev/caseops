@@ -40,6 +40,17 @@ const workspace = {
   profile: { forum: "Trade Marks Registry Delhi" },
 };
 
+// The API's hearing_statuses_by_action (services/ip_opposition_shared.py
+// HEARING_STATUSES_BY_ACTION); the form reads it, it keeps no copy.
+const HEARING_TABLE = {
+  hearing_preparation_recorded: ["adjourned", "scheduled"],
+  post_hearing_note_recorded: ["completed"],
+  hearing_notice_recorded: ["adjourned", "scheduled"],
+  adjournment_recorded: ["adjourned", "scheduled"],
+  written_arguments_recorded: ["adjourned", "completed", "scheduled"],
+  attendance_recorded: ["completed"],
+};
+
 const baseWorkflow = {
   proceeding_id: "opposition-43",
   represented_side: "applicant",
@@ -47,6 +58,7 @@ const baseWorkflow = {
   shared_actions: [],
   active_deadlines: [],
   shared_hearings: [],
+  hearing_statuses_by_action: HEARING_TABLE,
   next_required_action: "record_evidence_package",
 };
 
@@ -114,6 +126,21 @@ describe("IpOppositionSharedWorkflow", () => {
     expect(screen.getByLabelText("Opposition order event")).toBeDisabled();
     expect(screen.getByText(/No opposition order is recorded yet/)).toBeVisible();
     expect(screen.queryByLabelText(/record ID/i)).toBeNull();
+  });
+
+  it("B4-ADJ-22 takes the hearing states from the API table and refuses every hearing without it", async () => {
+    const hearings = [
+      { id: "hearing-done", hearing_on: "2026-10-01", forum_name: "Registry Delhi", status: "completed", purpose: "Hearing", time_status: "session" },
+      { id: "hearing-next", hearing_on: "2026-10-20", forum_name: "Registry Delhi", status: "scheduled", purpose: "Hearing", time_status: "session" },
+    ];
+    fetchWorkflowMock.mockResolvedValue({
+      ...baseWorkflow, current_stage: "hearing_scheduled", next_required_action: "record_hearing_preparation",
+      shared_hearings: hearings, hearing_statuses_by_action: undefined,
+    });
+    renderWorkflow();
+    const hearing = await screen.findByLabelText<HTMLSelectElement>("Shared hearing");
+    expect(hearing).toBeDisabled();
+    expect(Array.from(hearing.options).filter((option) => option.value).every((option) => option.disabled)).toBe(true);
   });
 
   it("B4-ADJ-02 links an appeal to a Matter chosen by name, never a typed record ID", async () => {

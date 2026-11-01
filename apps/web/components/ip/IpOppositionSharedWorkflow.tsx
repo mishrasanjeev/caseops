@@ -59,13 +59,6 @@ function localDateTime() {
   return now.toISOString().slice(0, 16);
 }
 
-// services/ip_opposition_shared.py _assert_hearing: preparation needs an
-// active hearing, a post-hearing note a completed one.
-const HEARING_STATUSES: Partial<Record<ActionKind, ReadonlySet<string>>> = {
-  hearing_preparation_recorded: new Set(["scheduled", "adjourned"]),
-  post_hearing_note_recorded: new Set(["completed"]),
-};
-
 function suggestedAction(next: SharedWorkflow["next_required_action"]): ActionKind {
   if (next === "record_evidence_package") return "evidence_package_recorded";
   if (next === "record_hearing_preparation") return "hearing_preparation_recorded";
@@ -176,11 +169,14 @@ export function IpOppositionSharedWorkflow({
     value: row.id,
     label: `${row.title} - ${row.result_on ?? "date unresolved"}`,
   }));
-  const allowedHearingStatuses = HEARING_STATUSES[actionKind];
+  // The hearing statuses this record accepts come from the API's own
+  // validator table (hearing_statuses_by_action); with no table every
+  // hearing is refused rather than guessed.
+  const allowedHearingStatuses = new Set(workflow.data?.hearing_statuses_by_action?.[actionKind] ?? []);
   const hearingOptions: ExplainedOption[] = (workflow.data?.shared_hearings ?? []).map((row) => ({
     value: row.id,
     label: `${row.hearing_on} - ${row.forum_name} - ${row.status}`,
-    reason: allowedHearingStatuses && !allowedHearingStatuses.has(row.status)
+    reason: !allowedHearingStatuses.has(row.status)
       ? actionKind === "post_hearing_note_recorded"
         ? "mark the hearing completed first"
         : "only a scheduled or adjourned hearing can be prepared"

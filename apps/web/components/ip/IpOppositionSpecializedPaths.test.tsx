@@ -28,6 +28,17 @@ const workspace = {
   },
   stage_events: [{ id: "outcome-event-48", event_kind: "opposition_stage_transition", resulting_stage: "withdrawn", source_reference: "registry-order:48" }],
 };
+// The API's hearing_statuses_by_action (services/ip_opposition_shared.py
+// HEARING_STATUSES_BY_ACTION); the form reads it, it keeps no copy.
+const HEARING_TABLE = {
+  hearing_preparation_recorded: ["adjourned", "scheduled"],
+  post_hearing_note_recorded: ["completed"],
+  hearing_notice_recorded: ["adjourned", "scheduled"],
+  adjournment_recorded: ["adjourned", "scheduled"],
+  written_arguments_recorded: ["adjourned", "completed", "scheduled"],
+  attendance_recorded: ["completed"],
+};
+
 const workflow = {
   proceeding_id: "opposition-48",
   represented_side: "opponent",
@@ -39,6 +50,7 @@ const workflow = {
     { id: "scope-9", class_number: 9, specification: "Downloadable software", effective_from: "2026-08-23", source: "registry" },
     { id: "scope-42", class_number: 42, specification: "Legal technology services", effective_from: "2026-08-23", source: "registry" },
   ],
+  hearing_statuses_by_action: HEARING_TABLE,
   next_required_action: "await_hearing",
 };
 
@@ -63,6 +75,26 @@ describe("IpOppositionSpecializedPaths", () => {
     vi.clearAllMocks();
     fetchWorkflowMock.mockResolvedValue(workflow);
     recordActionMock.mockResolvedValue(workflow);
+  });
+
+  it("B4-ADJ-22 offers exactly the hearings the served status table accepts", async () => {
+    fetchWorkflowMock.mockResolvedValue({
+      ...workflow,
+      shared_hearings: [
+        workflow.shared_hearings[0],
+        { id: "hearing-adjourned", hearing_on: "2026-10-27", forum_name: "Trade Marks Registry Delhi", status: "adjourned", purpose: "Opposition", time_status: "session" },
+      ],
+      // A narrower server rule must be followed, not a copy in the form.
+      hearing_statuses_by_action: { ...HEARING_TABLE, hearing_notice_recorded: ["adjourned"] },
+    });
+    renderPaths();
+    fireEvent.change(await screen.findByTestId("ip-opposition-specialized-action"), { target: { value: "hearing_notice_recorded" } });
+    const hearing = screen.getByTestId<HTMLSelectElement>("ip-opposition-specialized-hearing");
+    expect(hearing).toHaveValue("");
+    const option = (id: string) => Array.from(hearing.options).find((row) => row.value === id)!;
+    expect(option("hearing-48").disabled).toBe(true);
+    expect(option("hearing-48").textContent).toContain("not available for a scheduled hearing");
+    expect(option("hearing-adjourned").disabled).toBe(false);
   });
 
   it("records a partial multi-class scope review without changing unlisted scope", async () => {
