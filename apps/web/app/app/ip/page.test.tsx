@@ -594,6 +594,17 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
+  it("BUG-012 links a national trademark docket to its registry reconciliation", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("link", { name: "Reconcile with registry" })).toHaveAttribute(
+      "href",
+      "/app/ip/registry?docket=ip-1",
+    );
+  });
+
   it("opens ordinary docket links on overview and honors an explicit schedule view", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1");
 

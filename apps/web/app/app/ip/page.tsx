@@ -1489,7 +1489,15 @@ function DocketWorkspace({
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">
-        <CardHeader><CardTitle as="h2">{docket.title}</CardTitle></CardHeader>
+        <CardHeader className="gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <CardTitle as="h2" className="min-w-0 break-words">{docket.title}</CardTitle>
+          {/* Registry identities attach to national trademark records; Madrid records are reconciled in the Madrid portfolio. */}
+          {docket.record_type === "trademark" ? (
+            <Link href={`/app/ip/registry?docket=${encodeURIComponent(docket.id)}`} className="shrink-0 text-sm font-semibold text-[var(--color-brand-700)] hover:underline">
+              Reconcile with registry
+            </Link>
+          ) : null}
+        </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Readiness" value={docket.current_particulars.readiness_status} icon={FileCheck2} />
           <Metric label="Form" value={`${docket.current_particulars.form_key} ${docket.current_particulars.form_version}`} icon={Scale} />
