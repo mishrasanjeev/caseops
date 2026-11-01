@@ -39,6 +39,9 @@ import { cn } from "@/lib/cn";
  *   `aria-invalid` and is announced with the field.
  * - `enabled`: false holds the first read back, for pages that sequence
  *   their reads.
+ * - `emptyOptionLabel`: offer an explicit, selectable "no Matter" choice
+ *   with this caption (a filter's "All matters"). Without it the empty option
+ *   is a disabled "Select a Matter" placeholder.
  *
  * Enter in the search box searches at once and never submits the
  * surrounding form, which would otherwise act on the Matter chosen before
@@ -56,6 +59,7 @@ export type MatterPickerProps = {
   required?: boolean;
   disabled?: boolean;
   enabled?: boolean;
+  emptyOptionLabel?: string;
   className?: string;
 };
 
@@ -102,6 +106,7 @@ export function MatterPicker({
   required,
   disabled,
   enabled = true,
+  emptyOptionLabel,
   className,
 }: MatterPickerProps) {
   const generatedId = useId();
@@ -142,7 +147,9 @@ export function MatterPicker({
     : loaded;
   const rows = matters.map((matter) => ({ matter, reason: disabledReason?.(matter) ?? null }));
   const options = [
-    { value: "", label: results.isPending ? "Loading Matters…" : "Select a Matter", disabled: true },
+    emptyOptionLabel
+      ? { value: "", label: emptyOptionLabel, disabled: false }
+      : { value: "", label: results.isPending ? "Loading Matters…" : "Select a Matter", disabled: true },
     // The chosen Matter stays selectable so the field keeps showing it (with
     // its reason); the caller anchors that reason to the field.
     ...rows.map(({ matter, reason }) => ({
