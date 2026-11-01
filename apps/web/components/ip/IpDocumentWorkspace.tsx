@@ -60,10 +60,13 @@ export function IpDocumentWorkspace({
   canConfigure,
   assetType = "Trademark",
   scopeDocketId,
+  initialDocketId,
 }: {
   dockets: Pick<IpDocket, "id" | "title">[];
   assetType?: "Trademark" | "Patent";
   scopeDocketId?: string;
+  /** The docket an upload starts on, e.g. from a "?tab=documents&docket=" deep link. */
+  initialDocketId?: string;
   canUpload: boolean;
   canManage: boolean;
   canReview: boolean;
@@ -80,7 +83,7 @@ export function IpDocumentWorkspace({
   const [proceedingNo, setProceedingNo] = useState("");
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [taxonomyKey, setTaxonomyKey] = useState("");
-  const [docketId, setDocketId] = useState(dockets[0]?.id ?? "");
+  const [docketId, setDocketId] = useState(initialDocketId ?? dockets[0]?.id ?? "");
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
   >(assetType === "Patent" ? "restricted" : "internal");

@@ -619,6 +619,17 @@ describe("IpDocketPage", () => {
     ).toBeVisible();
   });
 
+  it("BUG-015 opens the Documents tab from a documents deep link", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&tab=documents");
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("tab", { name: "Documents" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Docket" })).toHaveAttribute("aria-selected", "false");
+  });
+
   it("B2-BUG-001/002 explains absent active calendar and rule prerequisites without enabling calculation", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({

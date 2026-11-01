@@ -52,6 +52,7 @@ vi.mock("@/lib/api/endpoints", () => ({
 }));
 
 import MadridPage from "@/app/app/ip/madrid/page";
+import { ApiError } from "@/lib/api/config";
 
 const IR = {
   id: "ir-1",
@@ -294,6 +295,9 @@ describe("Madrid portfolio", () => {
     expect(classes).not.toHaveAttribute("aria-invalid");
     expect(form.getByLabelText("Class 9 goods/services")).toBeVisible();
     expect(form.getByLabelText("Class 42 goods/services")).toBeVisible();
+    await waitFor(() => expect(form.getByLabelText("Parent IR")).toBeEnabled());
+    // Parent options come from the server's international-registration filter.
+    expect(recordsMock).toHaveBeenCalledWith({ recordKind: "international_registration" });
     await user.selectOptions(form.getByLabelText("Parent IR"), IR.id);
     await enterText(user, form.getByLabelText("Docket title"), "ASTER EU");
     await enterText(user, form.getByLabelText("Mark"), "ASTER");
@@ -324,7 +328,6 @@ describe("Madrid portfolio", () => {
   });
 
   it("BUG-015 disables evidence links the docket cannot supply and says where to add them", async () => {
-    const user = userEvent.setup();
     workspaceMock.mockResolvedValue({ ...WORKSPACE, documents: [], deadlines: [], costs: [] });
     const page = renderMadridPage();
     const linkedDocument = await page.findByRole<HTMLSelectElement>("combobox", { name: "Linked document" });
@@ -333,12 +336,13 @@ describe("Madrid portfolio", () => {
     expect(deadline).toBeDisabled();
     expect(linkedDocument).toHaveAccessibleDescription(/No documents on this docket yet/);
     expect(deadline).toHaveAccessibleDescription(/No deadlines on this docket yet/);
-    expect(page.getByRole("link", { name: "Upload one in the IP workspace Documents tab" })).toHaveAttribute("href", "/app/ip?docket=docket-ir");
+    expect(page.getByRole("link", { name: "Upload one in the IP workspace Documents tab" })).toHaveAttribute("href", "/app/ip?docket=docket-ir&tab=documents");
     expect(page.getByRole("link", { name: "Add one in the docket schedule" })).toHaveAttribute("href", "/app/ip?docket=docket-ir&view=schedule");
-    await user.selectOptions(page.getByLabelText("Action"), "fee_recorded");
-    const cost = page.getByRole<HTMLSelectElement>("combobox", { name: "Canonical cost item" });
-    expect(cost).toBeDisabled();
-    expect(cost).toHaveAccessibleDescription(/No active fee or cost/);
+    // A fee transaction can only fail without an active cost, so it is not offered.
+    const fee = page.getByRole<HTMLOptionElement>("option", { name: /Fee recorded/ });
+    expect(fee).toBeDisabled();
+    expect(fee).toHaveTextContent("Fee recorded (needs an active cost on this docket)");
+    expect(page.queryByRole("combobox", { name: "Canonical cost item" })).not.toBeInTheDocument();
     // No enabled select on the page is left without a real option.
     const dead = Array.from(document.querySelectorAll("select")).filter(
       (select) => !select.disabled && !Array.from(select.options).some((option) => option.value && !option.disabled),
@@ -352,6 +356,69 @@ describe("Madrid portfolio", () => {
     await user.selectOptions(await page.findByLabelText("Action"), "fee_recorded");
     const cost = page.getByRole<HTMLSelectElement>("combobox", { name: "Canonical cost item" });
     expect(Array.from(cost.options, (option) => option.value)).toEqual(["", "cost-1"]);
+  });
+
+  it("BUG-015 never sends a fee transaction without its canonical cost", async () => {
+    const user = userEvent.setup();
+    const page = renderMadridPage();
+    await user.selectOptions(await page.findByLabelText("Action"), "fee_recorded");
+    await enterText(user, page.getByLabelText("Source reference"), "fee:wipo:1");
+    await enterText(user, page.getByLabelText("Reason"), "WIPO basic fee paid.");
+    const submit = page.getByRole("button", { name: "Record transaction" });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription("Choose the canonical cost item this fee records.");
+    await user.selectOptions(page.getByRole("combobox", { name: "Canonical cost item" }), "cost-1");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(actionMock).toHaveBeenCalledTimes(1));
+    expect(actionMock.mock.calls[0][0]).toEqual(expect.objectContaining({ actionKind: "fee_recorded", costItemRefs: ["cost-1"] }));
+  });
+
+  it("BUG-015 anchors an action refusal to the evidence field it is about", async () => {
+    const user = userEvent.setup();
+    actionMock.mockRejectedValue(new ApiError(422, "Madrid document references must be linked to this designation docket.", {}));
+    const page = renderMadridPage();
+    await enterText(user, await page.findByLabelText("Source reference"), "wipo:snapshot:2");
+    await enterText(user, page.getByLabelText("Source URL"), IR.source_url);
+    await enterText(user, page.getByLabelText("WIPO status"), "registered");
+    await user.selectOptions(page.getByLabelText("Linked document"), "document-1");
+    await enterText(user, page.getByLabelText("Reason"), "Reviewed the WIPO record.");
+    await user.click(page.getByRole("button", { name: "Record transaction" }));
+    const linkedDocument = page.getByRole("combobox", { name: "Linked document" });
+    await waitFor(() => expect(linkedDocument).toHaveAttribute("aria-invalid", "true"));
+    expect(linkedDocument).toHaveAccessibleDescription(/must be linked to this designation docket/);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("BUG-015 anchors a basic-application refusal to the Basic Indian application field", async () => {
+    const user = userEvent.setup();
+    docketsMock.mockResolvedValue({ dockets: [
+      { id: "docket-a", title: "First mark", primary_identifier: null, record_type: "trademark" },
+    ], count: 1, has_more: false, next_cursor: null, total_count: 1 });
+    coreMock.mockResolvedValue({ applications: [
+      { id: "app-in", jurisdiction: "IN", office: "IP India", filing_phase: "filed", is_active: true },
+    ], identifiers: [] });
+    createMock.mockRejectedValue(new ApiError(404, "Basic trademark application not found.", {}));
+    const page = renderMadridPage();
+    await user.click(await page.findByRole("button", { name: "New record" }));
+    const form = within(page.getByRole("button", { name: "Create record" }).closest("form")!);
+    const docket = form.getByRole<HTMLSelectElement>("combobox", { name: "Basic mark docket" });
+    await waitFor(() => expect(docket).toBeEnabled());
+    await user.selectOptions(docket, "docket-a");
+    const application = form.getByRole<HTMLSelectElement>("combobox", { name: "Basic Indian application" });
+    await waitFor(() => expect(application).toBeEnabled());
+    await user.selectOptions(application, "app-in");
+    await enterText(user, form.getByLabelText("Docket title"), "ASTER IR");
+    await enterText(user, form.getByLabelText("Mark"), "ASTER");
+    await enterText(user, form.getByLabelText("Holder"), "Aster Labs");
+    await enterText(user, form.getByLabelText("WIPO reference"), "WIPO-1");
+    await enterText(user, form.getByLabelText("Source URL"), IR.source_url);
+    await enterText(user, form.getByLabelText("Source reference"), "wipo:1");
+    await enterText(user, form.getByLabelText("Class 9 goods/services"), "software");
+    await user.click(form.getByRole("button", { name: "Create record" }));
+    await waitFor(() => expect(application).toHaveAttribute("aria-invalid", "true"));
+    expect(application).toHaveAccessibleDescription(/Basic trademark application not found/);
+    expect(form.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("keeps designation statuses independent and reconciles a linked source candidate", async () => {

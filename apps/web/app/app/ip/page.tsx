@@ -139,6 +139,8 @@ export default function IpDocketPage() {
   const requestedView = requestedDocketView(searchParams.get("view"));
   const requestedProceedingId = searchParams.get("proceeding");
   const requestedDraftId = searchParams.get("draft");
+  // ?tab=documents opens the Documents tab with the requested docket preselected for upload.
+  const requestedTab = searchParams.get("tab") === "documents" ? "documents" : "docket";
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -302,7 +304,7 @@ export default function IpDocketPage() {
         />
       ) : null}
 
-      <Tabs defaultValue="docket" className="min-w-0">
+      <Tabs defaultValue={requestedTab} className="min-w-0">
         <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
           <TabsTrigger value="docket">Docket</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -314,6 +316,7 @@ export default function IpDocketPage() {
         <TabsContent value="documents">
           <IpDocumentWorkspace
             dockets={portfolioDockets}
+            initialDocketId={requestedTab === "documents" ? requestedDocketId ?? undefined : undefined}
             canUpload={canWrite && canUploadDocuments}
             canManage={canWrite && canManageDocuments}
             canReview={canReview}
