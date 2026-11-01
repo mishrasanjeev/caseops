@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -119,11 +120,7 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
   await signIn(page);
   const headers = await csrfHeaders(page);
 
-  const seeded = await page.request.post(
-    `${PROD_API_BASE_URL}/api/ip/document-taxonomy/seed`,
-    { headers },
-  );
-  expect(seeded.status(), await seeded.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(page.request, PROD_API_BASE_URL, headers);
 
   const aliasPreview = await page.request.post(
     `${PROD_API_BASE_URL}/api/ip/document-taxonomy/import-aliases`,
@@ -141,24 +138,9 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
   expect(aliasPreview.status(), await aliasPreview.text()).toBe(200);
   const aliasPreviewBody = await aliasPreview.json();
   expect(aliasPreviewBody.conflicts).toEqual([]);
-  if (aliasPreviewBody.imported_count === 1) {
-    const imported = await page.request.post(
-      `${PROD_API_BASE_URL}/api/ip/document-taxonomy/import-aliases`,
-      {
-        headers,
-        data: {
-          dry_run: false,
-          entries: [{
-            taxonomy_key: "evidence",
-            aliases: ["Production QA Evidence Affidavit"],
-          }],
-        },
-      },
-    );
-    expect(imported.status(), await imported.text()).toBe(200);
-  } else {
-    expect(aliasPreviewBody.unchanged_count).toBe(1);
-  }
+  // Preview only: the shared tester tenant's taxonomy is configuration, and
+  // this journey must not change it to pass.
+  expect(aliasPreviewBody.imported_count + aliasPreviewBody.unchanged_count).toBe(1);
 
   const listedDockets = await page.request.get(`${PROD_API_BASE_URL}/api/ip/dockets`);
   expect(listedDockets.status(), await listedDockets.text()).toBe(200);

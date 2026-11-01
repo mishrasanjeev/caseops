@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Locator } from "@playwright/test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { apiBaseUrl, bootstrapPatentTenant, enablePatentWorkspace, existingPatentQa, patentRunId,
+import { apiBaseUrl, bootstrapPatentTenant, enablePatentWorkspace, patentRunId,
   patentScreenshot, signInPatentTenant } from "./support/patent-acceptance";
 import { assertPatentControlsFit } from "./support/patent-layout";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -25,7 +26,7 @@ for (const width of [393, 768, 1280]) {
     await page.setViewportSize({ width, height: 1000 });
     const tenant = await bootstrapPatentTenant(request);
     const headers = { ...await enablePatentWorkspace(request, tenant), ...noPaidProviderHeaders };
-    if (!existingPatentQa) await post(request, headers, "/api/ip/document-taxonomy/seed", {}, 200);
+    await expectProvisionedDocumentTaxonomy(request, apiBaseUrl, headers);
     const contracts = await request.get(`${apiBaseUrl}/api/ip/specialist/contracts`, { headers });
     expect(contracts.status()).toBe(200);
     const definitions = await contracts.json();

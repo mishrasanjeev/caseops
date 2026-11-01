@@ -8,6 +8,7 @@ import {
   type APIResponse,
   type Page,
 } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const WEB = "https://caseops.ai";
 const API = "https://api.caseops.ai";
@@ -436,13 +437,7 @@ async function createFixture(label: "normal" | "grace"): Promise<Fixture> {
 }
 
 async function uploadAcceptedCertificate(fixture: Fixture): Promise<string> {
-  await json(
-    await api.post(`${API}/api/ip/document-taxonomy/seed`, {
-      headers: headers(),
-    }),
-    200,
-    "seed IP document taxonomy",
-  );
+  await expectProvisionedDocumentTaxonomy(api, API, headers());
   const nonce = fixture.docket.primary_identifier!;
   const uploaded = await json<Json>(
     await api.post(`${API}/api/ip/documents/upload`, {
