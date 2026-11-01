@@ -265,4 +265,33 @@ describe("IpDocumentWorkspace retirement", () => {
     expect(within(card).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(fetchIpDocumentsMock).toHaveBeenLastCalledWith({ includeHistory: true });
   });
+
+  it("keeps a closed record's documents read-only under history but still retirable", async () => {
+    const closedA = document({ read_only_reason: "closed_record" });
+    const closedB = document({
+      id: "document-2",
+      title: "Second closed deed",
+      read_only_reason: "closed_record",
+      versions: [{ ...document().versions[0], id: "version-2", display_name: "ACME_second_deed_1.txt" }],
+    });
+    fetchIpDocumentsMock.mockImplementation(async (options?: { includeHistory?: boolean }) => (
+      options?.includeHistory ? { items: [closedA, closedB], total: 2 } : { items: [], total: 0 }
+    ));
+    renderWorkspace({ canManage: true, canUpload: true });
+    expect(await screen.findByText(/No current controlled IP documents/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Show retired documents and documents of closed records"));
+    const card = await screen.findByTestId("ip-document-document-1");
+    expect(card).toHaveAttribute("data-retired", "false");
+    expect(card).toHaveAttribute("data-read-only", "true");
+    expect(within(card).getByText("Closed record")).toBeInTheDocument();
+    expect(within(card).getByText(/Its record is closed/)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /Download original/ })).toBeEnabled();
+    expect(within(card).getByRole("button", { name: "Retire" })).toBeEnabled();
+    // Every write the API refuses for a closed record's document is absent.
+    expect(within(card).queryByRole("button", { name: /Move to/ })).not.toBeInTheDocument();
+    expect(within(card).queryByLabelText(/New version for/)).not.toBeInTheDocument();
+    expect(within(card).queryByRole("checkbox")).not.toBeInTheDocument();
+    // Two read-only documents never make the bulk editor appear.
+    expect(screen.queryByLabelText("Bulk classification")).not.toBeInTheDocument();
+  });
 });

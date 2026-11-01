@@ -137,8 +137,13 @@ export function IpDocumentWorkspace({
       ? fetchIpDocumentsForDocket(scopeDocketId, { includeHistory: showHistory })
       : fetchIpDocuments({ includeHistory: showHistory }),
   });
+  // Bulk changes only documents the API may still change: not retired and not
+  // listed only because their record is closed (the history view).
   const currentDocuments = useMemo(
-    () => documents.data?.items.filter((document) => !document.retirement) ?? [],
+    () =>
+      documents.data?.items.filter(
+        (document) => !document.retirement && !document.read_only_reason,
+      ) ?? [],
     [documents.data],
   );
   const taxonomy = useQuery({
@@ -801,7 +806,9 @@ export function IpDocumentWorkspace({
               const version = document.versions[0];
               if (!version) return null;
               const retired = document.retirement ?? null;
-              const nextState = retired ? undefined : NEXT_STATE[version.state];
+              const closedRecord = !retired && document.read_only_reason === "closed_record";
+              const readOnly = !!retired || closedRecord;
+              const nextState = readOnly ? undefined : NEXT_STATE[version.state];
               const approvalRequired = nextState === "approved" || nextState === "filed";
               const mayOfferRetire = !retired
                 && (canManage || (canUpload && !!membershipId && document.created_by_membership_id === membershipId));
@@ -811,10 +818,11 @@ export function IpDocumentWorkspace({
                   className="min-w-0 rounded-lg border border-[var(--color-line)] p-4"
                   data-testid={`ip-document-${document.id}`}
                   data-retired={retired ? "true" : "false"}
+                  data-read-only={readOnly ? "true" : "false"}
                 >
                   <div className="flex min-w-0 w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                     <div className="flex min-w-0 gap-3">
-                      {canManage && !retired ? (
+                      {canManage && !readOnly ? (
                         <input
                           aria-label={`Select ${version.display_name}`}
                           type="checkbox"
@@ -844,12 +852,18 @@ export function IpDocumentWorkspace({
                             <Badge tone="warning">{document.confidentiality}</Badge>
                           ) : null}
                           {retired ? <Badge tone="neutral">Retired</Badge> : null}
+                          {closedRecord ? <Badge tone="neutral">Closed record</Badge> : null}
                         </div>
                         {retired ? (
                           <p className="mt-2 break-words text-xs text-[var(--color-mute)]">
                             Retired {new Date(retired.retired_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}{" "}
                             by {retired.retired_by_name}: {retired.reason}. Kept for history; it is
                             no longer offered as evidence.
+                          </p>
+                        ) : closedRecord ? (
+                          <p className="mt-2 break-words text-xs text-[var(--color-mute)]">
+                            Its record is closed, so this document is kept for history and cannot
+                            change. You can download it or retire it; reopen the record to change it.
                           </p>
                         ) : null}
                       </div>
@@ -917,7 +931,7 @@ export function IpDocumentWorkspace({
                       </span>
                     </div>
                   ) : null}
-                  {canUpload && !retired ? (
+                  {canUpload && !readOnly ? (
                     <label className="mt-3 flex min-w-0 w-full flex-col gap-1 text-sm sm:max-w-md">
                       <span className="font-medium">Upload a new immutable version</span>
                       <Input

@@ -10992,6 +10992,12 @@ export type IpDocument = {
   }>;
   /** Set once the document is retired: kept for history, never offered as evidence. */
   retirement?: IpDocumentRetirement | null;
+  /**
+   * History only: "retired", or "closed_record" when the document is listed
+   * only because its record is closed. Either way it offers no state change,
+   * new version or bulk selection; a closed record's document can still be retired.
+   */
+  read_only_reason?: "retired" | "closed_record" | null;
 };
 
 export type IpDocumentRetirement = {
