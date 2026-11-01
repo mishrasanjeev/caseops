@@ -30849,6 +30849,20 @@ export interface components {
              */
             target_kind: "appeal_proceeding" | "matter";
         };
+        /**
+         * IpOppositionAppealProceedingOption
+         * @description An appeal proceeding the appeal-link validator accepts, with its numbers.
+         */
+        IpOppositionAppealProceedingOption: {
+            /** Appeal Identifiers */
+            appeal_identifiers: string[];
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
+            /** Stage */
+            stage: string;
+        };
         /** IpOppositionApplicantActionRequest */
         IpOppositionApplicantActionRequest: {
             /**
@@ -31403,6 +31417,20 @@ export interface components {
             /** Source Notice Reference */
             source_notice_reference: string | null;
         };
+        /**
+         * IpOppositionRelatedApplicationOption
+         * @description An application the scope-review validator accepts as related.
+         */
+        IpOppositionRelatedApplicationOption: {
+            /** Application Number */
+            application_number: string | null;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
+        };
         /** IpOppositionScopeDecision */
         IpOppositionScopeDecision: {
             /** Application Scope Id */
@@ -31589,10 +31617,14 @@ export interface components {
         IpOppositionSharedWorkflowResponse: {
             /** Active Deadlines */
             active_deadlines: components["schemas"]["IpDeadlineRecord"][];
+            /** Appeal Proceedings */
+            appeal_proceedings?: components["schemas"]["IpOppositionAppealProceedingOption"][];
             /** Application Scopes */
             application_scopes: components["schemas"]["IpOppositionApplicationScopeRecord"][];
             /** Current Stage */
             current_stage: string;
+            /** Disposition Trigger Events */
+            disposition_trigger_events?: components["schemas"]["IpDocketEventResponse"][];
             /**
              * Next Required Action
              * @enum {string}
@@ -31600,6 +31632,8 @@ export interface components {
             next_required_action: "complete_role_workflow" | "record_evidence_package" | "advance_to_hearing" | "schedule_hearing" | "record_hearing_preparation" | "await_hearing" | "record_post_hearing_note" | "advance_to_order" | "record_order" | "review_appeal_or_close" | "link_appeal" | "complete_appeal_or_close" | "closed";
             /** Proceeding Id */
             proceeding_id: string;
+            /** Related Applications */
+            related_applications?: components["schemas"]["IpOppositionRelatedApplicationOption"][];
             /**
              * Represented Side
              * @enum {string}

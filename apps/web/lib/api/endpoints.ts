@@ -10209,6 +10209,20 @@ export type IpOppositionSharedWorkflow = {
     purpose: string;
     status: string;
   }>;
+  /** Choices built from the write validators' own predicates. */
+  appeal_proceedings: Array<{
+    id: string;
+    office: string;
+    stage: string;
+    appeal_identifiers: string[];
+  }>;
+  related_applications: Array<{
+    id: string;
+    application_number: string | null;
+    office: string;
+    filing_phase: string;
+  }>;
+  disposition_trigger_events: IpDocketEvent[];
   next_required_action:
     | "complete_role_workflow"
     | "record_evidence_package"

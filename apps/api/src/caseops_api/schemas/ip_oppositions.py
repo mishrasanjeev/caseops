@@ -802,6 +802,24 @@ class IpOppositionSharedHearingRecord(BaseModel):
     status: str
 
 
+class IpOppositionAppealProceedingOption(BaseModel):
+    """An appeal proceeding the appeal-link validator accepts, with its numbers."""
+
+    id: str
+    office: str
+    stage: str
+    appeal_identifiers: list[str]
+
+
+class IpOppositionRelatedApplicationOption(BaseModel):
+    """An application the scope-review validator accepts as related."""
+
+    id: str
+    application_number: str | None
+    office: str
+    filing_phase: str
+
+
 class IpOppositionSharedWorkflowResponse(BaseModel):
     proceeding_id: str
     represented_side: Literal["applicant", "opponent"]
@@ -810,6 +828,13 @@ class IpOppositionSharedWorkflowResponse(BaseModel):
     active_deadlines: list[IpDeadlineRecord]
     shared_hearings: list[IpOppositionSharedHearingRecord]
     application_scopes: list[IpOppositionApplicationScopeRecord]
+    # Choices built from the write validators' own predicates, so the form
+    # never offers a record the action would reject.
+    appeal_proceedings: list[IpOppositionAppealProceedingOption] = Field(default_factory=list)
+    related_applications: list[IpOppositionRelatedApplicationOption] = Field(
+        default_factory=list
+    )
+    disposition_trigger_events: list[IpDocketEventResponse] = Field(default_factory=list)
     next_required_action: Literal[
         "complete_role_workflow",
         "record_evidence_package",
