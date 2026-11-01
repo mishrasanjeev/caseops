@@ -265,6 +265,10 @@ export function IpPostRegistrationWorkspace({
   const [actionDocument, setActionDocument] = useState("");
   const [actionAuthority, setActionAuthority] = useState("");
   const [parallelId, setParallelId] = useState("");
+  // services/ip_post_registration.py: another proceeding on this docket.
+  const parallelOptions = (core.data?.proceedings ?? []).filter(row => row.id !== selectedId).map(row => ({
+    value: row.id, label: `${readable(row.proceeding_kind)} · ${row.stage}`,
+  }));
   const [legalEffect, setLegalEffect] = useState("");
   const [legalEffectDate, setLegalEffectDate] = useState("");
   const [candidateDisposition, setCandidateDisposition] = useState<
@@ -790,13 +794,20 @@ export function IpPostRegistrationWorkspace({
                 </Field>
               ) : null}
               {actionKind === "parallel_proceeding_link" ? (
-                <RecordSelect label="Parallel proceeding" className={SELECT_CLASS} value={parallelId}
-                  onChange={event => setParallelId(event.target.value)} options={[
-                    { value: "", label: "Select" },
-                    ...(core.data?.proceedings ?? []).filter(row => row.id !== selectedId).map(row => ({
-                      value: row.id, label: `${readable(row.proceeding_kind)} · ${row.stage}`,
-                    })),
-                  ]} />
+                <div className="min-w-0">
+                  <RecordSelect label="Parallel proceeding" className={SELECT_CLASS} value={parallelId}
+                    disabled={!parallelOptions.length}
+                    aria-describedby={parallelOptions.length ? undefined : "post-registration-parallel-reason"}
+                    onChange={event => setParallelId(event.target.value)} options={[
+                      { value: "", label: "Select" },
+                      ...parallelOptions,
+                    ]} />
+                  {parallelOptions.length ? null : (
+                    <p id="post-registration-parallel-reason" className="mt-1 text-xs text-[var(--color-mute)]">
+                      This IP record has no other proceeding to link. Open the parallel proceeding on this docket first.
+                    </p>
+                  )}
+                </div>
               ) : null}
               {actionKind === "disposition_candidate" ? (
                 <Field label="Candidate disposition">
