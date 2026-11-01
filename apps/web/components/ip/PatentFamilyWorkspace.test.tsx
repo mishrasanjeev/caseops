@@ -63,6 +63,16 @@ describe("Patent disclosure workspace", () => {
     }), expect.stringMatching(/^[a-f0-9-]{36}$/)));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/app/ip/patents/fa"));
   });
+  it("BUG-015 disables the client choice with a path to Clients when no client is active", async () => {
+    mocks.clients.mockResolvedValue({ clients: [{ id: "old", name: "Former client", is_active: false }] });
+    mount(<PatentFamilyIndex />);
+    fireEvent.click(screen.getByRole("button", { name: "New disclosure" }));
+    const client = await screen.findByLabelText("Client");
+    await waitFor(() => expect(client).toBeDisabled());
+    expect(screen.queryByRole("option", { name: "Former client" })).not.toBeInTheDocument();
+    expect(client).toHaveAccessibleDescription(/belongs to an active client/);
+    expect(screen.getByRole("link", { name: "Add or reactivate one in Clients" })).toHaveAttribute("href", "/app/clients");
+  });
   it("does not hydrate over unsaved corrections or advance their expected version", async () => {
     const client = mount(<PatentFamilyDetail familyId="fa" />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit disclosure" }));

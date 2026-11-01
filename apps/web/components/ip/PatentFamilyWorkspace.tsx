@@ -167,6 +167,8 @@ function FamilyForm({ initial, onSaved, onCancel }: {
   const [reason, setReason] = useState("");
   const [sourceId, setSourceId] = useState(initial?.facts.source?.kind === "document_version" ? initial.facts.source.document_version_id : "");
   const clients = useQuery({ queryKey: ["clients", "list"], queryFn: listClients, enabled: !initial });
+  const activeClients = clients.data?.clients.filter((client) => client.is_active) ?? [];
+  const noActiveClient = clients.isSuccess && !activeClients.length;
   const sources = useQuery({
     queryKey: ["ip", "documents", initial?.docket_id],
     queryFn: () => fetchIpDocumentsForDocket(initial!.docket_id), enabled: !!initial,
@@ -198,11 +200,11 @@ function FamilyForm({ initial, onSaved, onCancel }: {
     <div><Label htmlFor="patent-title">Invention title</Label><Input id="patent-title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} /></div>
     {!initial && <div><Label htmlFor="patent-client">Client</Label>
       {clients.isError ? <QueryErrorState title="Could not load clients" error={clients.error} onRetry={clients.refetch} />
-        : <select id="patent-client" className={selectClass} required disabled={clients.isPending} value={clientId} onChange={(event) => setClientId(event.target.value)}>
-          <option value="">{clients.isPending ? "Loading clients..." : "Select client"}</option>
-          {clients.data?.clients.filter((client) => client.is_active).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+        : <select id="patent-client" className={selectClass} required disabled={clients.isPending || !activeClients.length} aria-describedby={noActiveClient ? "patent-client-empty" : undefined} value={clientId} onChange={(event) => setClientId(event.target.value)}>
+          <option value="">{clients.isPending ? "Loading clients..." : activeClients.length ? "Select client" : "No active client"}</option>
+          {activeClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
         </select>}
-      {!clients.isPending && !clients.isError && !clients.data?.clients.some((client) => client.is_active) && <Link href="/app/clients" className="text-sm text-brand-700 underline">Open clients</Link>}
+      {noActiveClient && <p id="patent-client-empty" className="text-sm text-[var(--color-mute)]">A disclosure belongs to an active client. <Link href="/app/clients" className="font-semibold text-[var(--color-brand-700)]">Add or reactivate one in Clients</Link>.</p>}
     </div>}
     <div className="max-w-xs"><Label htmlFor="patent-disclosure-date">Disclosure date</Label><Input id="patent-disclosure-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></div>
     <div><Label htmlFor="patent-narrative">Invention disclosure</Label><Textarea id="patent-narrative" required rows={8} maxLength={30_000} value={narrative} onChange={(event) => setNarrative(event.target.value)} /></div>

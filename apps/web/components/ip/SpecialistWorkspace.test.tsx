@@ -63,6 +63,21 @@ describe("Specialist IP typed intake", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("BUG-015 offers only active clients and says where to add one when none is active", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => path === "/api/clients/"
+      ? Promise.resolve({ clients: [{ id: "old", name: "Former client", is_active: false }] })
+      : original(path, options));
+    mount(<SpecialistIndex />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New intake" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "New intake" }));
+    const client = await screen.findByLabelText("Client");
+    await waitFor(() => expect(client).toBeDisabled());
+    expect(screen.queryByRole("option", { name: "Former client" })).not.toBeInTheDocument();
+    expect(client).toHaveAccessibleDescription(/belongs to an active client/);
+    expect(screen.getByRole("link", { name: "Add or reactivate one in Clients" })).toHaveAttribute("href", "/app/clients");
+  });
+
   it("keeps unavailable intake disabled without hiding retained records", async () => {
     const original = mocks.api.getMockImplementation()!;
     mocks.api.mockImplementation((path, options) => path === "/api/ip/specialist/contracts" ? Promise.resolve([{ ...contract, intake_available: false }]) : original(path, options));

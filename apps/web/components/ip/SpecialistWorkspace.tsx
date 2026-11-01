@@ -68,6 +68,9 @@ export function SpecialistForm({ contract, initial: serverInitial, onSaved, onCa
   const key = useRef(crypto.randomUUID());
   const form = useRef<HTMLFormElement>(null);
   const clients = useQuery({ queryKey: ["clients"], queryFn: listClients });
+  // The intake validator accepts only an active client of this firm.
+  const activeClients = clients.data?.clients.filter((client) => client.is_active) ?? [];
+  const noActiveClient = !initial && clients.isSuccess && !activeClients.length;
   const save = useMutation({ mutationFn: async () => {
     const values = new FormData(form.current!);
     const details: Record<string, unknown> = { domain: contract.domain };
@@ -83,8 +86,9 @@ export function SpecialistForm({ contract, initial: serverInitial, onSaved, onCa
   return <form ref={form} aria-label={initial ? "Correct specialist intake" : "New specialist intake"} className="min-w-0 space-y-4 border-y border-line py-5" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
     <fieldset disabled={save.isPending || !clients.isSuccess || !contract.intake_available} className="min-w-0 space-y-4">
       <div><Label htmlFor="specialist-title">Title</Label><Input id="specialist-title" name="title" required maxLength={255} defaultValue={initial?.facts.title} /></div>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor="specialist-client">Client</Label><select className={selectClass} id="specialist-client" name="client_id" required disabled={!!initial} defaultValue={initial?.facts.client_id ?? ""}>
-        <option value="" disabled>Select a client</option>{clients.data?.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></div>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor="specialist-client">Client</Label><select className={selectClass} id="specialist-client" name="client_id" required disabled={!!initial || noActiveClient} aria-describedby={noActiveClient ? "specialist-client-empty" : undefined} defaultValue={initial?.facts.client_id ?? ""}>
+        <option value="" disabled>{noActiveClient ? "No active client" : "Select a client"}</option>{(initial ? clients.data?.clients ?? [] : activeClients).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+        {noActiveClient ? <p id="specialist-client-empty" className="mt-1 text-sm text-[var(--color-mute)]">An intake belongs to an active client. <Link href="/app/clients" className="font-semibold text-[var(--color-brand-700)]">Add or reactivate one in Clients</Link>.</p> : null}</div>
         <div className="min-w-0"><Label htmlFor="specialist-jurisdiction">Jurisdiction as supplied</Label><Input id="specialist-jurisdiction" name="jurisdiction_as_supplied" required maxLength={500} defaultValue={initial?.facts.jurisdiction_as_supplied} /></div></div>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">{contract.fields.map((field) => <div key={field.key} className={`min-w-0 ${field.kind === "textarea" ? "sm:col-span-2" : ""}`}>
         {field.kind === "boolean" ? <label className="flex min-w-0 items-center gap-2 text-sm">
