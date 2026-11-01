@@ -34,7 +34,7 @@ There is no verified INR 10,000 budget dashboard, switch, warning threshold, or
 cap-exhaustion recovery button to instruct a user to click. The old proposed
 budget amounts are superseded. On 1 November 2026 the owner replaced the
 recommendations-only `gemini-3.5-flash-lite` plan with a general OpenAI
-availability fallback to **`gemini-3.6-flash`** on the managed Google Cloud
+availability fallback to **`gemini-3.8-flash`** on the managed Google Cloud
 endpoint, with its own INR 10,000 per IST month Gemini cap that does not depend
 on the shared money guard. It is off by default
 (`CASEOPS_LLM_FALLBACK_ENABLED=false`) until the operator steps in the
@@ -391,7 +391,7 @@ private document content in a support report.
 ## 9. Shared Budget And Selected Gemini Fallback
 
 > Updated 1 November 2026: the fallback is now the general OpenAI availability
-> fallback to `gemini-3.6-flash` described in the
+> fallback to `gemini-3.8-flash` described in the
 > [AI spending runbook](runbooks/ai-spending-reconciliation.md). It switches on
 > OpenAI quota exhaustion or transient unavailability, is capped at INR 10,000 per
 > IST month by a Gemini-only ledger and does not need the shared guard. Rows below
@@ -441,7 +441,7 @@ configuration or an instruction to enable fallback now**:
 | Variable | Candidate value and requirement |
 | --- | --- |
 | `CASEOPS_LLM_FALLBACK_ENABLED` | `false` by default; replaces the retired `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED`. |
-| `CASEOPS_LLM_FALLBACK_MODEL` | Pinned to `gemini-3.6-flash`; replaces the retired recommendation-only model setting. |
+| `CASEOPS_LLM_FALLBACK_MODEL` | Pinned to `gemini-3.8-flash`; replaces the retired recommendation-only model setting. |
 | `CASEOPS_LLM_GEMINI_PROJECT` | Required only for opt-in; use an explicit managed Google Cloud project with independently verified billing/API/IAM/ADC readiness. |
 | `CASEOPS_LLM_GEMINI_LOCATION` | Pinned to `global`; owner confirmation of location and retention is pending. |
 

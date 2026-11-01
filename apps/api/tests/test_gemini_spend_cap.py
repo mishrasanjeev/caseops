@@ -29,7 +29,7 @@ from caseops_api.db.session import CaseOpsSession
 from caseops_api.services import gemini_spend_cap as cap
 from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 
-_MODEL = "gemini-3.6-flash"
+_MODEL = "gemini-3.8-flash"
 _TABLES = [AiGeminiSpendMonth.__table__, AiGeminiSpendAdmission.__table__]
 _NOV = datetime(2026, 11, 15, 6, 0, tzinfo=UTC)
 

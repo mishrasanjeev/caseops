@@ -32,13 +32,14 @@ from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 
-GEMINI_FALLBACK_MODEL = "gemini-3.6-flash"
+GEMINI_FALLBACK_MODEL = "gemini-3.8-flash"
 # Owner-authorized fresh Gemini spend per IST month, in paise (INR 10,000).
 MONTHLY_CAP_MINOR = 1_000_000
 
-# Standard (non-promotional) Standard-PayGo prices for the global endpoint,
-# USD per 1M tokens, checked on 2026-11-01 at PRICING_SOURCE_URL. The page also
-# lists introductory $0.75/$3.75 through 2026-12-31; it is deliberately not used.
+# Standard (non-promotional) Standard-PayGo prices for gemini-3.8-flash on the
+# global endpoint, USD per 1M tokens, checked on 2026-11-01 at PRICING_SOURCE_URL
+# ("Gemini 3.8 Flash Starting January 1, 2027"). The page also lists
+# introductory $0.75/$3.75 through 2026-12-31; it is deliberately not used.
 # Output includes reasoning ("Text output (response and reasoning)"). Non-global
 # regions ($1.65/$8.25) and the Priority tier are never requested by CaseOps.
 PRICING_SOURCE_URL = (

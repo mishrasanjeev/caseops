@@ -1,7 +1,7 @@
 """Offline native-SDK acceptance for the bounded Gemini fallback adapter.
 
-The pinned fallback model moved from gemini-3.5-flash-lite to gemini-3.6-flash
-(owner decision, 2026-11-01); both follow the Gemini 3 no-temperature and
+The pinned fallback model moved from gemini-3.5-flash-lite to gemini-3.8-flash
+(owner decisions, 2026-11-01); both follow the Gemini 3 no-temperature and
 no-prefill rules. Managed transports also reserve against the Gemini cap, which
 these tests back with an owned SQLite ledger.
 """
@@ -36,7 +36,7 @@ from caseops_api.db.ai_spend_models import (
 from caseops_api.db.session import CaseOpsSession
 from caseops_api.services import ai_money_budget, gemini_spend_cap, llm, llm_types
 
-MODEL = "gemini-3.6-flash"
+MODEL = "gemini-3.8-flash"
 PRIVATE = "offline-private-error-sentinel"
 
 

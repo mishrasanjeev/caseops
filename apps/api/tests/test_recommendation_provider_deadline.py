@@ -68,7 +68,7 @@ def deadline_native(native_boundary, monkeypatch):
         period = session.get(AiProviderSpendMonth, "2026-11")
         period.pricing_json = {
             **period.pricing_json,
-            "gemini:gemini-3.6-flash": period.pricing_json["gemini:gemini-3.1-flash-lite"],
+            "gemini:gemini-3.8-flash": period.pricing_json["gemini:gemini-3.1-flash-lite"],
         }
         session.commit()
     # Managed Gemini transports also reserve against the Gemini-only cap.
@@ -227,7 +227,7 @@ def _run(state, *, mode="gemini", structured=True, tenant_preflight=False):
 
     def fallback(timeout):
         return llm.GeminiProvider(
-            model="gemini-3.6-flash", project="offline-project", timeout_seconds=timeout
+            model="gemini-3.8-flash", project="offline-project", timeout_seconds=timeout
         )
 
     def revalidate():

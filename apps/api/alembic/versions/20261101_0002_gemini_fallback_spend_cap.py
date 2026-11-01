@@ -5,7 +5,7 @@ Revises: 20261101_0001
 Map: docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml.
 
 Owner decision, 1 November 2026: when OpenAI is out of quota or unavailable,
-CaseOps may fall back to gemini-3.6-flash on the managed Google Cloud endpoint,
+CaseOps may fall back to gemini-3.8-flash on the managed Google Cloud endpoint,
 capped at INR 10,000 (1,000,000 paise) of fresh Gemini spend per IST month.
 Two account-level, tenant-independent tables hold that cap: one row per month
 (created on first use with zero opening liability) and one content-free

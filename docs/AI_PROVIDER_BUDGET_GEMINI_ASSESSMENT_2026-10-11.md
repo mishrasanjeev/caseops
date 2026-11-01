@@ -1,7 +1,7 @@
 # AI Provider Budget And Gemini Assessment
 
 > Superseded in part on 1 November 2026: the owner chose a general OpenAI
-> availability fallback to `gemini-3.6-flash` with its own INR 10,000 per IST
+> availability fallback to `gemini-3.8-flash` with its own INR 10,000 per IST
 > month Gemini cap, independent of the shared guard. See
 > [the AI spending runbook](runbooks/ai-spending-reconciliation.md).
 

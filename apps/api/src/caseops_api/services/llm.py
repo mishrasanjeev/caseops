@@ -1162,12 +1162,14 @@ class GeminiProvider:
     """
 
     name = "gemini"
-    # Gemini 3 family rules (vendor developer guide, checked 2026-11-01): custom
-    # temperature is ignored and a trailing model turn (prefill) is rejected.
-    _GEMINI3_STRICT_MODELS = frozenset({"gemini-3.5-flash-lite", "gemini-3.6-flash"})
+    # Gemini 3 family rules (vendor developer guides, checked 2026-11-01): custom
+    # temperature/top-k/top-p are ignored and a trailing model turn (prefill) is
+    # rejected. For gemini-3.8-flash thinking_level accepts LOW, MEDIUM (default)
+    # and HIGH; MINIMAL is a validation error.
+    _GEMINI3_STRICT_MODELS = frozenset({"gemini-3.5-flash-lite", "gemini-3.8-flash"})
     # Thinking tokens count against max_output_tokens. Mirror OpenAI's low
     # reasoning effort so a bounded legal output is not starved by thinking.
-    _LOW_THINKING_MODELS = frozenset({"gemini-3.6-flash"})
+    _LOW_THINKING_MODELS = frozenset({"gemini-3.8-flash"})
 
     def __init__(
         self,

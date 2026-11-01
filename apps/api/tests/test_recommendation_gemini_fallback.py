@@ -92,7 +92,7 @@ class _GroundedFallback(MockProvider):
     name = "gemini"
 
     def __init__(self):
-        super().__init__("gemini-3.6-flash")
+        super().__init__("gemini-3.8-flash")
         self.calls = 0
         self.request_session = None
         self.callback = None
@@ -383,7 +383,7 @@ def test_availability_fallback_saves_actual_provider_and_grounded_options(
         record = session.get(Recommendation, response.json()["id"])
         run = session.get(ModelRun, record.model_run_id)
         assert run.provider == "gemini"
-        assert run.model == "gemini-3.6-flash"
+        assert run.model == "gemini-3.8-flash"
         event = session.scalar(
             select(AuditEvent).where(AuditEvent.action == "recommendation.generated")
         )
@@ -692,7 +692,7 @@ def test_rejected_fallback_cannot_make_a_third_call(
             assert len(runs) == 1
             assert runs[0].status == "rejected_unsafe_output"
             assert runs[0].provider == "gemini"
-            assert runs[0].model == "gemini-3.6-flash"
+            assert runs[0].model == "gemini-3.8-flash"
             assert "repair_error=LLMProviderError" in runs[0].error
             assert response.headers["X-Model-Run-Id"] == runs[0].id
         else:
@@ -770,7 +770,7 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
     }
     prices = {"openai:gpt-6-luna": rate}
     if boundary != "unknown-price":
-        prices["gemini:gemini-3.6-flash"] = rate
+        prices["gemini:gemini-3.8-flash"] = rate
     _seed(money_db, limit=30 if boundary == "exhausted" else 100, prices=prices)
     monkeypatch.setattr(money, "current_budget_month", lambda: "2026-11")
     transports = []
@@ -908,6 +908,6 @@ def test_pinned_model_and_managed_project_are_required(monkeypatch):
     monkeypatch.setenv("CASEOPS_LLM_GEMINI_PROJECT", "offline-caseops-project")
     monkeypatch.setenv("CASEOPS_LLM_FALLBACK_MODEL", "invented-model")
     get_settings.cache_clear()
-    with pytest.raises(ValidationError, match="gemini-3.6-flash"):
+    with pytest.raises(ValidationError, match="gemini-3.8-flash"):
         get_settings()
     get_settings.cache_clear()

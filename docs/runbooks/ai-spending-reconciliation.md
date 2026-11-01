@@ -145,12 +145,12 @@ correct forward; do not certify a ceiling from the schema alone. Repin dormant
 paid jobs before they can be invoked and rebuild the stopped ingest VM before
 resuming it against production credentials.
 
-## OpenAI Availability Fallback (Gemini 3.6 Flash)
+## OpenAI Availability Fallback (Gemini 3.8 Flash)
 
 Owner decision, 1 November 2026. When OpenAI's quota is exhausted
 (`LLMQuotaExhaustedError`) or OpenAI is transiently unavailable
 (`LLMTransientProviderError`), CaseOps may make **one** attempt per request on
-`gemini-3.6-flash` through the managed Google Cloud endpoint (Vertex/Agent
+`gemini-3.8-flash` through the managed Google Cloud endpoint (Vertex/Agent
 Platform, ADC) in project `perfect-period-305406`, location `global`. An API key
 or the free AI Studio API is never used. Gemini spend is capped at INR 10,000
 (1,000,000 paise) per IST month by a Gemini-only ledger that does **not** depend
@@ -172,10 +172,10 @@ behaviour is identical to the OpenAI-only release.
   revalidation before each attempt and the shared 100-second, two-attempt budget.
 - Gemini output goes through the same parsers and validators as OpenAI output
   (structured schema, citation verification, legal-safety checks).
-- The tenant AI policy must allow `gemini-3.6-flash` for the purpose, or the
+- The tenant AI policy must allow `gemini-3.8-flash` for the purpose, or the
   fallback is withheld and the OpenAI failure is reported.
 - `ModelRun` rows record the provider and model that produced each output
-  (`gemini` / `gemini-3.6-flash`); recommendations also keep
+  (`gemini` / `gemini-3.8-flash`); recommendations also keep
   `availability_fallback_used` and `provider_attempt_count` in the audit event.
 
 Covered: drafting (and drafting preview), the workspace assistant,
@@ -204,7 +204,7 @@ for lawyers. When OpenAI is out of quota these jobs stop exactly as before.
 | --- | --- | --- |
 | `CASEOPS_LLM_FALLBACK_ENABLED` | `false` | Turns the fallback on. Requires an OpenAI primary. |
 | `CASEOPS_LLM_GEMINI_PROJECT` | unset | Required when enabled; settings validation fails closed without it. |
-| `CASEOPS_LLM_FALLBACK_MODEL` | `gemini-3.6-flash` | Pinned; any other value fails validation. |
+| `CASEOPS_LLM_FALLBACK_MODEL` | `gemini-3.8-flash` | Pinned; any other value fails validation. |
 | `CASEOPS_LLM_GEMINI_LOCATION` | `global` | Pinned. |
 
 The former `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED` and
@@ -212,16 +212,27 @@ The former `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED` and
 
 ### Model availability (checked 2026-11-01)
 
-The Agent Platform model page (last updated 2026-10-30) lists
-`gemini-3.6-flash` as GA, released 21 July 2026, served from `global` and the
-`us` and `eu` multi-regions only. No India region is listed, so `global` stays;
-this is not India-only processing. **The page lists a retirement date of
-19 November 2026.** After that date a fallback attempt is expected to fail as a
-configuration error; CaseOps then reports the OpenAI failure as before. Its
-worst-case reservation is still kept. `gemini-3.8-flash` (GA, retirement
-"2 September 2027 or later", same regions, same standard price) is the obvious
-successor, but changing the pinned model is an owner decision and a code change
-(`llm_fallback_model`, the price table in `services/gemini_spend_cap.py`, tests).
+The owner first chose `gemini-3.6-flash`, then switched to `gemini-3.8-flash`
+the same day because the 3.6 model page lists its retirement on
+19 November 2026.
+
+The [Agent Platform model page](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash)
+(last updated 2026-10-30) lists `gemini-3.8-flash` as GA, released
+2 September 2026, retirement "2 September 2027 or later", served from `global`
+and the `us` and `eu` multi-regions only (Standard PayGo and Provisioned
+Throughput). No India region is listed, so `global` stays; this is not
+India-only processing. Maximum output is 65,536 tokens.
+
+The [developer guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-3-8-flash)
+(last updated 2026-10-30) gives the same request rules CaseOps already applied
+to the Gemini 3 family: temperature, top-k and top-p are ignored (CaseOps does
+not send them); a history ending in a model turn (prefill) is rejected (CaseOps
+refuses it before reserving spend); empty turns are dropped; `thinking_level`
+accepts `LOW`, `MEDIUM` (default) and `HIGH`, and `MINIMAL` is a validation
+error (CaseOps sends `LOW`); `frequency_penalty`, `presence_penalty` and
+`candidate_count` are errors (CaseOps sends none). Changing the pinned model
+again is an owner decision and a code change (`llm_fallback_model`, the price
+table in `services/gemini_spend_cap.py`, tests).
 
 ### The Gemini cap
 
@@ -351,7 +362,7 @@ Both the API service and every job run as
    they must show `ModelRun.provider = mock` and leave `ai_gemini_spend_admissions`
    unchanged. Do not force an OpenAI outage or send a paid Gemini probe to prove
    the switch; the offline tests cover it. The first real fallback will show as
-   a `gemini` / `gemini-3.6-flash` `ModelRun` and one admission row.
+   a `gemini` / `gemini-3.8-flash` `ModelRun` and one admission row.
 
 Rollback: `gcloud run services update caseops-api --region asia-south1
 --project perfect-period-305406 --update-env-vars CASEOPS_LLM_FALLBACK_ENABLED=false`

@@ -1,4 +1,4 @@
-"""OpenAI availability fallback to managed gemini-3.6-flash (owner decision 2026-11-01).
+"""OpenAI availability fallback to managed gemini-3.8-flash (owner decision 2026-11-01).
 
 Offline only: OpenAI and Gemini are deterministic emulators or the native SDK
 behind an in-process transport. Covers the trigger rules, one attempt per
@@ -46,7 +46,7 @@ from tests import test_ai_policy_enforcement, test_gemini_flash_lite_provider
 
 ephemeral_db = test_ai_policy_enforcement.ephemeral_db
 sdk = test_gemini_flash_lite_provider.sdk
-FALLBACK_MODEL = "gemini-3.6-flash"
+FALLBACK_MODEL = "gemini-3.8-flash"
 _QUOTA = "OpenAI quota exhausted. Check the provider billing account."
 _TRANSIENT = "OpenAI is temporarily unavailable or the request timed out."
 
@@ -390,7 +390,7 @@ def test_gemini_unavailability_reports_primary_and_format_errors_keep_their_type
 
 def test_gemini_output_meets_the_same_schema_validator():
     provider = _wrap(_Primary(LLMTransientProviderError(_TRANSIENT)), _Gemini(text='{"ok": 7}'))
-    with pytest.raises(LLMResponseFormatError, match="gemini:gemini-3.6-flash"):
+    with pytest.raises(LLMResponseFormatError, match="gemini:gemini-3.8-flash"):
         llm.generate_structured(
             provider, schema=_Toy, messages=_messages(), context=LLMCallContext(purpose="x")
         )

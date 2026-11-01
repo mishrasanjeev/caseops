@@ -450,10 +450,12 @@ class Settings(BaseSettings):
     # capped at INR 10,000 per IST month (services/gemini_spend_cap.py). Off by
     # default; when off, behaviour is unchanged. The model is pinned. Vertex/ADC
     # only: CASEOPS_LLM_GEMINI_PROJECT is required and no API key is accepted.
-    # gemini-3.6-flash is served from `global` and the `us`/`eu` multi-regions
-    # only (no India region, model page checked 2026-11-01).
+    # gemini-3.8-flash (GA 2026-09-02, retirement "2027-09-02 or later") is
+    # served from `global` and the `us`/`eu` multi-regions only; no India region
+    # (model page checked 2026-11-01). It replaced gemini-3.6-flash, which the
+    # same source lists for retirement on 2026-11-19.
     llm_fallback_enabled: bool = Field(default=False)
-    llm_fallback_model: Literal["gemini-3.6-flash"] = "gemini-3.6-flash"
+    llm_fallback_model: Literal["gemini-3.8-flash"] = "gemini-3.8-flash"
     llm_gemini_project: str | None = Field(
         default=None, pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$"
     )
