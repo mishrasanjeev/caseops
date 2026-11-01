@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDocketEvent,
     IpDocketRecord,
+    IpDocument,
     IpDocumentLink,
     IpPostRegistrationRecordal,
     IpRegistryLink,
@@ -25,6 +26,8 @@ from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocke
 from caseops_api.schemas.ip_operations import IpTitleInterestRecord
 from caseops_api.schemas.ip_recordals import (
     IpRecordalCreateRequest,
+    IpRecordalInstrumentOptionsResponse,
+    IpRecordalListItemResponse,
     IpRecordalPageResponse,
     IpRecordalResponse,
     IpRecordalTransactionRequest,
@@ -34,7 +37,12 @@ from caseops_api.schemas.ip_recordals import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
-from caseops_api.services.ip_document_workflow import list_ip_documents
+from caseops_api.services.ip_docket_access import _docket_or_404
+from caseops_api.services.ip_document_workflow import (
+    _serialize_document,
+    docket_scoped_document_links,
+    get_accessible_ip_document_ids,
+)
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
@@ -71,6 +79,8 @@ _TITLE_STATUS = {
     "rejected": "rejected",
     "withdrawn": "withdrawn",
 }
+# The instrument picker lists at most this many documents per docket.
+RECORDAL_INSTRUMENT_LIMIT = 200
 
 
 def _registry_party_conflict(
@@ -147,18 +157,23 @@ def list_ip_recordals(
     total = (
         session.scalar(select(func.count()).select_from(statement.order_by(None).subquery())) or 0
     )
-    rows = list(
-        session.scalars(
-            statement.order_by(
-                IpPostRegistrationRecordal.updated_at.desc(),
-                IpPostRegistrationRecordal.id,
-            )
-            .limit(limit)
-            .offset(offset)
-        ).all()
-    )
+    rows = session.execute(
+        statement.add_columns(IpDocketRecord.title)
+        .order_by(
+            IpPostRegistrationRecordal.updated_at.desc(),
+            IpPostRegistrationRecordal.id,
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
     return IpRecordalPageResponse(
-        items=[IpRecordalResponse.model_validate(row) for row in rows],
+        items=[
+            IpRecordalListItemResponse(
+                **IpRecordalResponse.model_validate(row).model_dump(),
+                docket_title=docket_title,
+            )
+            for row, docket_title in rows
+        ],
         total=total,
         limit=limit,
         offset=offset,
@@ -181,48 +196,78 @@ def get_ip_recordal(
     return row
 
 
-def _linked_document_ids(
+def list_recordal_instruments(
     session: Session,
     *,
-    company_id: str,
+    context: SessionContext,
     docket_id: str,
-) -> set[str]:
-    event_ids = select(IpDocketEvent.id).where(
-        IpDocketEvent.company_id == company_id,
-        IpDocketEvent.docket_id == docket_id,
+) -> IpRecordalInstrumentOptionsResponse:
+    """Documents a recordal on this docket may cite, newest first and bounded.
+
+    Candidates come from the validator's own link predicate and are filtered by
+    the canonical batched document-access decision before the bound is applied,
+    so ``truncated`` means more citable documents exist than are shown.
+    """
+    _docket_or_404(session, context=context, docket_id=docket_id)
+    linked = select(IpDocumentLink.document_id).where(
+        docket_scoped_document_links(company_id=context.company.id, docket_id=docket_id)
     )
-    deadline_ids = select(IpDeadline.id).where(
-        IpDeadline.company_id == company_id,
-        IpDeadline.docket_id == docket_id,
+    candidates = (
+        select(IpDocument)
+        .where(IpDocument.company_id == context.company.id, IpDocument.id.in_(linked))
+        .order_by(IpDocument.updated_at.desc(), IpDocument.id)
     )
-    return set(
-        session.scalars(
-            select(IpDocumentLink.document_id).where(
-                IpDocumentLink.company_id == company_id,
-                or_(
-                    (IpDocumentLink.target_type == "docket")
-                    & (IpDocumentLink.target_id == docket_id),
-                    (IpDocumentLink.target_type == "event")
-                    & (IpDocumentLink.target_id.in_(event_ids)),
-                    (IpDocumentLink.target_type == "deadline")
-                    & (IpDocumentLink.target_id.in_(deadline_ids)),
-                ),
-            )
+    page_size = RECORDAL_INSTRUMENT_LIMIT + 1
+    citable: list[IpDocument] = []
+    offset = 0
+    while len(citable) <= RECORDAL_INSTRUMENT_LIMIT:
+        page = list(session.scalars(candidates.offset(offset).limit(page_size)).all())
+        if not page:
+            break
+        accessible = get_accessible_ip_document_ids(
+            session, context=context, document_ids={row.id for row in page}
         )
+        citable.extend(row for row in page if row.id in accessible)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return IpRecordalInstrumentOptionsResponse(
+        docket_id=docket_id,
+        items=[
+            _serialize_document(session, context=context, document=row)
+            for row in citable[:RECORDAL_INSTRUMENT_LIMIT]
+        ],
+        truncated=len(citable) > RECORDAL_INSTRUMENT_LIMIT,
     )
 
 
 def _validate_owned_refs(
     session: Session,
     *,
-    company_id: str,
+    context: SessionContext,
     docket_id: str,
     document_refs: list[str],
     cost_item_refs: list[str],
     deadline_refs: list[str],
 ) -> None:
-    if document_refs and set(document_refs) - _linked_document_ids(
-        session, company_id=company_id, docket_id=docket_id
+    company_id = context.company.id
+    refs = set(document_refs)
+    citable = (
+        set(
+            session.scalars(
+                select(IpDocumentLink.document_id).where(
+                    docket_scoped_document_links(company_id=company_id, docket_id=docket_id),
+                    IpDocumentLink.document_id.in_(refs),
+                )
+            )
+        )
+        if refs
+        else set()
+    )
+    if refs - citable or refs - (
+        get_accessible_ip_document_ids(session, context=context, document_ids=citable)
+        if citable
+        else set()
     ):
         raise HTTPException(
             status_code=422,
@@ -324,7 +369,7 @@ def create_ip_recordal(
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
     _validate_owned_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.supporting_instrument_refs,
         cost_item_refs=payload.fee_cost_item_refs,
@@ -441,7 +486,7 @@ def record_ip_recordal_transaction(
         )
     _validate_owned_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.document_refs,
         cost_item_refs=payload.cost_item_refs,
@@ -516,7 +561,7 @@ def record_ip_recordal_transaction(
             event_kind="post_registration_recordal_transaction",
             source="manual",
             source_reference=payload.source_reference,
-            effective_at=payload.effective_at,
+            effective_at=payload.effective_at or datetime.now(UTC),
             responsible_membership_id=payload.responsible_membership_id,
             reason=payload.reason,
             evidence_refs=payload.evidence_refs,
@@ -623,7 +668,7 @@ def ip_recordal_workspace(
         interest for interest in interests if interest.recordal_status in {"pending", "filed"}
     ]
     docket = get_ip_docket(session, context=context, docket_id=row.docket_id)
-    documents = list_ip_documents(
+    documents = list_recordal_instruments(
         session,
         context=context,
         docket_id=row.docket_id,

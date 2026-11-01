@@ -134,7 +134,9 @@ class IpRecordalTransactionRequest(BaseModel):
     expected_version: int = Field(ge=1)
     expected_lifecycle_version: int = Field(ge=0)
     transaction_kind: IpRecordalTransactionKind
-    effective_at: datetime
+    # Omitted means "now": the server stamps its own clock, so a lagging
+    # browser clock can never date the transaction before an earlier event.
+    effective_at: datetime | None = None
     responsible_membership_id: str
     reason: str = Field(min_length=5, max_length=2000)
     source_url: HttpUrl | None = None
@@ -149,7 +151,7 @@ class IpRecordalTransactionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_transaction_contract(self) -> IpRecordalTransactionRequest:
-        if self.effective_at.utcoffset() is None:
+        if self.effective_at is not None and self.effective_at.utcoffset() is None:
             raise ValueError("Recordal transaction time must include a timezone.")
         if (
             self.transaction_kind in {"filed", "defect_noted", "corrected", "rejected"}
@@ -205,11 +207,30 @@ class IpRecordalResponse(BaseModel):
     updated_at: datetime
 
 
+class IpRecordalListItemResponse(IpRecordalResponse):
+    """A list row also names its docket, so the list never shows a raw docket id."""
+
+    docket_title: str
+
+
 class IpRecordalPageResponse(BaseModel):
-    items: list[IpRecordalResponse]
+    items: list[IpRecordalListItemResponse]
     total: int
     limit: int
     offset: int
+
+
+class IpRecordalInstrumentOptionsResponse(BaseModel):
+    """Documents a recordal on one docket may cite as its supporting instruments.
+
+    Built from the same predicate the create and transaction validators apply:
+    linked to the docket or to one of its events or deadlines, and readable by
+    the viewer. `truncated` is true when more than the listed documents exist.
+    """
+
+    docket_id: str
+    items: list[IpDocumentRecord]
+    truncated: bool = False
 
 
 class IpRecordalTransactionResponse(BaseModel):

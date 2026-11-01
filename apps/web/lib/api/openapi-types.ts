@@ -8030,6 +8030,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/recordals/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recordal Instrument Options
+         * @description The documents the recordal form may offer for one docket (declared before
+         *     /recordals/{recordal_id} so the static path is not read as an id).
+         */
+        get: operations["recordal_instrument_options_api_ip_recordals_instruments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/registry-diffs/{diff_id}/resolve": {
         parameters: {
             query?: never;
@@ -32646,10 +32667,95 @@ export interface components {
             /** Supporting Instrument Refs */
             supporting_instrument_refs: string[];
         };
+        /**
+         * IpRecordalInstrumentOptionsResponse
+         * @description Documents a recordal on one docket may cite as its supporting instruments.
+         *
+         *     Built from the same predicate the create and transaction validators apply:
+         *     linked to the docket or to one of its events or deadlines, and readable by
+         *     the viewer. `truncated` is true when more than the listed documents exist.
+         */
+        IpRecordalInstrumentOptionsResponse: {
+            /** Docket Id */
+            docket_id: string;
+            /** Items */
+            items: components["schemas"]["IpDocumentRecord"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * IpRecordalListItemResponse
+         * @description A list row also names its docket, so the list never shows a raw docket id.
+         */
+        IpRecordalListItemResponse: {
+            /** Acceptance Evidence Refs Json */
+            acceptance_evidence_refs_json: string[];
+            /** Affected Classes Json */
+            affected_classes_json: number[];
+            /** Affected Registration Refs Json */
+            affected_registration_refs_json: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Deadline Rule Key */
+            deadline_rule_key: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Effective On */
+            effective_on: string | null;
+            /** Executed On */
+            executed_on: string | null;
+            /** Fee Cost Item Refs Json */
+            fee_cost_item_refs_json: string[];
+            /** Filing Evidence Refs Json */
+            filing_evidence_refs_json: string[];
+            /** Form Code */
+            form_code: string;
+            /** Id */
+            id: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /** Parties Json */
+            parties_json: {
+                [key: string]: unknown;
+            }[];
+            /** Recordal Type */
+            recordal_type: string;
+            /** Registry Snapshot Id */
+            registry_snapshot_id: string | null;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Supporting Instrument Refs Json */
+            supporting_instrument_refs_json: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
         /** IpRecordalPageResponse */
         IpRecordalPageResponse: {
             /** Items */
-            items: components["schemas"]["IpRecordalResponse"][];
+            items: components["schemas"]["IpRecordalListItemResponse"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -32746,11 +32852,8 @@ export interface components {
             };
             /** Document Refs */
             document_refs?: string[];
-            /**
-             * Effective At
-             * Format: date-time
-             */
-            effective_at: string;
+            /** Effective At */
+            effective_at?: string | null;
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Lifecycle Version */
@@ -65967,6 +66070,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpRecordalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_instrument_options_api_ip_recordals_instruments_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalInstrumentOptionsResponse"];
                 };
             };
             /** @description Validation Error */
