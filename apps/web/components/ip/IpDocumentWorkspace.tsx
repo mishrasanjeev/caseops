@@ -43,6 +43,11 @@ function formatList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
+/** The deep-linked record when it is listed, else the first record. */
+function defaultDocketId(dockets: Pick<IpDocket, "id">[], preferred: string | undefined): string {
+  return preferred && dockets.some((row) => row.id === preferred) ? preferred : (dockets[0]?.id ?? "");
+}
+
 const NEXT_STATE: Partial<Record<IpDocumentState, IpDocumentState>> = {
   draft: "review",
   review: "approved",
@@ -63,6 +68,7 @@ export function IpDocumentWorkspace({
   docketsLoading = false,
   docketsError = null,
   onRetryDockets,
+  preferredDocketId,
 }: {
   dockets: Pick<IpDocket, "id" | "title">[];
   /** The caller's docket listing is still loading, so an empty list means nothing yet. */
@@ -72,6 +78,8 @@ export function IpDocumentWorkspace({
   onRetryDockets?: () => void;
   assetType?: "Trademark" | "Patent";
   scopeDocketId?: string;
+  /** Preselects this record as the linked docket when it is listed (deep links). */
+  preferredDocketId?: string;
   canUpload: boolean;
   canManage: boolean;
   canReview: boolean;
@@ -88,7 +96,7 @@ export function IpDocumentWorkspace({
   const [proceedingNo, setProceedingNo] = useState("");
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [taxonomyKey, setTaxonomyKey] = useState("");
-  const [docketId, setDocketId] = useState(dockets[0]?.id ?? "");
+  const [docketId, setDocketId] = useState(() => defaultDocketId(dockets, preferredDocketId));
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
   >(assetType === "Patent" ? "restricted" : "internal");
@@ -184,8 +192,8 @@ export function IpDocumentWorkspace({
     .filter(Boolean);
 
   useEffect(() => {
-    if (!docketId && dockets[0]?.id) setDocketId(dockets[0].id);
-  }, [docketId, dockets]);
+    if (!docketId && dockets.length) setDocketId(defaultDocketId(dockets, preferredDocketId));
+  }, [docketId, dockets, preferredDocketId]);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["ip", "documents"] });
   };
@@ -529,7 +537,7 @@ export function IpDocumentWorkspace({
                 </div>
               ) : dockets.length === 0 ? (
                 <p id="ip-document-docket-empty" className="mt-1 text-xs text-[var(--color-mute)]">
-                  No trademark docket yet. Create one with New trademark, then link the document to it here.
+                  No IP record to link yet. Create the record first, then upload its documents.
                 </p>
               ) : null}
             </div>

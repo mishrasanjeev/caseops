@@ -6924,6 +6924,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/foreign-associate-instructions/create-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Foreign Associate Instruction Create Options
+         * @description The associates, assignments, estimates, client instructions and
+         *     documents the create endpoint accepts for one docket, with blockers.
+         */
+        get: operations["foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/hearings": {
         parameters: {
             query?: never;
@@ -28974,6 +28995,15 @@ export interface components {
              */
             transaction_kind: "acknowledgement_received" | "defect_recorded" | "rejected" | "accepted";
         };
+        /** IpFilingJurisdictionOption */
+        IpFilingJurisdictionOption: {
+            /** Associate Count */
+            associate_count: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+        };
         /** IpFilingPreparationTransactionRequest */
         IpFilingPreparationTransactionRequest: {
             /** Attempt Key */
@@ -29066,6 +29096,70 @@ export interface components {
             /** Transaction Kind */
             transaction_kind: string;
         };
+        /** IpForeignAssociateCreateBlocker */
+        IpForeignAssociateCreateBlocker: {
+            /** Action Label */
+            action_label?: string | null;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "no_panel_associate" | "no_associate_for_jurisdiction" | "no_assignment_for_matter" | "no_active_estimate" | "no_linked_documents";
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "outside_counsel_id" | "assignment_id" | "estimate_cost_item_id" | "selected_document_refs";
+            /** Href */
+            href?: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * IpForeignAssociateCreateOptionsResponse
+         * @description Every value the create validator accepts for one docket, and why not.
+         *
+         *     Built from the same predicates as ``create_ip_foreign_associate_instruction``
+         *     so a picker never offers a value the API rejects (BUG-009/010/011/013).
+         */
+        IpForeignAssociateCreateOptionsResponse: {
+            /** Assignment Required */
+            assignment_required: boolean;
+            /** Assignments */
+            assignments: components["schemas"]["IpForeignAssociateOptionAssignment"][];
+            /** Associates */
+            associates: components["schemas"]["IpForeignAssociateOptionAssociate"][];
+            /** Blockers */
+            blockers: components["schemas"]["IpForeignAssociateCreateBlocker"][];
+            /** Can Manage Counsel */
+            can_manage_counsel: boolean;
+            /** Can Record Estimate */
+            can_record_estimate: boolean;
+            /** Client Instructions */
+            client_instructions: components["schemas"]["IpForeignAssociateOptionClientInstruction"][];
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Documents */
+            documents: components["schemas"]["IpForeignAssociateOptionDocument"][];
+            /** Estimates */
+            estimates: components["schemas"]["IpForeignAssociateOptionEstimate"][];
+            /** Jurisdictions */
+            jurisdictions: components["schemas"]["IpFilingJurisdictionOption"][];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Matter Title */
+            matter_title: string | null;
+            /** Panel Associate Count */
+            panel_associate_count: number;
+            /** Target Jurisdiction */
+            target_jurisdiction: string | null;
+            /** Unbudgeted Assignment Count */
+            unbudgeted_assignment_count: number;
+        };
         /** IpForeignAssociateCreateRequest */
         IpForeignAssociateCreateRequest: {
             /** Assignment Id */
@@ -29119,6 +29213,87 @@ export interface components {
             tax_rate_percent?: number | null;
             /** Tax Type */
             tax_type?: string | null;
+        };
+        /** IpForeignAssociateOptionAssignment */
+        IpForeignAssociateOptionAssignment: {
+            /** Budget Amount Minor */
+            budget_amount_minor: number;
+            /** Compatible Estimate Ids */
+            compatible_estimate_ids: string[];
+            /** Counsel Id */
+            counsel_id: string;
+            /** Counsel Name */
+            counsel_name: string;
+            /** Currency */
+            currency: string;
+            /** Id */
+            id: string;
+            /** Role Summary */
+            role_summary: string | null;
+            /** Status */
+            status: string;
+        };
+        /** IpForeignAssociateOptionAssociate */
+        IpForeignAssociateOptionAssociate: {
+            /** Filing Jurisdictions */
+            filing_jurisdictions: string[];
+            /** Firm City */
+            firm_city: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Panel Status */
+            panel_status: string;
+            /** Primary Contact Email */
+            primary_contact_email: string | null;
+            /** Primary Contact Name */
+            primary_contact_name: string | null;
+        };
+        /** IpForeignAssociateOptionClientInstruction */
+        IpForeignAssociateOptionClientInstruction: {
+            /** Id */
+            id: string;
+            /** Instruction Kind */
+            instruction_kind: string;
+            /** Instruction Version */
+            instruction_version: number;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Submitted By */
+            submitted_by: string;
+        };
+        /** IpForeignAssociateOptionDocument */
+        IpForeignAssociateOptionDocument: {
+            /** Id */
+            id: string;
+            /** Is Privileged */
+            is_privileged: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpForeignAssociateOptionEstimate */
+        IpForeignAssociateOptionEstimate: {
+            /** Amount Minor */
+            amount_minor: number | null;
+            /** Amount Withheld */
+            amount_withheld: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
         };
         /** IpForeignAssociatePageResponse */
         IpForeignAssociatePageResponse: {
@@ -63055,6 +63230,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpForeignAssociateWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+                target_jurisdiction?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateCreateOptionsResponse"];
                 };
             };
             /** @description Validation Error */

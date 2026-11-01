@@ -459,7 +459,7 @@ describe("IpDocumentWorkspace", () => {
     const linked = screen.getByRole("combobox", { name: "Linked docket" });
     expect(linked).toBeDisabled();
     expect(document.getElementById(linked.getAttribute("aria-describedby")!)).toHaveTextContent("Loading dockets…");
-    expect(screen.queryByText(/No trademark docket yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No IP record to link yet/)).not.toBeInTheDocument();
 
     rerender(withClient(
       <IpDocumentWorkspace
@@ -474,13 +474,28 @@ describe("IpDocumentWorkspace", () => {
     ));
     const failed = screen.getByRole("combobox", { name: "Linked docket" });
     expect(document.getElementById(failed.getAttribute("aria-describedby")!)).toHaveTextContent("The IP service is unavailable.");
-    expect(screen.queryByText(/No trademark docket yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No IP record to link yet/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(retry).toHaveBeenCalledOnce();
 
     rerender(withClient(
       <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
     ));
-    expect(screen.getByText(/No trademark docket yet\. Create one with New trademark/)).toBeVisible();
+    expect(screen.getByText(/No IP record to link yet\. Create the record first/)).toBeVisible();
+  it("preselects a deep-linked record and closes the docket list when there is none", async () => {
+    const two = [dockets[0], { ...dockets[0], id: "docket-pine", title: "PINE LABS" }];
+    const view = render(withClient(
+      <IpDocumentWorkspace dockets={two} preferredDocketId="docket-pine" canUpload canManage canReview canConfigure />,
+    ));
+    expect(await screen.findByLabelText("Linked docket")).toHaveValue("docket-pine");
+    view.unmount();
+
+    render(withClient(
+      <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
+    ));
+    const linked = await screen.findByLabelText("Linked docket");
+    expect(linked).toBeDisabled();
+    expect(linked).toHaveAttribute("aria-describedby", "ip-document-docket-empty");
+    expect(screen.getByText(/No IP record to link yet/)).toBeVisible();
   });
 });

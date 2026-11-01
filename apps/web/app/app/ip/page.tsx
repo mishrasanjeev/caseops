@@ -379,16 +379,21 @@ export default function IpDocketPage() {
           <IpDomainAvailability domains={readiness.data.domains} />
         </TabsContent>
         <TabsContent value="documents">
-          <IpDocumentWorkspace
-            dockets={portfolioDockets}
-            docketsLoading={listing.isLoading || deepLinkDocketPending}
-            docketsError={listing.error ?? requestedDocket.error ?? null}
-            onRetryDockets={() => void (listing.isError ? listing.refetch() : requestedDocket.refetch())}
-            canUpload={canWrite && canUploadDocuments}
-            canManage={canWrite && canManageDocuments}
-            canReview={canReview}
-            canConfigure={canConfigure}
-          />
+          {deepLinkDocketPending ? (
+            <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
+          ) : (
+            <IpDocumentWorkspace
+              dockets={portfolioDockets}
+              preferredDocketId={requestedDocketId ?? undefined}
+              docketsLoading={listing.isLoading}
+              docketsError={listing.error ?? requestedDocket.error ?? null}
+              onRetryDockets={() => void (listing.isError ? listing.refetch() : requestedDocket.refetch())}
+              canUpload={canWrite && canUploadDocuments}
+              canManage={canWrite && canManageDocuments}
+              canReview={canReview}
+              canConfigure={canConfigure}
+            />
+          )}
         </TabsContent>
         <TabsContent value="docket">
           {deepLinkDocketPending && requestedView === "access" && canManageAccess ? (

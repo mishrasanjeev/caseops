@@ -11804,6 +11804,85 @@ export async function fetchIpPortalClientInstructions(): Promise<{
   return apiRequest("/api/ip/portal/client-instructions");
 }
 
+export type IpForeignAssociateCreateBlocker = {
+  code:
+    | "no_panel_associate"
+    | "no_associate_for_jurisdiction"
+    | "no_assignment_for_matter"
+    | "no_active_estimate"
+    | "no_linked_documents";
+  field: "outside_counsel_id" | "assignment_id" | "estimate_cost_item_id" | "selected_document_refs";
+  message: string;
+  action_label?: string | null;
+  href?: string | null;
+};
+
+/** Everything POST /foreign-associate-instructions accepts for one docket
+ * (BUG-009/010/011/013), filtered by the create validator's own predicates. */
+export type IpForeignAssociateCreateOptions = {
+  docket_id: string;
+  docket_title: string;
+  lifecycle_version: number;
+  matter_id: string | null;
+  matter_title: string | null;
+  /** Canonical code (ISO 3166-1 alpha-2, or EM / WO / EP), a legacy
+   * instruction's stored free-text target unchanged, or null. */
+  target_jurisdiction: string | null;
+  jurisdictions: Array<{ code: string; name: string; associate_count: number }>;
+  panel_associate_count: number;
+  associates: Array<{
+    id: string;
+    name: string;
+    firm_city: string | null;
+    primary_contact_name: string | null;
+    primary_contact_email: string | null;
+    panel_status: string;
+    filing_jurisdictions: string[];
+  }>;
+  assignment_required: boolean;
+  assignments: Array<{
+    id: string;
+    counsel_id: string;
+    counsel_name: string;
+    role_summary: string | null;
+    status: string;
+    currency: string;
+    budget_amount_minor: number;
+    compatible_estimate_ids: string[];
+  }>;
+  unbudgeted_assignment_count: number;
+  estimates: Array<{
+    id: string;
+    description: string;
+    amount_minor: number | null;
+    amount_withheld: boolean;
+    currency: string;
+    evidence_reference: string;
+    created_at: string;
+  }>;
+  client_instructions: Array<{
+    id: string;
+    submitted_by: string;
+    instruction_kind: string;
+    instruction_version: number;
+    received_at: string;
+  }>;
+  documents: Array<{ id: string; title: string; is_privileged: boolean }>;
+  can_record_estimate: boolean;
+  /** outside_counsel:manage: may add panel counsel and Matter assignments. */
+  can_manage_counsel: boolean;
+  blockers: IpForeignAssociateCreateBlocker[];
+};
+
+export async function fetchIpForeignAssociateCreateOptions(input: {
+  docketId: string;
+  targetJurisdiction?: string | null;
+}): Promise<IpForeignAssociateCreateOptions> {
+  const query = new URLSearchParams({ docket_id: input.docketId });
+  if (input.targetJurisdiction) query.set("target_jurisdiction", input.targetJurisdiction);
+  return apiRequest(`/api/ip/foreign-associate-instructions/create-options?${query.toString()}`);
+}
+
 export async function createIpForeignAssociateInstruction(input: {
   docketId: string;
   expectedLifecycleVersion: number;
