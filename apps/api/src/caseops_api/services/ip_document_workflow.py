@@ -8,13 +8,15 @@ from typing import BinaryIO, Literal
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Company,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
+    IpDeadline,
+    IpDocketEvent,
     IpDocument,
     IpDocumentLink,
     IpDocumentTaxonomyAlias,
@@ -406,6 +408,33 @@ def list_ip_documents(
             raise
         visible.append(_serialize_document(session, context=context, document=row))
     return IpDocumentListResponse(items=visible, total=len(visible))
+
+
+def docket_scoped_document_links(*, company_id: str, docket_id: str):
+    """Links that make a document citable as evidence on one docket.
+
+    A document is citable when it is linked to the docket itself or to one of
+    the docket's events or deadlines. Recordal and Madrid pickers and their write
+    validators share this predicate (plus the batched viewer access decision),
+    so a form never offers a document the API rejects or hides one it accepts.
+    """
+    event_ids = select(IpDocketEvent.id).where(
+        IpDocketEvent.company_id == company_id,
+        IpDocketEvent.docket_id == docket_id,
+    )
+    deadline_ids = select(IpDeadline.id).where(
+        IpDeadline.company_id == company_id,
+        IpDeadline.docket_id == docket_id,
+    )
+    return and_(
+        IpDocumentLink.company_id == company_id,
+        or_(
+            (IpDocumentLink.target_type == "docket") & (IpDocumentLink.target_id == docket_id),
+            (IpDocumentLink.target_type == "event") & (IpDocumentLink.target_id.in_(event_ids)),
+            (IpDocumentLink.target_type == "deadline")
+            & (IpDocumentLink.target_id.in_(deadline_ids)),
+        ),
+    )
 
 
 def list_linked_ip_documents(
@@ -1533,6 +1562,7 @@ __all__ = [
     "apply_ip_document_bulk_update",
     "assert_ip_document_access",
     "authorize_ip_document_action",
+    "docket_scoped_document_links",
     "get_accessible_ip_document_ids",
     "get_ip_document",
     "get_ip_document_policies",

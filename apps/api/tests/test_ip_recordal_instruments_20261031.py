@@ -163,6 +163,26 @@ def test_instrument_options_match_the_recordal_validator(client: TestClient) -> 
         (created.json()["id"], docket["title"])
     ]
 
+    # A transaction sent without a time is stamped by the server's clock, after
+    # the recordal's own creation event, so it is never refused as backdated.
+    me = client.get("/api/auth/me", headers=headers).json()
+    withdrawn = client.post(
+        f"/api/ip/recordals/{created.json()['id']}/transactions",
+        headers=headers,
+        json={
+            "expected_version": created.json()["version"],
+            "expected_lifecycle_version": docket["lifecycle_version"],
+            "transaction_kind": "withdrawn",
+            "responsible_membership_id": me["membership"]["id"],
+            "reason": "Client withdrew the instruction.",
+        },
+    )
+    assert withdrawn.status_code == 201, withdrawn.text
+    assert withdrawn.json()["recordal"]["status"] == "withdrawn"
+    assert withdrawn.json()["event"]["effective_at"] >= workspace.json()["transactions"][-1][
+        "effective_at"
+    ]
+
 
 def test_instrument_options_are_tenant_scoped_and_need_ip_read(client: TestClient) -> None:
     owner = auth_headers(str(bootstrap_company(client)["access_token"]))
@@ -200,3 +220,181 @@ def test_instrument_options_are_tenant_scoped_and_need_ip_read(client: TestClien
     with get_session_factory()() as session:
         actions = set(session.scalars(select(AuditEvent.action)))
     assert not any("instrument" in action for action in actions)
+
+
+def _colleague(client: TestClient, owner: dict[str, str], slug: str) -> dict[str, str]:
+    """A same-company IP admin created through the product's user API."""
+
+    created = client.post(
+        "/api/companies/current/users",
+        headers=owner,
+        json={
+            "full_name": "Walled Colleague",
+            "email": f"walled@{slug}.example",
+            "role": "admin",
+            "password": "WalledPass123!",
+        },
+    )
+    assert created.status_code == 200, created.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": slug,
+            "email": f"walled@{slug}.example",
+            "password": "WalledPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    client.cookies.clear()
+    return auth_headers(str(login.json()["access_token"]))
+
+
+def _restricted_docket(client: TestClient, headers: dict[str, str]) -> str:
+    """A restricted docket: only its creator holds the seeded access grant."""
+
+    response = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Restricted ASTER portfolio",
+            "restricted": True,
+            "particulars": {
+                "form_key": "TM-A",
+                "form_version": "2026.1",
+                "mark_kind": "word",
+                "representation": {"text": "ASTER"},
+                "classes": [{"class_number": 9, "specification": "Downloadable software"}],
+                "parties": [{"role": "applicant", "name": "Aster Holdings LLP"}],
+                "filing_manifest": [
+                    {
+                        "key": "representation",
+                        "label": "Mark representation",
+                        "required": True,
+                        "evidence_reference": "fixture:recordal-wall",
+                    }
+                ],
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+def test_walled_colleague_cannot_list_or_cite_and_co_linked_deeds_follow_access(
+    client: TestClient,
+) -> None:
+    slug = "recordal-instruments-wall"
+    tenant = _bootstrap(client, slug)
+    owner = auth_headers(str(tenant["access_token"]))
+    enable_ip_workspace(client, owner, str(tenant["membership"]["id"]))
+    open_docket = _create_docket(client, owner)
+    walled_docket = _restricted_docket(client, owner)
+    colleague = _colleague(client, owner, slug)
+
+    walled_deed = _upload(client, owner, title="Deed on the walled docket",
+                          links=[{"target_type": "docket", "target_id": walled_docket}])
+    shared_deed = _upload(client, owner, title="Deed on the open docket",
+                          links=[{"target_type": "docket", "target_id": open_docket}])
+    co_linked = _upload(client, owner, title="Deed also filed on the walled docket",
+                        links=[{"target_type": "docket", "target_id": open_docket},
+                               {"target_type": "docket", "target_id": walled_docket}])
+
+    # (a) The walled docket does not exist for the colleague: no list, no recordal.
+    hidden = client.get(ROUTE, headers=colleague, params={"docket_id": walled_docket})
+    assert hidden.status_code == 404
+    assert "Deed on the walled docket" not in hidden.text
+    assert client.get(f"/api/ip/dockets/{walled_docket}", headers=colleague).status_code == 404
+    colleague_me = client.get("/api/auth/me", headers=colleague).json()
+    refused = client.post(
+        "/api/ip/recordals",
+        headers=colleague,
+        json={
+            "docket_id": walled_docket,
+            "expected_lifecycle_version": 1,
+            "responsible_membership_id": colleague_me["membership"]["id"],
+            "reason": "Record the executed assignment.",
+            "recordal_type": "assignment",
+            "legal_basis": "Trade Marks Act, 1999, section 45",
+            "form_code": "TM-P",
+            "parties": [
+                {"role": "assignor", "name": "Oldco", "evidence_reference": walled_deed},
+                {"role": "assignee", "name": "Newco", "evidence_reference": walled_deed},
+            ],
+            "executed_on": "2026-10-01",
+            "effective_on": "2026-10-01",
+            "affected_registration_refs": ["TM-1234567"],
+            "supporting_instrument_refs": [walled_deed],
+        },
+    )
+    assert refused.status_code == 404, refused.text
+    assert "Deed on the walled docket" not in refused.text
+
+    # (b) A deed co-linked to a docket the viewer cannot see is neither offered nor accepted
+    # for that viewer, while the owner, who can see both dockets, is offered it and may cite it.
+    offered = client.get(ROUTE, headers=colleague, params={"docket_id": open_docket})
+    assert offered.status_code == 200, offered.text
+    assert [row["id"] for row in offered.json()["items"]] == [shared_deed]
+    assert offered.json()["truncated"] is False
+    cited = _assignment(client, colleague, open_docket, [shared_deed, co_linked])
+    assert cited.status_code == 422, cited.text
+    assert "linked to the selected docket" in cited.text
+
+    owner_offered = client.get(ROUTE, headers=owner, params={"docket_id": open_docket})
+    assert {row["id"] for row in owner_offered.json()["items"]} == {shared_deed, co_linked}
+    accepted = _assignment(client, owner, open_docket, [shared_deed, co_linked])
+    assert accepted.status_code == 201, accepted.text
+
+
+def test_truncation_counts_only_documents_the_viewer_may_cite(
+    client: TestClient, monkeypatch
+) -> None:
+    from caseops_api.services import ip_recordals
+
+    slug = "recordal-instruments-bound"
+    tenant = _bootstrap(client, slug)
+    owner = auth_headers(str(tenant["access_token"]))
+    enable_ip_workspace(client, owner, str(tenant["membership"]["id"]))
+    docket_id = _create_docket(client, owner)
+    walled_docket = _restricted_docket(client, owner)
+    colleague = _colleague(client, owner, slug)
+    older = _upload(client, owner, title="Older deed",
+                    links=[{"target_type": "docket", "target_id": docket_id}])
+    newer = _upload(client, owner, title="Newer deed",
+                    links=[{"target_type": "docket", "target_id": docket_id}])
+    # Newest of all, and invisible to the colleague: it must not use up their bound.
+    _upload(client, owner, title="Newest deed, co-linked to the walled docket",
+            links=[{"target_type": "docket", "target_id": docket_id},
+                   {"target_type": "docket", "target_id": walled_docket}])
+
+    monkeypatch.setattr(ip_recordals, "RECORDAL_INSTRUMENT_LIMIT", 2)
+    colleague_view = client.get(ROUTE, headers=colleague, params={"docket_id": docket_id}).json()
+    assert [row["id"] for row in colleague_view["items"]] == [newer, older]
+    assert colleague_view["truncated"] is False
+    owner_view = client.get(ROUTE, headers=owner, params={"docket_id": docket_id}).json()
+    assert len(owner_view["items"]) == 2
+    assert owner_view["truncated"] is True
+
+    monkeypatch.setattr(ip_recordals, "RECORDAL_INSTRUMENT_LIMIT", 1)
+    colleague_view = client.get(ROUTE, headers=colleague, params={"docket_id": docket_id}).json()
+    assert [row["id"] for row in colleague_view["items"]] == [newer]
+    assert colleague_view["truncated"] is True
+
+
+def test_deadline_linked_deed_is_offered_and_accepted(client: TestClient, monkeypatch) -> None:
+    from caseops_api.core.settings import get_settings
+    from tests.test_ip_deadline_terminal_state import _confirmed_deadline
+
+    # Creating the governed deadline needs rule governance, which defaults off.
+    monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "true")
+    get_settings.cache_clear()
+    legal_headers, legal_id, _reviewer, deadline, docket_id = _confirmed_deadline(client)
+    enable_ip_workspace(client, legal_headers, legal_id)
+    via_deadline = _upload(client, legal_headers, title="Deed filed against the deadline",
+                           links=[{"target_type": "deadline", "target_id": deadline["id"]}])
+
+    offered = client.get(ROUTE, headers=legal_headers, params={"docket_id": docket_id})
+    assert offered.status_code == 200, offered.text
+    assert [row["id"] for row in offered.json()["items"]] == [via_deadline]
+    created = _assignment(client, legal_headers, docket_id, [via_deadline])
+    assert created.status_code == 201, created.text
+    assert created.json()["supporting_instrument_refs_json"] == [via_deadline]

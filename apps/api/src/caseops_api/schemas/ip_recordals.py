@@ -134,7 +134,9 @@ class IpRecordalTransactionRequest(BaseModel):
     expected_version: int = Field(ge=1)
     expected_lifecycle_version: int = Field(ge=0)
     transaction_kind: IpRecordalTransactionKind
-    effective_at: datetime
+    # Omitted means "now": the server stamps its own clock, so a lagging
+    # browser clock can never date the transaction before an earlier event.
+    effective_at: datetime | None = None
     responsible_membership_id: str
     reason: str = Field(min_length=5, max_length=2000)
     source_url: HttpUrl | None = None
@@ -149,7 +151,7 @@ class IpRecordalTransactionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_transaction_contract(self) -> IpRecordalTransactionRequest:
-        if self.effective_at.utcoffset() is None:
+        if self.effective_at is not None and self.effective_at.utcoffset() is None:
             raise ValueError("Recordal transaction time must include a timezone.")
         if (
             self.transaction_kind in {"filed", "defect_noted", "corrected", "rejected"}

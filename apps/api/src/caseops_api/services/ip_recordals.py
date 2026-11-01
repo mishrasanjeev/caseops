@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -39,8 +39,9 @@ from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_docket_access import _docket_or_404
 from caseops_api.services.ip_document_workflow import (
-    _assert_document_targets_accessible,
     _serialize_document,
+    docket_scoped_document_links,
+    get_accessible_ip_document_ids,
 )
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
@@ -195,71 +196,48 @@ def get_ip_recordal(
     return row
 
 
-def _recordal_document_links(*, company_id: str, docket_id: str):
-    """Links that make a document citable by a recordal on this docket.
-
-    A document is citable when it is linked to the docket itself or to one of
-    the docket's events or deadlines. The instrument picker and the write
-    validator both use this one predicate (plus the viewer's document access),
-    so the form can never offer a document the API rejects or hide one it
-    accepts.
-    """
-    event_ids = select(IpDocketEvent.id).where(
-        IpDocketEvent.company_id == company_id,
-        IpDocketEvent.docket_id == docket_id,
-    )
-    deadline_ids = select(IpDeadline.id).where(
-        IpDeadline.company_id == company_id,
-        IpDeadline.docket_id == docket_id,
-    )
-    return and_(
-        IpDocumentLink.company_id == company_id,
-        or_(
-            (IpDocumentLink.target_type == "docket") & (IpDocumentLink.target_id == docket_id),
-            (IpDocumentLink.target_type == "event") & (IpDocumentLink.target_id.in_(event_ids)),
-            (IpDocumentLink.target_type == "deadline")
-            & (IpDocumentLink.target_id.in_(deadline_ids)),
-        ),
-    )
-
-
-def _document_accessible(session: Session, *, context: SessionContext, document_id: str) -> bool:
-    try:
-        _assert_document_targets_accessible(session, context=context, document_id=document_id)
-    except HTTPException as exc:
-        if exc.status_code == 404:
-            return False
-        raise
-    return True
-
-
 def list_recordal_instruments(
     session: Session,
     *,
     context: SessionContext,
     docket_id: str,
 ) -> IpRecordalInstrumentOptionsResponse:
-    """Documents a recordal on this docket may cite, newest first and bounded."""
+    """Documents a recordal on this docket may cite, newest first and bounded.
+
+    Candidates come from the validator's own link predicate and are filtered by
+    the canonical batched document-access decision before the bound is applied,
+    so ``truncated`` means more citable documents exist than are shown.
+    """
     _docket_or_404(session, context=context, docket_id=docket_id)
     linked = select(IpDocumentLink.document_id).where(
-        _recordal_document_links(company_id=context.company.id, docket_id=docket_id)
+        docket_scoped_document_links(company_id=context.company.id, docket_id=docket_id)
     )
-    rows = list(
-        session.scalars(
-            select(IpDocument)
-            .where(IpDocument.company_id == context.company.id, IpDocument.id.in_(linked))
-            .order_by(IpDocument.updated_at.desc(), IpDocument.id)
-            .limit(RECORDAL_INSTRUMENT_LIMIT + 1)
-        ).all()
+    candidates = (
+        select(IpDocument)
+        .where(IpDocument.company_id == context.company.id, IpDocument.id.in_(linked))
+        .order_by(IpDocument.updated_at.desc(), IpDocument.id)
     )
+    page_size = RECORDAL_INSTRUMENT_LIMIT + 1
+    citable: list[IpDocument] = []
+    offset = 0
+    while len(citable) <= RECORDAL_INSTRUMENT_LIMIT:
+        page = list(session.scalars(candidates.offset(offset).limit(page_size)).all())
+        if not page:
+            break
+        accessible = get_accessible_ip_document_ids(
+            session, context=context, document_ids={row.id for row in page}
+        )
+        citable.extend(row for row in page if row.id in accessible)
+        if len(page) < page_size:
+            break
+        offset += page_size
     return IpRecordalInstrumentOptionsResponse(
         docket_id=docket_id,
         items=[
             _serialize_document(session, context=context, document=row)
-            for row in rows[:RECORDAL_INSTRUMENT_LIMIT]
-            if _document_accessible(session, context=context, document_id=row.id)
+            for row in citable[:RECORDAL_INSTRUMENT_LIMIT]
         ],
-        truncated=len(rows) > RECORDAL_INSTRUMENT_LIMIT,
+        truncated=len(citable) > RECORDAL_INSTRUMENT_LIMIT,
     )
 
 
@@ -273,21 +251,23 @@ def _validate_owned_refs(
     deadline_refs: list[str],
 ) -> None:
     company_id = context.company.id
+    refs = set(document_refs)
     citable = (
         set(
             session.scalars(
                 select(IpDocumentLink.document_id).where(
-                    _recordal_document_links(company_id=company_id, docket_id=docket_id),
-                    IpDocumentLink.document_id.in_(set(document_refs)),
+                    docket_scoped_document_links(company_id=company_id, docket_id=docket_id),
+                    IpDocumentLink.document_id.in_(refs),
                 )
             )
         )
-        if document_refs
+        if refs
         else set()
     )
-    if set(document_refs) - citable or not all(
-        _document_accessible(session, context=context, document_id=document_id)
-        for document_id in citable
+    if refs - citable or refs - (
+        get_accessible_ip_document_ids(session, context=context, document_ids=citable)
+        if citable
+        else set()
     ):
         raise HTTPException(
             status_code=422,
@@ -581,7 +561,7 @@ def record_ip_recordal_transaction(
             event_kind="post_registration_recordal_transaction",
             source="manual",
             source_reference=payload.source_reference,
-            effective_at=payload.effective_at,
+            effective_at=payload.effective_at or datetime.now(UTC),
             responsible_membership_id=payload.responsible_membership_id,
             reason=payload.reason,
             evidence_refs=payload.evidence_refs,

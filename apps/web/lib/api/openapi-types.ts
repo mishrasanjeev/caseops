@@ -32542,11 +32542,8 @@ export interface components {
             };
             /** Document Refs */
             document_refs?: string[];
-            /**
-             * Effective At
-             * Format: date-time
-             */
-            effective_at: string;
+            /** Effective At */
+            effective_at?: string | null;
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Lifecycle Version */
