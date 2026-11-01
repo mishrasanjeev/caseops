@@ -524,13 +524,20 @@ test('picker cancel includes authoritative entry read even when the actual choos
   const files=Object.assign(control('',()=>{
     ui='files';ledger.requests.push({sequence:++ledger.lastSequence,method:'GET',route:`/api/matters/${matterId}/workspace`,status:200,nativeMarker:true});
   }),{elementId:'scoped-files-section'});
+  // iOS input focuses this field, waits for the keyboard and reads its text back.
+  let typed='';
+  const search=Object.assign(control(),{elementId:'matter-search-field',clearValue:async()=>{typed='';},
+    addValue:async(value)=>{typed+=value;},getAttribute:async(key)=>key==='value'?typed:null});
   context.driver={
+    async pause(){},
     async waitUntil(check,options){if(!await check())throw new Error(options?.timeoutMsg||'OFFLINE_UI_NOT_READY');},
     async $$(query){
       if(query==='~account-open')return [control()];
       if(query==='~tab-matters')return [control('',()=>{ui='matters';})];
       if(query==='~screen-matters')return ui==='matters'?[control()]:[];
-      if(query==='~matter-search'||query==='~matter-search-submit')return [control()];
+      if(query==='~matter-search')return [search];
+      if(query==='~matter-search-submit')return [control()];
+      if(query==='-ios predicate string:type == "XCUIElementTypeKeyboard"')return [control()];
       if(query===`~matter-row-${matterId}`)return [control('',()=>{ui='matter';})];
       if(query==='~matter-code'||query==='~files-matter-code')return [control('OFFLINE-001')];
       if(query.includes('label == "Synthetic offline matter"')||query==='~files-matter-title')return [control('Synthetic offline matter')];
