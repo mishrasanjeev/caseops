@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { displayValue, fieldLabel } from "@/lib/display-value";
+import { displayCell, displayValue, fieldLabel, isInternalIdKey, looksLikeInternalId, readableColumns } from "@/lib/display-value";
 
 describe("displayValue", () => {
   it("never renders raw JSON for nested values", () => {
@@ -20,5 +20,26 @@ describe("displayValue", () => {
 
   it("turns snake_case keys into labels", () => {
     expect(fieldLabel("registration_number")).toBe("Registration number");
+  });
+});
+
+describe("internal identifiers", () => {
+  it("recognises id fields and id-shaped values", () => {
+    expect(["id", "docket_id", "recipient_membership_ids", "content_sha256"].every(isInternalIdKey)).toBe(true);
+    expect(["docket_title", "identifier_kind", "paid"].some(isInternalIdKey)).toBe(false);
+    expect(looksLikeInternalId("0b9c4c1e-6f1d-4a3e-9d55-2f1f6c1e7a10")).toBe(true);
+    expect(looksLikeInternalId("a".repeat(64))).toBe(true);
+    expect(looksLikeInternalId("TM-421")).toBe(false);
+  });
+
+  it("drops id columns by name and by value", () => {
+    const rows = [{ docket_id: "d", owner: "0b9c4c1e-6f1d-4a3e-9d55-2f1f6c1e7a10", docket_title: "ASTER" }];
+    expect(readableColumns(rows, 10)).toEqual(["docket_title"]);
+  });
+
+  it("reads stored codes as words without touching free text", () => {
+    expect(displayCell("filing_in_progress")).toBe("Filing in progress");
+    expect(displayCell(["word_mark", "TM / 2026 / 1"])).toBe("Word mark, TM / 2026 / 1");
+    expect(displayCell("Downloadable legal software")).toBe("Downloadable legal software");
   });
 });
