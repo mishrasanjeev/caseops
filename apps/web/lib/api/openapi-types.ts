@@ -32242,6 +32242,8 @@ export interface components {
              * @enum {string}
              */
             source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Declared Status */
+            source_declared_status?: string | null;
             /** Source Renewal Alert At */
             source_renewal_alert_at?: string | null;
             /** Source Renewal Alert Body */
@@ -44135,6 +44137,16 @@ export interface components {
         PortalInstructionListResponse: {
             /** Instructions */
             instructions?: components["schemas"]["PortalInstructionRecord"][];
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** PortalInstructionRecord */
         PortalInstructionRecord: {
