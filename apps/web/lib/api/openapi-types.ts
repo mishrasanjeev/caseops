@@ -11525,6 +11525,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/portfolio-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count every visible matter by status, forum and practice area */
+        get: operations["current_company_matter_portfolio_health_api_matters_portfolio_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/today": {
         parameters: {
             query?: never;
@@ -35191,8 +35208,25 @@ export interface components {
         IpWatchWorkspaceResponse: {
             /** Handoffs */
             handoffs?: components["schemas"]["IpWatchHandoffResponse"][];
+            /** Hit Profiles */
+            hit_profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Hit Total
+             * @default 0
+             */
+            hit_total: number;
             /** Hits */
             hits?: components["schemas"]["IpWatchHitResponse"][];
+            /**
+             * Ingestion Run Limit
+             * @default 20
+             */
+            ingestion_run_limit: number;
+            /**
+             * Ingestion Run Total
+             * @default 0
+             */
+            ingestion_run_total: number;
             /** Ingestion Runs */
             ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
             /**
@@ -35200,8 +35234,33 @@ export interface components {
              * @default 0
              */
             intake_profile_count: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Paused Profile Total
+             * @default 0
+             */
+            paused_profile_total: number;
+            /**
+             * Profile Total
+             * @default 0
+             */
+            profile_total: number;
             /** Profiles */
             profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Publication Total
+             * @default 0
+             */
+            publication_total: number;
             /** Publications */
             publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
@@ -38606,6 +38665,13 @@ export interface components {
             /** Submitted At */
             submitted_at?: string | null;
         };
+        /** MatterCountBucket */
+        MatterCountBucket: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string | null;
+        };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
             /** Bench Name */
@@ -39437,6 +39503,11 @@ export interface components {
             missing_date_count: number;
             /** Missing Date Matters */
             missing_date_matters: components["schemas"]["MatterRecord"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Overdue Count */
             overdue_count: number;
             /** Overdue Matters */
@@ -39779,6 +39850,36 @@ export interface components {
             id: string;
             /** Matter Id */
             matter_id: string;
+        };
+        /**
+         * MatterPortfolioHealthResponse
+         * @description Roll-up of every Matter the reader can see, counted on the server.
+         */
+        MatterPortfolioHealthResponse: {
+            /** Active Matters Count */
+            active_matters_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Forum Level Counts */
+            forum_level_counts: components["schemas"]["MatterCountBucket"][];
+            /** Hearings Next 7 Days Count */
+            hearings_next_7_days_count: number;
+            /** Idle Active Count */
+            idle_active_count: number;
+            /** Idle Active Limit */
+            idle_active_limit: number;
+            /** Idle Active Matters */
+            idle_active_matters: components["schemas"]["MatterRecord"][];
+            /** Idle After Days */
+            idle_after_days: number;
+            /** Intake Matters Count */
+            intake_matters_count: number;
+            /** Practice Area Counts */
+            practice_area_counts: components["schemas"]["MatterCountBucket"][];
+            /** Status Counts */
+            status_counts: components["schemas"]["MatterCountBucket"][];
+            /** Total Visible Count */
+            total_visible_count: number;
         };
         /**
          * MatterRecord
@@ -67621,6 +67722,7 @@ export interface operations {
             query?: {
                 docket_id?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -73263,6 +73365,9 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
+                /** @description Read the rows of one queue only (the other list comes back empty). Both counts are always returned. */
+                queue?: ("overdue" | "missing_date") | null;
             };
             header?: never;
             path?: never;
@@ -73592,6 +73697,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_portfolio_health_api_matters_portfolio_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterPortfolioHealthResponse"];
                 };
             };
         };

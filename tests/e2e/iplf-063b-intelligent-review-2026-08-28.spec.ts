@@ -181,8 +181,11 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
   await test.step("IPLF-UJ-18-NORMAL publishes into the exact IP opposition Draft", async () => {
     await page.goto(`/app/research/reviews?report=${encodeURIComponent(report.id)}`);
     await page.getByRole("tab", { name: "IP docket" }).click();
-    await page.getByRole("combobox", { name: "IP docket target" }).click();
-    await page.getByRole("option", { name: new RegExp(`^${application.identifier.raw_value} ·`) }).click();
+    // The target is chosen in the searchable docket picker, by server identity.
+    await page.getByLabel("Find the IP docket").fill(application.identifier.raw_value);
+    const ipTarget = page.getByRole("combobox", { name: "IP docket target" });
+    await expect(ipTarget.locator(`option[value="${application.docket.id}"]`)).toHaveCount(1);
+    await ipTarget.selectOption(application.docket.id);
     await page.getByRole("combobox", { name: "Opposition proceeding for Draft handoff" }).click();
     await page.getByRole("option", { name: /opponent.*draft.*Trade Marks Registry Delhi/i }).click();
     await page.getByRole("button", { name: "Generate review" }).click();

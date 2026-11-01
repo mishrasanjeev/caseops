@@ -69,6 +69,7 @@ import {
   type MatterBillingRate,
   type MatterComplianceListResponse,
   type MatterDashboardSummary,
+  type MatterPortfolioHealth,
   type MatterFileQAAnswerMode,
   type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
@@ -209,6 +210,7 @@ import {
   matterBillingRate,
   matterComplianceListResponse,
   matterDashboardSummary,
+  matterPortfolioHealth,
   matterHearingFollowUp,
   matterHearingPortfolio,
   matterFileQAExportNoteResponse,
@@ -682,6 +684,11 @@ export async function fetchMatterDashboardSummary(params?: {
   return matterDashboardSummary.parse(data);
 }
 
+export async function fetchMatterPortfolioHealth(): Promise<MatterPortfolioHealth> {
+  const data = await apiRequest<unknown>("/api/matters/portfolio-health");
+  return matterPortfolioHealth.parse(data);
+}
+
 export async function fetchMatterHearingPortfolio(params?: {
   date?: string;
   limit?: number;
@@ -698,9 +705,15 @@ export async function fetchMatterHearingPortfolio(params?: {
 
 export async function fetchMatterHearingFollowUp(params?: {
   limit?: number;
+  /** Rows to skip in each returned queue. */
+  offset?: number;
+  /** Read one queue's rows only; both counts are always returned. */
+  queue?: "overdue" | "missing_date";
 }): Promise<MatterHearingFollowUp> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.queue) qs.set("queue", params.queue);
   const path = qs.toString()
     ? `/api/matters/hearing-follow-up?${qs.toString()}`
     : "/api/matters/hearing-follow-up";
@@ -9640,12 +9653,30 @@ export type IpWatchHandoff = {
   created_at: string;
 };
 
+/**
+ * One page (`limit` rows from `offset`) of each watch list. Every `*_total`
+ * counts the whole visible list, so a reader states "N of M" and asks for the
+ * next offset instead of silently stopping at the page.
+ */
 export type IpWatchWorkspace = {
+  limit: number;
+  offset: number;
   profiles: IpWatchProfile[];
+  profile_total: number;
+  /** Visible profiles that are not running. */
+  paused_profile_total: number;
+  /** Hits on every visible profile in scope, newest first. */
   hits: IpWatchHit[];
-  /** Hit-linked entries plus the most recent visible captures, hits or not. */
+  hit_total: number;
+  /** The profiles these hits were compared with when they are on another page. */
+  hit_profiles: IpWatchProfile[];
+  /** Hit-linked entries plus this page of recorded entries, hits or not. */
   publications: IpJournalPublication[];
+  publication_total: number;
+  /** The most recent `ingestion_run_limit` runs of `ingestion_run_total`. */
   ingestion_runs: IpJournalIngestionRun[];
+  ingestion_run_total: number;
+  ingestion_run_limit: number;
   handoffs: IpWatchHandoff[];
   /** Visible profiles a capture is compared with, firm-wide; 0 means intake cannot run. */
   intake_profile_count: number;
@@ -12516,10 +12547,16 @@ export async function recordMadridAction(input: {
   );
 }
 
+export const IP_WATCH_PAGE_SIZE = 100;
+
 export async function fetchIpWatchWorkspace(
   docketId?: string | null,
+  page: { offset?: number; limit?: number } = {},
 ): Promise<IpWatchWorkspace> {
-  const params = new URLSearchParams({ limit: "250" });
+  const params = new URLSearchParams({
+    limit: String(page.limit ?? IP_WATCH_PAGE_SIZE),
+    offset: String(page.offset ?? 0),
+  });
   if (docketId) params.set("docket_id", docketId);
   return apiRequest(`/api/ip/watch?${params.toString()}`);
 }

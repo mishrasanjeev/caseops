@@ -5,7 +5,7 @@ import io
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
-from typing import BinaryIO, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -81,6 +81,7 @@ from caseops_api.schemas.matters import (
     MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
+    MatterCountBucket,
     MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
@@ -98,6 +99,7 @@ from caseops_api.schemas.matters import (
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskRecord,
@@ -2440,6 +2442,83 @@ def get_matter_dashboard_summary(
     )
 
 
+PORTFOLIO_IDLE_DAYS = 30
+
+
+def get_matter_portfolio_health(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    idle_limit: int = 10,
+) -> MatterPortfolioHealthResponse:
+    """Counts over every visible Matter (B4-ADJ-03).
+
+    The portfolio page computed these from one page of at most 200 Matters,
+    so a larger book showed wrong totals and buckets with no sign of a cap.
+    """
+
+    effective_today = today or date.today()
+    week_out = effective_today + timedelta(days=7)
+    idle_page_size = max(1, min(idle_limit, 50))
+    scope = (
+        Matter.company_id == context.company.id,
+        visible_matters_filter(session, context=context),
+    )
+    operational_filter = Matter.status.notin_((MatterStatus.DISPOSED.value, "closed"))
+
+    def buckets(column: Any) -> list[MatterCountBucket]:
+        rows = session.execute(
+            select(column, func.count(Matter.id)).where(*scope).group_by(column)
+        ).all()
+        return sorted(
+            (MatterCountBucket(key=key, count=count) for key, count in rows),
+            key=lambda bucket: (-bucket.count, bucket.key or ""),
+        )
+
+    status_counts = buckets(Matter.status)
+    by_status = {bucket.key: bucket.count for bucket in status_counts}
+    hearings_next_7_days_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            *scope,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+            Matter.next_hearing_on <= week_out,
+        )
+    ) or 0
+    idle_before = datetime.now(UTC) - timedelta(days=PORTFOLIO_IDLE_DAYS)
+    idle_filter = (Matter.status == MatterStatus.ACTIVE.value, Matter.updated_at < idle_before)
+    idle_active_count = session.scalar(
+        select(func.count(Matter.id)).where(*scope, *idle_filter)
+    ) or 0
+    idle_active_matters = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*scope, *idle_filter)
+            .order_by(Matter.updated_at.asc(), Matter.id.asc())
+            .limit(idle_page_size)
+        )
+    )
+    return MatterPortfolioHealthResponse(
+        company_id=context.company.id,
+        total_visible_count=sum(by_status.values()),
+        active_matters_count=by_status.get(MatterStatus.ACTIVE.value, 0),
+        intake_matters_count=by_status.get(MatterStatus.INTAKE.value, 0),
+        hearings_next_7_days_count=hearings_next_7_days_count,
+        status_counts=status_counts,
+        forum_level_counts=buckets(Matter.forum_level),
+        practice_area_counts=buckets(Matter.practice_area),
+        idle_after_days=PORTFOLIO_IDLE_DAYS,
+        idle_active_count=idle_active_count,
+        idle_active_matters=[_matter_record(matter) for matter in idle_active_matters],
+        idle_active_limit=idle_page_size,
+    )
+
+
 def list_matter_hearing_portfolio(
     session: Session,
     *,
@@ -2489,9 +2568,12 @@ def list_matter_hearing_follow_up(
     context: SessionContext,
     today: date | None = None,
     limit: int = 200,
+    offset: int = 0,
+    queue: str | None = None,
 ) -> MatterHearingFollowUpResponse:
     effective_today = today or date.today()
     page_size = max(1, min(limit, 500))
+    offset = max(0, offset)
     visible_filter = visible_matters_filter(session, context=context)
     active_filters = [
         Matter.company_id == context.company.id,
@@ -2503,30 +2585,40 @@ def list_matter_hearing_follow_up(
 
     overdue_count = session.scalar(select(func.count(Matter.id)).where(*overdue_filters)) or 0
     missing_count = session.scalar(select(func.count(Matter.id)).where(*missing_filters)) or 0
-    overdue = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    overdue: list[Matter] = []
+    if queue in (None, "overdue"):
+        overdue = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*overdue_filters)
+                .order_by(
+                    Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc()
+                )
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*overdue_filters)
-            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
-            .limit(page_size)
         )
-    )
-    missing = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    missing: list[Matter] = []
+    if queue in (None, "missing_date"):
+        missing = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*missing_filters)
+                .order_by(Matter.created_at.desc(), Matter.id.desc())
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*missing_filters)
-            .order_by(Matter.updated_at.desc(), Matter.id.desc())
-            .limit(page_size)
         )
-    )
+    overdue_more = queue in (None, "overdue") and overdue_count > offset + len(overdue)
+    missing_more = queue in (None, "missing_date") and missing_count > offset + len(missing)
     return MatterHearingFollowUpResponse(
         company_id=context.company.id,
         overdue_matters=[_matter_record(matter) for matter in overdue],
@@ -2534,7 +2626,8 @@ def list_matter_hearing_follow_up(
         overdue_count=overdue_count,
         missing_date_count=missing_count,
         limit=page_size,
-        truncated=overdue_count > len(overdue) or missing_count > len(missing),
+        offset=offset,
+        truncated=overdue_more or missing_more,
     )
 
 

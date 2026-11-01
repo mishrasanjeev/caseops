@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchIpDocketMock,
+  fetchIpDocketsMock,
   downloadApiFileMock,
   fetchIpDocumentsMock,
   fetchIpDocumentTaxonomyMock,
@@ -12,6 +14,8 @@ const {
   seedIpDocumentTaxonomyMock,
   uploadIpDocumentMock,
 } = vi.hoisted(() => ({
+  fetchIpDocketMock: vi.fn(),
+  fetchIpDocketsMock: vi.fn(),
   downloadApiFileMock: vi.fn(),
   fetchIpDocumentsMock: vi.fn(),
   fetchIpDocumentTaxonomyMock: vi.fn(),
@@ -25,6 +29,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   addIpDocumentLinks: vi.fn(),
   applyIpDocumentBulk: vi.fn(),
   downloadApiFile: downloadApiFileMock,
+  fetchIpDocket: fetchIpDocketMock,
+  fetchIpDockets: fetchIpDocketsMock,
   fetchIpDocuments: fetchIpDocumentsMock,
   fetchIpDocumentTaxonomy: fetchIpDocumentTaxonomyMock,
   importIpDocumentAliases: importIpDocumentAliasesMock,
@@ -97,9 +103,22 @@ const dockets = [{
   deadline_coverages: [],
 }];
 
+function docketPage(rows: typeof dockets, total = rows.length, next: string | null = null) {
+  return { dockets: rows, count: rows.length, has_more: Boolean(next), next_cursor: next, total_count: total };
+}
+
+/** The linked docket is chosen by the user; nothing is preselected. */
+async function chooseDocket(id = "docket-1") {
+  const linked = screen.getByRole("combobox", { name: "Linked docket" });
+  await waitFor(() => expect(linked).toBeEnabled());
+  fireEvent.change(linked, { target: { value: id } });
+  expect(linked).toHaveValue(id);
+}
+
 describe("IpDocumentWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchIpDocketsMock.mockResolvedValue(docketPage(dockets));
     fetchIpDocumentsMock.mockResolvedValue({ items: [], total: 0 });
     fetchIpDocumentTaxonomyMock.mockResolvedValue({
       taxonomy_version: "ip-document-taxonomy-v1",
@@ -124,7 +143,6 @@ describe("IpDocumentWorkspace", () => {
     });
     render(withClient(
       <IpDocumentWorkspace
-        dockets={dockets}
         canUpload
         canManage
         canReview
@@ -134,6 +152,7 @@ describe("IpDocumentWorkspace", () => {
 
     const upload = screen.getByRole("button", { name: "Upload reviewed document" });
     expect(upload).toBeDisabled();
+    await chooseDocket();
     fireEvent.change(screen.getByLabelText("Original file"), {
       target: { files: [new File(["evidence"], "unsafe:name.txt", { type: "text/plain" })] },
     });
@@ -176,7 +195,6 @@ describe("IpDocumentWorkspace", () => {
       });
     render(withClient(
       <IpDocumentWorkspace
-        dockets={dockets}
         canUpload
         canManage
         canReview
@@ -191,7 +209,7 @@ describe("IpDocumentWorkspace", () => {
     await waitFor(() => expect(aliasClassification).toBeEnabled());
     fireEvent.change(aliasClassification, { target: { value: "evidence" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview alias import" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("2 new, 0 unchanged, 0 conflicts");
+    expect(await screen.findByText(/2 new, 0 unchanged, 0 conflicts/)).toHaveAttribute("role", "status");
     expect(importIpDocumentAliasesMock).toHaveBeenNthCalledWith(1, {
       taxonomyKey: "evidence",
       aliases: ["Affidavit Evidence", "Evidence Affidavit"],
@@ -247,7 +265,6 @@ describe("IpDocumentWorkspace", () => {
     downloadApiFileMock.mockResolvedValue(undefined);
     render(withClient(
       <IpDocumentWorkspace
-        dockets={dockets}
         canUpload
         canManage
         canReview
@@ -275,9 +292,10 @@ describe("IpDocumentWorkspace", () => {
       ],
     });
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure />,
     ));
 
+    await chooseDocket();
     const status = await screen.findByText("No document classifications are configured");
     const notice = status.closest("[role=status]");
     expect(notice).toHaveAttribute("id", "ip-document-taxonomy-status");
@@ -323,7 +341,7 @@ describe("IpDocumentWorkspace", () => {
       entries: [],
     });
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage={false} canReview={false} canConfigure={false} />,
+      <IpDocumentWorkspace canUpload canManage={false} canReview={false} canConfigure={false} />,
     ));
 
     expect(await screen.findByText(
@@ -341,7 +359,7 @@ describe("IpDocumentWorkspace", () => {
       entries: [{ key: "evidence", label: "Evidence", is_active: false, version: 2 }],
     });
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure />,
     ));
 
     expect(await screen.findByText("Every document classification is inactive")).toBeVisible();
@@ -359,7 +377,7 @@ describe("IpDocumentWorkspace", () => {
     });
     seedIpDocumentTaxonomyMock.mockRejectedValue(new Error("Capability 'ip:taxonomy_admin' is required."));
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure />,
     ));
 
     fireEvent.click(await screen.findByRole("button", { name: "Load standard classifications" }));
@@ -378,7 +396,7 @@ describe("IpDocumentWorkspace", () => {
         entries: [{ key: "assignment", label: "Assignment", is_active: true, version: 1 }],
       });
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure={false} />,
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure={false} />,
     ));
 
     expect(screen.getByText("Loading document classifications…")).toBeVisible();
@@ -419,9 +437,10 @@ describe("IpDocumentWorkspace", () => {
     }));
     uploadIpDocumentMock.mockResolvedValue({ outcome: "created", document: null });
     render(withClient(
-      <IpDocumentWorkspace dockets={dockets} canUpload canManage canReview canConfigure />,
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure />,
     ));
 
+    await chooseDocket();
     const classification = screen.getByRole("combobox", { name: "Classification" });
     await waitFor(() => expect(classification).toBeEnabled());
     // The inactive entry and the former hidden "evidence" default are not offered.
@@ -450,54 +469,78 @@ describe("IpDocumentWorkspace", () => {
     );
   });
 
-  it("BUG-002 says the docket list is loading or failed instead of claiming no docket exists", async () => {
+  it("BUG-002 says the docket list is loading or failed, and retries, instead of claiming no docket exists", async () => {
     const { ApiError } = await import("@/lib/api/config");
-    const retry = vi.fn();
-    const { rerender } = render(withClient(
-      <IpDocumentWorkspace dockets={[]} docketsLoading canUpload canManage canReview canConfigure />,
-    ));
+    let rejectFirst: (error: unknown) => void = () => undefined;
+    fetchIpDocketsMock
+      .mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(docketPage(dockets));
+    render(withClient(<IpDocumentWorkspace canUpload canManage canReview canConfigure />));
     const linked = screen.getByRole("combobox", { name: "Linked docket" });
     expect(linked).toBeDisabled();
-    expect(document.getElementById(linked.getAttribute("aria-describedby")!)).toHaveTextContent("Loading dockets…");
-    expect(screen.queryByText(/No IP record to link yet/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Loading dockets…").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/No trademark dockets are visible/)).not.toBeInTheDocument();
 
-    rerender(withClient(
-      <IpDocumentWorkspace
-        dockets={[]}
-        docketsError={new ApiError(503, "The IP service is unavailable.", null)}
-        onRetryDockets={retry}
-        canUpload
-        canManage
-        canReview
-        canConfigure
-      />,
-    ));
-    const failed = screen.getByRole("combobox", { name: "Linked docket" });
-    expect(document.getElementById(failed.getAttribute("aria-describedby")!)).toHaveTextContent("The IP service is unavailable.");
-    expect(screen.queryByText(/No IP record to link yet/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(retry).toHaveBeenCalledOnce();
-
-    rerender(withClient(
-      <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
-    ));
-    expect(screen.getByText(/No IP record to link yet\. Create the record first/)).toBeVisible();
+    rejectFirst(new ApiError(503, "The IP service is unavailable.", null));
+    expect(await screen.findByText(/Dockets could not be loaded: The IP service is unavailable\./)).toBeVisible();
+    expect(linked).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(linked).toBeEnabled());
+    expect(fetchIpDocketsMock).toHaveBeenCalledTimes(2);
   });
 
-  it("preselects a deep-linked record and closes the docket list when there is none", async () => {
-    const two = [dockets[0], { ...dockets[0], id: "docket-pine", title: "PINE LABS" }];
-    const view = render(withClient(
-      <IpDocumentWorkspace dockets={two} preferredDocketId="docket-pine" canUpload canManage canReview canConfigure />,
-    ));
-    expect(await screen.findByLabelText("Linked docket")).toHaveValue("docket-pine");
-    view.unmount();
+  it("B4-ADJ-18 offers dockets past the first page through server search and paging", async () => {
+    const page = (start: number, count: number) => Array.from({ length: count }, (_, index) => ({
+      ...dockets[0], id: `docket-${start + index}`, title: `Mark ${start + index}`,
+    }));
+    fetchIpDocketsMock.mockImplementation(async ({ query, cursor }: { query?: string; cursor?: string | null }) => {
+      if (query === "ZEPHYR") return docketPage([{ ...dockets[0], id: "docket-zephyr", title: "ZEPHYR" }]);
+      if (cursor === "c2") return docketPage(page(101, 37), 137);
+      return docketPage(page(1, 100), 137, "c2");
+    });
+    render(withClient(<IpDocumentWorkspace canUpload canManage canReview canConfigure />));
+    const linked = screen.getByRole("combobox", { name: "Linked docket" });
+    await waitFor(() => expect(linked).toBeEnabled());
+    // Nothing is chosen for the user, and the cap is stated with the server total.
+    expect(linked).toHaveValue("");
+    expect(screen.getByText("Showing 100 of 137 dockets — refine your search or load more.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /Mark 137/ })).toBeInTheDocument());
+    expect(screen.getByText("137 dockets.")).toBeVisible();
 
-    render(withClient(
-      <IpDocumentWorkspace dockets={[]} canUpload canManage canReview canConfigure />,
+    fireEvent.change(screen.getByLabelText("Find the linked docket"), { target: { value: "ZEPHYR" } });
+    // The search is debounced; allow for it under load.
+    await waitFor(() => expect(screen.getByRole("option", { name: /ZEPHYR/ })).toBeInTheDocument(), { timeout: 5_000 });
+    expect(fetchIpDocketsMock).toHaveBeenCalledWith(expect.objectContaining({ query: "ZEPHYR" }));
+    fireEvent.change(linked, { target: { value: "docket-zephyr" } });
+    expect(linked).toHaveValue("docket-zephyr");
+  });
+
+  it("preselects only a deep-linked record, resolving one that is not on the loaded page", async () => {
+    fetchIpDocketMock.mockResolvedValue({ ...dockets[0], id: "docket-pine", title: "PINE LABS" });
+    const view = render(withClient(
+      <IpDocumentWorkspace preferredDocketId="docket-pine" canUpload canManage canReview canConfigure />,
     ));
     const linked = await screen.findByLabelText("Linked docket");
-    expect(linked).toBeDisabled();
-    expect(linked).toHaveAttribute("aria-describedby", "ip-document-docket-empty");
-    expect(screen.getByText(/No IP record to link yet/)).toBeVisible();
+    await waitFor(() => expect(linked).toHaveValue("docket-pine"));
+    expect(fetchIpDocketMock).toHaveBeenCalledWith("docket-pine");
+    view.unmount();
+
+    fetchIpDocketsMock.mockResolvedValue(docketPage([]));
+    render(withClient(<IpDocumentWorkspace canUpload canManage canReview canConfigure />));
+    const empty = await screen.findByLabelText("Linked docket");
+    expect(await screen.findByText(/No trademark dockets are visible to you/)).toBeVisible();
+    expect(empty).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Create one in the trademark docket" })).toHaveAttribute("href", "/app/ip");
+  });
+
+  it("fixes the linked docket to the record in a record-scoped document area", async () => {
+    render(withClient(
+      <IpDocumentWorkspace assetType="Patent" scopeDocketId="docket-patent" scopeDocketTitle="Battery family"
+        canUpload canManage canReview canConfigure />,
+    ));
+    expect(await screen.findByTestId("ip-document-scope-docket")).toHaveTextContent("Battery family");
+    expect(screen.queryByRole("combobox", { name: "Linked docket" })).not.toBeInTheDocument();
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 });

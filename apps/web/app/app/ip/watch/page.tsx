@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -73,6 +73,7 @@ import {
 } from "@/lib/ip/journal-capture";
 import { parseJurisdictions } from "@/lib/ip/jurisdictions";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
+import { mergeWatchPages, nextWatchOffset, watchCountText } from "@/lib/ip/watch-pages";
 import { useSession } from "@/lib/use-session";
 
 const DATE = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -182,11 +183,23 @@ export default function IpJournalWatchPage() {
   const [docketId, setDocketId] = useState("");
   const [selectedHitId, setSelectedHitId] = useState("");
 
-  const workspace = useQuery({
+  // Every list is paged with its server total; "Load more" reads the next
+  // offset of all of them (B4-ADJ-05: the lists stopped at 250 silently).
+  const workspace = useInfiniteQuery({
     queryKey: ["ip", "watch", docketId],
-    queryFn: () => fetchIpWatchWorkspace(docketId || null),
+    queryFn: ({ pageParam }) => fetchIpWatchWorkspace(docketId || null, { offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (_last, pages) => nextWatchOffset(pages),
     enabled: canRead,
   });
+  const data = useMemo(() => mergeWatchPages(workspace.data?.pages ?? []), [workspace.data]);
+  const more: MoreRows = {
+    hasMore: Boolean(workspace.hasNextPage),
+    loading: workspace.isFetchingNextPage,
+    error: workspace.isFetchNextPageError ? workspace.error : null,
+    onLoadMore: () => void workspace.fetchNextPage(),
+    onRefresh: () => void refresh(),
+  };
   const core = useQuery({
     queryKey: ["ip", "core-records", docketId],
     queryFn: () => fetchIpCoreRecords(docketId),
@@ -199,9 +212,9 @@ export default function IpJournalWatchPage() {
   });
 
   useEffect(() => {
-    const hits = workspace.data?.hits ?? [];
+    const hits = data?.hits ?? [];
     if (!hits.some((hit) => hit.id === selectedHitId)) setSelectedHitId(hits[0]?.id ?? "");
-  }, [selectedHitId, workspace.data]);
+  }, [selectedHitId, data]);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["ip", "watch"] });
@@ -216,14 +229,14 @@ export default function IpJournalWatchPage() {
     );
   }
 
-  const profiles = workspace.data?.profiles ?? [];
-  const hits = workspace.data?.hits ?? [];
+  const profiles = data?.profiles ?? [];
+  const hits = data?.hits ?? [];
   const selectedHit = hits.find((hit) => hit.id === selectedHitId) ?? null;
   const publication = selectedHit
-    ? workspace.data?.publications.find((item) => item.id === selectedHit.publication_id) ?? null
+    ? data?.publications.find((item) => item.id === selectedHit.publication_id) ?? null
     : null;
   const selectedProfile = selectedHit
-    ? profiles.find((item) => item.id === selectedHit.profile_id) ?? null
+    ? [...profiles, ...(data?.hit_profiles ?? [])].find((item) => item.id === selectedHit.profile_id) ?? null
     : null;
 
   return (
@@ -287,6 +300,8 @@ export default function IpJournalWatchPage() {
       ) : view === "profiles" ? (
         <ProfilesView
           profiles={profiles}
+          profileTotal={data?.profile_total ?? 0}
+          more={more}
           scopeDocketId={docketId}
           membershipId={session.context?.membership.id ?? ""}
           canManage={canManage}
@@ -295,9 +310,11 @@ export default function IpJournalWatchPage() {
       ) : view === "ingest" ? (
         <JournalIntake
           docketId={docketId}
-          publications={workspace.data?.publications ?? []}
+          publications={data?.publications ?? []}
+          publicationTotal={data?.publication_total ?? 0}
+          more={more}
           core={core.data}
-          intakeProfileCount={workspace.data?.intake_profile_count ?? 0}
+          intakeProfileCount={data?.intake_profile_count ?? 0}
           canManage={canManage}
           onCreateProfile={() => setView("profiles")}
           onRecorded={refresh}
@@ -307,17 +324,24 @@ export default function IpJournalWatchPage() {
           }}
         />
       ) : view === "runs" ? (
-        <RunsView profiles={profiles} runs={workspace.data?.ingestion_runs ?? []} />
+        <RunsView
+          profiles={profiles}
+          pausedTotal={data?.paused_profile_total ?? 0}
+          runs={data?.ingestion_runs ?? []}
+          runTotal={data?.ingestion_run_total ?? 0}
+        />
       ) : (
         <HitsView
           hits={hits}
+          hitTotal={data?.hit_total ?? 0}
+          more={more}
           profiles={profiles}
           publication={publication}
           selectedHit={selectedHit}
           selectedProfile={selectedProfile}
           selectedHitId={selectedHitId}
           setSelectedHitId={setSelectedHitId}
-          handoffs={workspace.data?.handoffs ?? []}
+          handoffs={data?.handoffs ?? []}
           core={core.data}
           membershipId={session.context?.membership.id ?? ""}
           canManage={canManage}
@@ -477,14 +501,57 @@ const PROFILE_FIELD_MAP: Record<string, string> = {
   cost_currency: "profile-cost",
 };
 
+type MoreRows = {
+  hasMore: boolean;
+  loading: boolean;
+  error: unknown;
+  onLoadMore: () => void;
+  onRefresh: () => void;
+};
+
+/** "Showing N of M …" with the way to the rest, or the complete count. */
+function ListCount({ loaded, total, noun, more }: {
+  loaded: number;
+  total: number;
+  noun: [string, string];
+  more: MoreRows;
+}) {
+  const short = loaded < total;
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]" data-testid={`watch-count-${noun[1].replaceAll(" ", "-")}`}>
+      <span role="status" className="min-w-0 break-words">
+        {watchCountText(loaded, total, noun)}
+        {short && !more.hasMore ? " The list changed while it was loading." : ""}
+      </span>
+      {short && more.hasMore ? (
+        <Button type="button" size="sm" variant="outline" disabled={more.loading} onClick={more.onLoadMore}>
+          {more.loading ? "Loading…" : `Load more ${noun[1]}`}
+        </Button>
+      ) : short ? (
+        <Button type="button" size="sm" variant="outline" onClick={more.onRefresh}>Refresh</Button>
+      ) : null}
+      {more.error ? (
+        <span role="alert" className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--color-danger-500)]">
+          <span className="min-w-0 break-words">More could not be loaded: {apiErrorMessage(more.error, "Request failed.")}</span>
+          <Button type="button" size="sm" variant="outline" onClick={more.onLoadMore}>Retry</Button>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function ProfilesView({
   profiles,
+  profileTotal,
+  more,
   scopeDocketId,
   membershipId,
   canManage,
   onChanged,
 }: {
   profiles: IpWatchProfile[];
+  profileTotal: number;
+  more: MoreRows;
   scopeDocketId: string;
   membershipId: string;
   canManage: boolean;
@@ -593,6 +660,7 @@ function ProfilesView({
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
       <section className="flex min-w-0 flex-col gap-3" aria-label="Watch profiles">
+        {profileTotal > 0 ? <ListCount loaded={profiles.length} total={profileTotal} noun={["watch profile", "watch profiles"]} more={more} /> : null}
         {profiles.length === 0 ? (
           <EmptyState title="No watch profiles" description="Create docket-specific criteria and recipients. Journal entries are compared with active profiles only." />
         ) : profiles.map((profile) => (
@@ -753,6 +821,8 @@ const CAPTURE_ORDER = [
 function JournalIntake({
   docketId,
   publications,
+  publicationTotal,
+  more,
   core,
   intakeProfileCount,
   canManage,
@@ -762,6 +832,8 @@ function JournalIntake({
 }: {
   docketId: string;
   publications: IpJournalPublication[];
+  publicationTotal: number;
+  more: MoreRows;
   core: IpCoreRecords | undefined;
   intakeProfileCount: number;
   canManage: boolean;
@@ -1043,7 +1115,7 @@ function JournalIntake({
           </form>
         </CardContent>
       </Card>}
-      <RecordedEntries publications={publications} />
+      <RecordedEntries publications={publications} total={publicationTotal} more={more} />
     </div>
   );
 }
@@ -1115,10 +1187,13 @@ function evidenceSummary(evidence: Record<string, unknown>) {
   return parts.length ? parts.join(", ") : "evidence captured";
 }
 
-function RecordedEntries({ publications }: { publications: IpJournalPublication[] }) {
+function RecordedEntries({ publications, total, more }: { publications: IpJournalPublication[]; total: number; more: MoreRows }) {
   return (
     <Card className="min-w-0">
-      <CardHeader><CardTitle as="h2">Recorded journal entries</CardTitle></CardHeader>
+      <CardHeader className="gap-2">
+        <CardTitle as="h2">Recorded journal entries</CardTitle>
+        {total > 0 ? <ListCount loaded={publications.length} total={total} noun={["recorded entry", "recorded entries"]} more={more} /> : null}
+      </CardHeader>
       <CardContent className="p-0">
         {publications.length === 0 ? (
           <p className="px-5 pb-5 text-sm text-[var(--color-mute)]">No journal entry is recorded yet. Entries you record appear here, with or without watch hits.</p>
@@ -1158,8 +1233,10 @@ function CapturedEvidence({ publication }: { publication: IpJournalPublication }
   );
 }
 
-function HitsView({ hits, profiles, publication, selectedHit, selectedProfile, selectedHitId, setSelectedHitId, handoffs, core, membershipId, canManage, onChanged }: {
+function HitsView({ hits, hitTotal, more, profiles, publication, selectedHit, selectedProfile, selectedHitId, setSelectedHitId, handoffs, core, membershipId, canManage, onChanged }: {
   hits: IpWatchHit[];
+  hitTotal: number;
+  more: MoreRows;
   profiles: IpWatchProfile[];
   publication: IpJournalPublication | null;
   selectedHit: IpWatchHit | null;
@@ -1176,7 +1253,7 @@ function HitsView({ hits, profiles, publication, selectedHit, selectedProfile, s
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
       <Card className="min-w-0">
-        <CardHeader><CardTitle as="h2">Review queue</CardTitle></CardHeader>
+        <CardHeader className="gap-2"><CardTitle as="h2">Review queue</CardTitle><ListCount loaded={hits.length} total={hitTotal} noun={["hit", "hits"]} more={more} /></CardHeader>
         <CardContent className="p-0"><div className="divide-y divide-[var(--color-line)]">{hits.map((hit) => {
           const mark = String(hit.candidate_mark_json.mark_text ?? "Device mark");
           return <button type="button" key={hit.id} data-testid={`watch-hit-${hit.id}`} className={hit.id === selectedHitId ? "w-full bg-[var(--color-brand-50)] px-5 py-4 text-left" : "w-full px-5 py-4 text-left hover:bg-[var(--color-bg-2)]"} onClick={() => setSelectedHitId(hit.id)}><strong className="block break-words text-sm">{mark}</strong><span className="mt-2 flex flex-wrap gap-2"><Badge tone={tone(hit.disposition)}>{hit.disposition.replaceAll("_", " ")}</Badge><Badge tone={tone(hit.source_status)}>{hit.source_status}</Badge>{hit.stale_source_alert ? <Badge tone="warning">stale alert</Badge> : null}</span><span className="mt-2 block text-xs text-[var(--color-mute)]">{DATE.format(new Date(hit.hit_date))}</span></button>;
@@ -1312,9 +1389,11 @@ function runSource(run: IpJournalIngestionRun) {
   return run.provider_key === "ipindia-journal-manual" ? "Manual journal intake" : run.provider_key;
 }
 
-function RunsView({ profiles, runs }: { profiles: IpWatchProfile[]; runs: IpJournalIngestionRun[] }) {
+function RunsView({ profiles, pausedTotal, runs, runTotal }: { profiles: IpWatchProfile[]; pausedTotal: number; runs: IpJournalIngestionRun[]; runTotal: number }) {
+  // The server counts every paused profile; only the loaded ones can be named.
   const paused = profiles.filter((item) => item.poll_status !== "active");
-  return <div className="flex flex-col gap-4">{paused.length ? <div className="border-l-2 border-amber-400 bg-amber-50 p-4 text-sm text-amber-950"><div className="flex items-center gap-2 font-semibold"><Pause className="h-4 w-4" />{paused.length} profile(s) paused</div><p className="mt-1 break-words">{paused.map((item) => `${item.name}: ${item.pause_reason ?? item.poll_status}`).join(" · ")}</p></div> : null}{runs.length === 0 ? <EmptyState title="No ingestion runs" description="Manual intake and scheduler checks will appear here." /> : <div className="overflow-x-auto border-y border-[var(--color-line)]"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-[var(--color-bg-2)] text-xs text-[var(--color-mute)]"><tr><th className="px-4 py-3">Started</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Entries recorded</th><th className="px-4 py-3">Hits</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Exception</th></tr></thead><tbody className="divide-y divide-[var(--color-line)]">{runs.map((run) => <tr key={run.id}><td className="px-4 py-3">{localDate(run.started_at)}</td><td className="px-4 py-3">{runSource(run)}</td><td className="px-4 py-3"><Badge tone={tone(run.status)}>{run.status.replaceAll("_", " ")}</Badge></td><td className="px-4 py-3 tabular-nums">{run.publications_created}/{run.publications_seen}{run.duplicate_hits ? ` · ${run.duplicate_hits} duplicate` : ""}</td><td className="px-4 py-3 tabular-nums">{run.hits_created}{run.stale_source_alert ? " · stale" : ""}</td><td className="px-4 py-3 tabular-nums">{run.cost_minor} {run.currency}</td><td className="px-4 py-3 text-[var(--color-mute)]">{run.error_redacted ?? "None"}</td></tr>)}</tbody></table></div>}</div>;
+  const unnamed = Math.max(0, pausedTotal - paused.length);
+  return <div className="flex flex-col gap-4">{pausedTotal ? <div className="border-l-2 border-amber-400 bg-amber-50 p-4 text-sm text-amber-950"><div className="flex items-center gap-2 font-semibold"><Pause className="h-4 w-4" />{pausedTotal} {pausedTotal === 1 ? "profile" : "profiles"} paused</div><p className="mt-1 break-words">{paused.map((item) => `${item.name}: ${item.pause_reason ?? item.poll_status}`).join(" · ")}{unnamed ? `${paused.length ? " · " : ""}${unnamed} more listed under Profiles` : ""}</p></div> : null}{runTotal > runs.length ? <p role="status" className="text-sm text-[var(--color-mute)]" data-testid="watch-runs-cap">The {runs.length} most recent of {runTotal.toLocaleString("en-IN")} runs are shown.</p> : null}{runs.length === 0 ? <EmptyState title="No ingestion runs" description="Manual intake and scheduler checks will appear here." /> : <div className="overflow-x-auto border-y border-[var(--color-line)]"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-[var(--color-bg-2)] text-xs text-[var(--color-mute)]"><tr><th className="px-4 py-3">Started</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Entries recorded</th><th className="px-4 py-3">Hits</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Exception</th></tr></thead><tbody className="divide-y divide-[var(--color-line)]">{runs.map((run) => <tr key={run.id}><td className="px-4 py-3">{localDate(run.started_at)}</td><td className="px-4 py-3">{runSource(run)}</td><td className="px-4 py-3"><Badge tone={tone(run.status)}>{run.status.replaceAll("_", " ")}</Badge></td><td className="px-4 py-3 tabular-nums">{run.publications_created}/{run.publications_seen}{run.duplicate_hits ? ` · ${run.duplicate_hits} duplicate` : ""}</td><td className="px-4 py-3 tabular-nums">{run.hits_created}{run.stale_source_alert ? " · stale" : ""}</td><td className="px-4 py-3 tabular-nums">{run.cost_minor} {run.currency}</td><td className="px-4 py-3 text-[var(--color-mute)]">{run.error_redacted ?? "None"}</td></tr>)}</tbody></table></div>}</div>;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
