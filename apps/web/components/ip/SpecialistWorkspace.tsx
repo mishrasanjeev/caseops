@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { downloadApiFile, fetchIpDocument, fetchIpDocumentsForDocket, fetchIpDocumentTaxonomy,
   listClients, previewIpDocketLifecycle, transitionIpDocketLifecycle, type IpLifecycleInput } from "@/lib/api/endpoints";
+import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
 import { fetchSpecialistContracts, fetchSpecialistObservations, fetchSpecialistRecord, fetchSpecialistRecords,
   saveSpecialistFacts, saveSpecialistObservation, specialistFactsSchema, specialistKey, uploadSpecialistSource,
   type SpecialistContract, type SpecialistObservation, type SpecialistRecord } from "@/lib/api/ip-specialist";
@@ -213,7 +214,7 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
       <fieldset disabled={save.isPending || !documents.isSuccess} className="min-w-0 space-y-4"><div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0"><Label htmlFor="specialist-kind">Observation type</Label><select id="specialist-kind" required className={selectClass} value={kind} onChange={(event) => setKind(event.target.value)}><option value="">Select observation type</option>{contract.observation_kinds.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></div>
         <div className="min-w-0"><Label htmlFor="specialist-day">Event date as recorded</Label><Input id="specialist-day" type="date" required value={day} onChange={(event) => setDay(event.target.value)} /></div></div>
-        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select></div>
+        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => isSpecialistSourceDocument(row.document, record.docket_id) && !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select></div>
         <div><Label htmlFor="specialist-locator">Source page or locator</Label><Input id="specialist-locator" required maxLength={500} value={locator} onChange={(event) => setLocator(event.target.value)} /></div>
         <div><Label htmlFor="specialist-account">Source account</Label><Textarea id="specialist-account" required maxLength={4000} value={account} onChange={(event) => setAccount(event.target.value)} /></div>
         {supersedes && <p role="status">Correction of a retained observation <Button type="button" variant="ghost" onClick={() => setSupersedes(null)}>Cancel correction</Button></p>}

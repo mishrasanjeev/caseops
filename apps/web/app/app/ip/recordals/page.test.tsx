@@ -173,7 +173,7 @@ const DOCKET = {
 
 const WORKSPACE_CORE: Omit<
   IpRecordalWorkspace,
-  "docket" | "documents" | "registry_workspaces" | "deadline_workspace"
+  "docket" | "documents" | "cited_documents" | "registry_workspaces" | "deadline_workspace"
 > = {
   recordal: RECORDAL,
   transactions: [{
@@ -212,6 +212,7 @@ const WORKSPACE: IpRecordalWorkspace = {
   ...WORKSPACE_CORE,
   docket: DOCKET,
   documents: [DOCUMENT],
+  cited_documents: [],
   registry_workspaces: [REGISTRY],
   deadline_workspace: {
     docket_id: "docket-1",

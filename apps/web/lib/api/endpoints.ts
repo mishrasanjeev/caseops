@@ -10345,7 +10345,10 @@ export type IpRecordalListItem = IpRecordal & { docket_title: string };
 export type IpRecordalWorkspace = {
   recordal: IpRecordal;
   docket: IpDocket;
+  /** Current instruments this docket can cite (the transaction picker). */
   documents: IpDocument[];
+  /** What this recordal cites, current or retired, for its own history labels. */
+  cited_documents: IpDocument[];
   registry_workspaces: IpRegistryWorkspace[];
   deadline_workspace: IpDeadlineWorkspace;
   transactions: IpDocketEvent[];
@@ -10987,6 +10990,44 @@ export type IpDocument = {
     created_by_membership_id: string;
     created_at: string;
   }>;
+  /** Set once the document is retired: kept for history, never offered as evidence. */
+  retirement?: IpDocumentRetirement | null;
+};
+
+export type IpDocumentRetirement = {
+  retired_at: string;
+  retired_by_name: string;
+  reason: string;
+};
+
+export type IpDocumentRetirementBlocker = {
+  kind:
+    | "recordal"
+    | "foreign_associate_instruction"
+    | "docket_event"
+    | "title_interest"
+    | "renewal_certificate"
+    | "portal_publication"
+    | "source_evidence";
+  /** "restricted" when the record sits on a docket the viewer cannot open. */
+  record_id: string;
+  label: string;
+  status: string | null;
+  docket_id: string | null;
+  docket_title: string | null;
+  resolution: string;
+  href: string | null;
+};
+
+export type IpDocumentRetirementPreview = {
+  document_id: string;
+  title: string;
+  current_version: number;
+  already_retired: boolean;
+  may_retire: boolean;
+  permission_reason: string | null;
+  blockers: IpDocumentRetirementBlocker[];
+  retirable: boolean;
 };
 
 export type IpDocumentUploadResult = {
@@ -11060,18 +11101,42 @@ export type IpDocumentAliasImportResult = {
   }>;
 };
 
-export async function fetchIpDocuments(): Promise<{ items: IpDocument[]; total: number }> {
-  return apiRequest("/api/ip/documents");
+export async function fetchIpDocuments(
+  options: { includeHistory?: boolean } = {},
+): Promise<{ items: IpDocument[]; total: number }> {
+  return apiRequest(options.includeHistory ? "/api/ip/documents?include_history=true" : "/api/ip/documents");
 }
 
 export async function fetchIpDocument(documentId: string): Promise<IpDocument> {
   return apiRequest(`/api/ip/documents/${encodeURIComponent(documentId)}`);
 }
 
+/**
+ * The docket's current documents: linked to the docket or to one of its events
+ * or deadlines (what the recordal, Madrid and foreign-associate validators
+ * accept). Retired documents appear only with includeHistory.
+ */
 export async function fetchIpDocumentsForDocket(
   docketId: string,
+  options: { includeHistory?: boolean } = {},
 ): Promise<{ items: IpDocument[]; total: number }> {
-  return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}`);
+  const history = options.includeHistory ? "&include_history=true" : "";
+  return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}${history}`);
+}
+
+export async function fetchIpDocumentRetirement(documentId: string): Promise<IpDocumentRetirementPreview> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(documentId)}/retirement`);
+}
+
+export async function retireIpDocument(input: {
+  documentId: string;
+  expectedCurrentVersion: number;
+  reason: string;
+}): Promise<IpDocument> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(input.documentId)}/retire`, {
+    method: "POST",
+    body: { expected_current_version: input.expectedCurrentVersion, reason: input.reason },
+  });
 }
 
 export type IpDocumentTaxonomy = {

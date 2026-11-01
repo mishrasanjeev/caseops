@@ -11,6 +11,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
+import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
 import type { SpecialistRecord } from "@/lib/api/ip-specialist";
 import { fetchWorkflow, fetchWorkflows, fetchContractObligations, fetchContractPerformance, fetchContractCostOptions, saveContractPerformance,
   obligationKey, recordContractCost, voidContractCost, saveContractObligation, saveWorkflow, workflowFactsSchema, workflowKey,
@@ -87,7 +88,7 @@ export function SpecialistWorkflows({ record, canWrite, onEvidence }: { record: 
   const documents = useQuery({ queryKey: ["ip", "documents", record.docket_id], queryFn: () => fetchIpDocumentsForDocket(record.docket_id) });
   const history = useQuery({ queryKey: [...workflowKey(record.id), selected?.id, historicalVersion],
     queryFn: ({ signal }) => fetchWorkflow(record.id, selected!.id, historicalVersion, signal), enabled: !!selected && !!historicalVersion });
-  const options: SourceOption[] = documents.data?.items.flatMap((document) => document.versions.filter((version) => !["rejected", "superseded"].includes(version.state)).map((version) => ({
+  const options: SourceOption[] = documents.data?.items.filter((document) => isSpecialistSourceDocument(document, record.docket_id)).flatMap((document) => document.versions.filter((version) => !["rejected", "superseded"].includes(version.state)).map((version) => ({
     label: `${document.title} / Version ${version.version}`, source: { document_id: document.id, document_version_id: version.id, content_sha256: version.sha256_hex },
   }))) ?? [];
   async function saved(next: WorkflowRecord) {

@@ -851,6 +851,8 @@ function RecordalDetail({ recordal, docketTitle, workspace, allDockets, workspac
   const deadlines = workspace?.deadline_workspace.deadlines ?? [];
   // Already the documents a recordal on this docket may cite (the API's own predicate).
   const linkedDocuments = documents;
+  // Labels for what this recordal already cites also cover retired instruments.
+  const labelDocuments = withCitedDocuments(documents, workspace?.cited_documents ?? []);
   const loadState = (
     <RecordalWorkspaceState
       pending={workspacePending}
@@ -878,13 +880,13 @@ function RecordalDetail({ recordal, docketTitle, workspace, allDockets, workspac
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
         <TabsContent value="recordal" className="m-0 min-w-0 p-5">
-          <RecordalOverview recordal={recordal} documents={linkedDocuments} />
+          <RecordalOverview recordal={recordal} documents={labelDocuments} />
           <div className="mt-6 border-t border-[var(--color-line)] pt-5">
             {workspace && docket ? <TransactionPanel workspace={workspace} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} membershipId={membershipId} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} /> : loadState}
           </div>
         </TabsContent>
-        <TabsContent value="title" className="m-0 min-w-0 p-5">{docket ? <TitleAssessment docket={docket} allDockets={allDockets} documents={documents} /> : loadState}</TabsContent>
-        <TabsContent value="evidence" className="m-0 min-w-0 p-5">{docket ? <EvidencePanel recordal={recordal} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} /> : loadState}</TabsContent>
+        <TabsContent value="title" className="m-0 min-w-0 p-5">{docket ? <TitleAssessment docket={docket} allDockets={allDockets} documents={labelDocuments} /> : loadState}</TabsContent>
+        <TabsContent value="evidence" className="m-0 min-w-0 p-5">{docket ? <EvidencePanel recordal={recordal} docket={docket} documents={labelDocuments} registry={registry} deadlines={deadlines} /> : loadState}</TabsContent>
         <TabsContent value="history" className="m-0 min-w-0 p-5">{workspace ? <HistoryPanel events={workspace.transactions} /> : loadState}</TabsContent>
       </Tabs>
     </section>
@@ -912,7 +914,7 @@ function RecordalWorkspaceState({ pending, error, onRetry }: {
 function RecordalOverview({ recordal, documents }: { recordal: IpRecordal; documents: IpDocument[] }) {
   return <div className="grid min-w-0 gap-6 lg:grid-cols-2">
     <section><h3 className="font-semibold">Legal particulars</h3><dl className="mt-3 grid gap-3 sm:grid-cols-2"><Datum label="Legal basis" value={recordal.legal_basis} wide /><Datum label="Form" value={recordal.form_code} /><Datum label="Execution" value={displayDate(recordal.executed_on)} /><Datum label="Effective" value={displayDate(recordal.effective_on)} /><Datum label="Scope" value={readable(String(recordal.scope_json.scope_kind ?? "whole_right"))} /><Datum label="Classes" value={recordal.affected_classes_json.join(", ") || "All affected classes"} /><Datum label="Affected rights" value={recordal.affected_registration_refs_json.join(", ")} wide /></dl></section>
-    <section><h3 className="font-semibold">Parties</h3><div className="mt-3 divide-y divide-[var(--color-line)]">{recordal.parties_json.map((party, index) => <div key={`${party.role}-${index}`} className="py-3 first:pt-0"><p className="font-medium">{party.name}</p><p className="text-sm text-[var(--color-mute)]">{readable(party.role)} · {documents.find((document) => document.id === party.evidence_reference)?.title ?? "Instrument not available to you"}</p></div>)}</div></section>
+    <section><h3 className="font-semibold">Parties</h3><div className="mt-3 divide-y divide-[var(--color-line)]">{recordal.parties_json.map((party, index) => <div key={`${party.role}-${index}`} className="py-3 first:pt-0"><p className="font-medium">{party.name}</p><p className="text-sm text-[var(--color-mute)]">{readable(party.role)} · {documentTitle(documents.find((document) => document.id === party.evidence_reference))}</p></div>)}</div></section>
   </div>;
 }
 
@@ -1105,16 +1107,28 @@ function reportFileStem(docket: IpDocket) {
   return stem || "ip-right";
 }
 
-function reportInterest(interest: IpTitleInterest, documents: IpDocument[]) { return `- ${interest.party_name}; ${interest.interest_type}; effective ${interest.effective_from}${interest.effective_until ? ` to ${interest.effective_until}` : " onward"}; recordal ${interest.recordal_status}; source ${documents.find((document) => document.id === interest.evidence_reference)?.title ?? "instrument not available to you"}`; }
+function reportInterest(interest: IpTitleInterest, documents: IpDocument[]) { return `- ${interest.party_name}; ${interest.interest_type}; effective ${interest.effective_from}${interest.effective_until ? ` to ${interest.effective_until}` : " onward"}; recordal ${interest.recordal_status}; source ${documentTitle(documents.find((document) => document.id === interest.evidence_reference), "instrument not available to you")}`; }
+
+/** The picker's current documents plus anything the recordal cites that has since been retired. */
+function withCitedDocuments(current: IpDocument[], cited: IpDocument[]): IpDocument[] {
+  const known = new Set(current.map((document) => document.id));
+  return [...current, ...cited.filter((document) => !known.has(document.id))];
+}
+
+/** A cited document's title, marked when it was retired; never its id. */
+function documentTitle(document: IpDocument | undefined, missing = "Instrument not available to you"): string {
+  if (!document) return missing;
+  return document.retirement ? `${document.title} (retired)` : document.title;
+}
 
 function InterestTable({ rows, documents, empty }: { rows: IpTitleInterest[]; documents: IpDocument[]; empty: string }) {
   if (!rows.length) return <p className="mt-3 text-sm text-[var(--color-mute)]">{empty}</p>;
-  return <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)]"><th className="p-2">Party</th><th className="p-2">Interest</th><th className="p-2">Effective</th><th className="p-2">Recordal</th><th className="p-2">Scope</th><th className="p-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b border-[var(--color-line)]"><td className="p-2 font-medium">{row.party_name}</td><td className="p-2">{readable(row.interest_type)}</td><td className="p-2">{displayDate(row.effective_from)}{row.effective_until ? ` to ${displayDate(row.effective_until)}` : " onward"}</td><td className="p-2"><Badge tone={row.recordal_status === "recorded" ? "success" : "warning"}>{readable(row.recordal_status)}</Badge></td><td className="p-2">{String(row.scope_json.scope_kind ?? "whole right").replaceAll("_", " ")}</td><td className="p-2 break-all">{documents.find((document) => document.id === row.evidence_reference)?.title ?? "Instrument not available to you"}</td></tr>)}</tbody></table></div>;
+  return <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr className="border-b border-[var(--color-line)]"><th className="p-2">Party</th><th className="p-2">Interest</th><th className="p-2">Effective</th><th className="p-2">Recordal</th><th className="p-2">Scope</th><th className="p-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b border-[var(--color-line)]"><td className="p-2 font-medium">{row.party_name}</td><td className="p-2">{readable(row.interest_type)}</td><td className="p-2">{displayDate(row.effective_from)}{row.effective_until ? ` to ${displayDate(row.effective_until)}` : " onward"}</td><td className="p-2"><Badge tone={row.recordal_status === "recorded" ? "success" : "warning"}>{readable(row.recordal_status)}</Badge></td><td className="p-2">{String(row.scope_json.scope_kind ?? "whole right").replaceAll("_", " ")}</td><td className="p-2 break-all">{documentTitle(documents.find((document) => document.id === row.evidence_reference))}</td></tr>)}</tbody></table></div>;
 }
 
 function EvidencePanel({ recordal, docket, documents, registry, deadlines }: { recordal: IpRecordal; docket: IpDocket; documents: IpDocument[]; registry: IpRegistryWorkspace[]; deadlines: IpLegalDeadline[] }) {
   return <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-    <EvidenceSection icon={<FileText className="h-4 w-4" />} title="Documents">{documents.filter((document) => recordal.supporting_instrument_refs_json.includes(document.id) || recordal.filing_evidence_refs_json.includes(document.id) || recordal.acceptance_evidence_refs_json.includes(document.id)).map((document) => <EvidenceRow key={document.id} title={document.title} detail={`${document.taxonomy_label} · ${document.confidentiality}${document.is_privileged ? " · privileged" : ""}`} />)}</EvidenceSection>
+    <EvidenceSection icon={<FileText className="h-4 w-4" />} title="Documents">{documents.filter((document) => recordal.supporting_instrument_refs_json.includes(document.id) || recordal.filing_evidence_refs_json.includes(document.id) || recordal.acceptance_evidence_refs_json.includes(document.id)).map((document) => <EvidenceRow key={document.id} title={documentTitle(document)} detail={`${document.taxonomy_label} · ${document.confidentiality}${document.is_privileged ? " · privileged" : ""}`} />)}</EvidenceSection>
     <EvidenceSection icon={<Scale className="h-4 w-4" />} title="Fees and costs">{docket.cost_items.filter((cost) => recordal.fee_cost_item_refs_json.includes(cost.id)).map((cost) => <EvidenceRow key={cost.id} title={cost.description} detail={`${cost.currency} ${cost.amount_withheld ? "withheld" : ((cost.amount_minor ?? 0) / 100).toFixed(2)} · ${cost.reconciliation_status}`} />)}</EvidenceSection>
     <EvidenceSection icon={<ShieldCheck className="h-4 w-4" />} title="Deadlines">{deadlines.map((deadline) => <EvidenceRow key={deadline.id} title={deadline.title} detail={`${readable(deadline.state)} · ${deadline.result_on ? displayDate(deadline.result_on) : "date unconfirmed"}`} />)}</EvidenceSection>
     <EvidenceSection icon={<Link2 className="h-4 w-4" />} title="Registry sources">{registry.flatMap((item) => item.snapshots.map((snapshot) => <EvidenceRow key={snapshot.id} title={item.link.normalized_identifier} detail={`${item.link.match_status} · retrieved ${displayDate(snapshot.source_retrieved_at)}`} href={snapshot.source_url} />))}</EvidenceSection>
