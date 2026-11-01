@@ -306,7 +306,11 @@ def summarize_source_record(
             ),
         ),
     ]
-    llm = provider or build_provider(purpose="legal_update:summary")
+    # Public-source summaries are not customer-critical; keep them off the
+    # account-wide Gemini fallback allowance.
+    llm = provider or build_provider(
+        purpose="legal_update:summary", availability_fallback=False
+    )
     prompt_hash = hashlib.sha256(
         "\n".join(f"{message.role}:{message.content}" for message in messages).encode("utf-8")
     ).hexdigest()

@@ -11,6 +11,7 @@ extraction run by the document-processing job).
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -228,6 +229,8 @@ def test_only_corpus_eval_and_best_effort_paths_opt_out():
         "scripts/extract_authority_metadata.py",
         "scripts/reextract_placeholder_titles.py",
         "services/corpus_structured.py",
+        # Public-source summaries are not customer-critical.
+        "services/legal_update_sources.py",
         # Recommendations own the source-revalidating fallback plan.
         "services/recommendations.py",
         "services/reranker.py",
@@ -326,18 +329,22 @@ def test_fallback_runs_inside_the_primary_deadline(monkeypatch):
     primary, gemini, timeouts = _Primary(LLMTransientProviderError(_TRANSIENT), on_call=slow), (
         _Gemini()
     ), []
-    provider = _wrap(primary, gemini, budget=60.0, timeouts=timeouts)
+    provider = _wrap(primary, gemini, budget=120.0, timeouts=timeouts)
     provider.generate(_messages())
-    assert timeouts == [15.0]
-    assert gemini.deadlines == [1060.0]
+    assert timeouts == [75.0]
+    assert gemini.deadlines == [1120.0]
 
-    late = _Primary(
-        LLMTransientProviderError(_TRANSIENT), on_call=lambda: clock.__setitem__(0, clock[0] + 59.5)
-    )
-    unused, late_timeouts = _Gemini(), []
-    with pytest.raises(LLMTransientProviderError):
-        _wrap(late, unused, budget=60.0, timeouts=late_timeouts).generate(_messages())
-    assert late_timeouts == [] and unused.calls == 0
+    # Less than the 30-second minimum left: the primary failure is reported.
+    for spent in (59.5, 31.0):
+        late = _Primary(
+            LLMTransientProviderError(_TRANSIENT),
+            on_call=lambda spent=spent: clock.__setitem__(0, clock[0] + spent),
+        )
+        unused, late_timeouts = _Gemini(), []
+        with pytest.raises(LLMTransientProviderError):
+            _wrap(late, unused, budget=60.0, timeouts=late_timeouts).generate(_messages())
+        assert late_timeouts == [] and unused.calls == 0
+    assert llm.MIN_FALLBACK_SECONDS == 30.0
 
 
 def test_caller_deadline_bounds_the_fallback(monkeypatch):
@@ -347,9 +354,39 @@ def test_caller_deadline_bounds_the_fallback(monkeypatch):
         LLMTransientProviderError(_TRANSIENT), on_call=lambda: clock.__setitem__(0, 10.0)
     )
     gemini, timeouts = _Gemini(), []
-    with llm.provider_deadline(30.0):
+    with llm.provider_deadline(60.0):
         _wrap(primary, gemini, budget=240.0, timeouts=timeouts).generate(_messages())
-    assert timeouts == [20.0] and gemini.deadlines == [30.0]
+    assert timeouts == [50.0] and gemini.deadlines == [60.0]
+
+
+def test_request_deadline_bounds_the_fallback(monkeypatch):
+    from caseops_api.core import request_context
+
+    clock = [0.0]
+    monkeypatch.setattr(llm.time, "perf_counter", lambda: clock[0])
+    token = request_context._request_fallback_deadline.set(100.0)
+    try:
+        primary = _Primary(
+            LLMTransientProviderError(_TRANSIENT), on_call=lambda: clock.__setitem__(0, 40.0)
+        )
+        gemini, timeouts = _Gemini(), []
+        _wrap(primary, gemini, budget=240.0, timeouts=timeouts).generate(_messages())
+        assert timeouts == [60.0] and gemini.deadlines == [100.0]
+        late = _Primary(
+            LLMTransientProviderError(_TRANSIENT), on_call=lambda: clock.__setitem__(0, 75.0)
+        )
+        unused = _Gemini()
+        with pytest.raises(LLMTransientProviderError):
+            _wrap(late, unused, budget=240.0).generate(_messages())
+        assert unused.calls == 0
+    finally:
+        request_context._request_fallback_deadline.reset(token)
+
+
+def test_request_timeout_setting_matches_the_deployed_cloud_run_timeout():
+    deploy = Path(__file__).resolve().parents[3] / "scripts" / "deploy-prod.sh"
+    assert "\nAPI_TIMEOUT_SECONDS=120\n" in deploy.read_text(encoding="utf-8")
+    assert get_settings().api_request_timeout_seconds == 120
 
 
 @pytest.mark.parametrize(
@@ -361,15 +398,21 @@ def test_cap_refusal_surfaces_the_primary_failure(primary_error, status_code):
     provider = _wrap(_Primary(primary_error), _Gemini(error=refusal))
     with pytest.raises(type(primary_error)) as caught:
         provider.generate(_messages())
-    assert str(caught.value) == f"{primary_error} {gemini_spend_cap.CAP_REFUSAL}"
+    assert str(caught.value) == str(primary_error)
     assert caught.value.fallback_refusal == (
         "The monthly Gemini fallback allowance is used up. No external request was sent."
     )
+    # A refused fallback never produced an answer: identity stays the primary's.
+    assert (provider.name, provider.model) == ("openai", "gpt-5.1")
     response = provider_failure_http_exception(noun="draft", exc=caught.value)
     assert response.status_code == status_code
-    assert gemini_spend_cap.CAP_REFUSAL in response.detail
+    # Retry advice concerns OpenAI only; the allowance sentence comes last.
+    assert response.detail.endswith(" " + gemini_spend_cap.CAP_REFUSAL)
+    assert "retry" not in response.detail.split(gemini_spend_cap.CAP_REFUSAL)[1].lower()
     if status_code == 503:
         assert "provider quota is exhausted" in response.detail
+    else:
+        assert f"{_TRANSIENT}. Please retry in a minute. " in response.detail
 
 
 def test_gemini_unavailability_reports_primary_and_format_errors_keep_their_type():
@@ -709,4 +752,160 @@ def test_native_managed_fallback_reserves_the_cap_before_transport(sdk, monkeypa
         with pytest.raises(LLMQuotaExhaustedError) as caught:
             llm.generate_structured(provider, **call)
         assert caught.value.fallback_refusal == gemini_spend_cap.CAP_REFUSAL
-        assert sdk.requests == [] and sdk.reservations == []
+        # The shared guard (off here) is consulted first; the cap refuses last,
+        # immediately before transport, so nothing is sent.
+        assert sdk.requests == [] and len(sdk.reservations) == 1
+
+
+
+@pytest.mark.parametrize(
+    ("gemini_error", "category", "level"),
+    [
+        (
+            llm._categorized(
+                LLMProviderError("Gemini call failed. Check provider configuration."),
+                "permission_denied",
+                403,
+            ),
+            "permission_denied",
+            "ERROR",
+        ),
+        (
+            llm._categorized(
+                LLMProviderError("Gemini call failed. Check provider configuration."),
+                "model_or_location_not_found",
+                404,
+            ),
+            "model_or_location_not_found",
+            "ERROR",
+        ),
+        (
+            llm._categorized(
+                LLMProviderError("Managed AI credentials are unavailable."), "credentials"
+            ),
+            "credentials",
+            "ERROR",
+        ),
+        (
+            llm._categorized(
+                LLMTransientProviderError("Gemini is temporarily unavailable."), "transient", 503
+            ),
+            "transient",
+            "WARNING",
+        ),
+    ],
+)
+def test_fallback_failure_log_is_content_free_and_names_misconfiguration(
+    caplog, gemini_error, category, level
+):
+    secret = "PRIVATE-CLIENT-PROMPT-7f3a"
+    messages = [LLMMessage(role="user", content=f"Matter facts: {secret}")]
+    provider = _wrap(_Primary(LLMTransientProviderError(_TRANSIENT)), _Gemini(error=gemini_error))
+    # App logging configuration in earlier tests may disable existing loggers or
+    # stop propagation, so attach caplog directly to an enabled logger.
+    llm_logger = logging.getLogger("caseops_api.services.llm")
+    was_disabled = llm_logger.disabled
+    llm_logger.disabled = False
+    llm_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("WARNING", logger="caseops_api.services.llm"):
+            with pytest.raises(LLMTransientProviderError):
+                provider.generate(messages)
+    finally:
+        llm_logger.removeHandler(caplog.handler)
+        llm_logger.disabled = was_disabled
+    # Propagation may also deliver the record to caplog; count each record once.
+    records = list(
+        {id(r): r for r in caplog.records if "fallback failed" in r.getMessage()}.values()
+    )
+    assert len(records) == 1
+    record = records[0]
+    assert record.levelname == level
+    rendered = record.getMessage()
+    assert f"category={category}" in rendered
+    assert f"misconfigured={level == 'ERROR'}" in rendered
+    assert all(secret not in r.getMessage() for r in caplog.records)
+    assert "Matter facts" not in caplog.text
+
+
+def test_gemini_http_errors_are_categorized_for_operators():
+    adapter = object.__new__(llm.GeminiProvider)
+    for status, category in (
+        (403, "permission_denied"),
+        (401, "permission_denied"),
+        (404, "model_or_location_not_found"),
+        (400, "configuration"),
+        (503, "transient"),
+    ):
+        error = RuntimeError("raw provider body must not be logged")
+        error.code = status
+        with pytest.raises(LLMProviderError) as caught:
+            adapter._raise_call_error(error)
+        assert caught.value.failure_category == category
+        assert caught.value.http_status == status
+        assert "raw provider body" not in str(caught.value)
+
+
+@pytest.mark.parametrize("allowed", [["gpt-5.1"], ["gpt-5.1", FALLBACK_MODEL]])
+@pytest.mark.usefixtures("ephemeral_db")
+def test_cassette_record_mode_still_applies_the_fallback_policy(tmp_path, allowed):
+    from caseops_api.services.llm_cassette import CassetteProvider
+    from tests.test_ai_policy_enforcement import _dispose, _fresh_session_and_company, _make_policy
+
+    session, company = _fresh_session_and_company("fallback-cassette")
+    try:
+        _make_policy(session, company_id=company.id, allowed_recommendations=allowed)
+        session.commit()
+        gemini = _Gemini(text='{"ok": true}')
+        wrapped = _wrap(_Primary(LLMTransientProviderError(_TRANSIENT)), gemini)
+        provider = CassetteProvider(wrapped, mode="record", path=tmp_path / "c.jsonl")
+        context = LLMCallContext(tenant_id=company.id, purpose="recommendation:authority")
+        if allowed == ["gpt-5.1"]:
+            with pytest.raises(LLMTransientProviderError):
+                llm.generate_structured(
+                    provider, schema=_Toy, messages=_messages(), context=context, session=session
+                )
+            assert gemini.calls == 0
+        else:
+            llm.generate_structured(
+                provider, schema=_Toy, messages=_messages(), context=context, session=session
+            )
+            assert gemini.calls == 1
+    finally:
+        _dispose(session)
+
+
+def test_drafting_route_never_starts_a_fallback_after_the_request_deadline(
+    client, monkeypatch
+):
+    """A primary that fails 150 s into the request cannot start Gemini (504 territory)."""
+    import time as time_module
+
+    from tests.test_auth_company import auth_headers, bootstrap_company
+    from tests.test_drafting_studio import _create_draft, _create_matter, _seed_authority
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-FALLBACK-DEADLINE")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 363")
+    draft = _create_draft(client, token, matter_id)
+    real_clock = time_module.perf_counter
+
+    def slow_outage():
+        # The primary returns its transient failure 150 s after it started.
+        monkeypatch.setattr(time_module, "perf_counter", lambda: real_clock() + 150.0)
+
+    gemini, timeouts = _Gemini(), []
+    provider = _wrap(
+        _Primary(LLMTransientProviderError(_TRANSIENT), on_call=slow_outage),
+        gemini,
+        budget=240.0,  # drafting's own worst case (120 s x 2) would still allow it
+        timeouts=timeouts,
+    )
+    monkeypatch.setattr("caseops_api.services.drafting.build_provider", lambda *a, **k: provider)
+    response = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/generate",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert response.status_code == 422, response.text
+    assert timeouts == [] and gemini.calls == 0

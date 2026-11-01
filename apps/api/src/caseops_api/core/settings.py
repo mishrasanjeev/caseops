@@ -455,6 +455,9 @@ class Settings(BaseSettings):
     # (model page checked 2026-11-01). It replaced gemini-3.6-flash, which the
     # same source lists for retirement on 2026-11-19.
     llm_fallback_enabled: bool = Field(default=False)
+    # The platform request timeout (Cloud Run --timeout, API_TIMEOUT_SECONDS in
+    # scripts/deploy-prod.sh). A fallback must finish 20 s before it.
+    api_request_timeout_seconds: int = Field(default=120, ge=30, le=3600)
     llm_fallback_model: Literal["gemini-3.8-flash"] = "gemini-3.8-flash"
     llm_gemini_project: str | None = Field(
         default=None, pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$"

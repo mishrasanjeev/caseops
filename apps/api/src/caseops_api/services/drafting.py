@@ -97,7 +97,10 @@ from caseops_api.services.llm import (
     generate_structured,
     max_tokens_for_purpose,
 )
-from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
+)
 from caseops_api.services.matter_access import assert_access, assert_ip_docket_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.private_retrieval import (
@@ -1322,6 +1325,7 @@ def _run_drafting_llm(
         detail=(
             f"Could not generate a draft: {type(failure).__name__}: {failure}. "
             "Please retry in a minute, or contact support if this persists."
+            + fallback_refusal_suffix(failure)
         ),
     ) from failure
 

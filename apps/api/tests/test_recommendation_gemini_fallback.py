@@ -432,7 +432,9 @@ def test_fallback_rechecks_changes_after_unavailable_primary(
     primary, fallback = _Unavailable(change_current_state), _GroundedFallback()
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
-    assert response.status_code == (403 if change == "policy" else 409), response.text
+    # A tenant policy that no longer allows the fallback model gets the primary
+    # failure (502), never a policy error and never a credentials fetch.
+    assert response.status_code == (502 if change == "policy" else 409), response.text
     assert primary.calls == 1
     assert fallback.calls == 0
     with factory() as session:
@@ -557,8 +559,10 @@ def test_changed_edition_between_retrieval_and_baseline_prevents_any_model_call(
     primary, fallback = _Unavailable(), _GroundedFallback()
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
-    assert response.status_code == 409, response.text
-    assert primary.calls == fallback.calls == 0
+    # Since 2026-11-01 review: a changed edition never blocks the primary (the
+    # flag-off behaviour); it only makes the fallback ineligible.
+    assert response.status_code == 502, response.text
+    assert primary.calls == 1 and fallback.calls == 0
     with get_session_factory()() as session:
         assert session.scalar(select(Recommendation.id)) is None
 
@@ -811,49 +815,126 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
     assert all(amount == 30 for _, amount in receipts)
 
 
-def test_deadline_is_shared_with_retrieval_and_no_third_provider_attempt(monkeypatch):
-    clock = [80.0]
+def test_primary_keeps_its_budget_and_fallback_gets_only_the_leftover(monkeypatch):
+    clock = [10.0]
     monkeypatch.setattr(routing.time, "perf_counter", lambda: clock[0])
     timeouts = []
     plan = routing.RecommendationFallbackPlan(
         started_at=0.0,
-        primary_factory=lambda timeout: timeouts.append(timeout) or _Unavailable(),
-        fallback_factory=lambda timeout: timeouts.append(timeout) or _GroundedFallback(),
+        primary_factory=lambda timeout: timeouts.append(("primary", timeout)) or _Unavailable(),
+        fallback_factory=lambda timeout: timeouts.append(("fallback", timeout))
+        or _GroundedFallback(),
         revalidate=lambda: None,
     )
 
     def invoke(provider, messages):
         if provider.name == "openai":
-            clock[0] += 15.0
+            clock[0] += 50.0
             raise LLMTransientProviderError("Timeout")
         return "validated", provider.generate(messages)
 
     assert plan.run([LLMMessage("user", "Offline fixture")], invoke)[0] == "validated"
-    assert timeouts == [20.0, 5.0]
+    # The primary is the caller's normal provider; the fallback gets 100 - 60 s.
+    assert timeouts == [("primary", None), ("fallback", 40.0)]
     with pytest.raises(LLMProviderError, match="attempt budget"):
         plan.run([], invoke)
     assert len(timeouts) == 2
 
 
-def test_elapsed_deadline_or_second_transient_never_creates_another_fallback(monkeypatch):
+@pytest.mark.parametrize("spent", [71.0, 100.0])
+def test_too_little_time_left_never_creates_a_fallback(monkeypatch, spent):
     clock = [0.0]
     monkeypatch.setattr(routing.time, "perf_counter", lambda: clock[0])
     calls = []
     plan = routing.RecommendationFallbackPlan(
         started_at=0.0,
         primary_factory=lambda timeout: _Unavailable(),
-        fallback_factory=lambda timeout: _GroundedFallback(),
-        revalidate=lambda: None,
+        fallback_factory=lambda timeout: calls.append("fallback") or _GroundedFallback(),
+        revalidate=lambda: calls.append("revalidate"),
     )
 
     def invoke(provider, messages):
         calls.append(provider.name)
-        clock[0] += 100.0
+        clock[0] += spent
         raise LLMTransientProviderError("Timeout")
 
-    with pytest.raises(LLMProviderError, match="attempt budget"):
+    with pytest.raises(LLMTransientProviderError, match="Timeout"):
         plan.run([], invoke)
     assert calls == ["openai"]
+
+
+def test_static_allowlist_without_the_fallback_model_never_fetches_credentials(
+    client: TestClient, monkeypatch, enabled
+):
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    with get_session_factory()() as session:
+        session.add(
+            TenantAIPolicy(
+                company_id=_company_id_for_matter(matter_id),
+                allowed_models_recommendations_json=json.dumps(["gpt-6-luna"]),
+            )
+        )
+        session.commit()
+    primary, fallback = _Unavailable(), _GroundedFallback()
+    _wire(monkeypatch, primary, fallback)
+    built = []
+    monkeypatch.setattr(
+        routing,
+        "build_recommendation_fallback",
+        lambda **kwargs: built.append("credentials") or fallback,
+    )
+    response = _post(client, token, matter_id)
+    assert response.status_code == 502, response.text
+    assert "temporarily unavailable" in response.json()["detail"]
+    assert primary.calls == 1 and fallback.calls == 0 and built == []
+
+
+def test_healthy_slow_primary_with_flag_on_matches_flag_off(
+    client: TestClient, monkeypatch, enabled
+):
+    """A 60-second healthy primary keeps its budget; missing lineage never blocks it."""
+    import dataclasses
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    original = recommendations._gather_authorities_with_trace
+
+    def without_lineage(*args, **kwargs):
+        retrieved, trace = original(*args, **kwargs)
+        return [dataclasses.replace(item, grounding_lineage=None) for item in retrieved], trace
+
+    monkeypatch.setattr(recommendations, "_gather_authorities_with_trace", without_lineage)
+    real_clock = time.perf_counter
+
+    class _SlowHealthyPrimary(MockProvider):
+        name = "openai"
+
+        def __init__(self):
+            super().__init__("gpt-6-luna")
+            self.calls = 0
+
+        def generate(self, messages, **kwargs):
+            self.calls += 1
+            # The primary answers after 60 s (well past the old 45 s plan cut).
+            monkeypatch.setattr(time, "perf_counter", lambda: real_clock() + 60.0)
+            return super().generate(messages, **kwargs)
+
+    primary, fallback = _SlowHealthyPrimary(), _GroundedFallback()
+    monkeypatch.setattr(recommendations, "build_provider", lambda *a, **k: primary)
+    monkeypatch.setattr(routing, "build_recommendation_fallback", lambda **kwargs: fallback)
+    monkeypatch.setattr(routing, "paid_providers_blocked_for_request", lambda: False)
+    response = _post(client, token, matter_id)
+    assert response.status_code == 200, response.text
+    assert primary.calls == 1 and fallback.calls == 0
+    with get_session_factory()() as session:
+        record = session.get(Recommendation, response.json()["id"])
+        assert session.get(ModelRun, record.model_run_id).provider == "openai"
+        event = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "recommendation.generated")
+        )
+        # Audit metadata is the flag-off shape when the fallback was not used.
+        assert "availability_fallback_used" not in json.loads(event.metadata_json)
 
 
 def test_late_no_paid_marker_blocks_fallback_construction():

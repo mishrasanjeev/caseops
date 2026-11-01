@@ -93,7 +93,7 @@ def test_pinned_constants_are_the_reviewed_owner_decision():
     assert cap.GEMINI_FALLBACK_MODEL == _MODEL
     assert cap.MONTHLY_CAP_MINOR == 1_000_000  # INR 10,000 in paise
     assert cap._USD_PER_MILLION == {_MODEL: (Decimal("1.50"), Decimal("7.50"))}
-    assert cap.INR_PER_USD_ALL_IN == Decimal("95.0")
+    assert cap.INR_PER_USD_ALL_IN == Decimal("110.0")
     assert cap.PRICING_SOURCE_URL == (
         "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing"
     )
@@ -106,13 +106,13 @@ def test_pinned_constants_are_the_reviewed_owner_decision():
 @pytest.mark.parametrize(
     ("input_bytes", "output_tokens", "expected"),
     [
-        # (10,000 x 1.50 + 8,192 x 7.50) / 1e6 USD x 95 x 100 = 726.18 -> 727 paise
-        (10_000, 8192, 727),
-        (1_000_000, 0, 14_250),  # $1.50 -> INR 142.50
-        (0, 100_000, 7_125),  # $0.75 -> INR 71.25
+        # (10,000 x 1.50 + 8,192 x 7.50) / 1e6 USD x 110 x 100 = 840.84 -> 841 paise
+        (10_000, 8192, 841),
+        (1_000_000, 0, 16_500),  # $1.50 -> INR 165.00
+        (0, 100_000, 8_250),  # $0.75 -> INR 82.50
         (1, 0, 1),  # never a zero charge
         (0, 0, 1),
-        (10_000_000, 128_000, 151_620),  # largest admissible request: $15.96
+        (10_000_000, 128_000, 175_560),  # largest admissible request: $15.96
     ],
 )
 def test_reservation_math_rounds_up_from_conservative_prices(input_bytes, output_tokens, expected):
@@ -145,14 +145,14 @@ def test_unpriced_or_unbounded_requests_refused_before_the_database(monkeypatch,
 def test_month_row_is_created_automatically_at_zero_with_content_free_admission(ledger):
     assert _state(ledger) == (None, None, [])
     receipt = _reserve()
-    assert _state(ledger) == (1_000_000, 727, [(receipt, _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 841, [(receipt, _MODEL, 841)])
     columns = {column["name"] for column in inspect(ledger.kw["bind"]).get_columns(
         "ai_gemini_spend_admissions"
     )}
     assert columns == {"id", "month", "model", "upper_bound_minor", "created_at"}
     second = _reserve()
     limit, admitted, receipts = _state(ledger)
-    assert (limit, admitted) == (1_000_000, 1454)
+    assert (limit, admitted) == (1_000_000, 1682)
     assert sorted(row[0] for row in receipts) == sorted([receipt, second])
 
 
@@ -160,17 +160,17 @@ def test_refusal_at_the_cap_keeps_prior_liability(ledger):
     with ledger() as session:
         session.add(
             AiGeminiSpendMonth(
-                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 727,
+                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 841,
                 created_at=_NOV,
             )
         )
         session.commit()
     receipt = _reserve()  # exactly fits
-    assert _state(ledger) == (1_000_000, 1_000_000, [(receipt, _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 1_000_000, [(receipt, _MODEL, 841)])
     with pytest.raises(cap.GeminiAllowanceError) as caught:
         _reserve(input_bytes=0, output_tokens=0)  # even one paise is refused
     assert str(caught.value) == cap.CAP_REFUSAL
-    assert _state(ledger) == (1_000_000, 1_000_000, [(receipt, _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 1_000_000, [(receipt, _MODEL, 841)])
 
 
 def test_lowered_limit_row_is_honoured_and_corrupt_rows_fail_closed(ledger):
@@ -218,7 +218,7 @@ def test_new_ist_month_rolls_over_automatically_after_exhaustion(ledger):
         _reserve(now=before)
     receipt = _reserve(now=after)
     assert _state(ledger, "2026-10") == (1_000_000, 1_000_000, [])
-    assert _state(ledger) == (1_000_000, 727, [(receipt, _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 841, [(receipt, _MODEL, 841)])
 
 
 def test_independent_commit_survives_caller_rollback(ledger):
@@ -229,7 +229,7 @@ def test_independent_commit_survives_caller_rollback(ledger):
         caller.rollback()
     finally:
         caller.close()
-    assert _state(ledger) == (1_000_000, 727, [(receipt, _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 841, [(receipt, _MODEL, 841)])
 
 
 def test_ledger_unavailable_is_not_a_funded_admission(tmp_path, monkeypatch):
@@ -248,7 +248,7 @@ def test_sqlite_two_writer_race_has_one_winner(ledger):
     with ledger() as session:
         session.add(
             AiGeminiSpendMonth(
-                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 727,
+                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 841,
                 created_at=_NOV,
             )
         )
@@ -267,7 +267,7 @@ def test_sqlite_two_writer_race_has_one_winner(ledger):
     winners = [result for result in results if isinstance(result, str)]
     losers = [result for result in results if isinstance(result, cap.GeminiAllowanceError)]
     assert len(winners) == len(losers) == 1
-    assert _state(ledger) == (1_000_000, 1_000_000, [(winners[0], _MODEL, 727)])
+    assert _state(ledger) == (1_000_000, 1_000_000, [(winners[0], _MODEL, 841)])
 
 
 def test_sqlite_first_writers_of_a_new_month_both_fit(ledger):
@@ -280,7 +280,7 @@ def test_sqlite_first_writers_of_a_new_month_both_fit(ledger):
     with ThreadPoolExecutor(max_workers=2) as pool:
         receipts = [future.result(timeout=10) for future in [pool.submit(attempt) for _ in "ab"]]
     limit, admitted, rows = _state(ledger)
-    assert (limit, admitted) == (1_000_000, 1454)
+    assert (limit, admitted) == (1_000_000, 1682)
     assert sorted(row[0] for row in rows) == sorted(receipts)
 
 
@@ -295,7 +295,7 @@ def test_migrated_schema_matches_the_ledger(request, client_fixture):
     from caseops_api.db.session import get_session_factory
 
     limit, admitted, rows = _state(get_session_factory())
-    assert (limit, admitted, rows) == (1_000_000, 727, [(receipt, _MODEL, 727)])
+    assert (limit, admitted, rows) == (1_000_000, 841, [(receipt, _MODEL, 841)])
 
 
 # --- PostgreSQL ---------------------------------------------------------------------
@@ -350,7 +350,7 @@ def test_postgres_month_lock_has_one_directed_winner(
     with factory() as session:
         session.add(
             AiGeminiSpendMonth(
-                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 727,
+                month="2026-11", limit_minor=1_000_000, admitted_minor=1_000_000 - 841,
                 created_at=_NOV,
             )
         )
@@ -375,7 +375,7 @@ def test_postgres_month_lock_has_one_directed_winner(
             period.admitted_minor = 1_000_000
             holder.add(
                 AiGeminiSpendAdmission(
-                    id=str(uuid4()), month="2026-11", model=_MODEL, upper_bound_minor=727,
+                    id=str(uuid4()), month="2026-11", model=_MODEL, upper_bound_minor=841,
                     created_at=_NOV,
                 )
             )
@@ -436,14 +436,14 @@ def test_postgres_concurrent_month_creation_and_race(cap_postgres: Engine, monke
     # Concurrent first writers of a new month all fit; none sees a duplicate key.
     assert all(isinstance(result, str) for result in results), results
     limit, admitted, rows = _state(factory)
-    assert (limit, admitted) == (1_000_000, 4 * 727)
+    assert (limit, admitted) == (1_000_000, 4 * 841)
     assert sorted(row[0] for row in rows) == sorted(results)
     # Only one of two racing writers fits the last allowance.
     with factory() as session:
         session.execute(
             AiGeminiSpendMonth.__table__.update()
             .where(AiGeminiSpendMonth.month == "2026-11")
-            .values(admitted_minor=1_000_000 - 727)
+            .values(admitted_minor=1_000_000 - 841)
         )
         session.commit()
     race = Barrier(2)

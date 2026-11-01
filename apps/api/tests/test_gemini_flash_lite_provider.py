@@ -252,16 +252,15 @@ def test_native_wire_preserves_system_schema_and_bounded_attempt(sdk, mode, mana
         assert constructor["http_options"]["api_version"] == "v1"
         assert "api_key" not in constructor
         assert "/locations/global/" in sdk.requests[0].url.path
-        # The managed endpoint reserves its worst case against the Gemini cap.
-        assert sdk.cap_reservations == [
-            {
-                "model": MODEL,
-                "input_bytes": reservation["input_bytes"],
-                "output_tokens": 1024,
-            }
-        ]
-    else:
-        assert sdk.cap_reservations == []
+    # The pinned fallback model reserves its worst case against the Gemini cap
+    # on every credential path; other Gemini models never do.
+    assert sdk.cap_reservations == [
+        {
+            "model": MODEL,
+            "input_bytes": reservation["input_bytes"],
+            "output_tokens": 1024,
+        }
+    ]
 
 
 def test_older_gemini_text_retains_temperature_and_default_retry_contract(sdk):
@@ -270,6 +269,8 @@ def test_older_gemini_text_retains_temperature_and_default_retry_contract(sdk):
         _call(adapter, "text")
     assert json.loads(sdk.requests[0].content)["generationConfig"]["temperature"] == 0.7
     assert sdk.reservations[0]["retry_count"] == 4
+    # A non-fallback (evaluation) Gemini model is outside the fallback cap.
+    assert sdk.cap_reservations == []
     assert "http_options" not in sdk.constructors[0]
 
 

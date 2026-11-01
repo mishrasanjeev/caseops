@@ -30,13 +30,14 @@ from typing import Any, NoReturn
 from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+from caseops_api.core.request_context import request_fallback_deadline
 from caseops_api.core.settings import get_settings
 from caseops_api.services.ai_money_budget import (
     AiMoneyBudgetError,
     assert_paid_ai_dispatch,
     reserve_paid_ai_call,
 )
-from caseops_api.services.gemini_spend_cap import reserve_gemini_spend
+from caseops_api.services.gemini_spend_cap import GEMINI_FALLBACK_MODEL, reserve_gemini_spend
 from caseops_api.services.llm_types import (
     LLMCallContext,
     LLMCompletion,
@@ -60,6 +61,20 @@ _completion_receipt: ContextVar[Callable[[LLMCompletion], None] | None] = Contex
 _fallback_policy_permits: ContextVar[bool] = ContextVar(
     "llm_fallback_policy_permits", default=True,
 )
+# A fallback below this budget cannot realistically answer a legal prompt; the
+# primary failure is reported instead of spending the Gemini cap.
+MIN_FALLBACK_SECONDS = 30.0
+
+
+def _categorized(
+    error: LLMProviderError, category: str, status: object = None
+) -> LLMProviderError:
+    """Attach a content-free failure category (and HTTP status) for logging."""
+    error.failure_category = category  # type: ignore[attr-defined]
+    error.http_status = (  # type: ignore[attr-defined]
+        status if isinstance(status, int) and not isinstance(status, bool) else None
+    )
+    return error
 
 
 class LLMUsageAccountingError(RuntimeError):
@@ -169,7 +184,9 @@ def _managed_credentials_before_deadline(deadline: float) -> Any:
                 credentials.refresh(request)
             provider_time_remaining(deadline)
             if not credentials.token:
-                raise LLMProviderError("Managed AI credentials are unavailable.")
+                raise _categorized(
+                    LLMProviderError("Managed AI credentials are unavailable."), "credentials"
+                )
             # A token-only public credential cannot perform a hidden SDK refresh.
             return Credentials(
                 token=credentials.token,
@@ -179,7 +196,9 @@ def _managed_credentials_before_deadline(deadline: float) -> Any:
         raise
     except Exception:
         provider_time_remaining(deadline)
-        raise LLMProviderError("Managed AI credentials are unavailable.") from None
+        raise _categorized(
+            LLMProviderError("Managed AI credentials are unavailable."), "credentials"
+        ) from None
 
 
 class MockProvider:
@@ -1235,7 +1254,10 @@ class GeminiProvider:
             self._client = genai.Client(**client_options)
         except Exception:
             provider_time_remaining(self._deadline)
-            raise LLMProviderError("Gemini client configuration is unavailable.") from None
+            raise _categorized(
+                LLMProviderError("Gemini client configuration is unavailable."),
+                "client_configuration",
+            ) from None
         provider_time_remaining(self._deadline)
         self.model = model
         self._managed = bool(project)
@@ -1338,8 +1360,12 @@ class GeminiProvider:
             or status_code == 402
             or any(marker in str(exc).lower() for marker in quota_markers)
         ):
-            raise LLMQuotaExhaustedError(
-                "Gemini quota exhausted. Check the provider billing account."
+            raise _categorized(
+                LLMQuotaExhaustedError(
+                    "Gemini quota exhausted. Check the provider billing account."
+                ),
+                "quota",
+                status_code,
             ) from None
         if isinstance(
             exc,
@@ -1352,10 +1378,26 @@ class GeminiProvider:
                 requests.exceptions.ConnectionError,
             ),
         ) or (status_code in {408, 429, 500, 502, 503, 504}):
-            raise LLMTransientProviderError(
-                "Gemini is temporarily unavailable or the request timed out."
+            raise _categorized(
+                LLMTransientProviderError(
+                    "Gemini is temporarily unavailable or the request timed out."
+                ),
+                "transient",
+                status_code,
             ) from None
-        raise LLMProviderError("Gemini call failed. Check provider configuration.") from None
+        # 401/403: API not enabled or missing IAM; 404: model or location not served.
+        category = (
+            "permission_denied"
+            if status_code in {401, 403}
+            else "model_or_location_not_found"
+            if status_code == 404
+            else "configuration"
+        )
+        raise _categorized(
+            LLMProviderError("Gemini call failed. Check provider configuration."),
+            category,
+            status_code,
+        ) from None
 
     def _call(self, kwargs: dict[str, Any]) -> tuple[Any, float]:
         started = time.perf_counter()
@@ -1365,16 +1407,6 @@ class GeminiProvider:
             kwargs["config"]["should_return_http_response"] = True
         input_bytes = len(json.dumps(kwargs, ensure_ascii=True).encode("utf-8")) + 4096
         provider_time_remaining(getattr(self, "_deadline", None))
-        if getattr(self, "_managed", True):
-            # Account-level Gemini cap, independent of the shared money guard.
-            # The output cap already includes thinking; every SDK attempt counts.
-            reserve_gemini_spend(
-                model=self.model,
-                input_bytes=input_bytes,
-                output_tokens=kwargs["config"]["max_output_tokens"]
-                * (1 + getattr(self, "_budget_retry_count", 4)),
-            )
-            provider_time_remaining(getattr(self, "_deadline", None))
         admission = reserve_paid_ai_call(
             provider=self.name,
             model=self.model,
@@ -1387,6 +1419,19 @@ class GeminiProvider:
             retry_count=getattr(self, "_budget_retry_count", 4),
         )
         assert_paid_ai_dispatch(admission)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        if self.model == GEMINI_FALLBACK_MODEL:
+            # Account-level Gemini fallback cap, reserved last, immediately
+            # before transport. It is independent of the shared money guard and
+            # covers only the pinned fallback model; the output cap includes
+            # thinking and every SDK attempt counts. Credential and client
+            # configuration failures happen earlier and reserve nothing.
+            reserve_gemini_spend(
+                model=self.model,
+                input_bytes=input_bytes,
+                output_tokens=kwargs["config"]["max_output_tokens"]
+                * (1 + getattr(self, "_budget_retry_count", 4)),
+            )
         remaining = provider_time_remaining(getattr(self, "_deadline", None))
         if remaining is not None:
             kwargs["config"]["http_options"] = {
@@ -1580,10 +1625,48 @@ def build_gemini_fallback(*, timeout_seconds: float) -> GeminiProvider:
 def with_fallback_refusal(
     primary_error: LLMProviderError, refusal: BaseException
 ) -> LLMProviderError:
-    """Keep the primary failure's type and safe message, adding why no fallback ran."""
-    combined = type(primary_error)(f"{primary_error} {refusal}")
+    """Keep the primary failure's type and safe message; carry why no fallback ran.
+
+    Callers append ``fallback_refusal`` after their own retry advice, which is
+    about the primary only (``llm_http.fallback_refusal_suffix``).
+    """
+    combined = type(primary_error)(str(primary_error))
     combined.fallback_refusal = str(refusal)  # type: ignore[attr-defined]
     return combined
+
+
+def fallback_deadline(started: float, budget_seconds: float) -> float:
+    """The latest moment a fallback may finish: the primary call's existing worst
+    case, any caller ``provider_deadline`` and the HTTP request's deadline."""
+    deadline = started + budget_seconds
+    for bound in (_provider_deadline.get(), request_fallback_deadline()):
+        if bound is not None:
+            deadline = min(deadline, bound)
+    return deadline
+
+
+def log_fallback_failure(purpose: str | None, model: str, error: BaseException) -> None:
+    """Content-free record of why a fallback attempt did not answer."""
+    category = getattr(error, "failure_category", None) or type(error).__name__
+    status = getattr(error, "http_status", None)
+    misconfigured = category in {
+        "credentials",
+        "client_configuration",
+        "permission_denied",
+        "model_or_location_not_found",
+        "configuration",
+    }
+    logger.log(
+        logging.ERROR if misconfigured else logging.WARNING,
+        "llm availability fallback failed purpose=%s fallback=%s error=%s category=%s "
+        "status=%s misconfigured=%s",
+        purpose,
+        model,
+        type(error).__name__,
+        category,
+        status if isinstance(status, int) else "none",
+        misconfigured,
+    )
 
 
 @contextmanager
@@ -1603,10 +1686,12 @@ class AvailabilityFallbackProvider:
     ``LLMTransientProviderError``. Refusals, schema/format failures, safety
     stops, policy or budget denials and the no-paid marker never switch.
     The single attempt per instance (one instance per request or job item)
-    runs within the primary's existing worst-case deadline. Gemini output
-    returns to the caller's unchanged validators. ``name``/``model`` name the
-    provider that handled the latest attempt, so failure provenance is exact,
-    and every completion carries its own provider and model.
+    must finish within the primary's existing worst-case deadline and the HTTP
+    request deadline, and is skipped with less than ``MIN_FALLBACK_SECONDS``
+    left. Gemini output returns to the caller's unchanged validators.
+    ``name``/``model`` change to Gemini only once Gemini has answered (or its
+    answer was rejected); otherwise they stay the primary's. Every completion
+    carries its own provider and model.
     """
 
     def __init__(
@@ -1677,15 +1762,17 @@ class AvailabilityFallbackProvider:
             ) from None
         if self.fallback_attempted or not _fallback_policy_permits.get():
             raise primary_error
-        deadline = started + self._budget_seconds
-        current = _provider_deadline.get()
-        if current is not None:
-            deadline = min(deadline, current)
+        deadline = fallback_deadline(started, self._budget_seconds)
         remaining = deadline - time.perf_counter()
-        if remaining < 1.0:
+        if remaining < MIN_FALLBACK_SECONDS:
+            logger.warning(
+                "llm availability fallback skipped purpose=%s reason=deadline "
+                "remaining_seconds=%.1f",
+                self.purpose,
+                max(remaining, 0.0),
+            )
             raise primary_error
         self.fallback_attempted = True
-        self.name, self.model = "gemini", self.fallback_model
         logger.warning(
             "llm availability fallback purpose=%s primary=%s:%s reason=%s",
             self.purpose,
@@ -1696,18 +1783,23 @@ class AvailabilityFallbackProvider:
         try:
             with provider_deadline(deadline):
                 fallback = self._fallback_factory(timeout_seconds=remaining)
-                self.name, self.model = fallback.name, fallback.model
-                return call(fallback)
+                completion = call(fallback)
         except AiMoneyBudgetError as refusal:
             # The cap, its ledger or the no-paid marker refused before transport.
+            log_fallback_failure(self.purpose, self.fallback_model, refusal)
             raise with_fallback_refusal(primary_error, refusal) from None
         except LLMResponseFormatError:
+            # Gemini answered but the answer was rejected: it is the provenance.
             # Same validation contract as the primary; never another switch.
+            self.name, self.model = "gemini", self.fallback_model
             raise
-        except LLMProviderError:
+        except LLMProviderError as gemini_error:
             # Gemini unavailable, misconfigured or out of time: report the
             # primary failure the caller already knows how to handle.
+            log_fallback_failure(self.purpose, self.fallback_model, gemini_error)
             raise primary_error from None
+        self.name, self.model = completion.provider, completion.model
+        return completion
 
 
 def _split_system_and_chat(
@@ -1996,9 +2088,11 @@ def generate_structured[T: BaseModel](
         )
 
         policy = resolve_tenant_policy(session, company_id=context.tenant_id)
-        if isinstance(provider, AvailabilityFallbackProvider):
+        # A cassette (record/replay) wraps the provider; look through it.
+        fallback_provider = getattr(provider, "_inner", provider)
+        if isinstance(fallback_provider, AvailabilityFallbackProvider):
             fallback_permitted = is_model_allowed(
-                policy, purpose=context.purpose, model=provider.fallback_model
+                policy, purpose=context.purpose, model=fallback_provider.fallback_model
             )
         if not is_model_allowed(policy, purpose=context.purpose, model=provider.model):
             from fastapi import HTTPException

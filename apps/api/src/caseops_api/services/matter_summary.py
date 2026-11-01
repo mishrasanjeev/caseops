@@ -59,7 +59,10 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
-from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
+)
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matters import _get_matter_model
 from caseops_api.services.session_context import SessionContext
@@ -341,7 +344,7 @@ def generate_matter_summary(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
                 f"Could not generate matter summary: {type(exc).__name__}: {exc}. "
-                "Please retry in a minute."
+                "Please retry in a minute." + fallback_refusal_suffix(exc)
             ),
         ) from exc
 

@@ -1,4 +1,10 @@
-"""Native, network-free deadline regressions for recommendation routing."""
+"""Native, network-free deadline regressions for recommendation routing.
+
+Since the 2026-11-01 review the primary runs on its own normal timeout (as with
+the fallback off) and only the fallback is bounded by the 100-second service
+budget. These tests exercise small leftover windows on purpose, so they lower
+the plan's 30-second minimum fallback budget to 1 second.
+"""
 
 from __future__ import annotations
 
@@ -219,10 +225,12 @@ def _run(state, *, mode="gemini", structured=True, tenant_preflight=False):
             raise llm.LLMTransientProviderError("offline primary outage")
 
     def primary(timeout):
+        # The plan hands the primary no deadline; it keeps its own timeout.
+        assert timeout is None
         if mode == "gemini":
             return UnavailablePrimary()
         return llm.OpenAIProvider(
-            model="gpt-6-luna", api_key="offline", timeout_seconds=timeout, max_retries=0
+            model="gpt-6-luna", api_key="offline", timeout_seconds=30.0, max_retries=0
         )
 
     def fallback(timeout):
@@ -235,7 +243,11 @@ def _run(state, *, mode="gemini", structured=True, tenant_preflight=False):
         state.request_session.rollback()
 
     plan = RecommendationFallbackPlan(
-        started_at=0, primary_factory=primary, fallback_factory=fallback, revalidate=revalidate
+        started_at=0,
+        primary_factory=primary,
+        fallback_factory=fallback,
+        revalidate=revalidate,
+        min_fallback_seconds=1.0,
     )
     state.plan = plan
 
@@ -259,7 +271,7 @@ def _run(state, *, mode="gemini", structured=True, tenant_preflight=False):
 def test_expired_managed_construction_never_admits_or_dispatches(deadline_native, delay_kind):
     state = deadline_native
     setattr(state, delay_kind, 11)
-    with _human(state), pytest.raises(llm.LLMProviderError, match="deadline"):
+    with _human(state), pytest.raises(llm.LLMTransientProviderError, match="primary outage"):
         _run(state)
     assert not state.requests and not state.receipts
 
@@ -282,12 +294,12 @@ def test_managed_auth_and_admission_reduce_native_http_timeout(deadline_native):
     assert state.reservations[0]["retry_count"] == 0
 
 
-@pytest.mark.parametrize("mode", ["gemini", "openai"])
+@pytest.mark.parametrize("mode", ["gemini"])
 @pytest.mark.parametrize("structured", [True, False])
 def test_admission_overrun_retains_debit_without_dispatch(deadline_native, mode, structured):
     state = deadline_native
     state.admission_delay = 31
-    with _human(state), pytest.raises(llm.LLMProviderError, match="deadline"):
+    with _human(state), pytest.raises(llm.LLMTransientProviderError, match="primary outage"):
         _run(state, mode=mode, structured=structured)
     period, rows = _snapshot(state)
     assert not state.requests and len(rows) == len(state.receipts) == 1
@@ -295,12 +307,12 @@ def test_admission_overrun_retains_debit_without_dispatch(deadline_native, mode,
     assert llm.provider_time_remaining() is None
 
 
-@pytest.mark.parametrize("mode", ["gemini", "openai"])
+@pytest.mark.parametrize("mode", ["gemini"])
 @pytest.mark.parametrize("structured", [True, False])
 def test_late_native_response_is_rejected_and_debit_retained(deadline_native, mode, structured):
     state = deadline_native
     state.return_delay = 31
-    with _human(state), pytest.raises(llm.LLMProviderError, match="deadline"):
+    with _human(state), pytest.raises(llm.LLMTransientProviderError, match="primary outage"):
         _run(state, mode=mode, structured=structured)
     period, rows = _snapshot(state)
     assert len(state.requests) == len(rows) == 1
@@ -309,13 +321,17 @@ def test_late_native_response_is_rejected_and_debit_retained(deadline_native, mo
 
 
 @pytest.mark.parametrize("structured", [True, False])
-def test_primary_http_timeout_is_recalculated_after_admission(deadline_native, structured):
+@pytest.mark.parametrize("delay", ["admission_delay", "return_delay"])
+def test_healthy_primary_is_not_cut_by_the_plan_deadline(deadline_native, structured, delay):
+    # 70 s into the 100 s budget plus a 31 s delay used to fail the primary;
+    # it now keeps its own 30 s timeout exactly as with the fallback off.
     state = deadline_native
-    state.admission_delay = 4
+    setattr(state, delay, 31)
     with _human(state):
         _run(state, mode="openai", structured=structured)
-    assert set(state.requests[0].extensions["timeout"].values()) == {26}
+    assert set(state.requests[0].extensions["timeout"].values()) == {30}
     assert state.reservations[0]["retry_count"] == 0
+    assert state.plan.attempts == 1 and state.plan.fallback_used is False
 
 
 def test_expired_policy_preflight_releases_transaction_and_never_admits(
@@ -339,8 +355,10 @@ def test_expired_policy_preflight_releases_transaction_and_never_admits(
 
     monkeypatch.setattr(saas_billing, "assert_ai_credits_available", preflight)
     monkeypatch.setattr(saas_billing, "debit_ai_credits", lambda *a, **k: None)
-    with _human(state), pytest.raises(llm.LLMProviderError, match="deadline"):
-        _run(state, mode="openai", tenant_preflight=True)
+    # The fallback's own preflight overruns its window: the primary outage is
+    # reported and nothing is admitted or sent.
+    with _human(state), pytest.raises(llm.LLMTransientProviderError, match="primary outage"):
+        _run(state, mode="gemini", tenant_preflight=True)
     assert not state.request_session.in_transaction()
     assert not state.requests and not state.receipts
 
@@ -387,8 +405,9 @@ def test_native_primary_timeout_can_fallback_inside_shared_deadline(deadline_nat
         answer, completion = _run(state, mode="native-fallback")
     assert answer.answer == "Offline native answer" and completion.provider == "gemini"
     assert state.dispatch_times == [3, 53]
-    assert set(state.requests[0].extensions["timeout"].values()) == {42}
-    assert set(state.requests[1].extensions["timeout"].values()) == {35}
+    # The primary keeps its own 30 s timeout; the fallback gets 100 - 53 s.
+    assert set(state.requests[0].extensions["timeout"].values()) == {30}
+    assert set(state.requests[1].extensions["timeout"].values()) == {47}
     period, rows = _snapshot(state)
     assert len(rows) == len(state.receipts) == state.plan.attempts == 2
     assert period["admitted_minor"] == sum(row["upper_bound_minor"] for row in rows)
@@ -399,7 +418,7 @@ def test_native_timeout_at_shared_deadline_cannot_start_fallback(deadline_native
     state = deadline_native
     state.native_fallback = True
     state.primary_delay = 30
-    with _human(state), pytest.raises(llm.LLMProviderError, match="deadline"):
+    with _human(state), pytest.raises(llm.LLMTransientProviderError):
         _run(state, mode="native-fallback")
     assert len(state.requests) == len(state.receipts) == 1
     assert not state.discoveries and state.plan.attempts == 1

@@ -1174,3 +1174,56 @@ def test_publication_retry_classification_is_bounded(summary_case, monkeypatch, 
         else:
             assert events[0].state == DomainOutboxState.DEAD_LETTER
     assert summaries.drain_update_summaries(provider=provider) == 0
+
+
+@pytest.mark.parametrize("allowed", [["gpt-5.1"], ["gpt-5.1", "gemini-3.8-flash"]])
+def test_summary_fallback_obeys_the_recommendation_allowlist(summary_case, allowed):
+    """The caller-level gate is the only allow-list check for this purpose."""
+    from caseops_api.services.llm import AvailabilityFallbackProvider, LLMTransientProviderError
+
+    case = summary_case
+    _enqueue_summary(case)
+    with get_session_factory()() as session:
+        session.add(
+            TenantAIPolicy(
+                company_id=case["company_id"],
+                allowed_models_recommendations_json=json.dumps(allowed),
+            )
+        )
+        session.commit()
+
+    class UnavailablePrimary(SummaryEmulator):
+        name = "openai"
+
+        def __init__(self):
+            super().__init__()
+            self.model = "gpt-5.1"
+
+        def generate(self, messages, *, temperature=0.2, max_tokens=1024):
+            self.calls += 1
+            raise LLMTransientProviderError(
+                "OpenAI is temporarily unavailable or the request timed out."
+            )
+
+    class RecordingGemini(SummaryEmulator):
+        name = "gemini"
+
+        def __init__(self):
+            super().__init__()
+            self.model = "gemini-3.8-flash"
+
+    # Both transports are offline emulators, so the wrapper is admitted as one
+    # (the worker only runs emulator-typed providers under tests).
+    class EmulatedFallback(AvailabilityFallbackProvider, MockProvider):
+        pass
+
+    primary, gemini = UnavailablePrimary(), RecordingGemini()
+    provider = EmulatedFallback(
+        primary,
+        purpose=summaries.PURPOSE,
+        budget_seconds=45.0,
+        fallback_factory=lambda *, timeout_seconds: gemini,
+    )
+    summaries.drain_update_summaries(provider=provider)
+    assert primary.calls == 1
+    assert gemini.calls == (1 if "gemini-3.8-flash" in allowed else 0)

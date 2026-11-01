@@ -49,10 +49,11 @@ PRICING_CHECKED_ON = "2026-11-01"
 _USD_PER_MILLION = {
     GEMINI_FALLBACK_MODEL: (Decimal("1.50"), Decimal("7.50")),
 }
-# Reviewed all-in INR per USD multiplier. It deliberately exceeds the market
-# rate to absorb FX movement, 18% GST on Google Cloud services and card/bank
-# fees. Change it only with a reviewed commit.
-INR_PER_USD_ALL_IN = Decimal("95.0")
+# Reviewed all-in INR per USD multiplier: an assumed market-rate ceiling of
+# about INR 88 per USD x 1.18 (18% GST on Google Cloud services) = ~INR 104,
+# plus about 6% for card/bank FX fees and rate movement = INR 110. Revisit it if
+# the market rate exceeds about INR 88. Change it only with a reviewed commit.
+INR_PER_USD_ALL_IN = Decimal("110.0")
 
 _UNBOUNDED = "Gemini request cost cannot be bounded. No external request was sent."
 CAP_REFUSAL = "The monthly Gemini fallback allowance is used up. No external request was sent."
