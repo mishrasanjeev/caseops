@@ -180,7 +180,9 @@ export function IpDocketPicker({
     ...(lookupPending ? [{ value, label: "Loading the selected docket…", disabled: true }] : []),
     ...dockets.map((docket) => ({ value: docket.id, label: ipDocketCaption(docket) })),
   ];
-  const nothingToChoose = dockets.length === 0 && !emptyOptionLabel;
+  // With no docket listed, the empty option is the only value: an enabled
+  // select would offer a choice that does not exist (the status says why).
+  const nothingToChoose = dockets.length === 0 && (!emptyOptionLabel || value === "");
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value;

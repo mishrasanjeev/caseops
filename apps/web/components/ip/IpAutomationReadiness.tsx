@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -193,6 +194,12 @@ export function IpAutomationReadiness({
                 {feature.manual_fallback_feature_id ? (
                   <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
                     Until then, use {featureName(feature.manual_fallback_feature_id).toLowerCase()}.
+                  </div>
+                ) : null}
+                {feature.feature_id === "watch_operations" ? (
+                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                    This is automated journal polling only. Manual journal intake stays available on{" "}
+                    <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/watch">Trademark journal watch</Link>.
                   </div>
                 ) : null}
               </li>

@@ -247,6 +247,15 @@ describe("IpDocketPicker", () => {
     expect(picker().selectedOptions[0]).toBeEnabled();
   });
 
+  it("disables an explicit empty choice when no docket exists to choose instead", async () => {
+    fetchIpDocketsMock.mockResolvedValue(page([]));
+    renderPicker(<Harness emptyOptionLabel="All accessible dockets" />);
+    expect(await screen.findByText(/No trademark dockets are visible to you/)).toBeVisible();
+    expect(picker()).toBeDisabled();
+    expect(picker()).toHaveValue("");
+    expect(picker().selectedOptions[0]).toHaveTextContent("All accessible dockets");
+  });
+
   it("anchors a caller's field error to the select", async () => {
     fetchIpDocketsMock.mockResolvedValue(page([PINE]));
     renderPicker(<Harness error="Docket: Select the docket to reconcile." />);

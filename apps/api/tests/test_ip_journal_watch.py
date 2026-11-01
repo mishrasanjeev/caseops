@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import event, select
 
 from caseops_api.db.models import (
+    CompanyMembership,
     DomainOutboxEvent,
     IpDocketEvent,
     IpDocketRecord,
@@ -21,6 +24,7 @@ from caseops_api.db.models import (
     Matter,
     MatterDeadline,
     MatterTask,
+    MembershipRole,
     NotificationDeliveryIntent,
 )
 from caseops_api.db.session import get_session_factory
@@ -33,7 +37,7 @@ from caseops_api.schemas.ip_watch import (
 from caseops_api.services import ip_watch as ip_watch_service
 from caseops_api.services.ip_watch import run_journal_watch_scheduler
 from tests.test_auth_company import auth_headers, bootstrap_company
-from tests.test_ip_record_workflow import _application, _asset, _docket
+from tests.test_ip_record_workflow import _application, _asset, _docket, _particulars
 
 
 def _fixture(client: TestClient, title: str = "ASTER") -> tuple[dict, dict, dict, dict]:
@@ -675,6 +679,7 @@ def test_iplf_uj_21_exceptions_source_duplicate_cost_and_tenant_scope(
         "publications": [],
         "ingestion_runs": [],
         "handoffs": [],
+        "intake_profile_count": 0,
     }
 
 
@@ -850,6 +855,8 @@ def test_device_similarity_requires_affirmative_reference_bound_evidence(
     low_score["device_reference"] = "https://evidence.example/candidate-device.png"
     low_score["class_numbers"] = [9]
     low_score["goods_services"] = {"9": ["software"]}
+    # The scope may only cover published classes (BUG-014 contract).
+    low_score["publication_scope"] = {"scope_kind": "partial", "published_classes": [9]}
     low_score["raw_evidence"]["device_similarity"] = {"method": "ai", "score": 0.01}
     rejected_match = _ingest(
         client,
@@ -869,6 +876,7 @@ def test_device_similarity_requires_affirmative_reference_bound_evidence(
     confirmed["device_reference"] = "https://evidence.example/candidate-device.png"
     confirmed["class_numbers"] = [9]
     confirmed["goods_services"] = {"9": ["software"]}
+    confirmed["publication_scope"] = {"scope_kind": "partial", "published_classes": [9]}
     confirmed["raw_evidence"]["device_similarity"] = {
         "method": "ai",
         "score": 0.94,
@@ -1090,3 +1098,602 @@ def test_ingestion_is_bounded_and_batches_profile_publication_lookups(
     assert duplicate_body["run"]["publications_created"] == 1
     assert len(duplicate_body["publications"]) == 1
     assert len(duplicate_body["hits"]) == 1
+
+
+# BUG-014 (Ram 2026-10-30): a lawyer's journal capture failed with a 422 that
+# blamed nothing ("List should have at least 1 item ...; Input should be a valid
+# list") or leaked a parser error, and an empty "{}" was accepted as evidence.
+
+
+def _manual_capture(**overrides: object) -> dict:
+    """The payload the web intake form builds from lawyer inputs."""
+
+    return {
+        "application_id": None,
+        "journal_number": "2187",
+        "journal_date": "2026-10-27",
+        "publication_kind": "advertisement",
+        "application_number": "BUG014-CAPTURE-1",
+        "mark_text": "ZQXV CAPTURE",
+        "device_reference": None,
+        "proprietor_name": None,
+        "office": "IP India",
+        "jurisdiction": "IN",
+        "class_numbers": [45],
+        "goods_services": {"45": ["Legal services"]},
+        "publication_scope": {"scope_kind": "full"},
+        "source_url": "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal",
+        "source_page": "45",
+        "source_status": "available",
+        "source_retrieved_at": None,
+        "parser_version": "manual-journal-v1",
+        "attribution": {"publisher": "IP India", "capture_method": "manual"},
+        "raw_evidence": {
+            "extract_text": "Journal 2187 page 45: ZQXV CAPTURE, class 45, legal services.",
+            "capture_method": "manual",
+        },
+        "supersedes_publication_id": None,
+        "correction_reason": None,
+    } | overrides
+
+
+def _errors(payload: dict) -> list[dict]:
+    with pytest.raises(ValidationError) as caught:
+        IpJournalPublicationCreate.model_validate(payload)
+    return caught.value.errors()
+
+
+def test_bug_014_lawyer_capture_shape_is_accepted() -> None:
+    model = IpJournalPublicationCreate.model_validate(_manual_capture())
+    assert model.class_numbers == [45]
+    assert model.goods_services == {"45": ["Legal services"]}
+    assert model.raw_evidence["extract_text"].startswith("Journal 2187")
+
+
+def test_bug_014_web_form_payloads_satisfy_the_api_contract() -> None:
+    # apps/web/lib/ip/journal-capture.test.ts asserts the intake form builds
+    # exactly these payloads, so the web form and this contract cannot drift.
+    fixture = Path(__file__).parent / "fixtures" / "journal_capture_web_payloads.json"
+    payloads = json.loads(fixture.read_text(encoding="utf-8"))
+    assert len(payloads) == 2
+    for payload in payloads:
+        IpJournalPublicationCreate.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "loc", "fragment"),
+    [
+        ({"class_numbers": []}, ("class_numbers",), "at least 1 item"),
+        ({"class_numbers": [46]}, ("class_numbers",), "between 1 and 45"),
+        ({"class_numbers": [45, 45]}, ("class_numbers",), "list each Nice class once"),
+        (
+            {"goods_services": {"Class 45": ["Legal services"]}},
+            ("goods_services",),
+            "Nice class number from 1 to 45",
+        ),
+        (
+            {"goods_services": {"30": ["Biscuits"]}},
+            ("goods_services",),
+            "Class 30 is not a published class",
+        ),
+        ({"goods_services": {"45": ["  "]}}, ("goods_services",), "blank entries"),
+        ({"goods_services": {"45": "Legal services"}}, ("goods_services", "45"), "valid list"),
+        (
+            {"publication_scope": {"scope_kind": "partial", "published_classes": [30]}},
+            ("publication_scope",),
+            "only cover classes it publishes",
+        ),
+        ({"publication_scope": {"scope_kind": "some"}}, ("publication_scope",), "full or partial"),
+        ({"raw_evidence": {}}, ("raw_evidence",), "Capture the source evidence"),
+        (
+            {"raw_evidence": {"capture_method": "manual", "extract_text": "   "}},
+            ("raw_evidence",),
+            "Capture the source evidence",
+        ),
+        ({"source_url": "ftp://journal.example"}, ("source_url",), "HTTP or HTTPS"),
+    ],
+)
+def test_bug_014_each_journal_failure_is_anchored_to_its_field(
+    overrides: dict, loc: tuple[str, ...], fragment: str
+) -> None:
+    errors = _errors(_manual_capture(**overrides))
+    assert [error["loc"] for error in errors] == [loc]
+    assert fragment in errors[0]["msg"]
+    assert "invalid literal" not in errors[0]["msg"]
+
+
+def test_bug_014_ingest_422_names_the_field_without_parser_text(client: TestClient) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "CAPTURE")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "bug014-empty-evidence-0001",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    raw_evidence={},
+                    goods_services={"Class 45": ["Legal services"]},
+                )
+            ],
+        },
+    )
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert sorted(tuple(error["loc"]) for error in body["errors"]) == [
+        ("body", "publications", 0, "goods_services"),
+        ("body", "publications", 0, "raw_evidence"),
+    ]
+    assert "Publications › Raw evidence: Capture the source evidence" in body["detail"]
+    assert "Value error" not in body["detail"]
+    assert "invalid literal" not in body["detail"]
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(IpJournalIngestionRun).where(
+                    IpJournalIngestionRun.idempotency_key == "bug014-empty-evidence-0001"
+                )
+            )
+            is None
+        )
+
+
+def test_bug_014_capture_without_an_active_profile_is_refused_not_dropped(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "NOPROFILE")
+    workspace = client.get("/api/ip/watch", headers=headers).json()
+    assert workspace["intake_profile_count"] == 0
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "bug014-no-profile-0001",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [_manual_capture()],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert "No active watch profile" in response.json()["detail"]
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(IpJournalIngestionRun).where(
+                    IpJournalIngestionRun.company_id == bootstrap["company"]["id"]
+                )
+            )
+            is None
+        )
+
+
+def test_bug_014_zero_hit_capture_is_listed_with_its_evidence(client: TestClient) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "LISTED")
+    response = client.post(
+        "/api/ip/watch/profiles",
+        headers=headers,
+        json={
+            "docket_id": docket["id"],
+            "name": "Unrelated word watch",
+            "word_terms": ["UNRELATED"],
+            "frequency": "publication",
+            "recipient_membership_ids": [bootstrap["membership"]["id"]],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert client.get("/api/ip/watch", headers=headers).json()["intake_profile_count"] == 1
+    result = _ingest(
+        client,
+        headers=headers,
+        key="bug014-zero-hit-0001",
+        publication=_manual_capture(),
+        cost_minor=0,
+    )
+    assert result["run"]["status"] == "succeeded"
+    assert result["hits"] == []
+    publication = result["publications"][0]
+    assert publication["raw_evidence_json"]["extract_text"].startswith("Journal 2187")
+
+    for scope in ({}, {"docket_id": docket["id"]}):
+        workspace = client.get("/api/ip/watch", headers=headers, params=scope)
+        assert workspace.status_code == 200, workspace.text
+        listed = {item["id"]: item for item in workspace.json()["publications"]}
+        assert publication["id"] in listed
+        assert listed[publication["id"]]["raw_evidence_json"] == publication["raw_evidence_json"]
+
+    other = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Beacon IP Partners",
+            "company_slug": "beacon-ip-capture",
+            "company_type": "law_firm",
+            "owner_full_name": "Beacon Owner",
+            "owner_email": "owner@beacon-capture.example",
+            "owner_password": "BeaconWatch123!",
+        },
+    )
+    assert other.status_code == 200, other.text
+    isolated = client.get("/api/ip/watch", headers=auth_headers(other.json()["access_token"]))
+    assert isolated.status_code == 200, isolated.text
+    assert isolated.json()["publications"] == []
+    assert isolated.json()["intake_profile_count"] == 0
+
+
+def _colleague(
+    client: TestClient, headers: dict[str, str], *, email: str, role: MembershipRole
+) -> dict[str, str]:
+    created = client.post(
+        "/api/companies/current/users",
+        headers=headers,
+        json={
+            "full_name": f"Watch {role.value}",
+            "email": email,
+            "role": "member",
+            "password": "ColleaguePass123!",
+        },
+    )
+    assert created.status_code == 200, created.text
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, str(created.json()["membership_id"]))
+        assert membership is not None
+        membership.role = role
+        session.commit()
+    login = client.post(
+        "/api/auth/login",
+        json={"company_slug": "aster-legal", "email": email, "password": "ColleaguePass123!"},
+    )
+    assert login.status_code == 200, login.text
+    return auth_headers(login.json()["access_token"])
+
+
+def _word_profile(
+    client: TestClient, headers: dict[str, str], *, docket_id: str, word: str, recipient: str
+) -> dict:
+    response = client.post(
+        "/api/ip/watch/profiles",
+        headers=headers,
+        json={
+            "docket_id": docket_id,
+            "name": f"{word} word watch",
+            "word_terms": [word],
+            "frequency": "publication",
+            "recipient_membership_ids": [recipient],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _listed(client: TestClient, headers: dict[str, str], **params: str) -> set[str]:
+    workspace = client.get("/api/ip/watch", headers=headers, params=params)
+    assert workspace.status_code == 200, workspace.text
+    return {item["id"] for item in workspace.json()["publications"]}
+
+
+def _searched(client: TestClient, headers: dict[str, str], q: str | None = None) -> set[str]:
+    response = client.get(
+        "/api/ip/watch/publications", headers=headers, params={"q": q} if q else {}
+    )
+    assert response.status_code == 200, response.text
+    return {item["id"] for item in response.json()["publications"]}
+
+
+def test_bug_014_listed_capture_respects_docket_visibility(client: TestClient) -> None:
+    bootstrap, headers, open_docket, _ = _fixture(client, "OPENWATCH")
+    owner_id = bootstrap["membership"]["id"]
+    restricted = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={"title": "WALLED", "restricted": True, "particulars": _particulars("WALLED")},
+    )
+    assert restricted.status_code == 201, restricted.text
+    walled_docket = restricted.json()["id"]
+    walled_asset = _asset(client, headers, walled_docket, "WALLED")
+    walled_application = _application(client, headers, walled_docket, walled_asset["id"])
+    _word_profile(
+        client, headers, docket_id=open_docket["id"], word="OPENMARK", recipient=owner_id
+    )
+    _word_profile(client, headers, docket_id=walled_docket, word="WALLMARK", recipient=owner_id)
+
+    def capture(key: str, **overrides: object) -> dict:
+        return _ingest(
+            client, headers=headers, key=key, publication=_manual_capture(**overrides), cost_minor=0
+        )
+
+    linked = capture(
+        "bug014-walled-0001",
+        application_id=walled_application["id"],
+        application_number="BUG014-WALLED",
+    )["publications"][0]
+    open_hit = capture(
+        "bug014-openhit-0001", application_number="BUG014-OPENHIT", mark_text="OPENMARK"
+    )
+    walled_hit = capture(
+        "bug014-wallhit-0001",
+        application_number="BUG014-WALLHIT",
+        mark_text="WALLMARK",
+        raw_evidence={"extract_text": "Walled team capture notes.", "capture_method": "manual"},
+    )
+    zero_hit = capture("bug014-zerohit-0001", application_number="BUG014-ZEROHIT")
+    assert len(open_hit["hits"]) == 1
+    assert len(walled_hit["hits"]) == 1
+    assert zero_hit["hits"] == []
+    open_hit_id = open_hit["publications"][0]["id"]
+    walled_hit_id = walled_hit["publications"][0]["id"]
+    zero_hit_id = zero_hit["publications"][0]["id"]
+
+    partner = _colleague(
+        client, headers, email="watch-partner@asterlegal.in", role=MembershipRole.PARTNER
+    )
+    # A partner outside the wall sees the entry that hit a profile they can
+    # see, never the walled team's unlinked capture (with its notes), the
+    # walled application's entry, or a colleague's zero-hit capture.
+    for seen in (_listed(client, partner), _searched(client, partner)):
+        assert open_hit_id in seen
+        assert {linked["id"], walled_hit_id, zero_hit_id}.isdisjoint(seen)
+    assert _searched(client, partner, "wallmark") == set()
+    owner_seen = _listed(client, headers)
+    assert {linked["id"], open_hit_id, walled_hit_id, zero_hit_id} <= owner_seen
+    assert _searched(client, headers, "BUG014-WALLHIT") == {walled_hit_id}
+    # A typed wildcard never widens the search.
+    assert _searched(client, headers, "BUG014%HIT") == set()
+
+    admin = _colleague(
+        client, headers, email="watch-admin@asterlegal.in", role=MembershipRole.ADMIN
+    )
+    # Only a visible entry can be corrected; the walled one reads as not found.
+    hidden = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=admin,
+        json={
+            "idempotency_key": "bug014-hidden-correction-0001",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    application_number="BUG014-WALLHIT",
+                    publication_kind="correction",
+                    supersedes_publication_id=walled_hit_id,
+                    correction_reason="Corrected goods description.",
+                )
+            ],
+        },
+    )
+    assert hidden.status_code == 404, hidden.text
+    own = _ingest(
+        client,
+        headers=admin,
+        key="bug014-admin-own-0001",
+        publication=_manual_capture(application_number="BUG014-ADMINOWN"),
+        cost_minor=0,
+    )["publications"][0]
+    assert own["id"] in _listed(client, admin)
+    assert own["id"] not in _listed(client, partner)
+
+    other = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Beacon IP Partners",
+            "company_slug": "beacon-ip-search",
+            "company_type": "law_firm",
+            "owner_full_name": "Beacon Owner",
+            "owner_email": "owner@beacon-search.example",
+            "owner_password": "BeaconWatch123!",
+        },
+    )
+    assert other.status_code == 200, other.text
+    assert _searched(client, auth_headers(other.json()["access_token"]), "BUG014") == set()
+
+
+def test_bug_014_visible_entry_predicate_compiles_on_every_dialect() -> None:
+    # Two docket-policy calls in one statement gave two anonymous team CTEs the
+    # same name, so GET /api/ip/watch failed with a 500 in the E2E journey.
+    from types import SimpleNamespace
+
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    class _NoRuns:
+        def scalars(self, *_args: object, **_kwargs: object) -> list[object]:
+            return []
+
+    context = SimpleNamespace(
+        company=SimpleNamespace(id="company-1"), membership=SimpleNamespace(id="member-1")
+    )
+    for _ in range(25):
+        statement = select(IpJournalPublication.id).where(
+            ip_watch_service._visible_publications_condition(_NoRuns(), context=context)
+        )
+        for dialect in (sqlite.dialect(), postgresql.dialect()):
+            assert "ip_journal_publications" in str(statement.compile(dialect=dialect))
+
+
+def test_bug_014_recapture_with_different_details_points_to_the_recorded_entry(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "RECAPTURE")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    first = _ingest(
+        client, headers=headers, key="bug014-recapture-0001", publication=_manual_capture()
+    )
+    same = _ingest(
+        client, headers=headers, key="bug014-recapture-0002", publication=_manual_capture()
+    )
+    assert same["publications"][0]["id"] == first["publications"][0]["id"]
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "bug014-recapture-0003",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    raw_evidence={
+                        "extract_text": "A corrected extract.",
+                        "capture_method": "manual",
+                    }
+                )
+            ],
+        },
+    )
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert body["type"] == "journal_entry_already_recorded"
+    assert body["publication_id"] == first["publications"][0]["id"]
+    assert "already recorded" in body["detail"]
+    assert "only if the journal itself published one" in body["detail"]
+
+
+def test_bug_014_recapture_of_a_walled_entry_does_not_reveal_it(client: TestClient) -> None:
+    bootstrap, headers, open_docket, _ = _fixture(client, "WALLRECAP")
+    owner_id = bootstrap["membership"]["id"]
+    restricted = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={"title": "WALLRECAP2", "restricted": True, "particulars": _particulars("WR2")},
+    )
+    assert restricted.status_code == 201, restricted.text
+    _word_profile(client, headers, docket_id=open_docket["id"], word="NOMATCH", recipient=owner_id)
+    _word_profile(
+        client, headers, docket_id=restricted.json()["id"], word="ZQXV", recipient=owner_id
+    )
+    walled = _ingest(
+        client, headers=headers, key="bug014-wallrecap-0001", publication=_manual_capture()
+    )
+    assert len(walled["hits"]) == 1
+    admin = _colleague(
+        client, headers, email="recap-admin@asterlegal.in", role=MembershipRole.ADMIN
+    )
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=admin,
+        json={
+            "idempotency_key": "bug014-wallrecap-0002",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [_manual_capture(mark_text="ZQXV OTHER")],
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["publication_id"] is None
+
+
+def test_bug_014_correction_identity_error_names_the_application_number(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "IDENTITY")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    original = _ingest(
+        client, headers=headers, key="bug014-identity-0001", publication=_manual_capture()
+    )["publications"][0]
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "bug014-identity-0002",
+            "provider_key": "ipindia-journal-manual",
+            "publications": [
+                _manual_capture(
+                    application_number="BUG014-SOMETHING-ELSE",
+                    publication_kind="correction",
+                    supersedes_publication_id=original["id"],
+                    correction_reason="Corrected goods description.",
+                )
+            ],
+        },
+    )
+    assert response.status_code == 422, response.text
+    errors = response.json()["errors"]
+    assert [tuple(error["loc"]) for error in errors] == [
+        ("body", "publications", 0, "application_number")
+    ]
+    assert original["application_number"] in errors[0]["msg"]
+
+
+def test_bug_014_profile_jurisdictions_use_the_canonical_vocabulary() -> None:
+    def profile(jurisdictions: list[str]) -> IpWatchProfileCreateRequest:
+        return IpWatchProfileCreateRequest.model_validate(
+            {
+                "docket_id": "docket-1",
+                "name": "Jurisdiction check",
+                "word_terms": ["ZQXV"],
+                "jurisdictions": jurisdictions,
+                "frequency": "daily",
+                "recipient_membership_ids": ["member-1"],
+            }
+        )
+
+    assert profile(["India", "in", " uk ", "EU", "WIPO"]).jurisdictions == ["IN", "GB", "EM", "WO"]
+    with pytest.raises(ValidationError) as caught:
+        profile(["India", "Narnia"])
+    errors = caught.value.errors()
+    assert [error["loc"] for error in errors] == [("jurisdictions",)]
+    assert '"Narnia" is not a recognised jurisdiction' in errors[0]["msg"]
+
+
+def test_bug_014_legacy_free_text_jurisdiction_still_matches(client: TestClient) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "LEGACYJUR")
+    created = _word_profile(
+        client,
+        headers,
+        docket_id=docket["id"],
+        word="ZQXV",
+        recipient=bootstrap["membership"]["id"],
+    )
+    with get_session_factory()() as session:
+        stored = session.get(IpWatchProfile, created["id"])
+        assert stored is not None
+        stored.jurisdictions_json = ["INDIA"]
+        session.commit()
+    result = _ingest(
+        client, headers=headers, key="bug014-legacyjur-0001", publication=_manual_capture()
+    )
+    assert len(result["hits"]) == 1
+    assert result["hits"][0]["similarity_evidence_json"]["jurisdiction_match"] is True
+
+
+def test_bug_014_hit_snapshot_keeps_the_captured_evidence(client: TestClient) -> None:
+    bootstrap, headers, docket, application = _fixture(client, "SNAPSHOT")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    result = _ingest(
+        client,
+        headers=headers,
+        key="bug014-snapshot-0001",
+        publication=_publication(application_id=application["id"]),
+    )
+    hit = result["hits"][0]
+    assert hit["source_snapshot_json"]["raw_evidence"]["journal_heading"] == (
+        "Trade Marks Journal No. 2248"
+    )
+
+
+def test_bug_014_profile_with_only_a_jurisdiction_is_refused() -> None:
+    # A jurisdiction narrows a match but never makes one: such a profile was
+    # saved and silently never matched any journal entry.
+    with pytest.raises(ValidationError, match="at least one criterion") as caught:
+        IpWatchProfileCreateRequest.model_validate(
+            {
+                "docket_id": "docket-1",
+                "name": "Jurisdiction only",
+                "jurisdictions": ["IN"],
+                "frequency": "daily",
+                "recipient_membership_ids": ["member-1"],
+            }
+        )
+    assert caught.value.errors()[0]["loc"] == ()
+    with pytest.raises(ValidationError) as classes:
+        IpWatchProfileCreateRequest.model_validate(
+            {
+                "docket_id": "docket-1",
+                "name": "Bad class",
+                "class_numbers": [46],
+                "frequency": "daily",
+                "recipient_membership_ids": ["member-1"],
+            }
+        )
+    assert [error["loc"] for error in classes.value.errors()] == [("class_numbers",)]
