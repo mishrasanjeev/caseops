@@ -10,12 +10,15 @@
  * at its address, reads the response the page itself received, and
  * holds the card to it: the count is the server total, a partial list says so,
  * and an empty one says nothing is waiting. Calendar-copy reviews arise only
- * from a connected provider calendar that drifted, so neither run creates
- * them; nothing is created and nothing needs retiring.
+ * from a connected provider calendar that drifted, so these two journeys
+ * create nothing. Locally the server total is always 0, so only the empty
+ * branch runs here; the card's partial ("newest 100 of N") branch is proven
+ * by the web unit test and the API test, not by this browser journey.
  *
  * The same sweep made the docket control report read the whole visible
  * population instead of the first 100 dockets. The [local-only] journey proves
- * that past the first page: it imports 105 dockets through the portfolio
+ * that reader (the report preview, not the calendar-copy card) past the first page,
+ * and it does create records: it imports 105 dockets through the portfolio
  * import page (the product's own bulk path, three commit batches), then
  * generates the Deadline control report and holds it to the server's docket
  * total, with the docket the server sorts last present. It is

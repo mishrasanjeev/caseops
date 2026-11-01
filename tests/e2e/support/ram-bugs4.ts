@@ -143,6 +143,41 @@ function grantLocalFullIp(actor: TesterActor, slug: string) {
   expect(result.status, "Local full-IP fixture grant failed; process output omitted.").toBe(0);
 }
 
+/**
+ * Local only: one issued SaaS invoice on this runtime's fresh tenant, for the
+ * tenant billing page's Invoices table. Only the platform operator issues SaaS
+ * invoices (the operator console, behind its own sign-in and MFA), so there is
+ * no tenant-facing path to drive; the row mirrors what that path writes.
+ * Restricted to the exact tenant this runtime bootstrapped on a loopback database.
+ */
+export function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
+  if (!rt.local || !rt.credentials.slug.startsWith("bugs4-") || rt.actor.company.slug !== rt.credentials.slug) {
+    throw new Error("Local SaaS invoice fixture requires the exact freshly bootstrapped tenant.");
+  }
+  const { database, python } = localDatabase();
+  const script = [
+    "import datetime, os",
+    "from caseops_api.db.models import BillingManualInvoice, Company",
+    "from caseops_api.db.session import get_session_factory",
+    "with get_session_factory()() as session:",
+    "    company = session.get(Company, os.environ['BUGS4_COMPANY_ID'])",
+    "    assert company and company.slug == os.environ['BUGS4_SLUG'] and company.slug.startswith('bugs4-')",
+    "    session.add(BillingManualInvoice(company_id=company.id, invoice_number=os.environ['BUGS4_INVOICE'],",
+    "        amount_minor=1250000, tax_amount_minor=225000, currency='INR', status='issued',",
+    "        issued_on=datetime.date.today(), due_on=datetime.date.today() + datetime.timedelta(days=30),",
+    "        metadata_json={'reason': 'bugs4 local layout fixture'}))",
+    "    session.commit()",
+  ].join("\n");
+  const result = spawnSync(python, ["-c", script], {
+    cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+    env: {
+      ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, BUGS4_COMPANY_ID: rt.actor.company.id,
+      BUGS4_SLUG: rt.credentials.slug, BUGS4_INVOICE: invoiceNumber, PYTHONPATH: path.join(repoRoot, "apps/api/src"),
+    },
+  });
+  expect(result.status, "Local SaaS invoice fixture failed; process output omitted.").toBe(0);
+}
+
 async function configureLocalWorkspace(request: APIRequestContext, api: URL, headers: Record<string, string>, actor: TesterActor) {
   const configured = await json(await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
     expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
