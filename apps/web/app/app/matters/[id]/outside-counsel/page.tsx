@@ -548,16 +548,15 @@ function LogSpendDialog({
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [assignmentId, setAssignmentId] = useState(assignments[0]?.id ?? "");
+  // Never pre-chosen: with several counsel the first one is an arbitrary pick.
+  const [assignmentId, setAssignmentId] = useState("");
   const [description, setDescription] = useState("");
   const [invoiceReference, setInvoiceReference] = useState("");
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState("submitted");
   const [dueOn, setDueOn] = useState("");
 
-  const selected =
-    assignments.find((assignment) => assignment.id === assignmentId) ??
-    assignments[0];
+  const selected = assignments.find((assignment) => assignment.id === assignmentId);
   const amountMinor = amount ? Math.round(Number(amount) * 100) : 0;
   const approvedAmountMinor =
     status === "approved" || status === "paid" ? amountMinor : null;
@@ -566,14 +565,14 @@ function LogSpendDialog({
     mutationFn: () =>
       createOutsideCounselSpendRecord({
         matterId,
-        counselId: selected.counsel_id,
-        assignmentId: selected.id,
+        counselId: selected!.counsel_id,
+        assignmentId: selected!.id,
         invoiceReference: invoiceReference.trim() || null,
         description: description.trim(),
         amountMinor,
         approvedAmountMinor,
         status: status as "submitted" | "approved" | "disputed" | "paid",
-        currency: selected.currency,
+        currency: selected!.currency,
         dueOn: dueOn || null,
       }),
     onSuccess: async () => {
@@ -624,7 +623,7 @@ function LogSpendDialog({
           <div>
             <Label htmlFor="oc-spend-assignment">Counsel</Label>
             <Select value={assignmentId} onValueChange={setAssignmentId}>
-              <SelectTrigger id="oc-spend-assignment">
+              <SelectTrigger id="oc-spend-assignment" aria-describedby={selected ? undefined : "oc-spend-assignment-hint"}>
                 <SelectValue placeholder="Pick an assignment" />
               </SelectTrigger>
               <SelectContent>
@@ -635,6 +634,11 @@ function LogSpendDialog({
                 ))}
               </SelectContent>
             </Select>
+            {selected ? null : (
+              <p id="oc-spend-assignment-hint" className="mt-1 text-xs text-[var(--color-mute)]">
+                Choose the counsel whose invoice this is.
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="oc-spend-invoice">Invoice reference</Label>

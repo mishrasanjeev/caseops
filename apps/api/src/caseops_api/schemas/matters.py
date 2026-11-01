@@ -587,6 +587,11 @@ class MatterNextHearingSuggestionActionRequest(BaseModel):
 
 
 class MatterListFilters(BaseModel):
+    # One Matter by id, through the same tenant and ethical-wall filter as the
+    # list: a Matter the reader may not see is simply absent (no 404 and no
+    # access-denied audit row), so a screen can name a referenced Matter
+    # without recording a probe each time it renders.
+    id: str | None = Field(default=None, min_length=1, max_length=36)
     q: str | None = Field(default=None, max_length=255)
     client_name: str | None = Field(default=None, max_length=255)
     opposing_party: str | None = Field(default=None, max_length=255)

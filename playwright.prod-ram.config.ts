@@ -31,7 +31,7 @@ const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 // Batch 4 specs sign in as the reporting tester themselves and run the same
 // journeys locally (app config) and here against the exact serving release.
-const BATCH4_SPECS = /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/;
+const BATCH4_SPECS = /ram-2026-(?:10-31-[a-z0-9-]+|11-01-adj-pickers)\.spec\.ts$/;
 // Rule-governance pickers and proposals (BUG-003..006) can pass in production only
 // while governance is enabled, so they run as their own release-owned projects.
 const BATCH4_GOVERNANCE_SPEC = /ram-2026-10-31-governance-ui\.spec\.ts$/;

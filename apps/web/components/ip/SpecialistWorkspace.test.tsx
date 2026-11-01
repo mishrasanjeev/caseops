@@ -118,6 +118,25 @@ describe("Specialist IP typed intake", () => {
     })));
   });
 
+  it("B4-ADJ-22 disables empty evidence choices with the in-product path", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path.startsWith("/api/ip/documents?docket_id=")) return Promise.resolve({ items: [], total: 0 });
+      if (path === "/api/ip/document-taxonomy") return Promise.resolve({ taxonomy_version: "v1", entries: [{ key: "old", label: "Retired", is_active: false, version: 1 }] });
+      if (path.includes("/observations?")) return Promise.resolve({ observations: [], next_cursor: null });
+      return original(path, options);
+    });
+    mount(<SpecialistDetail recordId={id} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "evidence" }));
+    const type = await screen.findByLabelText("Document type");
+    await waitFor(() => expect(type).toHaveAccessibleDescription(/No document type is active/));
+    expect(type).toBeDisabled();
+    const sourceVersion = await screen.findByLabelText("Source version");
+    await waitFor(() => expect(sourceVersion).toBeDisabled());
+    expect(sourceVersion).toHaveAccessibleDescription("No retained source version on this record yet. Upload the evidence above first.");
+    expect(screen.getByRole("button", { name: "Record observation" })).toBeDisabled();
+  });
+
   it("preserves rejected edits and displays the failure", async () => {
     const original = mocks.api.getMockImplementation()!;
     mocks.api.mockImplementation((path, options) => path.endsWith("/corrections") ? Promise.reject(new Error("Source access changed")) : original(path, options));

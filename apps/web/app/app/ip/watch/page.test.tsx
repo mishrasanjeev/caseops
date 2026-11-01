@@ -697,4 +697,23 @@ describe("IP journal watch page", () => {
     expect(toastError).not.toHaveBeenCalled();
     await waitFor(() => expect(page.getByRole("button", { name: "Create opposition" })).toBeEnabled());
   });
+
+  it("B4-ADJ-02 starts an opposition handoff with no linked application when the journal entry names none", async () => {
+    const user = userEvent.setup();
+    const relevant = { ...HIT, source_status: "available", disposition: "relevant", version: 3 };
+    workspaceMock.mockResolvedValue({
+      ...WORKSPACE, hits: [relevant],
+      publications: [{ ...PUBLICATION, application_id: null, source_status: "available" }],
+    });
+    createHandoffMock.mockResolvedValue({ id: "handoff-1", hit_id: HIT.id, handoff_kind: "opposition", status: "completed", target_type: "ip_proceeding" });
+    const page = renderWatchPage();
+    await chooseScopeDocket(user, page);
+    const application = await page.findByRole<HTMLSelectElement>("combobox", { name: "Application" });
+    // The docket's application is offered, never chosen for the lawyer.
+    expect(Array.from(application.options, (option) => option.value)).toEqual(["", "application-1"]);
+    expect(application).toHaveValue("");
+    await user.click(page.getByRole("button", { name: "Create opposition" }));
+    await waitFor(() => expect(createHandoffMock).toHaveBeenCalledTimes(1));
+    expect(createHandoffMock.mock.calls[0][0]).toMatchObject({ handoffKind: "opposition", applicationId: null });
+  });
 });

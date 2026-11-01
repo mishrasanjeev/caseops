@@ -349,6 +349,11 @@ describe("AdminMatterBillingPage", () => {
     fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
     render(withClient(<AdminMatterBillingPage />));
     await screen.findByText("No billing profiles");
+    // B4-ADJ-22 sibling: no profile means no enabled, empty Profile select.
+    const rateProfile = screen.getByLabelText<HTMLSelectElement>("Profile");
+    expect(rateProfile).toBeDisabled();
+    expect(rateProfile).toHaveAccessibleDescription(/Save the default profile above first/);
+    expect(screen.getByRole("button", { name: /Add rate/i })).toBeDisabled();
     expect(screen.getByLabelText("Profile name")).toHaveValue("Default");
     expect(screen.getByLabelText("Firm legal name")).toHaveValue("");
     expect(screen.getByLabelText("Invoice prefix")).toHaveValue("INV");

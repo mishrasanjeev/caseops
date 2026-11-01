@@ -571,7 +571,18 @@ describe("IP registry reconciliation page", () => {
     render(<IpRegistryPage />, { wrapper: wrapper() });
 
     expect(await screen.findByText(/court updates are never copied/i)).toBeVisible();
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "IP proceeding" })).toHaveValue("proceeding-1"));
+    // B4-ADJ-21: neither the proceeding nor the tracked case is chosen for the user.
+    const proceeding = await screen.findByRole<HTMLSelectElement>("combobox", { name: "IP proceeding" });
+    const trackedCase = screen.getByRole<HTMLSelectElement>("combobox", { name: "Matter tracked case" });
+    expect(proceeding).toHaveValue("");
+    expect(trackedCase).toHaveValue("");
+    expect(trackedCase).toBeDisabled();
+    expect(screen.getByText("Choose the IP proceeding first.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add reference" })).toBeDisabled();
+    await user.selectOptions(proceeding, "proceeding-1");
+    expect(trackedCase).toBeEnabled();
+    expect(trackedCase).toHaveValue("");
+    await user.selectOptions(trackedCase, "tracked-1");
     await user.type(screen.getByLabelText("Evidence reference"), "matter-bookmark:bookmark-1");
     await user.click(screen.getByRole("button", { name: "Add reference" }));
 
@@ -584,5 +595,23 @@ describe("IP registry reconciliation page", () => {
         evidenceReference: "matter-bookmark:bookmark-1",
       }),
     );
+  });
+
+  it("B4-ADJ-21 lists an already-referenced tracked case as unavailable for that proceeding", async () => {
+    const user = userEvent.setup();
+    referencesMock.mockResolvedValue([{
+      id: "reference-1", version: 1, proceeding_id: "proceeding-1", tracked_case_id: "tracked-1",
+      case_title: "Aster LLP v Registrar of Trade Marks", cnr_number: null, case_number: null,
+      court_name: null, link_status: "active", update_count: 0,
+    }]);
+    window.history.replaceState(null, "", `/app/ip/registry?docket=${DOCKET.id}`);
+    render(<IpRegistryPage />, { wrapper: wrapper() });
+
+    await user.selectOptions(await screen.findByRole("combobox", { name: "IP proceeding" }), "proceeding-1");
+    const trackedCase = screen.getByRole<HTMLSelectElement>("combobox", { name: "Matter tracked case" });
+    expect(trackedCase).toBeDisabled();
+    expect(Array.from(trackedCase.options).find((option) => option.value === "tracked-1")?.disabled).toBe(true);
+    expect(screen.getByText(/already referenced for this proceeding/i, { selector: "p" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add reference" })).toBeDisabled();
   });
 });

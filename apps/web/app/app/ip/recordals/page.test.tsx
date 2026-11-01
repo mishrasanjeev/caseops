@@ -343,6 +343,19 @@ describe("post-registration workspace", () => {
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
+  it("B4-ADJ-22 disables the acceptance snapshot choice when no confirmed snapshot exists and names where to record one", async () => {
+    const user = userEvent.setup();
+    mocks.workspace.mockResolvedValue({ ...WORKSPACE, registry_workspaces: [{ ...REGISTRY, snapshots: [] }] });
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    await screen.findByRole("heading", { name: "Record transaction" });
+    await user.selectOptions(screen.getByLabelText("Transaction"), "accepted");
+    const snapshot = screen.getByLabelText("Confirmed Registry snapshot");
+    expect(snapshot).toBeDisabled();
+    expect(snapshot).toHaveAccessibleDescription(/No confirmed Registry snapshot for this right yet/);
+    expect(screen.getByRole("link", { name: "Registry reconciliation" })).toHaveAttribute("href", "/app/ip/registry");
+    expect(screen.getByRole("button", { name: "Record accepted" })).toBeDisabled();
+  });
+
   it("renders the selected recordal before corpus-wide catalogs resolve", async () => {
     const user = userEvent.setup();
     const pendingCatalog = new Promise<never>(() => undefined);

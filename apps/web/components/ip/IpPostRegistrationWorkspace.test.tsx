@@ -275,6 +275,14 @@ describe("IpPostRegistrationWorkspace", () => {
     expect(actionMock).not.toHaveBeenCalled();
   });
 
+  it("B4-ADJ-22 disables the parallel proceeding select with a reason when no other proceeding exists", async () => {
+    render(withClient(<IpPostRegistrationWorkspace docket={docket} canWrite canReview currentMembershipId="membership-1" />));
+    fireEvent.change(await screen.findByLabelText("Action"), { target: { value: "parallel_proceeding_link" } });
+    const parallel = screen.getByRole<HTMLSelectElement>("combobox", { name: "Parallel proceeding" });
+    expect(parallel).toBeDisabled();
+    expect(parallel).toHaveAccessibleDescription(/no other proceeding to link/);
+  });
+
   it("saves the typed rule map and immutable profile fence", async () => {
     render(
       withClient(

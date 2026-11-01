@@ -204,6 +204,42 @@ describe("IpReportsPage", () => {
     expect(within(result).getByText("aaaaaaaaaaaa")).toBeInTheDocument();
   });
 
+  it("B4-ADJ-02 never shows internal id columns or stored codes from a server-shaped portfolio row", async () => {
+    const user = userEvent.setup();
+    // IpPortfolioRow.model_dump: the first four keys are internal ids.
+    previewMock.mockResolvedValue({ ...REPORT, report_kind: "portfolio_register", rows: [{
+      application_id: "1f0e3c5a-9b8d-4c7e-a6f5-4e3d2c1b0a99",
+      docket_id: "0b9c4c1e-6f1d-4a3e-9d55-2f1f6c1e7a10",
+      matter_id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+      asset_id: "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+      asset_kind: "word_mark",
+      asset_title: "ASTER",
+      asset_jurisdiction: "IN",
+      docket_title: "ASTER DEVICE",
+      docket_status: "pending_examination",
+      primary_identifier: "TM-421",
+      application_numbers: ["TM / 2026 / 00421"],
+      opposition_numbers: [],
+      nice_classes: [9],
+      goods_services: ["Downloadable legal software"],
+      responsible_membership_id: "c0ffee00-1234-4abc-9def-0123456789ab",
+      team_id: "deadbeef-1234-4abc-9def-0123456789ab",
+      filing_phase: "filing_in_progress",
+    }] });
+    render(withClient(<IpReportsPage />));
+    await user.selectOptions(await screen.findByLabelText("Report"), "portfolio_register");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    const result = await screen.findByTestId("ip-report-result");
+    const headers = within(result).getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toContain("Docket title");
+    expect(headers.some((header) => /id/i.test(header ?? ""))).toBe(false);
+    const table = within(result).getByRole("table");
+    expect(table.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(within(table).getByText("Pending examination")).toBeInTheDocument();
+    expect(within(table).getByText("Word mark")).toBeInTheDocument();
+    expect(table.textContent).not.toMatch(/[a-z]+(?:_[a-z]+)+/);
+  });
+
   it("uses only relevant renewal filters", async () => {
     const user = userEvent.setup();
     previewMock.mockResolvedValue({ ...REPORT, report_kind: "renewal", rows: [] });

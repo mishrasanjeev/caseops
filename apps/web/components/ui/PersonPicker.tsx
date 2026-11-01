@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { listCompanyUsers, type CompanyUserRecord } from "@/lib/api/endpoints";
 import { cn } from "@/lib/cn";
@@ -144,9 +145,14 @@ export function PersonPicker({
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
       {companyUsers.isError ? (
-        <p className="text-sm text-[var(--color-mute)]">
-          The staff list could not be loaded, so a new colleague cannot be chosen here yet.
-        </p>
+        <div role="alert" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]">
+          <span className="min-w-0 break-words">
+            The staff list could not be loaded, so a new colleague cannot be chosen here yet.
+          </span>
+          <Button type="button" size="sm" variant="outline" disabled={companyUsers.isFetching} onClick={() => companyUsers.refetch()}>
+            Try again
+          </Button>
+        </div>
       ) : null}
       {showFilter ? (
         <Input
