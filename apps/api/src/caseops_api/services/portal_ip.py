@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -37,6 +37,7 @@ from caseops_api.db.models import (
 from caseops_api.schemas.ip_reports import IpReportPreviewRequest
 from caseops_api.schemas.portal_ip import (
     PortalDocumentPublicationCreate,
+    PortalGrantPublicationBlock,
     PortalGrantRevokeRequest,
     PortalInstructionAcknowledgeRequest,
     PortalInstructionListResponse,
@@ -63,7 +64,10 @@ from caseops_api.services.ip_domain_policy import (
     general_ip_disclosure_filter,
 )
 from caseops_api.services.ip_reports import preview_ip_report
-from caseops_api.services.matter_access import can_access_ip_docket
+from caseops_api.services.matter_access import (
+    can_access_ip_docket,
+    visible_ip_dockets_filter,
+)
 from caseops_api.services.notification_delivery import (
     cancel_pending_notification_intents,
     enqueue_notification_delivery_intent,
@@ -140,6 +144,53 @@ def _grant_is_active(grant: MatterPortalGrant, *, now: datetime | None = None) -
     return publication_grant_is_active(grant, now=now or _now())
 
 
+def _visible_docket_ids(
+    session: Session, *, context: SessionContext, docket_ids: set[str]
+) -> set[str]:
+    if not docket_ids:
+        return set()
+    return set(
+        session.scalars(
+            select(IpDocketRecord.id).where(
+                IpDocketRecord.id.in_(docket_ids),
+                IpDocketRecord.company_id == context.company.id,
+                visible_ip_dockets_filter(session, context=context),
+            )
+        )
+    )
+
+
+def _grant_publication_block(
+    grant: MatterPortalGrant,
+    *,
+    user: PortalUser,
+    docket: IpDocketRecord,
+    visible_docket_ids: set[str],
+    now: datetime,
+) -> PortalGrantPublicationBlock | None:
+    """The single rule for "the firm can publish to this grant now".
+
+    The admin grant list reports it, and every publication path (reports,
+    documents, the shareable-documents list) refuses a grant it blocks, so
+    the client portal page never offers a grant that publishing rejects.
+    """
+    if grant.revoked_at is not None:
+        return "revoked"
+    if not publication_grant_is_active(grant, now=now):
+        return "expired"
+    if user.role != "client" or not user.is_active:
+        return "client_inactive"
+    if (
+        not docket.is_active
+        or docket.archived_by_matter_disposal
+        or not general_ip_disclosure_allowed(docket)
+    ):
+        return "docket_closed"
+    if docket.id not in visible_docket_ids:
+        return "docket_not_visible"
+    return None
+
+
 def _active_grant_statement(*, portal_user_id: str, docket_id: str | None = None):
     now = _now()
     statement = select(MatterPortalGrant).where(
@@ -193,8 +244,15 @@ def list_admin_ip_grants(session: Session, *, context: SessionContext) -> Portal
         .limit(500)
     ).all()
     now = _now()
-    return PortalIpGrantListResponse(
-        grants=[
+    visible = _visible_docket_ids(
+        session, context=context, docket_ids={docket.id for _grant, _user, docket in rows}
+    )
+    records: list[PortalIpGrantRecord] = []
+    for grant, user, docket in rows:
+        block = _grant_publication_block(
+            grant, user=user, docket=docket, visible_docket_ids=visible, now=now
+        )
+        records.append(
             PortalIpGrantRecord(
                 id=grant.id,
                 portal_user_id=user.id,
@@ -208,10 +266,11 @@ def list_admin_ip_grants(session: Session, *, context: SessionContext) -> Portal
                 revoked_at=grant.revoked_at,
                 row_version=grant.row_version,
                 active=_grant_is_active(grant, now=now),
+                publishable=block is None,
+                publication_blocked_reason=block,
             )
-            for grant, user, docket in rows
-        ]
-    )
+        )
+    return PortalIpGrantListResponse(grants=records)
 
 
 def revoke_ip_grant(
@@ -294,6 +353,8 @@ def revoke_ip_grant(
         revoked_at=grant.revoked_at,
         row_version=grant.row_version,
         active=False,
+        publishable=False,
+        publication_blocked_reason="revoked",
     )
 
 
@@ -555,23 +616,24 @@ def _publication_grants(
             MatterPortalGrant.id.in_(grant_ids),
             MatterPortalGrant.company_id == context.company.id,
             MatterPortalGrant.portal_user_id == user.id,
-            MatterPortalGrant.revoked_at.is_(None),
-            or_(
-                MatterPortalGrant.expires_at.is_(None),
-                MatterPortalGrant.expires_at > _now(),
-            ),
             IpDocketRecord.company_id == context.company.id,
-            general_ip_disclosure_filter(),
-            IpDocketRecord.is_active.is_(True),
-            IpDocketRecord.archived_by_matter_disposal.is_(False),
         )
         .order_by(MatterPortalGrant.id)
     ).all()
     if len(rows) != len(grant_ids):
         raise HTTPException(status_code=404, detail="Active IP portal grant not found.")
-    for _grant, docket in rows:
-        if not can_access_ip_docket(session, context=context, docket=docket):
+    now = _now()
+    visible = _visible_docket_ids(
+        session, context=context, docket_ids={docket.id for _grant, docket in rows}
+    )
+    for grant, docket in rows:
+        block = _grant_publication_block(
+            grant, user=user, docket=docket, visible_docket_ids=visible, now=now
+        )
+        if block == "docket_not_visible":
             raise HTTPException(status_code=404, detail="IP record not found.")
+        if block is not None:
+            raise HTTPException(status_code=404, detail="Active IP portal grant not found.")
     return user, list(rows)
 
 
@@ -931,10 +993,12 @@ def list_shareable_portal_documents(
             IpDocumentTaxonomyEntry.company_id == company_id,
             IpDocument.id.in_(linked_document_ids),
             IpDocument.is_privileged.is_(False),
+            IpDocument.confidentiality == "internal",
+            func.lower(IpDocumentTaxonomyEntry.key).in_(scope.document_categories),
             IpDocumentVersion.state.in_(_SHAREABLE_VERSION_STATES),
         )
         .order_by(IpDocument.title, IpDocument.id, IpDocumentVersion.version.desc())
-        .limit(200)
+        .limit(500)
     ).all()
     return PortalShareableDocumentListResponse(
         grant_id=grant.id,

@@ -45,6 +45,18 @@ class PortalIpScope(BaseModel):
         return list(dict.fromkeys(cleaned))
 
 
+# Why the firm cannot publish to a grant right now. "docket_closed" covers a
+# closed, archived or non-disclosable docket; "docket_not_visible" is an
+# ethical wall or restricted docket the current user cannot open.
+PortalGrantPublicationBlock = Literal[
+    "revoked",
+    "expired",
+    "client_inactive",
+    "docket_closed",
+    "docket_not_visible",
+]
+
+
 class PortalIpGrantRecord(BaseModel):
     id: str
     portal_user_id: str
@@ -58,6 +70,8 @@ class PortalIpGrantRecord(BaseModel):
     revoked_at: datetime | None
     row_version: int
     active: bool
+    publishable: bool = False
+    publication_blocked_reason: PortalGrantPublicationBlock | None = None
 
 
 class PortalIpGrantListResponse(BaseModel):
