@@ -701,6 +701,20 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
+  it("B4-ADJ-11 labels the docket record status so an imported filed mark never reads as Draft", async () => {
+    window.history.replaceState(null, "", "/app/ip");
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [
+        { ...activeDocket(), status: "draft" },
+        { ...activeDocket(), id: "ip-2", title: "BIRCH", primary_identifier: "TM-2" },
+      ],
+      count: 2,
+    });
+    render(withClient(<IpDocketPage />));
+    expect(await screen.findByTestId("ip-docket-ip-1")).toHaveTextContent("TM-1 · Record: particulars draft · v1");
+    expect(screen.getByTestId("ip-docket-ip-2")).toHaveTextContent("TM-2 · Record: active · v1");
+  });
+
   it("BUG-012 links a national trademark docket to its registry reconciliation", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1");
 

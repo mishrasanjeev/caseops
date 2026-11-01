@@ -111,6 +111,7 @@ import {
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 import { deadlineExceptionLabel } from "@/lib/ip/governance";
+import { recordStatusLabel } from "@/lib/ip/portfolio-status";
 import { parseReminderOffsetsHours, REMINDER_OFFSET_FORMAT_HINT } from "@/lib/reminder-offsets";
 import { useSession } from "@/lib/use-session";
 
@@ -460,7 +461,7 @@ export default function IpDocketPage() {
                 >
                   <span className="block truncate font-semibold">{row.title}</span>
                   <span className="mt-1 block text-xs text-[var(--color-mute)]">
-                    {row.primary_identifier ?? "Unfiled"} · {row.status} · v{row.current_version}
+                    {row.primary_identifier ?? "Unfiled"} · {recordStatusLabel(row.status)} · v{row.current_version}
                   </span>
                 </button>
               ))}

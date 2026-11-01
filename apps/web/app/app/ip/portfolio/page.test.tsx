@@ -204,15 +204,47 @@ describe("IpPortfolioPage", () => {
     expect(screen.getByText("Unconfirmed deadlines")).toBeInTheDocument();
   });
 
-  it("B4-ADJ-11 shows an imported registered mark's phase and unverified source status, not just Draft", async () => {
+  it("B4-ADJ-11 leads an imported registered mark's Status with its source wording, never Draft", async () => {
     fetchPortfolioMock.mockResolvedValue({
       ...RESPONSE,
-      rows: [{ ...RESPONSE.rows[0], docket_status: "draft", filing_phase: "filed", source_declared_status: "registered" }],
+      rows: [{ ...RESPONSE.rows[0], docket_status: "draft", filing_phase: "filed",
+        source_declared_status: "registered", source_status_text: "Registered" }],
     });
     render(withClient(<IpPortfolioPage />));
-    const declared = await screen.findAllByTestId("ip-portfolio-declared-status-docket-1");
-    expect(declared[0]).toHaveTextContent("Source status: registered (unverified)");
-    expect(screen.getAllByText("Filing phase: filed").length).toBeGreaterThan(0);
+    // The table (desktop) and the cards (phone) both render the Status column.
+    const cells = await screen.findAllByTestId("ip-portfolio-status-docket-1");
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      const badge = cell.firstElementChild as HTMLElement;
+      expect(badge).toHaveTextContent(/^Registered \(source, unverified\)$/);
+      expect(cell).toHaveTextContent("Filing phase: Filed");
+      expect(cell).toHaveTextContent("Record: particulars draft");
+      expect(Array.from(cell.children).map((child) => child.textContent)).not.toContain("draft");
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => expect(previewExportMock).toHaveBeenCalledWith(expect.objectContaining({
+      columns: expect.arrayContaining(["status", "record_status"]),
+    })));
+  });
+
+  it("B4-ADJ-11 shows unrecognised source wording and keeps a plain phase otherwise", async () => {
+    fetchPortfolioMock.mockResolvedValue({
+      ...RESPONSE,
+      rows: [
+        { ...RESPONSE.rows[0], docket_status: "draft", filing_phase: "draft", source_declared_status: null,
+          source_status_text: "Registered (Not In Use)" },
+        { ...RESPONSE.rows[0], docket_id: "docket-2", application_id: "application-2", docket_status: "ready",
+          filing_phase: "filed", source_declared_status: "filed", source_status_text: "Filed" },
+      ],
+    });
+    render(withClient(<IpPortfolioPage />));
+    const [unrecognised] = await screen.findAllByTestId("ip-portfolio-status-docket-1");
+    expect(unrecognised.firstElementChild).toHaveTextContent(/^Registered \(Not In Use\) \(source, unverified\)$/);
+    expect(unrecognised).toHaveTextContent("Filing phase: Draft");
+    const [plain] = screen.getAllByTestId("ip-portfolio-status-docket-2");
+    expect(plain.firstElementChild).toHaveTextContent(/^Filed$/);
+    expect(plain).toHaveTextContent("Record: particulars ready");
+    expect(plain).not.toHaveTextContent("unverified");
   });
 
   it("IP15-007 exposes application and renewal dates as default portfolio columns", async () => {

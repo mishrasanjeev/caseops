@@ -94,8 +94,8 @@ function validationMessage(issue: { field?: string; code?: string }, row: IpImpo
     case "blank_row":
       message = "Blank source row; excluded from import.";
       break;
-    case "unsupported_status":
-      message = `"${textValue(row, "source_status")}" is not a recognised trademark status. Use, for example, Draft, Pre-filing, Filed, Objected, Accepted, Advertised, Opposed, Registered, Refused, Abandoned or Withdrawn, or leave the cell blank.`;
+    case "unrecognised_status":
+      message = `"${textValue(row, "source_status")}" is not a status this import recognises, so the row imports in the Draft phase. The portfolio shows "${textValue(row, "source_status")}" as its unverified source status; record the real phase on the record once the registry confirms it.`;
       break;
     case "required_for_source_status":
       message = `Required: a "${textValue(row, "source_status")}" mark has been filed, so the row needs its application number.`;

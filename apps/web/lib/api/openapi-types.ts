@@ -32258,6 +32258,8 @@ export interface components {
              * @enum {string}
              */
             source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Status Text */
+            source_status_text?: string | null;
             /** Team Id */
             team_id?: string | null;
             /** Team Name */
