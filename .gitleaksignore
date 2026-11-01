@@ -186,3 +186,24 @@ e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acce
 e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:32
 438c79f776373ff31eba881e933ab07b9900231f:scripts/mobile/tooling.test.mjs:generic-api-key:528
 # End 2026-10-31 review.
+
+# 2026-11-01 scheduled all-refs:
+# Exact deterministic Matter, calendar and idempotency fixture labels from
+# run41301909540, independently bound to immutable source/span hashes in
+# docs/security/history-finding-review-2026-11-01.json. No credential values,
+# current-path/rule exclusions or future origins are covered by this section.
+09323eb1df3fd089469ffd33e55e8e689ea4e94c:apps/api/tests/ip_rule_governance_support.py:generic-api-key:150
+c874ae9838d2960bc7504e40ecde0343e6abe452:apps/api/tests/test_ip_deadline_jurisdiction_20261101.py:generic-api-key:210
+448140dbee7b177bf4d7bd3a12f1ad2d910afbb7:tests/e2e/ram-2026-11-01-adj-access.spec.ts:generic-api-key:405
+448140dbee7b177bf4d7bd3a12f1ad2d910afbb7:tests/e2e/ram-2026-11-01-adj-access.spec.ts:generic-api-key:489
+b3243adb70f390ba37772c1f879b6e8541630b86:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1202
+b3243adb70f390ba37772c1f879b6e8541630b86:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1225
+ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1451
+ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1541
+ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1551
+ea279801be82bb5460173beed2ff47b2b87aeb79:apps/api/tests/test_ip_journal_watch.py:generic-api-key:1630
+8cb55e637c850d8005a9606524c583e48b74d13d:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:392
+b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:539
+b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:646
+440278e2b86d5b994da960e44c30f5b35da5fcb7:tests/e2e/support/ram-bugs4.ts:generic-api-key:142
+# End 2026-11-01 review.

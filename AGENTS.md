@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A scheduled all-refs secret scan can fail on later unmerged commits even
+  when the serving tree and release PR range passed. Reconcile the actual
+  selected DAG and every immutable origin/span before classifying it. Review
+  deterministic fixture labels narrowly; never exclude a branch, test folder
+  or rule to obtain green. Prove an unmerged secret still blocks the gate.
+
 - A parameterized LIMIT 1 does not tell a generic plan that only one row will
   execute. A composite range plus partial-index incremental sort can read the
   entire tenant per admitted key. Put every exact unique-key equality inside

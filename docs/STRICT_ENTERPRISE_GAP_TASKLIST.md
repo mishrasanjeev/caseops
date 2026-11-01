@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## November 1 Scheduled All-Refs Findings: Release-Gated
+
+Partially implemented/NO-GO for the new candidate. Security41301909540 failed
+27 unreviewed history instances from14 immutable deterministic fixture origins;
+the serving02d0 tree passed. Exact original bytes, classification and14-entry
+policy binding are documented in security/history-finding-review-2026-11-01.md.
+New native cases preserve rejection on unmerged refs; no all-refs/path/rule
+fence is weakened. Require complete Docker/current CI/main/guarded deploy/live
+QA and truthful original Excel publication. Existing external holds remain.
+
 ## October 31 All-Refs Security Review: Release-Gated
 
 Partially implemented/NO-GO. Main's actual scheduled secret-scan failure was

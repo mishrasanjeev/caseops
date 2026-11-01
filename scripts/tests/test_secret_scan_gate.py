@@ -864,6 +864,42 @@ class RealGitleaksTests(GitFixture):
             self.assertTrue(boundary["cleanup_confirmed"])
             self.assertEqual(boundary["image"], scan.GITLEAKS_IMAGE)
 
+    def test_real_schedule_rejects_secret_on_unmerged_side_ref(self):
+        self.git("switch", "-c", "unmerged-unreviewed")
+        self.write("side.txt", self.canary())
+        introduced = self.commit("unmerged offline canary")
+        self.git("switch", "main")
+        self.write("record.txt", "clean candidate change\n")
+        head = self.commit("clean main")
+        with self.assertRaises(scan.ScanError):
+            self.run_scan(head, {}, "schedule")
+        self.assert_redacted_failure("history-initial.sarif")
+        inventory = json.loads((self.root / "evidence/inventory.json").read_text())
+        self.assertEqual(inventory["history_selection"], "--all")
+        self.assertIn(introduced, inventory["commits"])
+        self.assertNotIn(introduced, self.git("rev-list", head).splitlines())
+        receipt = json.loads((self.root / "evidence/tree-receipt.json").read_text())
+        self.assertEqual(receipt["exit_code"], 0)
+
+    def test_real_schedule_reviews_only_exact_origin_on_unmerged_side_ref(self):
+        self.git("switch", "-c", "unmerged-reviewed")
+        self.write("side.txt", self.canary())
+        origin = self.commit("reviewed offline source")
+        self.git("switch", "main")
+        self.write(
+            ".gitleaksignore",
+            f"{origin}:side.txt:stripe-access-token:1\n"
+            f"{origin}:side.txt:generic-api-key:1\n",
+        )
+        head = self.commit("exact origin review without merging side")
+        result = self.run_scan(head, {}, "schedule")
+        self.assertNotIn(origin, self.git("rev-list", head).splitlines())
+        self.assertGreater(result["boundaries"]["history"]["existing_policy_translations"], 0)
+        self.assertEqual(result["boundaries"]["history"]["exit_code"], 0)
+        proof = json.loads((self.root / "evidence/history-policy-provenance.json").read_text())
+        self.assertTrue(all(row["accepted_existing_policy"] for row in proof["findings"]))
+        self.assertTrue(all(row["existing_fingerprint"].startswith(origin + ":") for row in proof["findings"]))
+
     def assert_redacted_failure(self, expected_report):
         self.assert_incomplete()
         report = self.root / "evidence" / expected_report
@@ -1703,6 +1739,86 @@ class ReviewedHistoryPolicyTests(unittest.TestCase):
         with patch.object(scan, "git", side_effect=scan.ScanError("Missing selected blob")):
             with self.assertRaisesRegex(scan.ScanError, "Missing selected blob"):
                 self.assert_reachable_spans(rows, selected)
+
+
+class NovemberReviewedHistoryPolicyTests(unittest.TestCase):
+    def rows(self):
+        review = json.loads(
+            (ROOT / "docs/security/history-finding-review-2026-11-01.json").read_text()
+        )
+        self.assertEqual(review["source_run"], 41301909540)
+        self.assertEqual(review["reported_instances"], 27)
+        rows = review["findings"]
+        self.assertEqual(len(rows), 14)
+        self.assertEqual(len({row["fingerprint"] for row in rows}), 14)
+        return rows
+
+    def test_november1_review_has_only_fourteen_exact_policy_entries(self):
+        rows = self.rows()
+        policy = (ROOT / ".gitleaksignore").read_text()
+        start, end = "# 2026-11-01 scheduled all-refs:", "# End 2026-11-01 review."
+        self.assertEqual(policy.count(start), 1)
+        self.assertEqual(policy.count(end), 1)
+        section = policy.split(start, 1)[1].split(end, 1)[0]
+        actual = {line for line in section.splitlines() if line and not line.startswith("#")}
+        self.assertEqual(actual, {row["fingerprint"] for row in rows})
+        for row in rows:
+            self.assertRegex(row["fingerprint"], r"^[0-9a-f]{40}:(?:apps/api/tests|tests/e2e)/[A-Za-z0-9_./-]+:generic-api-key:[1-9][0-9]*$")
+            self.assertNotIn("mobile", row["fingerprint"])
+            for key in ("blob_sha256", "span_sha256"):
+                self.assertRegex(row[key], r"^[0-9a-f]{64}$")
+        kinds = [row["kind"] for row in rows]
+        self.assertEqual({k: kinds.count(k) for k in set(kinds)}, {
+            "calendar_fixture_key": 1, "calendar_fixture_call": 2,
+            "idempotency_fixture_key": 6, "matter_fixture_code": 4,
+            "calendar_policy_fixture_key": 1,
+        })
+
+    def check_selected(self, selected):
+        checked, not_selected = [], []
+        shapes = {
+            "calendar_fixture_key": r'key="ip-india-[0-9-]+precondition",',
+            "calendar_fixture_call": r'const delhi = await activeCalendar\(rt, request, approver.api, "b4-adj[0-9-]+delhi", stamp\("Delhi registry calendar"\)\);',
+            "idempotency_fixture_key": r'(?:"idempotency_key": "bug[0-9a-z-]+",|IpJournalIngestionRun.idempotency_key == "bug[0-9a-z-]+"|client, headers=headers, key="bug[0-9a-z-]+", publication=_manual_capture\(\))',
+            "matter_fixture_code": r'matter = _(mk|create)_matter\(client, (owner_token|token), "(?:IP|BUG)[A-Z0-9-]+"\)',
+            "calendar_policy_fixture_key": r'timezone: "Asia/Kolkata", holiday_calendar_key: "IN-CENTRAL-[0-9]+", working_day_policy: \{ working_weekdays: \[0, 1, 2, 3, 4\] \},',
+        }
+        for row in self.rows():
+            commit, path, rule, number = row["fingerprint"].split(":")
+            if commit not in selected:
+                not_selected.append(row["fingerprint"])
+                continue
+            blob = scan.git(ROOT, "show", commit + ":" + path)
+            with self.subTest(fingerprint=row["fingerprint"]):
+                self.assertLess(len(blob), 200_000)
+                self.assertEqual(hashlib.sha256(blob).hexdigest(), row["blob_sha256"])
+                line = blob.splitlines(keepends=True)[int(number) - 1]
+                self.assertEqual(hashlib.sha256(line).hexdigest(), row["span_sha256"])
+                self.assertIsNotNone(re.fullmatch(shapes[row["kind"]], line.decode().strip()))
+                checked.append(row["fingerprint"])
+        return {"checked": checked, "not_selected": not_selected}
+
+    def test_november1_selected_origins_match_immutable_spans_and_fixture_use(self):
+        selected = set(scan.git(ROOT, "rev-list", "--all").decode().splitlines())
+        self.assertTrue(selected)
+        result = self.check_selected(selected)
+        self.assertEqual(len(result["checked"]) + len(result["not_selected"]), 14)
+        print("CASEOPS_NOVEMBER_HISTORY_REVIEW " + json.dumps({
+            "checked": len(result["checked"]), "not_selected": len(result["not_selected"]),
+            "scope": "current all-refs; not-selected is not source verification",
+        }), flush=True)
+
+    def test_november1_unselected_origins_are_not_false_source_verification(self):
+        with patch.object(scan, "git", side_effect=AssertionError("Unselected blob lookup")):
+            result = self.check_selected(set())
+        self.assertEqual(result["checked"], [])
+        self.assertEqual(len(result["not_selected"]), 14)
+
+    def test_november1_missing_selected_blob_stays_blocking(self):
+        selected = {self.rows()[0]["fingerprint"].split(":")[0]}
+        with patch.object(scan, "git", side_effect=scan.ScanError("Missing selected blob")):
+            with self.assertRaisesRegex(scan.ScanError, "Missing selected blob"):
+                self.check_selected(selected)
 
 
 if __name__ == "__main__":
