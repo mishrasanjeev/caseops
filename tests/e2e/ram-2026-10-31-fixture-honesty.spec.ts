@@ -4,9 +4,11 @@
  * Earlier document journeys loaded the taxonomy through the admin seed
  * endpoint before opening the UI, so they passed on tenants where Ram saw an
  * empty Classification select. These journeys sign in as the tester and fail
- * if anything (fixture or page) calls that endpoint: the options must come
- * from product provisioning (workspace configuration/enablement locally, the
- * release backfill on test-legal).
+ * if the page calls that endpoint; fixtures (prepareTester and every e2e
+ * helper) are kept off it by the static guard in
+ * apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts. The options must
+ * come from product provisioning (workspace configuration locally, proven by
+ * the provisioning audit event; the release backfill on test-legal).
  *
  * Production runs only read and preview (naming-preview is side-effect free),
  * so no record is retained. The upload half is [local-only]: it links to a
@@ -22,16 +24,37 @@ import {
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
 
-const SEED_PATH = "/api/ip/document-taxonomy/seed";
+// Built from segments so the static seed guard covers this file as well.
+const TAXONOMY_PATH = "/api/ip/document-taxonomy";
 const DOCUMENT_FILE = { name: "classification-check.txt", mimeType: "text/plain" };
 
-/** Records every page request to the admin seed endpoint for the whole test. */
+/**
+ * Records every request the page issues to the admin seed endpoint. It does
+ * not see the Playwright `request` fixture or page.request; those are kept
+ * off the endpoint by the static guard.
+ */
 function watchSeedCalls(page: Page): Request[] {
   const calls: Request[] = [];
   page.on("request", req => {
-    if (new URL(req.url()).pathname === SEED_PATH) calls.push(req);
+    const { pathname } = new URL(req.url());
+    if (pathname.startsWith(`${TAXONOMY_PATH}/`) && pathname.split("/").pop() === "seed") calls.push(req);
   });
   return calls;
+}
+
+/** Local only: the tenant's entries were provisioned by workspace configuration, never seeded. */
+async function expectProvisioningAudit(page: Page, rt: TesterRuntime) {
+  const events = async (action: string) => {
+    const response = await page.request.get(`${rt.api.origin}/api/admin/audit/export`, {
+      headers: rt.headers, params: { action, format: "jsonl" },
+    });
+    expect(response.status(), `audit export for ${action}`).toBe(200);
+    return (await response.text()).split(/\r?\n/).filter(Boolean)
+      .map(line => JSON.parse(line) as { metadata: { trigger?: string } | null });
+  };
+  const provisioned = await events("ip_document_taxonomy.defaults_provisioned");
+  expect(provisioned.map(event => event.metadata?.trigger), "provisioning audit trigger").toEqual(["workspace_configuration"]);
+  expect(await events("ip_document_taxonomy.seeded"), "no seed audit event on the tester tenant").toEqual([]);
 }
 
 async function expectProvisionedReadiness(page: Page, rt: TesterRuntime) {
@@ -99,7 +122,7 @@ test("BUG-002 Ram's Documents Classification is provisioned, never seeded, and p
   const rt = await prepareTester(page, request, baseURL);
   const taxonomy = await expectProvisionedReadiness(page, rt);
   await proveClassification(page, rt, taxonomy.active_entry_count);
-  expect(seedCalls, "no fixture or page action may call the admin seed endpoint").toHaveLength(0);
+  expect(seedCalls, "the page never calls the admin seed endpoint (fixtures: static guard)").toHaveLength(0);
   await markPositive(info, "bug-002-classification-provisioned", {
     local: rt.local, active_entry_count: taxonomy.active_entry_count,
   });
@@ -113,6 +136,7 @@ test("BUG-002 [local-only] a classified upload from the provisioned taxonomy is 
   const rt = await prepareTester(page, request, baseURL);
   expect(rt.local, "This test creates records; production runs the preview test instead.").toBe(true);
   const taxonomy = await expectProvisionedReadiness(page, rt);
+  await expectProvisioningAudit(page, rt);
   // Prerequisite only (docket creation is BUG-001's journey): a stamped docket to link to.
   const title = stamp("Fixture honesty docket");
   const docket = await json(await page.request.post(`${rt.api.origin}/api/ip/dockets`, { headers: rt.headers, data: {
@@ -145,7 +169,7 @@ test("BUG-002 [local-only] a classified upload from the provisioned taxonomy is 
   const listed = await json(await page.request.get(`${rt.api.origin}/api/ip/documents?docket_id=${docket.id}`,
     { headers: rt.headers }), "Docket documents");
   expect(listed.items.map((item: { id: string }) => item.id)).toContain(body.document.id);
-  expect(seedCalls, "no fixture or page action may call the admin seed endpoint").toHaveLength(0);
+  expect(seedCalls, "the page never calls the admin seed endpoint (fixtures: static guard)").toHaveLength(0);
   await markPositive(info, "bug-002-classified-upload", { document_id: body.document.id });
 });
 
@@ -163,6 +187,6 @@ test("BUG-002 [mobile] Classification and its upload gate stay on screen without
   await preview.scrollIntoViewIfNeeded();
   await expectOnScreen(preview, "Preview controlled name is reachable on a phone");
   await expectNoPageOverflow(page);
-  expect(seedCalls, "no fixture or page action may call the admin seed endpoint").toHaveLength(0);
+  expect(seedCalls, "the page never calls the admin seed endpoint (fixtures: static guard)").toHaveLength(0);
   await markPositive(info, "bug-002-classification-mobile", { viewport });
 });

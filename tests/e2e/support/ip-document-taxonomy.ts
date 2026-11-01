@@ -3,14 +3,14 @@ import { expect, type APIRequestContext } from "@playwright/test";
 type TaxonomyEntry = { key: string; is_active: boolean };
 
 /**
- * Asserts the tenant's IP document taxonomy came from product provisioning.
- *
- * Journeys must not load the catalogue through the admin seed endpoint
- * (guarded by apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts): a
- * fresh tenant receives it when the IP
- * workspace is configured or enabled, and an existing tenant through the
- * release backfill. If provisioning breaks, the journey fails here instead of
- * silently repairing the tenant it claims to test.
+ * Asserts the tenant has an active IP document taxonomy containing the keys
+ * the journey uses. It does not identify where the entries came from; the
+ * guarantee that no e2e fixture loads them through the admin seed endpoint is
+ * the static guard in apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts.
+ * A fresh tenant receives the catalogue when the IP workspace is configured
+ * or enabled, and an existing tenant through the release backfill, so if
+ * provisioning breaks, the journey fails here instead of silently repairing
+ * the tenant it claims to test.
  */
 export async function expectProvisionedDocumentTaxonomy(
   api: APIRequestContext,
