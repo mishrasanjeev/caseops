@@ -186,6 +186,22 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
   const record = main.getByRole("combobox", { name: "Legal record" });
   await expect(record).toBeEnabled();
   await record.selectOption(`application:${target.applicationId}`);
+
+  // A -> B -> A (triage step 4): a record chosen on one docket never travels to another.
+  const other = listed.dockets[0];
+  await search.fill("");
+  await expect(picker.locator(`option[value="${other.id}"]`)).toHaveCount(1);
+  const otherCore = page.waitForResponse(response => response.url().endsWith(`/api/ip/dockets/${other.id}/core-records`));
+  await picker.selectOption(other.id);
+  expect((await otherCore).status()).toBe(200);
+  await expect(page).toHaveURL(new RegExp(`[?&]docket=${other.id}`));
+  await expect(record, "The other docket does not inherit the first docket's record").not.toHaveValue(`application:${target.applicationId}`);
+  await search.fill(target.number);
+  await expect(picker.locator(`option[value="${target.docketId}"]`)).toHaveCount(1);
+  await picker.selectOption(target.docketId);
+  await expect(page).toHaveURL(new RegExp(`[?&]docket=${target.docketId}`));
+  await expect(record).toBeEnabled();
+  await record.selectOption(`application:${target.applicationId}`);
   await expect(record).toHaveAccessibleDescription(new RegExp(`Application ${target.applicationIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   const identifier = main.getByLabel("Identifier", { exact: true });
   await expect(identifier, "The identity is prefilled from the chosen record").toHaveValue(target.applicationIdentifier);
@@ -241,10 +257,13 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     expect(evidence.diffs).toEqual([expect.objectContaining({ field_path: "/mark_name", change_kind: "added", after_value_json: identity })]);
 
     // Phones list one entry per change (decision buttons on screen); wider screens keep the table.
-    const row = main.getByRole(mobile ? "listitem" : "row").filter({ hasText: "/mark_name" });
+    // Rows read by field name and plain values; the register path is only technical detail.
+    const row = main.getByRole(mobile ? "listitem" : "row").filter({ hasText: "Mark as shown on the register" });
     await row.scrollIntoViewIfNeeded();
     await expectOnScreen(row, "The register change is queued for review");
-    await expect(row).toContainText("Mark as shown on the register");
+    await expect(row).toContainText(identity);
+    await expect(row).not.toContainText(`"${identity}"`);
+    await expect(row.getByText("/mark_name")).toBeHidden();
     await expect(main.getByText("No snapshots recorded.")).toHaveCount(0);
     await markPositive(info, "bug-012-registry-identity-and-structured-evidence", {
       local: rt.local, mobile, docket: target.docketId, link: link.id, snapshot: evidence.snapshot.id,
@@ -254,8 +273,9 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     await main.locator("#review-reason").fill(`${identity}: test evidence, not a register change.`);
     const rejected = page.waitForResponse(response => /\/api\/ip\/registry-diffs\/[^/]+\/resolve$/.test(new URL(response.url()).pathname));
     const reject = row.getByRole("button", { name: "Reject" });
-    // Centre it, as a reader would: the bottom-right corner is where the last toast sits.
-    await reject.evaluate(element => element.scrollIntoView({ block: "center" }));
+    // The confirmation toast (top-right, auto-dismissed) has been read before the next decision.
+    await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 });
+    await reject.scrollIntoViewIfNeeded();
     await expectOnScreen(reject, "Reject is on screen next to the change");
     await reject.click();
     expect((await rejected).status()).toBe(200);
@@ -302,6 +322,28 @@ test("BUG-012 Ram finds a docket beyond the first 50 by its number and records m
   const rt = await prepareTester(page, request, baseURL);
   const target = rt.local ? await seedLocalPortfolio(rt, request) : await findProductionTarget(rt, request);
   await journey(page, request, rt, target, info, false);
+});
+
+test("[local-only] BUG-012 an application-less docket says it cannot take an identity and links only to paths that create one", async ({ page, request, baseURL }) => {
+  const rt = await prepareTester(page, request, baseURL);
+  // Prerequisite through the API (creating a docket is not the workflow under test).
+  const empty = await json(await request.post(`${rt.api.origin}/api/ip/dockets`, {
+    headers: rt.headers,
+    data: { title: stamp("B4 EMPTY DOCKET"), primary_identifier: stamp("EMPTY"), restricted: false, particulars: particulars("EMPTY") },
+  }), "Local application-less docket", 201);
+  const main = page.locator("main");
+  const core = page.waitForResponse(response => response.url().endsWith(`/api/ip/dockets/${empty.id}/core-records`));
+  await page.goto(`${rt.web.origin}/app/ip/registry?docket=${empty.id}`);
+  const records = await (await core).json();
+  expect([records.applications.length, records.proceedings.length]).toEqual([0, 0]);
+  const status = main.getByText("has no trademark application, so it cannot take a registry identity", { exact: false });
+  await expect(status).toBeVisible();
+  await expect(status).toContainText("cannot add an application to an existing docket");
+  await expect(main.getByRole("link", { name: "IP workspace (New trademark)" })).toHaveAttribute("href", "/app/ip");
+  await expect(main.getByRole("link", { name: "Portfolio import" })).toHaveAttribute("href", "/app/ip/portfolio/imports");
+  await expect(main.getByRole("combobox", { name: "Legal record" })).toBeDisabled();
+  await expect(main.getByRole("button", { name: "Add identity" })).toBeDisabled();
+  expect(await deadSelects(page, main)).toEqual([]);
 });
 
 test("BUG-012 [mobile] the registry journey works at phone width without horizontal scroll", async ({ page, request, baseURL }, info) => {
