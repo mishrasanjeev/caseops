@@ -423,29 +423,20 @@ def _visible_publications_condition(session: Session, *, context: SessionContext
     its capture notes.
     """
 
-    visible_applications = (
-        select(TrademarkApplication.id)
-        .join(
-            IpDocketRecord,
-            (IpDocketRecord.id == TrademarkApplication.docket_id)
-            & (IpDocketRecord.company_id == TrademarkApplication.company_id),
-        )
-        .where(
-            TrademarkApplication.company_id == context.company.id,
-            visible_ip_dockets_filter(session, context=context),
-        )
+    # The docket policy is built once per statement: each call creates its own
+    # anonymous team CTE, and two of them in one statement can be given the
+    # same name ("Multiple, unrelated CTEs found with the same name").
+    visible_dockets = select(IpDocketRecord.id).where(
+        IpDocketRecord.company_id == context.company.id,
+        visible_ip_dockets_filter(session, context=context),
     )
-    visible_profiles = (
-        select(IpWatchProfile.id)
-        .join(
-            IpDocketRecord,
-            (IpDocketRecord.id == IpWatchProfile.docket_id)
-            & (IpDocketRecord.company_id == IpWatchProfile.company_id),
-        )
-        .where(
-            IpWatchProfile.company_id == context.company.id,
-            visible_ip_dockets_filter(session, context=context),
-        )
+    visible_applications = select(TrademarkApplication.id).where(
+        TrademarkApplication.company_id == context.company.id,
+        TrademarkApplication.docket_id.in_(visible_dockets),
+    )
+    visible_profiles = select(IpWatchProfile.id).where(
+        IpWatchProfile.company_id == context.company.id,
+        IpWatchProfile.docket_id.in_(visible_dockets),
     )
     has_visible_hit = (
         select(IpWatchHit.id)

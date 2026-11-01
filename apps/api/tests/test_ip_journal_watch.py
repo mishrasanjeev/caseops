@@ -1486,6 +1486,28 @@ def test_bug_014_listed_capture_respects_docket_visibility(client: TestClient) -
     assert _searched(client, auth_headers(other.json()["access_token"]), "BUG014") == set()
 
 
+def test_bug_014_visible_entry_predicate_compiles_on_every_dialect() -> None:
+    # Two docket-policy calls in one statement gave two anonymous team CTEs the
+    # same name, so GET /api/ip/watch failed with a 500 in the E2E journey.
+    from types import SimpleNamespace
+
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    class _NoRuns:
+        def scalars(self, *_args: object, **_kwargs: object) -> list[object]:
+            return []
+
+    context = SimpleNamespace(
+        company=SimpleNamespace(id="company-1"), membership=SimpleNamespace(id="member-1")
+    )
+    for _ in range(25):
+        statement = select(IpJournalPublication.id).where(
+            ip_watch_service._visible_publications_condition(_NoRuns(), context=context)
+        )
+        for dialect in (sqlite.dialect(), postgresql.dialect()):
+            assert "ip_journal_publications" in str(statement.compile(dialect=dialect))
+
+
 def test_bug_014_recapture_with_different_details_points_to_the_recorded_entry(
     client: TestClient,
 ) -> None:
