@@ -93,6 +93,8 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentPolicyActionResponse,
     IpDocumentPolicyResponse,
     IpDocumentRecord,
+    IpDocumentRetirementPreview,
+    IpDocumentRetireRequest,
     IpDocumentStateTransitionRequest,
     IpDocumentTaxonomyEntryRecord,
     IpDocumentTaxonomyResponse,
@@ -324,6 +326,10 @@ from caseops_api.services.ip_deadline_workflow import (
     select_company_rule_version,
     transition_rule_version,
     withdraw_calendar_version,
+)
+from caseops_api.services.ip_document_retirement import (
+    preview_ip_document_retirement,
+    retire_ip_document,
 )
 from caseops_api.services.ip_document_workflow import (
     add_ip_document_links,
@@ -1002,8 +1008,11 @@ async def get_ip_documents(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str | None, Query(max_length=36)] = None,
+    include_history: Annotated[bool, Query()] = False,
 ) -> IpDocumentListResponse:
-    return list_ip_documents(session, context=context, docket_id=docket_id)
+    return list_ip_documents(
+        session, context=context, docket_id=docket_id, include_history=include_history
+    )
 
 
 @router.post("/documents/upload", response_model=IpDocumentUploadResponse)
@@ -1061,6 +1070,30 @@ async def get_ip_document_route(
     session: DbSession,
 ) -> IpDocumentRecord:
     return get_ip_document(session, context=context, document_id=document_id)
+
+
+@router.get(
+    "/documents/{document_id}/retirement",
+    response_model=IpDocumentRetirementPreview,
+)
+async def get_ip_document_retirement_preview(
+    document_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentRetirementPreview:
+    return preview_ip_document_retirement(session, context=context, document_id=document_id)
+
+
+@router.post("/documents/{document_id}/retire", response_model=IpDocumentRecord)
+async def post_ip_document_retire(
+    document_id: str,
+    payload: IpDocumentRetireRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentRecord:
+    return retire_ip_document(
+        session, context=context, document_id=document_id, payload=payload
+    )
 
 
 @router.post("/documents/{document_id}/links", response_model=IpDocumentRecord)

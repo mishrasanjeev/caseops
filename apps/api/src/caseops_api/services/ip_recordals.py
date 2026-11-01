@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     IpTitleInterest,
     Matter,
 )
+from caseops_api.schemas.ip_documents import IpDocumentRecord
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.schemas.ip_operations import IpTitleInterestRecord
 from caseops_api.schemas.ip_recordals import (
@@ -40,8 +41,10 @@ from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_docket_access import _docket_or_404
 from caseops_api.services.ip_document_workflow import (
     _serialize_document,
+    citable_ip_document_ids,
     docket_scoped_document_links,
     get_accessible_ip_document_ids,
+    get_ip_document,
 )
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
@@ -214,7 +217,12 @@ def list_recordal_instruments(
     )
     candidates = (
         select(IpDocument)
-        .where(IpDocument.company_id == context.company.id, IpDocument.id.in_(linked))
+        .where(
+            IpDocument.company_id == context.company.id,
+            IpDocument.id.in_(linked),
+            # A retired document is history and is never offered as an instrument.
+            IpDocument.retired_at.is_(None),
+        )
         .order_by(IpDocument.updated_at.desc(), IpDocument.id)
     )
     page_size = RECORDAL_INSTRUMENT_LIMIT + 1
@@ -241,6 +249,48 @@ def list_recordal_instruments(
     )
 
 
+def _cited_documents(
+    session: Session,
+    *,
+    context: SessionContext,
+    recordal: IpPostRegistrationRecordal,
+    interests: list[IpTitleInterest],
+) -> list[IpDocumentRecord]:
+    """Every document this recordal cites, current or retired, that the viewer may open.
+
+    The instrument picker offers only current documents; the recordal's own
+    history keeps naming what it cited even after that document is retired.
+    """
+
+    refs = [
+        *recordal.supporting_instrument_refs_json,
+        *(
+            str(party.get("evidence_reference"))
+            for party in recordal.parties_json
+            if isinstance(party, dict) and party.get("evidence_reference")
+        ),
+        *recordal.filing_evidence_refs_json,
+        *recordal.acceptance_evidence_refs_json,
+        *(interest.evidence_reference for interest in interests),
+    ]
+    known = set(
+        session.scalars(
+            select(IpDocument.id).where(
+                IpDocument.company_id == context.company.id,
+                IpDocument.id.in_(set(refs)),
+            )
+        )
+    ) if refs else set()
+    cited: list[IpDocumentRecord] = []
+    for document_id in dict.fromkeys(ref for ref in refs if ref in known):
+        try:
+            cited.append(get_ip_document(session, context=context, document_id=document_id))
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+    return cited
+
+
 def _validate_owned_refs(
     session: Session,
     *,
@@ -264,14 +314,21 @@ def _validate_owned_refs(
         if refs
         else set()
     )
-    if refs - citable or refs - (
-        get_accessible_ip_document_ids(session, context=context, document_ids=citable)
-        if citable
+    current = citable_ip_document_ids(
+        session, company_id=company_id, document_ids=citable, lock=True
+    )
+    if refs - current or refs - (
+        get_accessible_ip_document_ids(session, context=context, document_ids=current)
+        if current
         else set()
     ):
         raise HTTPException(
             status_code=422,
-            detail="Recordal documents must be linked to the selected docket.",
+            detail=(
+                "Recordal documents must be current documents linked to the selected docket."
+                if refs - current == refs - citable
+                else "A selected recordal document was retired. Choose a current document."
+            ),
         )
 
     def missing_ids(model, ids: list[str]) -> set[str]:
@@ -673,6 +730,7 @@ def ip_recordal_workspace(
         context=context,
         docket_id=row.docket_id,
     )
+    cited_documents = _cited_documents(session, context=context, recordal=row, interests=interests)
     registry_workspaces = list_registry_workspaces(
         session,
         context=context,
@@ -687,6 +745,7 @@ def ip_recordal_workspace(
         recordal=IpRecordalResponse.model_validate(row),
         docket=docket,
         documents=documents.items,
+        cited_documents=cited_documents,
         registry_workspaces=registry_workspaces.items,
         deadline_workspace=deadlines,
         transactions=[IpDocketEventResponse.model_validate(event) for event in events],

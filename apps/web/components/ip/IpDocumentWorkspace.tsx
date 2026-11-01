@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileText, Link2, Upload } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Archive, Download, FileText, Link2, Upload } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
@@ -12,16 +13,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   addIpDocumentLinks,
   applyIpDocumentBulk,
   downloadApiFile,
+  fetchIpDocumentRetirement,
   fetchIpDocuments,
   fetchIpDocumentsForDocket,
   fetchIpDocumentTaxonomy,
   importIpDocumentAliases,
   previewIpDocumentName,
   previewIpDocumentBulk,
+  retireIpDocument,
   seedIpDocumentTaxonomy,
   transitionIpDocument,
   uploadIpDocument,
@@ -31,9 +35,11 @@ import {
   type IpDocumentBulkItem,
   type IpDocumentBulkPreview,
   type IpDocumentNamingPreview,
+  type IpDocumentRetirementBlocker,
   type IpDocumentState,
 } from "@/lib/api/endpoints";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, apiValidationIssues, isApiErrorShape } from "@/lib/api/config";
+import { useSession } from "@/lib/use-session";
 
 const TAXONOMY_STATUS_ID = "ip-document-taxonomy-status";
 const UPLOAD_REQUIREMENTS_ID = "ip-document-upload-requirements";
@@ -109,10 +115,30 @@ export function IpDocumentWorkspace({
     displayName: string;
   } | null>(null);
 
+  const session = useSession();
+  const membershipId = session.context?.membership.id ?? null;
+  // History adds retired documents and documents of closed records.
+  const [showHistory, setShowHistory] = useState(false);
+  const [retiringId, setRetiringId] = useState<string | null>(null);
+  const historyToggleId = useId();
   const documents = useQuery({
-    queryKey: scopeDocketId ? ["ip", "documents", scopeDocketId] : ["ip", "documents"],
-    queryFn: () => scopeDocketId ? fetchIpDocumentsForDocket(scopeDocketId) : fetchIpDocuments(),
+    queryKey: [
+      ...(scopeDocketId ? ["ip", "documents", scopeDocketId] : ["ip", "documents"]),
+      ...(showHistory ? ["history"] : []),
+    ],
+    queryFn: () => scopeDocketId
+      ? fetchIpDocumentsForDocket(scopeDocketId, { includeHistory: showHistory })
+      : fetchIpDocuments({ includeHistory: showHistory }),
   });
+  // Bulk changes only documents the API may still change: not retired and not
+  // listed only because their record is closed (the history view).
+  const currentDocuments = useMemo(
+    () =>
+      documents.data?.items.filter(
+        (document) => !document.retirement && !document.read_only_reason,
+      ) ?? [],
+    [documents.data],
+  );
   const taxonomy = useQuery({
     queryKey: ["ip", "document-taxonomy"],
     queryFn: fetchIpDocumentTaxonomy,
@@ -132,7 +158,7 @@ export function IpDocumentWorkspace({
   const bulkTaxonomyKey = activeTaxonomyKeys.has(bulkTaxonomy) ? bulkTaxonomy : "";
   const taxonomyReady = activeTaxonomy.length > 0;
   const taxonomyDescription = taxonomyReady ? undefined : TAXONOMY_STATUS_ID;
-  const showsBulk = (documents.data?.items.length ?? 0) > 1 && canManage;
+  const showsBulk = currentDocuments.length > 1 && canManage;
   const showsTaxonomyStatus = !taxonomyReady && (canUpload || canConfigure || showsBulk);
   const existingDisplayNames = useMemo(
     () =>
@@ -340,9 +366,7 @@ export function IpDocumentWorkspace({
   const previewBulk = useMutation({
     mutationFn: async () => {
       if (!bulkTaxonomyKey) throw new Error("Choose the new classification.");
-      const chosen = (documents.data?.items ?? []).filter((row) =>
-        selectedIds.includes(row.id),
-      );
+      const chosen = currentDocuments.filter((row) => selectedIds.includes(row.id));
       const items: IpDocumentBulkItem[] = chosen.map((row) => ({
         document_id: row.id,
         expected_current_version: row.current_version,
@@ -721,28 +745,58 @@ export function IpDocumentWorkspace({
           </div>
         ) : null}
 
+        <label
+          htmlFor={historyToggleId}
+          className="flex min-w-0 items-center gap-2 self-start text-sm"
+        >
+          <input
+            id={historyToggleId}
+            type="checkbox"
+            checked={showHistory}
+            onChange={(event) => {
+              setShowHistory(event.target.checked);
+              setRetiringId(null);
+            }}
+          />
+          Show retired documents and documents of closed records
+        </label>
         {documents.isPending ? (
-          <p className="text-sm">Loading documents…</p>
+          <p className="text-sm" role="status">Loading documents…</p>
         ) : documents.isError ? (
-          <p className="text-sm text-red-700">Documents could not be loaded.</p>
+          <QueryErrorState
+            error={documents.error}
+            title="Documents could not be loaded"
+            onRetry={() => documents.refetch()}
+          />
         ) : documents.data?.items.length === 0 ? (
-          <p className="text-sm text-[var(--color-mute)]">No controlled IP documents yet.</p>
+          <p className="text-sm text-[var(--color-mute)]">
+            {showHistory
+              ? "No controlled IP documents, current or retired."
+              : "No current controlled IP documents. Retired documents appear when you show them above."}
+          </p>
         ) : (
           <div className="flex min-w-0 flex-col gap-3">
             {documents.data?.items.map((document) => {
               const version = document.versions[0];
               if (!version) return null;
-              const nextState = NEXT_STATE[version.state];
+              const retired = document.retirement ?? null;
+              const closedRecord = !retired && document.read_only_reason === "closed_record";
+              const readOnly = !!retired || closedRecord;
+              const nextState = readOnly ? undefined : NEXT_STATE[version.state];
               const approvalRequired = nextState === "approved" || nextState === "filed";
+              const mayOfferRetire = !retired
+                && (canManage || (canUpload && !!membershipId && document.created_by_membership_id === membershipId));
               return (
                 <article
                   key={document.id}
                   className="min-w-0 rounded-lg border border-[var(--color-line)] p-4"
                   data-testid={`ip-document-${document.id}`}
+                  data-retired={retired ? "true" : "false"}
+                  data-read-only={readOnly ? "true" : "false"}
                 >
                   <div className="flex min-w-0 w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                     <div className="flex min-w-0 gap-3">
-                      {canManage ? (
+                      {canManage && !readOnly ? (
                         <input
                           aria-label={`Select ${version.display_name}`}
                           type="checkbox"
@@ -771,7 +825,21 @@ export function IpDocumentWorkspace({
                           {document.confidentiality !== "internal" ? (
                             <Badge tone="warning">{document.confidentiality}</Badge>
                           ) : null}
+                          {retired ? <Badge tone="neutral">Retired</Badge> : null}
+                          {closedRecord ? <Badge tone="neutral">Closed record</Badge> : null}
                         </div>
+                        {retired ? (
+                          <p className="mt-2 break-words text-xs text-[var(--color-mute)]">
+                            Retired {new Date(retired.retired_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}{" "}
+                            by {retired.retired_by_name}: {retired.reason}. Kept for history; it is
+                            no longer offered as evidence.
+                          </p>
+                        ) : closedRecord ? (
+                          <p className="mt-2 break-words text-xs text-[var(--color-mute)]">
+                            Its record is closed, so this document is kept for history and cannot
+                            change. You can download it or retire it; reopen the record to change it.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex min-w-0 w-full flex-wrap gap-2 sm:w-auto">
@@ -802,8 +870,32 @@ export function IpDocumentWorkspace({
                           }
                         >Move to {nextState}</Button>
                       ) : null}
+                      {mayOfferRetire ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-expanded={retiringId === document.id}
+                          aria-controls={`ip-document-retire-${document.id}`}
+                          onClick={() => setRetiringId((current) => (current === document.id ? null : document.id))}
+                        >
+                          <Archive className="h-4 w-4" aria-hidden /> Retire
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
+                  {retiringId === document.id && !retired ? (
+                    <RetireDocumentPanel
+                      document={document}
+                      onCancel={() => setRetiringId(null)}
+                      onRetired={async () => {
+                        setRetiringId(null);
+                        await Promise.all([
+                          refresh(),
+                          queryClient.invalidateQueries({ queryKey: ["ip-documents"] }),
+                        ]);
+                      }}
+                    />
+                  ) : null}
                   {version.low_ocr_quality || version.processing_status !== "indexed" ? (
                     <div className="mt-3 flex min-w-0 gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
                       <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
@@ -813,7 +905,7 @@ export function IpDocumentWorkspace({
                       </span>
                     </div>
                   ) : null}
-                  {canUpload ? (
+                  {canUpload && !readOnly ? (
                     <label className="mt-3 flex min-w-0 w-full flex-col gap-1 text-sm sm:max-w-md">
                       <span className="font-medium">Upload a new immutable version</span>
                       <Input
@@ -833,6 +925,164 @@ export function IpDocumentWorkspace({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** The server's blocking records from a refused retirement, when the error carries them. */
+function blockersFrom(error: unknown): IpDocumentRetirementBlocker[] | null {
+  if (!isApiErrorShape(error) || !error.data || typeof error.data !== "object") return null;
+  const data = error.data as { code?: unknown; blockers?: unknown };
+  return data.code === "ip_document_retirement_blocked" && Array.isArray(data.blockers)
+    ? (data.blockers as IpDocumentRetirementBlocker[])
+    : null;
+}
+
+function RetireDocumentPanel({
+  document,
+  onCancel,
+  onRetired,
+}: {
+  document: IpDocument;
+  onCancel: () => void;
+  onRetired: () => Promise<void>;
+}) {
+  const panelId = `ip-document-retire-${document.id}`;
+  const reasonId = `${panelId}-reason`;
+  const reasonHelpId = `${reasonId}-help`;
+  const reasonErrorId = `${reasonId}-error`;
+  const blockedNoteId = `${panelId}-blocked`;
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const preview = useQuery({
+    queryKey: ["ip", "documents", document.id, "retirement"],
+    queryFn: () => fetchIpDocumentRetirement(document.id),
+    staleTime: 0,
+  });
+  const retire = useMutation({
+    mutationFn: () => {
+      const trimmed = reason.trim();
+      if (trimmed.length < 10) throw new Error("Give a reason of at least 10 characters.");
+      return retireIpDocument({
+        documentId: document.id,
+        expectedCurrentVersion: preview.data?.current_version ?? document.current_version,
+        reason: trimmed,
+      });
+    },
+    onSuccess: async () => {
+      toast.success("Document retired. It stays readable in history and is no longer offered as evidence.");
+      await onRetired();
+    },
+    onError: async (error) => {
+      if (blockersFrom(error)) {
+        // A record started relying on it since the check: show the fresh list.
+        await preview.refetch();
+        return;
+      }
+      const issue = isApiErrorShape(error)
+        ? apiValidationIssues(error.data).find((row) => row.loc.includes("reason"))
+        : undefined;
+      if (issue || (error instanceof Error && error.message.startsWith("Give a reason"))) {
+        setReasonError(issue ? issue.msg.replace(/^Value error, /, "") : (error as Error).message);
+        return;
+      }
+      toast.error(apiErrorMessage(error, "The document was not retired."));
+    },
+  });
+  const data = preview.data;
+  const blockers = data?.blockers ?? [];
+  const blocked = !!data && (!data.may_retire || blockers.length > 0 || data.already_retired);
+  return (
+    <section
+      id={panelId}
+      aria-label={`Retire ${document.title}`}
+      className="mt-3 flex min-w-0 flex-col gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm"
+    >
+      <p className="font-semibold">Retire this document</p>
+      <p className="text-[var(--color-mute)]">
+        Retiring keeps the file, its versions and its audit trail. It stops the document being
+        offered or accepted as evidence anywhere in the IP workspace.
+      </p>
+      {preview.isPending ? (
+        <p role="status">Checking which records rely on this document…</p>
+      ) : preview.isError ? (
+        <QueryErrorState
+          error={preview.error}
+          title="Could not check which records rely on this document"
+          onRetry={() => preview.refetch()}
+        />
+      ) : data && !data.may_retire ? (
+        <p id={blockedNoteId} role="status">{data.permission_reason}</p>
+      ) : data?.already_retired ? (
+        <p id={blockedNoteId} role="status">This document is already retired.</p>
+      ) : blockers.length ? (
+        <div id={blockedNoteId} role="status" className="flex min-w-0 flex-col gap-2">
+          <p>
+            {blockers.length === 1
+              ? "1 record still relies on this document as evidence. Release it first:"
+              : `${blockers.length} records still rely on this document as evidence. Release them first:`}
+          </p>
+          <ul className="flex min-w-0 flex-col gap-2" data-testid="ip-document-retirement-blockers">
+            {blockers.map((blocker, index) => (
+              <li
+                key={`${blocker.kind}-${blocker.record_id}-${index}`}
+                className="min-w-0 rounded-md border border-[var(--color-line)] bg-white p-2"
+              >
+                <p className="break-words font-medium">
+                  {blocker.label}
+                  {blocker.status ? ` · ${blocker.status.replaceAll("_", " ")}` : ""}
+                </p>
+                {blocker.docket_title ? (
+                  <p className="break-words text-xs text-[var(--color-mute)]">On {blocker.docket_title}</p>
+                ) : null}
+                <p className="break-words text-xs">
+                  {blocker.resolution}{" "}
+                  {blocker.href ? (
+                    <Link className="font-semibold text-[var(--color-brand-700)] underline" href={blocker.href}>
+                      Open
+                    </Link>
+                  ) : null}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-1">
+          <Label htmlFor={reasonId}>Reason for retiring</Label>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            rows={2}
+            maxLength={1000}
+            aria-invalid={reasonError ? true : undefined}
+            aria-describedby={reasonError ? `${reasonErrorId} ${reasonHelpId}` : reasonHelpId}
+            onChange={(event) => {
+              setReason(event.target.value);
+              setReasonError(null);
+            }}
+          />
+          <p id={reasonHelpId} className="text-xs text-[var(--color-mute)]">
+            At least 10 characters. Recorded in the audit trail with your name.
+          </p>
+          {reasonError ? (
+            <p id={reasonErrorId} role="alert" className="text-xs text-[var(--color-danger-text)]">
+              {reasonError}
+            </p>
+          ) : null}
+        </div>
+      )}
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Button
+          size="sm"
+          onClick={() => retire.mutate()}
+          disabled={!data || blocked || retire.isPending}
+          aria-describedby={blocked ? blockedNoteId : undefined}
+        >
+          {retire.isPending ? "Retiring…" : "Retire document"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </section>
   );
 }
 

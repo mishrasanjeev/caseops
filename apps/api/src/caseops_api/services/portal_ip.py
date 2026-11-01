@@ -925,6 +925,11 @@ def _document_publication_refusal(
     list offers only versions for which it returns None, so the picker can
     never offer a version the publish endpoint refuses.
     """
+    if document.retired_at is not None:
+        return _conflict(
+            "portal_document_retired",
+            "This document was retired and cannot be shared with the client.",
+        )
     if (
         document.is_privileged
         or document.confidentiality != "internal"
@@ -1071,6 +1076,8 @@ def publish_document_to_portal(
             IpDocumentVersion.company_id == context.company.id,
             IpDocumentTaxonomyEntry.company_id == context.company.id,
         )
+        # Serializes this publication with a concurrent document retirement.
+        .with_for_update(read=True, of=IpDocument)
     ).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Approved IP document not found.")

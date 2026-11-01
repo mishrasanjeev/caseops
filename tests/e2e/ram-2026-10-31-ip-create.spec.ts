@@ -9,7 +9,9 @@
  * Signed in as the tester through the real form (production: Ram on
  * test-legal; local: a fresh tenant entitled like test-legal). The docket is
  * created only through the UI with a clock+serial title and retired at the
- * end; the API is used only as an oracle and for that cleanup.
+ * end; the API is used only as an oracle and for that cleanup. The uploaded
+ * document is then retired through the Documents tab's history view
+ * (B4-ADJ-07), so a production run leaves no current record behind.
  */
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 
@@ -17,6 +19,7 @@ import {
   collectOpenPopoverOffenders, deadSelects, expectNoPageOverflow, expectOnScreen, json, markPositive,
   prepareTester, stamp, type TesterRuntime,
 } from "./support/ram-bugs4";
+import { retireDocketByApi, retireDocumentByApi, retireDocumentThroughUi, runCleanup } from "./support/ip-documents";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -171,6 +174,7 @@ async function createTwoClassTrademark(page: Page, request: APIRequestContext, r
 // BUG-002 (Documents): Classification lists the provisioned taxonomy and a UI upload works.
 async function uploadClassifiedDocument(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, docketId: string, mobile: boolean,
+  created: { documentId: string | null },
 ) {
   await page.getByRole("tab", { name: "Documents", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=documents(?:&|$)/);
@@ -199,10 +203,12 @@ async function uploadClassifiedDocument(
   const upload = await uploaded;
   expect(upload.status(), "Document upload").toBe(200);
   const result = await upload.json();
+  // Recorded before any further assertion, so failure-path cleanup can retire it.
+  created.documentId = result.document?.id ?? null;
   expect(result.outcome).toBe("created");
-  // IP documents have no retire route: the evidence names the record this run left behind.
+  const documentId: string = result.document.id;
   await markPositive(info, `ip-documents-upload-${mobile ? "mobile" : "desktop"}`, {
-    taxonomy: active.length, documentId: result.document?.id ?? null, documentTitle: title, docketId, local: rt.local,
+    taxonomy: active.length, documentId, documentTitle: title, docketId, local: rt.local,
   });
 
   // ?tab= deep link opens the Documents tab directly; an unknown tab falls back to Docket.
@@ -211,28 +217,48 @@ async function uploadClassifiedDocument(
   await page.goto(`${rt.web.origin}/app/ip?tab=unknown`);
   await expect(page.getByRole("tab", { name: "Docket", exact: true })).toHaveAttribute("aria-selected", "true");
   if (mobile) await expectNoPageOverflow(page);
+  return documentId;
+}
+
+/** Create, upload, then retire both: the docket first, then its document through the UI. */
+async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
+  const { docketId } = await createTwoClassTrademark(page, request, rt, mobile);
+  // What this run created and has not yet released.
+  const created: { documentId: string | null } = { documentId: null };
+  let docketLive = true;
+  try {
+    await markPositive(info, `ip-create-${mobile ? "mobile" : "desktop"}`, { docketId, local: rt.local });
+    await uploadClassifiedDocument(page, request, rt, info, docketId, mobile, created);
+    await retireDocket(request, rt, docketId);
+    docketLive = false;
+    // The closed docket's document is reached through the history view, shown
+    // read-only (no state change, new version or bulk selection), and retired there.
+    expect(created.documentId, "The upload returned the created document").toBeTruthy();
+    const documentId = created.documentId as string;
+    await retireDocumentThroughUi(page, rt, documentId,
+      `Ram batch-4 acceptance upload ${rt.run} retired after its docket.`, { history: true, mobile, closedRecord: true });
+    created.documentId = null;
+    await markPositive(info, `ip-document-retired-${mobile ? "mobile" : "desktop"}`, {
+      documentId, docketId, local: rt.local,
+    });
+  } finally {
+    // Nothing is left to release when the journey passed.
+    const documentId = created.documentId;
+    await runCleanup([
+      ["Retire the acceptance docket", docketLive ? () => retireDocketByApi(request, rt, docketId) : null],
+      ["Retire the acceptance upload", documentId ? () => retireDocumentByApi(request, rt, documentId) : null],
+    ]);
+  }
 }
 
 test("BUG-001 BUG-002 Ram creates a two-class trademark that opens in view and records its Nice edition", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, baseURL);
-  const { docketId } = await createTwoClassTrademark(page, request, rt, false);
-  try {
-    await markPositive(info, "ip-create-desktop", { docketId, local: rt.local });
-    await uploadClassifiedDocument(page, request, rt, info, docketId, false);
-  } finally {
-    await retireDocket(request, rt, docketId);
-  }
+  await journey(page, request, rt, info, false);
 });
 
 test("BUG-001 BUG-002 [mobile] Ram creates a two-class trademark on a phone without horizontal scroll", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, baseURL, { width: 393, height: 851 });
-  const { docketId } = await createTwoClassTrademark(page, request, rt, true);
-  try {
-    await markPositive(info, "ip-create-mobile", { docketId, local: rt.local });
-    await uploadClassifiedDocument(page, request, rt, info, docketId, true);
-  } finally {
-    await retireDocket(request, rt, docketId);
-  }
+  await journey(page, request, rt, info, true);
 });

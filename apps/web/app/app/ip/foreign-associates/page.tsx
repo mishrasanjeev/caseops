@@ -1027,7 +1027,7 @@ function InstructionSummary({ workspace, docket, documents }: { workspace: IpFor
       <Card className="lg:col-span-2"><CardHeader><CardTitle as="h3">Selected documents</CardTitle></CardHeader><CardContent className="grid min-w-0 gap-2 sm:grid-cols-2">
         {documents.map((document) => {
           const version = document.versions.find((item) => item.version === document.current_version);
-          return <div key={document.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-line)] p-3 text-sm"><span className="min-w-0 break-words">{document.title}{document.is_privileged ? " · privileged" : ""}</span>{version ? <a href={`${API_BASE_URL}/api/ip/documents/${encodeURIComponent(document.id)}/versions/${version.version}/download`} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline"><ExternalLink className="h-4 w-4" />Open source</Button></a> : <span className="text-xs text-[var(--color-mute)]">No version</span>}</div>;
+          return <div key={document.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-line)] p-3 text-sm"><span className="min-w-0 break-words">{document.title}{document.is_privileged ? " · privileged" : ""}{document.retirement ? " · retired" : ""}</span>{version ? <a href={`${API_BASE_URL}/api/ip/documents/${encodeURIComponent(document.id)}/versions/${version.version}/download`} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline"><ExternalLink className="h-4 w-4" />Open source</Button></a> : <span className="text-xs text-[var(--color-mute)]">No version</span>}</div>;
         })}
       </CardContent></Card>
     </div>

@@ -18115,11 +18115,24 @@ class IpDocument(Base):
             name="fk_ip_document_creator_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["retired_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_retired_by_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_ip_document_id_company"),
         CheckConstraint("current_version > 0", name="ck_ip_document_current_version_positive"),
         CheckConstraint(
             "confidentiality IN ('internal', 'confidential', 'restricted')",
             name="ck_ip_document_confidentiality",
+        ),
+        CheckConstraint(
+            "(retired_at IS NULL AND retired_by_membership_id IS NULL"
+            " AND retirement_reason IS NULL)"
+            " OR (retired_at IS NOT NULL AND retired_by_membership_id IS NOT NULL"
+            " AND retirement_reason IS NOT NULL)",
+            name="ck_ip_document_retirement_complete",
         ),
     )
 
@@ -18139,6 +18152,11 @@ class IpDocument(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+    # Retirement withdraws the document from pickers, validators and current
+    # lists; it never deletes the document, its versions, links or bytes.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class IpDocumentVersion(Base):

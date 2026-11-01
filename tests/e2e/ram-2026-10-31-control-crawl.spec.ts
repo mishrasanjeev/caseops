@@ -34,7 +34,7 @@ const TAB_NAMES = [
 const INTERNAL_FIELD = /\b(?:(?:membership|member|matter|record|scope|application|event|docket|proceeding|hearing|target) ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
 
 const ROUTES = [
-  "/app/ip", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
+  "/app/ip", "/app/ip?tab=documents", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
   "/app/ip/foreign-associates", "/app/ip/registry", "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal",
   "/app/ip/patents", "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
   // B4-ADJ-02: review queues and notification rules that asked for typed ids.

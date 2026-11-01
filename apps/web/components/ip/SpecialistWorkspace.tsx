@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { downloadApiFile, fetchIpDocument, fetchIpDocumentsForDocket, fetchIpDocumentTaxonomy,
   listClients, previewIpDocketLifecycle, transitionIpDocketLifecycle, type IpLifecycleInput } from "@/lib/api/endpoints";
+import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
 import { fetchSpecialistContracts, fetchSpecialistObservations, fetchSpecialistRecord, fetchSpecialistRecords,
   saveSpecialistFacts, saveSpecialistObservation, specialistFactsSchema, specialistKey, uploadSpecialistSource,
   type SpecialistContract, type SpecialistObservation, type SpecialistRecord } from "@/lib/api/ip-specialist";
@@ -188,7 +189,7 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
   const selected = versions.find((row) => row.version.id === sourceId);
   // Each choice is disabled with a reason when nothing can be chosen (B4-ADJ-22 class).
   const activeTypes = types.data?.entries.filter((row) => row.is_active) ?? [];
-  const sourceChoices = versions.filter((row) => !["rejected", "superseded"].includes(row.version.state)).length;
+  const sourceChoices = versions.filter((row) => isSpecialistSourceDocument(row.document, record.docket_id) && !["rejected", "superseded"].includes(row.version.state)).length;
   const upload = useMutation({ mutationFn: async () => {
     if (!file) throw new Error("Select an evidence file.");
     const result = await uploadSpecialistSource(record, file, taxonomy);
@@ -218,7 +219,7 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
         <div className="min-w-0"><Label htmlFor="specialist-kind">Observation type</Label><select id="specialist-kind" required className={selectClass} value={kind} disabled={!contract.observation_kinds.length} aria-describedby={contract.observation_kinds.length ? undefined : "specialist-kind-empty"} onChange={(event) => setKind(event.target.value)}><option value="">Select observation type</option>{contract.observation_kinds.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
           {!contract.observation_kinds.length && <p id="specialist-kind-empty" className="mt-1 text-xs text-mute">This record type defines no source observations.</p>}</div>
         <div className="min-w-0"><Label htmlFor="specialist-day">Event date as recorded</Label><Input id="specialist-day" type="date" required value={day} onChange={(event) => setDay(event.target.value)} /></div></div>
-        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} disabled={!sourceChoices} aria-describedby={sourceChoices ? undefined : "specialist-source-empty"} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select>
+        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} disabled={!sourceChoices} aria-describedby={sourceChoices ? undefined : "specialist-source-empty"} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => isSpecialistSourceDocument(row.document, record.docket_id) && !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select>
           {!sourceChoices && <p id="specialist-source-empty" className="mt-1 text-xs text-mute">No retained source version on this record yet. {canUpload ? "Upload the evidence above first." : "A colleague who can upload evidence must add it first."}</p>}</div>
         <div><Label htmlFor="specialist-locator">Source page or locator</Label><Input id="specialist-locator" required maxLength={500} value={locator} onChange={(event) => setLocator(event.target.value)} /></div>
         <div><Label htmlFor="specialist-account">Source account</Label><Textarea id="specialist-account" required maxLength={4000} value={account} onChange={(event) => setAccount(event.target.value)} /></div>

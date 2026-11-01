@@ -6736,6 +6736,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/documents/{document_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Retire */
+        post: operations["post_ip_document_retire_api_ip_documents__document_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/retirement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Retirement Preview */
+        get: operations["get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/documents/{document_id}/versions/{version_number}/download": {
         parameters: {
             query?: never;
@@ -28628,6 +28662,9 @@ export interface components {
             is_privileged: boolean;
             /** Links */
             links: components["schemas"]["IpDocumentLinkRecord"][];
+            /** Read Only Reason */
+            read_only_reason?: ("retired" | "closed_record") | null;
+            retirement?: components["schemas"]["IpDocumentRetirementRecord"] | null;
             /** Taxonomy Key */
             taxonomy_key: string;
             /** Taxonomy Label */
@@ -28641,6 +28678,69 @@ export interface components {
             updated_at: string;
             /** Versions */
             versions: components["schemas"]["IpDocumentVersionRecord"][];
+        };
+        /**
+         * IpDocumentRetirementBlocker
+         * @description A record that still relies on the document as evidence.
+         */
+        IpDocumentRetirementBlocker: {
+            /** Docket Id */
+            docket_id?: string | null;
+            /** Docket Title */
+            docket_title?: string | null;
+            /** Href */
+            href?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "recordal" | "foreign_associate_instruction" | "docket_event" | "title_interest" | "renewal_certificate" | "portal_publication" | "source_evidence";
+            /** Label */
+            label: string;
+            /** Record Id */
+            record_id: string;
+            /** Resolution */
+            resolution: string;
+            /** Status */
+            status?: string | null;
+        };
+        /** IpDocumentRetirementPreview */
+        IpDocumentRetirementPreview: {
+            /** Already Retired */
+            already_retired: boolean;
+            /** Blockers */
+            blockers: components["schemas"]["IpDocumentRetirementBlocker"][];
+            /** Current Version */
+            current_version: number;
+            /** Document Id */
+            document_id: string;
+            /** May Retire */
+            may_retire: boolean;
+            /** Permission Reason */
+            permission_reason?: string | null;
+            /** Retirable */
+            retirable: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpDocumentRetirementRecord */
+        IpDocumentRetirementRecord: {
+            /** Reason */
+            reason: string;
+            /**
+             * Retired At
+             * Format: date-time
+             */
+            retired_at: string;
+            /** Retired By Name */
+            retired_by_name: string;
+        };
+        /** IpDocumentRetireRequest */
+        IpDocumentRetireRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Reason */
+            reason: string;
         };
         /** IpDocumentStateTransitionRequest */
         IpDocumentStateTransitionRequest: {
@@ -32987,6 +33087,8 @@ export interface components {
         };
         /** IpRecordalWorkspaceResponse */
         IpRecordalWorkspaceResponse: {
+            /** Cited Documents */
+            cited_documents?: components["schemas"]["IpDocumentRecord"][];
             /** Current Registered Interests */
             current_registered_interests: components["schemas"]["IpTitleInterestRecord"][];
             deadline_workspace: components["schemas"]["IpDeadlineWorkspaceResponse"];
@@ -63153,6 +63255,7 @@ export interface operations {
         parameters: {
             query?: {
                 docket_id?: string | null;
+                include_history?: boolean;
             };
             header?: never;
             path?: never;
@@ -63334,6 +63437,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_retire_api_ip_documents__document_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentRetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRetirementPreview"];
                 };
             };
             /** @description Validation Error */

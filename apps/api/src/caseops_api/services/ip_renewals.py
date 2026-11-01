@@ -528,9 +528,13 @@ def _confirmed_deadline_clauses(*, company_id: str, docket_id: str, kind: str):
 
 
 def _accepted_certificate_clauses(*, company_id: str, docket_id: str):
-    """The rule for a renewal certificate: current version accepted, linked to the docket."""
+    """The rule for a renewal certificate: current version accepted, linked to the docket.
+
+    A retired document is history and is never offered or accepted.
+    """
     return (
         IpDocument.company_id == company_id,
+        IpDocument.retired_at.is_(None),
         IpDocument.id.in_(
             select(IpDocumentLink.document_id).where(
                 IpDocumentLink.company_id == company_id,
@@ -756,10 +760,13 @@ def _document(
     document_id: str,
 ) -> IpDocument:
     row = session.scalar(
-        select(IpDocument).where(
+        select(IpDocument)
+        .where(
             IpDocument.id == document_id,
             IpDocument.company_id == context.company.id,
         )
+        # Serializes this citation with a concurrent document retirement.
+        .with_for_update(read=True)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="IP renewal certificate not found.")

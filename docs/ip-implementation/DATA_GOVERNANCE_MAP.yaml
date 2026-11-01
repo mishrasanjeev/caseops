@@ -12808,6 +12808,21 @@
           "sql_type": "BOOLEAN",
           "nullable": false
         },
+        "retired_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "retired_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "retirement_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": true
+        },
         "taxonomy_entry_id": {
           "category_id": "financial_or_payment_data",
           "sql_type": "VARCHAR(36)",
@@ -31082,12 +31097,12 @@
       }
     }
   ],
-  "schema_fingerprint": "f5d1fb80ae434f92106fd276f71ef6241849899624f7314fb700d75ad4e5fc9f",
+  "schema_fingerprint": "4fc3efde39d939467299359644a2caa094708a4ba192d087464bf3b30df1cc05",
   "index_inventory": {
-    "orm_index_count": 1792,
-    "orm_index_fingerprint": "c0c229367ba107cbef5f4c115d55e7a744b3e1db92d65e2a76aaee3a348d172a",
-    "migration_index_count": 1576,
-    "migration_index_fingerprint": "617165b8ca4fae2bd728f47dd4ceb99898d02092759c2457ddec0aaf6b9433cc",
+    "orm_index_count": 1793,
+    "orm_index_fingerprint": "fc64aaaf36a70eefce60da98345b1d540ca8e747c5f80d177632bb1897afaab5",
+    "migration_index_count": 1577,
+    "migration_index_fingerprint": "4225a6fa99c359961d1dfbf459ad181ed061d1456317f6b32848425ecc52cc2e",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }
