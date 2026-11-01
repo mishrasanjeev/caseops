@@ -223,11 +223,19 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
   for (const id of ruleIds) {
     expect(data.rules.find(row => row.id === id)).toMatchObject({ status: "active", rule_kind: "deadline" });
   }
-  const calendarIds = data.calendars.filter(row => row.status === "active").map(row => row.id);
-  for (const [label, expectedIds, placeholder] of [
-    ["Active rule version", ruleIds, "No eligible active deadline rule"],
-    ["Active working calendar", calendarIds, "No active working calendar"],
+  const activeCalendars = data.calendars.filter(row => row.status === "active");
+  // 2026-11-01 B4-ADJ-08: calendars are offered only in the chosen rule's jurisdiction.
+  const calendarIdsForRule = async () => {
+    const ruleId = await scope.getByRole("combobox", { name: "Active rule version", exact: true }).inputValue();
+    const jurisdiction = data.rules.find(row => row.id === ruleId)?.jurisdiction.trim().toUpperCase();
+    return activeCalendars.filter(row => !jurisdiction || row.jurisdiction.trim().toUpperCase() === jurisdiction).map(row => row.id);
+  };
+  let calendarIds: string[] = [];
+  for (const [label, placeholder] of [
+    ["Active rule version", "No eligible active deadline rule"],
+    ["Active working calendar", "No active working calendar"],
   ] as const) {
+    const expectedIds = label === "Active rule version" ? ruleIds : (calendarIds = await calendarIdsForRule());
     const select = scope.getByRole("combobox", { name: label, exact: true });
     await expect(select).toHaveCount(1);
     await expect(select).toBeVisible();
@@ -239,7 +247,9 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     const actualIds = await optionIds();
     if (!expectedIds.length) {
       await expect(select).toBeDisabled();
-      await expect(select.getByRole("option", { name: placeholder, exact: true })).toHaveCount(1);
+      const jurisdiction = label === "Active working calendar" && ruleIds.length
+        ? data.rules.find(row => row.id === ruleIds[ruleIds.length - 1])?.jurisdiction.trim().toUpperCase() : undefined;
+      await expect(select.getByRole("option", { name: jurisdiction ? `No active ${jurisdiction} working calendar` : placeholder, exact: true })).toHaveCount(1);
       await expect(select.locator("option")).toHaveCount(1);
     } else {
       await expect(select).toBeEnabled();
@@ -270,7 +280,7 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     const prerequisites = scope.locator("#ip-deadline-prerequisites");
     await expect(prerequisites).toBeVisible();
     if (!ruleIds.length) await expect(prerequisites).toContainText("No active deadline rule is selected for company deadlines.");
-    if (!calendarIds.length) await expect(prerequisites).toContainText("No working calendar is active.");
+    if (!calendarIds.length) await expect(prerequisites).toContainText(activeCalendars.length ? "working calendar is active" : "No working calendar is active.");
     await expect(prerequisites.getByRole("link", { name: "Open rule and calendar governance" })).toHaveAttribute("href", "#ip-deadline-governance");
     await expect(scope.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
   }

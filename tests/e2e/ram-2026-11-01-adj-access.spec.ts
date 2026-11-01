@@ -2,9 +2,11 @@
  * Adjacent defects found while fixing Ram's batch 4 (CaseOps_Bugs (4).xlsx):
  *
  * B4-ADJ-01  A walled admin with portal:invite could grant portal access to a
- *            Matter they cannot see: the picker was wall-scoped, the API was not.
+ *            Matter or IP docket they cannot see: the picker was wall-scoped,
+ *            the API was not, and the IP grant list showed walled dockets.
  * B4-ADJ-08  A rule that needs an active working calendar was enforced only in
- *            the browser, and the rule form preselected the first calendar.
+ *            the browser, the rule form preselected the first calendar, and
+ *            rule and calendar jurisdictions were never compared.
  * B4-ADJ-12  A registry identity's kind was free text and a target outside the
  *            docket answered 404 instead of a field-anchored 422.
  *
@@ -35,7 +37,10 @@ const MOBILE = { width: 393, height: 851 };
 
 type Matter = { id: string; matter_code: string; title: string; status: string; updated_at: string };
 type RegistryTarget = { docketId: string; applicationId: string; otherApplicationId: string };
-type Calendar = { id: string; key: string; status: string; name: string; version: number };
+type Calendar = {
+  id: string; key: string; status: string; name: string; version: number; jurisdiction: string; timezone: string;
+  weekend_days: number[]; holidays: string[]; exceptional_working_days: string[]; source_reference: string; source_hash: string;
+};
 
 function code(label: string): string {
   return stamp(label).replace(/[^A-Za-z0-9]+/g, "-").toUpperCase().slice(0, 40);
@@ -332,10 +337,161 @@ test("B4-ADJ-01 [mobile] [local-only] the walled-Matter refusal is anchored to t
   }
 });
 
+// ------------------------------------------------- B4-ADJ-01 (IP client portal)
+
+type IpGrant = { id: string; ip_docket_record_id: string; docket_title: string; portal_user_email: string; row_version: number; active: boolean };
+
+/** IP records carry their own walls: preview, then apply, as Ram (owner). */
+async function ipAccessChange(rt: TesterRuntime, request: APIRequestContext, docketId: string, change: Record<string, unknown>) {
+  const panel = await json<{ access_policy_version: number }>(await request.get(
+    `${rt.api.origin}/api/ip/dockets/${docketId}/access`, { headers: rt.headers }), "IP access panel");
+  const body = { ...change, expected_access_policy_version: panel.access_policy_version, reason: "Conflict with the client (acceptance check)." };
+  const preview = await json<{ preview_token: string }>(await request.post(
+    `${rt.api.origin}/api/ip/dockets/${docketId}/access/preview`, { headers: rt.headers, data: body }), "IP access preview");
+  return json<{ panel: { walls: Array<{ id: string; subject_id: string; revoked_at: string | null }> } }>(await request.post(
+    `${rt.api.origin}/api/ip/dockets/${docketId}/access/apply`, { headers: rt.headers, data: { ...body, preview_token: preview.preview_token } }),
+  "IP access change");
+}
+
+async function ownerIpGrants(rt: TesterRuntime, request: APIRequestContext, docketId: string): Promise<IpGrant[]> {
+  const listed = await json<{ grants: IpGrant[] }>(await request.get(`${rt.api.origin}/api/admin/portal/ip-grants`, { headers: rt.headers }),
+    "Owner grant oracle");
+  return listed.grants.filter((row) => row.ip_docket_record_id === docketId);
+}
+
+function ipInvitation(email: string, fullName: string, docketId: string) {
+  return { email, full_name: fullName, role: "client", ip_docket_ids: [docketId], event_kinds: ["registry_snapshot_accepted"],
+    deadline_kinds: ["opposition_evidence"], document_categories: ["evidence"], can_submit_instructions: true };
+}
+
+async function ipPortalWallJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, mobile: boolean) {
+  expect(rt.local, "Needs a second admin and an IP wall; Ram is alone on test-legal").toBe(true);
+  const admin = await colleague(rt, "admin", "Walled IP Admin");
+  const docket = await localTrademark(rt, request, "ADJ01 IP WALLED");
+  const tag = rt.run.replace(/\W+/g, "").slice(-10).toLowerCase();
+  const ownerClient = `Owner IP Client ${tag}`;
+  let walled = false;
+  try {
+    // Ram's own grant on the docket, which the walled admin must stop seeing.
+    const ownerGrant = await json<{ grants: Array<{ id: string }> }>(await request.post(`${rt.api.origin}/api/admin/portal/invitations`, {
+      headers: rt.headers, data: ipInvitation(`adj01-ip-owner-${tag}@example.com`, ownerClient, docket.id),
+    }), "Owner IP grant", 201);
+    const ownerGrantId = ownerGrant.grants[0].id;
+
+    await switchUser(page, rt, admin.credentials);
+    const firstList = responseTo(page, /\/api\/admin\/portal\/ip-grants$/, "GET");
+    await page.goto(`${rt.web.origin}/app/ip/client-portal`);
+    const firstResponse = await firstList;
+    expect(firstResponse.status()).toBe(200);
+    const before = await firstResponse.json() as { grants: IpGrant[] };
+    expect(before.grants.map((row) => row.id), "Before the wall the admin manages Ram's grant").toContain(ownerGrantId);
+    await expect(page.getByText(`${ownerClient} · ${docket.title}`)).toHaveCount(1);
+
+    await page.getByLabel("Client name").fill("Walled IP Client");
+    await page.getByLabel("Work email").fill(`adj01-ip-walled-${tag}@example.com`);
+    const searched = page.waitForResponse((row) => new URL(row.url()).pathname === "/api/ip/dockets"
+      && new URL(row.url()).searchParams.get("query") === docket.title);
+    await page.getByLabel("Find the client's docket").fill(docket.title);
+    expect((await searched).status()).toBe(200);
+    const select = page.getByRole("combobox", { name: "IP docket" });
+    await expect(select.locator(`option[value="${docket.id}"]`)).toHaveCount(1);
+    await select.selectOption(docket.id);
+    await expect(page.getByRole("checkbox", { name: "Evidence" })).toBeChecked();
+
+    // Ram walls the admin off the docket after it was chosen.
+    const wall = await ipAccessChange(rt, request, docket.id, { action: "add_wall", subject_type: "membership", subject_id: admin.membershipId });
+    walled = true;
+    expect(wall.panel.walls.some((row) => row.subject_id === admin.membershipId && !row.revoked_at)).toBe(true);
+    const grantsBefore = (await ownerIpGrants(rt, request, docket.id)).map((row) => row.id);
+
+    const submit = page.getByRole("button", { name: "Grant access" });
+    await expect(submit).toBeEnabled();
+    const invited = responseTo(page, /\/api\/admin\/portal\/invitations$/, "POST");
+    if (mobile) await submit.tap(); else await submit.click();
+    const refusal = await invited;
+    expect(refusal.status(), "The walled docket is refused like a missing one").toBe(404);
+    expect((await refusal.json()).detail).toBe("IP record not found.");
+    await expect(select).toHaveAttribute("aria-invalid", "true");
+    await expect(select).toHaveAccessibleDescription(/This docket is no longer available to you/);
+    const error = page.locator("#ip-client-docket-error");
+    await error.scrollIntoViewIfNeeded();
+    await expectOnScreen(error, "The refusal sits under the docket field");
+    if (mobile) await expectNoPageOverflow(page);
+    expect((await ownerIpGrants(rt, request, docket.id)).map((row) => row.id), "Nothing was written").toEqual(grantsBefore);
+
+    // After a refresh the walled admin no longer sees Ram's grant or the docket title.
+    const secondList = responseTo(page, /\/api\/admin\/portal\/ip-grants$/, "GET");
+    await page.getByRole("button", { name: "Refresh" }).click();
+    const secondResponse = await secondList;
+    expect(secondResponse.status()).toBe(200);
+    const after = await secondResponse.json() as { grants: IpGrant[] };
+    expect(after.grants.map((row) => row.id)).not.toContain(ownerGrantId);
+    expect(JSON.stringify(after)).not.toContain(docket.title);
+    await expect(page.getByText(`${ownerClient} · ${docket.title}`)).toHaveCount(0);
+    const revoke = await admin.api.post(`${rt.api.origin}/api/admin/portal/ip-grants/${ownerGrantId}/revoke`, {
+      data: { expected_row_version: 1, reason: "Walled admin must not reach this grant." },
+    });
+    expect(revoke.status()).toBe(404);
+    expect((await revoke.json()).detail).toBe("Portal grant not found.");
+
+    // Positive control: Ram, who is not walled, can still grant the same docket.
+    const owner = await request.post(`${rt.api.origin}/api/admin/portal/invitations`, {
+      headers: rt.headers, data: ipInvitation(`adj01-ip-owner2-${tag}@example.com`, "Second Owner IP Client", docket.id),
+    });
+    expect(owner.status()).toBe(201);
+    await markPositive(test.info(), mobile ? "b4-adj-01-ip-portal-wall-mobile" : "b4-adj-01-ip-portal-wall", { docket: docket.id });
+  } finally {
+    await admin.api.dispose();
+    for (const grant of (await ownerIpGrants(rt, request, docket.id)).filter((row) => row.active)) {
+      const revoked = await request.post(`${rt.api.origin}/api/admin/portal/ip-grants/${grant.id}/revoke`, {
+        headers: rt.headers, data: { expected_row_version: grant.row_version, reason: "B4-ADJ-01 acceptance cleanup" },
+      });
+      expect(revoked.status(), "Acceptance grant revoked").toBe(200);
+    }
+    if (walled) {
+      const panel = await json<{ walls: Array<{ id: string; subject_id: string; revoked_at: string | null }> }>(await request.get(
+        `${rt.api.origin}/api/ip/dockets/${docket.id}/access`, { headers: rt.headers }), "IP access panel");
+      for (const row of panel.walls.filter((item) => item.subject_id === admin.membershipId && !item.revoked_at)) {
+        await ipAccessChange(rt, request, docket.id, { action: "revoke_wall", wall_id: row.id });
+      }
+    }
+  }
+}
+
+test("B4-ADJ-01 [local-only] a walled admin cannot grant IP portal access to a docket walled after it was chosen", async ({
+  page, request, baseURL,
+}) => {
+  test.setTimeout(300_000);
+  page.setDefaultTimeout(30_000);
+  const rt = await prepareTester(page, request, baseURL);
+  try {
+    await ipPortalWallJourney(page, request, rt, false);
+  } finally {
+    await rt.release();
+  }
+});
+
+test("B4-ADJ-01 [mobile] [local-only] the walled-docket refusal is anchored to the docket field at 393px", async ({
+  page, request, baseURL,
+}) => {
+  test.setTimeout(300_000);
+  page.setDefaultTimeout(30_000);
+  const rt = await prepareTester(page, request, baseURL, page.viewportSize() ?? MOBILE);
+  try {
+    await ipPortalWallJourney(page, request, rt, true);
+  } finally {
+    await rt.release();
+  }
+});
+
 // ---------------------------------------------------------------- B4-ADJ-08
 
 async function localDocket(rt: TesterRuntime, request: APIRequestContext): Promise<string> {
-  const mark = stamp("B4-ADJ08 MARK");
+  return (await localTrademark(rt, request, "B4-ADJ08 MARK")).id;
+}
+
+async function localTrademark(rt: TesterRuntime, request: APIRequestContext, label: string): Promise<{ id: string; title: string }> {
+  const mark = stamp(label);
   const created = await json(await request.post(`${rt.api.origin}/api/ip/trademark-applications/manual`, {
     headers: rt.headers,
     data: {
@@ -351,17 +507,19 @@ async function localDocket(rt: TesterRuntime, request: APIRequestContext): Promi
       },
     },
   }), "Local docket prerequisite", 201);
-  return created.docket.id as string;
+  return { id: created.docket.id as string, title: created.docket.title as string };
 }
 
 /** Ram proposes, a colleague activates: the two-person path, through the product API. */
 async function activeCalendar(
   rt: TesterRuntime, request: APIRequestContext, approver: APIRequestContext, key: string, name: string,
+  jurisdiction = "IN",
 ): Promise<Calendar> {
   const proposed = await json<Calendar>(await request.post(`${rt.api.origin}/api/ip/working-calendars`, {
     headers: rt.headers,
     data: {
-      key, name, jurisdiction: "IN", office: "IP India", timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [],
+      key, name, jurisdiction, office: jurisdiction === "IN" ? "IP India" : "UK IPO",
+      timezone: jurisdiction === "IN" ? "Asia/Kolkata" : "Europe/London", weekend_days: [5, 6], holidays: [],
       exceptional_working_days: [], source_priority: ["official_gazette"], source_reference: `https://ipindia.gov.in/${key}`,
       source_hash: "c".repeat(64), effective_from: "2026-01-01",
     },
@@ -404,11 +562,16 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
   const docketId = await localDocket(rt, request);
   const delhi = await activeCalendar(rt, request, approver.api, "b4-adj08-delhi", stamp("Delhi registry calendar"));
   const mumbai = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar"));
+  const uk = await activeCalendar(rt, request, approver.api, "b4-adj08-uk", stamp("UK IPO calendar"), "GB");
+  const offeredCalendars = (select: Locator) => select.locator("option").evaluateAll(
+    (rows) => rows.map((row) => (row as HTMLOptionElement).value).filter(Boolean).sort());
   try {
-    let form = await openRuleForm(page, rt, docketId);
+    const form = await openRuleForm(page, rt, docketId);
     const calendar = form.getByLabel("Fixture working calendar");
-    await expect(calendar, "With two active calendars nothing is preselected").toHaveValue("");
+    await expect(calendar, "With two active IN calendars nothing is preselected").toHaveValue("");
     await expect(calendar.locator("option[value='']")).toHaveText("Choose a working calendar");
+    // The active GB calendar is never offered for an IN rule: the API would refuse it.
+    expect(await offeredCalendars(calendar)).toEqual([delhi.id, mumbai.id].sort());
     await fillRule(form, rt.run);
     const sent: string[] = [];
     page.on("request", (row) => { if (/\/api\/ip\/deadline-rules$/.test(new URL(row.url()).pathname)) sent.push(row.method()); });
@@ -428,16 +591,16 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
     expect(refusal.status(), "The server refuses a fixture on a superseded calendar").toBe(422);
     expect((await refusal.json()).errors[0].type).toBe("ip_rule_fixture_calendar_not_active");
     await expect(calendar).toHaveAttribute("aria-invalid", "true");
-    await expect(calendar).toHaveAccessibleDescription(/Choose an active working calendar of this workspace/);
+    await expect(calendar).toHaveAccessibleDescription(/it was replaced, withdrawn or never activated/);
     await expectOnScreen(calendar, "The refusal is anchored to the calendar field");
 
-    // After a reload the picker lists exactly the active calendars, and the proposal succeeds.
-    form = await openRuleForm(page, rt, docketId);
-    const reloaded = form.getByLabel("Fixture working calendar");
-    const offered = await reloaded.locator("option").evaluateAll((rows) => rows.map((row) => (row as HTMLOptionElement).value).filter(Boolean));
-    expect(offered.sort()).toEqual([delhi.id, superseding.id].sort());
-    await reloaded.selectOption(superseding.id);
-    await fillRule(form, `${rt.run}-again`);
+    // Without a page reload the picker now lists exactly the active IN calendars:
+    // the superseded version is gone and no stale choice is kept.
+    await expect.poll(() => offeredCalendars(calendar), { message: "The refused form reloads its calendars" })
+      .toEqual([delhi.id, superseding.id].sort());
+    await expect(calendar).toHaveValue("");
+    await calendar.selectOption(superseding.id);
+    await expect(calendar).not.toHaveAttribute("aria-invalid", "true");
     const proposed = responseTo(page, /\/api\/ip\/deadline-rules$/, "POST");
     await form.getByRole("button", { name: "Propose rule and fixture" }).click();
     const created = await proposed;
@@ -470,6 +633,23 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
     });
     expect(forged.status()).toBe(422);
     expect((await forged.json()).errors[0].type).toBe("ip_rule_fixture_calendar_not_active");
+
+    // An active calendar of another jurisdiction, embedded exactly as stored, is refused at the same field.
+    const foreign = await request.post(`${rt.api.origin}/api/ip/deadline-rules`, {
+      headers: rt.headers,
+      data: { key: "in-tm-opponent-notice", rule_kind: "deadline", jurisdiction: "IN", office: rule.office,
+        right_kind: "trademark", proceeding_kind: rule.proceeding_kind, role: rule.role, stage: rule.stage,
+        source_record_id: rule.source_record_id, source_hash: rule.source_hash, source_reference: rule.source_reference,
+        effective_from: rule.effective_from, engine_compatibility: rule.engine_compatibility, definition: rule.definition,
+        fixtures: [{ ...rule.fixtures[0], calculation: { ...rule.fixtures[0].calculation, calendar: {
+          calendar_version_id: uk.id, timezone: uk.timezone, weekend_days: uk.weekend_days, holidays: uk.holidays,
+          exceptional_working_days: uk.exceptional_working_days, source_reference: uk.source_reference, source_hash: uk.source_hash,
+        } } }] },
+    });
+    expect(foreign.status()).toBe(422);
+    const foreignError = (await foreign.json()).errors[0];
+    expect(foreignError.type).toBe("ip_rule_fixture_calendar_jurisdiction_mismatch");
+    expect(foreignError.loc).toEqual(["body", "fixtures", 0, "calculation", "calendar", "calendar_version_id"]);
     await markPositive(info, "b4-adj-08-rule-calendar", { rule_version_id: rule.id });
   } finally {
     await approver.api.dispose();
@@ -487,11 +667,14 @@ test("B4-ADJ-08 [mobile] [local-only] choosing the fixture calendar is required 
   const approver = await colleague(rt, "admin", "Calendar Approver");
   const docketId = await localDocket(rt, request);
   const delhi = await activeCalendar(rt, request, approver.api, "b4-adj08-delhi", stamp("Delhi registry calendar"));
-  await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar"));
+  const mumbai = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar"));
+  await activeCalendar(rt, request, approver.api, "b4-adj08-uk", stamp("UK IPO calendar"), "GB");
   try {
     const form = await openRuleForm(page, rt, docketId);
     const calendar = form.getByLabel("Fixture working calendar");
     await expect(calendar).toHaveValue("");
+    const offered = await calendar.locator("option").evaluateAll((rows) => rows.map((row) => (row as HTMLOptionElement).value).filter(Boolean));
+    expect(offered.sort(), "Only the IN calendars are offered for an IN rule").toEqual([delhi.id, mumbai.id].sort());
     await fillRule(form, rt.run);
     const submit = form.getByRole("button", { name: "Propose rule and fixture" });
     await submit.scrollIntoViewIfNeeded();
