@@ -14,8 +14,11 @@
  *   3. uploads the executed instrument from inside the recordal form;
  *   4. sees both party Instrument pickers list it, creates the recordal and
  *      finds it in the list by server identity, citing the instrument;
- *   5. retires what it created through the product paths: withdraws the
- *      recordal and retires the docket.
+ *   5. sees, in a second tab, that the Documents tab refuses to retire the
+ *      instrument while the draft recordal relies on it (B4-ADJ-07);
+ *   6. retires what it created through the product paths: withdraws the
+ *      recordal, retires the docket, then retires the instrument from the
+ *      Documents tab's history view.
  *
  * Nothing the bug is about is created through the API or the database.
  * Traces, screenshots and video stay off because the runtime holds the
@@ -33,6 +36,9 @@ import {
   stamp,
   type TesterRuntime,
 } from "./support/ram-bugs4";
+import {
+  createDocketThroughUi, expectRetirementBlockedThroughUi, retireDocumentThroughUi,
+} from "./support/ip-documents";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -49,21 +55,9 @@ function apiCall(rt: TesterRuntime, method: string, path: string | RegExp) {
   };
 }
 
-/** A disposable docket, created through the IP docket's own form. */
-async function createDocketThroughUi(page: Page, rt: TesterRuntime, title: string) {
-  await page.goto(`${rt.web.origin}/app/ip`);
-  await page.getByRole("button", { name: "New trademark" }).click();
-  const form = page.locator("form").filter({ has: page.getByLabel("Docket title") });
-  await form.getByLabel("Docket title").fill(title);
-  await form.getByLabel("Word mark").fill(title.replace(/^BUG-008 /, "B008 "));
-  await form.getByLabel("Goods / services specification").fill("Downloadable legal practice software");
-  await form.getByLabel("Applicant").fill("Aster Labs Private Limited");
-  await form.getByLabel("Representation evidence reference").fill(`e2e:${title}`);
-  const created = page.waitForResponse(apiCall(rt, "POST", "/api/ip/trademark-applications/manual"));
-  await form.getByRole("button", { name: "Create application" }).click();
-  const body = await json<{ docket: { id: string; title: string } }>(await created, "Create the disposable docket", 201);
-  expect(body.docket.title).toBe(title);
-  return body.docket;
+/** A disposable docket, created through the IP docket's own "New trademark" panel. */
+async function createDocket(page: Page, rt: TesterRuntime, title: string) {
+  return createDocketThroughUi(page, rt, title, title.replace(/^BUG-008 recordal docket /, "B008 "));
 }
 
 async function retireDocketThroughUi(page: Page, rt: TesterRuntime, docket: { id: string; title: string }) {
@@ -88,7 +82,7 @@ async function retireDocketThroughUi(page: Page, rt: TesterRuntime, docket: { id
 }
 
 async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
-  const docket = await createDocketThroughUi(page, rt, stamp("BUG-008 recordal docket"));
+  const docket = await createDocket(page, rt, stamp("BUG-008 recordal docket"));
 
   await page.goto(`${rt.web.origin}/app/ip/recordals`);
   await expect(page.getByRole("heading", { name: "Post-registration" })).toBeVisible();
@@ -203,6 +197,18 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
     local: rt.local, docket_id: docket.id, document_id: deedId, recordal_id: recordal.id, mobile,
   });
 
+  // The live draft recordal relies on the instrument, so the Documents tab
+  // names it and refuses to retire the instrument (checked in a second tab so
+  // this recordal stays selected here).
+  const documentsTab = await page.context().newPage();
+  await documentsTab.setViewportSize(page.viewportSize() ?? DESKTOP);
+  await expectRetirementBlockedThroughUi(documentsTab, rt, deedId,
+    { label: "Assignment recordal", status: "draft", recordId: recordal.id }, { mobile });
+  await documentsTab.close();
+  await markPositive(info, "adj07-instrument-retirement-blocked-by-live-recordal", {
+    local: rt.local, document_id: deedId, recordal_id: recordal.id, mobile,
+  });
+
   // Retire what this run created, through the product paths.
   const transaction = page.locator("form").filter({ has: page.getByRole("heading", { name: "Record transaction" }) });
   await transaction.getByLabel("Transaction").selectOption("withdrawn");
@@ -216,6 +222,12 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
   expect(withdrawal.recordal.status).toBe("withdrawn");
   await expect(page.getByText("This recordal is closed.")).toBeVisible();
   await retireDocketThroughUi(page, rt, docket);
+  // The withdrawn recordal no longer relies on the instrument: retire it from history.
+  await retireDocumentThroughUi(page, rt, deedId, `BUG-008 acceptance instrument ${rt.run} retired after its recordal.`,
+    { history: true, mobile });
+  await markPositive(info, "adj07-instrument-retired-after-recordal-and-docket", {
+    local: rt.local, document_id: deedId, recordal_id: recordal.id, mobile,
+  });
 }
 
 test("BUG-008 Ram uploads an instrument from the recordal form and both parties cite it", async ({ page, request, baseURL }, info) => {

@@ -35,6 +35,7 @@ import {
   deadSelects, expectNoPageOverflow, expectOnScreen, markPositive, prepareTester, stamp,
   type TesterRuntime,
 } from "./support/ram-bugs4";
+import { retireDocumentThroughUi } from "./support/ip-documents";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -193,7 +194,9 @@ async function recordQuote(page: Page, form: Locator, docketId: string, currency
 }
 
 /** The Documents blocker opens the record's Documents tab with the record chosen; upload there. */
-async function uploadFromBlocker(page: Page, form: Locator, docketId: string, code: string): Promise<string> {
+async function uploadFromBlocker(
+  page: Page, form: Locator, docketId: string, code: string,
+): Promise<{ title: string; documentId: string }> {
   const link = form.locator("#fa-documents-hint").getByRole("link", { name: /Open the record's Documents tab/ });
   await expect(link).toHaveAttribute("href", `/app/ip?docket=${docketId}&tab=documents`);
   const tab = await followNewTab(page, link);
@@ -221,7 +224,7 @@ async function uploadFromBlocker(page: Page, form: Locator, docketId: string, co
   const result = await ok(await uploaded, "Upload the instruction document in the Documents tab");
   expect(result.outcome).toBe("created");
   await tab.close();
-  return title;
+  return { title, documentId: result.document.id as string };
 }
 
 async function completeAndCreate(page: Page, form: Locator, documentTitle: string, authority: string) {
@@ -358,7 +361,7 @@ async function instructionWalk(page: Page, request: APIRequestContext, baseURL: 
     const estimateId = await recordQuote(page, form, record.docketId, currency, "1500.00");
 
     // The instruction document is uploaded where the blocker points.
-    const documentTitle = await uploadFromBlocker(page, form, record.docketId, target.code);
+    const { title: documentTitle, documentId } = await uploadFromBlocker(page, form, record.docketId, target.code);
     const withDocument = await checkAgain(page, form, target.code, "Create options after the upload");
     expect(withDocument.documents.map((row) => row.title)).toContain(documentTitle);
     expect(withDocument.blockers).toEqual([]);
@@ -371,6 +374,9 @@ async function instructionWalk(page: Page, request: APIRequestContext, baseURL: 
     });
     await expect(page.getByRole("heading", { name: counselName })).toBeVisible();
     await retireInstruction(page, instruction.id);
+    // The cancelled instruction no longer relies on the pack: retire it in the Documents tab (B4-ADJ-07).
+    await retireDocumentThroughUi(page, rt, documentId, `Synthetic instruction pack ${rt.run} retired after its instruction.`,
+      { history: false, mobile });
     await voidQuote(page, rt, record.docketId, estimateId);
     await retireCounsel(request, rt, counselId);
     retired = true;
@@ -474,7 +480,7 @@ test("[local-only] BUG-010 Ram links a Matter from the Matterless explanation, a
   // The quote must fit the assignment: the form defaults the currency to it.
   await expect(form.getByRole("region", { name: "Record associate quote" }).getByLabel("Quote currency")).toHaveValue("GBP");
   const estimateId = await recordQuote(page, form, record.docketId, "GBP", "1500.00");
-  const documentTitle = await uploadFromBlocker(page, form, record.docketId, "GB");
+  const { title: documentTitle } = await uploadFromBlocker(page, form, record.docketId, "GB");
   await checkAgain(page, form, "GB", "Create options after the upload");
   const instruction = await completeAndCreate(page, form, documentTitle, "Client letter of 29 Oct 2026, ref AST-7");
   expect(instruction).toMatchObject({ assignment_id: created.id, outside_counsel_id: counselId, estimate_cost_item_id: estimateId, target_jurisdiction: "GB" });
