@@ -21,11 +21,24 @@ describe("PortalIpRecordPage", () => {
   it("shows approved data and sends a structured instruction", async () => {
     const user = userEvent.setup();
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><PortalIpRecordPage /></QueryClientProvider>);
-    expect(await screen.findByText("OPP-88")).toBeInTheDocument();
+    const rows = await screen.findByTestId("portal-publication-rows");
+    // B4-ADJ-02: rows read as labelled values, never raw JSON.
+    expect(rows).toHaveTextContent("Opposition numbers");
+    expect(rows).toHaveTextContent("OPP-88");
+    expect(rows.textContent).not.toMatch(/[{}"]|opposition_numbers/);
     await user.selectOptions(screen.getByLabelText("Approved publication"), "pub-1");
     await user.selectOptions(screen.getByLabelText("Instruction type"), "proceeding");
     await user.type(screen.getByLabelText("Instruction details"), "Proceed with the opposition response.");
     await user.click(screen.getByRole("button", { name: "Send for firm acknowledgement" }));
     await waitFor(() => expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({ publicationId: "pub-1", docketId: "docket-1", instructionKind: "proceeding", decision: "proceed" })));
+  });
+
+  it("disables the publication select with a reason when nothing can be answered", async () => {
+    mocks.publications.mockResolvedValue({ publications: [] });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><PortalIpRecordPage /></QueryClientProvider>);
+    const select = await screen.findByLabelText("Approved publication");
+    expect(select).toBeDisabled();
+    expect(screen.getByText(/None is available yet/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Send for firm acknowledgement" })).toBeDisabled();
   });
 });

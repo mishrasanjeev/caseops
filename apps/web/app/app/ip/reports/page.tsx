@@ -23,6 +23,7 @@ import {
   type IpReportPreview,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { displayValue } from "@/lib/display-value";
 import {
   fetchAdminPortalIpGrants,
   publishIpReportToPortal,
@@ -69,13 +70,6 @@ function label(value: string) {
   return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "Not available";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.length ? value.map(displayValue).join(", ") : "None";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
 
 function freshnessTone(status: IpReportPreview["freshness"]["status"]) {
   if (status === "current") return "success" as const;
