@@ -589,6 +589,65 @@ test("[mobile] B4-ADJ-13 [local-only] Madrid family table stacks at 393px with i
   await rt.release();
 });
 
+async function employeesJourney(page: Page, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
+  const listed = page.waitForResponse(r => new URL(r.url()).pathname === "/api/companies/current/employees"
+    && r.request().method() === "GET");
+  await page.goto(`${rt.web.origin}/app/admin/employees`);
+  await json(await listed, "Employee directory the page received");
+  const table = page.getByTestId("employees-table");
+  const row = table.locator("tbody > tr").filter({ hasText: rt.credentials.email });
+  await expect(row).toHaveCount(1);
+  await expectReachable(row.getByTestId(`employee-edit-${rt.credentials.email}`), "Edit on the employee row");
+  if (mobile) {
+    await expectStacked(table, "Employee directory");
+    await expectNoPageOverflow(page);
+  }
+  await markPositive(info, mobile ? "adj13-employees-mobile" : "adj13-employees", { membership_id: rt.actor.membership.id });
+}
+
+test("B4-ADJ-13 [local-only] the employee directory keeps Edit on screen at 1024px", async ({ page, request, baseURL }, info) => {
+  test.setTimeout(300_000);
+  const rt = await prepareTester(page, request, baseURL, DESKTOP);
+  expect(rt.local, "The directory row actions are the tenant owner's; only the local tenant guarantees the tester is its owner").toBe(true);
+  await employeesJourney(page, rt, info, false);
+  await rt.release();
+});
+
+test("[mobile] B4-ADJ-13 [local-only] the employee directory stacks at 393px with Edit on screen", async ({ page, request, baseURL }, info) => {
+  test.setTimeout(300_000);
+  const rt = await prepareTester(page, request, baseURL, MOBILE);
+  expect(rt.local, "The directory row actions are the tenant owner's; only the local tenant guarantees the tester is its owner").toBe(true);
+  await employeesJourney(page, rt, info, true);
+  await rt.release();
+});
+
+for (const viewport of [DESKTOP, MOBILE]) {
+  const tag = viewport === MOBILE ? "[mobile] " : "";
+  test(`${tag}B4-ADJ-13 [local-only] the matters list keeps its Status actions pinned on screen at ${viewport.width}px`, async ({ page, request, baseURL }, info) => {
+    test.setTimeout(300_000);
+    const rt = await prepareTester(page, request, baseURL, viewport);
+    expect(rt.local, "The list is read for a Matter this run creates; production test-legal must not gain one per run").toBe(true);
+    const matterCode = code("QALIST13");
+    const matter = await json<{ id: string }>(await page.request.post(`${rt.api.origin}/api/matters/`, {
+      headers: rt.headers, data: { title: stamp("ADJ13 matters list row"), matter_code: matterCode,
+        practice_area: "Civil", forum_level: "high_court", status: "intake" },
+    }), "Create the local QA Matter");
+    await page.goto(`${rt.web.origin}/app/matters`);
+    const status = page.getByRole("combobox", { name: `Status for ${matterCode}` });
+    await expectReachable(status, "Status select on the matters row");
+    const scroller = page.locator("main table").filter({ has: status }).locator("xpath=..");
+    const geometry = await scrollTable(scroller, 0);
+    for (const fraction of [0.5, 1]) {
+      await scrollTable(scroller, fraction);
+      await expectReachable(status, `Status select with the columns scrolled (${fraction})`, { sideways: true });
+    }
+    if (viewport === MOBILE) await expectNoPageOverflow(page);
+    await markPositive(info, viewport === MOBILE ? "adj13-matters-list-mobile" : "adj13-matters-list",
+      { matter_id: matter.id, geometry });
+    await rt.release();
+  });
+}
+
 test("B4-ADJ-16 [local-only] adding a colleague leaves the caller's API context signed in as the tester", async ({ page, request, baseURL }, info) => {
   test.setTimeout(240_000);
   const rt = await prepareTester(page, request, baseURL);
