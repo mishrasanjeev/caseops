@@ -226,12 +226,15 @@ function LegalUpdatesPanel() {
     },
   });
 
+  // The API accepts at most 8 terms; extra terms are refused, never dropped.
   const termList = terms
     .split(",")
     .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 8);
-  const canCreate = name.trim().length > 0 && termList.length > 0;
+    .filter(Boolean);
+  const termsError = termList.length > 8
+    ? `Enter at most 8 terms, separated by commas; ${termList.length} were entered.`
+    : null;
+  const canCreate = name.trim().length > 0 && termList.length > 0 && !termsError;
 
   return (
     <Card data-testid="legal-update-center">
@@ -282,13 +285,22 @@ function LegalUpdatesPanel() {
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
-          <Input
-            aria-label="Statute or section terms"
-            data-testid="legal-update-terms"
-            placeholder="Act or section terms"
-            value={terms}
-            onChange={(event) => setTerms(event.target.value)}
-          />
+          <div className="flex min-w-0 flex-col gap-1">
+            <Input
+              aria-label="Statute or section terms"
+              data-testid="legal-update-terms"
+              placeholder="Act or section terms"
+              value={terms}
+              aria-invalid={termsError ? true : undefined}
+              aria-describedby={termsError ? "legal-update-terms-error" : undefined}
+              onChange={(event) => setTerms(event.target.value)}
+            />
+            {termsError ? (
+              <p id="legal-update-terms-error" role="alert" className="text-xs text-[var(--color-danger-500)]">
+                {termsError}
+              </p>
+            ) : null}
+          </div>
           <Button
             type="submit"
             variant="secondary"

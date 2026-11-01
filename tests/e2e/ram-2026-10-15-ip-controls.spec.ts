@@ -421,7 +421,7 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
         ...currentWorkspace.calendars.filter(row => row.status === "active").map(row => row.id)]);
       const hearingFields = page.getByTestId("ip-hearing-workflow");
       for (const label of ["Hearing date", "Time precision", "IANA timezone", "Forum", "Purpose", "Mode",
-        "Location", "Virtual hearing link", "Source", "Reminder offsets (hours)"]) {
+        "Location", "Virtual hearing link", "Source", "Reminder offsets"]) {
         const control = label === "Time precision" || label === "Mode"
           ? hearingFields.getByRole("combobox", { name: label, exact: true })
           : hearingFields.getByLabel(label, { exact: true });
