@@ -256,4 +256,20 @@ describe("PerMatterOutsideCounselPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Currency: enter a 3-letter code");
     expect(screen.getByTestId("matter-oc-assign-submit")).toBeDisabled();
   });
+
+  it("B4-ADJ-02 never pre-chooses the counsel an invoice is logged against", async () => {
+    const user = userEvent.setup();
+    const base = await fetchWorkspaceMock();
+    const second = { ...base.assignments[0], id: "a2", counsel_id: "c2", counsel_name: "Birch Chambers" };
+    fetchWorkspaceMock.mockResolvedValue({ ...base, assignments: [...base.assignments, second] });
+    render(withClient(<PerMatterOutsideCounselPage />));
+    await user.click(await screen.findByTestId("matter-oc-spend-open"));
+    const counsel = screen.getByRole("combobox", { name: "Counsel" });
+    expect(counsel).toHaveTextContent("Pick an assignment");
+    expect(counsel).not.toHaveTextContent(/Redwood Counsel|Birch Chambers/);
+    expect(counsel).toHaveAccessibleDescription("Choose the counsel whose invoice this is.");
+    await user.type(screen.getByLabelText("Description"), "Drafting fee");
+    await user.type(screen.getByLabelText(/^Amount/), "1500");
+    expect(screen.getByTestId("matter-oc-spend-submit")).toBeDisabled();
+  });
 });
