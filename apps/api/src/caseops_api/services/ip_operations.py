@@ -1133,26 +1133,44 @@ def _visible_ip_docket_ids(session: Session, *, context: SessionContext) -> set[
     )
 
 
-_FULL_LISTING_PAGE_SIZE = 200
+_FULL_LISTING_CHUNK_SIZE = 200
 
 
 def _list_all_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketListResponse:
-    """The whole visible docket population, paged through the keyset cursor.
+    """The whole visible docket population, taken in one statement.
 
     Reports, control reviews and exception queues describe the reader's entire
-    portfolio; one default page silently dropped docket 101 onwards.
+    portfolio; one default page silently dropped docket 101 onwards. The rows
+    are read once, so a docket updated while the snapshot is being built cannot
+    move behind a page cursor and drop out; only serialization is chunked.
     """
 
+    rows = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(*_visible_docket_scope(session, context=context))
+            .order_by(IpDocketRecord.updated_at.desc(), IpDocketRecord.id.desc())
+        ).all()
+    )
+    may_read_rates = _may_read_confidential_rates(session, context=context)
     dockets: list[IpDocketRecordResponse] = []
-    cursor: str | None = None
-    while True:
-        page = list_ip_dockets(
-            session, context=context, limit=_FULL_LISTING_PAGE_SIZE, cursor=cursor
+    for start in range(0, len(rows), _FULL_LISTING_CHUNK_SIZE):
+        chunk = rows[start : start + _FULL_LISTING_CHUNK_SIZE]
+        preload = _load_docket_serialization_rows(
+            session,
+            company_id=context.company.id,
+            docket_ids=[row.id for row in chunk],
         )
-        dockets.extend(page.dockets)
-        if not page.has_more or page.next_cursor is None:
-            break
-        cursor = page.next_cursor
+        dockets.extend(
+            _serialize_docket(
+                session,
+                row,
+                context=context,
+                may_read_rates=may_read_rates,
+                preload=preload,
+            )
+            for row in chunk
+        )
     return IpDocketListResponse(
         dockets=dockets,
         count=len(dockets),
