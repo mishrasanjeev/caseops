@@ -509,6 +509,18 @@ describe("IP journal watch page", () => {
     expect(searchMock).toHaveBeenCalledWith("BUG014-CAPTURE-1");
   });
 
+  it("B4-ADJ-20 shows a manual-only profile as unscheduled, never as checked by a scheduler", async () => {
+    const user = userEvent.setup();
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Profiles" }));
+    const card = await page.findByTestId("watch-profile-profile-1");
+    expect(within(card).getByText("Scheduled check")).toBeVisible();
+    expect(within(card).getByText("None: manual intake only")).toBeVisible();
+    expect(within(card).getByText("Last journal entry compared")).toBeVisible();
+    expect(within(card).queryByText("Next check")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Last checked")).not.toBeInTheDocument();
+  });
+
   it("creates criteria, frequency, recipients chosen by name, and cost policy", async () => {
     const user = userEvent.setup();
     createProfileMock.mockResolvedValue(PROFILE);

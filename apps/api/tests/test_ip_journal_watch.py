@@ -811,9 +811,14 @@ def test_journal_watch_scheduler_is_durable_and_fail_closed(
         manual_profile.next_poll_at = scheduled_at
         session.commit()
         result = run_journal_watch_scheduler(session, now=scheduled_at)
-        assert result.due_profiles == 2
+        # B4-ADJ-20: an active manual-only profile has nothing to poll, so it
+        # is not due even with a legacy next poll recorded.
+        assert result.due_profiles == 1
         assert result.checked_profiles == 1
+        assert result.manual_profiles == 0
         assert result.provider_paused_profiles == 1
+        session.refresh(manual_profile)
+        assert manual_profile.last_polled_at is None
         assert result.external_calls == 0
         session.refresh(external_profile)
         assert external_profile.poll_status == "paused"
@@ -825,7 +830,10 @@ def test_journal_watch_scheduler_is_durable_and_fail_closed(
                 )
             )
         )
-        assert {row.status for row in runs} == {"succeeded", "failed"}
+        # B4-ADJ-20: only the automated profile's refused check is a run; the
+        # manual-only profile polls nothing and records nothing.
+        assert [row.status for row in runs] == ["failed"]
+        assert runs[0].provider_key == "unlicensed-journal-provider"
         assert all(row.external_call is False for row in runs)
 
 
@@ -958,7 +966,8 @@ def test_quota_resets_at_period_boundary_and_terminal_dockets_never_run(
         session.commit()
         result = run_journal_watch_scheduler(session, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
         assert result.due_profiles == 1
-        assert result.checked_profiles == 1
+        assert result.manual_profiles == 1
+        assert result.checked_profiles == 0
         session.refresh(row)
         assert row.poll_status == "active"
         assert row.pause_reason is None

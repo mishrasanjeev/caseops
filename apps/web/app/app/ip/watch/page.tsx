@@ -608,8 +608,17 @@ function ProfilesView({
                 <Field label="Classes / jurisdictions" value={[...profile.class_numbers_json.map((item) => `Class ${item}`), ...profile.jurisdictions_json].join(", ") || "None"} />
                 <div className="min-w-0"><span className="text-[var(--color-mute)]">Recipients</span><ul className="mt-1 space-y-0.5 font-medium text-[var(--color-ink)]">{profile.recipient_membership_ids_json.map((id) => <li key={id} className="break-words"><PersonName membershipId={id} /></li>)}</ul></div>
                 <Field label="Cost policy" value={`${profile.spent_cost_minor_in_period} / ${profile.max_cost_minor_per_period || "unlimited"} ${profile.cost_currency} paise`} />
-                <Field label="Last checked" value={localDate(profile.last_polled_at)} />
-                <Field label="Next check" value={localDate(profile.next_poll_at)} />
+                {profile.provider_key === "manual-journal" ? (
+                  <>
+                    <Field label="Last journal entry compared" value={profile.last_polled_at ? localDate(profile.last_polled_at) : "None yet"} />
+                    <Field label="Scheduled check" value="None: manual intake only" />
+                  </>
+                ) : (
+                  <>
+                    <Field label="Last checked" value={localDate(profile.last_polled_at)} />
+                    <Field label="Next check" value={localDate(profile.next_poll_at)} />
+                  </>
+                )}
               </div>
               {canManage ? (
                 <div className="flex gap-2">
@@ -1304,11 +1313,8 @@ function HandoffPanel({ hit, publication, core, membershipId, handoffs, onChange
 }
 
 function runSource(run: IpJournalIngestionRun) {
-  if (run.idempotency_key.startsWith("scheduler:")) {
-    return run.provider_key === "manual-journal"
-      ? "Scheduled check · no journal source contacted"
-      : `${run.provider_key} · scheduled check`;
-  }
+  // Manual-only profiles are never polled, so the API returns no scheduler run for them.
+  if (run.idempotency_key.startsWith("scheduler:")) return `${run.provider_key} · scheduled check`;
   return run.provider_key === "ipindia-journal-manual" ? "Manual journal intake" : run.provider_key;
 }
 
