@@ -283,6 +283,7 @@
     min-width: 0;
     max-width: none;
     padding: 0.25rem 0;
+    border-width: 0;
     text-align: left;
     overflow-wrap: anywhere;
   }
