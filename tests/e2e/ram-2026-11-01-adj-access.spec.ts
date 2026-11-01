@@ -517,6 +517,11 @@ async function localTrademark(rt: TesterRuntime, request: APIRequestContext, lab
 }
 
 /** Ram proposes, a colleague activates: the two-person path, through the product API. */
+// Working-calendar references for the B4-ADJ-08 journeys.
+const DELHI_CALENDAR = "b4-adj08-delhi";
+const MUMBAI_CALENDAR = "b4-adj08-mumbai";
+const UK_CALENDAR = "b4-adj08-uk";
+
 async function activeCalendar(
   rt: TesterRuntime, request: APIRequestContext, approver: APIRequestContext, key: string, name: string,
   jurisdiction = "IN",
@@ -566,9 +571,9 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
   expect(rt.local, "Calendar activation needs a second approver; Ram is alone on test-legal").toBe(true);
   const approver = await colleague(rt, "admin", "Calendar Approver");
   const docketId = await localDocket(rt, request);
-  const delhi = await activeCalendar(rt, request, approver.api, "b4-adj08-delhi", stamp("Delhi registry calendar"));
-  const mumbai = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar"));
-  const uk = await activeCalendar(rt, request, approver.api, "b4-adj08-uk", stamp("UK IPO calendar"), "GB");
+  const delhi = await activeCalendar(rt, request, approver.api, DELHI_CALENDAR, stamp("Delhi registry calendar"));
+  const mumbai = await activeCalendar(rt, request, approver.api, MUMBAI_CALENDAR, stamp("Mumbai registry calendar"));
+  const uk = await activeCalendar(rt, request, approver.api, UK_CALENDAR, stamp("UK IPO calendar"), "GB");
   const offeredCalendars = (select: Locator) => select.locator("option").evaluateAll(
     (rows) => rows.map((row) => (row as HTMLOptionElement).value).filter(Boolean).sort());
   try {
@@ -589,7 +594,7 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
     // Ram chooses Mumbai; another approver supersedes it before he submits.
     await calendar.selectOption(mumbai.id);
     await expect(calendar).not.toHaveAttribute("aria-invalid", "true");
-    const superseding = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar v2"));
+    const superseding = await activeCalendar(rt, request, approver.api, MUMBAI_CALENDAR, stamp("Mumbai registry calendar v2"));
     expect(superseding.version).toBe(2);
     const refused = responseTo(page, /\/api\/ip\/deadline-rules$/, "POST");
     await form.getByRole("button", { name: "Propose rule and fixture" }).click();
@@ -615,7 +620,7 @@ test("B4-ADJ-08 [local-only] the rule form picks no calendar for you and the ser
     expect(rule.fixtures[0].calculation.calendar.calendar_version_id).toBe(superseding.id);
 
     // A later supersession is named on the rule itself as a reason it cannot activate.
-    const third = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar v3"));
+    const third = await activeCalendar(rt, request, approver.api, MUMBAI_CALENDAR, stamp("Mumbai registry calendar v3"));
     expect(third.version).toBe(3);
     await openRuleForm(page, rt, docketId);
     const blocked = page.getByTestId(`ip-rule-activation-blocked-${rule.id}`);
@@ -672,9 +677,9 @@ test("B4-ADJ-08 [mobile] [local-only] choosing the fixture calendar is required 
   expect(rt.local, "Calendar activation needs a second approver; Ram is alone on test-legal").toBe(true);
   const approver = await colleague(rt, "admin", "Calendar Approver");
   const docketId = await localDocket(rt, request);
-  const delhi = await activeCalendar(rt, request, approver.api, "b4-adj08-delhi", stamp("Delhi registry calendar"));
-  const mumbai = await activeCalendar(rt, request, approver.api, "b4-adj08-mumbai", stamp("Mumbai registry calendar"));
-  await activeCalendar(rt, request, approver.api, "b4-adj08-uk", stamp("UK IPO calendar"), "GB");
+  const delhi = await activeCalendar(rt, request, approver.api, DELHI_CALENDAR, stamp("Delhi registry calendar"));
+  const mumbai = await activeCalendar(rt, request, approver.api, MUMBAI_CALENDAR, stamp("Mumbai registry calendar"));
+  await activeCalendar(rt, request, approver.api, UK_CALENDAR, stamp("UK IPO calendar"), "GB");
   try {
     const form = await openRuleForm(page, rt, docketId);
     const calendar = form.getByLabel("Fixture working calendar");

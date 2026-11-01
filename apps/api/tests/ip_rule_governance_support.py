@@ -15,6 +15,8 @@ from caseops_api.db.models import BillingSubscription
 from caseops_api.db.session import get_session_factory
 
 RULE_GOVERNANCE_ENTITLEMENT = "ip_rule_governance"
+# The working calendar a rule fixture runs on in the precondition helpers.
+PRECONDITION_CALENDAR = "ip-india-2026-precondition"
 
 
 def grant_ip_rule_governance_entitlement(company_id: str) -> None:
@@ -147,7 +149,7 @@ def company_active_calendar(company_id: str) -> dict:
         if row is None:
             calendar = LegalWorkingCalendar(
                 company_id=company_id,
-                key="ip-india-2026-precondition",
+                key=PRECONDITION_CALENDAR,
                 name="IP India official working calendar 2026",
                 jurisdiction="IN",
                 office="IP India",

@@ -145,7 +145,8 @@ def test_rule_fixtures_and_deadlines_refuse_a_calendar_of_another_jurisdiction(
     rule = _activate(client, legal_headers, proposed.json()["id"], reviewer_id)
     assert rule.status_code == 200, rule.text
 
-    matter = _mk_matter(client, owner_token, "IP-ADJ08-JUR")
+    matter_code = "IP-ADJ08-JUR"
+    matter = _mk_matter(client, owner_token, matter_code)
     docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
     proposal = {
         "title": "Respond to examination report",
@@ -207,7 +208,8 @@ def test_activation_refuses_a_rule_whose_fixture_calendar_is_another_jurisdictio
         rule_set.jurisdiction = "GB"
         session.commit()
 
-    matter = _mk_matter(client, owner_token, "IP-ADJ08-LEGACY")
+    matter_code = "IP-ADJ08-LEGACY"
+    matter = _mk_matter(client, owner_token, matter_code)
     docket = _docket_for_matter(client, owner_headers, matter_id=matter["id"])
     workspace = client.get(
         f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
