@@ -79,7 +79,7 @@ def history_selection(
         git(repo, "merge-base", "--is-ancestor", base, head)
         git(repo, "merge-base", "--is-ancestor", tip, head)
         selection = base + ".." + head
-    elif event_name == "schedule":
+    elif event_name in {"schedule", "workflow_dispatch"}:
         selection = "--all"
     else:
         raise ScanError("Unsupported secret-scan event")

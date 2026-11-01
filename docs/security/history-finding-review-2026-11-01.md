@@ -42,6 +42,16 @@ remains blocking. No scanner runtime or scan-boundary change is needed.
 
 ## Regression And Release Boundary
 
+The existing Security workflow also accepts an explicit manual dispatch.
+That event selects the same complete all-refs boundary as the daily schedule;
+checkoutHEAD and full-clone fences remain mandatory. It runs the unchanged
+eight-job security inventory, native regressions and redacted scanner receipts.
+The actual GitHub trigger remains workflow_dispatch in its retained run data,
+not a fabricated scheduled run. New negative canaries prove that manual replay
+still rejects an unmerged secret and a mismatched candidate. This permits
+candidate verification immediately after a repair without broadening access,
+relaxing timeouts, excluding refs or waiting for the next daily schedule.
+
 The standard test_secret_scan_gate.py inventory binds all14 policy entries to
 the hash ledger and constrained fixture uses. Selected reachable origins are
 checked against immutable bytes; unselected origins are counted separately and

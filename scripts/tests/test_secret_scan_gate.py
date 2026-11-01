@@ -165,6 +165,7 @@ class SelectionTests(GitFixture):
         for event_name, event in [
             ("push", self.push(self.base, "0" * 40)),
             ("schedule", {}),
+            ("workflow_dispatch", {}),
         ]:
             _, ids = scan.history_selection(self.repo, self.base, event_name, event)
             self.assertEqual(ids, [self.base])
@@ -193,6 +194,19 @@ class SelectionTests(GitFixture):
         with self.assertRaises(scan.ScanError):
             scan.history_selection(self.repo, "a" * 40, "schedule", {})
         with self.assertRaises(scan.ScanError):
+            scan.history_selection(self.repo, self.base, "workflow_run", {})
+
+    def test_manual_allrefs_keeps_unmerged_history_and_exact_candidate(self):
+        self.git("switch", "-c", "manual-unmerged-side")
+        self.write("side.txt", "unmerged public fixture\n")
+        side = self.commit("unmerged record")
+        self.git("switch", "main")
+        self.write("record.txt", "new main record\n")
+        head = self.commit("main record")
+        selection, ids = scan.history_selection(self.repo, head, "workflow_dispatch", {})
+        self.assertEqual(selection, "--all")
+        self.assertEqual(set(ids), {self.base, side, head})
+        with self.assertRaisesRegex(scan.ScanError, "Checkout HEAD differs"):
             scan.history_selection(self.repo, self.base, "workflow_dispatch", {})
 
     def test_shallow_checkout_is_rejected(self):
@@ -865,6 +879,12 @@ class RealGitleaksTests(GitFixture):
             self.assertEqual(boundary["image"], scan.GITLEAKS_IMAGE)
 
     def test_real_schedule_rejects_secret_on_unmerged_side_ref(self):
+        self.assert_unmerged_secret_rejected("schedule")
+
+    def test_real_manual_allrefs_rejects_secret_on_unmerged_side_ref(self):
+        self.assert_unmerged_secret_rejected("workflow_dispatch")
+
+    def assert_unmerged_secret_rejected(self, event_name):
         self.git("switch", "-c", "unmerged-unreviewed")
         self.write("side.txt", self.canary())
         introduced = self.commit("unmerged offline canary")
@@ -872,7 +892,7 @@ class RealGitleaksTests(GitFixture):
         self.write("record.txt", "clean candidate change\n")
         head = self.commit("clean main")
         with self.assertRaises(scan.ScanError):
-            self.run_scan(head, {}, "schedule")
+            self.run_scan(head, {}, event_name)
         self.assert_redacted_failure("history-initial.sarif")
         inventory = json.loads((self.root / "evidence/inventory.json").read_text())
         self.assertEqual(inventory["history_selection"], "--all")
