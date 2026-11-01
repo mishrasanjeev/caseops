@@ -828,7 +828,9 @@ describe("centralized notice management", () => {
         }),
     ]);
     listMattersMock.mockImplementation(async ({ q, cursor }: { q?: string; cursor?: string }) =>
-      q
+      q === "NO SUCH MATTER"
+        ? { matters: [], next_cursor: null }
+        : q
         ? {
             matters: [
               { id: "matter-101", matter_code: "MAT-101", title: "Later page matter" },
@@ -859,8 +861,22 @@ describe("centralized notice management", () => {
     fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
       target: { value: "MAT-101" },
     });
-    const later = await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
-    fireEvent.click(later);
+    await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
+    // B4-ADJ-03 review: the count is the server's answer for the search; the
+    // notice's existing link is listed apart and is not counted as a match.
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent("1 matter matches this search.");
+    const linkedGroup = within(dialog).getByRole("group", { name: "Linked to this notice (1)" });
+    expect(within(linkedGroup).getByRole("checkbox", { name: /MAT-001/ })).not.toBeChecked();
+    fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
+      target: { value: "NO SUCH MATTER" },
+    });
+    expect(await within(dialog).findByText("No accessible matters match this search.")).toBeVisible();
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent("0 matters match this search.");
+    expect(within(linkedGroup).getByRole("checkbox", { name: /MAT-001/ })).toBeVisible();
+    fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
+      target: { value: "MAT-101" },
+    });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /MAT-101/ }));
     fireEvent.change(within(dialog).getByLabelText("Remarks"), {
       target: { value: "Corrected links" },
     });

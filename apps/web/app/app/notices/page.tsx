@@ -290,6 +290,7 @@ function NoticeFormDialog({
   onOpenChange,
   notice,
   matters,
+  linkedMatters,
   mattersPending,
   mattersError,
   mattersHasMore,
@@ -305,7 +306,10 @@ function NoticeFormDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   notice: NoticeRecord | null;
+  /** Matters the server returned for the current search, in its order. */
   matters: MatterOption[];
+  /** The edited notice's existing links, shown whatever the search. */
+  linkedMatters: MatterOption[];
   mattersPending: boolean;
   mattersError: boolean;
   /** The server has more Matters for this search than are listed. */
@@ -330,7 +334,9 @@ function NoticeFormDialog({
     setFile(null);
   }, [notice, open]);
 
-  const visibleMatters = matters;
+  const linkedIds = new Set(linkedMatters.map((matter) => matter.id));
+  // Search results only; a linked Matter is listed once, in the linked group.
+  const searchMatters = matters.filter((matter) => !linkedIds.has(matter.id));
   const invalidAmount = [draft.amount, draft.disputeAmount, draft.recoveredAmount].some(
     (value) => value.trim() !== "" && amountToMinor(value) === null,
   );
@@ -540,17 +546,32 @@ function NoticeFormDialog({
               onChange={(event) => onMatterSearchChange(event.target.value)}
               placeholder="Matter code, title, client, or party"
             />
+            {linkedMatters.length ? (
+              <div className="mb-3" role="group" aria-labelledby="notice-linked-matters">
+                <p id="notice-linked-matters" className="mb-1.5 text-xs font-semibold text-[var(--color-ink)]">
+                  Linked to this notice ({linkedMatters.length})
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {linkedMatters.map((matter) => (
+                    <label key={matter.id} className="flex items-start gap-2 rounded-lg border border-[var(--color-line)] p-2 text-sm">
+                      <input type="checkbox" className="mt-0.5" checked={matterIds.includes(matter.id)} onChange={(event) => toggleMatter(matter.id, event.target.checked)} />
+                      <span className="min-w-0 break-words"><span className="font-medium">{matter.matter_code}</span> - {matter.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {mattersPending ? (
               <div className="flex items-center gap-2 text-sm text-[var(--color-mute)]">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading matters...
               </div>
             ) : mattersError ? (
               <p className="text-sm text-amber-800">Matters could not be loaded. Existing links are preserved until the picker is available.</p>
-            ) : visibleMatters.length === 0 ? (
+            ) : matters.length === 0 ? (
               <p className="text-sm text-[var(--color-mute)]">No accessible matters match this search.</p>
-            ) : (
+            ) : searchMatters.length === 0 ? null : (
               <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">
-                {visibleMatters.map((matter) => (
+                {searchMatters.map((matter) => (
                   <label key={matter.id} className="flex items-start gap-2 rounded-lg border border-[var(--color-line)] p-2 text-sm">
                     <input type="checkbox" className="mt-0.5" checked={matterIds.includes(matter.id)} onChange={(event) => toggleMatter(matter.id, event.target.checked)} />
                     <span><span className="font-medium">{matter.matter_code}</span> - {matter.title}</span>
@@ -562,8 +583,8 @@ function NoticeFormDialog({
               <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
                 <span role="status" data-testid="notice-matter-count">
                   {mattersHasMore
-                    ? `Showing the ${visibleMatters.length} most recently updated matches. Search, or load more.`
-                    : `${visibleMatters.length} ${visibleMatters.length === 1 ? "matter" : "matters"}${matterSearch.trim() ? " match this search" : ""}.`}
+                    ? `Showing the ${matters.length} most recently updated matches. Search, or load more.`
+                    : `${matters.length} ${matters.length === 1 ? "matter" : "matters"}${matterSearch.trim() ? (matters.length === 1 ? " matches this search" : " match this search") : ""}.`}
                   {matterIds.length ? ` ${matterIds.length} selected.` : ""}
                 </span>
                 {mattersHasMore ? (
@@ -903,18 +924,21 @@ export default function NoticesPage() {
     return Array.from(options.values()).sort((left, right) => left.full_name.localeCompare(right.full_name));
   }, [currentContext, notices, ownersQuery.data]);
 
+  // Server rows only, so the dialog's count is the server's answer for the search.
   const formMatterOptions = useMemo(() => {
     const options = new Map<string, MatterOption>();
     for (const page of mattersQuery.data?.pages ?? []) for (const matter of page.matters) options.set(matter.id, matter);
-    for (const link of editingNotice?.matter_links ?? []) {
-      options.set(link.matter_id, {
+    return Array.from(options.values());
+  }, [mattersQuery.data]);
+  const linkedMatterOptions = useMemo<MatterOption[]>(
+    () =>
+      (editingNotice?.matter_links ?? []).map((link) => ({
         id: link.matter_id,
         matter_code: link.matter_code,
         title: link.matter_title,
-      });
-    }
-    return Array.from(options.values());
-  }, [editingNotice, mattersQuery.data]);
+      })),
+    [editingNotice],
+  );
   const ownerOptions = useMemo(() => directoryOwners.map((owner) => ({ id: owner.membership_id, label: owner.full_name })), [directoryOwners]);
   const statusOptions = useMemo(
     () =>
@@ -1008,7 +1032,7 @@ export default function NoticesPage() {
           </CardContent>
         </Card>
       </>
-      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); setMatterSearch(""); } }} notice={editingNotice} matters={formMatterOptions} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError && !mattersQuery.isFetchNextPageError} mattersHasMore={Boolean(mattersQuery.hasNextPage)} mattersLoadingMore={mattersQuery.isFetchingNextPage} onLoadMoreMatters={() => void mattersQuery.fetchNextPage()} matterSearch={matterSearch} onMatterSearchChange={setMatterSearch} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} onSubmit={({ payload, file }) => { if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
+      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); setMatterSearch(""); } }} notice={editingNotice} matters={formMatterOptions} linkedMatters={linkedMatterOptions} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError && !mattersQuery.isFetchNextPageError} mattersHasMore={Boolean(mattersQuery.hasNextPage)} mattersLoadingMore={mattersQuery.isFetchingNextPage} onLoadMoreMatters={() => void mattersQuery.fetchNextPage()} matterSearch={matterSearch} onMatterSearchChange={setMatterSearch} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} onSubmit={({ payload, file }) => { if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
     </div>
   );
 }
