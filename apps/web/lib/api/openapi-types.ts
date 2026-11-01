@@ -11525,6 +11525,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/portfolio-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count every visible matter by status, forum and practice area */
+        get: operations["current_company_matter_portfolio_health_api_matters_portfolio_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/today": {
         parameters: {
             query?: never;
@@ -38645,6 +38662,13 @@ export interface components {
             /** Submitted At */
             submitted_at?: string | null;
         };
+        /** MatterCountBucket */
+        MatterCountBucket: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string | null;
+        };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
             /** Bench Name */
@@ -39818,6 +39842,36 @@ export interface components {
             id: string;
             /** Matter Id */
             matter_id: string;
+        };
+        /**
+         * MatterPortfolioHealthResponse
+         * @description Roll-up of every Matter the reader can see, counted on the server.
+         */
+        MatterPortfolioHealthResponse: {
+            /** Active Matters Count */
+            active_matters_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Forum Level Counts */
+            forum_level_counts: components["schemas"]["MatterCountBucket"][];
+            /** Hearings Next 7 Days Count */
+            hearings_next_7_days_count: number;
+            /** Idle Active Count */
+            idle_active_count: number;
+            /** Idle Active Limit */
+            idle_active_limit: number;
+            /** Idle Active Matters */
+            idle_active_matters: components["schemas"]["MatterRecord"][];
+            /** Idle After Days */
+            idle_after_days: number;
+            /** Intake Matters Count */
+            intake_matters_count: number;
+            /** Practice Area Counts */
+            practice_area_counts: components["schemas"]["MatterCountBucket"][];
+            /** Status Counts */
+            status_counts: components["schemas"]["MatterCountBucket"][];
+            /** Total Visible Count */
+            total_visible_count: number;
         };
         /**
          * MatterRecord
@@ -73632,6 +73686,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_portfolio_health_api_matters_portfolio_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterPortfolioHealthResponse"];
                 };
             };
         };

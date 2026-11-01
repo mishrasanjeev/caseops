@@ -156,6 +156,27 @@ export const matterDashboardSummary = z.object({
   recent_matters_limit: z.number().int().positive(),
 });
 
+const matterCountBucket = z.object({
+  key: z.string().nullable(),
+  count: z.number().int().nonnegative(),
+});
+
+/** Counts over every visible Matter, from GET /api/matters/portfolio-health. */
+export const matterPortfolioHealth = z.object({
+  company_id: z.string(),
+  total_visible_count: z.number().int().nonnegative(),
+  active_matters_count: z.number().int().nonnegative(),
+  intake_matters_count: z.number().int().nonnegative(),
+  hearings_next_7_days_count: z.number().int().nonnegative(),
+  status_counts: z.array(matterCountBucket),
+  forum_level_counts: z.array(matterCountBucket),
+  practice_area_counts: z.array(matterCountBucket),
+  idle_after_days: z.number().int().positive(),
+  idle_active_count: z.number().int().nonnegative(),
+  idle_active_matters: z.array(matter),
+  idle_active_limit: z.number().int().positive(),
+});
+
 export const matterHearingPortfolio = z.object({
   company_id: z.string(),
   matters: z.array(matter),
@@ -446,6 +467,7 @@ export type AuthContext = z.infer<typeof authContext>;
 export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
 export type MatterDashboardSummary = z.infer<typeof matterDashboardSummary>;
+export type MatterPortfolioHealth = z.infer<typeof matterPortfolioHealth>;
 export type MatterHearingPortfolio = z.infer<typeof matterHearingPortfolio>;
 export type MatterHearingFollowUp = z.infer<typeof matterHearingFollowUp>;
 export type MatterComplianceExtractionRun = z.infer<typeof matterComplianceExtractionRun>;

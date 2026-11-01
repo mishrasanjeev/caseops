@@ -5,7 +5,7 @@ import io
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
-from typing import BinaryIO, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -81,6 +81,7 @@ from caseops_api.schemas.matters import (
     MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
+    MatterCountBucket,
     MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
@@ -98,6 +99,7 @@ from caseops_api.schemas.matters import (
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskRecord,
@@ -2433,6 +2435,83 @@ def get_matter_dashboard_summary(
         upcoming_hearings_limit=upcoming_page_size,
         recent_matters=[_matter_record(matter) for matter in recent_matters],
         recent_matters_limit=recent_page_size,
+    )
+
+
+PORTFOLIO_IDLE_DAYS = 30
+
+
+def get_matter_portfolio_health(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    idle_limit: int = 10,
+) -> MatterPortfolioHealthResponse:
+    """Counts over every visible Matter (B4-ADJ-03).
+
+    The portfolio page computed these from one page of at most 200 Matters,
+    so a larger book showed wrong totals and buckets with no sign of a cap.
+    """
+
+    effective_today = today or date.today()
+    week_out = effective_today + timedelta(days=7)
+    idle_page_size = max(1, min(idle_limit, 50))
+    scope = (
+        Matter.company_id == context.company.id,
+        visible_matters_filter(session, context=context),
+    )
+    operational_filter = Matter.status.notin_((MatterStatus.DISPOSED.value, "closed"))
+
+    def buckets(column: Any) -> list[MatterCountBucket]:
+        rows = session.execute(
+            select(column, func.count(Matter.id)).where(*scope).group_by(column)
+        ).all()
+        return sorted(
+            (MatterCountBucket(key=key, count=count) for key, count in rows),
+            key=lambda bucket: (-bucket.count, bucket.key or ""),
+        )
+
+    status_counts = buckets(Matter.status)
+    by_status = {bucket.key: bucket.count for bucket in status_counts}
+    hearings_next_7_days_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            *scope,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+            Matter.next_hearing_on <= week_out,
+        )
+    ) or 0
+    idle_before = datetime.now(UTC) - timedelta(days=PORTFOLIO_IDLE_DAYS)
+    idle_filter = (Matter.status == MatterStatus.ACTIVE.value, Matter.updated_at < idle_before)
+    idle_active_count = session.scalar(
+        select(func.count(Matter.id)).where(*scope, *idle_filter)
+    ) or 0
+    idle_active_matters = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*scope, *idle_filter)
+            .order_by(Matter.updated_at.asc(), Matter.id.asc())
+            .limit(idle_page_size)
+        )
+    )
+    return MatterPortfolioHealthResponse(
+        company_id=context.company.id,
+        total_visible_count=sum(by_status.values()),
+        active_matters_count=by_status.get(MatterStatus.ACTIVE.value, 0),
+        intake_matters_count=by_status.get(MatterStatus.INTAKE.value, 0),
+        hearings_next_7_days_count=hearings_next_7_days_count,
+        status_counts=status_counts,
+        forum_level_counts=buckets(Matter.forum_level),
+        practice_area_counts=buckets(Matter.practice_area),
+        idle_after_days=PORTFOLIO_IDLE_DAYS,
+        idle_active_count=idle_active_count,
+        idle_active_matters=[_matter_record(matter) for matter in idle_active_matters],
+        idle_active_limit=idle_page_size,
     )
 
 

@@ -137,6 +137,7 @@ from caseops_api.schemas.matters import (
     MatterNextHearingSuggestionActionRequest,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskListResponse,
@@ -296,6 +297,7 @@ from caseops_api.services.matters import (
     get_matter_attachment_preview,
     get_matter_dashboard_summary,
     get_matter_invoice_pdf,
+    get_matter_portfolio_health,
     get_matter_workspace,
     issue_matter_invoice_draft,
     list_matter_hearing_follow_up,
@@ -388,6 +390,18 @@ async def current_company_matter_dashboard_summary(
         upcoming_limit=upcoming_limit,
         recent_limit=recent_limit,
     )
+
+
+@router.get(
+    "/portfolio-health",
+    response_model=MatterPortfolioHealthResponse,
+    summary="Count every visible matter by status, forum and practice area",
+)
+async def current_company_matter_portfolio_health(
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterPortfolioHealthResponse:
+    return get_matter_portfolio_health(session, context=context)
 
 
 @router.get(

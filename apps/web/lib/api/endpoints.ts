@@ -69,6 +69,7 @@ import {
   type MatterBillingRate,
   type MatterComplianceListResponse,
   type MatterDashboardSummary,
+  type MatterPortfolioHealth,
   type MatterFileQAAnswerMode,
   type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
@@ -209,6 +210,7 @@ import {
   matterBillingRate,
   matterComplianceListResponse,
   matterDashboardSummary,
+  matterPortfolioHealth,
   matterHearingFollowUp,
   matterHearingPortfolio,
   matterFileQAExportNoteResponse,
@@ -680,6 +682,11 @@ export async function fetchMatterDashboardSummary(params?: {
     : "/api/matters/dashboard-summary";
   const data = await apiRequest<unknown>(path);
   return matterDashboardSummary.parse(data);
+}
+
+export async function fetchMatterPortfolioHealth(): Promise<MatterPortfolioHealth> {
+  const data = await apiRequest<unknown>("/api/matters/portfolio-health");
+  return matterPortfolioHealth.parse(data);
 }
 
 export async function fetchMatterHearingPortfolio(params?: {
