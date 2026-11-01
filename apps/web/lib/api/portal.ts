@@ -191,6 +191,15 @@ export type PortalIpGrant = {
   revoked_at: string | null;
   row_version: number;
   active: boolean;
+  /** True only when publishing to this grant would be accepted (same rule as publish). */
+  publishable: boolean;
+  publication_blocked_reason:
+    | "revoked"
+    | "expired"
+    | "client_inactive"
+    | "docket_closed"
+    | "docket_not_visible"
+    | null;
 };
 
 export async function fetchAdminPortalIpGrants(): Promise<{ grants: PortalIpGrant[] }> {
