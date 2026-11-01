@@ -553,7 +553,7 @@ for (const width of [1280, 393]) {
       ["Trademark Image", "image_reference", "source metadata"], ["Application Date", "application_date", "canonical"],
       ["Renewal Due Date", "renewal_due_date", "canonical"], ["Applicant Name(s)", "applicant_name", "canonical"],
       ["Class", "class_number", "canonical"], ["Application No.", "application_number", "canonical"],
-      ["Status", "source_status", "source metadata"], ["Comment", "comment", "source metadata"],
+      ["Status", "source_status", "canonical"], ["Comment", "comment", "source metadata"],
       ["Takeover request", "takeover_request", "source metadata"], ["Name Change request", "name_change_request", "source metadata"],
       ["Address Change request", "address_change_request", "source metadata"], ["Internal Remarks", "internal_remarks", "source metadata"],
     ];

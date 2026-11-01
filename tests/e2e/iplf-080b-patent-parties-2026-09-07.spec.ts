@@ -7,6 +7,7 @@ import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPatentControlsFit } from "./support/patent-layout";
 import { bootstrapPatentTenant, enablePatentWorkspace, signInPatentTenant } from "./support/patent-acceptance";
 import { createPatentApplicationWithEvidence } from "./support/prod-api-response-evidence";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -30,8 +31,7 @@ for (const kind of ["family", "application"] as const) {
       });
       expect(familyResponse.status(), await familyResponse.text()).toBe(201);
       const family = await familyResponse.json();
-      const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-      expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+      await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
       const bytes = Buffer.from(`Synthetic signed party source with original and corrected address facts. ${run} `.repeat(30));
       const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, {
         headers, multipart: {

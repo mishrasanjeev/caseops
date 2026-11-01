@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -29,6 +29,11 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.provider_text import (
+    communication_text_is_escaped,
+    provider_escaped_text,
+    provider_plain_text,
+)
 from caseops_api.services.session_context import SessionContext
 
 _MAX_PREVIEW_CHARS = 280
@@ -88,6 +93,9 @@ class _Extraction:
     preview: str | None
     confidence_band: str
     normalized_key: str
+    #: Key an escaped-text extraction produced before B4-ADJ-23, so a rescan
+    #: finds the candidate it already made instead of adding a second one.
+    legacy_normalized_key: str | None = None
 
 
 def list_email_invitation_candidates(
@@ -105,7 +113,10 @@ def list_email_invitation_candidates(
         status_filter=status_filter,
         limit=limit,
     )
-    records = [_candidate_record(candidate, matter) for candidate, matter in rows]
+    records = [
+        _candidate_record(candidate, matter, escaped=communication_text_is_escaped(metadata))
+        for candidate, matter, metadata in rows
+    ]
     return EmailInvitationCandidateListResponse(
         candidates=records,
         pending_count=sum(1 for item in records if item.status == "needs_review"),
@@ -131,7 +142,7 @@ def extract_email_invitation_candidates(
     examined = 0
     created = 0
     duplicates = 0
-    candidates: list[tuple[EmailCalendarCandidate, Matter]] = []
+    candidates: list[tuple[EmailCalendarCandidate, bool]] = []
     matters_by_id: dict[str, Matter] = {}
 
     for row, row_matter in communications:
@@ -151,7 +162,7 @@ def extract_email_invitation_candidates(
             created += 1
         if candidate.status == EmailCalendarCandidateStatus.DUPLICATE_SKIPPED:
             duplicates += 1
-        candidates.append((candidate, row_matter))
+        candidates.append((candidate, communication_text_is_escaped(row.metadata_json)))
 
     record_from_context(
         session,
@@ -180,8 +191,8 @@ def extract_email_invitation_candidates(
         created_count=created,
         duplicate_count=duplicates,
         candidates=[
-            _candidate_record(candidate, matters_by_id[candidate.matter_id])
-            for candidate, _ in candidates
+            _candidate_record(candidate, matters_by_id[candidate.matter_id], escaped=escaped)
+            for candidate, escaped in candidates
         ],
     )
 
@@ -219,7 +230,7 @@ def review_email_invitation_candidate(
         )
         session.commit()
         session.refresh(candidate)
-        return _candidate_record(candidate, matter)
+        return _candidate_record(candidate, matter, escaped=_candidate_escaped(session, candidate))
 
     if candidate.status == EmailCalendarCandidateStatus.DUPLICATE_SKIPPED:
         raise HTTPException(
@@ -232,7 +243,7 @@ def review_email_invitation_candidate(
         candidate.reviewed_at = candidate.reviewed_at or now
         session.commit()
         session.refresh(candidate)
-        return _candidate_record(candidate, matter)
+        return _candidate_record(candidate, matter, escaped=_candidate_escaped(session, candidate))
 
     matter = require_operational_matter(
         session,
@@ -273,7 +284,7 @@ def review_email_invitation_candidate(
     )
     session.commit()
     session.refresh(candidate)
-    return _candidate_record(candidate, matter)
+    return _candidate_record(candidate, matter, escaped=_candidate_escaped(session, candidate))
 
 
 def _candidate_rows(
@@ -283,10 +294,15 @@ def _candidate_rows(
     matter_id: str | None,
     status_filter: str | None,
     limit: int,
-) -> list[tuple[EmailCalendarCandidate, Matter]]:
+) -> list[tuple[EmailCalendarCandidate, Matter, object]]:
     stmt = (
-        select(EmailCalendarCandidate, Matter)
+        select(EmailCalendarCandidate, Matter, Communication.metadata_json)
         .join(Matter, Matter.id == EmailCalendarCandidate.matter_id)
+        .outerjoin(
+            Communication,
+            (Communication.id == EmailCalendarCandidate.communication_id)
+            & (Communication.company_id == EmailCalendarCandidate.company_id),
+        )
         .where(
             EmailCalendarCandidate.company_id == context.company.id,
             Matter.company_id == context.company.id,
@@ -303,7 +319,19 @@ def _candidate_rows(
         stmt = stmt.where(EmailCalendarCandidate.matter_id == matter.id)
     if status_filter:
         stmt = stmt.where(EmailCalendarCandidate.status == status_filter)
-    return list(session.execute(stmt).all())
+    return [(candidate, matter, metadata) for candidate, matter, metadata in session.execute(stmt)]
+
+
+def _candidate_escaped(session: Session, candidate: EmailCalendarCandidate) -> bool:
+    """Whether the candidate's text came from an escaped mailbox snippet."""
+
+    metadata = session.scalar(
+        select(Communication.metadata_json).where(
+            Communication.id == candidate.communication_id,
+            Communication.company_id == candidate.company_id,
+        )
+    )
+    return communication_text_is_escaped(metadata)
 
 
 def _candidate_communications(
@@ -393,13 +421,19 @@ def _upsert_candidate(
     matter: Matter,
     extraction: _Extraction,
 ) -> tuple[EmailCalendarCandidate, bool]:
+    keys = [extraction.normalized_key]
+    if extraction.legacy_normalized_key:
+        keys.append(extraction.legacy_normalized_key)
     existing = session.scalar(
-        select(EmailCalendarCandidate).where(
+        select(EmailCalendarCandidate)
+        .where(
             EmailCalendarCandidate.company_id == context.company.id,
             EmailCalendarCandidate.matter_id == matter.id,
             EmailCalendarCandidate.communication_id == communication.id,
-            EmailCalendarCandidate.normalized_key == extraction.normalized_key,
+            EmailCalendarCandidate.normalized_key.in_(keys),
         )
+        .order_by(EmailCalendarCandidate.created_at.asc())
+        .limit(1)
     )
     if existing is not None:
         return existing, False
@@ -409,7 +443,7 @@ def _upsert_candidate(
         .where(
             EmailCalendarCandidate.company_id == context.company.id,
             EmailCalendarCandidate.matter_id == matter.id,
-            EmailCalendarCandidate.normalized_key == extraction.normalized_key,
+            EmailCalendarCandidate.normalized_key.in_(keys),
             EmailCalendarCandidate.status.in_(
                 [
                     EmailCalendarCandidateStatus.NEEDS_REVIEW.value,
@@ -447,7 +481,38 @@ def _upsert_candidate(
 
 
 def _extract_from_communication(row: Communication) -> _Extraction | None:
-    text = _source_text(row)
+    if not communication_text_is_escaped(row.metadata_json):
+        return _extract_from_text(row, _source_text(row))
+    # A Gmail snippet is read decoded, so "Court &amp; Chamber 4" is not cut
+    # at the entity's ";", and stored escaped like its source so every reader
+    # decodes it exactly once (B4-ADJ-23).
+    extraction = _extract_from_text(row, _source_text(row, decode_body=True))
+    if extraction is None:
+        return None
+    legacy = _extract_from_text(row, _source_text(row))
+    return replace(
+        extraction,
+        location=_escaped_within(extraction.location, max_chars=255),
+        preview=_escaped_within(extraction.preview, max_chars=_MAX_PREVIEW_CHARS),
+        legacy_normalized_key=(
+            legacy.normalized_key
+            if legacy is not None and legacy.normalized_key != extraction.normalized_key
+            else None
+        ),
+    )
+
+
+def _escaped_within(value: str | None, *, max_chars: int) -> str | None:
+    """Escape decoded text and keep the stored form within its column."""
+
+    escaped = provider_escaped_text(value)
+    while value and escaped is not None and len(escaped) > max_chars:
+        value = value[: len(value) - (len(escaped) - max_chars)].rstrip()
+        escaped = provider_escaped_text(value)
+    return escaped or None
+
+
+def _extract_from_text(row: Communication, text: str) -> _Extraction | None:
     if not text:
         return None
     date_match = _find_date(text)
@@ -551,8 +616,9 @@ def _find_location(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _source_text(row: Communication) -> str:
-    parts = [row.subject or "", row.body or ""]
+def _source_text(row: Communication, *, decode_body: bool = False) -> str:
+    body = provider_plain_text(row.body) if decode_body else row.body
+    parts = [row.subject or "", body or ""]
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
     # Only existing bounded metadata is considered; never dereference body or
     # attachment storage records.
@@ -645,7 +711,12 @@ def _compact_optional(value: str | None, *, max_chars: int) -> str | None:
 def _candidate_record(
     candidate: EmailCalendarCandidate,
     matter: Matter,
+    *,
+    escaped: bool,
 ) -> EmailInvitationCandidateRecord:
+    def text(value: str | None) -> str | None:
+        return provider_plain_text(value) if escaped else value
+
     return EmailInvitationCandidateRecord(
         id=candidate.id,
         company_id=candidate.company_id,
@@ -658,8 +729,9 @@ def _candidate_record(
         detected_title=candidate.detected_title,
         detected_start_at=candidate.detected_start_at,
         detected_end_at=candidate.detected_end_at,
-        detected_location=candidate.detected_location,
-        source_preview=candidate.source_preview,
+        # Text from a Gmail snippet is decoded once here; nothing else is.
+        detected_location=text(candidate.detected_location),
+        source_preview=text(candidate.source_preview),
         confidence_band=candidate.confidence_band,
         duplicate_of_candidate_id=candidate.duplicate_of_candidate_id,
         created_deadline_id=candidate.created_deadline_id,

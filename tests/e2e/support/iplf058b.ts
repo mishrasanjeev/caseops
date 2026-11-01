@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./ip-document-taxonomy";
 
 type Json = Record<string, any>;
 
@@ -67,11 +68,7 @@ export async function createRecordalFixture(
   const application = (await applicationResponse.json()) as Json;
   const docket = application.docket as Json;
 
-  await expectStatus(
-    await api.post(`${apiBase}/api/ip/document-taxonomy/seed`, { headers }),
-    200,
-    "seed document taxonomy",
-  );
+  await expectProvisionedDocumentTaxonomy(api, apiBase, headers);
   const uploadResponse = await api.post(`${apiBase}/api/ip/documents/upload`, {
     headers,
     multipart: {

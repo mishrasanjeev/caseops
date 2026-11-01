@@ -60,6 +60,19 @@ describe("DataTable", () => {
     expect(onRowClick).toHaveBeenNthCalledWith(3, rows[1]);
   });
 
+  it("pins only the last column when the caller asks, so row actions stay on screen", () => {
+    const { unmount } = render(<DataTable columns={columns} data={rows} pinLastColumn />);
+    const pinnedRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
+    const cells = Array.from(pinnedRow.querySelectorAll("td"));
+    expect(cells.at(-1)?.className).toMatch(/sticky right-0/);
+    expect(cells[0].className).not.toMatch(/sticky/);
+    expect(screen.getByRole("columnheader", { name: "Due" }).className).toMatch(/sticky right-0/);
+    unmount();
+    render(<DataTable columns={columns} data={rows} />);
+    const plainRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
+    expect(plainRow.innerHTML).not.toMatch(/sticky/);
+  });
+
   it("labels Previous and Next pagination buttons for screen readers", () => {
     render(<DataTable columns={columns} data={rows} />);
     expect(screen.getByRole("button", { name: /Previous page/i })).toBeInTheDocument();

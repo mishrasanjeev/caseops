@@ -36,7 +36,12 @@ from caseops_api.schemas.ip_lifecycle import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
-from caseops_api.services.ip_document_workflow import list_linked_ip_documents
+from caseops_api.services.ip_document_workflow import (
+    citable_ip_document_ids,
+    docket_scoped_document_links,
+    get_accessible_ip_document_ids,
+    list_linked_ip_documents,
+)
 from caseops_api.services.ip_lifecycle import append_ip_docket_event, list_ip_docket_events
 from caseops_api.services.ip_operations import (
     _lock_ip_dockets_in_stable_order,
@@ -413,6 +418,7 @@ _IMPACT_REVIEW_ACTIONS = {
 def _validate_owned_refs(
     session: Session,
     *,
+    context: SessionContext,
     company_id: str,
     docket_id: str,
     payload: TrademarkInternationalActionRequest,
@@ -454,33 +460,27 @@ def _validate_owned_refs(
             detail="Madrid cost references must be active and belong to this designation docket.",
         )
     if payload.document_refs:
-        event_ids = select(IpDocketEvent.id).where(
-            IpDocketEvent.company_id == company_id,
-            IpDocketEvent.docket_id == docket_id,
-        )
-        deadline_ids = select(IpDeadline.id).where(
-            IpDeadline.company_id == company_id,
-            IpDeadline.docket_id == docket_id,
-        )
+        refs = set(payload.document_refs)
         linked_ids = set(
             session.scalars(
                 select(IpDocumentLink.document_id).where(
-                    IpDocumentLink.company_id == company_id,
-                    or_(
-                        (IpDocumentLink.target_type == "docket")
-                        & (IpDocumentLink.target_id == docket_id),
-                        (IpDocumentLink.target_type == "event")
-                        & (IpDocumentLink.target_id.in_(event_ids)),
-                        (IpDocumentLink.target_type == "deadline")
-                        & (IpDocumentLink.target_id.in_(deadline_ids)),
-                    ),
+                    docket_scoped_document_links(company_id=company_id, docket_id=docket_id),
+                    IpDocumentLink.document_id.in_(refs),
                 )
             )
         )
-        if set(payload.document_refs) - linked_ids:
+        current_ids = citable_ip_document_ids(
+            session, company_id=company_id, document_ids=linked_ids, lock=True
+        )
+        if refs - current_ids or refs - get_accessible_ip_document_ids(
+            session, context=context, document_ids=current_ids
+        ):
             raise HTTPException(
                 status_code=422,
-                detail="Madrid document references must be linked to this designation docket.",
+                detail=(
+                    "Madrid document references must be current documents linked to "
+                    "this designation docket."
+                ),
             )
 
 
@@ -596,6 +596,7 @@ def record_international_action(
     _assert_action_scope(row, payload)
     _validate_owned_refs(
         session,
+        context=context,
         company_id=row.company_id,
         docket_id=row.docket_id,
         payload=payload,
@@ -774,7 +775,6 @@ def international_workspace(
         docket_id=row.docket_id,
         event_ids=event_ids,
         deadline_ids=deadline_ids,
-        limit=100,
     )
 
     parent = None
@@ -787,15 +787,23 @@ def international_workspace(
         parent = TrademarkInternationalRecordResponse.model_validate(parent_row)
     designations = []
     if row.record_kind == "international_registration":
-        designation_page = list_international_records(
-            session,
-            context=context,
-            record_kind="international_designation",
-            parent_registration_id=row.id,
-            limit=100,
-            offset=0,
-        )
-        designations = designation_page.items
+        # Every designation of this registration: an IR may designate more
+        # contracting parties than one list page holds.
+        designations = [
+            TrademarkInternationalRecordResponse.model_validate(designation)
+            for designation in session.scalars(
+                _visible_records_statement(session, context=context)
+                .where(
+                    TrademarkInternationalRegistration.record_kind
+                    == "international_designation",
+                    TrademarkInternationalRegistration.parent_registration_id == row.id,
+                )
+                .order_by(
+                    TrademarkInternationalRegistration.updated_at.desc(),
+                    TrademarkInternationalRegistration.id,
+                )
+            ).all()
+        ]
 
     reconciled_ids = {
         event.reconciles_event_id for event in events if event.reconciles_event_id is not None

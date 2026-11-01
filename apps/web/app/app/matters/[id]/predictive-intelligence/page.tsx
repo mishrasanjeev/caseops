@@ -240,8 +240,8 @@ function CalibratedSignalsPanel({
             description="Run source-backed outcome classification and aggregate refresh before calibrated signals can be displayed."
           />
         ) : (
-          <div className="overflow-hidden rounded-md border border-[var(--color-line)]">
-            <table className="w-full text-left text-xs">
+          <div className="@container overflow-hidden rounded-md border border-[var(--color-line)]" data-testid="predictive-calibrated-signals-table">
+            <table className="w-full text-left text-xs @max-[48rem]:stacked-table @max-[48rem]:px-3">
               <thead className="bg-[var(--color-bg)] text-[var(--color-mute)]">
                 <tr>
                   <th className="px-3 py-2 font-semibold">Signal</th>
@@ -279,7 +279,7 @@ function CalibratedSignalRow({
 }) {
   return (
     <tr data-testid={`predictive-calibrated-signal-${signal.signal_type}`}>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Signal" className="px-3 py-2 align-top">
         <div className="font-semibold text-[var(--color-ink)]">{signal.label}</div>
         <div className="mt-1 text-[var(--color-mute)]">
           {signal.aggregate_snapshot_id
@@ -297,31 +297,31 @@ function CalibratedSignalRow({
           {signal.limitation_note}
         </p>
       </td>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Status" className="px-3 py-2 align-top">
         <StatusPill status={signal.status} />
       </td>
-      <td className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
+      <td data-label="Sample" className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
         {signal.sample_size}
       </td>
-      <td className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
+      <td data-label="Observed rate" className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
         {formatRate(signal.observed_rate)}
         <div className="mt-1 text-[var(--color-mute)]">
           {signal.positive_count}/{signal.negative_count}/{signal.neutral_count}
         </div>
       </td>
-      <td className="px-3 py-2 align-top text-[var(--color-ink-2)]">
+      <td data-label="Band" className="px-3 py-2 align-top text-[var(--color-ink-2)]">
         {confidenceBand(signal)}
         <div className="mt-1 text-[var(--color-mute)]">
           {titleCase(signal.calibration_level)} · {titleCase(signal.evidence_quality)}
         </div>
       </td>
-      <td className="px-3 py-2 align-top text-[var(--color-ink-2)]">
+      <td data-label="Scope" className="px-3 py-2 align-top text-[var(--color-ink-2)]">
         {calibratedScopeLabel(signal)}
         <div className="mt-1 text-[var(--color-mute)]">
           {yearWindow(signal.scope.year_start, signal.scope.year_end)}
         </div>
       </td>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Sources" className="px-3 py-2 align-top">
         {signal.evidence.length > 0 ? (
           <div className="flex flex-col gap-1">
             {signal.evidence.slice(0, 3).map((item) => {

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -82,6 +83,7 @@ DEFAULT_EXPORT_COLUMNS = [
     "jurisdiction",
     "office",
     "status",
+    "record_status",
     "phase",
     "proprietors",
     "agents",
@@ -110,7 +112,8 @@ EXPORT_COLUMNS = {
     "goods_services": ("Goods and services", lambda row: " | ".join(row.goods_services)),
     "jurisdiction": ("Jurisdiction", lambda row: row.jurisdiction or ""),
     "office": ("Office", lambda row: row.office or ""),
-    "status": ("Status", lambda row: row.docket_status),
+    "status": ("Status", lambda row: portfolio_status_text(row)),
+    "record_status": ("Record status", lambda row: row.docket_status),
     "phase": ("Filing phase", lambda row: row.filing_phase),
     "proprietors": ("Proprietors", lambda row: " | ".join(row.proprietors)),
     "agents": ("Agents", lambda row: " | ".join(row.agents)),
@@ -138,6 +141,35 @@ EXPORT_COLUMNS = {
     "updated_at": ("Updated at", lambda row: row.updated_at.isoformat()),
     "provenance": ("Provenance", lambda row: " | ".join(row.provenance)),
 }
+
+
+_IMPORT_PHASE_RANK = {"draft": 0, "pre_filing": 1, "filed": 2}
+_PHASE_LABELS = {"draft": "Draft", "pre_filing": "Pre-filing", "filed": "Filed"}
+
+
+def source_status_is_ahead(row: Any) -> bool:
+    """Whether an import's source status says more than the filing phase.
+
+    B4-ADJ-11: a mark the source calls Registered imports in the filed phase,
+    and wording the mapping does not recognise imports as draft. The source
+    wording is then the mark's headline status, marked unverified, so neither
+    reads as Draft. Once a lifecycle event moves the phase on, the phase leads.
+    """
+
+    phase = getattr(row, "filing_phase", None)
+    if not getattr(row, "source_status_text", None) or phase not in _IMPORT_PHASE_RANK:
+        return False
+    declared = getattr(row, "source_declared_status", None)
+    return declared is None or _IMPORT_PHASE_RANK.get(declared, 3) > _IMPORT_PHASE_RANK[phase]
+
+
+def portfolio_status_text(row: Any) -> str:
+    """The Status column: the filing phase, or the unverified source status."""
+
+    if source_status_is_ahead(row):
+        return f"{row.source_status_text} (source, unverified)"
+    phase = str(row.filing_phase)
+    return _PHASE_LABELS.get(phase, phase.replace("_", " ").capitalize())
 
 
 def validate_portfolio_columns(columns: list[str]) -> list[str]:

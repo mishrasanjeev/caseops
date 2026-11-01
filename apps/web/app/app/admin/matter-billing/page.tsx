@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, apiFieldErrors } from "@/lib/api/config";
 import {
   createMatterBillingProfile,
   createMatterBillingRate,
@@ -27,6 +27,33 @@ function rupeesToMinor(value: string): number {
 
 const profilesKey = ["admin", "matter-billing"] as const;
 type ProfilesResponse = Awaited<ReturnType<typeof fetchMatterBillingProfiles>>;
+type BillingMode = "hourly" | "fixed_fee" | "milestone" | "mixed";
+
+// The server's BillingModeLiteral, in the same order; nothing else is offered.
+const BILLING_MODES: ReadonlyArray<{ value: BillingMode; label: string }> = [
+  { value: "hourly", label: "Hourly" },
+  { value: "fixed_fee", label: "Fixed fee" },
+  { value: "milestone", label: "Milestone" },
+  { value: "mixed", label: "Mixed" },
+];
+
+// BUG-016: GST, tax rates, terms and billing mode were create-only, so a
+// profile saved with GST off and 47-day terms could not be corrected here.
+// Bounds mirror MatterBillingProfileUpdateRequest.
+const POLICY_LIMITS = {
+  cgst_rate_bps: { label: "CGST bps", max: 10000 },
+  sgst_rate_bps: { label: "SGST bps", max: 10000 },
+  igst_rate_bps: { label: "IGST bps", max: 10000 },
+  payment_terms_days: { label: "Payment terms (days)", max: 365 },
+} as const;
+type PolicyField = keyof typeof POLICY_LIMITS;
+
+function wholeNumberError(field: PolicyField, value: string): string | null {
+  const { label, max } = POLICY_LIMITS[field];
+  if (!/^\d+$/.test(value.trim())) return `${label} must be a whole number.`;
+  if (Number(value) > max) return `${label} must be ${max} or less.`;
+  return null;
+}
 
 export default function AdminMatterBillingPage() {
   const canAdmin = useCapability("workspace:admin");
@@ -42,6 +69,12 @@ export default function AdminMatterBillingPage() {
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [gstStateCode, setGstStateCode] = useState("");
   const [igstBps, setIgstBps] = useState("1800");
+  const [cgstBps, setCgstBps] = useState("900");
+  const [sgstBps, setSgstBps] = useState("900");
+  const [gstApplicable, setGstApplicable] = useState(true);
+  const [paymentTermsDays, setPaymentTermsDays] = useState("30");
+  const [billingMode, setBillingMode] = useState<BillingMode>("hourly");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [profileForRate, setProfileForRate] = useState("");
   const [rateScope, setRateScope] = useState<"default" | "role" | "practice_area">("default");
   const [rateValue, setRateValue] = useState("");
@@ -77,6 +110,11 @@ export default function AdminMatterBillingPage() {
       setPlaceOfSupply(profile.default_place_of_supply ?? "");
       setGstStateCode(profile.gstin_state_code ?? "");
       setIgstBps(String(profile.igst_rate_bps));
+      setCgstBps(String(profile.cgst_rate_bps));
+      setSgstBps(String(profile.sgst_rate_bps));
+      setGstApplicable(profile.gst_applicable);
+      setPaymentTermsDays(String(profile.payment_terms_days));
+      setBillingMode(profile.billing_mode as BillingMode);
     }
     setProfileReady(true);
   }, [profileReady, profilesQuery.data, profilesQuery.isSuccess]);
@@ -91,16 +129,16 @@ export default function AdminMatterBillingPage() {
     firm_pan: firmPan || null,
     default_place_of_supply: placeOfSupply || null,
     default_sac_hsn: sac || null,
-    gst_applicable: true,
+    gst_applicable: gstApplicable,
     gstin_state_code: gstStateCode || null,
-    cgst_rate_bps: 900,
-    sgst_rate_bps: 900,
+    cgst_rate_bps: Number(cgstBps),
+    sgst_rate_bps: Number(sgstBps),
     igst_rate_bps: Number(igstBps || "0"),
     tax_rate_bps: Number(igstBps || "0"),
     invoice_prefix: prefix,
     next_invoice_sequence: 1,
-    payment_terms_days: 30,
-    billing_mode: "hourly",
+    payment_terms_days: Number(paymentTermsDays),
+    billing_mode: billingMode,
     default_rate_minor_per_hour: defaultRate ? rupeesToMinor(defaultRate) : null,
     expense_categories: ["court_fee", "filing_fee", "travel", "reimbursement"],
     retainer_adjustments_enabled: true,
@@ -127,6 +165,9 @@ export default function AdminMatterBillingPage() {
           default_sac_hsn: payload.default_sac_hsn, gstin_state_code: payload.gstin_state_code,
           invoice_prefix: payload.invoice_prefix, igst_rate_bps: payload.igst_rate_bps,
           default_rate_minor_per_hour: payload.default_rate_minor_per_hour,
+          gst_applicable: payload.gst_applicable, cgst_rate_bps: payload.cgst_rate_bps,
+          sgst_rate_bps: payload.sgst_rate_bps, payment_terms_days: payload.payment_terms_days,
+          billing_mode: payload.billing_mode,
         };
         const baseline = loadedProfile.current;
         const updateBody = Object.fromEntries(Object.entries(editable).filter(
@@ -158,8 +199,27 @@ export default function AdminMatterBillingPage() {
       });
       toast.success("Matter billing profile saved.");
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Could not save billing profile.")),
+    onError: (err) => {
+      setFieldErrors(apiFieldErrors(err));
+      toast.error(apiErrorMessage(err, "Could not save billing profile."));
+    },
   });
+  const saveProfile = () => {
+    const values: Record<PolicyField, string> = {
+      cgst_rate_bps: cgstBps, sgst_rate_bps: sgstBps, igst_rate_bps: igstBps,
+      payment_terms_days: paymentTermsDays,
+    };
+    const errors: Record<string, string> = {};
+    for (const field of Object.keys(values) as PolicyField[]) {
+      const error = wholeNumberError(field, values[field]);
+      if (error) errors[field] = error;
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length === 0) saveProfileMutation.mutate();
+  };
+  const errorProps = (field: string) => fieldErrors[field]
+    ? { "aria-invalid": true, "aria-describedby": `matter-billing-${field}-error` }
+    : {};
 
   const addRateMutation = useMutation({
     mutationFn: () => {
@@ -167,7 +227,7 @@ export default function AdminMatterBillingPage() {
         throw new Error("Load a billing profile before adding a rate.");
       }
       return createMatterBillingRate({
-        profileId: profileForRate || profilesQuery.data?.profiles[0]?.id || "",
+        profileId: rateProfileId,
         body: {
           rate_scope: rateScope,
           amount_minor_per_hour: rupeesToMinor(rateValue),
@@ -204,6 +264,11 @@ export default function AdminMatterBillingPage() {
   }
 
   const profiles = profilesQuery.data?.profiles ?? [];
+  // The single default profile is the only possible target; with several, the
+  // user chooses (never the first by default). No profile: nothing to choose.
+  const rateProfileId = profiles.some((profile) => profile.id === profileForRate)
+    ? profileForRate
+    : profiles.length === 1 ? profiles[0].id : "";
 
   return (
     <div className="flex flex-col gap-5">
@@ -249,8 +314,38 @@ export default function AdminMatterBillingPage() {
             <Field label="Default hourly rate INR">
               <Input value={defaultRate} inputMode="decimal" onChange={(event) => setDefaultRate(event.target.value)} />
             </Field>
-            <Field label="IGST bps">
-              <Input value={igstBps} inputMode="numeric" onChange={(event) => setIgstBps(event.target.value)} />
+            <label className="flex min-h-10 items-center gap-2 text-sm text-[var(--color-ink-2)] md:col-span-2">
+              <input
+                type="checkbox"
+                checked={gstApplicable}
+                onChange={(event) => setGstApplicable(event.target.checked)}
+              />
+              <span>GST applicable: charge CGST and SGST, or IGST, on invoices from this profile</span>
+            </label>
+            <Field label="Billing mode">
+              <select
+                className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 text-sm"
+                value={billingMode}
+                onChange={(event) => setBillingMode(event.target.value as BillingMode)}
+              >
+                {BILLING_MODES.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="CGST bps" error={fieldErrors.cgst_rate_bps} errorId="matter-billing-cgst_rate_bps-error">
+              <Input value={cgstBps} inputMode="numeric" {...errorProps("cgst_rate_bps")} onChange={(event) => setCgstBps(event.target.value)} />
+            </Field>
+            <Field label="SGST bps" error={fieldErrors.sgst_rate_bps} errorId="matter-billing-sgst_rate_bps-error">
+              <Input value={sgstBps} inputMode="numeric" {...errorProps("sgst_rate_bps")} onChange={(event) => setSgstBps(event.target.value)} />
+            </Field>
+            <Field label="IGST bps" error={fieldErrors.igst_rate_bps} errorId="matter-billing-igst_rate_bps-error">
+              <Input value={igstBps} inputMode="numeric" {...errorProps("igst_rate_bps")} onChange={(event) => setIgstBps(event.target.value)} />
+            </Field>
+            <Field label="Payment terms (days)" error={fieldErrors.payment_terms_days} errorId="matter-billing-payment_terms_days-error">
+              <Input value={paymentTermsDays} inputMode="numeric" {...errorProps("payment_terms_days")} onChange={(event) => setPaymentTermsDays(event.target.value)} />
             </Field>
             <Field label="Firm address" className="md:col-span-2">
               <Input value={firmAddress} onChange={(event) => setFirmAddress(event.target.value)} />
@@ -258,7 +353,7 @@ export default function AdminMatterBillingPage() {
             <div className="md:col-span-2">
               <Button
                 type="button"
-                onClick={() => saveProfileMutation.mutate()}
+                onClick={saveProfile}
                 disabled={!profileReady || !profilesQuery.isSuccess || saveProfileMutation.isPending || addRateMutation.isPending}
               >
                 {saveProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -294,9 +389,14 @@ export default function AdminMatterBillingPage() {
           <Field label="Profile">
             <select
               className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 text-sm"
-              value={profileForRate || profiles[0]?.id || ""}
+              value={rateProfileId}
+              disabled={!profiles.length}
+              aria-describedby={profiles.length ? undefined : "matter-billing-rate-profile-reason"}
               onChange={(event) => setProfileForRate(event.target.value)}
             >
+              {profiles.length === 1 ? null : (
+                <option value="" disabled>{profiles.length ? "Select a profile" : "No billing profile yet"}</option>
+              )}
               {profiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.name}
@@ -332,10 +432,15 @@ export default function AdminMatterBillingPage() {
           <Button
             type="button"
             onClick={() => addRateMutation.mutate()}
-            disabled={!profilesQuery.isSuccess || !profiles.length || saveProfileMutation.isPending || addRateMutation.isPending || !rateValue}
+            disabled={!profilesQuery.isSuccess || !rateProfileId || saveProfileMutation.isPending || addRateMutation.isPending || !rateValue}
           >
             Add rate
           </Button>
+          {profilesQuery.isSuccess && !profiles.length ? (
+            <p id="matter-billing-rate-profile-reason" className="text-xs text-[var(--color-mute)] md:col-span-4">
+              Rates belong to a billing profile. Save the default profile above first.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -391,15 +496,28 @@ function Field({
   label,
   children,
   className,
+  error,
+  errorId,
 }: {
   label: string;
   children: React.ReactNode;
   className?: string;
+  error?: string;
+  errorId?: string;
 }) {
+  // The error sits outside the label so it describes the control
+  // (aria-describedby) without becoming part of its name.
   return (
-    <label className={className ? `flex flex-col gap-1.5 ${className}` : "flex flex-col gap-1.5"}>
-      <span className="text-sm font-medium text-[var(--color-ink-2)]">{label}</span>
-      {children}
-    </label>
+    <div className={className ? `flex flex-col gap-1.5 ${className}` : "flex flex-col gap-1.5"}>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-[var(--color-ink-2)]">{label}</span>
+        {children}
+      </label>
+      {error ? (
+        <span id={errorId} className="text-xs text-[var(--color-danger)]">
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }

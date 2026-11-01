@@ -500,6 +500,30 @@ class MatterDashboardSummaryResponse(BaseModel):
     recent_matters_limit: int
 
 
+class MatterCountBucket(BaseModel):
+    # None is a Matter with no value for the grouped field.
+    key: str | None
+    count: int
+
+
+class MatterPortfolioHealthResponse(BaseModel):
+    """Roll-up of every Matter the reader can see, counted on the server."""
+
+    company_id: str
+    total_visible_count: int
+    active_matters_count: int
+    intake_matters_count: int
+    hearings_next_7_days_count: int
+    status_counts: list[MatterCountBucket]
+    forum_level_counts: list[MatterCountBucket]
+    practice_area_counts: list[MatterCountBucket]
+    idle_after_days: int
+    idle_active_count: int
+    # The longest-idle active Matters first, at most `idle_active_limit`.
+    idle_active_matters: list[MatterRecord]
+    idle_active_limit: int
+
+
 class MatterHearingPortfolioResponse(BaseModel):
     company_id: str
     matters: list[MatterRecord]
@@ -515,6 +539,9 @@ class MatterHearingFollowUpResponse(BaseModel):
     overdue_count: int
     missing_date_count: int
     limit: int
+    # Rows skipped in each returned queue; page with ``offset`` + ``limit``.
+    offset: int = 0
+    # True when a returned queue has rows after this page.
     truncated: bool
 
 
@@ -560,6 +587,11 @@ class MatterNextHearingSuggestionActionRequest(BaseModel):
 
 
 class MatterListFilters(BaseModel):
+    # One Matter by id, through the same tenant and ethical-wall filter as the
+    # list: a Matter the reader may not see is simply absent (no 404 and no
+    # access-denied audit row), so a screen can name a referenced Matter
+    # without recording a probe each time it renders.
+    id: str | None = Field(default=None, min_length=1, max_length=36)
     q: str | None = Field(default=None, max_length=255)
     client_name: str | None = Field(default=None, max_length=255)
     opposing_party: str | None = Field(default=None, max_length=255)

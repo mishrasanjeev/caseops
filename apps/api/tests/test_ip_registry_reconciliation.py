@@ -791,7 +791,7 @@ def test_registry_is_tenant_scoped_and_rejects_non_registry_adapter(
             "provider_key": "ecourtsindia",
             "office": "Delhi High Court",
             "jurisdiction": "IN",
-            "identifier_kind": "cnr",
+            "identifier_kind": "application",
             "raw_identifier": "DLHC010012342026",
             "source_url": "https://services.ecourts.gov.in/",
             "match_confidence": "1.0",

@@ -29,6 +29,12 @@ const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-
 const BATCH3_CLIENT_SPEC = /ram-2026-10-22-bugs\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
+// Batch 4 specs sign in as the reporting tester themselves and run the same
+// journeys locally (app config) and here against the exact serving release.
+const BATCH4_SPECS = /ram-2026-(?:10-31-[a-z0-9-]+|11-01-adj-pickers)\.spec\.ts$/;
+// Rule-governance pickers and proposals (BUG-003..006) can pass in production only
+// while governance is enabled, so they run as their own release-owned projects.
+const BATCH4_GOVERNANCE_SPEC = /ram-2026-10-31-governance-ui\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -61,6 +67,7 @@ export default defineConfig({
     PLATFORM_REPORT_ADMIN_PROD_SPECS,
     BATCH3_CLIENT_SPEC,
     BATCH3_DRAFT_READONLY_SPEC,
+    BATCH4_SPECS,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -113,6 +120,8 @@ export default defineConfig({
       name: "tester-prod-chromium",
       testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /ram-2026-10-08-notices\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
       testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC],
+      // Mutating halves of read-only production checks run only against a local app.
+      grepInvert: /\[local-only\]/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },
@@ -167,6 +176,74 @@ export default defineConfig({
         storageState: { cookies: [], origins: [] },
         extraHTTPHeaders: noPaidProviderHeaders,
         trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "batch4-prod-chromium",
+      testMatch: BATCH4_SPECS,
+      testIgnore: BATCH4_GOVERNANCE_SPEC,
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch4-prod-mobile",
+      testMatch: BATCH4_SPECS,
+      testIgnore: BATCH4_GOVERNANCE_SPEC,
+      grep: /\[mobile\]/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        isMobile: true,
+        hasTouch: true,
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch4-governance-prod-chromium",
+      testMatch: BATCH4_GOVERNANCE_SPEC,
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch4-governance-prod-mobile",
+      testMatch: BATCH4_GOVERNANCE_SPEC,
+      grep: /\[mobile\]/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        isMobile: true,
+        hasTouch: true,
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
       },
     },
     {

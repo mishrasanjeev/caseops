@@ -63,6 +63,21 @@ describe("Specialist IP typed intake", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("BUG-015 offers only active clients and says where to add one when none is active", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path, options) => path === "/api/clients/"
+      ? Promise.resolve({ clients: [{ id: "old", name: "Former client", is_active: false }] })
+      : original(path, options));
+    mount(<SpecialistIndex />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New intake" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "New intake" }));
+    const client = await screen.findByLabelText("Client");
+    await waitFor(() => expect(client).toBeDisabled());
+    expect(screen.queryByRole("option", { name: "Former client" })).not.toBeInTheDocument();
+    expect(client).toHaveAccessibleDescription(/belongs to an active client/);
+    expect(screen.getByRole("link", { name: "Add or reactivate one in Clients" })).toHaveAttribute("href", "/app/clients");
+  });
+
   it("keeps unavailable intake disabled without hiding retained records", async () => {
     const original = mocks.api.getMockImplementation()!;
     mocks.api.mockImplementation((path, options) => path === "/api/ip/specialist/contracts" ? Promise.resolve([{ ...contract, intake_available: false }]) : original(path, options));
@@ -101,6 +116,25 @@ describe("Specialist IP typed intake", () => {
     await waitFor(() => expect(mocks.api).toHaveBeenCalledWith(`/api/ip/specialist/records/${id}/corrections`, expect.objectContaining({
       body: expect.objectContaining({ expected_version: 1, expected_lifecycle_version: 0, facts: expect.objectContaining({ title: "Unsaved transcription" }) }),
     })));
+  });
+
+  it("B4-ADJ-22 disables empty evidence choices with the in-product path", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path.startsWith("/api/ip/documents?docket_id=")) return Promise.resolve({ items: [], total: 0 });
+      if (path === "/api/ip/document-taxonomy") return Promise.resolve({ taxonomy_version: "v1", entries: [{ key: "old", label: "Retired", is_active: false, version: 1 }] });
+      if (path.includes("/observations?")) return Promise.resolve({ observations: [], next_cursor: null });
+      return original(path, options);
+    });
+    mount(<SpecialistDetail recordId={id} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "evidence" }));
+    const type = await screen.findByLabelText("Document type");
+    await waitFor(() => expect(type).toHaveAccessibleDescription(/No document type is active/));
+    expect(type).toBeDisabled();
+    const sourceVersion = await screen.findByLabelText("Source version");
+    await waitFor(() => expect(sourceVersion).toBeDisabled());
+    expect(sourceVersion).toHaveAccessibleDescription("No retained source version on this record yet. Upload the evidence above first.");
+    expect(screen.getByRole("button", { name: "Record observation" })).toBeDisabled();
   });
 
   it("preserves rejected edits and displays the failure", async () => {

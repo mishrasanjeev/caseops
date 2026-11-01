@@ -205,8 +205,8 @@ function KnowledgeGraphView({
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-hidden rounded-md border border-[var(--color-line)]">
-                <table className="w-full text-left text-xs">
+              <div className="@container overflow-hidden rounded-md border border-[var(--color-line)]" data-testid="legal-knowledge-graph-nodes-table">
+                <table className="w-full text-left text-xs @max-[36rem]:stacked-table @max-[36rem]:px-3">
                   <thead className="bg-[var(--color-bg)] text-[var(--color-mute)]">
                     <tr>
                       <th className="px-3 py-2 font-semibold">Node</th>
@@ -261,7 +261,7 @@ function NodeRow({
   const href = sourceHref(node.source_type, node.source_id, matterId, node.label);
   return (
     <tr data-testid={`legal-knowledge-graph-node-${node.node_type}`}>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Node" className="px-3 py-2 align-top">
         <div className="font-semibold text-[var(--color-ink)]">{node.label}</div>
         <div className="mt-1 text-[var(--color-mute)]">{titleCase(node.node_type)}</div>
         {node.confidence_label ? (
@@ -270,7 +270,7 @@ function NodeRow({
           </div>
         ) : null}
       </td>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Source" className="px-3 py-2 align-top">
         <div className="font-medium text-[var(--color-ink-2)]">
           {titleCase(node.source_type)}
         </div>
@@ -285,7 +285,7 @@ function NodeRow({
           </Link>
         ) : null}
       </td>
-      <td className="px-3 py-2 align-top">
+      <td data-label="Snippet / limitation" className="px-3 py-2 align-top">
         <p className="max-w-xl leading-relaxed text-[var(--color-ink-2)]">
           {node.source_quote || node.limitation_note}
         </p>

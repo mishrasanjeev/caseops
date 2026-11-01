@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, FileChartColumn, LoaderCircle, Play, RefreshCw, Send } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -22,6 +23,7 @@ import {
   type IpReportPreview,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { displayCell, displayValue, isInternalIdKey, looksLikeInternalId, readableColumns } from "@/lib/display-value";
 import {
   fetchAdminPortalIpGrants,
   publishIpReportToPortal,
@@ -68,13 +70,6 @@ function label(value: string) {
   return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "Not available";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.length ? value.map(displayValue).join(", ") : "None";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
 
 function freshnessTone(status: IpReportPreview["freshness"]["status"]) {
   if (status === "current") return "success" as const;
@@ -126,7 +121,8 @@ export default function IpReportsPage() {
     queryFn: fetchAdminPortalIpGrants,
     enabled: canPublish,
   });
-  const activeGrants = grants.data?.grants.filter((grant) => grant.active) ?? [];
+  // Only grants the publish endpoint accepts: live grant, active client, open docket you can see.
+  const activeGrants = grants.data?.grants.filter((grant) => grant.publishable) ?? [];
   const portalUsers = Array.from(
     new Map(activeGrants.map((grant) => [grant.portal_user_id, grant])).values(),
   );
@@ -153,10 +149,9 @@ export default function IpReportsPage() {
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not publish the client report.")),
   });
-  const columns = useMemo(
-    () => Array.from(new Set((report?.rows ?? []).flatMap((row) => Object.keys(row)))).slice(0, 10),
-    [report?.rows],
-  );
+  // Internal ids and hashes (application_id, docket_id, matter_id, ...) are
+  // never report columns (B4-ADJ-02); the record is named by its title.
+  const columns = useMemo(() => readableColumns(report?.rows ?? [], 10), [report?.rows]);
 
   if (!canRead) {
     return (
@@ -219,7 +214,7 @@ export default function IpReportsPage() {
         <Card data-testid="portal-report-publication">
           <CardHeader><CardTitle as="h2">Publish reviewed report</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Client" htmlFor="report-client"><select id="report-client" className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={portalUserId} onChange={(event) => { setPortalUserId(event.target.value); setSelectedGrantIds([]); }}><option value="">Select client</option>{portalUsers.map((grant) => <option key={grant.portal_user_id} value={grant.portal_user_id}>{grant.portal_user_name} · {grant.portal_user_email}</option>)}</select></Field>
+            <Field label="Client" htmlFor="report-client"><select id="report-client" className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60" value={portalUserId} disabled={!portalUsers.length} aria-describedby={portalUsers.length ? undefined : "report-client-empty"} onChange={(event) => { setPortalUserId(event.target.value); setSelectedGrantIds([]); }}><option value="">{grants.isPending ? "Loading clients…" : grants.isError ? "Clients could not be loaded" : portalUsers.length ? "Select client" : "No client has portal access"}</option>{portalUsers.map((grant) => <option key={grant.portal_user_id} value={grant.portal_user_id}>{grant.portal_user_name} · {grant.portal_user_email}</option>)}</select>{grants.isError ? <p id="report-client-empty" role="alert" className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-danger-500)]">{apiErrorMessage(grants.error, "Clients with portal access could not be loaded.")}<Button type="button" size="sm" variant="outline" onClick={() => grants.refetch()}>Retry</Button></p> : !portalUsers.length && !grants.isPending ? <p id="report-client-empty" className="text-sm text-[var(--color-mute)]">Reports publish only to clients with active IP portal access on an open docket. <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/client-portal">Grant access in Client portal</Link>.</p> : null}</Field>
             <Field label="Client title" htmlFor="report-client-title"><Input id="report-client-title" value={publicationTitle} onChange={(event) => setPublicationTitle(event.target.value)} /></Field>
             <Field label="Publish at" htmlFor="report-publish-at"><Input id="report-publish-at" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></Field>
             <div className="flex items-end"><Button className="w-full" onClick={() => publication.mutate()} disabled={publication.isPending || !portalUserId || !selectedGrantIds.length || publicationTitle.trim().length < 2 || report.confidentiality !== "internal"}><Send className="h-4 w-4" />{scheduledFor ? "Schedule" : "Publish"}</Button></div>
@@ -248,8 +243,8 @@ function ReportResult({ report, columns }: { report: IpReportPreview; columns: s
       </CardHeader>
       <CardContent className="space-y-5">
         {report.freshness.unavailable_sources.length ? <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span>Unavailable sources: {report.freshness.unavailable_sources.map(label).join(", ")}.</span></div> : null}
-        <section aria-labelledby="report-summary-title"><h3 id="report-summary-title" className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Summary</h3><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(report.summary).map(([key, value]) => <div key={key} className="min-w-0 border-b border-[var(--color-line)] pb-2"><dt className="text-xs text-[var(--color-mute)]">{label(key)}</dt><dd className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">{displayValue(value)}</dd></div>)}</dl></section>
-        {report.rows.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] table-fixed text-left text-sm"><thead className="border-y border-[var(--color-line)] bg-[var(--color-bg-2)]"><tr>{columns.map((column) => <th key={column} className="w-48 px-3 py-2 font-semibold">{label(column)}</th>)}</tr></thead><tbody>{report.rows.map((row, index) => <tr key={index} className="border-b border-[var(--color-line)] align-top">{columns.map((column) => <td key={column} className="max-w-48 break-words px-3 py-3 text-[var(--color-ink-2)]">{displayValue(row[column])}</td>)}</tr>)}</tbody></table></div> : <EmptyState title={report.freshness.status === "unavailable" ? "Report source unavailable" : "No matching records"} />}
+        <section aria-labelledby="report-summary-title"><h3 id="report-summary-title" className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Summary</h3><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(report.summary).filter(([key, value]) => !isInternalIdKey(key) && !looksLikeInternalId(value)).map(([key, value]) => <div key={key} className="min-w-0 border-b border-[var(--color-line)] pb-2"><dt className="text-xs text-[var(--color-mute)]">{label(key)}</dt><dd className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">{displayValue(value)}</dd></div>)}</dl></section>
+        {report.rows.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] table-fixed text-left text-sm"><thead className="border-y border-[var(--color-line)] bg-[var(--color-bg-2)]"><tr>{columns.map((column) => <th key={column} className="w-48 px-3 py-2 font-semibold">{label(column)}</th>)}</tr></thead><tbody>{report.rows.map((row, index) => <tr key={index} className="border-b border-[var(--color-line)] align-top">{columns.map((column) => <td key={column} className="max-w-48 break-words px-3 py-3 text-[var(--color-ink-2)]">{displayCell(row[column])}</td>)}</tr>)}</tbody></table></div> : <EmptyState title={report.freshness.status === "unavailable" ? "Report source unavailable" : "No matching records"} />}
         <div className="grid gap-3 border-t border-[var(--color-line)] pt-4 text-xs text-[var(--color-mute)] sm:grid-cols-2"><p>Audience: Internal · Restricted records outside your access are omitted without a count.</p><p className="sm:text-right">Schema {report.schema_version}{report.truncated ? " · Result truncated at the selected row limit" : ""}</p></div>
       </CardContent>
     </Card>

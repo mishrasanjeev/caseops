@@ -40,9 +40,9 @@ export async function expectBoundedReviewPageLoad(
     await options.navigate();
     await expect(page.getByTestId("intelligent-review-detail")).toBeVisible();
     // Matter targets load after the frozen reports; wait for both to settle.
-    await expect(page.getByRole("combobox", { name: "Matter target" })).toContainText(
-      "Choose a Matter",
-    );
+    await expect(
+      page.getByRole("combobox", { name: "Matter target" }).locator('option[value=""]'),
+    ).toHaveText("Select a Matter");
     await expect.poll(() => inFlight.size).toBe(0);
   } finally {
     page.off("request", started);

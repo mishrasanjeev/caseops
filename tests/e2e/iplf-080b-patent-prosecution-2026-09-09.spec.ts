@@ -7,6 +7,7 @@ import {
   patentScreenshot, signInPatentTenant,
 } from "./support/patent-acceptance";
 import { assertPatentControlsFit } from "./support/patent-layout";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -41,8 +42,7 @@ for (const width of [393, 768, 1280]) {
     });
     expect(familyResponse.status(), await familyResponse.text()).toBe(201);
     const family = await familyResponse.json();
-    const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-    expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+    await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
     const bytes = Buffer.from(`Synthetic patent claim and filing evidence, not official legal text. ${run} `.repeat(30));
     const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, {
       headers, multipart: {

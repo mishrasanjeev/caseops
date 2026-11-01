@@ -17,6 +17,11 @@ import type { ReactNode } from "react";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 
+// A pinned last column stays at the right edge of the scrolling table, so a
+// row's actions are on screen at any width (B4-ADJ-13).
+const PINNED_HEADER = "sticky right-0 z-[1] bg-[var(--color-bg)] shadow-[-1px_0_0_var(--color-line)]";
+const PINNED_CELL = "sticky right-0 z-[1] bg-white shadow-[-1px_0_0_var(--color-line)]";
+
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -25,6 +30,8 @@ type DataTableProps<TData, TValue> = {
   initialPageSize?: number;
   onRowClick?: (row: TData) => void;
   getRowId?: (row: TData, index: number) => string;
+  /** Keep the last column (a row's actions) on screen while the others scroll sideways. */
+  pinLastColumn?: boolean;
 };
 
 export function DataTable<TData, TValue>({
@@ -35,6 +42,7 @@ export function DataTable<TData, TValue>({
   initialPageSize = 25,
   onRowClick,
   getRowId,
+  pinLastColumn = false,
 }: DataTableProps<TData, TValue>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -88,14 +96,17 @@ export function DataTable<TData, TValue>({
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-[var(--color-line)] bg-[var(--color-bg)]">
-                {group.headers.map((header) => {
+                {group.headers.map((header, index) => {
                   const canSort = header.column.getCanSort();
                   const dir = header.column.getIsSorted();
                   return (
                     <th
                       key={header.id}
                       scope="col"
-                      className="px-4 py-2.5 text-left font-semibold text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]"
+                      className={cn(
+                        "px-4 py-2.5 text-left font-semibold text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]",
+                        pinLastColumn && index === group.headers.length - 1 && PINNED_HEADER,
+                      )}
                     >
                       {header.isPlaceholder ? null : (
                         <button
@@ -161,8 +172,14 @@ export function DataTable<TData, TValue>({
                         "cursor-pointer hover:bg-[var(--color-bg-2)] focus-visible:bg-[var(--color-bg-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-brand-500)]",
                     )}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-[var(--color-ink-2)]">
+                    {row.getVisibleCells().map((cell, index, cells) => (
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          "px-4 py-3 text-[var(--color-ink-2)]",
+                          pinLastColumn && index === cells.length - 1 && PINNED_CELL,
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

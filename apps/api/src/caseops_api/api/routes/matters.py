@@ -137,6 +137,7 @@ from caseops_api.schemas.matters import (
     MatterNextHearingSuggestionActionRequest,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskListResponse,
@@ -296,7 +297,9 @@ from caseops_api.services.matters import (
     get_matter_attachment_preview,
     get_matter_dashboard_summary,
     get_matter_invoice_pdf,
+    get_matter_portfolio_health,
     get_matter_workspace,
+    issue_matter_invoice_draft,
     list_matter_hearing_follow_up,
     list_matter_hearing_portfolio,
     list_matter_tasks,
@@ -309,6 +312,7 @@ from caseops_api.services.matters import (
     update_matter_court_order,
     update_matter_hearing,
     update_matter_task,
+    void_matter_invoice_draft,
 )
 from caseops_api.services.next_hearing import (
     decide_next_hearing_suggestion,
@@ -340,6 +344,7 @@ HearingPackGenerator = Annotated[
 HearingPackReviewer = Annotated[SessionContext, Depends(require_capability("hearing_packs:review"))]
 CourtSyncRunner = Annotated[SessionContext, Depends(require_capability("court_sync:run"))]
 InvoiceIssuer = Annotated[SessionContext, Depends(require_capability("invoices:issue"))]
+InvoiceVoider = Annotated[SessionContext, Depends(require_capability("invoices:void"))]
 TimeEntryWriter = Annotated[SessionContext, Depends(require_capability("time_entries:write"))]
 DocumentUploader = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
 DocumentManager = Annotated[SessionContext, Depends(require_capability("documents:manage"))]
@@ -388,6 +393,18 @@ async def current_company_matter_dashboard_summary(
 
 
 @router.get(
+    "/portfolio-health",
+    response_model=MatterPortfolioHealthResponse,
+    summary="Count every visible matter by status, forum and practice area",
+)
+async def current_company_matter_portfolio_health(
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterPortfolioHealthResponse:
+    return get_matter_portfolio_health(session, context=context)
+
+
+@router.get(
     "/hearing-portfolio",
     response_model=MatterHearingPortfolioResponse,
     summary="Return visible matters with next-hearing dates",
@@ -415,11 +432,21 @@ async def current_company_matter_hearing_follow_up(
     context: CurrentContext,
     session: DbSession,
     limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    queue: Literal["overdue", "missing_date"] | None = Query(
+        default=None,
+        description=(
+            "Read the rows of one queue only (the other list comes back empty). "
+            "Both counts are always returned."
+        ),
+    ),
 ) -> MatterHearingFollowUpResponse:
     return list_matter_hearing_follow_up(
         session,
         context=context,
         limit=limit,
+        offset=offset,
+        queue=queue,
     )
 
 
@@ -2718,6 +2745,38 @@ async def download_current_company_matter_invoice_pdf(
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-CaseOps-Checksum": checksum,
         },
+    )
+
+
+@router.post(
+    "/{matter_id}/invoices/{invoice_id}/issue",
+    response_model=InvoiceRecord,
+    summary="Issue a draft matter invoice",
+)
+async def issue_current_company_matter_invoice_draft(
+    matter_id: str,
+    invoice_id: str,
+    context: InvoiceIssuer,
+    session: DbSession,
+) -> InvoiceRecord:
+    return issue_matter_invoice_draft(
+        session, context=context, matter_id=matter_id, invoice_id=invoice_id
+    )
+
+
+@router.post(
+    "/{matter_id}/invoices/{invoice_id}/void",
+    response_model=InvoiceRecord,
+    summary="Void a draft matter invoice",
+)
+async def void_current_company_matter_invoice_draft(
+    matter_id: str,
+    invoice_id: str,
+    context: InvoiceVoider,
+    session: DbSession,
+) -> InvoiceRecord:
+    return void_matter_invoice_draft(
+        session, context=context, matter_id=matter_id, invoice_id=invoice_id
     )
 
 

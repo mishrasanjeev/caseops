@@ -19,7 +19,7 @@ function grantIpEntitlement(companyId: string): void {
     "from caseops_api.db.models import BillingSubscription",
     "from caseops_api.db.session import get_session_factory",
     "session=get_session_factory()()",
-    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf_042_playwright',externally_billable=False,entitlement_overrides_json={'ip_workspace': True}))",
+    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf_042_playwright',externally_billable=False,entitlement_overrides_json={'ip_workspace': True, 'ip_rule_governance': True}))",
     "session.commit()",
     "session.close()",
   ].join("; ");
@@ -112,6 +112,7 @@ async function createMember(api: APIRequestContext, tenant: any, label: string) 
 function rulePayload(
   stage: "notice_filing_due" | "opponent_evidence_due" | "reply_evidence_due",
   suffix: string,
+  calendarVersionId: string,
 ) {
   const triggerKind = {
     notice_filing_due: "trademark_publication",
@@ -135,7 +136,7 @@ function rulePayload(
     source_version: "fixture-source-2026-08-23",
     engine_version: "caseops-ip-deadline-v1",
     calendar: {
-      calendar_version_id: "fixture-calendar-042",
+      calendar_version_id: calendarVersionId,
       timezone: "Asia/Kolkata",
       weekend_days: [5, 6],
       holidays: ["2026-08-17"],
@@ -219,7 +220,7 @@ async function governDeadlines(api: APIRequestContext, tenant: any) {
   ] as const) {
     const rule = await api.post(`${apiBaseUrl}/api/ip/deadline-rules`, {
       headers: ownerHeaders,
-      data: rulePayload(stage, `${suffix}-${tenant.slug}`),
+      data: rulePayload(stage, `${suffix}-${tenant.slug}`, calendarBody.id),
     });
     expect(rule.status(), await rule.text()).toBe(201);
     const activation = await legalApi.post(`${apiBaseUrl}/api/ip/deadline-rules/${(await rule.json()).id}/activate`, {
@@ -312,7 +313,7 @@ async function proposeAndConfirm(page: Page, backupMembershipId: string) {
   const proposed = page.waitForResponse((row) => row.url().endsWith("/opponent-deadlines") && row.request().method() === "POST");
   await opponent.getByRole("button", { name: "Propose deadline" }).click();
   expect((await proposed).status()).toBe(201);
-  await opponent.getByLabel("Opponent backup membership ID").fill(backupMembershipId);
+  await opponent.getByLabel("Opponent backup lawyer").selectOption(backupMembershipId);
   const confirmed = page.waitForResponse((row) => row.url().endsWith("/confirm") && row.request().method() === "POST");
   await opponent.getByRole("button", { name: "Confirm" }).click();
   expect((await confirmed).status()).toBe(200);
@@ -357,7 +358,11 @@ test("IPLF-042 completes the governed opponent opposition journey", async ({ pag
   await opposition.getByLabel("Party 1 name").fill("Applicant Industries Private Limited");
   await opposition.getByLabel("Party 2 name").fill("Opponent Brands LLP");
   await opposition.getByLabel("Ground 1 lawyer detail").fill("Counsel confirmed the pleaded earlier-mark ground.");
-  await opposition.getByLabel("Scope 1 class").fill("9");
+  // BUG-002: the challenged class is chosen from the Nice catalogue.
+  const scopeClass = opposition.getByRole("combobox", { name: "Scope 1 class" });
+  await scopeClass.click();
+  await scopeClass.fill("9");
+  await opposition.page().getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
   await opposition.getByLabel("Scope 1 goods and services").fill("Downloadable legal software");
   await opposition.getByRole("button", { name: "Add right" }).click();
   await opposition.getByLabel("Right 1 mark").fill("IPLF 042 EARLIER MARK");

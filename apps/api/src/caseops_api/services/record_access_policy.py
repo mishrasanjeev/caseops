@@ -305,17 +305,21 @@ def visible_ip_dockets_filter(
         .correlate(TeamMembership)
         .scalar_subquery()
     )
-    active_teams = (
-        select(TeamMembership.team_id)
-        .where(
-            TeamMembership.membership_id == membership_id,
-            active_team_id.is_not(None),
-        )
-        # Both policy branches share this statement-local set. Repeating the
-        # eligibility probe per docket makes sparse continuation pages unstable.
-        .cte()
-        .prefix_with("MATERIALIZED", dialect="postgresql")
+    teams = select(TeamMembership.team_id).where(
+        TeamMembership.membership_id == membership_id,
+        active_team_id.is_not(None),
     )
+    # Both policy branches share this statement-local set. Repeating the
+    # eligibility probe per docket makes sparse continuation pages unstable.
+    anonymous = teams.cte()
+    active_teams = anonymous.prefix_with("MATERIALIZED", dialect="postgresql")
+    # The CTE's anonymous name is derived from the identity of `anonymous`,
+    # which the generative prefix_with copy does not keep. Once it was freed,
+    # the next call could get the same identity and so the same name, and a
+    # statement holding two policy calls failed to compile: a 500 (B4-ADJ-10).
+    # Keeping it alive with the copy keeps names unique while the statement
+    # exists; an explicit unique name would defeat the SQL compilation cache.
+    active_teams._caseops_anonymous_name_owner = anonymous  # type: ignore[attr-defined]
     member_wall = _active_ip_subject_match(
         EthicalWall, EthicalWall.excluded_membership_id, membership_id, now
     )

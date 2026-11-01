@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   CheckCircle2,
@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import {
   Select,
   SelectContent,
@@ -133,9 +134,13 @@ export default function MatterTimelinePage() {
   const [sort, setSort] = useState<"asc" | "desc">("asc");
   const [type, setType] = useState<string>("all");
   const { data: workspace } = useMatterWorkspace(matterId);
-  const timelineQuery = useQuery({
+  // Cursor pages of 200: the timeline used to stop at 200 events silently
+  // (B4-ADJ-15) and showed "No timeline events" when the read failed.
+  const timelineQuery = useInfiniteQuery({
     queryKey: ["matters", matterId, "timeline", sort, type],
-    queryFn: () => fetchMatterTimeline({ matterId, sort, type, limit: 200 }),
+    queryFn: ({ pageParam }) => fetchMatterTimeline({ matterId, sort, type, limit: 200, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
     enabled: Boolean(matterId),
   });
 
@@ -143,7 +148,10 @@ export default function MatterTimelinePage() {
     () => splitHearings(workspace?.hearings ?? []),
     [workspace?.hearings],
   );
-  const items = timelineQuery.data?.items ?? [];
+  const items = useMemo(
+    () => timelineQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [timelineQuery.data],
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -197,6 +205,12 @@ export default function MatterTimelinePage() {
               <div className="h-12 rounded-lg bg-[var(--color-bg-2)]" />
               <div className="h-12 rounded-lg bg-[var(--color-bg-2)]" />
             </div>
+          ) : timelineQuery.isError && !timelineQuery.isFetchNextPageError ? (
+            <QueryErrorState
+              title="Could not load the timeline"
+              error={timelineQuery.error}
+              onRetry={() => timelineQuery.refetch()}
+            />
           ) : items.length === 0 ? (
             <EmptyState
               icon={ScrollText}
@@ -204,11 +218,39 @@ export default function MatterTimelinePage() {
               description="Events appear here as hearings, orders, documents, deadlines, tasks, IP events, and activity are added."
             />
           ) : (
-            <ol className="flex flex-col gap-3">
-              {items.map((item) => (
-                <TimelineRow key={item.id} item={item} />
-              ))}
-            </ol>
+            <div className="flex flex-col gap-3">
+              <ol className="flex flex-col gap-3">
+                {items.map((item) => (
+                  <TimelineRow key={item.id} item={item} />
+                ))}
+              </ol>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]">
+                <span role="status" data-testid="timeline-count">
+                  {timelineQuery.hasNextPage
+                    ? `Showing the first ${items.length} events in this order. More events exist.`
+                    : `${items.length} ${items.length === 1 ? "event" : "events"}.`}
+                </span>
+                {timelineQuery.hasNextPage ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={timelineQuery.isFetchingNextPage}
+                    onClick={() => timelineQuery.fetchNextPage()}
+                  >
+                    {timelineQuery.isFetchingNextPage ? "Loading…" : "Load more events"}
+                  </Button>
+                ) : null}
+                {timelineQuery.isFetchNextPageError ? (
+                  <span role="alert" className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--color-danger-500)]">
+                    More events could not be loaded.
+                    <Button type="button" size="sm" variant="outline" onClick={() => timelineQuery.fetchNextPage()}>
+                      Retry
+                    </Button>
+                  </span>
+                ) : null}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
