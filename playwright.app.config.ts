@@ -77,8 +77,9 @@ export default defineConfig({
     /ram-2026-10-08-notices\.spec\.ts$/,
     /ram-2026-10-08-drive\.spec\.ts$/,
     // Batch 4 (CaseOps_Bugs (4).xlsx): the same specs run here against a
-    // fresh test-legal-shaped tenant and in prod-ram against test-legal.
-    /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+    // fresh test-legal-shaped tenant and in prod-ram against test-legal. Its
+    // 2026-11-01 adjacent-defect specs run here; prod-ram does not list them yet.
+    /ram-2026-(?:10-31|11-01)-[a-z0-9-]+\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -157,7 +158,7 @@ export default defineConfig({
         /ram-2026-10-22-drafting\.spec\.ts$/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
         /platform-leads-2026-10-21\.spec\.ts$/,
-        /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+        /ram-2026-(?:10-31|11-01)-[a-z0-9-]+\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

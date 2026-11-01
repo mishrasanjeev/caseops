@@ -123,6 +123,20 @@ async function everyMatter(rt: TesterRuntime, request: APIRequestContext): Promi
   return rows;
 }
 
+/** Clicks Load more and holds the picker to the second page the server returned. */
+async function loadNextDocketPage(page: Page, rt: TesterRuntime, first: DocketPage) {
+  const nextRead = apiRead(page, rt, "/api/ip/dockets", (url) => url.searchParams.get("cursor") === first.next_cursor);
+  await page.getByTestId("ip-docket-picker").getByRole("button", { name: "Load more", exact: true }).click();
+  const next = await uiJson<DocketPage>(nextRead, "Linked docket picker next page");
+  const linked = page.getByLabel("Linked docket", { exact: true });
+  const loaded = first.dockets.length + next.dockets.length;
+  // Every docket on the second page is now offered.
+  for (const row of next.dockets) await expect(linked.locator(`option[value="${row.id}"]`)).toHaveCount(1);
+  await expect(page.locator("#ip-document-docket-status > span").first()).toHaveText(next.has_more
+    ? `Showing ${count(loaded)} of ${count(first.total_count)} dockets — refine your search or load more.`
+    : `${count(first.total_count)} ${first.total_count === 1 ? "docket" : "dockets"}.`);
+}
+
 async function linkedDocketJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   if (rt.local) await seedLocalDockets(rt, request);
   const all = await everyDocket(rt, request);
@@ -141,12 +155,16 @@ async function linkedDocketJourney(page: Page, request: APIRequestContext, rt: T
   await expectOnScreen(linked, "The Linked docket field is on screen");
   await expect(linked).toBeEnabled();
   await expect(linked, "No docket is chosen for the tester").toHaveValue("");
-  const status = page.locator("#ip-document-docket-status");
+  const status = page.locator("#ip-document-docket-status > span").first();
   await expect(status).toHaveText(first.has_more
     ? `Showing ${count(first.dockets.length)} of ${count(first.total_count)} dockets — refine your search or load more.`
     : `${count(first.total_count)} ${first.total_count === 1 ? "docket" : "dockets"}.`);
   const oldestOption = linked.locator(`option[value="${oldest.id}"]`);
   await expect(oldestOption).toHaveCount(first.dockets.some((row) => row.id === oldest.id) ? 1 : 0);
+
+  // Load more reads the next cursor page; a complete first page offers no button.
+  const loadMore = page.getByTestId("ip-docket-picker").getByRole("button", { name: "Load more", exact: true });
+  await (first.has_more ? loadNextDocketPage(page, rt, first) : expect(loadMore).toHaveCount(0));
 
   // The oldest docket is reached through the server search.
   const searched = apiRead(page, rt, "/api/ip/dockets", (url) => url.searchParams.get("query") === oldest.title);
