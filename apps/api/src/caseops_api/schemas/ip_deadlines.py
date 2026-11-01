@@ -195,6 +195,9 @@ IpGovernanceBlockReason = Literal[
     # approver other than its proposer, a rule two (reviewer and approver).
     "no_other_approver",
     "fixtures_not_passing",
+    # A deadline rule's fixtures were calculated on a calendar that is not an
+    # active working calendar of this workspace (missing, withdrawn or superseded).
+    "fixture_calendar_not_active",
 ]
 
 

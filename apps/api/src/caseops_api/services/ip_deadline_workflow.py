@@ -501,6 +501,9 @@ class _GovernanceViewer:
     # Every active member holding ip:rules_activate, the viewer included. Only
     # counted, never returned: it decides ``no_other_approver``.
     approver_ids: frozenset[str] = frozenset()
+    # This company's active working calendar versions, as fixture snapshots.
+    # A deadline rule's fixtures prove it only on one of these.
+    active_calendars: dict[str, tuple] | None = None
 
     def projection(self) -> IpDeadlineGovernanceProjection:
         return IpDeadlineGovernanceProjection(**self.actions)
@@ -576,7 +579,110 @@ def _governance_viewer(
         reviewer_ids=reviewer_ids,
         usable_proposer_ids=usable,
         approver_ids=approver_ids,
+        active_calendars=_active_calendar_snapshots(session, company_id=context.company.id),
     )
+
+
+def _calendar_snapshot_key(
+    *,
+    timezone: str,
+    weekend_days: list,
+    holidays: list,
+    exceptional_working_days: list,
+    source_reference: str,
+    source_hash: str,
+) -> tuple:
+    return (
+        timezone,
+        tuple(sorted(int(day) for day in weekend_days)),
+        tuple(sorted(str(day) for day in holidays)),
+        tuple(sorted(str(day) for day in exceptional_working_days)),
+        source_reference,
+        (source_hash or "").lower(),
+    )
+
+
+def _active_calendar_snapshots(
+    session: Session,
+    *,
+    company_id: str,
+    calendar_version_ids: set[str] | None = None,
+    share_lock: bool = False,
+) -> dict[str, tuple]:
+    """Active working calendar versions of one company, keyed by version id.
+
+    The same predicate ``propose_deadline`` uses for its calendar: company
+    owned and ``active``. ``share_lock`` holds them active until the caller
+    commits, so a concurrent supersession either sees this write or refuses it.
+    """
+
+    statement = select(LegalWorkingCalendarVersion).where(
+        LegalWorkingCalendarVersion.company_id == company_id,
+        LegalWorkingCalendarVersion.status == "active",
+    )
+    if calendar_version_ids is not None:
+        if not calendar_version_ids:
+            return {}
+        statement = statement.where(
+            LegalWorkingCalendarVersion.id.in_(sorted(calendar_version_ids))
+        )
+    if share_lock:
+        statement = statement.with_for_update(read=True)
+    return {
+        row.id: _calendar_snapshot_key(
+            timezone=row.timezone,
+            weekend_days=list(row.weekend_days_json or []),
+            holidays=list(row.holidays_json or []),
+            exceptional_working_days=list(row.exceptional_working_days_json or []),
+            source_reference=row.source_reference,
+            source_hash=row.source_hash,
+        )
+        for row in session.scalars(statement)
+    }
+
+
+def _fixture_calendar_ids(fixtures: list[dict]) -> set[str]:
+    ids: set[str] = set()
+    for fixture in fixtures:
+        calendar = (fixture.get("calculation") or {}).get("calendar")
+        if isinstance(calendar, dict) and calendar.get("calendar_version_id"):
+            ids.add(str(calendar["calendar_version_id"]))
+    return ids
+
+
+def _fixture_calendar_issues(
+    fixtures: list[dict],
+    active_calendars: dict[str, tuple],
+) -> list[tuple[int, str]]:
+    """``(fixture index, reason)`` for every deadline fixture whose calendar is
+    not an active working calendar of the company (``not_active``) or whose
+    embedded snapshot differs from that version (``snapshot_mismatch``)."""
+
+    issues: list[tuple[int, str]] = []
+    for index, fixture in enumerate(fixtures):
+        calculation = fixture.get("calculation")
+        if not calculation:
+            continue
+        calendar = calculation.get("calendar") or {}
+        expected = active_calendars.get(str(calendar.get("calendar_version_id") or ""))
+        if expected is None:
+            issues.append((index, "not_active"))
+            continue
+        try:
+            embedded = _calendar_snapshot_key(
+                timezone=calendar["timezone"],
+                weekend_days=list(calendar.get("weekend_days") or []),
+                holidays=list(calendar.get("holidays") or []),
+                exceptional_working_days=list(calendar.get("exceptional_working_days") or []),
+                source_reference=calendar["source_reference"],
+                source_hash=calendar["source_hash"],
+            )
+        except (KeyError, TypeError, ValueError):
+            issues.append((index, "snapshot_mismatch"))
+            continue
+        if embedded != expected:
+            issues.append((index, "snapshot_mismatch"))
+    return issues
 
 
 def _rule_activation_projection(
@@ -617,6 +723,8 @@ def _rule_activation_projection(
             fixture_ids, passed_ids = _rule_fixture_results(row, rule_set)
             if not fixture_ids or set(fixture_ids) != set(passed_ids):
                 reasons.append("fixtures_not_passing")
+            if _fixture_calendar_issues(row.fixture_set_json, viewer.active_calendars or {}):
+                reasons.append("fixture_calendar_not_active")
     return reasons, eligible
 
 
@@ -791,6 +899,12 @@ def propose_rule_version(
         context=context,
         required_capability="ip:rules_propose",
     )
+    if payload.rule_kind == "deadline":
+        _assert_fixture_calendars_active(
+            session,
+            company_id=context.company.id,
+            fixtures=[item.model_dump(mode="json") for item in payload.fixtures],
+        )
     key = payload.key.strip().lower()
     # Keys are unique per company: another tenant's identical key is neither
     # visible nor a collision, and version numbering is never shared.
@@ -876,6 +990,44 @@ def propose_rule_version(
     session.commit()
     session.refresh(row)
     return _rule_record(rule_set, row, _viewer_for_rule(session, context=context, row=row))
+
+
+def _assert_fixture_calendars_active(
+    session: Session,
+    *,
+    company_id: str,
+    fixtures: list[dict],
+) -> None:
+    """A deadline rule's fixtures must run on an active working calendar of this
+    company, exactly as stored. The browser enforced this alone (B4-ADJ-08);
+    an embedded snapshot of any other calendar proved nothing."""
+
+    active = _active_calendar_snapshots(
+        session,
+        company_id=company_id,
+        calendar_version_ids=_fixture_calendar_ids(fixtures),
+        share_lock=True,
+    )
+    errors = [
+        {
+            "loc": ["body", "fixtures", index, "calculation", "calendar", "calendar_version_id"],
+            "msg": (
+                "Choose an active working calendar of this workspace. Propose a working "
+                "calendar and have another owner, admin or partner activate it first."
+                if reason == "not_active"
+                else "The fixture calendar differs from the stored working calendar version; "
+                "reload the calendar and propose again."
+            ),
+            "type": (
+                "ip_rule_fixture_calendar_not_active"
+                if reason == "not_active"
+                else "ip_rule_fixture_calendar_snapshot_mismatch"
+            ),
+        }
+        for index, reason in _fixture_calendar_issues(fixtures, active)
+    ]
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
 
 
 def _ranges_overlap(
@@ -1144,6 +1296,23 @@ def activate_rule_version(
         fixture_ids=fixture_ids,
         passed_fixture_ids=passed_ids,
     )
+    active_calendars = _active_calendar_snapshots(
+        session,
+        company_id=context.company.id,
+        calendar_version_ids=_fixture_calendar_ids(row.fixture_set_json),
+        share_lock=True,
+    )
+    if _fixture_calendar_issues(row.fixture_set_json, active_calendars):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_rule_fixture_calendar_not_active",
+                "detail": (
+                    "This rule's fixtures were calculated on a working calendar that is "
+                    "no longer active. Propose the rule again on the current active calendar."
+                ),
+            },
+        )
     overlapping = _overlapping_active_versions(session, row=row)
     if overlapping and not payload.supersede_overlapping:
         collided = ", ".join(

@@ -27,7 +27,10 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarSnapshot,
     LegalCalendarVersionProposalRequest,
 )
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -321,7 +324,7 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     rule_proposal = client.post(
         "/api/ip/deadline-rules",
         headers=owner_headers,
-        json=_rule_payload(),
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     )
     assert rule_proposal.status_code == 201, rule_proposal.text
     rule = rule_proposal.json()
@@ -820,7 +823,11 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
         json={"reason": "Independent calendar review is complete."},
     )
     assert activated_calendar.status_code == 200, activated_calendar.text
-    rule = client.post("/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()).json()
+    rule = client.post(
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
+    ).json()
     activated_rule = client.post(
         f"/api/ip/deadline-rules/{rule['id']}/activate",
         headers=legal_headers,
@@ -961,7 +968,9 @@ def test_workspace_eligibility_rechecks_company_selection_without_hiding_governa
                                      json={"reason": "Independent synthetic calendar review"})
     assert activated_calendar.status_code == 200, activated_calendar.text
     rule_response = client.post(
-        "/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     )
     assert rule_response.status_code == 201, rule_response.text
     rule = rule_response.json()

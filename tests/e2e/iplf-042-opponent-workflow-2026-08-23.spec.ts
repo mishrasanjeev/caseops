@@ -112,6 +112,7 @@ async function createMember(api: APIRequestContext, tenant: any, label: string) 
 function rulePayload(
   stage: "notice_filing_due" | "opponent_evidence_due" | "reply_evidence_due",
   suffix: string,
+  calendarVersionId: string,
 ) {
   const triggerKind = {
     notice_filing_due: "trademark_publication",
@@ -135,7 +136,7 @@ function rulePayload(
     source_version: "fixture-source-2026-08-23",
     engine_version: "caseops-ip-deadline-v1",
     calendar: {
-      calendar_version_id: "fixture-calendar-042",
+      calendar_version_id: calendarVersionId,
       timezone: "Asia/Kolkata",
       weekend_days: [5, 6],
       holidays: ["2026-08-17"],
@@ -219,7 +220,7 @@ async function governDeadlines(api: APIRequestContext, tenant: any) {
   ] as const) {
     const rule = await api.post(`${apiBaseUrl}/api/ip/deadline-rules`, {
       headers: ownerHeaders,
-      data: rulePayload(stage, `${suffix}-${tenant.slug}`),
+      data: rulePayload(stage, `${suffix}-${tenant.slug}`, calendarBody.id),
     });
     expect(rule.status(), await rule.text()).toBe(201);
     const activation = await legalApi.post(`${apiBaseUrl}/api/ip/deadline-rules/${(await rule.json()).id}/activate`, {

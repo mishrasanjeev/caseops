@@ -13,7 +13,10 @@ from caseops_api.schemas.ip_oppositions import (
     IpOppositionWorkspaceUpsertRequest,
 )
 from caseops_api.schemas.ip_records import IpOppositionStageTransitionRequest
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -221,7 +224,7 @@ def _governed_deadline_rule(
     )
     assert activated_calendar.status_code == 200, activated_calendar.text
 
-    rule_payload = _rule_payload()
+    rule_payload = rule_payload_on_calendar(_rule_payload(), activated_calendar.json())
     rule_payload.update(
         {
             "key": f"in-tm-opposition-applicant-{workflow_stage}-{suffix}",

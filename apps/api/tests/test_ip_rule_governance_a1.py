@@ -53,7 +53,10 @@ from caseops_api.schemas.ip_deadlines import (
 )
 from caseops_api.services import ip_deadline_workflow
 from caseops_api.services.session_context import SessionContext
-from tests.ip_rule_governance_support import grant_ip_rule_governance_entitlement
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_for_company,
+)
 from tests.test_auth_company import auth_headers
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -179,6 +182,7 @@ def _assign_role(client: TestClient, company: dict, membership_id: str, role_id:
 def _propose(client: TestClient, headers: dict[str, str], **overrides) -> dict:
     payload = _rule_payload()
     payload.update(overrides)
+    payload = rule_payload_for_company(client, headers, payload)
     response = client.post("/api/ip/deadline-rules", headers=headers, json=payload)
     assert response.status_code == 201, response.text
     return response.json()
@@ -416,7 +420,9 @@ def test_a1_decision_02_expired_rollout_api_writes_nothing_for_an_entitled_compa
     )
     get_settings.cache_clear()
     allowed = client.post(
-        "/api/ip/deadline-rules", headers=company["headers"], json=_rule_payload()
+        "/api/ip/deadline-rules",
+        headers=company["headers"],
+        json=rule_payload_for_company(client, company["headers"], _rule_payload()),
     )
     assert allowed.status_code == 201, allowed.text
 
@@ -508,7 +514,9 @@ def test_a1_ownership_01_rule_keys_are_owned_per_company_without_leaks(
     same_company_conflict = client.post(
         "/api/ip/deadline-rules",
         headers=second["headers"],
-        json={**_rule_payload(), "stage": "examination"},
+        json=rule_payload_for_company(
+            client, second["headers"], {**_rule_payload(), "stage": "examination"}
+        ),
     )
     assert same_company_conflict.status_code == 409
     assert "this workspace" in same_company_conflict.json()["detail"].lower()
