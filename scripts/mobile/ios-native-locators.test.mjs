@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { absent, click, dispatchNativeClick, findQuery, home, input, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { absent, click, dispatchNativeClick, findQuery, home, input, IOS_FIRST_KEY_SETTLE_MS, IOS_KEYBOARD_READY_MS, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { freshNoteAbsent, scenarios, selectMatterActivity, selectMatterDraft, verifyIosCalendarRow } from '../../apps/mobile/e2e/journeys.mjs';
 
 function element(id, { displayed = true, accessible = 'false', label = 'CaseOps', value = label } = {}) {
@@ -264,6 +264,50 @@ test('input forwards optional bounded scroll discovery while preserving its defa
   }
 });
 
+function iosInputDouble({ keyboard = true, accepted = (typed) => typed } = {}) {
+  const calls = [], waits = [];
+  let typed = '';
+  const field = { elementId: 'unit-field', isDisplayed: async () => true,
+    clearValue: async () => { calls.push('clear'); typed = ''; },
+    addValue: async (value) => { calls.push(`add:${value}`); typed += value; },
+    getAttribute: async (name) => { assert.equal(name, 'value'); return accepted(typed); } };
+  const driver = {
+    waitUntil: async (callback, options) => { waits.push(options);
+      if (!await callback()) throw new Error(options.timeoutMsg); },
+    $$: async (query) => query === '~matter-search' ? [field]
+      : query === '-ios predicate string:type == "XCUIElementTypeKeyboard"' && keyboard
+        ? [{ isDisplayed: async () => true }] : [],
+    elementClick: async (id) => { assert.equal(id, 'unit-field'); calls.push('focus'); },
+    pause: async (ms) => { calls.push(`pause:${ms}`); },
+  };
+  return { context: { platform: 'ios', driver, record: () => {} }, calls, waits };
+}
+
+test('iOS input focuses, waits for the keyboard, settles after the first key and proves the exact text', async () => {
+  const fake = iosInputDouble();
+  await input(fake.context, 'id', 'matter-search', 'MOBILE-LOCAL-001');
+  assert.deepEqual(fake.calls, ['focus', 'clear', 'add:M', `pause:${IOS_FIRST_KEY_SETTLE_MS}`, 'add:OBILE-LOCAL-001']);
+  assert.equal(IOS_FIRST_KEY_SETTLE_MS, 1000);
+  assert.ok(fake.waits.some(({ timeout, timeoutMsg }) => timeout === IOS_KEYBOARD_READY_MS && timeoutMsg === 'NATIVE_KEYBOARD_NOT_READY'));
+  const single = iosInputDouble();
+  await input(single.context, 'id', 'matter-search', 'x');
+  assert.deepEqual(single.calls, ['focus', 'clear', 'add:x', `pause:${IOS_FIRST_KEY_SETTLE_MS}`]);
+  const cleared = iosInputDouble({ accepted: () => 'Placeholder' });
+  await input(cleared.context, 'id', 'matter-search', '');
+  assert.deepEqual(cleared.calls, ['focus', 'clear']);
+});
+
+test('iOS input refuses dropped keystrokes and an absent keyboard instead of acting on a wrong value', async () => {
+  const dropped = iosInputDouble({ accepted: (typed) => typed.length > 1 ? 'M-LOCAL-001' : typed });
+  await assert.rejects(input(dropped.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_INPUT_VALUE_MISMATCH/);
+  const noKeyboard = iosInputDouble({ keyboard: false });
+  await assert.rejects(input(noKeyboard.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_KEYBOARD_NOT_READY/);
+  assert.deepEqual(noKeyboard.calls, ['focus']);
+  const firstKey = iosInputDouble({ accepted: () => '' });
+  await assert.rejects(input(firstKey.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_INPUT_FIRST_KEY_NOT_ACCEPTED/);
+  assert.deepEqual(firstKey.calls, ['focus', 'clear', 'add:M']);
+});
+
 const workLabel = 'Seeded task, MAT-001 · Seeded matter, task · 25 Oct 2026 · open';
 function workDouble(platform, { label = workLabel, text = workLabel, type = 'XCUIElementTypeButton',
   accessible = 'true', duplicates = false } = {}) {
@@ -450,16 +494,20 @@ test('both Calendar journeys bind their first date entry to the actual stable in
       waitUntil: async (callback, options) => { waits.push(options); assert.ok(await callback()); },
       $$: async (query) => {
         queries.push(query);
-        if (query === selector(platform, 'id', 'calendar-date-input')) return [{ ...shown,
-          setValue: async (value) => { values.push(value); throw stop; } }];
+        if (query === selector(platform, 'id', 'calendar-date-input')) return [{ ...shown, elementId: 'unit-date',
+          setValue: async (value) => { values.push(value); throw stop; },
+          clearValue: async () => {}, addValue: async (value) => { values.push(value); throw stop; } }];
         if ([selector(platform, 'id', 'tab-calendar'), selector(platform, 'id', 'screen-calendar')].includes(query)) return [shown];
+        if (platform === 'ios' && query === '-ios predicate string:type == "XCUIElementTypeKeyboard"') return [shown];
         assert.fail('CALENDAR_ALIAS_OR_UNRELATED_CONTROL_QUERIED');
       },
     } };
     nativeProtocolDouble(context.driver);
     await assert.rejects(() => scenarios.find((scenario) => scenario.id === id).run(context), (error) => error === stop);
-    assert.deepEqual(values, ['2026-10-25']);
-    assert.equal(waits.at(-1).timeout, 1500, 'CALENDAR_INPUT_MUST_ADMIT_BOUNDED_SCROLL_DISCOVERY');
+    // iOS types the first character on its own before the rest (see input()).
+    assert.deepEqual(values, [platform === 'ios' ? '2' : '2026-10-25']);
+    assert.equal(waits.filter(({ timeoutMsg }) => timeoutMsg === 'NATIVE_CONTROL_NOT_VISIBLE').at(-1).timeout, 1500,
+      'CALENDAR_INPUT_MUST_ADMIT_BOUNDED_SCROLL_DISCOVERY');
     assert.equal(queries.includes(selector(platform, 'label', 'Agenda date, YYYY-MM-DD')), false);
   }
 });

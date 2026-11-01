@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 
 export const IOS_SWIPE_SETTLE_MS = 300;
+export const IOS_KEYBOARD_READY_MS = 5000;
+export const IOS_FIRST_KEY_SETTLE_MS = 1000;
+const IOS_KEYBOARD = '-ios predicate string:type == "XCUIElementTypeKeyboard"';
 
 export function selector(platform, kind, value) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
@@ -180,7 +183,27 @@ export async function read(context, kind, value, options) {
 export async function input(context, kind, value, text, options) {
   const element = await find(context, kind, value, options);
   nativeAction(context, 'input', kind, value);
-  await element.setValue(text);
+  if (context.platform !== 'ios') {
+    await element.setValue(text);
+    return;
+  }
+  // XCUITest types as soon as focus is requested, and the keyboard relays out
+  // after its first keystroke; keys sent during either transition are dropped
+  // ("MOBILE-LOCAL-001" reached the API as q=M-LOCAL-001). Focus, wait for the
+  // keyboard, type the first character and let the keyboard settle before the
+  // rest, then refuse a field whose text differs rather than act on it.
+  await dispatchNativeClick(context, element, kind, value);
+  await context.driver.waitUntil(async () => !!await visible(context.driver, IOS_KEYBOARD),
+    { timeout: IOS_KEYBOARD_READY_MS, interval: 150, timeoutMsg: 'NATIVE_KEYBOARD_NOT_READY' });
+  await element.clearValue();
+  // An empty field reports its placeholder as value; clearing is the whole entry.
+  if (!text) return;
+  await element.addValue(text.slice(0, 1));
+  await context.driver.waitUntil(async () => await element.getAttribute('value') === text.slice(0, 1),
+    { timeout: IOS_KEYBOARD_READY_MS, interval: 150, timeoutMsg: 'NATIVE_INPUT_FIRST_KEY_NOT_ACCEPTED' });
+  await context.driver.pause(IOS_FIRST_KEY_SETTLE_MS);
+  if (text.length > 1) await element.addValue(text.slice(1));
+  assert.equal(await element.getAttribute('value'), text, 'NATIVE_INPUT_VALUE_MISMATCH');
 }
 export async function expectText(context, text, options = { scroll: true }) { await find(context, 'text', text, options); }
 export async function absent(context, kind, value) {
