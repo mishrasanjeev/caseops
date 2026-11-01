@@ -204,6 +204,17 @@ describe("IpPortfolioPage", () => {
     expect(screen.getByText("Unconfirmed deadlines")).toBeInTheDocument();
   });
 
+  it("B4-ADJ-11 shows an imported registered mark's phase and unverified source status, not just Draft", async () => {
+    fetchPortfolioMock.mockResolvedValue({
+      ...RESPONSE,
+      rows: [{ ...RESPONSE.rows[0], docket_status: "draft", filing_phase: "filed", source_declared_status: "registered" }],
+    });
+    render(withClient(<IpPortfolioPage />));
+    const declared = await screen.findAllByTestId("ip-portfolio-declared-status-docket-1");
+    expect(declared[0]).toHaveTextContent("Source status: registered (unverified)");
+    expect(screen.getAllByText("Filing phase: filed").length).toBeGreaterThan(0);
+  });
+
   it("IP15-007 exposes application and renewal dates as default portfolio columns", async () => {
     render(withClient(<IpPortfolioPage />));
     await waitFor(() => expect(fetchPortfolioMock).toHaveBeenCalledTimes(1));

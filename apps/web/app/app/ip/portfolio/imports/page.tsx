@@ -71,7 +71,7 @@ function validationMessage(issue: { field?: string; code?: string }, row: IpImpo
   const labels: Record<string, string> = {
     class_number: "Class", class_numbers: "Classes", image_reference: "Image reference",
     applicant_name: "Applicant", mark_text: "Mark", application_date: "Application date",
-    renewal_due_date: "Renewal due date",
+    renewal_due_date: "Renewal due date", source_status: "Status", application_number: "Application number",
   };
   const label = labels[field] ?? `${field.charAt(0).toUpperCase()}${field.slice(1).replaceAll("_", " ")}`;
   let message: string;
@@ -93,6 +93,18 @@ function validationMessage(issue: { field?: string; code?: string }, row: IpImpo
       break;
     case "blank_row":
       message = "Blank source row; excluded from import.";
+      break;
+    case "unsupported_status":
+      message = `"${textValue(row, "source_status")}" is not a recognised trademark status. Use, for example, Draft, Pre-filing, Filed, Objected, Accepted, Advertised, Opposed, Registered, Refused, Abandoned or Withdrawn, or leave the cell blank.`;
+      break;
+    case "required_for_source_status":
+      message = `Required: a "${textValue(row, "source_status")}" mark has been filed, so the row needs its application number.`;
+      break;
+    case "declared_status_unverified":
+      message = `Imported as Filed. "${textValue(row, "source_status")}" is kept as the unverified source status until registry evidence or a recorded event confirms it.`;
+      break;
+    case "terminal_status_no_alert":
+      message = "No renewal alert is scheduled for a mark the source says is no longer pending or registered.";
       break;
     default:
       message = (issue.code ?? "invalid").replaceAll("_", " ");

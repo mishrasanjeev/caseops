@@ -9041,6 +9041,8 @@ export type IpPortfolioRow = IpPortfolioDatesRecord & {
   source_renewal_alert_at?: string | null;
   source_renewal_alert_status?: string | null;
   source_renewal_alert_body?: string | null;
+  /** Status a portfolio import declared (unverified); `filing_phase` is the legal phase. */
+  source_declared_status?: string | null;
   application_id: string;
   matter_id: string | null;
   asset_id: string | null;

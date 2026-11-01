@@ -1032,9 +1032,22 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
     case "office":
       return row.office ?? "Not recorded";
     case "status":
-      return <Badge>{row.docket_status.replaceAll("_", " ")}</Badge>;
+      // The badge is the record's own state; the application's filing phase
+      // and any imported source status are shown with it (B4-ADJ-11).
+      return (
+        <span className="flex min-w-0 flex-col items-start gap-1">
+          <Badge>{row.docket_status.replaceAll("_", " ")}</Badge>
+          <span className="text-xs text-[var(--color-mute)]">Filing phase: {row.filing_phase.replaceAll("_", " ")}</span>
+          <DeclaredStatus row={row} />
+        </span>
+      );
     case "phase":
-      return row.filing_phase.replaceAll("_", " ");
+      return (
+        <span>
+          {row.filing_phase.replaceAll("_", " ")}
+          <DeclaredStatus row={row} />
+        </span>
+      );
     case "proprietors":
       return <ListValue values={row.proprietors} />;
     case "agents":
@@ -1087,6 +1100,17 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
     case "updated_at":
       return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(row.updated_at));
   }
+}
+
+/** Status a portfolio import declared; never shown as the legal phase. */
+function DeclaredStatus({ row }: { row: IpPortfolioRow }) {
+  const declared = row.source_declared_status;
+  if (!declared || declared === row.filing_phase) return null;
+  return (
+    <span className="mt-1 block text-xs text-[var(--color-mute)]" data-testid={`ip-portfolio-declared-status-${row.docket_id}`}>
+      Source status: {declared.replaceAll("_", " ")} (unverified)
+    </span>
+  );
 }
 
 function ListValue({ values, mono = false }: { values: string[]; mono?: boolean }) {

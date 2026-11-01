@@ -207,8 +207,21 @@ def page_date_details(session, *, company_id, docket_ids):
         .where(IpDocketRecord.company_id == company_id, IpDocketRecord.id.in_(docket_ids))
     )
     return {
-        version.docket_id: current_dates(
-            session, version=version, docket_id=version.docket_id, imported_proven=proven
-        )
+        version.docket_id: {
+            **current_dates(
+                session, version=version, docket_id=version.docket_id, imported_proven=proven
+            ),
+            "source_declared_status": _declared_status(version, proven),
+        }
         for version, proven in rows
     }
+
+
+def _declared_status(version, proven):
+    """The import's declared source status (B4-ADJ-11), unverified legal state."""
+
+    from caseops_api.services.ip_imports import SOURCE_STATUS_ALIASES
+
+    imported = (version.representation_json or {}).get("portfolio_import")
+    value = imported.get("declared_status") if isinstance(imported, dict) else None
+    return value if proven and value in set(SOURCE_STATUS_ALIASES.values()) else None
