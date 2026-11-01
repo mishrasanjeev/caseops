@@ -510,6 +510,14 @@ test('signed-out resume rejects refresh, token exchange, authorization or any ot
   for (const route of ['/api/auth/native/refresh', '/api/auth/native/token', '/api/auth/native/authorize', '/api/auth/login', '/api/auth/me']) {
     for (const status of [null, 200, 401]) assert.throws(() => signedOutResumeTraffic([{ method: 'POST', route, status }]), /SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION/);
   }
+  // Only the exact public compatibility GET is admitted; any other method or
+  // a lookalike route under the auth namespace remains an auth attempt.
+  signedOutResumeTraffic([{ method: 'GET', route: '/api/auth/native/compatibility', status: 200 }]);
+  for (const request of [{ method: 'POST', route: '/api/auth/native/compatibility', status: 200 },
+    { method: 'GET', route: '/api/auth/native/compatibility/extra', status: 200 },
+    { method: 'GET', route: '/api/auth/native/sessions', status: 200 }]) {
+    assert.throws(() => signedOutResumeTraffic([{ method: 'GET', route: '/api/auth/native/compatibility', status: 200 }, request]), /SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION/);
+  }
 });
 
 test('NATIVE-23 orchestration restores signed-out controls and rejects the reported persistent privacy cover (unit doubles only)', async (t) => {

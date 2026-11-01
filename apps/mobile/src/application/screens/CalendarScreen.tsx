@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Keyboard, ScrollView, Text, View } from "react-native";
 import {
   NativeButton,
   NativeProgress,
@@ -51,6 +51,7 @@ export function CalendarScreen({
   const previousWeek = adjacentCalendarDay(day, -7);
   const nextWeek = adjacentCalendarDay(day, 7);
   const goToDate = () => {
+    Keyboard.dismiss();
     try {
       select(dateOnly(input));
     } catch {

@@ -201,8 +201,12 @@ export function noNotePostRetried(requests) {
     0, 'NOTE_POST_DURING_CASE_RECOVERY');
 }
 
+// The app's compatibility gate reads this public policy through its
+// credential-free transport on every foreground; it carries no token or code.
+const PUBLIC_COMPATIBILITY_READ = '/api/auth/native/compatibility';
 export function signedOutResumeTraffic(requests) {
-  assert.equal(requests.filter((request) => request.route.startsWith('/api/auth/')).length, 0, 'SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION');
+  assert.equal(requests.filter((request) => request.route.startsWith('/api/auth/')
+    && !(request.method === 'GET' && request.route === PUBLIC_COMPATIBILITY_READ)).length, 0, 'SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION');
 }
 
 export const scenarios = [
