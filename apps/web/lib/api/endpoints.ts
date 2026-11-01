@@ -10718,7 +10718,8 @@ export type IpGovernanceBlockReason =
   | "no_qualified_reviewer"
   | "no_other_approver"
   | "fixtures_not_passing"
-  | "fixture_calendar_not_active";
+  | "fixture_calendar_not_active"
+  | "fixture_calendar_jurisdiction_mismatch";
 
 export type IpGovernanceActionDecision = {
   available: boolean;

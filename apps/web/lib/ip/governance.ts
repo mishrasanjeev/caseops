@@ -33,6 +33,7 @@ const CATEGORY: Record<IpGovernanceBlockReason, GovernanceBlockCategory> = {
   proposer_unavailable: "Needs setup",
   fixtures_not_passing: "Needs setup",
   fixture_calendar_not_active: "Needs setup",
+  fixture_calendar_jurisdiction_mismatch: "Needs setup",
   not_candidate: "Needs setup",
   rule_kind_unsupported: "Needs setup",
 };
@@ -72,6 +73,8 @@ export function governanceReasonText(
       return "The server fixture check does not pass for this version. Propose a corrected version.";
     case "fixture_calendar_not_active":
       return "Its fixtures were calculated on a working calendar that is no longer active. Propose the rule again on the current active working calendar.";
+    case "fixture_calendar_jurisdiction_mismatch":
+      return "Its fixtures were calculated on a working calendar of another jurisdiction. Propose the rule again on an active working calendar of the rule's jurisdiction.";
     case "not_candidate":
       return "Only candidate versions can be activated.";
     case "rule_kind_unsupported":
@@ -237,6 +240,27 @@ export function eligibleScopedRules(
 /** Calendars the deadline validator accepts: the company's active versions. */
 export function activeWorkingCalendars(workspace: IpDeadlineWorkspace): IpWorkingCalendarVersion[] {
   return workspace.calendars.filter((calendar) => calendar.status === "active");
+}
+
+/** Jurisdictions as the API compares them: trimmed and upper-cased. */
+export function normalJurisdiction(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
+export function sameJurisdiction(left: string | null | undefined, right: string | null | undefined): boolean {
+  return normalJurisdiction(left) === normalJurisdiction(right);
+}
+
+/**
+ * Active working calendars a deadline of `jurisdiction` may be counted on: the
+ * API refuses a rule fixture or a deadline on a calendar of another
+ * jurisdiction (B4-ADJ-08), so pickers offer only these.
+ */
+export function activeCalendarsForJurisdiction(
+  workspace: IpDeadlineWorkspace,
+  jurisdiction: string,
+): IpWorkingCalendarVersion[] {
+  return activeWorkingCalendars(workspace).filter((calendar) => sameJurisdiction(calendar.jurisdiction, jurisdiction));
 }
 
 const SHA256_HEX = /^[0-9a-fA-F]{64}$/;
