@@ -41,6 +41,17 @@ from caseops_api.services.session_context import SessionContext
 
 _ACTIVE_DEADLINE_STATES = frozenset({"confirmed", "overdue"})
 _HEARING_STAGES = frozenset({"hearing_pending", "hearing_scheduled", "reserved_for_order"})
+# The hearing statuses each hearing-bound record accepts. The validators read
+# this table and the shared-workflow response serves it, so the form's
+# choices and the write rules cannot drift apart (B4-ADJ-22).
+HEARING_STATUSES_BY_ACTION: dict[str, frozenset[str]] = {
+    "hearing_preparation_recorded": frozenset({"scheduled", "adjourned"}),
+    "post_hearing_note_recorded": frozenset({"completed"}),
+    "hearing_notice_recorded": frozenset({"scheduled", "adjourned"}),
+    "adjournment_recorded": frozenset({"scheduled", "adjourned"}),
+    "written_arguments_recorded": frozenset({"scheduled", "adjourned", "completed"}),
+    "attendance_recorded": frozenset({"completed"}),
+}
 _FURTHER_EVIDENCE_STAGES = frozenset(
     {
         "opponent_evidence_filed",
@@ -341,6 +352,9 @@ def get_shared_workflow(
             for row in events
             if _is_disposition_trigger(row)
         ],
+        hearing_statuses_by_action={
+            action: sorted(statuses) for action, statuses in HEARING_STATUSES_BY_ACTION.items()
+        },
         proceeding_id=proceeding.id,
         represented_side=proceeding.side,
         current_stage=proceeding.stage,
@@ -402,7 +416,7 @@ def _assert_hearing(
     *,
     proceeding: IpProceeding,
     hearing_id: str,
-    require_completed: bool,
+    action_kind: str,
 ) -> MatterHearing:
     hearing = session.scalar(
         select(MatterHearing).where(
@@ -414,12 +428,13 @@ def _assert_hearing(
     )
     if hearing is None:
         raise HTTPException(status_code=404, detail="Shared opposition hearing not found.")
-    if require_completed and hearing.status != "completed":
+    allowed = HEARING_STATUSES_BY_ACTION[action_kind]
+    if hearing.status not in allowed and "completed" in allowed:
         raise HTTPException(
             status_code=409,
             detail="Complete the shared hearing before adding notes.",
         )
-    if not require_completed and hearing.status not in {"scheduled", "adjourned"}:
+    if hearing.status not in allowed:
         raise HTTPException(
             status_code=409,
             detail="Hearing preparation requires an active hearing.",
@@ -512,7 +527,7 @@ def _assert_specialized_hearing(
     *,
     proceeding: IpProceeding,
     hearing_id: str,
-    allowed_statuses: set[str],
+    allowed_statuses: frozenset[str],
 ) -> MatterHearing:
     hearing = session.scalar(
         select(MatterHearing).where(
@@ -571,12 +586,7 @@ def _assert_specialized_action(
         }
         detail = details[payload.action_kind]
         assert detail is not None
-        allowed = {
-            "hearing_notice_recorded": {"scheduled", "adjourned"},
-            "adjournment_recorded": {"scheduled", "adjourned"},
-            "written_arguments_recorded": {"scheduled", "adjourned", "completed"},
-            "attendance_recorded": {"completed"},
-        }[payload.action_kind]
+        allowed = HEARING_STATUSES_BY_ACTION[payload.action_kind]
         _assert_specialized_hearing(
             session,
             proceeding=proceeding,
@@ -831,7 +841,7 @@ def record_shared_action(
             session,
             proceeding=proceeding,
             hearing_id=preparation.shared_hearing_id,
-            require_completed=payload.action_kind == "post_hearing_note_recorded",
+            action_kind=payload.action_kind,
         )
     elif payload.action_kind == "order_recorded":
         _assert_order(session, proceeding=proceeding, payload=payload, actions=actions)

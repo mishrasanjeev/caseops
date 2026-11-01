@@ -835,6 +835,9 @@ class IpOppositionSharedWorkflowResponse(BaseModel):
         default_factory=list
     )
     disposition_trigger_events: list[IpDocketEventResponse] = Field(default_factory=list)
+    # The hearing statuses each hearing-bound record accepts, served from the
+    # validators' own table so the form never keeps a second copy.
+    hearing_statuses_by_action: dict[str, list[str]] = Field(default_factory=dict)
     next_required_action: Literal[
         "complete_role_workflow",
         "record_evidence_package",

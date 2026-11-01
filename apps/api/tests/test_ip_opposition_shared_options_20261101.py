@@ -11,7 +11,10 @@ shared-workflow read now carries the exact choices each write accepts:
   scope-review validator, which previously accepted any application in the
   company, including one on a docket the actor may not see);
 - ``disposition_trigger_events``: this opposition's order or outcome events
-  (the disposition-review validator).
+  (the disposition-review validator);
+- ``hearing_statuses_by_action``: the hearing statuses each hearing-bound
+  record accepts, read from the validators' own table instead of a copy kept
+  in each form.
 """
 
 from __future__ import annotations
@@ -23,11 +26,12 @@ from sqlalchemy import select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditEvent, TrademarkApplication
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ip_opposition_shared import HEARING_STATUSES_BY_ACTION
 from tests.test_auth_company import auth_headers
 from tests.test_ip_nice_classes_20261031 import _member_without_ip_read
 from tests.test_ip_opposition_applicant_workflow import _fixture, _stage
 from tests.test_ip_opposition_foundation import _complete_workspace
-from tests.test_ip_opposition_shared_workflow import _post_action, _route, _skip_to
+from tests.test_ip_opposition_shared_workflow import _hearing, _post_action, _route, _skip_to
 from tests.test_ip_record_workflow import _application, _asset, _particulars
 
 
@@ -316,3 +320,68 @@ def test_choices_are_not_readable_across_tenant_wall_or_role(client: TestClient)
     assert foreign.status_code == 404
     client.cookies.clear()
     assert client.get(_route(docket, proceeding, "opposition-shared-workflow")).status_code == 401
+
+
+def test_hearing_choices_follow_the_served_status_table(client: TestClient) -> None:
+    """The form reads which hearing each record accepts from the API's table.
+
+    A scheduled and a completed hearing exist: the hearing notice accepts the
+    scheduled one and refuses the completed one, exactly as served.
+    """
+    bootstrap, _, docket, proceeding = _fixture(client)
+    owner = auth_headers(str(bootstrap["access_token"]))
+    _complete_workspace(client, bootstrap=bootstrap, docket=docket, proceeding=proceeding)
+    scheduled = _hearing(client, bootstrap=bootstrap, docket=docket)
+    completed = client.post(
+        "/api/ip/hearings",
+        headers=owner,
+        json={
+            "docket_id": docket["id"],
+            "hearing_on": "2026-10-01",
+            "forum_name": "Trade Marks Registry Delhi",
+            "purpose": "Earlier opposition hearing",
+            "status": "completed",
+            "outcome_note": "Heard; orders reserved.",
+        },
+    )
+    assert completed.status_code == 201, completed.text
+
+    workflow = _workflow(client, owner, docket, proceeding).json()
+    served = workflow["hearing_statuses_by_action"]
+    assert served == {
+        action: sorted(statuses) for action, statuses in HEARING_STATUSES_BY_ACTION.items()
+    }
+    assert served["hearing_notice_recorded"] == ["adjourned", "scheduled"]
+    assert served["attendance_recorded"] == ["completed"]
+    statuses = {row["id"]: row["status"] for row in workflow["shared_hearings"]}
+    assert statuses == {scheduled["id"]: "scheduled", completed.json()["id"]: "completed"}
+
+    def notice(hearing_id: str) -> dict[str, object]:
+        return {
+            "shared_hearing_id": hearing_id,
+            "notice_received_on": "2026-10-05",
+            "notice_document_ref": "registry-hearing-notice:adj-22",
+            "minimum_notice_days": 30,
+            "notice_status": "sufficient",
+            "applicable_rule_version": "Trade Marks Rules, 2017",
+            "confirmation_reference": "counsel-review:notice:adj-22",
+        }
+
+    refused = _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="hearing_notice_recorded",
+        expected_status=409,
+        hearing_notice=notice(completed.json()["id"]),
+    )
+    assert "not in a valid state" in str(refused)
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="hearing_notice_recorded",
+        hearing_notice=notice(scheduled["id"]),
+    )

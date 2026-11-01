@@ -31625,6 +31625,10 @@ export interface components {
             current_stage: string;
             /** Disposition Trigger Events */
             disposition_trigger_events?: components["schemas"]["IpDocketEventResponse"][];
+            /** Hearing Statuses By Action */
+            hearing_statuses_by_action?: {
+                [key: string]: string[];
+            };
             /**
              * Next Required Action
              * @enum {string}
@@ -69053,6 +69057,7 @@ export interface operations {
                 cursor?: string | null;
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 has_stay?: boolean | null;
+                id?: string | null;
                 limit?: number | null;
                 max_claim_amount_minor?: number | null;
                 min_claim_amount_minor?: number | null;
