@@ -444,9 +444,12 @@ def list_linked_ip_documents(
     docket_id: str,
     event_ids: set[str],
     deadline_ids: set[str],
-    limit: int = 100,
 ) -> list[IpDocumentRecord]:
-    """Return a bounded set of documents linked to one accessible workflow aggregate."""
+    """Return every document linked to one accessible workflow aggregate.
+
+    Callers filter this set (selected instruction documents) and report its
+    length as the total, so a cap would silently drop documents past it.
+    """
     target_filters = [
         (IpDocumentLink.target_type == "docket") & (IpDocumentLink.target_id == docket_id)
     ]
@@ -473,7 +476,6 @@ def list_linked_ip_documents(
             )
             .distinct()
             .order_by(IpDocument.updated_at.desc(), IpDocument.id)
-            .limit(limit)
         ).all()
     )
     visible: list[IpDocumentRecord] = []

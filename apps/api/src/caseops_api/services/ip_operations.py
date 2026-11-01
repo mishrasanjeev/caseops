@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, false, func, or_, select
+from sqlalchemy import ColumnElement, and_, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -1109,6 +1109,77 @@ def _decode_docket_cursor(cursor: str) -> tuple[datetime, str]:
     return position, docket_id
 
 
+def _visible_docket_scope(
+    session: Session, *, context: SessionContext
+) -> list[ColumnElement[bool]]:
+    """The one predicate for "active trademark dockets this reader may see"."""
+
+    return [
+        IpDocketRecord.company_id == context.company.id,
+        IpDocketRecord.record_type.in_(TRADEMARK_RECORD_TYPES),
+        IpDocketRecord.is_active.is_(True),
+        IpDocketRecord.archived_by_matter_disposal.is_(False),
+        visible_ip_dockets_filter(session, context=context),
+    ]
+
+
+def _visible_ip_docket_ids(session: Session, *, context: SessionContext) -> set[str]:
+    """Every visible docket id, unpaged - for access checks, not display."""
+
+    return set(
+        session.scalars(
+            select(IpDocketRecord.id).where(*_visible_docket_scope(session, context=context))
+        ).all()
+    )
+
+
+_FULL_LISTING_CHUNK_SIZE = 200
+
+
+def _list_all_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketListResponse:
+    """The whole visible docket population, taken in one statement.
+
+    Reports, control reviews and exception queues describe the reader's entire
+    portfolio; one default page silently dropped docket 101 onwards. The rows
+    are read once, so a docket updated while the snapshot is being built cannot
+    move behind a page cursor and drop out; only serialization is chunked.
+    """
+
+    rows = list(
+        session.scalars(
+            select(IpDocketRecord)
+            .where(*_visible_docket_scope(session, context=context))
+            .order_by(IpDocketRecord.updated_at.desc(), IpDocketRecord.id.desc())
+        ).all()
+    )
+    may_read_rates = _may_read_confidential_rates(session, context=context)
+    dockets: list[IpDocketRecordResponse] = []
+    for start in range(0, len(rows), _FULL_LISTING_CHUNK_SIZE):
+        chunk = rows[start : start + _FULL_LISTING_CHUNK_SIZE]
+        preload = _load_docket_serialization_rows(
+            session,
+            company_id=context.company.id,
+            docket_ids=[row.id for row in chunk],
+        )
+        dockets.extend(
+            _serialize_docket(
+                session,
+                row,
+                context=context,
+                may_read_rates=may_read_rates,
+                preload=preload,
+            )
+            for row in chunk
+        )
+    return IpDocketListResponse(
+        dockets=dockets,
+        count=len(dockets),
+        has_more=False,
+        next_cursor=None,
+        total_count=len(dockets),
+    )
+
+
 def list_ip_dockets(
     session: Session,
     *,
@@ -1129,19 +1200,14 @@ def list_ip_dockets(
     """
 
     search = (query or "").strip()
+    scope = _visible_docket_scope(session, context=context)
     requested = set(record_types or ())
-    listed_types = tuple(
-        record_type
-        for record_type in TRADEMARK_RECORD_TYPES
-        if not requested or record_type in requested
-    )
-    scope = [
-        IpDocketRecord.company_id == context.company.id,
-        IpDocketRecord.record_type.in_(listed_types),
-        IpDocketRecord.is_active.is_(True),
-        IpDocketRecord.archived_by_matter_disposal.is_(False),
-        visible_ip_dockets_filter(session, context=context),
-    ]
+    if requested:
+        scope.append(
+            IpDocketRecord.record_type.in_(
+                tuple(record_type for record_type in TRADEMARK_RECORD_TYPES if record_type in requested)
+            )
+        )
     if search:
         scope.append(
             or_(
@@ -4184,7 +4250,10 @@ def _ip_docket_control_report_from_listing(
     context: SessionContext,
     listing: IpDocketListResponse,
     generated_at: datetime,
+    row_limit: int | None = None,
 ) -> IpDocketControlReport:
+    """Counts cover the whole listing; ``row_limit`` trims only the rows."""
+
     totals: dict[str, int] = {}
     withheld = 0
     for docket in listing.dockets:
@@ -4267,7 +4336,7 @@ def _ip_docket_control_report_from_listing(
         total_cost_minor_by_currency=totals,
         withheld_cost_item_count=withheld,
         counts_are_complete=not listing.has_more,
-        rows=control_rows,
+        rows=control_rows if row_limit is None else control_rows[:row_limit],
     )
 
 
@@ -4275,14 +4344,16 @@ def ip_docket_control_report(
     session: Session,
     *,
     context: SessionContext,
-    limit: int = 100,
+    limit: int | None = None,
 ) -> IpDocketControlReport:
-    listing = list_ip_dockets(session, context=context, limit=limit)
+    """The whole visible portfolio; ``limit`` caps only the returned rows."""
+
     return _ip_docket_control_report_from_listing(
         session,
         context=context,
-        listing=listing,
+        listing=_list_all_ip_dockets(session, context=context),
         generated_at=_now(),
+        row_limit=limit,
     )
 
 
@@ -4675,7 +4746,7 @@ def create_ip_control_review(
         "failed_queries": sorted({q.strip() for q in payload.failed_queries if q.strip()}),
         "observed_at": now.isoformat(),
     }
-    full_listing = list_ip_dockets(session, context=context)
+    full_listing = _list_all_ip_dockets(session, context=context)
     exceptions = _control_exceptions(
         session,
         context=context,
@@ -4794,7 +4865,7 @@ def _review_or_404(
     if row is None:
         raise HTTPException(status_code=404, detail="Control review not found.")
     snapshot = _stored_control_review_snapshot(row)
-    visible_ids = {docket.id for docket in list_ip_dockets(session, context=context).dockets}
+    visible_ids = _visible_ip_docket_ids(session, context=context)
     protected_ids = _control_review_protected_ids(snapshot)
     if not protected_ids.issubset(visible_ids):
         # A stored report can reveal identifiers and workload facts. Losing
@@ -4817,7 +4888,7 @@ def list_ip_control_reviews(
 ) -> IpControlReviewListResponse:
     """Return recent reviews only when every frozen record remains visible."""
 
-    visible_ids = {docket.id for docket in list_ip_dockets(session, context=context).dockets}
+    visible_ids = _visible_ip_docket_ids(session, context=context)
     rows = session.scalars(
         select(IpDocketControlReview)
         .where(IpDocketControlReview.company_id == context.company.id)
@@ -5208,7 +5279,7 @@ def ip_daily_docket(
     listing = _apply_control_review_filters(
         session,
         context=context,
-        listing=list_ip_dockets(session, context=context),
+        listing=_list_all_ip_dockets(session, context=context),
         filters=applied_filters,
     )
     listed_docket_ids = {docket.id for docket in listing.dockets}

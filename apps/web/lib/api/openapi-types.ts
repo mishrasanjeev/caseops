@@ -26082,6 +26082,8 @@ export interface components {
         IpCalendarReconciliationCandidateListResponse: {
             /** Candidates */
             candidates?: components["schemas"]["IpCalendarReconciliationCandidateRecord"][];
+            /** Total */
+            total: number;
         };
         /** IpCalendarReconciliationCandidateRecord */
         IpCalendarReconciliationCandidateRecord: {
