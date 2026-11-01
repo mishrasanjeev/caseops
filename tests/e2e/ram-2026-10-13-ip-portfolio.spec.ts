@@ -563,7 +563,10 @@ for (const width of [1280, 393]) {
     await expect(page.getByText("Extra column: Unmapped (unmapped)", { exact: true })).toBeVisible();
     await expect(page.getByRole("row").filter({ has: page.getByText(`${number}-C`, { exact: true }) })
       .getByText("Application date: Source date not recognized; it is not imported.", { exact: true })).toBeVisible();
-    const firstSourceRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "1", exact: true }) });
+    // Below the table's 900px container width each cell shows its column label
+    // (B4-ADJ-13 stacked table), so the row-number cell reads "Row 1" there.
+    const firstRowNumber = /^(?:Row )?1$/;
+    const firstSourceRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: firstRowNumber }) });
     await firstSourceRow.getByRole("group", { name: "Non-blocking notes for row 1", exact: true }).scrollIntoViewIfNeeded();
     await expect(firstSourceRow.getByText("Specification: Not supplied; new imported records remain drafts.", { exact: true })).toBeVisible();
     await expect(firstSourceRow.getByText("Image reference: Source text retained; no image downloaded or attached.", { exact: true })).toBeVisible();
@@ -572,7 +575,7 @@ for (const width of [1280, 393]) {
       .getByText("Row: Blank source row; excluded from import.", { exact: true })).toBeVisible();
     if (local) await test.info().attach(`ip-import-notes-${width}px`, { body: await page.screenshot(), contentType: "image/png" });
     const rawSource = page.getByRole("region", { name: `Review ip13-${run}.csv`, exact: true })
-      .getByRole("row").filter({ has: page.getByRole("cell", { name: "1", exact: true }) }).locator("details");
+      .getByRole("row").filter({ has: page.getByRole("cell", { name: firstRowNumber }) }).locator("details");
     await rawSource.getByText("Source values", { exact: true }).click();
     await expect(rawSource.locator("dl > div")).toHaveCount(sourceHeaders.length);
     for (const [index, header] of sourceHeaders.entries()) {
