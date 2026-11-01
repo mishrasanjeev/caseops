@@ -8,6 +8,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# The IP identifier vocabulary (``services.ip_identifier_rules``): application
+# and registration numbers belong to an application, the rest to a proceeding.
+IpRegistryIdentifierKind = Literal[
+    "application",
+    "registration",
+    "opposition",
+    "rectification",
+    "cancellation",
+    "non_use_removal",
+    "appeal",
+    "court",
+]
+
 
 class IpRegistryLinkCreateRequest(BaseModel):
     application_id: str | None = None
@@ -15,7 +28,7 @@ class IpRegistryLinkCreateRequest(BaseModel):
     provider_key: str = Field(min_length=2, max_length=80)
     office: str = Field(min_length=2, max_length=80)
     jurisdiction: str = Field(min_length=2, max_length=40)
-    identifier_kind: str = Field(min_length=2, max_length=40)
+    identifier_kind: IpRegistryIdentifierKind
     raw_identifier: str = Field(min_length=1, max_length=160)
     source_url: str = Field(min_length=8, max_length=800)
     match_confidence: Decimal = Field(ge=0, le=1)

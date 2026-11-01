@@ -160,17 +160,22 @@ def test_madrid_docket_has_no_registry_target_and_the_writer_refuses_foreign_rec
 
     # The Madrid docket has nothing to attach to, and a national record of
     # another docket is refused there and on any other docket.
-    for docket_id, application_id, message in (
-        (madrid["docket_id"], pine_application["id"], "Trademark application not found"),
-        (aster["id"], pine_application["id"], "Trademark application not found"),
+    # B4-ADJ-12: a 422 on the target field, not a 404 that reads like the docket is missing.
+    for docket_id, application_id in (
+        (madrid["docket_id"], pine_application["id"]),
+        (aster["id"], pine_application["id"]),
     ):
         refused = client.post(
             f"/api/ip/dockets/{docket_id}/registry-links",
             headers=headers,
             json=_link_body(application_id=application_id),
         )
-        assert refused.status_code == 404, refused.text
-        assert refused.json()["detail"] == f"{message} on this docket."
+        assert refused.status_code == 422, refused.text
+        error = refused.json()["errors"][0]
+        assert (error["loc"], error["type"]) == (
+            ["body", "application_id"],
+            "registry_target_not_in_docket",
+        )
     assert _link_count(company_id) == 0
 
     accepted = client.post(
