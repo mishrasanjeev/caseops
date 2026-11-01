@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     IpDeadlineCoverage,
     IpDocketEvent,
     IpDocketRecord,
+    IpProceeding,
     IpResponsibilityAssignment,
     IpRuleSet,
     IpRuleVersion,
@@ -503,7 +504,7 @@ class _GovernanceViewer:
     approver_ids: frozenset[str] = frozenset()
     # This company's active working calendar versions, as fixture snapshots.
     # A deadline rule's fixtures prove it only on one of these.
-    active_calendars: dict[str, tuple] | None = None
+    active_calendars: dict[str, tuple[str, tuple]] | None = None
 
     def projection(self) -> IpDeadlineGovernanceProjection:
         return IpDeadlineGovernanceProjection(**self.actions)
@@ -608,17 +609,26 @@ def _active_calendar_snapshots(
     company_id: str,
     calendar_version_ids: set[str] | None = None,
     share_lock: bool = False,
-) -> dict[str, tuple]:
-    """Active working calendar versions of one company, keyed by version id.
+) -> dict[str, tuple[str, tuple]]:
+    """Active working calendar versions of one company, keyed by version id,
+    as ``(calendar jurisdiction, snapshot key)``.
 
     The same predicate ``propose_deadline`` uses for its calendar: company
     owned and ``active``. ``share_lock`` holds them active until the caller
     commits, so a concurrent supersession either sees this write or refuses it.
     """
 
-    statement = select(LegalWorkingCalendarVersion).where(
-        LegalWorkingCalendarVersion.company_id == company_id,
-        LegalWorkingCalendarVersion.status == "active",
+    statement = (
+        select(LegalWorkingCalendarVersion, LegalWorkingCalendar.jurisdiction)
+        .join(
+            LegalWorkingCalendar,
+            (LegalWorkingCalendar.id == LegalWorkingCalendarVersion.calendar_id)
+            & (LegalWorkingCalendar.company_id == LegalWorkingCalendarVersion.company_id),
+        )
+        .where(
+            LegalWorkingCalendarVersion.company_id == company_id,
+            LegalWorkingCalendarVersion.status == "active",
+        )
     )
     if calendar_version_ids is not None:
         if not calendar_version_ids:
@@ -627,18 +637,27 @@ def _active_calendar_snapshots(
             LegalWorkingCalendarVersion.id.in_(sorted(calendar_version_ids))
         )
     if share_lock:
-        statement = statement.with_for_update(read=True)
+        statement = statement.with_for_update(read=True, of=LegalWorkingCalendarVersion)
     return {
-        row.id: _calendar_snapshot_key(
-            timezone=row.timezone,
-            weekend_days=list(row.weekend_days_json or []),
-            holidays=list(row.holidays_json or []),
-            exceptional_working_days=list(row.exceptional_working_days_json or []),
-            source_reference=row.source_reference,
-            source_hash=row.source_hash,
+        row.id: (
+            _normal_jurisdiction(jurisdiction),
+            _calendar_snapshot_key(
+                timezone=row.timezone,
+                weekend_days=list(row.weekend_days_json or []),
+                holidays=list(row.holidays_json or []),
+                exceptional_working_days=list(row.exceptional_working_days_json or []),
+                source_reference=row.source_reference,
+                source_hash=row.source_hash,
+            ),
         )
-        for row in session.scalars(statement)
+        for row, jurisdiction in session.execute(statement)
     }
+
+
+def _normal_jurisdiction(value: str | None) -> str:
+    # Rule sets and calendars store ``strip().upper()``; proceedings store the
+    # entered text, so every comparison normalizes both sides the same way.
+    return (value or "").strip().upper()
 
 
 def _fixture_calendar_ids(fixtures: list[dict]) -> set[str]:
@@ -652,10 +671,13 @@ def _fixture_calendar_ids(fixtures: list[dict]) -> set[str]:
 
 def _fixture_calendar_issues(
     fixtures: list[dict],
-    active_calendars: dict[str, tuple],
+    active_calendars: dict[str, tuple[str, tuple]],
+    *,
+    jurisdiction: str,
 ) -> list[tuple[int, str]]:
     """``(fixture index, reason)`` for every deadline fixture whose calendar is
-    not an active working calendar of the company (``not_active``) or whose
+    not an active working calendar of the company (``not_active``), belongs to
+    another jurisdiction than the rule (``jurisdiction_mismatch``) or whose
     embedded snapshot differs from that version (``snapshot_mismatch``)."""
 
     issues: list[tuple[int, str]] = []
@@ -664,9 +686,13 @@ def _fixture_calendar_issues(
         if not calculation:
             continue
         calendar = calculation.get("calendar") or {}
-        expected = active_calendars.get(str(calendar.get("calendar_version_id") or ""))
-        if expected is None:
+        found = active_calendars.get(str(calendar.get("calendar_version_id") or ""))
+        if found is None:
             issues.append((index, "not_active"))
+            continue
+        calendar_jurisdiction, expected = found
+        if calendar_jurisdiction != _normal_jurisdiction(jurisdiction):
+            issues.append((index, "jurisdiction_mismatch"))
             continue
         try:
             embedded = _calendar_snapshot_key(
@@ -723,8 +749,18 @@ def _rule_activation_projection(
             fixture_ids, passed_ids = _rule_fixture_results(row, rule_set)
             if not fixture_ids or set(fixture_ids) != set(passed_ids):
                 reasons.append("fixtures_not_passing")
-            if _fixture_calendar_issues(row.fixture_set_json, viewer.active_calendars or {}):
+            issues = {
+                reason
+                for _, reason in _fixture_calendar_issues(
+                    row.fixture_set_json,
+                    viewer.active_calendars or {},
+                    jurisdiction=rule_set.jurisdiction,
+                )
+            }
+            if issues & {"not_active", "snapshot_mismatch"}:
                 reasons.append("fixture_calendar_not_active")
+            if "jurisdiction_mismatch" in issues:
+                reasons.append("fixture_calendar_jurisdiction_mismatch")
     return reasons, eligible
 
 
@@ -903,6 +939,7 @@ def propose_rule_version(
         _assert_fixture_calendars_active(
             session,
             company_id=context.company.id,
+            jurisdiction=payload.jurisdiction,
             fixtures=[item.model_dump(mode="json") for item in payload.fixtures],
         )
     key = payload.key.strip().lower()
@@ -996,11 +1033,13 @@ def _assert_fixture_calendars_active(
     session: Session,
     *,
     company_id: str,
+    jurisdiction: str,
     fixtures: list[dict],
 ) -> None:
     """A deadline rule's fixtures must run on an active working calendar of this
-    company, exactly as stored. The browser enforced this alone (B4-ADJ-08);
-    an embedded snapshot of any other calendar proved nothing."""
+    company and of the rule's jurisdiction, exactly as stored. The browser
+    enforced this alone (B4-ADJ-08); an embedded snapshot of any other calendar
+    proved nothing."""
 
     active = _active_calendar_snapshots(
         session,
@@ -1008,23 +1047,28 @@ def _assert_fixture_calendars_active(
         calendar_version_ids=_fixture_calendar_ids(fixtures),
         share_lock=True,
     )
+    messages = {
+        "not_active": (
+            "This working calendar is not active in this workspace: it was replaced, "
+            "withdrawn or never activated. Choose a currently active working calendar."
+        ),
+        "jurisdiction_mismatch": (
+            "This working calendar belongs to another jurisdiction than the rule "
+            f"({_normal_jurisdiction(jurisdiction)}). Choose an active working calendar "
+            "of the rule's jurisdiction."
+        ),
+        "snapshot_mismatch": (
+            "The fixture calendar differs from the stored working calendar version; "
+            "reload the calendar and propose again."
+        ),
+    }
     errors = [
         {
             "loc": ["body", "fixtures", index, "calculation", "calendar", "calendar_version_id"],
-            "msg": (
-                "Choose an active working calendar of this workspace. Propose a working "
-                "calendar and have another owner, admin or partner activate it first."
-                if reason == "not_active"
-                else "The fixture calendar differs from the stored working calendar version; "
-                "reload the calendar and propose again."
-            ),
-            "type": (
-                "ip_rule_fixture_calendar_not_active"
-                if reason == "not_active"
-                else "ip_rule_fixture_calendar_snapshot_mismatch"
-            ),
+            "msg": messages[reason],
+            "type": f"ip_rule_fixture_calendar_{reason}",
         }
-        for index, reason in _fixture_calendar_issues(fixtures, active)
+        for index, reason in _fixture_calendar_issues(fixtures, active, jurisdiction=jurisdiction)
     ]
     if errors:
         raise HTTPException(status_code=422, detail=errors)
@@ -1302,7 +1346,13 @@ def activate_rule_version(
         calendar_version_ids=_fixture_calendar_ids(row.fixture_set_json),
         share_lock=True,
     )
-    if _fixture_calendar_issues(row.fixture_set_json, active_calendars):
+    calendar_issues = {
+        reason
+        for _, reason in _fixture_calendar_issues(
+            row.fixture_set_json, active_calendars, jurisdiction=rule_set.jurisdiction
+        )
+    }
+    if calendar_issues & {"not_active", "snapshot_mismatch"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -1310,6 +1360,18 @@ def activate_rule_version(
                 "detail": (
                     "This rule's fixtures were calculated on a working calendar that is "
                     "no longer active. Propose the rule again on the current active calendar."
+                ),
+            },
+        )
+    if calendar_issues:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_rule_fixture_calendar_jurisdiction_mismatch",
+                "detail": (
+                    "This rule's fixtures were calculated on a working calendar of another "
+                    f"jurisdiction than {rule_set.jurisdiction}. Propose the rule again on an "
+                    f"active working calendar for {rule_set.jurisdiction}."
                 ),
             },
         )
@@ -2182,16 +2244,58 @@ def propose_deadline(
     )
     if calendar is None:
         raise HTTPException(status_code=409, detail="An active company calendar is required.")
+    rule_jurisdiction = _normal_jurisdiction(rule_set.jurisdiction)
+    calendar_jurisdiction = session.scalar(
+        select(LegalWorkingCalendar.jurisdiction).where(
+            LegalWorkingCalendar.id == calendar.calendar_id,
+            LegalWorkingCalendar.company_id == context.company.id,
+        )
+    )
+    if _normal_jurisdiction(calendar_jurisdiction) != rule_jurisdiction:
+        # A deadline counted on another jurisdiction's holidays is wrong even
+        # when every other gate passes (B4-ADJ-08).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ip_deadline_calendar_jurisdiction_mismatch",
+                "field": "calendar_version_id",
+                "detail": (
+                    f"The rule applies in {rule_jurisdiction} but the working calendar is for "
+                    f"{_normal_jurisdiction(calendar_jurisdiction)}. Choose an active working "
+                    f"calendar for {rule_jurisdiction}."
+                ),
+            },
+        )
     if payload.trigger_event_id:
-        trigger = session.scalar(
-            select(IpDocketEvent.id).where(
+        trigger = session.execute(
+            select(IpDocketEvent.id, IpDocketEvent.proceeding_id).where(
                 IpDocketEvent.id == payload.trigger_event_id,
                 IpDocketEvent.docket_id == docket.id,
                 IpDocketEvent.company_id == context.company.id,
             )
-        )
+        ).one_or_none()
         if trigger is None:
             raise HTTPException(status_code=404, detail="Trigger event not found.")
+        if trigger.proceeding_id is not None:
+            proceeding_jurisdiction = session.scalar(
+                select(IpProceeding.jurisdiction).where(
+                    IpProceeding.id == trigger.proceeding_id,
+                    IpProceeding.company_id == context.company.id,
+                )
+            )
+            if _normal_jurisdiction(proceeding_jurisdiction) != rule_jurisdiction:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "ip_deadline_rule_jurisdiction_mismatch",
+                        "field": "rule_version_id",
+                        "detail": (
+                            f"The proceeding is in {_normal_jurisdiction(proceeding_jurisdiction)} "
+                            f"but the rule applies in {rule_jurisdiction}. Choose a governed rule "
+                            "of the proceeding's jurisdiction."
+                        ),
+                    },
+                )
     definition = IpDeadlineRuleDefinition.model_validate(rule.definition_json)
     calculation_payload = IpDeadlineCalculationRequest(
         deadline_kind=definition.deadline_kind,

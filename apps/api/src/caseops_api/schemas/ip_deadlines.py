@@ -198,6 +198,9 @@ IpGovernanceBlockReason = Literal[
     # A deadline rule's fixtures were calculated on a calendar that is not an
     # active working calendar of this workspace (missing, withdrawn or superseded).
     "fixture_calendar_not_active",
+    # A deadline rule's fixtures were calculated on an active working calendar
+    # of another jurisdiction than the rule's.
+    "fixture_calendar_jurisdiction_mismatch",
 ]
 
 
