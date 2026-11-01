@@ -1050,6 +1050,8 @@ def test_matter_and_team_mutation_actor_fence_inventory_is_complete() -> None:
         "request_matter_attachment_processing": "documents:manage",
         "create_time_entry": "time_entries:write",
         "create_matter_invoice": "invoices:issue",
+        "issue_matter_invoice_draft": "invoices:issue",
+        "void_matter_invoice_draft": "invoices:void",
     }
     direct_parent_writers = {
         "create_matter_note",
@@ -1061,6 +1063,8 @@ def test_matter_and_team_mutation_actor_fence_inventory_is_complete() -> None:
         "request_matter_attachment_processing",
         "create_time_entry",
         "create_matter_invoice",
+        "issue_matter_invoice_draft",
+        "void_matter_invoice_draft",
     }
     for function_name in sorted(direct_parent_writers):
         source = inspect.getsource(getattr(matter_service, function_name))

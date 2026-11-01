@@ -235,6 +235,43 @@ class IpRenewalTermListResponse(BaseModel):
     total: int
 
 
+class IpRenewalReferenceEvent(BaseModel):
+    id: str
+    event_kind: str
+    effective_at: datetime
+    source_reference: str | None
+    reason: str | None
+
+
+class IpRenewalReferenceDocument(BaseModel):
+    id: str
+    title: str
+    current_version: int
+
+
+class IpRenewalReferenceDeadline(BaseModel):
+    id: str
+    title: str
+    result_on: date | None
+    state: str
+    trigger_event_id: str | None
+
+
+class IpRenewalTransitionReferences(BaseModel):
+    """Records the transition validator accepts as this term's references.
+
+    Each list is built from the same predicate the transition endpoint
+    enforces. A next-term deadline is accepted only when its
+    trigger_event_id equals the acceptance event the transition uses.
+    """
+
+    term_id: str
+    filing_events: list[IpRenewalReferenceEvent]
+    acceptance_events: list[IpRenewalReferenceEvent]
+    certificate_documents: list[IpRenewalReferenceDocument]
+    next_term_deadlines: list[IpRenewalReferenceDeadline]
+
+
 class IpRenewalDeadlineSummary(BaseModel):
     id: str
     title: str

@@ -8,6 +8,7 @@ const {
   acknowledgeMock,
   createInstructionMock,
   fetchPortfolioMock,
+  referencesMock,
   scheduleMock,
   transitionMock,
   useCapabilityMock,
@@ -15,6 +16,7 @@ const {
   acknowledgeMock: vi.fn(),
   createInstructionMock: vi.fn(),
   fetchPortfolioMock: vi.fn(),
+  referencesMock: vi.fn(),
   scheduleMock: vi.fn(),
   transitionMock: vi.fn(),
   useCapabilityMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   acknowledgeIpRenewalInstruction: acknowledgeMock,
   createIpRenewalInstruction: createInstructionMock,
   fetchIpRenewalPortfolio: fetchPortfolioMock,
+  fetchIpRenewalTransitionReferences: referencesMock,
   scheduleIpRenewalReminders: scheduleMock,
   transitionIpRenewalTerm: transitionMock,
 }));
@@ -134,6 +137,17 @@ const RESPONSE = {
   ],
 };
 
+const REFERENCES = {
+  term_id: "term-1",
+  filing_events: [{ id: "event-filing", event_kind: "renewal_filing", effective_at: "2026-09-01T00:00:00Z", source_reference: "registry://filing/1", reason: null }],
+  acceptance_events: [{ id: "event-acceptance", event_kind: "renewal_acceptance", effective_at: "2026-09-20T00:00:00Z", source_reference: "registry://acceptance/1", reason: null }],
+  certificate_documents: [{ id: "document-certificate", title: "Renewal certificate", current_version: 1 }],
+  next_term_deadlines: [
+    { id: "deadline-renewal", title: "Renewal due", result_on: "2026-09-30", state: "confirmed", trigger_event_id: "event-registration" },
+    { id: "deadline-next", title: "Next renewal due", result_on: "2036-09-30", state: "confirmed", trigger_event_id: "event-acceptance" },
+  ],
+};
+
 function withClient(children: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -150,6 +164,68 @@ describe("IpRenewalsPage", () => {
     createInstructionMock.mockResolvedValue(TERM);
     acknowledgeMock.mockResolvedValue({ ...TERM, state: "instructed" });
     transitionMock.mockResolvedValue({ ...TERM, state: "filing_in_progress" });
+    referencesMock.mockResolvedValue(REFERENCES);
+  });
+
+  it("BUG-015 completes a renewal by choosing validator-backed evidence, never typing record IDs", async () => {
+    const user = userEvent.setup();
+    const accepted = { ...TERM, state: "accepted" as const, filing_event_id: "event-filing", acceptance_event_id: "event-acceptance" };
+    fetchPortfolioMock.mockResolvedValue({ ...RESPONSE, items: [{ ...RESPONSE.items[0], term: accepted }] });
+    transitionMock.mockResolvedValue({ ...accepted, state: "completed" });
+    render(withClient(<IpRenewalsPage />));
+    await screen.findByText("ASTER device mark");
+    expect(screen.queryByLabelText(/ID$/)).not.toBeInTheDocument();
+    // Recorded evidence is shown locked: the validator refuses to replace it.
+    const filing = await screen.findByRole<HTMLSelectElement>("combobox", { name: "Confirmed filing event" });
+    expect(filing).toBeDisabled();
+    expect(filing).toHaveAccessibleDescription(/renewal evidence cannot be replaced/);
+    const certificate = screen.getByRole<HTMLSelectElement>("combobox", { name: "Accepted certificate" });
+    await waitFor(() => expect(certificate).toBeEnabled());
+    expect(Array.from(certificate.options, (option) => option.value)).toEqual(["", "document-certificate"]);
+    // Only a deadline calculated from this term's acceptance event is offered.
+    const nextTerm = screen.getByRole<HTMLSelectElement>("combobox", { name: "Next-term renewal deadline" });
+    expect(Array.from(nextTerm.options, (option) => option.value)).toEqual(["", "deadline-next"]);
+    await user.selectOptions(certificate, "document-certificate");
+    await user.selectOptions(nextTerm, "deadline-next");
+    await user.type(screen.getByLabelText("Reason"), "Certificate and next term verified");
+    await user.click(screen.getByRole("button", { name: "Record transition" }));
+    await waitFor(() => expect(transitionMock).toHaveBeenCalledWith(expect.objectContaining({
+      targetState: "completed",
+      filingEventId: "event-filing",
+      acceptanceEventId: "event-acceptance",
+      certificateDocumentId: "document-certificate",
+      nextTermDeadlineId: "deadline-next",
+    })));
+    expect(referencesMock).toHaveBeenCalledWith({ docketId: "docket-1", termId: "term-1" });
+  });
+
+  it("BUG-015 disables a renewal evidence choice the docket cannot supply and says where to add it", async () => {
+    const user = userEvent.setup();
+    referencesMock.mockResolvedValue({ ...REFERENCES, filing_events: [] });
+    render(withClient(<IpRenewalsPage />));
+    await screen.findByText("ASTER device mark");
+    await user.selectOptions(screen.getByLabelText("Next state"), "filed");
+    const filing = screen.getByRole<HTMLSelectElement>("combobox", { name: "Confirmed filing event" });
+    await waitFor(() => expect(filing.options[0]).toHaveTextContent("None on this docket"));
+    expect(filing).toBeDisabled();
+    expect(filing).toHaveAccessibleDescription(/No confirmed renewal filing event is on this docket/);
+    expect(screen.getByRole("link", { name: "Record and confirm it on the docket" })).toHaveAttribute("href", "/app/ip?docket=docket-1");
+    await user.type(screen.getByLabelText("Reason"), "Registry filing acknowledged");
+    expect(screen.getByRole("button", { name: "Record transition" })).toBeDisabled();
+    expect(transitionMock).not.toHaveBeenCalled();
+  });
+
+  it("BUG-015 shows a renewal evidence load failure with a retry", async () => {
+    const user = userEvent.setup();
+    referencesMock.mockRejectedValueOnce(new Error("References unavailable."));
+    render(withClient(<IpRenewalsPage />));
+    await screen.findByText("ASTER device mark");
+    await user.selectOptions(screen.getByLabelText("Next state"), "filed");
+    const filing = screen.getByRole<HTMLSelectElement>("combobox", { name: "Confirmed filing event" });
+    await waitFor(() => expect(filing).toHaveAccessibleDescription(/References unavailable\./));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(filing).toBeEnabled());
+    expect(Array.from(filing.options, (option) => option.value)).toEqual(["", "event-filing"]);
   });
 
   it("shows renewal totals, legal provenance, and date-derived work", async () => {

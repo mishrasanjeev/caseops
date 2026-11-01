@@ -1,0 +1,299 @@
+{
+  "captured_at": "2026-11-01T04:10:00Z",
+  "allowlist": "caseops-api-00258-zv8 .. caseops-api-00293-nf2 (36)",
+  "deletes": [
+    {
+      "at": "2026-11-01T03:42:47Z",
+      "revision": "caseops-api-00258-zv8"
+    },
+    {
+      "at": "2026-11-01T03:43:01Z",
+      "revision": "caseops-api-00259-kpk"
+    },
+    {
+      "at": "2026-11-01T03:43:13Z",
+      "revision": "caseops-api-00260-j75"
+    },
+    {
+      "at": "2026-11-01T03:43:28Z",
+      "revision": "caseops-api-00261-xnb"
+    },
+    {
+      "at": "2026-11-01T03:43:42Z",
+      "revision": "caseops-api-00262-8p5"
+    },
+    {
+      "at": "2026-11-01T03:43:58Z",
+      "revision": "caseops-api-00263-zl4"
+    },
+    {
+      "at": "2026-11-01T03:44:14Z",
+      "revision": "caseops-api-00264-jmx"
+    },
+    {
+      "at": "2026-11-01T03:44:31Z",
+      "revision": "caseops-api-00265-7zt"
+    },
+    {
+      "at": "2026-11-01T03:44:50Z",
+      "revision": "caseops-api-00266-lcq"
+    },
+    {
+      "at": "2026-11-01T03:45:07Z",
+      "revision": "caseops-api-00267-swr"
+    },
+    {
+      "at": "2026-11-01T03:45:22Z",
+      "revision": "caseops-api-00268-6p9"
+    },
+    {
+      "at": "2026-11-01T03:45:35Z",
+      "revision": "caseops-api-00269-d5g"
+    },
+    {
+      "at": "2026-11-01T03:45:50Z",
+      "revision": "caseops-api-00270-5zs"
+    },
+    {
+      "at": "2026-11-01T03:45:59Z",
+      "revision": "caseops-api-00271-cg8"
+    },
+    {
+      "at": "2026-11-01T03:46:09Z",
+      "revision": "caseops-api-00272-2cs"
+    },
+    {
+      "at": "2026-11-01T03:46:19Z",
+      "revision": "caseops-api-00273-v99"
+    },
+    {
+      "at": "2026-11-01T03:46:43Z",
+      "revision": "caseops-api-00274-phv"
+    },
+    {
+      "at": "2026-11-01T03:47:07Z",
+      "revision": "caseops-api-00275-f7n"
+    },
+    {
+      "at": "2026-11-01T03:47:26Z",
+      "revision": "caseops-api-00276-zq8"
+    },
+    {
+      "at": "2026-11-01T03:47:39Z",
+      "revision": "caseops-api-00277-2ws"
+    },
+    {
+      "at": "2026-11-01T03:47:46Z",
+      "revision": "caseops-api-00278-4rq"
+    },
+    {
+      "at": "2026-11-01T03:47:54Z",
+      "revision": "caseops-api-00279-6pg"
+    },
+    {
+      "at": "2026-11-01T03:48:02Z",
+      "revision": "caseops-api-00280-qpf"
+    },
+    {
+      "at": "2026-11-01T03:48:12Z",
+      "revision": "caseops-api-00281-9bt"
+    },
+    {
+      "at": "2026-11-01T03:48:23Z",
+      "revision": "caseops-api-00282-j82"
+    },
+    {
+      "at": "2026-11-01T03:48:34Z",
+      "revision": "caseops-api-00283-k2x"
+    },
+    {
+      "at": "2026-11-01T03:48:47Z",
+      "revision": "caseops-api-00284-jzh"
+    },
+    {
+      "at": "2026-11-01T03:48:57Z",
+      "revision": "caseops-api-00285-skg"
+    },
+    {
+      "at": "2026-11-01T03:49:08Z",
+      "revision": "caseops-api-00286-8x7"
+    },
+    {
+      "at": "2026-11-01T03:49:19Z",
+      "revision": "caseops-api-00287-ml7"
+    },
+    {
+      "at": "2026-11-01T03:49:30Z",
+      "revision": "caseops-api-00288-ccf"
+    },
+    {
+      "at": "2026-11-01T03:49:40Z",
+      "revision": "caseops-api-00289-l9g"
+    },
+    {
+      "at": "2026-11-01T03:49:52Z",
+      "revision": "caseops-api-00290-plb"
+    },
+    {
+      "at": "2026-11-01T03:50:03Z",
+      "revision": "caseops-api-00291-62b"
+    },
+    {
+      "at": "2026-11-01T03:50:16Z",
+      "revision": "caseops-api-00292-sr5"
+    },
+    {
+      "at": "2026-11-01T03:50:29Z",
+      "revision": "caseops-api-00293-nf2"
+    }
+  ],
+  "describe_not_found": 36,
+  "fresh_list_count_after": 469,
+  "fresh_list_intersection": 0,
+  "admin_activity_delete_events": [
+    {
+      "revision": "caseops-api-00258-zv8",
+      "timestamp": "2026-11-01T03:43:01.502854Z"
+    },
+    {
+      "revision": "caseops-api-00259-kpk",
+      "timestamp": "2026-11-01T03:43:13.816516Z"
+    },
+    {
+      "revision": "caseops-api-00260-j75",
+      "timestamp": "2026-11-01T03:43:28.411800Z"
+    },
+    {
+      "revision": "caseops-api-00261-xnb",
+      "timestamp": "2026-11-01T03:43:43.065009Z"
+    },
+    {
+      "revision": "caseops-api-00262-8p5",
+      "timestamp": "2026-11-01T03:43:58.463626Z"
+    },
+    {
+      "revision": "caseops-api-00263-zl4",
+      "timestamp": "2026-11-01T03:44:14.163971Z"
+    },
+    {
+      "revision": "caseops-api-00264-jmx",
+      "timestamp": "2026-11-01T03:44:32.076851Z"
+    },
+    {
+      "revision": "caseops-api-00265-7zt",
+      "timestamp": "2026-11-01T03:44:50.510518Z"
+    },
+    {
+      "revision": "caseops-api-00266-lcq",
+      "timestamp": "2026-11-01T03:45:07.463940Z"
+    },
+    {
+      "revision": "caseops-api-00267-swr",
+      "timestamp": "2026-11-01T03:45:22.455942Z"
+    },
+    {
+      "revision": "caseops-api-00268-6p9",
+      "timestamp": "2026-11-01T03:45:35.678636Z"
+    },
+    {
+      "revision": "caseops-api-00269-d5g",
+      "timestamp": "2026-11-01T03:45:50.747671Z"
+    },
+    {
+      "revision": "caseops-api-00270-5zs",
+      "timestamp": "2026-11-01T03:45:59.864923Z"
+    },
+    {
+      "revision": "caseops-api-00271-cg8",
+      "timestamp": "2026-11-01T03:46:09.499620Z"
+    },
+    {
+      "revision": "caseops-api-00272-2cs",
+      "timestamp": "2026-11-01T03:46:19.490399Z"
+    },
+    {
+      "revision": "caseops-api-00273-v99",
+      "timestamp": "2026-11-01T03:46:43.565681Z"
+    },
+    {
+      "revision": "caseops-api-00274-phv",
+      "timestamp": "2026-11-01T03:47:07.897663Z"
+    },
+    {
+      "revision": "caseops-api-00275-f7n",
+      "timestamp": "2026-11-01T03:47:26.041810Z"
+    },
+    {
+      "revision": "caseops-api-00276-zq8",
+      "timestamp": "2026-11-01T03:47:39.295405Z"
+    },
+    {
+      "revision": "caseops-api-00277-2ws",
+      "timestamp": "2026-11-01T03:47:47.517016Z"
+    },
+    {
+      "revision": "caseops-api-00278-4rq",
+      "timestamp": "2026-11-01T03:47:54.728106Z"
+    },
+    {
+      "revision": "caseops-api-00279-6pg",
+      "timestamp": "2026-11-01T03:48:03.263429Z"
+    },
+    {
+      "revision": "caseops-api-00280-qpf",
+      "timestamp": "2026-11-01T03:48:12.938050Z"
+    },
+    {
+      "revision": "caseops-api-00281-9bt",
+      "timestamp": "2026-11-01T03:48:23.327392Z"
+    },
+    {
+      "revision": "caseops-api-00282-j82",
+      "timestamp": "2026-11-01T03:48:34.466057Z"
+    },
+    {
+      "revision": "caseops-api-00283-k2x",
+      "timestamp": "2026-11-01T03:48:47.958689Z"
+    },
+    {
+      "revision": "caseops-api-00284-jzh",
+      "timestamp": "2026-11-01T03:48:58.091027Z"
+    },
+    {
+      "revision": "caseops-api-00285-skg",
+      "timestamp": "2026-11-01T03:49:08.985574Z"
+    },
+    {
+      "revision": "caseops-api-00286-8x7",
+      "timestamp": "2026-11-01T03:49:20.183222Z"
+    },
+    {
+      "revision": "caseops-api-00287-ml7",
+      "timestamp": "2026-11-01T03:49:30.718443Z"
+    },
+    {
+      "revision": "caseops-api-00288-ccf",
+      "timestamp": "2026-11-01T03:49:41.199522Z"
+    },
+    {
+      "revision": "caseops-api-00289-l9g",
+      "timestamp": "2026-11-01T03:49:52.335514Z"
+    },
+    {
+      "revision": "caseops-api-00290-plb",
+      "timestamp": "2026-11-01T03:50:04.161136Z"
+    },
+    {
+      "revision": "caseops-api-00291-62b",
+      "timestamp": "2026-11-01T03:50:16.416358Z"
+    },
+    {
+      "revision": "caseops-api-00292-sr5",
+      "timestamp": "2026-11-01T03:50:30.220625Z"
+    },
+    {
+      "revision": "caseops-api-00293-nf2",
+      "timestamp": "2026-11-01T03:50:44.137436Z"
+    }
+  ]
+}

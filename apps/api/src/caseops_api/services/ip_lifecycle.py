@@ -587,6 +587,14 @@ def preview_ip_docket_event(
     )
 
 
+def _reject_retired_event_refs(session: Session, *, company_id: str, refs: list[str]) -> None:
+    # Event references are free text; one that names an IP document is a
+    # citation that document retirement counts, so it must name a current one.
+    from caseops_api.services.ip_document_workflow import reject_retired_document_refs
+
+    reject_retired_document_refs(session, company_id=company_id, refs=refs)
+
+
 def _append_locked_event(
     session: Session,
     *,
@@ -611,6 +619,9 @@ def _append_locked_event(
             status_code=409,
             detail="Terminal IP records are immutable; use the dedicated reopen transition.",
         )
+    _reject_retired_event_refs(
+        session, company_id=docket.company_id, refs=[*payload.document_refs, *payload.evidence_refs]
+    )
     if payload.event_kind == "filing":
         requested_transaction_id = payload.payload.get("filing_transaction_id")
         if (
@@ -2064,6 +2075,9 @@ def transition_ip_docket_lifecycle(
             resulting_lifecycle_version=next_version,
         )
     else:
+        _reject_retired_event_refs(
+            session, company_id=docket.company_id, refs=[payload.evidence_ref]
+        )
         next_sequence = (
             session.scalar(
                 select(func.max(IpDocketEvent.sequence)).where(

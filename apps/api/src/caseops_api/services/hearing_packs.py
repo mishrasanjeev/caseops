@@ -40,6 +40,7 @@ from caseops_api.db.models import (
     MatterTask,
     ModelRun,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.llm import (
     PURPOSE_HEARING_PACK,
@@ -54,7 +55,10 @@ from caseops_api.services.llm import (
     generate_structured,
     max_tokens_for_purpose,
 )
-from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
+)
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -396,7 +400,7 @@ def generate_hearing_pack(
                 type(retry_exc).__name__,
                 retry_exc,
             )
-            if isinstance(retry_exc, LLMQuotaExhaustedError):
+            if isinstance(retry_exc, (AiMoneyBudgetError, LLMQuotaExhaustedError)):
                 raise provider_failure_http_exception(
                     noun="hearing pack",
                     exc=retry_exc,
@@ -407,6 +411,7 @@ def generate_hearing_pack(
                     f"Could not assemble a hearing pack: "
                     f"{type(retry_exc).__name__}: {retry_exc}. Please retry "
                     f"in a minute, or contact support if this persists."
+                    + fallback_refusal_suffix(retry_exc)
                 ),
             ) from retry_exc
     except LLMProviderError as exc:
@@ -416,7 +421,7 @@ def generate_hearing_pack(
             type(exc).__name__,
             exc,
         )
-        if isinstance(exc, LLMQuotaExhaustedError):
+        if isinstance(exc, (AiMoneyBudgetError, LLMQuotaExhaustedError)):
             raise provider_failure_http_exception(
                 noun="hearing pack",
                 exc=exc,
@@ -426,6 +431,7 @@ def generate_hearing_pack(
             detail=(
                 f"Could not assemble a hearing pack: {type(exc).__name__}: {exc}. "
                 "Please retry in a minute, or contact support if this persists."
+                + fallback_refusal_suffix(exc)
             ),
         ) from exc
 

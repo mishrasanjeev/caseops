@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   fetchCore: vi.fn(),
   fetchReports: vi.fn(),
-  fetchPortfolio: vi.fn(),
+  fetchDocket: vi.fn(),
+  fetchDockets: vi.fn(),
   finalize: vi.fn(),
   getReview: vi.fn(),
   listMatters: vi.fn(),
@@ -25,7 +26,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/endpoints", () => ({
   fetchAuthorityResearchReports: mocks.fetchReports,
   fetchIpCoreRecords: mocks.fetchCore,
-  fetchIpPortfolio: mocks.fetchPortfolio,
+  fetchIpDocket: mocks.fetchDocket,
+  fetchIpDockets: mocks.fetchDockets,
   listMatters: mocks.listMatters,
 }));
 
@@ -40,6 +42,7 @@ vi.mock("@/lib/api/intelligent-reviews", () => ({
 
 vi.mock("@/lib/capabilities", () => ({
   can: () => true,
+  useCapability: () => true,
   useResolvedCapabilities: () => [
     "recommendations:generate",
     "recommendations:decide",
@@ -225,7 +228,7 @@ describe("IntelligentReviewsPage", () => {
     mocks.searchParams = "report=report-1";
     mocks.fetchReports.mockResolvedValue({ reports: [report] });
     mocks.fetchCore.mockResolvedValue({ assets: [], applications: [], proceedings: [], identifiers: [] });
-    mocks.fetchPortfolio.mockResolvedValue({ rows: [], counts: {}, filters: {}, limit: 100, next_cursor: null });
+    mocks.fetchDockets.mockResolvedValue({ dockets: [], count: 0, has_more: false, next_cursor: null, total_count: 0 });
     mocks.listMatters.mockResolvedValue({
       matters: [{ id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" }],
       next_cursor: null,
@@ -288,8 +291,9 @@ describe("IntelligentReviewsPage", () => {
     mocks.create.mockResolvedValue(reviewFixture({ state: "queued", progress: 0 }));
     renderPage();
     await screen.findByText("Opposition authorities");
-    await user.click(screen.getByRole("combobox", { name: "Matter target" }));
-    await user.click(await screen.findByRole("option", { name: /IP-101/ }));
+    const target = screen.getByRole("combobox", { name: "Matter target" });
+    await waitFor(() => expect(target).toBeEnabled());
+    await user.selectOptions(target, "matter-1");
     await user.click(screen.getByRole("button", { name: "Generate review" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.create.mock.calls[0][0]).toEqual(expect.objectContaining({
@@ -300,19 +304,53 @@ describe("IntelligentReviewsPage", () => {
       }));
   });
 
+  it("BUG-007 sibling: finds a Matter target by server search and lists refused Matters with the reason", async () => {
+    const user = userEvent.setup();
+    mocks.listReviews.mockResolvedValue({ reviews: [] });
+    mocks.listMatters.mockImplementation(async (params: { q?: string }) =>
+      params.q
+        ? {
+            matters: [{ id: "matter-old", matter_code: "IP-OLD-7", title: "Older opposition", status: "on_hold" }],
+            next_cursor: null,
+          }
+        : {
+            matters: [
+              { id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" },
+              { id: "matter-2", matter_code: "IP-102", title: "Closed opposition", status: "closed" },
+            ],
+            next_cursor: null,
+          });
+    renderPage();
+    const target = await screen.findByRole("combobox", { name: "Matter target" });
+    expect(target.tagName).toBe("SELECT");
+    await waitFor(() => expect(target).toBeEnabled());
+    const closed = within(target).getByRole("option", { name: /IP-102/ }) as HTMLOptionElement;
+    expect(closed.disabled).toBe(true);
+    expect(closed.textContent).toMatch(/closed Matters cannot be reviewed/);
+
+    await user.type(screen.getByLabelText("Search Matters"), "IP-OLD{Enter}");
+    await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledWith(expect.objectContaining({ q: "IP-OLD" })));
+    await waitFor(() => expect(within(target).getByRole("option", { name: /IP-OLD-7/ })).toBeEnabled());
+    expect(mocks.create).not.toHaveBeenCalled();
+    await user.selectOptions(target, "matter-old");
+    await user.click(screen.getByRole("button", { name: "Generate review" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.create.mock.calls[0][0]).toEqual(expect.objectContaining({ matterId: "matter-old" }));
+  });
+
   it("freezes a server-owned opposition proceeding for IP Draft handoff", async () => {
     const user = userEvent.setup();
     mocks.listReviews.mockResolvedValue({ reviews: [] });
-    mocks.fetchPortfolio.mockResolvedValue({
-      rows: [{
-        docket_id: "docket-1",
+    mocks.fetchDockets.mockResolvedValue({
+      dockets: [{
+        id: "docket-1",
         primary_identifier: "TM-1001",
         title: "Aster mark",
         record_type: "trademark",
         status: "active",
         is_active: true,
       }],
-      counts: {}, filters: {}, limit: 100, next_cursor: null,
+      count: 1, has_more: false, next_cursor: null, total_count: 1,
     });
     mocks.fetchCore.mockResolvedValue({
       assets: [], applications: [], identifiers: [],
@@ -328,8 +366,9 @@ describe("IntelligentReviewsPage", () => {
     mocks.create.mockResolvedValue(reviewFixture({ state: "queued", progress: 0 }));
     renderPage();
     await user.click(await screen.findByRole("tab", { name: "IP docket" }));
-    await user.click(screen.getByRole("combobox", { name: "IP docket target" }));
-    await user.click(await screen.findByRole("option", { name: /TM-1001/ }));
+    const ipTarget = screen.getByRole("combobox", { name: "IP docket target" });
+    await waitFor(() => expect(ipTarget).toBeEnabled());
+    await user.selectOptions(ipTarget, "docket-1");
     await user.click(await screen.findByRole("combobox", { name: "Opposition proceeding for Draft handoff" }));
     await user.click(await screen.findByRole("option", { name: /opponent.*notice_filed/i }));
     await user.click(screen.getByRole("button", { name: "Generate review" }));
@@ -463,8 +502,8 @@ describe("IntelligentReviewsPage", () => {
         next_cursor: null,
       }),
     );
-    mocks.fetchPortfolio.mockImplementation(() =>
-      settle({ rows: [], counts: {}, filters: {}, limit: 100, next_cursor: null }),
+    mocks.fetchDockets.mockImplementation(() =>
+      settle({ dockets: [], count: 0, has_more: false, next_cursor: null, total_count: 0 }),
     );
     mocks.getReview.mockImplementation(() => settle(reviewFixture()));
 
@@ -475,9 +514,9 @@ describe("IntelligentReviewsPage", () => {
     expect(mocks.fetchReports).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledTimes(1));
     expect(mocks.getReview).not.toHaveBeenCalled();
-    expect(mocks.fetchPortfolio).not.toHaveBeenCalled();
+    expect(mocks.fetchDockets).not.toHaveBeenCalled();
     await user.click(screen.getByRole("tab", { name: "IP docket" }));
-    await waitFor(() => expect(mocks.fetchPortfolio).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.fetchDockets).toHaveBeenCalledTimes(1));
     expect(mocks.getReview).not.toHaveBeenCalled();
     expect(maxInFlight).toBeLessThanOrEqual(2);
   });

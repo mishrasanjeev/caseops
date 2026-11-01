@@ -759,6 +759,7 @@ function CalendarDriftCard({ canApprove }: { canApprove: boolean }) {
 
   const unknown = (findings ?? []).filter((row) => row.drift_status === "unknown").length;
   const pendingCandidates = candidates.data?.candidates ?? [];
+  const pendingTotal = Math.max(candidates.data?.total ?? 0, pendingCandidates.length);
 
   async function candidateDecided(candidateId: string) {
     setFindings((current) =>
@@ -827,9 +828,7 @@ function CalendarDriftCard({ canApprove }: { canApprove: boolean }) {
         <div className="border-t border-[var(--color-line)] pt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium text-[var(--color-ink-2)]">Waiting for review</p>
-            {pendingCandidates.length ? (
-              <Badge tone="warning">{pendingCandidates.length}</Badge>
-            ) : null}
+            {pendingTotal ? <Badge tone="warning">{pendingTotal}</Badge> : null}
           </div>
 
           {candidates.isPending ? (
@@ -845,16 +844,27 @@ function CalendarDriftCard({ canApprove }: { canApprove: boolean }) {
               />
             </div>
           ) : pendingCandidates.length ? (
-            <ul className="mt-3 flex min-w-0 flex-col gap-3" data-testid="ip-calendar-candidates">
-              {pendingCandidates.map((candidate) => (
-                <CalendarReconciliationCandidateRow
-                  key={candidate.id}
-                  candidate={candidate}
-                  canApprove={canApprove}
-                  onDecided={() => candidateDecided(candidate.id)}
-                />
-              ))}
-            </ul>
+            <>
+              {pendingTotal > pendingCandidates.length ? (
+                <p
+                  className="mt-2 text-sm text-[var(--color-ink-2)]"
+                  data-testid="ip-calendar-candidates-partial"
+                >
+                  Showing the {pendingCandidates.length} newest of {pendingTotal} reviews.
+                  Decide these and the next ones load here.
+                </p>
+              ) : null}
+              <ul className="mt-3 flex min-w-0 flex-col gap-3" data-testid="ip-calendar-candidates">
+                {pendingCandidates.map((candidate) => (
+                  <CalendarReconciliationCandidateRow
+                    key={candidate.id}
+                    candidate={candidate}
+                    canApprove={canApprove}
+                    onDecided={() => candidateDecided(candidate.id)}
+                  />
+                ))}
+              </ul>
+            </>
           ) : (
             <p className="mt-2 text-sm text-[var(--color-mute)]" data-testid="ip-calendar-candidates-empty">
               No calendar-copy reviews are waiting.

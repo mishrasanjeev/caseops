@@ -5,11 +5,15 @@ import { Inbox, Loader2, Mail, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  MatterName,
+  MatterPicker,
+  OPERATIONAL_MATTER_STATUSES,
+} from "@/components/app/MatterPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -22,7 +26,31 @@ import {
   startGmailMailboxConnection,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
-import type { MailboxMessageImportRecord } from "@/lib/api/schemas";
+import type { MailboxMessageImportRecord, Matter } from "@/lib/api/schemas";
+
+// The review validator (services/gmail_sync.py) links only to a Matter the
+// reviewer can open and that can still take operational work.
+function matterBlockedReason(matter: Matter): string | null {
+  return OPERATIONAL_MATTER_STATUSES.has(matter.status)
+    ? null
+    : "closed Matters cannot take new correspondence";
+}
+
+const STATUS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "All statuses" },
+  { value: "new", label: "New" },
+  { value: "queued", label: "Queued" },
+  { value: "unmatched", label: "Unmatched" },
+  { value: "linked_metadata", label: "Linked" },
+  { value: "content_import_requested", label: "Import requested" },
+  { value: "content_imported", label: "Content imported" },
+  { value: "imported", label: "Imported" },
+  { value: "duplicate", label: "Duplicate" },
+  { value: "failed", label: "Failed" },
+  { value: "dead_letter", label: "Dead letter" },
+  { value: "ignored", label: "Ignored" },
+  { value: "resolved", label: "Resolved" },
+];
 
 function statusTone(status: string): "success" | "warning" | "neutral" | "brand" {
   if (["imported", "linked_metadata", "content_imported"].includes(status)) return "success";
@@ -77,8 +105,11 @@ function MessageRow({
           {row.sender_name || "Unknown sender"} - {when(row.occurred_at)}
         </div>
       </div>
-      <div className="text-xs text-[var(--color-mute)]">
-        <div>Matter: {row.matter_id ?? "unlinked"}</div>
+      <div className="min-w-0 text-xs text-[var(--color-mute)]">
+        <div>Matter: <MatterName matterId={row.matter_id} fallback="unlinked" /></div>
+        {row.matter_id || matterId ? null : (
+          <div className="mt-1">Choose a Matter for Link and Request above to link this message.</div>
+        )}
         <div>Attachments: {row.attachment_count}</div>
         {row.last_error_redacted ? (
           <div className="mt-1 text-amber-800">{row.last_error_redacted}</div>
@@ -122,6 +153,8 @@ export default function MailboxPage() {
   const [status, setStatus] = useState("");
   const [provider, setProvider] = useState<"gmail" | "outlook_mail" | "">("");
   const [matterId, setMatterId] = useState("");
+  const [matterBlocked, setMatterBlocked] = useState<string | null>(null);
+  const actionMatterId = matterBlocked ? "" : matterId;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const query = useQuery({
     queryKey: ["mailbox-imports", status, provider],
@@ -178,7 +211,7 @@ export default function MailboxPage() {
       reviewMailboxImport({
         importId: input.importId,
         action: input.action,
-        matterId: matterId || null,
+        matterId: actionMatterId || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mailbox-imports"] });
@@ -254,23 +287,35 @@ export default function MailboxPage() {
               <option value="outlook_mail">Outlook</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="mailbox-status">Status</Label>
-            <Input
+            <select
               id="mailbox-status"
-              placeholder="new, imported, failed"
+              className="mt-1 h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-            />
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
-          <div>
-            <Label htmlFor="mailbox-matter">Matter id for actions</Label>
-            <Input
+          <div className="min-w-0">
+            <MatterPicker
               id="mailbox-matter"
-              placeholder="matter id"
+              label="Matter for Link and Request"
+              searchLabel="Search Matters for Link and Request"
               value={matterId}
-              onChange={(event) => setMatterId(event.target.value)}
+              disabledReason={matterBlockedReason}
+              error={matterBlocked ? `This Matter cannot be used: ${matterBlocked}.` : null}
+              onChange={(next, matter) => {
+                setMatterId(next);
+                setMatterBlocked(matter ? matterBlockedReason(matter) : null);
+              }}
             />
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Used for messages not yet linked. A linked message stays on its Matter unless you choose another here.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -301,7 +346,7 @@ export default function MailboxPage() {
                 key={row.id}
                 row={row}
                 selected={selected.has(row.id)}
-                matterId={matterId}
+                matterId={actionMatterId}
                 busy={reviewMutation.isPending}
                 onSelected={(checked) => {
                   const next = new Set(selected);

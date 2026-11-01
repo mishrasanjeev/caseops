@@ -302,7 +302,7 @@ test.describe.serial("Ram 2026-08-24 local and deployed regressions", () => {
     await expect(
       page.getByRole("heading", { name: "Trademark journal watch" }),
     ).toBeVisible();
-    await expect(page.getByLabel("Docket scope")).toBeVisible();
+    await expect(page.getByLabel("Docket scope", { exact: true })).toBeVisible();
 
     for (const viewport of [
       { width: 360, height: 800 },
@@ -345,7 +345,7 @@ test.describe.serial("Ram 2026-08-24 local and deployed regressions", () => {
     } else {
       await expect(page.getByRole("table")).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Started" })).toBeVisible();
-      await expect(page.getByRole("columnheader", { name: "Provider" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Source" })).toBeVisible();
     }
 
     await page.goto(`${BASE_URL}/law-firms`);

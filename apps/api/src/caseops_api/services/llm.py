@@ -6,7 +6,8 @@ Design decisions:
 - ``MockProvider`` is the default so local dev, CI, and tests never need a live
   API key. Output is deterministic and structured so assertions are cheap.
 - ``OpenAIProvider`` is the hosted production adapter. ``GeminiProvider`` is
-  retained only for explicit non-production evaluation; Anthropic is retired.
+  the managed, capped availability fallback (``AvailabilityFallbackProvider``,
+  off by default) and an explicit evaluation adapter; Anthropic is retired.
 - ``generate_structured`` coerces the model's response into a validated
   ``pydantic.BaseModel``. That is the shape CaseOps uses for recommendations,
   drafts, and briefs — arbitrary free text is not acceptable for the product.
@@ -29,12 +30,14 @@ from typing import Any, NoReturn
 from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+from caseops_api.core.request_context import request_fallback_deadline
 from caseops_api.core.settings import get_settings
 from caseops_api.services.ai_money_budget import (
     AiMoneyBudgetError,
     assert_paid_ai_dispatch,
     reserve_paid_ai_call,
 )
+from caseops_api.services.gemini_spend_cap import GEMINI_FALLBACK_MODEL, reserve_gemini_spend
 from caseops_api.services.llm_types import (
     LLMCallContext,
     LLMCompletion,
@@ -54,6 +57,24 @@ _provider_deadline: ContextVar[float | None] = ContextVar("llm_provider_deadline
 _completion_receipt: ContextVar[Callable[[LLMCompletion], None] | None] = ContextVar(
     "llm_completion_receipt", default=None,
 )
+# False while a caller's tenant AI policy does not allow the fallback model.
+_fallback_policy_permits: ContextVar[bool] = ContextVar(
+    "llm_fallback_policy_permits", default=True,
+)
+# A fallback below this budget cannot realistically answer a legal prompt; the
+# primary failure is reported instead of spending the Gemini cap.
+MIN_FALLBACK_SECONDS = 30.0
+
+
+def _categorized(
+    error: LLMProviderError, category: str, status: object = None
+) -> LLMProviderError:
+    """Attach a content-free failure category (and HTTP status) for logging."""
+    error.failure_category = category  # type: ignore[attr-defined]
+    error.http_status = (  # type: ignore[attr-defined]
+        status if isinstance(status, int) and not isinstance(status, bool) else None
+    )
+    return error
 
 
 class LLMUsageAccountingError(RuntimeError):
@@ -163,7 +184,9 @@ def _managed_credentials_before_deadline(deadline: float) -> Any:
                 credentials.refresh(request)
             provider_time_remaining(deadline)
             if not credentials.token:
-                raise LLMProviderError("Managed AI credentials are unavailable.")
+                raise _categorized(
+                    LLMProviderError("Managed AI credentials are unavailable."), "credentials"
+                )
             # A token-only public credential cannot perform a hidden SDK refresh.
             return Credentials(
                 token=credentials.token,
@@ -173,7 +196,9 @@ def _managed_credentials_before_deadline(deadline: float) -> Any:
         raise
     except Exception:
         provider_time_remaining(deadline)
-        raise LLMProviderError("Managed AI credentials are unavailable.") from None
+        raise _categorized(
+            LLMProviderError("Managed AI credentials are unavailable."), "credentials"
+        ) from None
 
 
 class MockProvider:
@@ -863,6 +888,7 @@ class OpenAIProvider:
         provider_time_remaining(self._deadline)
         self._openai = openai
         self.model = model
+        self.timeout_seconds = timeout_seconds
         self._budget_retry_count = 0 if self._deadline is not None else max_retries
 
     def _model_rejects_temperature(self) -> bool:
@@ -1148,9 +1174,21 @@ class OpenAIProvider:
 
 
 class GeminiProvider:
-    """Budget-guarded Google GenAI adapter; routing belongs to the caller."""
+    """Budget-guarded Google GenAI adapter; routing belongs to the caller.
+
+    Every managed (Vertex project) transport first reserves its worst-case cost
+    against the account-level Gemini cap in ``gemini_spend_cap``.
+    """
 
     name = "gemini"
+    # Gemini 3 family rules (vendor developer guides, checked 2026-11-01): custom
+    # temperature/top-k/top-p are ignored and a trailing model turn (prefill) is
+    # rejected. For gemini-3.8-flash thinking_level accepts LOW, MEDIUM (default)
+    # and HIGH; MINIMAL is a validation error.
+    _GEMINI3_STRICT_MODELS = frozenset({"gemini-3.5-flash-lite", "gemini-3.8-flash"})
+    # Thinking tokens count against max_output_tokens. Mirror OpenAI's low
+    # reasoning effort so a bounded legal output is not starved by thinking.
+    _LOW_THINKING_MODELS = frozenset({"gemini-3.8-flash"})
 
     def __init__(
         self,
@@ -1216,9 +1254,13 @@ class GeminiProvider:
             self._client = genai.Client(**client_options)
         except Exception:
             provider_time_remaining(self._deadline)
-            raise LLMProviderError("Gemini client configuration is unavailable.") from None
+            raise _categorized(
+                LLMProviderError("Gemini client configuration is unavailable."),
+                "client_configuration",
+            ) from None
         provider_time_remaining(self._deadline)
         self.model = model
+        self._managed = bool(project)
         self._budget_retry_count = 0 if bounded_timeout is not None else 4
 
     def _request_kwargs(
@@ -1232,13 +1274,16 @@ class GeminiProvider:
         chat = [
             message for message in messages if message.role != "system" and message.content.strip()
         ]
-        if self.model == "gemini-3.5-flash-lite" and chat and chat[-1].role == "assistant":
-            raise LLMProviderError("Gemini 3.5 Flash-Lite does not accept an assistant prefill.")
+        strict = self.model in self._GEMINI3_STRICT_MODELS
+        if strict and chat and chat[-1].role == "assistant":
+            raise LLMProviderError(f"Gemini {self.model} does not accept an assistant prefill.")
         if any(message.role not in {"system", "user", "assistant"} for message in messages):
             raise LLMProviderError("Gemini received an unsupported message role.")
         config: dict[str, Any] = {"max_output_tokens": max_tokens}
-        if self.model != "gemini-3.5-flash-lite":
+        if not strict:
             config["temperature"] = temperature
+        if self.model in self._LOW_THINKING_MODELS:
+            config["thinking_config"] = {"thinking_level": "low"}
         system, _ = _split_system_and_chat(messages)
         if system:
             config["system_instruction"] = {"role": "user", "parts": [{"text": system}]}
@@ -1251,7 +1296,7 @@ class GeminiProvider:
             "model": self.model,
             "contents": _messages_to_gemini(
                 chat
-                if self.model == "gemini-3.5-flash-lite"
+                if strict
                 else [message for message in messages if message.role != "system"]
             ),
             "config": config,
@@ -1315,8 +1360,12 @@ class GeminiProvider:
             or status_code == 402
             or any(marker in str(exc).lower() for marker in quota_markers)
         ):
-            raise LLMQuotaExhaustedError(
-                "Gemini quota exhausted. Check the provider billing account."
+            raise _categorized(
+                LLMQuotaExhaustedError(
+                    "Gemini quota exhausted. Check the provider billing account."
+                ),
+                "quota",
+                status_code,
             ) from None
         if isinstance(
             exc,
@@ -1329,10 +1378,26 @@ class GeminiProvider:
                 requests.exceptions.ConnectionError,
             ),
         ) or (status_code in {408, 429, 500, 502, 503, 504}):
-            raise LLMTransientProviderError(
-                "Gemini is temporarily unavailable or the request timed out."
+            raise _categorized(
+                LLMTransientProviderError(
+                    "Gemini is temporarily unavailable or the request timed out."
+                ),
+                "transient",
+                status_code,
             ) from None
-        raise LLMProviderError("Gemini call failed. Check provider configuration.") from None
+        # 401/403: API not enabled or missing IAM; 404: model or location not served.
+        category = (
+            "permission_denied"
+            if status_code in {401, 403}
+            else "model_or_location_not_found"
+            if status_code == 404
+            else "configuration"
+        )
+        raise _categorized(
+            LLMProviderError("Gemini call failed. Check provider configuration."),
+            category,
+            status_code,
+        ) from None
 
     def _call(self, kwargs: dict[str, Any]) -> tuple[Any, float]:
         started = time.perf_counter()
@@ -1354,6 +1419,19 @@ class GeminiProvider:
             retry_count=getattr(self, "_budget_retry_count", 4),
         )
         assert_paid_ai_dispatch(admission)
+        provider_time_remaining(getattr(self, "_deadline", None))
+        if self.model == GEMINI_FALLBACK_MODEL:
+            # Account-level Gemini fallback cap, reserved last, immediately
+            # before transport. It is independent of the shared money guard and
+            # covers only the pinned fallback model; the output cap includes
+            # thinking and every SDK attempt counts. Credential and client
+            # configuration failures happen earlier and reserve nothing.
+            reserve_gemini_spend(
+                model=self.model,
+                input_bytes=input_bytes,
+                output_tokens=kwargs["config"]["max_output_tokens"]
+                * (1 + getattr(self, "_budget_retry_count", 4)),
+            )
         remaining = provider_time_remaining(getattr(self, "_deadline", None))
         if remaining is not None:
             kwargs["config"]["http_options"] = {
@@ -1528,6 +1606,202 @@ class GeminiProvider:
         return completion
 
 
+def build_gemini_fallback(*, timeout_seconds: float) -> GeminiProvider:
+    """The pinned managed Gemini fallback; never an API key or free tier."""
+    if paid_providers_blocked_for_request():
+        raise AiMoneyBudgetError("Automated verification cannot call paid AI providers.")
+    settings = get_settings()
+    if not getattr(settings, "llm_fallback_enabled", False) or not settings.llm_gemini_project:
+        raise LLMProviderError("The managed AI fallback is not configured.")
+    return GeminiProvider(
+        model=settings.llm_fallback_model,
+        api_key=None,
+        project=settings.llm_gemini_project,
+        location=settings.llm_gemini_location,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def with_fallback_refusal(
+    primary_error: LLMProviderError, refusal: BaseException
+) -> LLMProviderError:
+    """Keep the primary failure's type and safe message; carry why no fallback ran.
+
+    Callers append ``fallback_refusal`` after their own retry advice, which is
+    about the primary only (``llm_http.fallback_refusal_suffix``).
+    """
+    combined = type(primary_error)(str(primary_error))
+    combined.fallback_refusal = str(refusal)  # type: ignore[attr-defined]
+    return combined
+
+
+def fallback_deadline(started: float, budget_seconds: float) -> float:
+    """The latest moment a fallback may finish: the primary call's existing worst
+    case, any caller ``provider_deadline`` and the HTTP request's deadline."""
+    deadline = started + budget_seconds
+    for bound in (_provider_deadline.get(), request_fallback_deadline()):
+        if bound is not None:
+            deadline = min(deadline, bound)
+    return deadline
+
+
+def log_fallback_failure(purpose: str | None, model: str, error: BaseException) -> None:
+    """Content-free record of why a fallback attempt did not answer."""
+    category = getattr(error, "failure_category", None) or type(error).__name__
+    status = getattr(error, "http_status", None)
+    misconfigured = category in {
+        "credentials",
+        "client_configuration",
+        "permission_denied",
+        "model_or_location_not_found",
+        "configuration",
+    }
+    logger.log(
+        logging.ERROR if misconfigured else logging.WARNING,
+        "llm availability fallback failed purpose=%s fallback=%s error=%s category=%s "
+        "status=%s misconfigured=%s",
+        purpose,
+        model,
+        type(error).__name__,
+        category,
+        status if isinstance(status, int) else "none",
+        misconfigured,
+    )
+
+
+@contextmanager
+def availability_fallback_policy(permitted: bool) -> Iterator[None]:
+    """Withhold the fallback while the tenant AI policy does not allow its model."""
+    token = _fallback_policy_permits.set(bool(permitted) and _fallback_policy_permits.get())
+    try:
+        yield
+    finally:
+        _fallback_policy_permits.reset(token)
+
+
+class AvailabilityFallbackProvider:
+    """The primary provider plus at most one managed Gemini attempt.
+
+    Switches only when the primary raises ``LLMQuotaExhaustedError`` or
+    ``LLMTransientProviderError``. Refusals, schema/format failures, safety
+    stops, policy or budget denials and the no-paid marker never switch.
+    The single attempt per instance (one instance per request or job item)
+    must finish within the primary's existing worst-case deadline and the HTTP
+    request deadline, and is skipped with less than ``MIN_FALLBACK_SECONDS``
+    left. Gemini output returns to the caller's unchanged validators.
+    ``name``/``model`` change to Gemini only once Gemini has answered (or its
+    answer was rejected); otherwise they stay the primary's. Every completion
+    carries its own provider and model.
+    """
+
+    def __init__(
+        self,
+        primary: LLMProvider,
+        *,
+        purpose: str | None,
+        budget_seconds: float,
+        fallback_factory: Callable[..., LLMProvider] | None = None,
+    ) -> None:
+        self.primary = primary
+        self.purpose = purpose
+        self.fallback_model = get_settings().llm_fallback_model
+        self._budget_seconds = budget_seconds
+        self._fallback_factory = fallback_factory or build_gemini_fallback
+        self.fallback_attempted = False
+        self.name = primary.name
+        self.model = primary.model
+
+    def generate(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        return self._run(
+            lambda active: active.generate(
+                messages, temperature=temperature, max_tokens=max_tokens
+            )
+        )
+
+    def generate_structured[T: BaseModel](
+        self,
+        messages: list[LLMMessage],
+        *,
+        schema: type[T],
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        def call(active: LLMProvider) -> LLMCompletion:
+            native = getattr(active, "generate_structured", None)
+            if callable(native):
+                return native(
+                    messages, schema=schema, temperature=temperature, max_tokens=max_tokens
+                )
+            return active.generate(messages, temperature=temperature, max_tokens=max_tokens)
+
+        return self._run(call)
+
+    def _run(self, call: Callable[[LLMProvider], LLMCompletion]) -> LLMCompletion:
+        started = time.perf_counter()
+        self.name, self.model = self.primary.name, self.primary.model
+        try:
+            return call(self.primary)
+        except (LLMQuotaExhaustedError, LLMTransientProviderError) as primary_error:
+            return self._fallback(call, primary_error, started)
+
+    def _fallback(
+        self,
+        call: Callable[[LLMProvider], LLMCompletion],
+        primary_error: LLMProviderError,
+        started: float,
+    ) -> LLMCompletion:
+        if paid_providers_blocked_for_request():
+            raise AiMoneyBudgetError(
+                "Automated verification cannot call paid AI providers."
+            ) from None
+        if self.fallback_attempted or not _fallback_policy_permits.get():
+            raise primary_error
+        deadline = fallback_deadline(started, self._budget_seconds)
+        remaining = deadline - time.perf_counter()
+        if remaining < MIN_FALLBACK_SECONDS:
+            logger.warning(
+                "llm availability fallback skipped purpose=%s reason=deadline "
+                "remaining_seconds=%.1f",
+                self.purpose,
+                max(remaining, 0.0),
+            )
+            raise primary_error
+        self.fallback_attempted = True
+        logger.warning(
+            "llm availability fallback purpose=%s primary=%s:%s reason=%s",
+            self.purpose,
+            self.primary.name,
+            self.primary.model,
+            type(primary_error).__name__,
+        )
+        try:
+            with provider_deadline(deadline):
+                fallback = self._fallback_factory(timeout_seconds=remaining)
+                completion = call(fallback)
+        except AiMoneyBudgetError as refusal:
+            # The cap, its ledger or the no-paid marker refused before transport.
+            log_fallback_failure(self.purpose, self.fallback_model, refusal)
+            raise with_fallback_refusal(primary_error, refusal) from None
+        except LLMResponseFormatError:
+            # Gemini answered but the answer was rejected: it is the provenance.
+            # Same validation contract as the primary; never another switch.
+            self.name, self.model = "gemini", self.fallback_model
+            raise
+        except LLMProviderError as gemini_error:
+            # Gemini unavailable, misconfigured or out of time: report the
+            # primary failure the caller already knows how to handle.
+            log_fallback_failure(self.purpose, self.fallback_model, gemini_error)
+            raise primary_error from None
+        self.name, self.model = completion.provider, completion.model
+        return completion
+
+
 def _split_system_and_chat(
     messages: list[LLMMessage],
 ) -> tuple[str, list[dict[str, str]]]:
@@ -1585,8 +1859,19 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
 
 
 def build_provider(
-    purpose: str | None = None, *, timeout_seconds: float | None = None
+    purpose: str | None = None,
+    *,
+    timeout_seconds: float | None = None,
+    availability_fallback: bool = True,
 ) -> LLMProvider:
+    """Build the configured provider for ``purpose``.
+
+    When ``CASEOPS_LLM_FALLBACK_ENABLED`` is true and the primary is OpenAI, the
+    result also makes at most one managed Gemini attempt per instance after a
+    typed OpenAI quota or availability failure (``AvailabilityFallbackProvider``).
+    Corpus, evaluation and best-effort retrieval helpers pass
+    ``availability_fallback=False``; recommendations own their fallback plan.
+    """
     settings = get_settings()
     if paid_providers_blocked_for_request():
         # Browser and API regression suites carry a request-scoped marker.
@@ -1596,6 +1881,17 @@ def build_provider(
         # independently enforced boundary; ModelRun still records provider=mock.
         return MockProvider(model=_resolve_model_for_purpose(settings, purpose))
     inner = _build_inner_provider(settings, purpose, timeout_seconds=timeout_seconds)
+    if (
+        availability_fallback
+        and getattr(settings, "llm_fallback_enabled", False)
+        and isinstance(inner, OpenAIProvider)
+    ):
+        inner = AvailabilityFallbackProvider(
+            inner,
+            purpose=purpose,
+            # One SDK attempt per allowed retry: the caller's existing worst case.
+            budget_seconds=inner.timeout_seconds * (1 + inner._budget_retry_count),
+        )
     # Cassette wrapping is opt-in (off by default). Sprint 11 offline
     # eval: capture once with credentials in `record` mode, replay
     # forever in CI in `replay` mode.
@@ -1784,6 +2080,7 @@ def generate_structured[T: BaseModel](
     """
     provider_time_remaining()
     estimated_billing_credits = 0
+    fallback_permitted = True
     if session is not None and context.tenant_id:
         from caseops_api.services.tenant_ai_policy import (
             is_model_allowed,
@@ -1791,6 +2088,12 @@ def generate_structured[T: BaseModel](
         )
 
         policy = resolve_tenant_policy(session, company_id=context.tenant_id)
+        # A cassette (record/replay) wraps the provider; look through it.
+        fallback_provider = getattr(provider, "_inner", provider)
+        if isinstance(fallback_provider, AvailabilityFallbackProvider):
+            fallback_permitted = is_model_allowed(
+                policy, purpose=context.purpose, model=fallback_provider.fallback_model
+            )
         if not is_model_allowed(policy, purpose=context.purpose, model=provider.model):
             from fastapi import HTTPException
             from fastapi import status as _status
@@ -1872,6 +2175,9 @@ def generate_structured[T: BaseModel](
             observed = True
 
     token = _completion_receipt.set(account if on_completion_accounted is not None else None)
+    policy_token = _fallback_policy_permits.set(
+        fallback_permitted and _fallback_policy_permits.get()
+    )
     try:
         if callable(native_generate):
             completion = native_generate(
@@ -1883,6 +2189,7 @@ def generate_structured[T: BaseModel](
             )
         _observe_completion(completion)
     finally:
+        _fallback_policy_permits.reset(policy_token)
         _completion_receipt.reset(token)
     provider_time_remaining()
     if on_model_run is not None:

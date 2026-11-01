@@ -2690,9 +2690,16 @@ requirements when using the fallback.
 - A generated document is verified by reading it. PDF tests must assert glyph
   positions against column borders and printable width, each long value's full
   text inside its own column, and non-Latin input; `%PDF` plus a checksum only
-  proves a file exists. Build PDFs through `services/pdf_layout.py`: fpdf2 cells
-  neither clip nor wrap, and `multi_cell` leaves the cursor at the right margin
-  unless `new_x` is given.
+  proves a file exists. Glyph positions and extracted text also pass when text
+  is drawn dark on dark: rasterize every page, measure each run's ink contrast
+  against its own background (measurement in `apps/api/tests/pdf_legibility.py`;
+  committed negative control
+  `apps/api/tests/test_bug016_invoice_pdf_legibility.py::test_bug016_raster_check_flags_dark_text_on_a_dark_fill`),
+  assert the page count with no blank trailing page, and never accept a
+  downloaded file name. Build PDFs through
+  `services/pdf_layout.py`: fpdf2 cells neither clip nor wrap, `multi_cell`
+  leaves the cursor at the right margin unless `new_x` is given, and
+  `Table.row()` copies the caller's fill into every body cell.
 - A reopened report means the previous proof measured a proxy. Before fixing
   again, diff the earlier change and its test against the new report and record
   why that test could not fail. Reproduce on the unfixed commit inside a checkout
@@ -2817,6 +2824,45 @@ requirements when using the fallback.
   on every iteration. Preserve failed partially edited fixtures, prove the
   replacement journey on a fresh fixture and rerun its retained terminal state;
   resetting saved evidence is not idempotence or revocation proof.
+- A tester-reported bug is accepted only in the reporting tester's own tenant
+  and role on the exact serving release, from records the journey creates
+  through the UI with fresh identifiers and preconditions read from server
+  data. An API-built fixture, another tenant, a freshly provisioned tenant
+  when the tester's data comes from a backfill migration, a locally enabled
+  flag, three local approvers, or a shared record whose state later runs
+  change is local evidence, never the verdict; until production runs it is
+  `Inconclusive`.
+- A `test.skip`, a `[local-only]` grep exclusion, an `if` that guards
+  assertions, or a crawl that stops before the control is a skip, not a pass.
+  Count only assertions production executed, list every journey production
+  can never run (final issue, multi-approver activation) with its reason, and
+  keep that row `Inconclusive`.
+- An empty state or disabled control is a fix only when the same journey
+  follows its explanation to a usable selection for the tester's role. A link
+  to a view without the action, an action the role cannot perform, or a
+  disabled field beside an enabled submit is still the reported dead end.
+- Serve picker options from the write validator's own predicate, including
+  state that changes after creation (closed docket, inactive client, ethical
+  wall, voided estimate), and regress a record whose state changed after it
+  was offered. A picker that is wall-scoped over an API that is not is a
+  security gap, not a fixed picker.
+- Every list a picker, validator, report or check reads must page to the end
+  or state its cap with a server total. Prove it across at least two page or
+  chunk boundaries with the interesting row sorted last, and show a one-page
+  reader fails the test; a fixture that fits on one page cannot fail.
+  `apps/web/lib/ip/docket-dropdowns.test.ts` pins bare docket list reads.
+- A fixture must not create the catalogue or tenant configuration its journey
+  claims to test, and a production spec must not change shared tester
+  configuration (AI policy, billing profile, workspace setup) or create a
+  record type the product cannot retire unless the owner has recorded a
+  residue exception (record type, per-run count, cleanup owner) in the bug
+  ledger before the release. Otherwise split the mutating half into a
+  `[local-only]` test; the taxonomy guard is
+  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`.
+- A lane is done only when an independent adversarial review of its diff and
+  specs, run from the tester's workflow, reports no blocking or major finding.
+  Every first implementation in the 2026-10-31 batch had them; an
+  implementer's "Properly fixed locally" is a claim to review, not a verdict.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

@@ -1,15 +1,19 @@
 # Cloud Run Deployment Assets
 
 Production (`perfect-period-305406`, `asia-south1`) has exactly two checked-in
-writers:
+release writers:
 
 - `scripts/deploy-prod.sh` releases the `caseops-api` and `caseops-web`
-  services and the release-owned seed and backfill jobs. It is the only writer
-  of `caseops-api` and the only definition of `caseops-migrate-job`: step 2
+  services and the release-owned seed and backfill jobs. It is the only release
+  writer of `caseops-api` and the only definition of `caseops-migrate-job`: step 2
   creates or updates that job with its complete contract (command, arguments,
   environment, secrets, identity, Cloud SQL, resources, retries and task
   timeout) and reads every field back before alembic runs. Run it as described
-  in `docs/GCP_DEPLOY.md`.
+  in `docs/GCP_DEPLOY.md`. Between releases, `scripts/ip-rule-governance-a2.sh`
+  may make one config-only `caseops-api` revision on the serving image that
+  changes only `CASEOPS_IP_RULE_GOVERNANCE_ENABLED` and its rollout expiry
+  (`docs/runbooks/ip-rule-governance-a2.md`); the next release takes both from
+  the checked-in `deploy/ip-rule-governance-state.json`.
 - `scheduler-inventory.json` is the only definition of the recurring Cloud Run
   jobs and their Cloud Scheduler triggers. `scripts/scheduler_inventory.py`
   converges it on every release (called by `deploy-prod.sh`), grants each job's

@@ -30,7 +30,7 @@ on:
         required: true
         type: string
       run_historical_a0_gate:
-        description: "Run the archived IPLF-027B predecessor-fixture acceptance"
+        description: "Run the archived IPLF-027B predecessor-fixture acceptance (only while rule governance is disabled)"
         required: false
         default: false
         type: boolean
@@ -356,6 +356,59 @@ jobs:
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-mobile --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-mobile
           bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-drafts-readonly --config=playwright.prod-ram.config.ts --project=batch3-drafts-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-drafts-readonly
 
+      - name: Run release-owned Batch4 tester acceptance
+        id: batch4-tester
+        if: matrix.suite == 'test-legal-write-oct13'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]; then
+            if ! git merge-base --is-ancestor HEAD 02d0b0e48ec86e1ff59866cb9bc53f8c35ddf232; then
+              echo "::error::Newer serving release is missing Batch4 acceptance."
+              exit 1
+            fi
+            echo "::notice::Serving source predates Batch4 acceptance; no new-feature certification."
+            exit 0
+          fi
+          test -f tests/e2e/ram-2026-10-31-governance-ui.spec.ts
+          for key in CASEOPS_RAM_PROD_SLUG CASEOPS_RAM_PROD_EMAIL CASEOPS_RAM_PROD_PASSWORD CASEOPS_EXPECTED_RELEASE_SHA; do
+            value="${!key:-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then printf '::error::Missing Batch4 fixture key: %s\n' "$key" >&2; exit 1; fi
+          done
+          unset value
+          # BUG-003..006 can pass only while production serves rule governance
+          # enabled. IPLF-027B A2 enables it by config alone, ahead of the
+          # checked-in state, so the live state decides which roles are owed.
+          if ! checked_in="$(python scripts/prod_playwright_evidence.py batch4-governance)"; then
+            echo "::error::Serving release has no valid deploy/ip-rule-governance-state.json."
+            exit 1
+          fi
+          if ! governance="$(python scripts/prod_rule_governance_live.py)"; then
+            echo "::error::Could not read the live production rule-governance state."
+            exit 1
+          fi
+          case "$checked_in:$governance" in
+            enabled:enabled|disabled:disabled) ;;
+            disabled:enabled) echo "::notice::Production enables rule governance ahead of the checked-in state (IPLF-027B A2); BUG-003..006 run against the live state." ;;
+            enabled:disabled) echo "::error::The serving release enables rule governance but production reports it disabled."; exit 1 ;;
+            *) echo "::error::Unreviewed rule-governance state."; exit 1 ;;
+          esac
+          echo "governance=$governance" >> "$GITHUB_OUTPUT"
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-desktop --config=playwright.prod-ram.config.ts --project=batch4-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-desktop
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-mobile --config=playwright.prod-ram.config.ts --project=batch4-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-mobile
+          if [[ "$governance" == enabled ]]; then
+            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-desktop --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-desktop
+            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-mobile --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-mobile
+          else
+            echo "::notice::Rule governance is disabled in production; BUG-003..006 production proof waits for the enabled state."
+          fi
+
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
         env:
@@ -395,7 +448,16 @@ jobs:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_A0_PROD_MODE: verify
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-a0 --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
+        run: |
+          set -euo pipefail
+          # The A0 journey asserts the rule-governance fence. Once the serving
+          # release enables governance (IPLF-027B A2) it would only report the
+          # intended state as a failure, so refuse instead of running it.
+          if [ -f deploy/ip-rule-governance-state.json ] && python3 -c 'import json, sys; sys.exit(0 if json.load(open("deploy/ip-rule-governance-state.json", encoding="utf-8"))["enabled"] is True else 1)'; then
+            echo "::error::Rule governance is enabled at the serving release; the historical A0 fence acceptance no longer applies."
+            exit 1
+          fi
+          bash "$RUNNER_TEMP/caseops-prod-playwright" ip-a0 --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
 
       - name: Check IPLF-037B renewal acceptance configuration
         id: renewal-prerequisites
@@ -585,6 +647,7 @@ jobs:
           RENEWAL_CONFIGURED: ${{ steps.renewal-prerequisites.outputs.configured }}
           COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
           PLATFORM_REPORT_READY: ${{ steps.platform-report-prerequisites.outputs.ready }}
+          BATCH4_GOVERNANCE: ${{ steps.batch4-tester.outputs.governance }}
         run: |
           set -euo pipefail
           case "$SUITE" in
@@ -605,6 +668,15 @@ jobs:
           esac
           if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
             required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
+          fi
+          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
+            required+=(batch4-desktop batch4-mobile)
+            # The live state the Batch4 step cross-checked and ran against.
+            case "${BATCH4_GOVERNANCE:-}" in
+              enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
+              disabled) ;;
+              *) echo "::error::Batch4 acceptance recorded no live rule-governance state."; exit 1 ;;
+            esac
           fi
           python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
 

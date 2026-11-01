@@ -45,10 +45,12 @@ from caseops_api.db.models import ModelRun
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_prompts import get_prompt_parts
 from caseops_api.services.llm import (
+    AvailabilityFallbackProvider,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    availability_fallback_policy,
     build_provider,
 )
 from caseops_api.services.session_context import SessionContext
@@ -114,6 +116,7 @@ def generate_step_preview(
         LLMMessage(role="user", content=user_msg),
     ]
     prompt_hash = _prompt_hash(messages)
+    fallback_allowed = True
 
     # EG-006: gate every preview call by the tenant AI policy. The
     # production routes always pass session + context.company_id so
@@ -135,9 +138,14 @@ def generate_step_preview(
                     "admin to allow this model for drafting previews."
                 ),
             )
+        if isinstance(llm, AvailabilityFallbackProvider):
+            fallback_allowed = is_model_allowed(
+                policy, purpose=PURPOSE, model=llm.fallback_model
+            )
 
     try:
-        completion = _invoke_with_cutover(llm, messages)
+        with availability_fallback_policy(fallback_allowed):
+            completion = _invoke_with_cutover(llm, messages)
     except HTTPException:
         # _invoke_with_cutover already raised an actionable, redacted
         # 4xx/5xx — record the failure for audit, then re-raise.

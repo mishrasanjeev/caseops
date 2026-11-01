@@ -190,7 +190,11 @@ async function fillCommonProfile(
   await workspace.getByLabel("Ground 1 lawyer detail").fill(
     "Opposition counsel confirmed the pleaded earlier-mark ground.",
   );
-  await workspace.getByLabel("Scope 1 class").fill("9");
+  // BUG-002: the challenged class is chosen from the Nice catalogue.
+  const scopeClass = workspace.getByRole("combobox", { name: "Scope 1 class" });
+  await scopeClass.click();
+  await scopeClass.fill("9");
+  await workspace.page().getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
   await workspace.getByLabel("Scope 1 goods and services").fill("Downloadable legal software");
 }
 

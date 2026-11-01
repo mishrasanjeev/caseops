@@ -23,12 +23,13 @@ The response ``Content-Type`` is ``application/problem+json`` per spec.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic_core.core_schema import ErrorType
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.middleware.cors import CORSMiddleware
@@ -165,6 +166,67 @@ def _resolve_type_slug(status_code: int, detail: str) -> str:
     return _match_type_slug(status_code, detail) or _generic_type_uri(status_code)
 
 
+# Where FastAPI found the value; it means nothing to the person filling a form.
+_VALIDATION_SOURCES = frozenset({"body", "query", "path", "header", "cookie"})
+# Pydantic wraps a validator's own ValueError/AssertionError message in these.
+_VALIDATOR_PREFIXES = ("Value error, ", "Assertion failed, ")
+_BUILTIN_ERROR_TYPES = frozenset(get_args(ErrorType))
+_ACRONYMS = {"id": "ID", "ids": "IDs", "ip": "IP", "uri": "URI", "url": "URL", "urls": "URLs"}
+
+
+def _humanize_field(segment: str) -> str:
+    words = [word for word in segment.replace("-", "_").split("_") if word]
+    text = " ".join(_ACRONYMS.get(word.lower(), word.lower()) for word in words)
+    return text[:1].upper() + text[1:]
+
+
+def _humanized_field_path(loc: Any) -> str:
+    """``("body", "publications", 0, "class_numbers")`` -> ``Publications › Class numbers``.
+
+    The request source and list indices are dropped, as are pydantic's union and
+    function tags (``function-after[...]``, ``[key]``). Only field names are
+    used, never the submitted value.
+    """
+
+    if not isinstance(loc, list | tuple):
+        return ""
+    parts: list[str] = []
+    for position, segment in enumerate(loc):
+        if not isinstance(segment, str):  # list indices
+            continue
+        if position == 0 and segment in _VALIDATION_SOURCES:
+            continue
+        if "[" in segment or "(" in segment:
+            continue
+        humanized = _humanize_field(segment)
+        if humanized:
+            parts.append(humanized)
+    return " › ".join(parts)
+
+
+def _validation_message(item: Any) -> str:
+    message = str(item.get("msg") if isinstance(item, dict) else item)
+    for prefix in _VALIDATOR_PREFIXES:
+        if message.startswith(prefix):
+            return message[len(prefix):]
+    return message
+
+
+def _validation_detail(item: Any) -> str:
+    """One field-anchored line: ``<Field path>: <message>``.
+
+    A ``PydanticCustomError`` raised by our own validators already names the
+    visible row or field (``Class row 2: ...``), so only pydantic's built-in
+    error types get the path prefix.
+    """
+
+    message = _validation_message(item)
+    if isinstance(item, dict) and item.get("type") not in _BUILTIN_ERROR_TYPES:
+        return message
+    field = _humanized_field_path(item.get("loc")) if isinstance(item, dict) else ""
+    return f"{field}: {message}" if field else message
+
+
 def _problem_payload(
     *,
     status_code: int,
@@ -176,16 +238,19 @@ def _problem_payload(
 ) -> dict[str, Any]:
     # Pydantic validation errors are lists; normalise to a single string
     # for the human-readable `detail` field but keep the structured
-    # breakdown under `errors` for machine readers.
+    # breakdown under `errors` for machine readers. Each line names the field
+    # it belongs to: a bare "Input should be a valid list" sent a tester to
+    # the wrong field (Ram 2026-10-30, BUG-014).
     errors: list[Any] | None = None
     detail_extensions: dict[str, Any] = {}
     detail_slug: str | None = None
+    # The substring slug map keeps matching the messages alone, so a field
+    # name can never change which machine type a response resolves to.
+    slug_text: str | None = None
     if isinstance(detail, list):
         errors = jsonable_encoder(detail)
-        detail_text = "; ".join(
-            str(item.get("msg") if isinstance(item, dict) else item)
-            for item in detail
-        )
+        detail_text = "; ".join(_validation_detail(item) for item in detail)
+        slug_text = "; ".join(_validation_message(item) for item in detail)
     elif isinstance(detail, dict):
         # HTTPException callers use dictionaries for machine-readable conflict
         # metadata. Keep RFC 7807's human-readable ``detail`` as a string and
@@ -233,7 +298,7 @@ def _problem_payload(
     # in where the answer used to be the generic status URL.
     slug = (
         problem_type
-        or _match_type_slug(status_code, detail_text)
+        or _match_type_slug(status_code, slug_text if slug_text is not None else detail_text)
         or detail_slug
         or _generic_type_uri(status_code)
     )

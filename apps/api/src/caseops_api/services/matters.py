@@ -5,7 +5,7 @@ import io
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
-from typing import BinaryIO, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    InvoiceStatus,
     IpDocketRecord,
     Matter,
     MatterActivity,
@@ -57,7 +58,6 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
     MatterTimeEntry,
-    MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     Team,
@@ -81,6 +81,7 @@ from caseops_api.schemas.matters import (
     MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
+    MatterCountBucket,
     MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
@@ -98,6 +99,7 @@ from caseops_api.schemas.matters import (
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskRecord,
@@ -217,6 +219,8 @@ MATTER_MUTATION_CAPABILITIES: dict[str, str] = {
     "request_matter_attachment_processing": "documents:manage",
     "create_time_entry": "time_entries:write",
     "create_matter_invoice": "invoices:issue",
+    "issue_matter_invoice_draft": "invoices:issue",
+    "void_matter_invoice_draft": "invoices:void",
 }
 NOTICE_TEXT_FIELDS = {
     "notice_source",
@@ -1122,13 +1126,6 @@ def _invoice_record(invoice: MatterInvoice) -> InvoiceRecord:
             )
             for attempt in invoice.payment_attempts
         ],
-    )
-
-
-def _raise_billing_permission_error() -> None:
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only owners and admins can create invoices.",
     )
 
 
@@ -2230,6 +2227,8 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
             detail="min_claim_amount_minor cannot exceed max_claim_amount_minor.",
         )
 
+    if filters.id:
+        stmt = stmt.where(Matter.id == filters.id.strip())
     if filters.q:
         needle = f"%{filters.q.strip()}%"
         stmt = stmt.where(
@@ -2445,6 +2444,83 @@ def get_matter_dashboard_summary(
     )
 
 
+PORTFOLIO_IDLE_DAYS = 30
+
+
+def get_matter_portfolio_health(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    idle_limit: int = 10,
+) -> MatterPortfolioHealthResponse:
+    """Counts over every visible Matter (B4-ADJ-03).
+
+    The portfolio page computed these from one page of at most 200 Matters,
+    so a larger book showed wrong totals and buckets with no sign of a cap.
+    """
+
+    effective_today = today or date.today()
+    week_out = effective_today + timedelta(days=7)
+    idle_page_size = max(1, min(idle_limit, 50))
+    scope = (
+        Matter.company_id == context.company.id,
+        visible_matters_filter(session, context=context),
+    )
+    operational_filter = Matter.status.notin_((MatterStatus.DISPOSED.value, "closed"))
+
+    def buckets(column: Any) -> list[MatterCountBucket]:
+        rows = session.execute(
+            select(column, func.count(Matter.id)).where(*scope).group_by(column)
+        ).all()
+        return sorted(
+            (MatterCountBucket(key=key, count=count) for key, count in rows),
+            key=lambda bucket: (-bucket.count, bucket.key or ""),
+        )
+
+    status_counts = buckets(Matter.status)
+    by_status = {bucket.key: bucket.count for bucket in status_counts}
+    hearings_next_7_days_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            *scope,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+            Matter.next_hearing_on <= week_out,
+        )
+    ) or 0
+    idle_before = datetime.now(UTC) - timedelta(days=PORTFOLIO_IDLE_DAYS)
+    idle_filter = (Matter.status == MatterStatus.ACTIVE.value, Matter.updated_at < idle_before)
+    idle_active_count = session.scalar(
+        select(func.count(Matter.id)).where(*scope, *idle_filter)
+    ) or 0
+    idle_active_matters = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*scope, *idle_filter)
+            .order_by(Matter.updated_at.asc(), Matter.id.asc())
+            .limit(idle_page_size)
+        )
+    )
+    return MatterPortfolioHealthResponse(
+        company_id=context.company.id,
+        total_visible_count=sum(by_status.values()),
+        active_matters_count=by_status.get(MatterStatus.ACTIVE.value, 0),
+        intake_matters_count=by_status.get(MatterStatus.INTAKE.value, 0),
+        hearings_next_7_days_count=hearings_next_7_days_count,
+        status_counts=status_counts,
+        forum_level_counts=buckets(Matter.forum_level),
+        practice_area_counts=buckets(Matter.practice_area),
+        idle_after_days=PORTFOLIO_IDLE_DAYS,
+        idle_active_count=idle_active_count,
+        idle_active_matters=[_matter_record(matter) for matter in idle_active_matters],
+        idle_active_limit=idle_page_size,
+    )
+
+
 def list_matter_hearing_portfolio(
     session: Session,
     *,
@@ -2494,9 +2570,12 @@ def list_matter_hearing_follow_up(
     context: SessionContext,
     today: date | None = None,
     limit: int = 200,
+    offset: int = 0,
+    queue: str | None = None,
 ) -> MatterHearingFollowUpResponse:
     effective_today = today or date.today()
     page_size = max(1, min(limit, 500))
+    offset = max(0, offset)
     visible_filter = visible_matters_filter(session, context=context)
     active_filters = [
         Matter.company_id == context.company.id,
@@ -2508,30 +2587,40 @@ def list_matter_hearing_follow_up(
 
     overdue_count = session.scalar(select(func.count(Matter.id)).where(*overdue_filters)) or 0
     missing_count = session.scalar(select(func.count(Matter.id)).where(*missing_filters)) or 0
-    overdue = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    overdue: list[Matter] = []
+    if queue in (None, "overdue"):
+        overdue = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*overdue_filters)
+                .order_by(
+                    Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc()
+                )
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*overdue_filters)
-            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
-            .limit(page_size)
         )
-    )
-    missing = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    missing: list[Matter] = []
+    if queue in (None, "missing_date"):
+        missing = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*missing_filters)
+                .order_by(Matter.created_at.desc(), Matter.id.desc())
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*missing_filters)
-            .order_by(Matter.updated_at.desc(), Matter.id.desc())
-            .limit(page_size)
         )
-    )
+    overdue_more = queue in (None, "overdue") and overdue_count > offset + len(overdue)
+    missing_more = queue in (None, "missing_date") and missing_count > offset + len(missing)
     return MatterHearingFollowUpResponse(
         company_id=context.company.id,
         overdue_matters=[_matter_record(matter) for matter in overdue],
@@ -2539,7 +2628,8 @@ def list_matter_hearing_follow_up(
         overdue_count=overdue_count,
         missing_date_count=missing_count,
         limit=page_size,
-        truncated=overdue_count > len(overdue) or missing_count > len(missing),
+        offset=offset,
+        truncated=overdue_more or missing_more,
     )
 
 
@@ -6787,8 +6877,16 @@ def get_matter_invoice_pdf(
     matter_id: str,
     invoice_id: str,
 ) -> tuple[bytes, str, str]:
-    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
-        _raise_billing_permission_error()
+    from caseops_api.services.capabilities import membership_has_capability
+
+    # BUG-016: the billing page offers the PDF to every holder of
+    # invoices:issue (owner, admin and partner by default), the same predicate
+    # as the route dependency; an owner/admin-only check here refused partners.
+    if not membership_has_capability(session, context.membership, "invoices:issue"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Downloading an invoice PDF needs permission to create invoices.",
+        )
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
     invoice = session.scalar(
         select(MatterInvoice)
@@ -6805,3 +6903,167 @@ def get_matter_invoice_pdf(
     if invoice is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
     return render_invoice_pdf(session, context=context, invoice=invoice)
+
+
+def _locked_matter_invoice(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    invoice_id: str,
+) -> MatterInvoice:
+    invoice = session.scalar(
+        select(MatterInvoice)
+        .options(selectinload(MatterInvoice.line_items))
+        .where(
+            MatterInvoice.id == invoice_id,
+            MatterInvoice.matter_id == matter.id,
+            MatterInvoice.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
+    return invoice
+
+
+def _refreshed_invoice_record(session: Session, invoice_id: str) -> InvoiceRecord:
+    refreshed = session.scalar(
+        select(MatterInvoice)
+        .options(
+            joinedload(MatterInvoice.issued_by_membership).joinedload(CompanyMembership.user),
+            selectinload(MatterInvoice.line_items),
+        )
+        .where(MatterInvoice.id == invoice_id)
+    )
+    assert refreshed is not None
+    return _invoice_record(refreshed)
+
+
+def issue_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Issue a draft matter invoice.
+
+    BUG-016: the New invoice dialog creates drafts and a draft PDF is not
+    payable, but the only draft-to-issued path was a payment link, which a firm
+    without payment collection cannot create. Issuing is final here: the
+    invoice can no longer be voided in CaseOps and its PDF prints as the
+    firm's invoice.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["issue_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    _assert_matter_not_disposed(matter, operation="issue an invoice")
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a draft invoice can be issued.",
+        )
+    invoice.status = InvoiceStatus.ISSUED
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_issued",
+        title="Invoice issued",
+        detail=(
+            f"{invoice.invoice_number} issued with total {invoice.total_amount_minor} minor units."
+        ),
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.issued",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "total_amount_minor": invoice.total_amount_minor,
+            "balance_due_minor": invoice.balance_due_minor,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)
+
+
+def void_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Void a draft matter invoice and release its time entries.
+
+    BUG-016: a draft created by mistake had no way out of the matter's billing
+    list. Only a draft with no recorded payment can be voided here; an issued
+    invoice is a tax document and needs a credit note instead. A void invoice
+    has nothing to collect, so its balance is zeroed and every balance sum
+    (billing KPIs, matter brief, outside-counsel totals) drops it.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["void_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT or invoice.amount_received_minor > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only a draft invoice with no recorded payment can be voided. "
+                "An issued invoice needs a credit note."
+            ),
+        )
+    released = 0
+    for line in invoice.line_items:
+        if line.time_entry_id is not None:
+            line.time_entry_id = None
+            released += 1
+    previous_balance_minor = invoice.balance_due_minor
+    invoice.status = InvoiceStatus.VOID
+    invoice.balance_due_minor = 0
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_voided",
+        title="Draft invoice voided",
+        detail=f"{invoice.invoice_number} voided; {released} time entries released.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.voided",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "previous_balance_due_minor": previous_balance_minor,
+            "released_time_entries": released,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)

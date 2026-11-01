@@ -169,13 +169,20 @@ function PatentWorkForm({ application, area, sequence, predecessor, onSaved, onC
   const busy = mutation.isPending || commit.isPending;
   function invalidateReview() { setReview(undefined); setAcknowledged(false); commandKey.current = null; setError(""); }
   const sourceOptions = <><option value="">Select document version</option>{options.map((option) => <option key={option.pin.document_version_id} value={option.pin.document_version_id}>{option.label}</option>)}</>;
+  // Each record choice is disabled with a reason when nothing can be chosen (B4-ADJ-22 class).
+  const noSource = sources.isSuccess && options.length === 0;
+  const packageChoices = packages.data?.records.filter((row) => row.is_current && row.anchor_version === application.version && row.lifecycle_version === application.lifecycle_version) ?? [];
+  const noPackage = packages.isSuccess && packageChoices.length === 0;
+  const packageRequired = ["filing", "response", "amendment", "grant"].includes(eventKind);
+  const choicesMissing = !selectedSource || (area === "evidence" ? documents.some((item) => !item.version) : packageRequired && !packageId);
   return <form aria-label={area === "evidence" ? "Prepare patent edition" : "Record patent event"} className="min-w-0 space-y-4 border-y border-line py-4"
     onChange={invalidateReview} onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
     <fieldset disabled={busy} className="min-w-0 space-y-4">
       {sources.isPending ? <Skeleton className="h-10 w-full" /> : sources.isError
         ? <QueryErrorState title="Could not load source documents" error={sources.error} onRetry={sources.refetch} />
         : <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <div className="min-w-0"><Label htmlFor="patent-work-source">Source evidence</Label><select id="patent-work-source" className={selectClass} value={sourceId} required onChange={(event) => setSourceId(event.target.value)}>{sourceOptions}</select></div>
+          <div className="min-w-0"><Label htmlFor="patent-work-source">Source evidence</Label><select id="patent-work-source" className={selectClass} value={sourceId} required disabled={noSource} aria-describedby={noSource ? "patent-work-source-empty" : undefined} onChange={(event) => setSourceId(event.target.value)}>{sourceOptions}</select>
+            {noSource && <p id="patent-work-source-empty" className="mt-1 text-xs text-mute">No source document on this IP record yet. Use Upload source to add it first.</p>}</div>
           <div className="flex min-w-0 items-end"><Button type="button" variant="ghost" onClick={onOpenDocuments}><Plus size={16} />Upload source</Button></div>
         </div>}
       {area === "evidence" ? <>
@@ -190,16 +197,17 @@ function PatentWorkForm({ application, area, sequence, predecessor, onSaved, onC
           <div className="min-w-0 flex-1 basis-48"><Label htmlFor={`manifest-kind-${index}`}>Document kind {index + 1}</Label><select id={`manifest-kind-${index}`} className={selectClass} value={item.kind} disabled={kind !== "filing_package"} onChange={(event) => setDocuments(documents.map((row, ordinal) => ordinal === index ? { ...row, kind: event.target.value as typeof kind } : row))}>
             {patentDocumentKinds.filter((value) => value !== "filing_package").map((value) => <option key={value} value={value}>{label(value)}</option>)}
           </select></div>
-          <div className="min-w-0 flex-1 basis-64"><Label htmlFor={`manifest-source-${index}`}>Exact version {index + 1}</Label><select id={`manifest-source-${index}`} className={selectClass} value={item.version} required onChange={(event) => setDocuments(documents.map((row, ordinal) => ordinal === index ? { ...row, version: event.target.value } : row))}>{sourceOptions}</select></div>
+          <div className="min-w-0 flex-1 basis-64"><Label htmlFor={`manifest-source-${index}`}>Exact version {index + 1}</Label><select id={`manifest-source-${index}`} className={selectClass} value={item.version} required disabled={noSource} aria-describedby={noSource ? "patent-work-source-empty" : undefined} onChange={(event) => setDocuments(documents.map((row, ordinal) => ordinal === index ? { ...row, version: event.target.value } : row))}>{sourceOptions}</select></div>
           {documents.length > 1 && <Button type="button" variant="ghost" aria-label={`Remove document ${index + 1}`} title={`Remove document ${index + 1}`} onClick={() => { setDocuments(documents.filter((_, ordinal) => ordinal !== index)); invalidateReview(); }}><Trash2 size={16} /></Button>}
         </div>)}
         {kind === "filing_package" && documents.length < 20 && <Button type="button" variant="ghost" onClick={() => { setDocuments([...documents, { kind: "claims", version: "" }]); invalidateReview(); }}><Plus size={16} />Add document</Button>}
       </> : <>
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <div className="min-w-0"><Label htmlFor="patent-event-kind">Event</Label><select id="patent-event-kind" className={selectClass} value={eventKind} onChange={(event) => setEventKind(event.target.value as typeof eventKind)}>{patentEventKinds.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></div>
-          <div className="min-w-0"><Label htmlFor="patent-event-package">Exact work product</Label><select id="patent-event-package" className={selectClass} value={packageId} onChange={(event) => setPackageId(event.target.value)} required={["filing", "response", "amendment", "grant"].includes(eventKind)}>
-            <option value="">Select work product</option>{packages.data?.records.filter((row) => row.is_current && row.anchor_version === application.version && row.lifecycle_version === application.lifecycle_version).map((row) => <option key={row.id} value={row.id}>{row.title} - edition {row.edition}</option>)}
-          </select></div>
+          <div className="min-w-0"><Label htmlFor="patent-event-package">Exact work product</Label><select id="patent-event-package" className={selectClass} value={packageId} onChange={(event) => setPackageId(event.target.value)} required={packageRequired} disabled={noPackage} aria-describedby={noPackage ? "patent-event-package-empty" : undefined}>
+            <option value="">Select work product</option>{packageChoices.map((row) => <option key={row.id} value={row.id}>{row.title} - edition {row.edition}</option>)}
+          </select>
+          {noPackage && <p id="patent-event-package-empty" className="mt-1 text-xs text-mute">No current work product for this application edition{packages.data?.next_cursor ? " on this page; use More manifests" : ". Prepare one under Evidence first"}.</p>}</div>
           <div className="min-w-0"><Label htmlFor="patent-event-received">Received date</Label><Input id="patent-event-received" type="date" value={received} onChange={(event) => setReceived(event.target.value)} required /></div>
           <div className="min-w-0"><Label htmlFor="patent-event-effective">Effective date</Label><Input id="patent-event-effective" type="date" value={effective} onChange={(event) => setEffective(event.target.value)} required /></div>
         </div>
@@ -221,7 +229,7 @@ function PatentWorkForm({ application, area, sequence, predecessor, onSaved, onC
       </label>}
       <Button type="button" disabled={busy || (!!review.impact.required_acknowledgements.length && !acknowledged)} onClick={() => commit.mutate()}><Save size={16} />Record reviewed event</Button>
     </section>}
-    <div className="flex min-w-0 flex-wrap gap-2"><Button type="submit" disabled={busy || sources.isPending || sources.isError}><Save size={16} />{area === "evidence" ? "Save edition" : "Preview event"}</Button>
+    <div className="flex min-w-0 flex-wrap gap-2"><Button type="submit" disabled={busy || sources.isPending || sources.isError || choicesMissing}><Save size={16} />{area === "evidence" ? "Save edition" : "Preview event"}</Button>
       <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button></div>
   </form>;
 }

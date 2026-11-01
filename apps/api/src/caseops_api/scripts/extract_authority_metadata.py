@@ -564,7 +564,9 @@ def run(
             spend, cap,
         )
 
-    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    provider = build_provider(
+        purpose=PURPOSE_METADATA_EXTRACT, availability_fallback=False
+    )
     if provider.name != "openai":
         raise SystemExit(
             "authority metadata extraction requires CASEOPS_LLM_PROVIDER=openai"

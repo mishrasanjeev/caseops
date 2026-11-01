@@ -4,12 +4,18 @@ import hashlib
 import re
 import unicodedata
 from collections.abc import Callable
+from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import IpDocumentTaxonomyAlias, IpDocumentTaxonomyEntry
+from caseops_api.db.models import (
+    AuditActorType,
+    IpDocumentTaxonomyAlias,
+    IpDocumentTaxonomyEntry,
+)
 from caseops_api.schemas.ip_documents import (
     IpDocumentFoundationContract,
     IpDocumentNamingPreviewRequest,
@@ -19,10 +25,17 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentTaxonomyResponse,
     IpDocumentTaxonomyUpsertRequest,
 )
-from caseops_api.services.audit import record_from_context
+from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.session_context import SessionContext
 
+# The one source of truth for the IP document taxonomy version. Workspace
+# configuration stores this value unless an API caller sends its own label.
 TAXONOMY_VERSION = "ip-document-taxonomy-v1"
+DefaultTaxonomyTrigger = Literal[
+    "workspace_configuration",
+    "workspace_enable",
+    "document_upload",
+]
 NAMING_PATTERN = (
     "[ClientCode]_[AssetType]_[Mark]_[Jurisdiction]_[ApplicationNo]_"
     "[ProceedingType]_[ProceedingNo]_[DocumentType]_[YYYY-MM-DD]_[Version]"
@@ -123,6 +136,115 @@ def _response(
     )
 
 
+def _add_default_entries(
+    session: Session,
+    *,
+    company_id: str,
+    actor_membership_id: str,
+    existing_keys: set[str],
+) -> list[str]:
+    seeded_keys: list[str] = []
+    for sort_order, (key, label) in enumerate(DEFAULT_TAXONOMY, start=10):
+        if key in existing_keys:
+            continue
+        entry = IpDocumentTaxonomyEntry(
+            company_id=company_id,
+            key=key,
+            label=label,
+            description=f"CaseOps seeded {label.casefold()} document category.",
+            sort_order=sort_order,
+            is_seeded=True,
+            is_active=True,
+            version=1,
+            updated_by_membership_id=actor_membership_id,
+        )
+        session.add(entry)
+        session.flush()
+        session.add(
+            IpDocumentTaxonomyAlias(
+                company_id=company_id,
+                taxonomy_entry_id=entry.id,
+                alias=label,
+                normalized_alias=_normalize_alias(label),
+                source="seed",
+                created_by_membership_id=actor_membership_id,
+            )
+        )
+        seeded_keys.append(key)
+    session.flush()
+    return seeded_keys
+
+
+def _company_has_taxonomy_entries(session: Session, *, company_id: str) -> bool:
+    return (
+        session.scalar(
+            select(IpDocumentTaxonomyEntry.id)
+            .where(IpDocumentTaxonomyEntry.company_id == company_id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def ensure_default_ip_document_taxonomy(
+    session: Session,
+    *,
+    company_id: str,
+    actor_membership_id: str,
+    trigger: DefaultTaxonomyTrigger,
+) -> list[str]:
+    """Provision the default classifications for a tenant that has none.
+
+    Inserts only when the company owns zero taxonomy entries, so a firm's own,
+    renamed or deactivated entries are never changed. The inserts run in a
+    savepoint: when a concurrent request provisions the same tenant first, the
+    (company_id, key) unique constraint rejects this attempt, the savepoint is
+    rolled back and the winner's rows stand. Returns the keys this call
+    inserted. The caller owns the outer commit.
+    """
+
+    if _company_has_taxonomy_entries(session, company_id=company_id):
+        return []
+    try:
+        with session.begin_nested():
+            seeded_keys = _add_default_entries(
+                session,
+                company_id=company_id,
+                actor_membership_id=actor_membership_id,
+                existing_keys=set(),
+            )
+            record_audit(
+                session,
+                company_id=company_id,
+                actor_type=AuditActorType.SYSTEM,
+                actor_membership_id=actor_membership_id,
+                actor_label="CaseOps default IP document classifications",
+                action="ip_document_taxonomy.defaults_provisioned",
+                target_type="ip_document_taxonomy",
+                target_id=company_id,
+                metadata={
+                    "taxonomy_version": TAXONOMY_VERSION,
+                    "keys": seeded_keys,
+                    "trigger": trigger,
+                },
+            )
+    except IntegrityError:
+        return []
+    return seeded_keys
+
+
+def ip_document_taxonomy_counts(session: Session, *, company_id: str) -> tuple[int, int]:
+    """Return (total, active) taxonomy entry counts for one tenant."""
+
+    total, active = session.execute(
+        select(
+            func.count(IpDocumentTaxonomyEntry.id),
+            func.count(case((IpDocumentTaxonomyEntry.is_active.is_(True), 1))),
+        ).where(IpDocumentTaxonomyEntry.company_id == company_id)
+    ).one()
+    return int(total or 0), int(active or 0)
+
+
 def seed_ip_document_taxonomy(
     session: Session,
     *,
@@ -133,34 +255,12 @@ def seed_ip_document_taxonomy(
     if {key for key, _label in DEFAULT_TAXONOMY}.issubset(existing_keys):
         return _response(existing, aliases)
 
-    seeded_keys: list[str] = []
-    for sort_order, (key, label) in enumerate(DEFAULT_TAXONOMY, start=10):
-        if key in existing_keys:
-            continue
-        entry = IpDocumentTaxonomyEntry(
-            company_id=context.company.id,
-            key=key,
-            label=label,
-            description=f"CaseOps seeded {label.casefold()} document category.",
-            sort_order=sort_order,
-            is_seeded=True,
-            is_active=True,
-            version=1,
-            updated_by_membership_id=context.membership.id,
-        )
-        session.add(entry)
-        session.flush()
-        session.add(
-            IpDocumentTaxonomyAlias(
-                company_id=context.company.id,
-                taxonomy_entry_id=entry.id,
-                alias=label,
-                normalized_alias=_normalize_alias(label),
-                source="seed",
-                created_by_membership_id=context.membership.id,
-            )
-        )
-        seeded_keys.append(key)
+    seeded_keys = _add_default_entries(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        existing_keys=existing_keys,
+    )
     record_from_context(
         session,
         context,

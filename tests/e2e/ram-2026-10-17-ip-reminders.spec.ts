@@ -100,7 +100,7 @@ for (const width of [1280, 393]) {
     await form.getByLabel("IANA timezone", { exact: true }).fill(workspace.timezone);
     await form.getByLabel("Purpose", { exact: true }).fill(purpose);
     await form.getByLabel("Source", { exact: true }).fill("manual");
-    await form.getByLabel("Reminder offsets (hours)", { exact: true }).fill("48, 24");
+    await form.getByLabel("Reminder offsets", { exact: true }).fill("48, 24");
     await form.getByLabel("Email", { exact: true }).uncheck();
     await form.getByLabel("In app", { exact: true }).check();
     await form.getByRole("button", { name: "Preview recipients and policy", exact: true }).click();

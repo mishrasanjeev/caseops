@@ -27,6 +27,10 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarSnapshot,
     LegalCalendarVersionProposalRequest,
 )
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -276,6 +280,7 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_id = str(bootstrap["membership"]["id"])
     owner_headers = auth_headers(owner_token)
@@ -319,7 +324,7 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
     rule_proposal = client.post(
         "/api/ip/deadline-rules",
         headers=owner_headers,
-        json=_rule_payload(),
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     )
     assert rule_proposal.status_code == 201, rule_proposal.text
     rule = rule_proposal.json()
@@ -461,6 +466,14 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         session.add(wall)
         session.commit()
         wall_id = wall.id
+    # The responsibility pickers offer exactly what confirmation accepts.
+    walled_view = client.get(
+        f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
+    )
+    assert walled_view.status_code == 200, walled_view.text
+    walled_eligible = walled_view.json()["eligible_responsible_membership_ids"]
+    assert reviewer_id not in walled_eligible
+    assert {owner_id, legal_id} <= set(walled_eligible)
     blocked_by_ip_wall = client.post(
         f"/api/ip/deadlines/{deadline['id']}/confirm",
         headers=legal_headers,
@@ -475,6 +488,12 @@ def test_all_five_deadline_writers_remain_operable_with_governance_flag_off(
         wall = session.get(EthicalWall, wall_id)
         assert wall is not None
         session.delete(wall)
+        session.commit()
+    unwalled_view = client.get(
+        f"/api/ip/dockets/{docket['id']}/deadline-workspace", headers=legal_headers
+    )
+    assert reviewer_id in unwalled_view.json()["eligible_responsible_membership_ids"]
+    with get_session_factory()() as session:
         session.add_all(
             [
                 UserCalendarConnection(
@@ -776,6 +795,7 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
     client: TestClient,
 ) -> None:
     first = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(first["company"]["id"]))
     owner_token = str(first["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -803,7 +823,11 @@ def test_provisional_exception_disabled_rule_and_cross_tenant_governance_fail_cl
         json={"reason": "Independent calendar review is complete."},
     )
     assert activated_calendar.status_code == 200, activated_calendar.text
-    rule = client.post("/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()).json()
+    rule = client.post(
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
+    ).json()
     activated_rule = client.post(
         f"/api/ip/deadline-rules/{rule['id']}/activate",
         headers=legal_headers,
@@ -926,6 +950,7 @@ def test_workspace_eligibility_rechecks_company_selection_without_hiding_governa
     client: TestClient,
 ) -> None:
     owner = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(owner["company"]["id"]))
     owner_headers = auth_headers(owner["access_token"])
     _, legal_token = _member(client, owner["access_token"], name="Eligibility legal reviewer",
                              email="eligibility-legal@asterlegal.in")
@@ -943,7 +968,9 @@ def test_workspace_eligibility_rechecks_company_selection_without_hiding_governa
                                      json={"reason": "Independent synthetic calendar review"})
     assert activated_calendar.status_code == 200, activated_calendar.text
     rule_response = client.post(
-        "/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     )
     assert rule_response.status_code == 201, rule_response.text
     rule = rule_response.json()

@@ -8,6 +8,7 @@ import {
   bootstrapPatentTenant, enablePatentWorkspace,
   signInPatentTenant,
 } from "./support/patent-acceptance";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -44,8 +45,7 @@ for (const width of [393, 768, 1280]) {
     });
     expect(familyResponse.status(), await familyResponse.text()).toBe(201);
     const family = await familyResponse.json();
-    const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-    expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+    await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
     // The API returned the authoritative family identity. Do not assume a
@@ -58,6 +58,8 @@ for (const width of [393, 768, 1280]) {
     });
     await page.getByLabel("Title", { exact: true }).fill("Original application source");
     await page.getByLabel("Invention", { exact: true }).fill("Substrate");
+    // Classification is an explicit choice from the server-listed entries.
+    await page.getByLabel("Classification", { exact: true }).selectOption("evidence");
     await page.getByRole("button", { name: "Preview controlled name" }).click();
     await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();
     const uploadPromise = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/ip/documents/upload" && response.request().method() === "POST");

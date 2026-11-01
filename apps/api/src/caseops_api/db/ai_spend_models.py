@@ -57,3 +57,47 @@ class AiProviderSpendAdmission(Base):
     __table_args__ = (
         CheckConstraint("upper_bound_minor > 0", name="ck_ai_spend_admission_positive"),
     )
+
+
+class AiGeminiSpendMonth(Base):
+    """Account-level Gemini fallback allowance for one IST month.
+
+    Independent of the shared guard above: created on first use with zero
+    opening liability under the owner's 1 November 2026 decision.
+    """
+
+    __tablename__ = "ai_gemini_spend_months"
+    __table_args__ = (
+        CheckConstraint(
+            "limit_minor > 0 AND limit_minor <= 1000000",
+            name="ck_ai_gemini_spend_limit_owner_ceiling",
+        ),
+        CheckConstraint(
+            "admitted_minor >= 0 AND admitted_minor <= limit_minor",
+            name="ck_ai_gemini_spend_within_limit",
+        ),
+    )
+
+    month: Mapped[str] = mapped_column(String(7), primary_key=True)
+    limit_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    admitted_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AiGeminiSpendAdmission(Base):
+    """Content-free worst-case Gemini charge; never refunded."""
+
+    __tablename__ = "ai_gemini_spend_admissions"
+    __table_args__ = (
+        CheckConstraint("upper_bound_minor > 0", name="ck_ai_gemini_spend_admission_positive"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    month: Mapped[str] = mapped_column(
+        ForeignKey("ai_gemini_spend_months.month", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    upper_bound_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -165,7 +165,9 @@ def model_generate_section_text(
     matches every other OpenAI call in the system (see
     ``feedback_corpus_spend_audit``).
     """
-    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    provider = build_provider(
+        purpose=PURPOSE_METADATA_EXTRACT, availability_fallback=False
+    )
     system = (
         "You are a legal-text retrieval assistant. The user names an "
         "Indian statute and a section number. If you have the OFFICIAL "

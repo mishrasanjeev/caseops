@@ -671,8 +671,8 @@ export default function TenantBillingPage() {
               onRetry={() => invoicesQuery.refetch()}
             />
           ) : invoicesQuery.isSuccess ? (
-            <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <div className="@container overflow-x-auto" data-testid="saas-invoices-table">
+            <table className="min-w-full text-left text-sm @max-[40rem]:stacked-table">
               <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>
                   <th className="py-2 pr-4">Invoice</th>
@@ -685,13 +685,13 @@ export default function TenantBillingPage() {
               <tbody>
                 {(invoicesQuery.data?.invoices ?? []).map((invoice) => (
                   <tr key={invoice.id} className="border-b border-[var(--color-line-2)]">
-                    <td className="py-3 pr-4 font-medium">{invoice.invoice_number}</td>
-                    <td className="py-3 pr-4">{invoice.status}</td>
-                    <td className="py-3 pr-4">
+                    <td data-label="Invoice" className="py-3 pr-4 font-medium">{invoice.invoice_number}</td>
+                    <td data-label="Status" className="py-3 pr-4">{invoice.status}</td>
+                    <td data-label="Total" className="py-3 pr-4">
                       {formatMoneyMinor(invoice.total_amount_minor, invoice.currency)}
                     </td>
-                    <td className="py-3 pr-4">{invoice.issued_on ?? "-"}</td>
-                    <td className="py-3 pr-4">
+                    <td data-label="Issued" className="py-3 pr-4">{invoice.issued_on ?? "-"}</td>
+                    <td data-label="Download" className="py-3 pr-4">
                       <Button
                         type="button"
                         size="sm"

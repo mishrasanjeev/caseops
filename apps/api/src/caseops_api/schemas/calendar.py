@@ -127,6 +127,23 @@ class CalendarEventListResponse(BaseModel):
     events: list[CalendarEventRecord]
 
 
+class CalendarDaySummary(BaseModel):
+    """Open-item counts for one date, by the same display types as the feed."""
+
+    occurs_on: date
+    total: int = Field(ge=1)
+    by_display_type: dict[CalendarEventDisplayType, int]
+
+
+class CalendarSummaryResponse(BaseModel):
+    """Per-day counts for the Year view. Only dates with open items appear."""
+
+    range_from: date
+    range_to: date
+    total: int = Field(ge=0)
+    days: list[CalendarDaySummary]
+
+
 class CalendarConnectionRecord(BaseModel):
     id: str
     company_id: str

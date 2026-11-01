@@ -425,12 +425,14 @@ class Settings(BaseSettings):
     ai_route_rate_limit_per_minute: int = Field(default=30, ge=1)
 
     llm_provider: str = Field(default="mock")
-    # October continues unchanged by owner instruction. The shared money gate
-    # starts only in an explicitly configured period; missing reconciliation
-    # then blocks transport rather than inventing a zero opening balance.
-    ai_money_budget_enabled: bool = Field(default=True)
+    # Off by owner decision on 2026-11-01: OpenAI and Voyage are prepaid
+    # accounts whose monthly spend cannot be reconciled, and an unreconciled
+    # month refused every paid AI action in production. When an operator
+    # enables it, the gate starts only in the configured period and missing
+    # reconciliation blocks transport rather than inventing a zero balance.
+    ai_money_budget_enabled: bool = Field(default=False)
     ai_money_budget_start_month: str = Field(
-        default="2026-11", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+        default="2026-12", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
     )
     # Fallback model when a purpose-specific one is not set. Per-purpose
     # routing lets operators use an OpenAI reasoning model for legal drafting
@@ -443,12 +445,20 @@ class Settings(BaseSettings):
     llm_model_metadata_extract: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
-    # Recommendations-only availability fallback. Live activation requires
-    # reviewed managed-service processing terms, ADC/IAM and reconciled prices.
-    llm_recommendation_fallback_enabled: bool = Field(default=False)
-    llm_recommendation_fallback_model: Literal["gemini-3.5-flash-lite"] = (
-        "gemini-3.5-flash-lite"
-    )
+    # OpenAI availability fallback (owner decision, 2026-11-01): one managed
+    # Gemini attempt after OpenAI quota exhaustion or transient unavailability,
+    # capped at INR 10,000 per IST month (services/gemini_spend_cap.py). Off by
+    # default; when off, behaviour is unchanged. The model is pinned. Vertex/ADC
+    # only: CASEOPS_LLM_GEMINI_PROJECT is required and no API key is accepted.
+    # gemini-3.8-flash (GA 2026-09-02, retirement "2027-09-02 or later") is
+    # served from `global` and the `us`/`eu` multi-regions only; no India region
+    # (model page checked 2026-11-01). It replaced gemini-3.6-flash, which the
+    # same source lists for retirement on 2026-11-19.
+    llm_fallback_enabled: bool = Field(default=False)
+    # The platform request timeout (Cloud Run --timeout, API_TIMEOUT_SECONDS in
+    # scripts/deploy-prod.sh). A fallback must finish 20 s before it.
+    api_request_timeout_seconds: int = Field(default=120, ge=30, le=3600)
+    llm_fallback_model: Literal["gemini-3.8-flash"] = "gemini-3.8-flash"
     llm_gemini_project: str | None = Field(
         default=None, pattern=r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$"
     )
@@ -599,10 +609,10 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _require_managed_recommendation_fallback_project(self) -> "Settings":
-        if self.llm_recommendation_fallback_enabled and not self.llm_gemini_project:
+    def _require_managed_fallback_project(self) -> "Settings":
+        if self.llm_fallback_enabled and not self.llm_gemini_project:
             raise ValueError(
-                "Recommendation fallback requires CASEOPS_LLM_GEMINI_PROJECT "
+                "CASEOPS_LLM_FALLBACK_ENABLED requires CASEOPS_LLM_GEMINI_PROJECT "
                 "for the paid managed endpoint; an API key is not a substitute."
             )
         return self

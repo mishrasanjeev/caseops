@@ -272,7 +272,7 @@ def translate_query_to_english(q: str) -> str | None:
             build_provider,
         )
 
-        provider = build_provider("metadata_extract")
+        provider = build_provider("metadata_extract", availability_fallback=False)
         messages = [
             LLMMessage(role="system", content=_TRANSLATE_SYSTEM_PROMPT),
             LLMMessage(role="user", content=stripped),

@@ -32,6 +32,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.ai_spend_models import (  # noqa: F401
+    AiGeminiSpendAdmission,
+    AiGeminiSpendMonth,
     AiProviderSpendAdmission,
     AiProviderSpendMonth,
 )
@@ -18115,11 +18117,24 @@ class IpDocument(Base):
             name="fk_ip_document_creator_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["retired_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_retired_by_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_ip_document_id_company"),
         CheckConstraint("current_version > 0", name="ck_ip_document_current_version_positive"),
         CheckConstraint(
             "confidentiality IN ('internal', 'confidential', 'restricted')",
             name="ck_ip_document_confidentiality",
+        ),
+        CheckConstraint(
+            "(retired_at IS NULL AND retired_by_membership_id IS NULL"
+            " AND retirement_reason IS NULL)"
+            " OR (retired_at IS NOT NULL AND retired_by_membership_id IS NOT NULL"
+            " AND retirement_reason IS NOT NULL)",
+            name="ck_ip_document_retirement_complete",
         ),
     )
 
@@ -18139,6 +18154,11 @@ class IpDocument(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+    # Retirement withdraws the document from pickers, validators and current
+    # lists; it never deletes the document, its versions, links or bytes.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class IpDocumentVersion(Base):
@@ -19498,15 +19518,26 @@ class LegalWorkingCalendarVersion(Base):
 
 
 class IpRuleSet(Base):
-    """Stable identity for a scoped legal deadline rule."""
+    """Stable identity for one company's scoped legal deadline rule.
+
+    IPLF-027B A1: every rule set is owned by exactly one company and its key is
+    unique only within that company. ``company_id`` stays nullable for the
+    expand phase only; the A1 migration backfills every legacy row and refuses
+    ambiguous ownership, every writer sets it, and readers treat a NULL owner
+    as not found.
+    """
 
     __tablename__ = "ip_rule_sets"
     __table_args__ = (
-        UniqueConstraint("key", name="uq_ip_rule_set_key"),
+        UniqueConstraint("company_id", "key", name="uq_ip_rule_set_company_key"),
+        UniqueConstraint("id", "company_id", name="uq_ip_rule_set_id_company"),
         CheckConstraint("rule_kind IN ('deadline', 'form', 'fee')", name="ck_ip_rule_set_kind"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True
+    )
     key: Mapped[str] = mapped_column(String(160), nullable=False)
     rule_kind: Mapped[str] = mapped_column(String(24), nullable=False)
     jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -19589,6 +19620,13 @@ class CompanyIpRulePolicy(Base):
             ["ip_rule_versions.id", "ip_rule_versions.rule_set_id"],
             name="fk_company_ip_policy_version_set",
             ondelete="RESTRICT",
+        ),
+        # A company can only select a version of a rule set it owns.
+        ForeignKeyConstraint(
+            ["rule_set_id", "company_id"],
+            ["ip_rule_sets.id", "ip_rule_sets.company_id"],
+            name="fk_company_ip_policy_rule_set_company",
+            ondelete="CASCADE",
         ),
         UniqueConstraint("company_id", "rule_set_id", name="uq_company_ip_rule_policy"),
         CheckConstraint("version > 0", name="ck_company_ip_rule_policy_version_positive"),

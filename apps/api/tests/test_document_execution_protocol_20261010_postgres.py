@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     ContractActivity,
     DocumentProcessingJob,
+    IpDocument,
     MatterActivity,
     PrivateProjectionEvent,
     User,
@@ -95,6 +96,16 @@ def _historical_identity_columns(engine):
         prop.key for prop in inspect(User).column_attrs if prop.columns[0].name not in columns
     )
     assert "sessions_valid_after" not in columns
+    # IP document retirement (20261101_0001) postdates this database too.
+    document_columns = frozenset(
+        column["name"] for column in inspect(engine).get_columns("ip_documents")
+    )
+    document_absent = tuple(
+        prop.key
+        for prop in inspect(IpDocument).column_attrs
+        if prop.columns[0].name not in document_columns
+    )
+    assert "retired_at" in document_absent
 
     def historical_reads(state):
         if not state.is_select or state.session.get_bind() is not engine:
@@ -105,6 +116,12 @@ def _historical_identity_columns(engine):
             if entity is None or description.get("expr") is not entity:
                 continue
             mapper = inspect(entity).mapper
+            if mapper.class_ is IpDocument:
+                loader = Load(entity)
+                for key in document_absent:
+                    loader = loader.defer(getattr(IpDocument, key), raiseload=True)
+                options.append(loader)
+                continue
             if mapper.class_ is User:
                 loader, target = Load(entity), entity
             elif mapper.class_ is CompanyMembership:

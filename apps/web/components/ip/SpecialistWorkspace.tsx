@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { downloadApiFile, fetchIpDocument, fetchIpDocumentsForDocket, fetchIpDocumentTaxonomy,
   listClients, previewIpDocketLifecycle, transitionIpDocketLifecycle, type IpLifecycleInput } from "@/lib/api/endpoints";
+import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
 import { fetchSpecialistContracts, fetchSpecialistObservations, fetchSpecialistRecord, fetchSpecialistRecords,
   saveSpecialistFacts, saveSpecialistObservation, specialistFactsSchema, specialistKey, uploadSpecialistSource,
   type SpecialistContract, type SpecialistObservation, type SpecialistRecord } from "@/lib/api/ip-specialist";
@@ -68,6 +69,9 @@ export function SpecialistForm({ contract, initial: serverInitial, onSaved, onCa
   const key = useRef(crypto.randomUUID());
   const form = useRef<HTMLFormElement>(null);
   const clients = useQuery({ queryKey: ["clients"], queryFn: listClients });
+  // The intake validator accepts only an active client of this firm.
+  const activeClients = clients.data?.clients.filter((client) => client.is_active) ?? [];
+  const noActiveClient = !initial && clients.isSuccess && !activeClients.length;
   const save = useMutation({ mutationFn: async () => {
     const values = new FormData(form.current!);
     const details: Record<string, unknown> = { domain: contract.domain };
@@ -83,8 +87,9 @@ export function SpecialistForm({ contract, initial: serverInitial, onSaved, onCa
   return <form ref={form} aria-label={initial ? "Correct specialist intake" : "New specialist intake"} className="min-w-0 space-y-4 border-y border-line py-5" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
     <fieldset disabled={save.isPending || !clients.isSuccess || !contract.intake_available} className="min-w-0 space-y-4">
       <div><Label htmlFor="specialist-title">Title</Label><Input id="specialist-title" name="title" required maxLength={255} defaultValue={initial?.facts.title} /></div>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor="specialist-client">Client</Label><select className={selectClass} id="specialist-client" name="client_id" required disabled={!!initial} defaultValue={initial?.facts.client_id ?? ""}>
-        <option value="" disabled>Select a client</option>{clients.data?.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></div>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor="specialist-client">Client</Label><select className={selectClass} id="specialist-client" name="client_id" required disabled={!!initial || noActiveClient} aria-describedby={noActiveClient ? "specialist-client-empty" : undefined} defaultValue={initial?.facts.client_id ?? ""}>
+        <option value="" disabled>{noActiveClient ? "No active client" : "Select a client"}</option>{(initial ? clients.data?.clients ?? [] : activeClients).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+        {noActiveClient ? <p id="specialist-client-empty" className="mt-1 text-sm text-[var(--color-mute)]">An intake belongs to an active client. <Link href="/app/clients" className="font-semibold text-[var(--color-brand-700)]">Add or reactivate one in Clients</Link>.</p> : null}</div>
         <div className="min-w-0"><Label htmlFor="specialist-jurisdiction">Jurisdiction as supplied</Label><Input id="specialist-jurisdiction" name="jurisdiction_as_supplied" required maxLength={500} defaultValue={initial?.facts.jurisdiction_as_supplied} /></div></div>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">{contract.fields.map((field) => <div key={field.key} className={`min-w-0 ${field.kind === "textarea" ? "sm:col-span-2" : ""}`}>
         {field.kind === "boolean" ? <label className="flex min-w-0 items-center gap-2 text-sm">
@@ -182,6 +187,9 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
   const history = useQuery({ queryKey: [...specialistKey(record.id), "observations", cursor], queryFn: ({ signal }) => fetchSpecialistObservations(record.id, cursor, signal) });
   const versions = documents.data?.items.flatMap((document) => document.versions.map((version) => ({ document, version }))) ?? [];
   const selected = versions.find((row) => row.version.id === sourceId);
+  // Each choice is disabled with a reason when nothing can be chosen (B4-ADJ-22 class).
+  const activeTypes = types.data?.entries.filter((row) => row.is_active) ?? [];
+  const sourceChoices = versions.filter((row) => isSpecialistSourceDocument(row.document, record.docket_id) && !["rejected", "superseded"].includes(row.version.state)).length;
   const upload = useMutation({ mutationFn: async () => {
     if (!file) throw new Error("Select an evidence file.");
     const result = await uploadSpecialistSource(record, file, taxonomy);
@@ -199,7 +207,8 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
   return <section className="min-w-0 space-y-5">
     {canUpload && <form aria-label="Upload specialist evidence" className="flex min-w-0 flex-wrap items-end gap-3 border-y border-line py-4" onSubmit={(event) => { event.preventDefault(); upload.mutate(); }}>
       <div className="min-w-0 flex-1 basis-64"><Label htmlFor="specialist-upload">Evidence file</Label><Input ref={fileInput} id="specialist-upload" type="file" required disabled={upload.isPending} onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
-      <div className="min-w-0 flex-1 basis-48"><Label htmlFor="specialist-taxonomy">Document type</Label><select id="specialist-taxonomy" className={selectClass} required value={taxonomy} onChange={(event) => setTaxonomy(event.target.value)}><option value="">Select document type</option>{types.data?.entries.filter((row) => row.is_active).map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}</select></div>
+      <div className="min-w-0 flex-1 basis-48"><Label htmlFor="specialist-taxonomy">Document type</Label><select id="specialist-taxonomy" className={selectClass} required value={taxonomy} disabled={!activeTypes.length} aria-describedby={activeTypes.length ? undefined : "specialist-taxonomy-empty"} onChange={(event) => setTaxonomy(event.target.value)}><option value="">{types.isPending ? "Loading document types…" : "Select document type"}</option>{activeTypes.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}</select>
+        {!activeTypes.length && types.isSuccess && <p id="specialist-taxonomy-empty" className="mt-1 text-xs text-mute">No document type is active. An IP workspace admin can load or reactivate document classifications on the IP Documents tab.</p>}</div>
       <Button type="submit" disabled={upload.isPending || !file || !taxonomy}><Upload size={16} />Upload evidence</Button>
     </form>}
     {types.isError && <QueryErrorState title="Could not load document types" error={types.error} onRetry={types.refetch} />}
@@ -207,13 +216,15 @@ function SpecialistEvidence({ record, contract, canWrite, canUpload }: { record:
     {documents.isError && <QueryErrorState title="Could not load source evidence" error={documents.error} onRetry={documents.refetch} />}
     {canWrite && contract?.intake_available && <form aria-label="Record source observation" className="min-w-0 space-y-4" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
       <fieldset disabled={save.isPending || !documents.isSuccess} className="min-w-0 space-y-4"><div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="min-w-0"><Label htmlFor="specialist-kind">Observation type</Label><select id="specialist-kind" required className={selectClass} value={kind} onChange={(event) => setKind(event.target.value)}><option value="">Select observation type</option>{contract.observation_kinds.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></div>
+        <div className="min-w-0"><Label htmlFor="specialist-kind">Observation type</Label><select id="specialist-kind" required className={selectClass} value={kind} disabled={!contract.observation_kinds.length} aria-describedby={contract.observation_kinds.length ? undefined : "specialist-kind-empty"} onChange={(event) => setKind(event.target.value)}><option value="">Select observation type</option>{contract.observation_kinds.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
+          {!contract.observation_kinds.length && <p id="specialist-kind-empty" className="mt-1 text-xs text-mute">This record type defines no source observations.</p>}</div>
         <div className="min-w-0"><Label htmlFor="specialist-day">Event date as recorded</Label><Input id="specialist-day" type="date" required value={day} onChange={(event) => setDay(event.target.value)} /></div></div>
-        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select></div>
+        <div><Label htmlFor="specialist-source">Source version</Label><select id="specialist-source" required className={selectClass} value={sourceId} disabled={!sourceChoices} aria-describedby={sourceChoices ? undefined : "specialist-source-empty"} onChange={(event) => setSourceId(event.target.value)}><option value="">Select source version</option>{versions.filter((row) => isSpecialistSourceDocument(row.document, record.docket_id) && !["rejected", "superseded"].includes(row.version.state)).map(({ document, version }) => <option key={version.id} value={version.id}>{document.title} / Version {version.version}</option>)}</select>
+          {!sourceChoices && <p id="specialist-source-empty" className="mt-1 text-xs text-mute">No retained source version on this record yet. {canUpload ? "Upload the evidence above first." : "A colleague who can upload evidence must add it first."}</p>}</div>
         <div><Label htmlFor="specialist-locator">Source page or locator</Label><Input id="specialist-locator" required maxLength={500} value={locator} onChange={(event) => setLocator(event.target.value)} /></div>
         <div><Label htmlFor="specialist-account">Source account</Label><Textarea id="specialist-account" required maxLength={4000} value={account} onChange={(event) => setAccount(event.target.value)} /></div>
         {supersedes && <p role="status">Correction of a retained observation <Button type="button" variant="ghost" onClick={() => setSupersedes(null)}>Cancel correction</Button></p>}
-        <Button type="submit" disabled={!selected}><Check size={16} />Record observation</Button>
+        <Button type="submit" disabled={!selected || !kind}><Check size={16} />Record observation</Button>
       </fieldset>{save.isError && <p role="alert">{errors(save.error)}</p>}
     </form>}
     <h2 className="text-lg font-semibold">Source history</h2>

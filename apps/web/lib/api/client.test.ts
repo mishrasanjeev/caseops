@@ -64,6 +64,74 @@ describe("apiRequest", () => {
     } satisfies Partial<ApiError>);
   });
 
+  it("names the failing field in a validation problem whatever the API detail says", async () => {
+    // An older API joined only the messages; the toast then named no field.
+    vi.mocked(fetch).mockResolvedValue(response({
+      type: "https://httpstatuses.com/422",
+      title: "Unprocessable content",
+      status: 422,
+      detail: "List should have at least 1 item after validation, not 0; Input should be a valid list",
+      errors: [
+        {
+          loc: ["body", "publications", 0, "class_numbers"],
+          msg: "List should have at least 1 item after validation, not 0",
+          type: "too_short",
+        },
+        {
+          loc: ["body", "publications", 0, "goods_services", "45"],
+          msg: "Input should be a valid list",
+          type: "list_type",
+        },
+      ],
+    }, 422, "application/problem+json"));
+
+    await expect(apiRequest("/api/ip/watch/journal-ingestions", { method: "POST" })).rejects.toMatchObject({
+      status: 422,
+      detail: "Publications \u203a Class numbers: List should have at least 1 item after validation, not 0; "
+        + "Publications \u203a Goods services \u203a 45: Input should be a valid list",
+    });
+  });
+
+  it("words a bare FastAPI validation list with its fields", async () => {
+    vi.mocked(fetch).mockResolvedValue(response({
+      detail: [{ loc: ["body", "source_url"], msg: "Value error, Use an https URL.", type: "value_error" }],
+    }, 422));
+
+    await expect(apiRequest("/api/x", { method: "POST" })).rejects.toMatchObject({
+      detail: "Source URL: Use an https URL.",
+    });
+  });
+
+  it("renders a structured conflict instead of its bare status title", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({
+      type: "https://httpstatuses.com/409",
+      title: "Conflict",
+      status: 409,
+      detail: "Conflict",
+      code: "ip_opposition_opponent_not_ready",
+      gaps: ["forum_required", "grounds_required"],
+    }, 409, "application/problem+json"));
+    await expect(apiRequest("/api/ip/opposition", { method: "POST" })).rejects.toMatchObject({
+      status: 409,
+      detail: "IP opposition opponent not ready. Missing: forum; grounds.",
+    });
+
+    // The same refusal from a handler outside the problem envelope.
+    vi.mocked(fetch).mockResolvedValueOnce(response({
+      detail: { code: "ip_document_locked", document_id: "doc-1" },
+    }, 409));
+    await expect(apiRequest("/api/ip/documents/doc-1", { method: "PATCH" })).rejects.toMatchObject({
+      detail: "IP document locked.",
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce(response({
+      detail: { message: "Reload this workspace.", code: "ip_document_state_conflict" },
+    }, 409));
+    await expect(apiRequest("/api/ip/documents/doc-1", { method: "PATCH" })).rejects.toMatchObject({
+      detail: "Reload this workspace.",
+    });
+  });
+
   it("refreshes and retries after a problem+json invalid-token response", async () => {
     window.localStorage.setItem("caseops.session.context", "{}");
     vi.mocked(fetch)

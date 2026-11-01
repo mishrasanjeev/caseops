@@ -50,6 +50,7 @@ from caseops_api.db.models import (
     MatterHearing,
     ModelRun,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
@@ -57,6 +58,10 @@ from caseops_api.services.llm import (
     LLMProviderError,
     build_provider,
     generate_structured,
+)
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
 )
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matters import _get_matter_model
@@ -333,11 +338,13 @@ def generate_matter_summary(
             type(exc).__name__,
             exc,
         )
+        if isinstance(exc, AiMoneyBudgetError):
+            raise provider_failure_http_exception(noun="matter summary", exc=exc) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
                 f"Could not generate matter summary: {type(exc).__name__}: {exc}. "
-                "Please retry in a minute."
+                "Please retry in a minute." + fallback_refusal_suffix(exc)
             ),
         ) from exc
 

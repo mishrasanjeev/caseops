@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, type RenderResult, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, type RenderResult, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -293,6 +293,37 @@ describe("ProviderOperationsPage", () => {
       message: "Notification intent was queued.",
       operation: { ...operation, status: "queued", replay_available: false },
     });
+  });
+
+  it("B4-ADJ-15 states the cap per view and gives advice that is true in that view", async () => {
+    listProviderOperationsMock.mockResolvedValue({
+      operations: [operation],
+      returned_count: 100,
+      page_limit: 100,
+      has_more: true,
+      open_count: 1,
+      ignored_count: 0,
+      resolved_count: 0,
+      replayable_count: 1,
+    });
+    render(withClient(<ProviderOperationsPage />));
+    const allCap = await screen.findByTestId("provider-operations-cap");
+    expect(listProviderOperationsMock).toHaveBeenLastCalledWith({ includeResolved: true, limit: 100 });
+    expect(screen.getByRole("button", { name: "All operations" })).toHaveAttribute("aria-pressed", "true");
+    expect(allCap).toHaveTextContent(
+      "cover the 100 most recently updated operations, including resolved and ignored ones; older operations are not listed here.",
+    );
+    // Resolving a row in the "all" view does not make room, so it is never advised there.
+    expect(allCap).not.toHaveTextContent(/Resolv|ignoring/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Needs action only" }));
+    await waitFor(() =>
+      expect(listProviderOperationsMock).toHaveBeenLastCalledWith({ includeResolved: false, limit: 100 }),
+    );
+    expect(screen.getByRole("button", { name: "Needs action only" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByTestId("provider-operations-cap")).toHaveTextContent(
+      "cover the 100 most recently updated operations that need action; more exist. Resolving or ignoring a listed operation removes it from this view and brings the next one in.",
+    );
   });
 
   it("renders access refusal when caller is not a workspace admin", () => {

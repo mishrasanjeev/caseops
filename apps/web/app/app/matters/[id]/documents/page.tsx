@@ -1128,8 +1128,8 @@ export default function MatterDocumentsPage() {
                   {group.documents.length}
                 </Badge>
               </div>
-              <div className="relative overflow-x-auto">
-              <table className="w-full min-w-[72rem] text-sm">
+              <div className="@container relative overflow-x-auto" data-testid="matter-documents-table">
+              <table className="w-full text-sm @min-[40rem]:min-w-[72rem] @max-[40rem]:stacked-table">
                 <caption className="sr-only">Documents and available actions for this matter</caption>
                 <thead>
                   <tr className="border-b border-[var(--color-line)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
@@ -1140,7 +1140,7 @@ export default function MatterDocumentsPage() {
                     <th className="px-4 py-2.5 text-left font-semibold">Size</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Processing</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Added</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
+                    <th className="sticky right-0 z-[1] bg-white px-4 py-2.5 text-right font-semibold shadow-[-1px_0_0_var(--color-line)]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1163,7 +1163,7 @@ export default function MatterDocumentsPage() {
                         <tr
                           className="border-b border-[var(--color-line-2)] last:border-0"
                         >
-                          <td className="px-4 py-3 align-top">
+                          <td data-label="Select" className="px-4 py-3 align-top">
                             <input
                               type="checkbox"
                               className="h-4 w-4 rounded border-[var(--color-line)]"
@@ -1173,7 +1173,7 @@ export default function MatterDocumentsPage() {
                               data-testid={`matter-document-select-${doc.id}`}
                             />
                           </td>
-                          <td className="px-4 py-3">
+                          <td data-label="File" className="px-4 py-3">
                             <Link
                               href={viewHref}
                               className="inline-flex items-center gap-2 font-medium text-[var(--color-ink)] hover:underline"
@@ -1209,7 +1209,7 @@ export default function MatterDocumentsPage() {
                               ) : null}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                          <td data-label="Lifecycle" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                             <div>{lifecycleLabel}</div>
                             {doc.sequence_index !== null && doc.sequence_index !== undefined ? (
                               <div className="mt-1 text-[var(--color-mute-2)]">
@@ -1217,19 +1217,19 @@ export default function MatterDocumentsPage() {
                               </div>
                             ) : null}
                           </td>
-                          <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                          <td data-label="Date" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                             {dateLabel(doc.document_date)}
                           </td>
-                          <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                          <td data-label="Size" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                             {humanSize(doc.size_bytes)}
                           </td>
-                          <td className="px-4 py-3">
+                          <td data-label="Processing" className="px-4 py-3">
                             <StatusBadge status={doc.processing_status ?? "unknown"} />
                           </td>
-                          <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                          <td data-label="Added" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                             {dateLabel(doc.created_at)}
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td data-label="Actions" className="sticky right-0 z-[1] bg-white px-4 py-3 text-right shadow-[-1px_0_0_var(--color-line)]">
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               <Button
                                 variant="ghost"
