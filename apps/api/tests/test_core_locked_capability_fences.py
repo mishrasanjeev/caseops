@@ -537,7 +537,7 @@ def test_complete_core_writer_inventory_uses_actor_first_exact_capability() -> N
         (
             ip_operations.create_ip_control_review,
             "ip:write",
-            "list_ip_dockets",
+            "_list_all_ip_dockets",
         ),
         (
             ip_operations.record_ip_control_review_export,
