@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
+import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { SourceAction } from "@/components/app/SourceAction";
 import { Button } from "@/components/ui/Button";
 import {
@@ -49,9 +50,7 @@ import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchAuthorityResearchReports,
   fetchIpCoreRecords,
-  fetchIpPortfolio,
   type AuthorityResearchReport,
-  type IpPortfolioRow,
 } from "@/lib/api/endpoints";
 import {
   createIntelligentReview,
@@ -111,11 +110,6 @@ export default function IntelligentReviewsPage() {
   // background refresh of cached reports after in-app navigation, which would
   // otherwise make it a third concurrent read.
   const mattersEnabled = reportsQuery.isFetched && !reportsQuery.isFetching;
-  const ipQuery = useQuery({
-    queryKey: ["ip", "intelligent-review-targets"],
-    queryFn: () => fetchIpPortfolio({}, { limit: 100 }),
-    enabled: targetKind === "ip_docket",
-  });
   const [targetId, setTargetId] = useState("");
   const [proceedingId, setProceedingId] = useState("");
   const [issue, setIssue] = useState("");
@@ -283,15 +277,20 @@ export default function IntelligentReviewsPage() {
                       />
                     </TabsContent>
                     <TabsContent value="ip_docket">
-                      <TargetSelect
+                      {/* Every active docket the reader can see, searched and
+                          paged on the server: the first 100 portfolio rows hid
+                          older dockets and dockets without an application
+                          (B4-ADJ-18 sibling). The review API accepts any
+                          accessible active docket (_load_target). */}
+                      <IpDocketPicker
                         id="review-ip-target"
                         label="IP docket target"
+                        searchLabel="Find the IP docket"
                         value={targetId}
-                        onValueChange={setTargetId}
-                        placeholder={ipQuery.isPending ? "Loading IP dockets" : "Choose an IP docket"}
-                        options={(ipQuery.data?.rows ?? [])
-                          .filter((row) => row.is_active)
-                          .map((row) => ({ id: row.docket_id, label: ipTargetLabel(row) }))}
+                        onChange={(value) => {
+                          setTargetId(value);
+                          setProceedingId("");
+                        }}
                       />
                       {targetId ? (
                         <div className="mt-3">
@@ -852,11 +851,6 @@ function Notice({ children, tone }: { children: React.ReactNode; tone: "neutral"
 
 function toggleId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id];
-}
-
-function ipTargetLabel(row: IpPortfolioRow) {
-  const identifier = row.primary_identifier ?? row.application_numbers[0] ?? "Identifier pending";
-  return `${identifier} · ${row.docket_title}`;
 }
 
 function setFact(
