@@ -38,13 +38,18 @@ function apiResponse(rt: TesterRuntime, method: string, path: RegExp) {
 /** Ram's basic Indian trademark, created through the docket UI (the prerequisite path Ram uses). */
 async function createBasicMark(page: Page, rt: TesterRuntime, title: string) {
   await page.goto(`${rt.web.origin}/app/ip`);
-  await page.getByRole("button", { name: "New trademark" }).click();
-  const form = page.locator("form").filter({ has: page.getByLabel("Docket title") });
-  await form.getByLabel("Docket title").fill(title);
-  await form.getByLabel("Word mark").fill(title.split(" ")[0]);
-  await form.getByLabel("Nice class").fill("9");
-  await form.getByLabel("Goods / services specification").fill("Downloadable legal research software");
-  await form.getByLabel("Applicant").fill("Test Legal LLP");
+  await page.getByRole("button", { name: "New trademark", exact: true }).click();
+  const form = page.getByRole("region", { name: "New trademark application" });
+  await expect(form).toBeVisible();
+  await form.getByLabel("Docket title", { exact: true }).fill(title);
+  await form.getByLabel("Word mark", { exact: true }).fill(title.split(" ")[0]);
+  // The class comes from the NCL catalogue picker, chosen by its heading.
+  const nice = form.getByRole("combobox", { name: "Nice class, row 1" });
+  await nice.click();
+  await nice.fill("9");
+  await page.getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
+  await form.getByLabel("Goods and services, row 1").fill("Downloadable legal research software");
+  await form.getByLabel("Applicant", { exact: true }).fill("Test Legal LLP");
   await form.getByLabel("Representation evidence reference").fill(`attachment:${title}`);
   const created = page.waitForResponse(apiResponse(rt, "POST", /\/api\/ip\/trademark-applications\/manual$/));
   await form.getByRole("button", { name: "Create application" }).click();

@@ -258,7 +258,9 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
 
     // Phones list one entry per change (decision buttons on screen); wider screens keep the table.
     // Rows read by field name and plain values; the register path is only technical detail.
-    const row = main.getByRole(mobile ? "listitem" : "row").filter({ hasText: "Mark as shown on the register" });
+    // The diff stacks into a list whenever its card is narrower than its table (B4-ADJ-13).
+    const row = main.getByRole("row").or(main.getByRole("listitem"))
+      .filter({ hasText: "Mark as shown on the register" }).filter({ visible: true });
     await row.scrollIntoViewIfNeeded();
     await expectOnScreen(row, "The register change is queued for review");
     await expect(row).toContainText(identity);

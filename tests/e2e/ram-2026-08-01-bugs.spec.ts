@@ -152,7 +152,7 @@ async function seedLinkedIpDocket(api: APIRequestContext, token: string, members
     data: { matter_deadline_id: deadlineId, responsible_membership_id: membershipId, coverage_status: "accepted" },
   });
   expect(coverage.status()).toBe(200);
-  return (await application.json()).id as string;
+  return (await application.json()).application.id as string;
 }
 
 async function signIn(page: Page, slug: string): Promise<void> {

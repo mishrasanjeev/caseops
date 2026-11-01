@@ -441,8 +441,10 @@ test("[local-only] BUG-010 Ram links a Matter from the Matterless explanation, a
   const links = accessTab.getByTestId("ip-matter-links-panel");
   await links.getByRole("button", { name: "Link Matter" }).click();
   await links.locator("#ip-link-matter-search").fill(matter.code);
-  await links.locator("#ip-link-matter").click();
-  await accessTab.getByRole("option", { name: `${matter.code} - ${matter.title}` }).click();
+  // The Matter picker is a native select: choose the Matter by server identity.
+  const matterSelect = links.locator("#ip-link-matter");
+  await expect(matterSelect.locator(`option[value="${matter.id}"]`)).toHaveText(new RegExp(`^${matter.code} · `));
+  await matterSelect.selectOption(matter.id);
   await links.locator("#ip-link-role").click();
   await accessTab.getByRole("option", { name: "Operational" }).click();
   await links.locator("#ip-link-reason").fill("Bill the UK filing against the client Matter budget.");
