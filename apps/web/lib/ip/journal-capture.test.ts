@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -22,7 +25,39 @@ const LAWYER: JournalCaptureForm = {
   extract: "Journal 2187 page 45: ZQXV CAPTURE",
 };
 
+// apps/api/tests/test_ip_journal_watch.py validates the same file with the API
+// contract, so a stricter API and this builder cannot drift apart unnoticed.
+const PARITY_FIXTURE = path.resolve(__dirname, "../../../api/tests/fixtures/journal_capture_web_payloads.json");
+const PARITY_FORMS: JournalCaptureForm[] = [
+  LAWYER,
+  {
+    ...EMPTY_JOURNAL_CAPTURE,
+    journalNumber: "2188",
+    journalDate: "2026-11-03",
+    applicationNumber: "BUG014-CAPTURE-2",
+    deviceReference: "https://evidence.example/device.png",
+    proprietor: "Tasty Bite Foods",
+    classNumbers: "Class 30, 43",
+    goods: { "30": "Biscuits", "43": "" },
+    scopeKind: "partial",
+    scopeClasses: [43],
+    sourceUrl: "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal",
+    reference: "DMS 4410 / Journal 2188.pdf",
+    notes: "Page scanned by the docketing team",
+  },
+];
+
 describe("buildJournalCapture (BUG-014)", () => {
+  it("builds exactly the payloads the API contract test validates", () => {
+    const expected = JSON.parse(readFileSync(PARITY_FIXTURE, "utf8"));
+    const built = PARITY_FORMS.map((form) => {
+      const outcome = buildJournalCapture(form);
+      if (!outcome.ok) throw new Error(JSON.stringify(outcome.errors));
+      return outcome.publication;
+    });
+    expect(built).toEqual(expected);
+  });
+
   it("builds the API shape from what a lawyer types", () => {
     const outcome = buildJournalCapture(LAWYER);
     expect(outcome.ok).toBe(true);

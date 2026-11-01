@@ -1115,6 +1115,12 @@ function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] })
                 Manual fallback remains {feature.manual_fallback_feature_id.replaceAll("_", " ")}.
               </div>
             ) : null}
+            {feature.feature_id === "watch_operations" ? (
+              <div className="w-full break-words text-xs text-[var(--color-mute)]">
+                This is automated journal polling only. Manual journal intake stays available on{" "}
+                <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/watch">Trademark journal watch</Link>.
+              </div>
+            ) : null}
           </div>
         ))}
       </CardContent>

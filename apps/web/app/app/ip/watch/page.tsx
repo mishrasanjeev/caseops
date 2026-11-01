@@ -38,6 +38,7 @@ import {
   apiErrorMessage,
   apiFieldErrors,
   humanizeApiFieldPath,
+  isApiErrorShape,
 } from "@/lib/api/config";
 import {
   createIpWatchHandoff,
@@ -48,6 +49,7 @@ import {
   fetchIpWorkspaceReadiness,
   ingestIpJournal,
   listCompanyUsers,
+  searchIpJournalPublications,
   updateIpWatchProfileStatus,
   type IpCoreRecords,
   type IpFeatureReadiness,
@@ -69,6 +71,7 @@ import {
   goodsFieldId,
   type JournalCaptureForm,
 } from "@/lib/ip/journal-capture";
+import { parseJurisdictions } from "@/lib/ip/jurisdictions";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
 import { useSession } from "@/lib/use-session";
 
@@ -349,11 +352,21 @@ const BLOCKED_CATEGORY: Record<BlockedReason, string> = {
   unknown_feature: "Unavailable",
 };
 
+/** What the reader can do about each gate (who to ask, or that nothing is needed). */
+const BLOCKED_CATEGORY_PATH: Record<string, string> = {
+  "Paused by CaseOps": "CaseOps controls this switch; nothing needs to change in your workspace.",
+  "Not in your plan": "A workspace owner can ask CaseOps to add journal watch to the plan.",
+  "Your role cannot": "Ask a workspace owner or admin for journal-watch management access.",
+  Unavailable: "Contact CaseOps support if you expected automated polling here.",
+};
+
 /**
  * Manual intake and automated polling are different promises. Manual intake
  * (the operator records each journal entry) needs only journal-watch
- * management; automated polling also needs the plan, the CaseOps rollout and
- * workspace setup. Each gate is named, never one generic sentence.
+ * management. No automated journal source is connected to CaseOps: the
+ * scheduler never contacts a journal (services/ip_watch.py
+ * run_journal_watch_scheduler), so "Available" is never claimed for it even
+ * when every readiness gate passes. Each gate that is closed is still named.
  */
 function WatchReadiness({
   feature,
@@ -400,12 +413,11 @@ function WatchReadiness({
           <span className="font-semibold">Automated journal polling</span>
           {loading ? (
             <span className="text-[var(--color-mute)]" role="status">Checking availability…</span>
-          ) : error ? null : feature === null ? (
-            <Badge tone="neutral">Unavailable</Badge>
-          ) : reasons.length === 0 ? (
-            <Badge tone="success">Available</Badge>
-          ) : (
-            categories.map((category) => <Badge key={category} tone="warning">{category}</Badge>)
+          ) : error ? null : (
+            <>
+              <Badge tone="neutral">No journal source connected</Badge>
+              {categories.map((category) => <Badge key={category} tone="warning">{category}</Badge>)}
+            </>
           )}
         </div>
         {error ? (
@@ -413,21 +425,24 @@ function WatchReadiness({
             <span className="min-w-0 break-words">Could not load automation availability: {apiErrorMessage(error, "Request failed.")}</span>
             <Button type="button" size="sm" variant="outline" onClick={onRetry}>Try again</Button>
           </div>
-        ) : !loading && feature === null ? (
-          <p className="mt-1 text-[var(--color-mute)]">This workspace does not report automated journal polling. Record entries through manual intake.</p>
-        ) : reasons.length ? (
+        ) : loading ? null : (
           <>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--color-mute)]">
-              {reasons.map((reason) => <li key={reason} className="break-words">{BLOCKED_REASON_TEXT[reason]}</li>)}
-            </ul>
             <p className="mt-1 break-words text-[var(--color-mute)]">
-              Scheduled checks do not contact a journal source until it is available; record each entry through manual intake.
-              {needsSetup ? <> <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip">Open IP workspace setup</Link></> : null}
+              No automated journal source is connected to CaseOps, so scheduled checks never contact a journal. Record each official journal entry through manual intake.
             </p>
+            {reasons.length ? (
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--color-mute)]" aria-label="Closed automation gates">
+                {reasons.map((reason) => (
+                  <li key={reason} className="break-words">
+                    <span className="font-medium text-[var(--color-ink)]">{BLOCKED_CATEGORY[reason]}:</span> {BLOCKED_REASON_TEXT[reason]}{" "}
+                    {BLOCKED_CATEGORY[reason] === "Needs setup" ? null : BLOCKED_CATEGORY_PATH[BLOCKED_CATEGORY[reason]]}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {needsSetup ? <p className="mt-1"><Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip">Open IP workspace setup</Link></p> : null}
           </>
-        ) : !loading ? (
-          <p className="mt-1 text-[var(--color-mute)]">Automated polling is available for this workspace.</p>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -523,6 +538,9 @@ function ProfilesView({
     });
   }
 
+  const typedJurisdictions = parseJurisdictions(jurisdictions);
+  const outsideIntake = typedJurisdictions.codes.length > 0 && !typedJurisdictions.codes.includes("IN");
+
   function submit(event: FormEvent) {
     event.preventDefault();
     const parsed = parseNiceClasses(classNumbers);
@@ -531,6 +549,8 @@ function ProfilesView({
     if (!profileDocketId) next["profile-docket"] = "Choose the docket this watch belongs to.";
     if (name.trim().length < 2) next["profile-name"] = "Enter a profile name of at least 2 characters.";
     if (parsed.errors.length) next["profile-classes"] = parsed.errors.map((item) => item.message).join(" ");
+    const jurisdictionList = parseJurisdictions(jurisdictions);
+    if (jurisdictionList.error) next["profile-jurisdictions"] = jurisdictionList.error;
     if (deviceList.some((item) => !/^https?:\/\/\S+$/i.test(item))) {
       next["profile-devices"] = "Device evidence must be web links that start with https:// or http://.";
     }
@@ -562,7 +582,7 @@ function ProfilesView({
       deviceReferences: deviceList,
       classNumbers: parsed.classes,
       proprietorTerms: splitTerms(proprietors),
-      jurisdictions: splitTerms(jurisdictions).map((item) => item.toUpperCase()),
+      jurisdictions: jurisdictionList.codes,
       frequency,
       recipientMembershipIds: recipients,
       maxCostMinorPerPeriod: cost,
@@ -623,7 +643,10 @@ function ProfilesView({
               <TextField id="profile-devices" label="Device evidence URLs" hint="Comma separated web links" value={devices} setValue={(value) => { setDevices(value); clearError("profile-devices"); }} error={errors["profile-devices"]} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField id="profile-classes" label="Nice classes" hint="For example: Class 30, 43" value={classNumbers} setValue={(value) => { setClassNumbers(value); clearError("profile-classes"); }} error={errors["profile-classes"]} />
-                <TextField id="profile-jurisdictions" label="Jurisdictions" hint="Country codes, for example IN" value={jurisdictions} setValue={(value) => { setJurisdictions(value); clearError("profile-jurisdictions"); }} error={errors["profile-jurisdictions"]} />
+                <div className="min-w-0">
+                  <TextField id="profile-jurisdictions" label="Jurisdictions" hint="Codes or names, for example IN" value={jurisdictions} setValue={(value) => { setJurisdictions(value); clearError("profile-jurisdictions"); }} error={errors["profile-jurisdictions"]} />
+                  {outsideIntake ? <p className="mt-1 break-words text-xs text-amber-900" data-testid="profile-jurisdiction-note">Journal intake records the IP India Trade Marks Journal (IN). A profile limited to {typedJurisdictions.codes.join(", ")} will not match those entries.</p> : null}
+                </div>
               </div>
               <TextField id="profile-proprietors" label="Proprietor terms" hint="Comma separated" value={proprietors} setValue={(value) => { setProprietors(value); clearError("profile-proprietors"); }} error={errors["profile-proprietors"]} />
               <RecipientsField
@@ -750,19 +773,52 @@ function JournalIntake({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [recorded, setRecorded] = useState<IpJournalIngestResult | null>(null);
+  const [conflict, setConflict] = useState<{ publicationId: string | null; applicationNumber: string } | null>(null);
   const [predecessorFilter, setPredecessorFilter] = useState("");
+  const [predecessorQuery, setPredecessorQuery] = useState("");
+  const [predecessor, setPredecessor] = useState<IpJournalPublication | null>(null);
   const parsedClasses = useMemo(() => parseNiceClasses(form.classNumbers).classes, [form.classNumbers]);
   const applications = core?.applications ?? [];
+  const correcting = form.kind !== "advertisement";
+  const canCapture = canManage && intakeProfileCount > 0;
+  useEffect(() => {
+    const timer = setTimeout(() => setPredecessorQuery(predecessorFilter.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [predecessorFilter]);
+  // Server-side search over every entry the viewer may see (the predicate the
+  // API uses to accept a correction), not the recent page held by the workspace.
+  const predecessorSearch = useQuery({
+    queryKey: ["ip", "watch", "publications", predecessorQuery],
+    queryFn: () => searchIpJournalPublications(predecessorQuery),
+    enabled: canCapture && correcting,
+  });
+  const found = predecessorSearch.data?.publications ?? [];
+  const predecessorOptions = predecessor && !found.some((item) => item.id === predecessor.id)
+    ? [predecessor, ...found]
+    : found;
+  const nothingToCorrect =
+    predecessorSearch.isSuccess && !predecessorQuery && predecessorOptions.length === 0;
   const mutation = useMutation({
     mutationFn: ingestIpJournal,
     onSuccess: async (result) => {
       setRecorded(result);
+      setConflict(null);
       setErrors({});
       setFormError(null);
-      if (result.run.status !== "paused_cost_quota") setForm(EMPTY_JOURNAL_CAPTURE);
+      if (result.run.status !== "paused_cost_quota") {
+        setForm(EMPTY_JOURNAL_CAPTURE);
+        setPredecessor(null);
+      }
       await onRecorded();
     },
     onError: (error) => {
+      if (isApiErrorShape(error) && error.status === 409 && error.problemType === "journal_entry_already_recorded") {
+        const data = (error.data ?? {}) as { publication_id?: string | null };
+        setErrors({});
+        setFormError(error.detail);
+        setConflict({ publicationId: data.publication_id ?? null, applicationNumber: form.applicationNumber.trim() });
+        return;
+      }
       const result = formErrorsFrom(error, captureFieldMap(parsedClasses), "Could not record the journal entry.");
       setErrors(result.fields);
       setFormError(result.form);
@@ -784,9 +840,28 @@ function JournalIntake({
     };
   }
 
+  function choosePredecessor(id: string) {
+    const chosen = predecessorOptions.find((item) => item.id === id) ?? null;
+    setPredecessor(chosen);
+    // A correction keeps the corrected entry's application number (the API refuses
+    // any other), so it is filled in and locked rather than typed.
+    setForm((current) => ({
+      ...current,
+      supersedes: id,
+      applicationNumber: chosen ? chosen.application_number : current.applicationNumber,
+    }));
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[CAPTURE_FIELDS.supersedes];
+      delete next[CAPTURE_FIELDS.applicationNumber];
+      return next;
+    });
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
     setRecorded(null);
+    setConflict(null);
     const outcome = buildJournalCapture(form);
     if (!outcome.ok) {
       setErrors(outcome.errors);
@@ -804,31 +879,25 @@ function JournalIntake({
     });
   }
 
-  if (!canManage) {
-    return <EmptyState title="Your role cannot record journal entries" description="Journal-watch management access is required to capture official journal evidence. You can still review hits." />;
-  }
-  if (intakeProfileCount === 0) {
-    return (
-      <EmptyState
-        title="No active watch profile to compare with"
-        description="Each journal entry is compared with the active watch profiles you can see. Create a watch profile, or resume a paused one, before recording an entry."
-        action={<Button type="button" onClick={onCreateProfile}><Radar className="h-4 w-4" />Create a watch profile</Button>}
-      />
-    );
-  }
-
-  const correcting = form.kind !== "advertisement";
-  // The chosen entry stays an option when the filter no longer matches it.
-  const filteredPublications = publications.filter((item) =>
-    item.id === form.supersedes
-    || publicationLabel(item).toLowerCase().includes(predecessorFilter.trim().toLowerCase()),
-  );
   const errorCount = Object.keys(errors).length;
+  const applicationNumberLocked = correcting && predecessor !== null && form.supersedes === predecessor.id;
+
+  // Only the capture form is gated: recorded entries and the last result stay
+  // visible to read-only users and when no profile is active.
+  const gate = !canManage ? (
+    <EmptyState title="Your role cannot record journal entries" description="Journal-watch management access is required to capture official journal evidence. Ask a workspace owner or admin for it. You can still review hits and recorded entries." />
+  ) : intakeProfileCount === 0 ? (
+    <EmptyState
+      title="No active watch profile to compare with"
+      description="Each journal entry is compared with the active watch profiles you can see. Create a watch profile, or resume a paused one, before recording an entry."
+      action={<Button type="button" onClick={onCreateProfile}><Radar className="h-4 w-4" />Create a watch profile</Button>}
+    />
+  ) : null;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {recorded ? <RecordedSummary result={recorded} onReviewHits={onReviewHits} onDismiss={() => setRecorded(null)} /> : null}
-      <Card className="min-w-0">
+      {gate ?? <Card className="min-w-0">
         <CardHeader>
           <CardTitle as="h2">Manual official-journal intake</CardTitle>
           <p className="text-sm text-[var(--color-mute)]">This is the manual path. Record one entry exactly as the official journal publishes it; it is compared with {intakeProfileCount} active watch {intakeProfileCount === 1 ? "profile" : "profiles"} across every docket you can see.</p>
@@ -854,27 +923,44 @@ function JournalIntake({
               </div>
               <div className="min-w-0"><Label htmlFor={CAPTURE_FIELDS.kind}>Publication kind</Label><select id={CAPTURE_FIELDS.kind} className={SELECT_CLASS} value={form.kind} onChange={(event) => update("kind")(event.target.value as JournalCaptureForm["kind"])}><option value="advertisement">Advertisement</option><option value="correction">Correction</option><option value="readvertisement">Re-advertisement</option></select></div>
               {correcting ? (
-                publications.length === 0 ? (
-                  <p role="status" className="border-l-2 border-amber-400 pl-3 text-sm text-amber-900">No journal entry is recorded yet, so there is nothing to correct. Record the original advertisement first.</p>
-                ) : (
-                  <div className="min-w-0 space-y-2">
-                    <div className="min-w-0"><Label htmlFor="supersedes-filter">Find the entry being corrected</Label><Input id="supersedes-filter" type="search" className="mt-1" value={predecessorFilter} onChange={(event) => setPredecessorFilter(event.target.value)} placeholder="Journal, application number or mark" aria-controls={CAPTURE_FIELDS.supersedes} /></div>
+                <div className="min-w-0 space-y-2">
+                  <div className="min-w-0"><Label htmlFor="supersedes-filter">Find the entry being corrected</Label><Input id="supersedes-filter" type="search" className="mt-1" value={predecessorFilter} onChange={(event) => setPredecessorFilter(event.target.value)} placeholder="Journal, application number or mark" aria-controls={CAPTURE_FIELDS.supersedes} /></div>
+                  {predecessorSearch.isError ? (
+                    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-danger-500)]">
+                      <span className="min-w-0 break-words">Could not search recorded entries: {apiErrorMessage(predecessorSearch.error, "Request failed.")}</span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => predecessorSearch.refetch()}>Try again</Button>
+                    </div>
+                  ) : (
                     <RecordSelect id={CAPTURE_FIELDS.supersedes} label="Journal entry being corrected" className={SELECT_CLASS}
-                      value={form.supersedes} onChange={(event) => update("supersedes", CAPTURE_FIELDS.supersedes)(event.target.value)}
+                      value={form.supersedes} onChange={(event) => choosePredecessor(event.target.value)}
                       aria-invalid={errors[CAPTURE_FIELDS.supersedes] ? true : undefined}
                       aria-describedby={errors[CAPTURE_FIELDS.supersedes] ? errorIdFor(CAPTURE_FIELDS.supersedes) : undefined}
-                      disabled={filteredPublications.length === 0}
+                      disabled={predecessorSearch.isPending || predecessorOptions.length === 0}
                       options={[
-                        { value: "", label: filteredPublications.length ? "Choose the recorded entry" : "No recorded entry matches", disabled: true },
-                        ...filteredPublications.map((item) => ({ value: item.id, label: publicationLabel(item) })),
+                        {
+                          value: "",
+                          label: predecessorSearch.isPending
+                            ? "Searching recorded entries…"
+                            : predecessorOptions.length
+                              ? "Choose the recorded entry"
+                              : predecessorQuery ? "No recorded entry matches" : "No recorded entry yet",
+                          disabled: true,
+                        },
+                        ...predecessorOptions.map((item) => ({ value: item.id, label: publicationLabel(item) })),
                       ]} />
-                    <p className="text-xs text-[var(--color-mute)]">Showing the {publications.length} most recent recorded {publications.length === 1 ? "entry" : "entries"} you can see.</p>
-                    <FieldError fieldId={CAPTURE_FIELDS.supersedes} message={errors[CAPTURE_FIELDS.supersedes]} />
-                    <div className="min-w-0"><Label htmlFor={CAPTURE_FIELDS.correctionReason}>Correction reason</Label><Textarea id={CAPTURE_FIELDS.correctionReason} className="mt-1" value={form.correctionReason} onChange={(event) => update("correctionReason", CAPTURE_FIELDS.correctionReason)(event.target.value)} aria-invalid={errors[CAPTURE_FIELDS.correctionReason] ? true : undefined} aria-describedby={errors[CAPTURE_FIELDS.correctionReason] ? errorIdFor(CAPTURE_FIELDS.correctionReason) : undefined} /><FieldError fieldId={CAPTURE_FIELDS.correctionReason} message={errors[CAPTURE_FIELDS.correctionReason]} /></div>
-                  </div>
-                )
+                  )}
+                  {nothingToCorrect ? (
+                    <p role="status" className="border-l-2 border-amber-400 pl-3 text-sm text-amber-900">No journal entry you can see is recorded yet, so there is nothing to correct. Record the original advertisement first.</p>
+                  ) : predecessorSearch.isSuccess && predecessorOptions.length === 0 ? (
+                    <p role="status" className="text-sm text-[var(--color-mute)]">No recorded entry you can see matches this search. Search by journal number, application number or mark.</p>
+                  ) : (
+                    <p className="text-xs text-[var(--color-mute)]">Searches every recorded entry you can see; the 25 most recent matches are listed.</p>
+                  )}
+                  <FieldError fieldId={CAPTURE_FIELDS.supersedes} message={errors[CAPTURE_FIELDS.supersedes]} />
+                  <div className="min-w-0"><Label htmlFor={CAPTURE_FIELDS.correctionReason}>Correction reason</Label><Textarea id={CAPTURE_FIELDS.correctionReason} className="mt-1" value={form.correctionReason} onChange={(event) => update("correctionReason", CAPTURE_FIELDS.correctionReason)(event.target.value)} aria-invalid={errors[CAPTURE_FIELDS.correctionReason] ? true : undefined} aria-describedby={errors[CAPTURE_FIELDS.correctionReason] ? errorIdFor(CAPTURE_FIELDS.correctionReason) : undefined} /><FieldError fieldId={CAPTURE_FIELDS.correctionReason} message={errors[CAPTURE_FIELDS.correctionReason]} /></div>
+                </div>
               ) : null}
-              <TextField id={CAPTURE_FIELDS.applicationNumber} label="Registry application number" value={form.applicationNumber} setValue={update("applicationNumber", CAPTURE_FIELDS.applicationNumber)} error={errors[CAPTURE_FIELDS.applicationNumber]} required />
+              <TextField id={CAPTURE_FIELDS.applicationNumber} label="Registry application number" hint={applicationNumberLocked ? "Kept from the entry being corrected" : undefined} readOnly={applicationNumberLocked} value={form.applicationNumber} setValue={update("applicationNumber", CAPTURE_FIELDS.applicationNumber)} error={errors[CAPTURE_FIELDS.applicationNumber]} required />
               <TextField id={CAPTURE_FIELDS.markText} label="Published word mark" value={form.markText} setValue={update("markText", CAPTURE_FIELDS.markText)} error={errors[CAPTURE_FIELDS.markText]} />
               <TextField id={CAPTURE_FIELDS.deviceReference} label="Published device image link" hint="Needed when the mark is a device" value={form.deviceReference} setValue={update("deviceReference", CAPTURE_FIELDS.deviceReference)} error={errors[CAPTURE_FIELDS.deviceReference]} />
               <TextField id={CAPTURE_FIELDS.proprietor} label="Published proprietor" value={form.proprietor} setValue={update("proprietor")} />
@@ -951,12 +1037,42 @@ function JournalIntake({
                   {errorCount ? <p className="mt-1">Fields to correct: {Object.keys(errors).map((id) => CAPTURE_LABELS[id] ?? (id.startsWith("goods-") ? `Class ${id.slice(6)} goods/services` : id)).join(", ")}.</p> : null}
                 </div>
               ) : null}
-              <Button type="submit" disabled={mutation.isPending || (correcting && publications.length === 0)}>{mutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileInput className="h-4 w-4" />}Record and compare</Button>
+              {conflict?.publicationId ? <AlreadyRecordedEntry publicationId={conflict.publicationId} applicationNumber={conflict.applicationNumber} /> : null}
+              <Button type="submit" disabled={mutation.isPending || (correcting && nothingToCorrect)}>{mutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileInput className="h-4 w-4" />}Record and compare</Button>
             </div>
           </form>
         </CardContent>
-      </Card>
+      </Card>}
       <RecordedEntries publications={publications} />
+    </div>
+  );
+}
+
+/** The entry a re-capture collided with, so the operator reviews it instead of guessing. */
+function AlreadyRecordedEntry({ publicationId, applicationNumber }: { publicationId: string; applicationNumber: string }) {
+  const lookup = useQuery({
+    queryKey: ["ip", "watch", "publications", "recorded", applicationNumber],
+    queryFn: () => searchIpJournalPublications(applicationNumber),
+  });
+  const entry = lookup.data?.publications.find((item) => item.id === publicationId) ?? null;
+  return (
+    <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm" data-testid="journal-already-recorded">
+      <p className="font-semibold text-[var(--color-ink)]">The recorded entry</p>
+      {lookup.isPending ? (
+        <p className="mt-1 text-[var(--color-mute)]" role="status">Loading the recorded entry…</p>
+      ) : lookup.isError ? (
+        <div role="alert" className="mt-1 flex flex-wrap items-center gap-2 text-[var(--color-danger-500)]">
+          <span className="min-w-0 break-words">Could not load it: {apiErrorMessage(lookup.error, "Request failed.")}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => lookup.refetch()}>Try again</Button>
+        </div>
+      ) : entry ? (
+        <>
+          <p className="mt-1 break-words">{publicationLabel(entry)}</p>
+          <p className="mt-1 break-words text-[var(--color-mute)]">Classes {entry.class_numbers_json.join(", ")} · {evidenceSummary(entry.raw_evidence_json ?? {})} · recorded {localDate(entry.created_at)}</p>
+        </>
+      ) : (
+        <p className="mt-1 text-[var(--color-mute)]">It is listed under Recorded journal entries.</p>
+      )}
     </div>
   );
 }
@@ -1071,10 +1187,10 @@ function HitsView({ hits, profiles, publication, selectedHit, selectedProfile, s
           <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><CardTitle as="h2" className="break-words">{publication.mark_text || "Device mark"}</CardTitle><p className="mt-1 break-words text-sm text-[var(--color-mute)]">Application {publication.application_number} · Journal {publication.journal_number}</p></div><div className="flex flex-wrap gap-2"><Badge tone={tone(selectedHit.source_status)}>{selectedHit.source_status}</Badge><Badge tone={tone(selectedHit.deadline_confirmation_state)}>{selectedHit.deadline_confirmation_state}</Badge></div></CardHeader>
           <CardContent className="space-y-5">
             {selectedHit.source_status !== "available" ? <div className="flex gap-2 border-l-2 border-amber-400 pl-3 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Final source-dependent dispositions are blocked until an attorney can open and confirm the official source.</div> : null}
-            {selectedHit.duplicate_of_hit_id ? <div className="text-sm"><Badge tone="warning">Linked successor / duplicate</Badge><span className="ml-2 text-[var(--color-mute)]">Prior hit {selectedHit.duplicate_of_hit_id}</span></div> : null}
-            <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><Field label="Compared profile" value={selectedProfile?.name ?? selectedHit.profile_id} /><Field label="Classes" value={publication.class_numbers_json.join(", ")} /><Field label="Proprietor" value={publication.proprietor_name ?? "Not published"} /><Field label="Publication scope" value={scopeLabel(publication.publication_scope_json)} /></div>
+            {selectedHit.duplicate_of_hit_id ? <PriorHit priorId={selectedHit.duplicate_of_hit_id} hits={hits} onOpen={setSelectedHitId} /> : null}
+            <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><Field label="Compared profile" value={selectedProfile?.name ?? "Profile not visible to you"} /><Field label="Classes" value={publication.class_numbers_json.join(", ")} /><Field label="Proprietor" value={publication.proprietor_name ?? "Not published"} /><Field label="Publication scope" value={scopeLabel(publication.publication_scope_json)} /></div>
             <div><div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Official source evidence</h3><Button href={selectedHit.source_url} target="_blank" rel="noreferrer" size="sm" variant="outline">Open source<ArrowUpRight className="h-4 w-4" /></Button></div><CapturedEvidence publication={publication} /></div>
-            <div><h3 className="mb-2 text-sm font-semibold">Similarity evidence</h3><pre className="max-h-72 overflow-auto rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 text-xs whitespace-pre-wrap">{JSON.stringify(selectedHit.similarity_evidence_json, null, 2)}</pre></div>
+            <div><h3 className="mb-2 text-sm font-semibold">Similarity evidence</h3><SimilarityEvidence evidence={selectedHit.similarity_evidence_json} /></div>
             <div className="flex gap-3 border-l-2 border-[var(--color-brand-500)] pl-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>AI assistance is advisory.</strong><p className="mt-1 text-[var(--color-mute)]">{selectedHit.advisory_notice}</p></div></div>
           </CardContent>
         </Card>
@@ -1082,6 +1198,64 @@ function HitsView({ hits, profiles, publication, selectedHit, selectedProfile, s
         {canManage && ["relevant", "client_instruction", "enforcement_opened"].includes(selectedHit.disposition) ? <HandoffPanel hit={selectedHit} publication={publication} core={core} membershipId={membershipId} handoffs={handoffs.filter((item) => item.hit_id === selectedHit.id)} onChanged={onChanged} /> : null}
       </div> : <EmptyState title="Select a hit" description="Choose a journal candidate to inspect source and similarity evidence." />}
     </div>
+  );
+}
+
+function PriorHit({ priorId, hits, onOpen }: { priorId: string; hits: IpWatchHit[]; onOpen: (hitId: string) => void }) {
+  const prior = hits.find((item) => item.id === priorId) ?? null;
+  const mark = prior ? String(prior.candidate_mark_json.mark_text ?? "Device mark") : null;
+  const application = prior ? prior.candidate_mark_json.application_number : null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Badge tone="warning">Linked successor / duplicate</Badge>
+      {prior ? (
+        <>
+          <span className="min-w-0 break-words text-[var(--color-mute)]">Earlier hit: {mark}{application ? ` · Application ${String(application)}` : ""} · {DATE.format(new Date(prior.hit_date))}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => onOpen(prior.id)}>Open the earlier hit</Button>
+        </>
+      ) : (
+        <span className="text-[var(--color-mute)]">An earlier hit on this application is outside the current docket scope.</span>
+      )}
+    </div>
+  );
+}
+
+type WordRow = { term?: unknown; score?: unknown; contains?: unknown };
+type PhoneticRow = { term?: unknown; matched?: unknown };
+
+/** The comparison as labelled fields; a lawyer never reads the stored JSON. */
+function SimilarityEvidence({ evidence }: { evidence: Record<string, unknown> }) {
+  const words = Array.isArray(evidence.word) ? (evidence.word as WordRow[]) : [];
+  const phonetics = Array.isArray(evidence.phonetic) ? (evidence.phonetic as PhoneticRow[]) : [];
+  const device = (evidence.device ?? {}) as { matched?: unknown; profile_references?: unknown };
+  const classes = Array.isArray(evidence.class_overlap) ? evidence.class_overlap.map(String) : [];
+  const proprietors = Array.isArray(evidence.proprietor_matches) ? evidence.proprietor_matches.map(String) : [];
+  const watchedDevices = Array.isArray(device.profile_references) && device.profile_references.length > 0;
+  const rows: Array<[string, string]> = [
+    [
+      "Word matches",
+      words.length
+        ? words.map((row) => `${String(row.term ?? "")}: ${Math.round(Number(row.score ?? 0) * 100)}% similar${row.contains ? ", contained in the mark" : ""}`).join("; ")
+        : "No word terms in this profile",
+    ],
+    [
+      "Phonetic matches",
+      phonetics.length
+        ? phonetics.map((row) => `${String(row.term ?? "")}: ${row.matched ? "sounds alike" : "does not sound alike"}`).join("; ")
+        : "No phonetic terms in this profile",
+    ],
+    ["Device", device.matched ? "Matches a watched device image" : watchedDevices ? "No match with the watched device images" : "No device image watched"],
+    ["Class overlap", classes.length ? `Class ${classes.join(", ")}` : "No shared Nice class"],
+    ["Proprietor matches", proprietors.length ? proprietors.join(", ") : "None"],
+    ["Jurisdiction", evidence.jurisdiction_match ? "Within the profile's jurisdictions" : "Outside the profile's jurisdictions"],
+    ["AI assistance", evidence.ai_advisory ? "Device similarity was suggested by AI (advisory only)" : "None used"],
+  ];
+  return (
+    <dl className="grid min-w-0 gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 text-sm sm:grid-cols-2" data-testid="similarity-evidence">
+      {rows.map(([label, value]) => (
+        <div key={label} className="min-w-0"><dt className="text-[var(--color-mute)]">{label}</dt><dd className="mt-1 break-words">{value}</dd></div>
+      ))}
+    </dl>
   );
 }
 
@@ -1151,13 +1325,13 @@ function FieldError({ fieldId, message }: { fieldId: string; message?: string })
   return message ? <p id={errorIdFor(fieldId)} className="mt-1 break-words text-sm text-[var(--color-danger-500)]">{message}</p> : null;
 }
 
-function TextField({ id, label, hint, value, setValue, type = "text", required = false, error }: { id: string; label: string; hint?: ReactNode; value: string; setValue: (value: string) => void; type?: string; required?: boolean; error?: string }) {
+function TextField({ id, label, hint, value, setValue, type = "text", required = false, readOnly = false, error }: { id: string; label: string; hint?: ReactNode; value: string; setValue: (value: string) => void; type?: string; required?: boolean; readOnly?: boolean; error?: string }) {
   const hintId = hint ? `${id}-hint` : null;
   const describedBy = [hintId, error ? errorIdFor(id) : null].filter(Boolean).join(" ");
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2"><Label htmlFor={id}>{label}</Label>{hint ? <span id={hintId ?? undefined} className="text-xs text-[var(--color-mute)]">{hint}</span> : null}</div>
-      <Input id={id} type={type} className="mt-1" value={value} onChange={(event) => setValue(event.target.value)} required={required} aria-invalid={error ? true : undefined} aria-describedby={describedBy || undefined} />
+      <Input id={id} type={type} className="mt-1" value={value} onChange={(event) => setValue(event.target.value)} required={required} readOnly={readOnly} aria-invalid={error ? true : undefined} aria-describedby={describedBy || undefined} />
       <FieldError fieldId={id} message={error} />
     </div>
   );

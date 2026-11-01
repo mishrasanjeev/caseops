@@ -16,6 +16,7 @@ const {
   docketsMock,
   ingestMock,
   readinessMock,
+  searchMock,
   toastError,
   toastSuccess,
   usersMock,
@@ -30,6 +31,7 @@ const {
   docketsMock: vi.fn(),
   ingestMock: vi.fn(),
   readinessMock: vi.fn(),
+  searchMock: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   usersMock: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpWorkspaceReadiness: readinessMock,
   ingestIpJournal: ingestMock,
   listCompanyUsers: usersMock,
+  searchIpJournalPublications: searchMock,
   updateIpWatchProfileStatus: vi.fn(),
 }));
 
@@ -134,7 +137,17 @@ const HIT = {
   duplicate_of_hit_id: "hit-original",
   candidate_mark_json: { mark_text: "ASTER PRIME" },
   classes_goods_json: { scope: { scope_kind: "partial" } },
-  similarity_evidence_json: { word: [{ compared: "ASTER", score: 0.87 }], class_overlap: [9, 42] },
+  similarity_evidence_json: {
+    version: "watch-similarity-v1",
+    matched: true,
+    word: [{ term: "ASTER", score: 0.87, contains: true }],
+    phonetic: [{ term: "ASTER", term_code: "A236", candidate_code: "A236", matched: true }],
+    device: { matched: false, profile_references: [], candidate_reference: null, supplied_evidence: null },
+    class_overlap: [9, 42],
+    proprietor_matches: [],
+    jurisdiction_match: true,
+    ai_advisory: true,
+  },
   ai_advisory: true,
   advisory_notice: "Similarity scoring is advisory. Verify the official source.",
   source_url: PUBLICATION.source_url,
@@ -244,6 +257,7 @@ describe("IP journal watch page", () => {
       identifiers: [{ application_id: "application-1", identifier_kind: "application", raw_value: "TM-9876543", effective_until: null }],
     });
     workspaceMock.mockResolvedValue(WORKSPACE);
+    searchMock.mockResolvedValue({ publications: [ZERO_HIT_PUBLICATION, PUBLICATION] });
     readinessMock.mockResolvedValue(readiness(["rollout_disabled"]));
     usersMock.mockResolvedValue(USERS);
   });
@@ -260,9 +274,14 @@ describe("IP journal watch page", () => {
     expect(await screen.findByRole("heading", { name: "ASTER PRIME" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute("href", PUBLICATION.source_url);
     expect(screen.getByText(/Final source-dependent dispositions are blocked/)).toBeVisible();
-    expect(screen.getByText(/Prior hit hit-original/)).toBeVisible();
+    expect(screen.getByText("An earlier hit on this application is outside the current docket scope.")).toBeVisible();
     expect(screen.getByText("AI assistance is advisory.")).toBeVisible();
-    expect(screen.getByText(/class_overlap/)).toBeVisible();
+    // BUG-014: the comparison is labelled fields, never the stored JSON or an internal id.
+    const similarity = screen.getByTestId("similarity-evidence");
+    expect(within(similarity).getByText("ASTER: 87% similar, contained in the mark")).toBeVisible();
+    expect(within(similarity).getByText("Class 9, 42")).toBeVisible();
+    expect(within(similarity).getByText("Device similarity was suggested by AI (advisory only)")).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/class_overlap|hit-original|\{"/);
     // IP-WATCH-02: the evidence the lawyer captured is shown with the hit, not hidden.
     expect(screen.getByText(PUBLICATION.raw_evidence_json.extract_text)).toBeVisible();
     expect(screen.getByText("Only classes 9")).toBeVisible();
@@ -285,10 +304,22 @@ describe("IP journal watch page", () => {
     const automated = await page.findByTestId("watch-readiness-automated");
     expect(await within(automated).findByText("Not in your plan")).toBeVisible();
     expect(within(automated).getByText("Paused by CaseOps")).toBeVisible();
-    expect(within(automated).getByText("CaseOps has not switched automated journal polling on yet.")).toBeVisible();
+    expect(within(automated).getByText(/CaseOps has not switched automated journal polling on yet\./)).toBeVisible();
+    // Each closed gate says who can act on it.
+    expect(within(automated).getByText(/A workspace owner can ask CaseOps to add journal watch to the plan\./)).toBeVisible();
     const manual = page.getByTestId("watch-readiness-manual");
     expect(within(manual).getByText("Available")).toBeVisible();
     expect(within(manual).getByText(/This is the manual path/)).toBeVisible();
+  });
+
+  it("BUG-014 never claims automated polling works when every readiness gate passes", async () => {
+    readinessMock.mockResolvedValue(readiness([]));
+    const page = renderWatchPage();
+    const automated = await page.findByTestId("watch-readiness-automated");
+    expect(await within(automated).findByText("No journal source connected")).toBeVisible();
+    expect(within(automated).getByText(/No automated journal source is connected to CaseOps/)).toBeVisible();
+    expect(within(automated).queryByText("Available")).toBeNull();
+    expect(automated.textContent).not.toMatch(/polling is available|until it is available/i);
   });
 
   it("labels a linked journal application by mark and number and really selects the no-link option", async () => {
@@ -404,8 +435,22 @@ describe("IP journal watch page", () => {
     await user.click(await page.findByRole("button", { name: "Journal intake" }));
     expect(await page.findByText("No active watch profile to compare with")).toBeVisible();
     expect(page.queryByRole("button", { name: "Record and compare" })).toBeNull();
+    // Recorded entries stay visible while the capture form is gated.
+    expect(page.getByTestId("journal-entry-publication-zero")).toHaveTextContent("ZQXV TRIAGE PROBE");
     await user.click(page.getByRole("button", { name: "Create a watch profile" }));
     expect(await page.findByRole("button", { name: "Create profile" })).toBeVisible();
+  });
+
+  it("BUG-014 shows recorded entries to a reader whose role cannot capture", async () => {
+    const user = userEvent.setup();
+    capabilityMock.mockImplementation((capability: string) => capability !== "ip:watch_manage");
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Journal intake" }));
+    expect(await page.findByText("Your role cannot record journal entries")).toBeVisible();
+    expect(page.getByTestId("journal-entry-publication-zero")).toHaveTextContent("ZQXV TRIAGE PROBE");
+    expect(page.getByTestId("journal-entry-publication-1")).toHaveTextContent("ASTER PRIME");
+    expect(page.queryByRole("button", { name: "Record and compare" })).toBeNull();
+    expect(searchMock).not.toHaveBeenCalled();
   });
 
   it("BUG-014 lists a zero-hit capture as a correctable entry", async () => {
@@ -415,9 +460,53 @@ describe("IP journal watch page", () => {
     expect(await page.findByTestId("journal-entry-publication-zero")).toHaveTextContent("ZQXV TRIAGE PROBE");
     await user.selectOptions(page.getByLabelText("Publication kind"), "correction");
     const predecessor = page.getByRole<HTMLSelectElement>("combobox", { name: "Journal entry being corrected" });
-    expect(Array.from(predecessor.options, (option) => option.value)).toEqual(["", "publication-1", "publication-zero"]);
+    // Options come from the server-side search (every entry the user may see), not the workspace page.
+    await waitFor(() => expect(predecessor).toBeEnabled());
+    expect(searchMock).toHaveBeenLastCalledWith("");
+    expect(Array.from(predecessor.options, (option) => option.value)).toEqual(["", "publication-zero", "publication-1"]);
     await user.selectOptions(predecessor, "publication-zero");
     expect(predecessor).toHaveValue("publication-zero");
+    // The API refuses a correction with another application number, so it is filled in and locked.
+    const applicationNumber = page.getByLabelText("Registry application number");
+    expect(applicationNumber).toHaveValue("BUG014-TRIAGE-20261031");
+    expect(applicationNumber).toHaveAttribute("readonly");
+    expect(applicationNumber).toHaveAccessibleDescription(expect.stringContaining("Kept from the entry being corrected"));
+    searchMock.mockResolvedValue({ publications: [] });
+    await enterText(user, page.getByLabelText("Find the entry being corrected"), "nothing like it");
+    await waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("nothing like it"));
+    // The chosen entry stays an option even when the new search does not return it.
+    await waitFor(() => expect(Array.from(predecessor.options, (option) => option.value)).toEqual(["", "publication-zero"]));
+    expect(predecessor).toHaveValue("publication-zero");
+  });
+
+  it("BUG-014 says when nothing visible can be corrected and keeps the submit disabled", async () => {
+    const user = userEvent.setup();
+    searchMock.mockResolvedValue({ publications: [] });
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Journal intake" }));
+    await user.selectOptions(await page.findByLabelText("Publication kind"), "correction");
+    expect(await page.findByText(/No journal entry you can see is recorded yet/)).toBeVisible();
+    expect(page.getByRole("combobox", { name: "Journal entry being corrected" })).toBeDisabled();
+    expect(page.getByRole("button", { name: "Record and compare" })).toBeDisabled();
+  });
+
+  it("BUG-014 points a conflicting re-capture at the recorded entry instead of advising a correction", async () => {
+    const user = userEvent.setup();
+    ingestMock.mockRejectedValue(new ApiError(
+      409,
+      "Journal 2187, application BUG014-TRIAGE-20261031 is already recorded with different details or evidence. The first capture is kept unchanged. Review the recorded entry; record a correction or re-advertisement only if the journal itself published one.",
+      { type: "journal_entry_already_recorded", publication_id: "publication-zero" },
+      "journal_entry_already_recorded",
+    ));
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Journal intake" }));
+    await fillLawyerCapture(user, page, "45");
+    await enterText(user, page.getByLabelText("Journal entry as published"), "A different extract.");
+    await user.click(page.getByRole("button", { name: "Record and compare" }));
+    expect(await page.findByTestId("journal-intake-error")).toHaveTextContent("is already recorded");
+    const recorded = await page.findByTestId("journal-already-recorded");
+    expect(await within(recorded).findByText(/Journal 2187 · .* · Application BUG014-TRIAGE-20261031 · ZQXV TRIAGE PROBE/)).toBeVisible();
+    expect(searchMock).toHaveBeenCalledWith("BUG014-CAPTURE-1");
   });
 
   it("creates criteria, frequency, recipients chosen by name, and cost policy", async () => {
@@ -474,6 +563,33 @@ describe("IP journal watch page", () => {
     await waitFor(() => expect(page.getByRole("combobox", { name: "Add a recipient" })).toBeDisabled());
     expect(page.getByRole("button", { name: "Add recipient" })).toBeDisabled();
     expect(page.getByText("No other colleague is available to choose.")).toBeVisible();
+  });
+
+  it("BUG-014 refuses an unknown jurisdiction at the field and sends canonical codes", async () => {
+    const user = userEvent.setup();
+    createProfileMock.mockResolvedValue(PROFILE);
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Profiles" }));
+    const docket = await page.findByRole<HTMLSelectElement>("combobox", { name: "Docket" });
+    await waitFor(() => expect(docket).toBeEnabled());
+    await user.selectOptions(docket, "docket-1");
+    await enterText(user, page.getByLabelText("Profile name"), "Jurisdiction watch");
+    await enterText(user, page.getByLabelText("Word terms"), "ZQXV");
+    const jurisdictions = page.getByLabelText("Jurisdictions");
+    await user.clear(jurisdictions);
+    await enterText(user, jurisdictions, "India, Narnia");
+    await user.click(page.getByRole("button", { name: "Create profile" }));
+    await waitFor(() => expect(jurisdictions).toHaveAttribute("aria-invalid", "true"));
+    expect(jurisdictions).toHaveAccessibleDescription(expect.stringContaining("\"Narnia\" is not a recognised jurisdiction"));
+    expect(createProfileMock).not.toHaveBeenCalled();
+    await user.clear(jurisdictions);
+    await enterText(user, jurisdictions, "UK");
+    expect(page.getByTestId("profile-jurisdiction-note")).toHaveTextContent("will not match those entries");
+    await user.clear(jurisdictions);
+    await enterText(user, jurisdictions, "India");
+    await user.click(page.getByRole("button", { name: "Create profile" }));
+    await waitFor(() => expect(createProfileMock).toHaveBeenCalledTimes(1));
+    expect(createProfileMock.mock.calls[0][0].jurisdictions).toEqual(["IN"]);
   });
 
   it("BUG-014 never drops a profile class token silently", async () => {
