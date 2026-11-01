@@ -295,6 +295,23 @@ describe("ProviderOperationsPage", () => {
     });
   });
 
+  it("B4-ADJ-15 says the counts cover only the most recent operations when older ones exist", async () => {
+    listProviderOperationsMock.mockResolvedValue({
+      operations: [operation],
+      returned_count: 100,
+      page_limit: 100,
+      has_more: true,
+      open_count: 1,
+      ignored_count: 0,
+      resolved_count: 0,
+      replayable_count: 1,
+    });
+    render(withClient(<ProviderOperationsPage />));
+    expect(await screen.findByTestId("provider-operations-cap")).toHaveTextContent(
+      "These counts and the list cover the 100 most recent operations; older operations exist.",
+    );
+  });
+
   it("renders access refusal when caller is not a workspace admin", () => {
     useCapabilityMock.mockReturnValue(false);
     render(withClient(<ProviderOperationsPage />));

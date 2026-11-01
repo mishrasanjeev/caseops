@@ -2723,6 +2723,11 @@ export const providerOperationRecord = z.object({
 
 export const providerOperationListResponse = z.object({
   operations: z.array(providerOperationRecord),
+  // The server reads the most recent `page_limit` operations; the counts
+  // below describe those rows, and `has_more` says older ones exist.
+  returned_count: z.number().int().min(0),
+  page_limit: z.number().int().min(1),
+  has_more: z.boolean(),
   open_count: z.number().int().min(0),
   ignored_count: z.number().int().min(0),
   resolved_count: z.number().int().min(0),

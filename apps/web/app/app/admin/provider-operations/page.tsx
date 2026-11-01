@@ -231,6 +231,12 @@ export default function ProviderOperationsPage() {
         <Kpi label="Ignored" value={operationsQuery.data?.ignored_count ?? 0} />
         <Kpi label="Resolved" value={operationsQuery.data?.resolved_count ?? 0} />
       </section>
+      {operationsQuery.data?.has_more ? (
+        <p role="status" className="text-sm text-[var(--color-mute)]" data-testid="provider-operations-cap">
+          These counts and the list cover the {operationsQuery.data.returned_count} most recent operations; older
+          operations exist. Resolve or ignore handled ones to bring older operations into view.
+        </p>
+      ) : null}
 
       <Card>
         <CardHeader>

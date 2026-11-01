@@ -215,6 +215,30 @@ describe("HearingsPage (portfolio aggregate)", () => {
     expect(screen.getByText("Missing hearing date (1)")).toBeInTheDocument();
     expect(screen.getByText("Overdue matter")).toBeInTheDocument();
     expect(screen.getByText("Missing date matter")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing 1 of/)).toBeNull();
+  });
+
+  it("B4-ADJ-15 says when a follow-up queue holds more matters than it lists", async () => {
+    fetchMatterHearingPortfolioMock.mockResolvedValue({
+      company_id: "company-1", matters: [], total_count: 0, limit: 500, truncated: false, date: null,
+    });
+    fetchMatterHearingFollowUpMock.mockResolvedValue({
+      company_id: "company-1",
+      overdue_matters: [{
+        id: "m-overdue", matter_code: "OD-1", title: "Overdue matter", status: "active",
+        practice_area: "Civil", forum_level: "high_court", next_hearing_on: "2026-05-01",
+        created_at: "2026-04-01T00:00:00Z", updated_at: "2026-04-15T00:00:00Z",
+      }],
+      missing_date_matters: [],
+      overdue_count: 250,
+      missing_date_count: 0,
+      limit: 200,
+      truncated: true,
+    });
+    render(withClient(<HearingsPage />));
+    expect(await screen.findByText("Past listing date (250)")).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 of 250\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "open the matter list" })).toHaveAttribute("href", "/app/matters");
   });
 
   it("surfaces an error state when hearing portfolio loading fails", async () => {

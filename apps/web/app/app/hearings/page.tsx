@@ -131,12 +131,14 @@ export default function AllHearingsPage() {
             title={`Past listing date (${followUpQuery.data.overdue_count})`}
             description="Active matters whose stored next-hearing date has passed."
             matters={followUpQuery.data.overdue_matters}
+            total={followUpQuery.data.overdue_count}
             canSyncOutlook={canSyncOutlook}
           />
           <FollowUpCard
             title={`Missing hearing date (${followUpQuery.data.missing_date_count})`}
             description="Active matters with no next-hearing date recorded."
             matters={followUpQuery.data.missing_date_matters}
+            total={followUpQuery.data.missing_date_count}
             canSyncOutlook={canSyncOutlook}
           />
         </section>
@@ -226,11 +228,14 @@ function FollowUpCard({
   title,
   description,
   matters,
+  total,
   canSyncOutlook,
 }: {
   title: string;
   description: string;
   matters: Matter[];
+  /** The server count; the list holds at most one page of it. */
+  total: number;
   canSyncOutlook: boolean;
 }) {
   return (
@@ -253,6 +258,15 @@ function FollowUpCard({
             ))}
           </ul>
         )}
+        {matters.length < total ? (
+          <p role="status" className="mt-2 text-sm text-[var(--color-mute)]">
+            Showing {matters.length} of {total}. Update the listed matters, or{" "}
+            <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/matters">
+              open the matter list
+            </Link>{" "}
+            to reach the rest.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
