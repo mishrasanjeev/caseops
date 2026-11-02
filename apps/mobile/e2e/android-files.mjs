@@ -137,10 +137,11 @@ async function enterFiles(context) {
 async function details(context, anchor) {
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'ANDROID_FILES_WRONG_FILENAME');
   await expandSourceDetails(context, await find(context, 'id', `files-source-${anchor.attachmentId}`, { scroll: true }));
-  // expandSourceDetails just lifted the link above the tab bar, so the revealed
-  // hash sits directly below it. An upward-first sweep pushed it out of reach
-  // (files-25 FILES-09); search downward only, within the same bound.
-  assert.equal(await read(context, 'id', `files-hash-${anchor.attachmentId}`, { scroll: true, scrollDirection: 'down' }), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH');
+  // A swipe sweep can fling past this short row (files-25 FILES-09, files-26
+  // FILES-04). Let UiAutomator scroll it into view first; the normal bounded
+  // visibility and tab-bar checks still decide.
+  await scrollAndroidIntoView(context, `new UiSelector().resourceId(${JSON.stringify(`files-hash-${anchor.attachmentId}`)})`);
+  assert.equal(await read(context, 'id', `files-hash-${anchor.attachmentId}`, { scroll: true }), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH');
 }
 async function reload(context, anchor) {
   const before = await traffic(context); await click(context, 'id', 'files-reload', { scroll: true });
@@ -203,9 +204,21 @@ export async function rapidActivateAndroidUpload(context, button) {
 // (files-24 FILES-04). After the transport acknowledgement, bring that status
 // into view in whatever state it shows, then wait for the readback in place
 // without gestures. Unknown and rejected outcomes still refuse immediately.
-export const ANDROID_UPLOAD_STATUS_QUERY = 'android=new UiSelector().resourceIdMatches("files-upload-(uploading|acknowledged|persisted|unknown|rejected)")';
+const ANDROID_UPLOAD_STATUS_SELECTOR = 'new UiSelector().resourceIdMatches("files-upload-(uploading|acknowledged|persisted|unknown|rejected)")';
+export const ANDROID_UPLOAD_STATUS_QUERY = `android=${ANDROID_UPLOAD_STATUS_SELECTOR}`;
+// UiAutomator's own scroll moves in small steps until the element is visible,
+// so it cannot fling past a short row the way a sweep can. It only positions;
+// it finds nothing on its own, and a miss leaves the bounded find to fail.
+export const ANDROID_SCROLL_INTO_VIEW_SWIPES = 12;
+export async function scrollAndroidIntoView(context, uiSelector) {
+  assert.equal(context.platform, 'android', 'ANDROID_FILES_PLATFORM_REQUIRED');
+  assert.match(uiSelector, /^new UiSelector\(\)\.resourceId(Matches)?\("[^"]+"\)$/, 'ANDROID_SCROLL_INTO_VIEW_SELECTOR_REQUIRED');
+  nativeAction(context, 'swipe');
+  await context.driver.$$(`android=new UiScrollable(new UiSelector().scrollable(true)).setMaxSearchSwipes(${ANDROID_SCROLL_INTO_VIEW_SWIPES}).scrollIntoView(${uiSelector})`);
+}
 export const ANDROID_UPLOAD_READBACK_MS = 15000;
 export async function awaitAndroidUploadReadback(context) {
+  await scrollAndroidIntoView(context, ANDROID_UPLOAD_STATUS_SELECTOR);
   await findQuery(context, ANDROID_UPLOAD_STATUS_QUERY, { scroll: true });
   await wait(context, async () => {
     if (await visible(context.driver, 'id=files-upload-unknown')) fail('ANDROID_FILES_UPLOAD_UNKNOWN_NO_REPLAY');

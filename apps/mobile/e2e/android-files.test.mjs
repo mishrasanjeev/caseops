@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ANDROID_UPLOAD_STATUS_QUERY, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidUploadReadback, chooseAndroidFile,
-  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, validateAndroidFileAsset, validateAndroidFilesContext,
+import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidUploadReadback, chooseAndroidFile,
+  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
@@ -319,4 +319,17 @@ test('Android upload readback waits in place for the app to confirm persistence 
   const stuck = uploadStatusDriver(['acknowledged']);
   await assert.rejects(awaitAndroidUploadReadback({ platform: 'android', driver: stuck.driver }), /ANDROID_FILES_UPLOAD_READBACK_REQUIRED/);
   assert.equal(stuck.swipes(), 0);
+});
+
+test('Android scroll-into-view only positions a plain resource-id target through UiScrollable', async () => {
+  const queries = [], records = [];
+  const context = { platform: 'android', record: event => records.push(event), driver: { $$: async query => { queries.push(query); return []; } } };
+  await scrollAndroidIntoView(context, 'new UiSelector().resourceId("files-hash-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")');
+  assert.deepEqual(queries, [`android=new UiScrollable(new UiSelector().scrollable(true)).setMaxSearchSwipes(${ANDROID_SCROLL_INTO_VIEW_SWIPES}).scrollIntoView(new UiSelector().resourceId("files-hash-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"))`]);
+  assert.deepEqual(records, [{ type: 'native_ui_action', action: 'swipe' }]);
+  for (const bad of ['new UiSelector().text("Delete")', 'new UiSelector().resourceId("a")).click(', '//*[@resource-id="x"]']) {
+    await assert.rejects(scrollAndroidIntoView(context, bad), /ANDROID_SCROLL_INTO_VIEW_SELECTOR_REQUIRED/);
+  }
+  await assert.rejects(scrollAndroidIntoView({ ...context, platform: 'ios' }, 'new UiSelector().resourceId("x")'), /ANDROID_FILES_PLATFORM_REQUIRED/);
+  assert.equal(queries.length, 1);
 });
