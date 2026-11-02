@@ -628,19 +628,23 @@ function RuleProposalForm({
       <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("rule-source-hash"); }} error={errors["rule-source-hash"]} />
       <Field id="rule-fixture-calendar" label="Fixture working calendar" error={errors["rule-fixture-calendar"]}>
         {(describedBy, invalid) => (
-          <select
-            id="rule-fixture-calendar"
-            className={SELECT_CLASS}
-            value={calendar?.id ?? ""}
-            disabled={!calendars.length}
-            aria-invalid={invalid || undefined}
-            aria-describedby={calendars.length ? describedBy : prerequisiteId}
-            onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
-          >
-            {!calendars.length ? <option value="">{ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "Enter the jurisdiction first"}</option> : null}
-            {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
-            {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
-          </select>
+          <>
+            <select
+              id="rule-fixture-calendar"
+              className={SELECT_CLASS}
+              value={calendar?.id ?? ""}
+              disabled={!calendars.length}
+              aria-invalid={invalid || undefined}
+              aria-describedby={calendars.length ? [describedBy, calendar ? "rule-fixture-calendar-detail" : null].filter(Boolean).join(" ") || undefined : prerequisiteId}
+              onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
+            >
+              {!calendars.length ? <option value="">{ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "Enter the jurisdiction first"}</option> : null}
+              {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
+              {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
+            </select>
+            {/* A long calendar name is clipped inside the select; spell the chosen one out in full. */}
+            {calendar ? <p id="rule-fixture-calendar-detail" data-selected-option-value={calendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarOptionCaption(calendar)}</p> : null}
+          </>
         )}
       </Field>
       <Field id="rule-fixture-base" label="Fixture trigger date" error={errors["rule-fixture-base"]}>

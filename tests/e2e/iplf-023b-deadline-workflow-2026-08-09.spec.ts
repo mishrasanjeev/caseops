@@ -385,7 +385,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   const deadlineWorkspace = page.getByTestId("ip-deadline-workspace");
   await expect(deadlineWorkspace).toContainText("Calculations are proposals");
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
+  await expect(deadlineWorkspace.getByText(/No responsible lawyer/)).toBeVisible();
   await expect(deadlineWorkspace.getByText("2026-08-18 · candidate · v1")).toBeVisible();
   await expect(
     deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
