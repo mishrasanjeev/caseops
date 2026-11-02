@@ -2656,6 +2656,20 @@ describe("IpDocketPage", () => {
     );
   });
 
+  it("holds no place for the decision band while it loads without a deep link", async () => {
+    window.history.replaceState(null, "", "/app/ip");
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [AWAITING_DOCKET], count: 1 });
+    fetchIpCoverageTransfersAwaitingMeMock.mockReturnValue(new Promise(() => {}));
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByText("Portfolio")).toBeVisible();
+    // A placeholder that later collapses moves everything below it, including
+    // a docket that has just been scrolled into view (BUG-001).
+    expect(screen.queryByTestId("ip-coverage-decisions")).toBeNull();
+    expect(screen.queryByTestId("ip-coverage-decisions-loading")).toBeNull();
+  });
+
   it("keeps a deep-linked decision surface visible while the query is loading", async () => {
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
     const scrollIntoView = vi.fn();
