@@ -163,7 +163,9 @@ export async function chooseAndroidFile(context, asset, { cancel = false } = {})
     await dispatchNativeClick(context, selected, 'text', asset.filename);
   }
   await wait(context, async () => await context.driver.getCurrentPackage() === context.fixture.appId, 15000, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
-  await find(context, 'id', 'files-matter-code');
+  // Choose was reached by scrolling down; the returned Files screen keeps that
+  // position, so its header needs the same bounded sweep as every other read.
+  await find(context, 'id', 'files-matter-code', { scroll: true });
   if (!cancel) { await find(context, 'id', 'files-selection', { scroll: true }); assert.equal(await (await find(context, 'id', 'files-upload', { scroll: true })).isEnabled(), true, 'ANDROID_FILES_UPLOAD_DISABLED'); }
 }
 export function validateAndroidUploadAcknowledgement(requests, matterId, { requireRead = false } = {}) {

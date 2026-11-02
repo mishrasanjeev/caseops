@@ -108,8 +108,8 @@ test('observed Android picker binds exact selected device, app, build, manifest,
   }
 });
 
-function pickerDouble(context, asset, cancel = false) {
-  let state = 'app'; const commands = [], callbacks = new Map();
+function pickerDouble(context, asset, cancel = false, { headerBelowFold = false } = {}) {
+  let state = 'app', headerShown = !headerBelowFold; const commands = [], callbacks = new Map();
   const packageName = JSON.parse(readFileSync(context.provider.evidence.path)).packageName;
   const element = (id, text = '', next) => {
     callbacks.set(id, () => { commands.push(id); if (next) state = next; });
@@ -120,7 +120,14 @@ function pickerDouble(context, asset, cancel = false) {
     getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : packageName,
     pressKeyCode: async code => { assert.equal(code, 4); assert.equal(cancel, true); commands.push('android-back'); state = 'app'; },
     waitUntil: async (predicate, options) => { if (!await predicate()) throw new Error(options.timeoutMsg); },
+    getWindowRect: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performActions: async ([pointer]) => {
+      const [start, , end] = pointer.actions; commands.push(end.y > start.y ? 'sweep-up' : 'sweep-down');
+      if (end.y > start.y && (state === 'app' || state === 'selected')) headerShown = true;
+    },
+    releaseActions: async () => {},
     $$: async query => {
+      if (query === 'id=files-matter-code' && !headerShown) return [];
       if (query === 'id=files-choose') return [element('choose', '', 'picker')];
       if (query === 'id=files-selection-clear' && state === 'selected') return [element('clear-selection', '', 'app')];
       if (query === '~Show roots' && state === 'picker') return [element('roots', '', 'roots')];
@@ -165,6 +172,17 @@ test('actual Android picker wrapper uses only observed Downloads/folder/file con
     const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt, cancel);
     await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
     assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file']);
+    assert.equal(fake.state(), cancel ? 'app' : 'selected');
+  }
+});
+
+test('returned Files header below the fold is found by the bounded upward sweep, never a second picker action', async t => {
+  // Observed on emulator-5584: choose was reached by scrolling and the
+  // returned screen kept that position, so an unscrolled header lookup failed.
+  for (const cancel of [false, true]) {
+    const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt, cancel, { headerBelowFold: true });
+    await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
+    assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back', 'sweep-up'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file', 'sweep-up']);
     assert.equal(fake.state(), cancel ? 'app' : 'selected');
   }
 });
