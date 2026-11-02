@@ -96,12 +96,51 @@ test("logout discards a late picker result and never queues upload", async () =>
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
   assert.deepEqual(f.cleaned, [asset]);
 });
-test("cancel leaves no navigation or selected-file state", async () => {
+test("cancel keeps only the opaque navigation intent and no selected file", async () => {
+  // Android remounts after its system picker; the user returns to the same
+  // Matter Files screen, but nothing is selected, staged or uploadable.
   const f = fixture();
   const pending = f.coordinator.choose(intent);
   f.resolve(null);
   await pending;
+  assert.deepEqual(f.coordinator.snapshot(identity, "epoch-1"), {
+    intent,
+    revision: 1,
+    selection: null,
+  });
+  assert.equal(f.coordinator.selectionState.hasSelection, false);
+  assert.deepEqual(f.cleaned, []);
+  f.coordinator.clear();
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+});
+test("the return lease outlives the pick until settle, and never a later clear", async () => {
+  const f = fixture();
+  assert.equal(f.coordinator.leased, false);
+  const pending = f.coordinator.choose(intent);
+  assert.equal(f.coordinator.leased, true);
+  f.resolve(asset);
+  await pending;
+  // Result delivered before the app is active again: still leased, so the
+  // routine compatibility recheck on return must not discard it.
+  assert.equal(f.coordinator.picking, false);
+  assert.equal(f.coordinator.leased, true);
+  f.coordinator.settle();
+  assert.equal(f.coordinator.leased, false);
+  assert.deepEqual(f.coordinator.snapshot(identity, "epoch-1")?.selection?.asset, asset);
+  // Settling ends only the lease; a later privacy clear still purges it.
+  f.coordinator.clear();
+  assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+  assert.deepEqual(f.cleaned, [asset]);
+});
+test("a clear during the return lease ends it and discards the result", async () => {
+  const f = fixture();
+  const pending = f.coordinator.choose(intent);
+  f.resolve(asset);
+  await pending;
+  f.coordinator.clear();
+  assert.equal(f.coordinator.leased, false);
+  assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+  assert.deepEqual(f.cleaned, [asset]);
 });
 test("does not launch a second OS picker even after cancellation", async () => {
   const f = fixture();

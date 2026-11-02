@@ -214,9 +214,10 @@ export default function App() {
           runPrivateFileCleanup([
             () => viewerEvents.notify("background"),
             () => {
-              // A routine public recheck does not steal the SDK's opaque active
-              // picker lease. A real denial/unknown policy cancels it normally.
-              if (status !== "checking" || !picker.picking) {
+              // A routine public recheck does not steal the SDK's opaque picker
+              // lease, including the recheck after Android's picker returns.
+              // A real denial/unknown policy cancels it normally.
+              if (status !== "checking" || !picker.leased) {
                 picker.clear();
                 purgeMatterFileTemps();
               }
@@ -375,6 +376,9 @@ export default function App() {
     const lock = localLock.current,
       sessionKey = runtime.session.sessionKey;
     const supported = await runtime.compatibility.refresh();
+    // The returned picker result has survived its routine recheck; any later
+    // background or recheck clears it as usual.
+    if (supported && foreground.current) picker.settle();
     if (
       !supported ||
       !alive.current ||
@@ -390,7 +394,7 @@ export default function App() {
       return;
     const expectedEpoch = lock.commandEpoch;
     publishUnlocked(await lock.resume(openServerSession), lock, expectedEpoch);
-  }, [runtime, openServerSession, publishUnlocked]);
+  }, [runtime, picker, openServerSession, publishUnlocked]);
   const uiCommand: LocalUiCommand = {
     lock: localLock.current,
     epoch: localLock.current?.commandEpoch ?? null,

@@ -42,10 +42,15 @@ export function createFilePickerCoordinator(
 ) {
   let epoch = 0;
   let picking = false;
+  // Android's system picker backgrounds the app, so its result arrives before
+  // the routine compatibility recheck that follows the return. Keep the
+  // opaque intent and result through that recheck, never past a later clear.
+  let returning = false;
   let intent: PickerIntent | null = null;
   let asset: MatterFileAsset | null = null;
   const clear = () => {
     ++epoch;
+    returning = false;
     intent = null;
     const previous = asset;
     asset = null;
@@ -58,6 +63,14 @@ export function createFilePickerCoordinator(
   return {
     get picking() {
       return picking;
+    },
+    /** True from choose() until settle() or any clear. */
+    get leased() {
+      return picking || returning;
+    },
+    /** The app is active again and its compatibility recheck succeeded. */
+    settle() {
+      returning = false;
     },
     get selectionState(): FileSelectionState {
       return { picking, revision: epoch, hasSelection: asset !== null };
@@ -112,6 +125,7 @@ export function createFilePickerCoordinator(
         clear();
         if (owner !== epoch) return;
         intent = { ...next };
+        returning = true;
         changed();
         if (owner !== epoch) return;
         const result =
@@ -124,10 +138,9 @@ export function createFilePickerCoordinator(
           if (result) cleanup(result);
           return;
         }
-        if (!result) {
-          clear();
-          return;
-        }
+        // A cancelled pick keeps only the opaque navigation intent so the
+        // user returns to the same Matter Files screen with nothing selected.
+        if (!result) return;
         asset = { ...result };
         changed();
       } catch (cause) {
