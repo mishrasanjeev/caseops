@@ -130,11 +130,10 @@ export async function swipe(context, direction = 'down') {
     { type: 'pointerMove', duration: 0, x, y: direction === 'down' ? bottom : top },
     { type: 'pointerDown', button: 0 },
     { type: 'pointerMove', duration: 350, x, y: direction === 'down' ? top : bottom },
-    // Lifting a moving finger flings the ScrollView: a short page jumps to its
-    // end and carries a row just below the fold under the fixed header, so no
-    // gesture ever leaves it visible. Android flings the same way: files-25/26
-    // sweeps carried a revealed source hash past the viewport. Hold still first.
-    { type: 'pause', duration: IOS_SWIPE_SETTLE_MS },
+    // Lifting a moving finger flings an iOS ScrollView: a short page jumps to
+    // its end and carries a row just below the fold under the fixed header, so
+    // no gesture ever leaves it visible. Hold still before lifting.
+    ...(context.platform === 'ios' ? [{ type: 'pause', duration: IOS_SWIPE_SETTLE_MS }] : []),
     { type: 'pointerUp', button: 0 },
   ] }]);
   await context.driver.releaseActions();
