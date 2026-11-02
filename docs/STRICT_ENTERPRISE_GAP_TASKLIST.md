@@ -16,6 +16,13 @@ acceptance after PR569 advanced canonical main00bfb7fc. The next launch refused
 that drift before execution. Preserve all preceding failed/incomplete receipts;
 fresh combined-source full Docker/current CI/main/live proof remains required.
 
+Adjacent native evidence cleanup now rejects reparse roots before scanning;
+one actual Windows junction control and metadata controls passed in54P/6S
+helper acceptance. Privilege-blocked alias cases stay unverified. Specialist
+performance retains both controlled statistics states and foreign-ID noise;
+one20k-row adverse profile passed with unchanged limits. Neither component
+certifies the final combined source or production. Release verdict stays NO-GO.
+
 ## November 1 Scheduled All-Refs Findings: Release-Gated
 
 Partially implemented/NO-GO for the new candidate. Security41301909540 failed

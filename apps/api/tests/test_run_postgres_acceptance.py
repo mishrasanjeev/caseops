@@ -562,19 +562,92 @@ def _symlink_or_skip(link: Path, target: Path) -> None:
         pytest.skip("This process may not create symbolic links")
 
 
-def test_pytest_current_links_are_dropped_and_their_numbered_targets_retained(tmp_path):
+@pytest.mark.parametrize("target_kind", ["absolute", "relative"])
+def test_pytest_current_links_are_dropped_and_their_numbered_targets_retained(
+    tmp_path, target_kind
+):
     """An elevated Windows run lets pytest link each numbered basetemp entry."""
     fixtures, destination = tmp_path / "fixtures", tmp_path / "retained"
     numbered = fixtures / "test_upload_commit0"
     numbered.mkdir(parents=True)
     (numbered / "evidence.bin").write_bytes(b"retained bytes")
     destination.mkdir()
-    _symlink_or_skip(fixtures / "test_upload_commitcurrent", numbered)
+    target = numbered if target_kind == "absolute" else Path(numbered.name)
+    _symlink_or_skip(fixtures / "test_upload_commitcurrent", target)
 
-    assert driver.drop_pytest_current_links(fixtures) == ["test_upload_commitcurrent"]
+    removed = driver.drop_pytest_current_links(fixtures)
+    assert removed == ["test_upload_commitcurrent"]
     assert not os.path.lexists(fixtures / "test_upload_commitcurrent")
     driver.retain_runtime(fixtures, destination)
     assert (destination / "test_upload_commit0/evidence.bin").read_bytes() == b"retained bytes"
+
+
+@pytest.mark.parametrize("alias_kind", ["ordinary_entry", "relative_symlink"])
+def test_pytest_current_link_cleanup_rejects_root_junction_without_touching_outside(
+    tmp_path, alias_kind
+):
+    fixtures, outside = tmp_path / "fixtures", tmp_path / "outside"
+    numbered = outside / "test_case0"
+    numbered.mkdir(parents=True)
+    evidence = numbered / "evidence.bin"
+    evidence.write_bytes(b"outside-original\x00\r\nbytes")
+    alias = outside / "test_casecurrent"
+    if alias_kind == "relative_symlink":
+        _symlink_or_skip(alias, Path(numbered.name))
+        target = os.readlink(alias)
+    else:
+        alias.mkdir()
+        (alias / "untouched.bin").write_bytes(b"outside-current-entry")
+    if os.name == "nt":
+        result = subprocess.run(
+            [os.environ["COMSPEC"], "/d", "/c", "mklink", "/J", str(fixtures), str(outside)],
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+        assert result.returncode == 0, "Owned root junction fixture creation failed"
+        assert fixtures.is_dir() and not fixtures.is_symlink()
+        assert fixtures.lstat().st_file_attributes & 0x400
+    else:
+        fixtures.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="Reparse point"):
+        driver.drop_pytest_current_links(fixtures)
+    if alias_kind == "relative_symlink":
+        assert alias.is_symlink() and os.readlink(alias) == target
+    else:
+        assert not alias.is_symlink()
+        assert (alias / "untouched.bin").read_bytes() == b"outside-current-entry"
+    assert numbered.is_dir()
+    assert evidence.read_bytes() == b"outside-original\x00\r\nbytes"
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        pytest.param(SimpleNamespace(st_mode=driver.stat.S_IFLNK), id="symlink-mode"),
+        pytest.param(
+            SimpleNamespace(st_mode=driver.stat.S_IFDIR, st_file_attributes=0x400),
+            id="directory-reparse-attribute",
+        ),
+    ],
+)
+def test_pytest_current_link_cleanup_rejects_reparse_metadata_before_io(monkeypatch, metadata):
+    root = SimpleNamespace(
+        lstat=lambda: metadata,
+        is_dir=lambda: True,
+        is_symlink=lambda: False,
+    )
+
+    def unexpected_io(*args, **kwargs):
+        pytest.fail("Reparse root must be rejected before scanning or deleting entries")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(driver, "native_path", lambda path: root)
+        for operation in ("scandir", "unlink", "rmdir"):
+            scoped.setattr(driver.os, operation, unexpected_io)
+        with pytest.raises(ValueError, match="Reparse point"):
+            driver.drop_pytest_current_links(Path("fixtures"))
 
 
 @pytest.mark.parametrize("shape", ["outside", "unnumbered", "other-name"])

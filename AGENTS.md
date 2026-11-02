@@ -3686,3 +3686,12 @@ requirements when using the fallback.
   Keep the interruption receipt and require the complete native inventory,
   canonical completion evidence and final PASS before accepting a Docker gate;
   an outer zero cannot override an interrupted child or retained call failure.
+- Do not replace post-bulk performance coverage with unconditional ANALYZE.
+  Retain analyzed and controlled unrefreshed profiles, deterministic lower-ID
+  foreign noise, original work/deadline bounds and raw plans. Change statistics
+  options only in an independently migrated disposable database and restore
+  their prior values; a warm-plan pass cannot certify the unrefreshed state.
+- A pre-inventory fixture cleanup must reject reparse roots before scanning
+  or unlinking. Windows junctions are not ordinary symlinks; test a real root
+  junction without requiring symbolic-link privileges, preserve outside bytes,
+  and keep unavailable relative-alias cases explicitly unverified.

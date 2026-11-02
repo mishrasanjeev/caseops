@@ -16,6 +16,14 @@ requires replacement combined-source acceptance. Earlier Docker03 stopped at a
 Docker image-inspection timeout before builds/native/browser cases; discovery
 alone is not a pass. No production or workbook verdict is promoted from B5.
 
+Combined-tree review adds analyzed/unrefreshed specialist profiles rather than
+warming away the prior risk, and rejects fixture-root junctions before alias
+cleanup. Frozen WIP adverse20k-row hidden-next-page case1/1 passed; Windows
+helper60actual=54passed/6symlink-privilege skips/0failures. The actual root
+junction ordinary-entry case passed; unavailable aliases remain unverified.
+Full final-source Docker/current CI/main/live proof and Excel publication remain
+pending. This does not close the retained earlier-source specialist failure.
+
 ## October 31 Ram Batch 4 (CaseOps_Bugs (4).xlsx)
 
 Source: Ram's 2026-10-30 workbook, 17 populated rows (BUG-001..BUG-016 and
