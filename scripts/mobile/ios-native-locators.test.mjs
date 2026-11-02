@@ -723,12 +723,14 @@ test('iOS swipe holds still before lifting so momentum cannot carry a short page
   assert.deepEqual(fake.actions[0][0].actions[3], { type: 'pause', duration: 300 });
 });
 
-test('Android retains its original center swipe without any iOS geometry query', async () => {
+test('Android keeps its center swipe without iOS geometry queries and holds still before lifting', async () => {
   const fake = swipeDouble('android');
   await swipe(fake.context);
   assert.deepEqual(fake.actions[0][0].actions[0], { type: 'pointerMove', duration: 0, x: 201, y: 629 });
   assert.equal(fake.actions[0][0].actions[2].y, 245);
-  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pointerUp']);
+  // A moving lift flings the list past short rows (files-25/26 source hash).
+  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pause', 'pointerUp']);
+  assert.equal(fake.actions[0][0].actions[3].duration, IOS_SWIPE_SETTLE_MS);
   assert.deepEqual(fake.queries, []);
 });
 
