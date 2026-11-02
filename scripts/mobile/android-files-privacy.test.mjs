@@ -144,6 +144,9 @@ function fixture(t, selectedProfile = null) {
         assert.equal(nodes.has(destination), false, 'UNIT_EXCLUSIVE_REMOTE_ASSET_CREATE');
         assert.ok(Buffer.isBuffer(options.input), 'VERIFIED_DESCRIPTOR_BUFFER_REQUIRED');
         add(destination, options.input, 0); value = '';
+      } else if (script.includes('CASEOPS_ANDROID_FUSE_ATTR_REFRESH_V1')) {
+        assert.ok(script.includes('echo 2 > /proc/sys/vm/drop_caches'), 'EXACT_FUSE_ATTRIBUTE_REFRESH_REQUIRED');
+        state.fuseRefreshes = (state.fuseRefreshes || 0) + 1; value = '';
       } else assert.fail('UNRECOGNIZED_OFFLINE_DEVICE_SCRIPT');
     } else if (argv[0] === 'shell' && argv[1] === 'mkdir') {
       assert.equal(nodes.has(argv.at(-1)), false, 'UNIT_EXCLUSIVE_PROVIDER_FOLDER'); add(argv.at(-1), null, 0); value = '';
@@ -194,6 +197,7 @@ test('missing root, foreign AVD, changed boot or private directory owner refuse 
 
 test('staging copies only exact public manifest assets to one exclusive provider folder and rechecks bytes/hash', t => {
   const f = fixture(t), result = f.stage();
+  assert.equal(f.state.fuseRefreshes, 1, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
   assert.equal(result.receipt.folderName, 'CaseOpsFiles-unit-run-first');
   assert.equal(result.receipt.assets.length, 2); assert.equal(result.receipt.originalsDeleted, false);
   assert.equal(f.calls.filter(args => args.some(value => value.includes('CASEOPS_ANDROID_WRITE_ASSET_V1'))).length, 2);
@@ -742,9 +746,11 @@ test('provider metadata settles before it is recorded and admits only a ctime mo
   let clock = 0, reads = 0;
   const later = { ...written[0].providerMetadata, changed: 'c2' };
   // Observed shape: the media provider bumps ctime once, just after the write.
+  let refreshes = 0;
   const settled = settleAndroidProviderMetadata(written, () => (++reads > 1 ? later : written[0].providerMetadata),
-    { settleMs: 1000, sleep: ms => { clock += ms; }, now: () => clock });
+    { settleMs: 1000, sleep: ms => { clock += ms; }, now: () => clock, refresh: () => { refreshes++; } });
   assert.deepEqual(settled[0].providerMetadata, later);
+  assert.equal(refreshes, reads, 'EVERY_SETTLE_READ_REFRESHES_FIRST');
   assert.equal(settled[0].writeChanged, 'c1');
   assert.ok(clock >= 1000);
   for (const changed of [{ sizeBytes: 25 }, { modified: 'm2' }, { inode: '2' }, { uid: 0 }]) {

@@ -257,19 +257,21 @@ function knownSource(value) {
     ...(value.marker ? { marker: value.marker } : {}) };
 }
 // Android's media provider finishes its own post-write processing after the
-// exclusive write closes; on emulator-5584 a staged TXT's ctime moved 4 ms
-// after it was recorded, failing preflight. Record metadata only once it has
-// held still, and refuse any change other than ctime.
+// exclusive write closes (on emulator-5584 a staged TXT's ctime moved 4 ms
+// later), and the /storage FUSE view kept serving the earlier cached ctime
+// until something refreshed it. Record metadata only from fresh attributes
+// that have held still, and refuse any change other than ctime.
 export const ANDROID_PROVIDER_SETTLE_MS = 3000;
 const ANDROID_PROVIDER_SETTLE_DEADLINE_MS = 20000;
 export function settleAndroidProviderMetadata(written, statOf, { settleMs = ANDROID_PROVIDER_SETTLE_MS,
-  sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), now = Date.now } = {}) {
+  sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), now = Date.now, refresh = () => {} } = {}) {
   const end = now() + settleMs + ANDROID_PROVIDER_SETTLE_DEADLINE_MS;
-  let last = written.map(({ devicePath }) => statOf(devicePath)), stableSince = now();
+  const read = () => { refresh(); return written.map(({ devicePath }) => statOf(devicePath)); };
+  let last = read(), stableSince = now();
   while (now() - stableSince < settleMs) {
     assert.ok(now() < end, 'ANDROID_FILES_PROVIDER_METADATA_NOT_SETTLED');
     sleep(Math.min(250, settleMs));
-    const current = written.map(({ devicePath }) => statOf(devicePath));
+    const current = read();
     if (JSON.stringify(current) !== JSON.stringify(last)) { last = current; stableSince = now(); }
   }
   return written.map((asset, index) => {
@@ -323,7 +325,11 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     observed.push({ ...knownSource(asset), devicePath, transferSha256: hash(asset.bytes),
       transferMethod: 'verified-buffer-exclusive-device-write', providerMetadata: metadata });
   }
-  const settled = settleAndroidProviderMetadata(observed, file => io.stat(file), { settleMs });
+  // Root emulator only: drop cached dentries/inodes so the FUSE view reports
+  // current attributes. Physical shell access keeps its reviewed scripts.
+  const refresh = io.physical ? () => {} : () => io.script('CASEOPS_ANDROID_FUSE_ATTR_REFRESH_V1',
+    'sync && echo 2 > /proc/sys/vm/drop_caches', [], { encoding: 'utf8', timeout: 15000 });
+  const settled = settleAndroidProviderMetadata(observed, file => io.stat(file), { settleMs, refresh });
   current(containers, options);
   const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',
     udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers),
