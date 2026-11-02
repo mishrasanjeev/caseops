@@ -207,7 +207,7 @@ for (const { name, viewport } of viewports) {
       await page.getByRole("button", { name: "New record", exact: true }).click();
       const form = page.locator("form").filter({ has: page.getByRole("button", { name: "Create record", exact: true }) });
       fixture.openParents();
-      await form.getByLabel("Record type", { exact: true }).selectOption("international_designation");
+      await form.getByRole("combobox", { name: "Record type", exact: true }).selectOption("international_designation");
       const parent = form.getByRole("combobox", { name: "Parent IR", exact: true });
       const more = form.getByRole("button", { name: "Load more parent IRs", exact: true });
       await expect(parent.locator('option:not([value=""])')).toHaveCount(PAGE_SIZE);

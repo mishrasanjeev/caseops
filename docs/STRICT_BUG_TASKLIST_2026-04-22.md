@@ -1,5 +1,24 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 B4-ADJ-28 Browser Selector: Focused Replay Passed
+
+Partially fixed/NO-GO. CI41469295739 on1a4 has742browser passes,21explicit
+skips and2failures, zero retries/global errors. Both failed before IR101 in the
+new four-case module: an exact wrapping-label lookup missed the correctly named
+combobox. Both page contexts and a native Chromium two-viewport probe preserve
+the diagnosis. Use an exact named-role selector, retain all deeper assertions
+and run all four actual changed journeys before full CI/Docker freeze. All four
+passed actual built1a4 Docker with native JSON/XML/progress reconciliation,
+zero skips/retries and unchanged timeouts. E2E typecheck also passed. Preserve
+the first two infrastructure-only attempts separately (reporter binding, then
+missing canonical public proxy); neither reached the selector. Full09 is
+intentionally interrupted/reaped with699complete PG passes/2097passed phases,
+zero failed phases and all765 full-gate browsers unexecuted. The
+complete backend gates passed10997API cases/3665explicit skips and3654PG cases;
+those source-bound components do not make the failed whole CI green. Preserve
+the incomplete local native run, all failures and setup errors. No runtime,
+permission, timeout, retry or Mac/app/0008 change is justified by this defect.
+
 ## November 2 B4-ADJ-27 Offline Governance Fixture: Acceptance Pending
 
 Partially fixed/NO-GO. Hosted286 CI retained126 failed calls in the complete

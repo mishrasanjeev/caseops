@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Execute every new or changed Playwright journey against the current built
+  local app before freezing an expensive full gate. Discovery and jsdom tests
+  do not prove browser locator semantics. A wrapping select label can include
+  its option text in exact-label lookup while the combobox's accessible name
+  is correct; verify the named role instead of bypassing accessibility checks.
+- A focused Docker browser replay must use the image's configured public API
+  proxy, not its direct container port. Start the canonical loopback proxy and
+  verify marked API, proxy and web identities before login. Preserve failed
+  setup evidence separately from application workflow failures.
+
 - Offline deployment fixtures must declare their synthetic release policy,
   not inherit the current rollout file while omitting its committed evidence.
   Separately replay the actual committed policy and exact evidence blob; retain
