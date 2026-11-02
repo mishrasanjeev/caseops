@@ -623,7 +623,7 @@ test("[mobile] B4-ADJ-13 [local-only] the employee directory stacks at 393px wit
 
 for (const viewport of [DESKTOP, MOBILE]) {
   const tag = viewport === MOBILE ? "[mobile] " : "";
-  test(`${tag}B4-ADJ-13 [local-only] the matters list keeps its Status actions pinned on screen at ${viewport.width}px`, async ({ page, request, baseURL }, info) => {
+  test(`${tag}B4-ADJ-13 [local-only] the matters list keeps its Status actions on screen at ${viewport.width}px`, async ({ page, request, baseURL }, info) => {
     test.setTimeout(300_000);
     const rt = await prepareTester(page, request, baseURL, viewport);
     expect(rt.local, "The list is read for a Matter this run creates; production test-legal must not gain one per run").toBe(true);
@@ -635,13 +635,26 @@ for (const viewport of [DESKTOP, MOBILE]) {
     await page.goto(`${rt.web.origin}/app/matters`);
     const status = page.getByRole("combobox", { name: `Status for ${matterCode}` });
     await expectReachable(status, "Status select on the matters row");
-    const scroller = page.locator("main table").filter({ has: status }).locator("xpath=..");
-    const geometry = await scrollTable(scroller, 0);
-    for (const fraction of [0.5, 1]) {
-      await scrollTable(scroller, fraction);
-      await expectReachable(status, `Status select with the columns scrolled (${fraction})`, { sideways: true });
+    let geometry: unknown;
+    if (viewport === MOBILE) {
+      // On a phone the list stacks into labelled rows, so nothing covers the Matter name.
+      const title = page.locator("main tr").filter({ hasText: matterCode }).locator("td").filter({ hasText: "ADJ13 matters list row" });
+      await expectReachable(title, "Matter name on the stacked row");
+      geometry = await title.evaluate((cell) => {
+        const box = cell.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return { covered: !(hit && cell.contains(hit)), width: box.width };
+      });
+      expect(geometry, "the Matter name is not covered by the Status column").toMatchObject({ covered: false });
+      await expectNoPageOverflow(page);
+    } else {
+      const scroller = page.locator("main table").filter({ has: status }).locator("xpath=..");
+      geometry = await scrollTable(scroller, 0);
+      for (const fraction of [0.5, 1]) {
+        await scrollTable(scroller, fraction);
+        await expectReachable(status, `Status select with the columns scrolled (${fraction})`, { sideways: true });
+      }
     }
-    if (viewport === MOBILE) await expectNoPageOverflow(page);
     await markPositive(info, viewport === MOBILE ? "adj13-matters-list-mobile" : "adj13-matters-list",
       { matter_id: matter.id, geometry });
     await rt.release();

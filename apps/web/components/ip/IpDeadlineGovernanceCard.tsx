@@ -581,21 +581,25 @@ function RuleProposalForm({
         hint={`Starts from: ${scope.triggerLabel}. Opposition deadline pickers list only rules of their exact scope; proposing the same scope again creates its next version.`}
       >
         {(describedBy, invalid) => (
-          <select
-            id="rule-scope"
-            className={SELECT_CLASS}
-            value={scopeId}
-            aria-invalid={invalid || undefined}
-            aria-describedby={describedBy}
-            onChange={(event) => {
-              const nextScope = RULE_SCOPES.find((row) => row.id === event.target.value) ?? RULE_SCOPES[0];
-              setScopeId(nextScope.id);
-              setMethod(nextScope.calendarMethod);
-              clear("rule-scope");
-            }}
-          >
-            {RULE_SCOPES.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
-          </select>
+          <>
+            <select
+              id="rule-scope"
+              className={SELECT_CLASS}
+              value={scopeId}
+              aria-invalid={invalid || undefined}
+              aria-describedby={[describedBy, "rule-scope-detail"].filter(Boolean).join(" ")}
+              onChange={(event) => {
+                const nextScope = RULE_SCOPES.find((row) => row.id === event.target.value) ?? RULE_SCOPES[0];
+                setScopeId(nextScope.id);
+                setMethod(nextScope.calendarMethod);
+                clear("rule-scope");
+              }}
+            >
+              {RULE_SCOPES.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+            </select>
+            {/* Scope names can be wider than the select; spell the chosen one out in full. */}
+            <p id="rule-scope-detail" data-selected-option-value={scope.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{scope.label}</p>
+          </>
         )}
       </Field>
       <Field id="rule-jurisdiction" label="Jurisdiction" error={errors["rule-jurisdiction"]}>
