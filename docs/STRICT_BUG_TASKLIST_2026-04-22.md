@@ -1,5 +1,20 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 B4-ADJ-27 Offline Governance Fixture: Acceptance Pending
+
+Partially fixed/NO-GO. Hosted286 CI retained126 failed calls in the complete
+deployment-hardening module. The fake Git commit adopted the real enabled policy
+but declared none of its evidence committed, so unrelated guard tests stopped
+early. Keep the original74 explicit/11 truncated evidence rejections,29 missing
+fixture outputs and12 stderr mismatches; replacement must execute all siblings.
+Use an explicit synthetic baseline and independently prove the real committed
+state/evidence path, with all existing invalid-state and drift guards unchanged.
+Docker08 stopped intentionally after62 complete PostgreSQL passes/186phases;
+the rest of3654 and all765 browsers remain unexecuted, not green or skipped.
+Complete network-disabled replacement passed300/300 and900phases, preserving all
+298originals and126former failures with0skips/retries. Parent native XML/journal
+reconciliation passed. Fresh CI/Docker/main/live and both Excel updates pending.
+
 ## November 2 B4-ADJ-26 Mandatory Public Case Identity: Acceptance Pending
 
 Partially fixed/NO-GO. Exact00bfb QA41428563260's Oct13 role retained54actual

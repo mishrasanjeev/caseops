@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Offline deployment fixtures must declare their synthetic release policy,
+  not inherit the current rollout file while omitting its committed evidence.
+  Separately replay the actual committed policy and exact evidence blob; retain
+  disabled/enabled, missing-evidence, expiry and migration rejection coverage.
+  Run the complete changed offline rehearsal before another full Docker freeze.
+
 - Mandatory browser case titles must name a stable public workflow, never a
   query value, retained record ID or personal address. Keep exact input routes
   separate from titles. Prove real reporter discovery agrees with the mandatory

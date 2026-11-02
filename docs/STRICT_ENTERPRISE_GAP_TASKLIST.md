@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## November 2 Offline Release Policy Boundary
+
+Partially implemented/NO-GO. Synthetic deployment commits must not silently
+inherit mutable rollout policy. Preserve the enabled production configuration,
+prove its committed evidence separately, and make unrelated offline fixtures
+explicit. Retain all126 hosted failures and interrupted Docker08 as incomplete;
+the full unchanged-guard offline rehearsal passed300/300,900phases,0skips/retries.
+A fresh full source-bound CI/Docker/main/live release remains required.
+
 ## November 2 Mandatory Case Identity Before Execution
 
 Partially implemented/NO-GO. Stable public titles replace two private route

@@ -1,5 +1,18 @@
 # CaseOps  - Work To Be Done
 
+## November 2 Deployment Rehearsal Replacement Pending
+
+NO-GO on286: CI41450975514 retained126 deployment-hardening failures after a
+synthetic commit inherited enabled rollout state without its evidence blob.
+Production correctly rejected it. Isolate fixture policy, separately replay the
+actual committed state and exact evidence. The full changed offline module
+passed300/300,900phases,0skips/retries with all298original cases preserved and
+all126failed calls passing. Fresh CI/full Docker/release still required. Retain62
+PostgreSQL passes/186phases
+from intentionally stopped Docker08; remaining native/browser inventory is not
+complete. Current green scanner/CodeQL components are not green whole CI, merge,
+deployment or final Excel proof. Leave MacBook/app/readthrough0008 untouched.
+
 ## November 2 Disclosure Work Replacement Pending
 
 NO-GO:1c Docker02 retained a real fresh-mixed disclosure-loading failure and
