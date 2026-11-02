@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_any_capability, require_capability
 from caseops_api.schemas.ip_foreign_associates import (
+    IpForeignAssociateCreateOptionsResponse,
     IpForeignAssociateCreateRequest,
     IpForeignAssociatePageResponse,
     IpForeignAssociateReminderRequest,
@@ -21,6 +22,7 @@ from caseops_api.schemas.ip_foreign_associates import (
 from caseops_api.services.ip_foreign_associates import (
     create_ip_foreign_associate_instruction,
     get_ip_foreign_associate_instruction,
+    ip_foreign_associate_create_options,
     ip_foreign_associate_workspace,
     list_ip_foreign_associate_instructions,
     record_ip_foreign_associate_transaction,
@@ -71,6 +73,30 @@ def foreign_associate_instruction_create(
 ) -> IpForeignAssociateResponse:
     return IpForeignAssociateResponse.model_validate(
         create_ip_foreign_associate_instruction(session, context=context, payload=payload)
+    )
+
+
+@router.get(
+    "/foreign-associate-instructions/create-options",
+    response_model=IpForeignAssociateCreateOptionsResponse,
+)
+def foreign_associate_instruction_create_options(
+    session: DbSession,
+    context: Annotated[
+        SessionContext,
+        Depends(require_any_capability("ip:write", "ip:approve")),
+    ],
+    docket_id: Annotated[str, Query(min_length=1, max_length=64)],
+    target_jurisdiction: Annotated[str | None, Query(max_length=80)] = None,
+) -> IpForeignAssociateCreateOptionsResponse:
+    """The associates, assignments, estimates, client instructions and
+    documents the create endpoint accepts for one docket, with blockers."""
+
+    return ip_foreign_associate_create_options(
+        session,
+        context=context,
+        docket_id=docket_id,
+        target_jurisdiction=target_jurisdiction,
     )
 
 

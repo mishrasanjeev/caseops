@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import UTC, datetime, timedelta
 from functools import cache
 from itertools import pairwise
 from pathlib import Path
@@ -1098,10 +1099,22 @@ def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
     assert "caseops-migrate-job contract drift" in script
 
 
+_GOVERNANCE_STATE_FILE = "deploy/ip-rule-governance-state.json"
+
+
 def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
 
-    assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" in script
+    # The flag comes only from the checked-in release state, never a literal.
+    assert f"IP_RULE_GOVERNANCE_STATE_FILE={_GOVERNANCE_STATE_FILE}" in script
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" not in script
+    assert "|${IP_RULE_GOVERNANCE_ENV}|" in script
+    assert '"${IP_RULE_GOVERNANCE_REMOVE_FLAGS[@]}"' in script
+    state = json.loads(_read_repo_text(_GOVERNANCE_STATE_FILE))
+    assert set(state) == {
+        "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
+    }
+    assert state["schema_version"] == 1
     assert ("MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret") in script
     assert (
         'CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
@@ -2031,10 +2044,22 @@ def _run_deploy_with_fakes(
     backup_mode: str = "ok",
     security_mode: str = "ok",
     security_post_build_mode: str = "ok",
+    governance_state: dict[str, object] | None = None,
+    committed_files: tuple[str, ...] = (),
+    a1_migration: bool = True,
+    live_governance_flag: str = "false",
+    live_governance_expiry: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     gcloud_log = tmp_path / "gcloud.log"
+    # The release reads the state from its own commit; by default that is the
+    # checked-in file. The live service starts from the given governance values.
+    (tmp_path / "live-governance-flag").write_text(live_governance_flag, encoding="utf-8")
+    if live_governance_expiry is not None:
+        (tmp_path / "live-governance-expiry").write_text(
+            live_governance_expiry, encoding="utf-8"
+        )
     security_payloads = tmp_path / "security-payloads.json"
     security_payloads.write_text(json.dumps(_security_gate_payloads()), encoding="utf-8")
 
@@ -2086,6 +2111,35 @@ if [[ "$1" == "rev-parse" ]]; then
   printf '%s\n' "abcdef1234567890abcdef1234567890abcdef12"
   exit 0
 fi
+if [[ "$1" == "show" && \
+  "$2" == "abcdef1234567890abcdef1234567890abcdef12:deploy/ip-rule-governance-state.json" ]]; then
+  printf '%s\n' "${FAKE_GOVERNANCE_STATE}"
+  exit 0
+fi
+if [[ "$1 $2" == "cat-file -t" && "$3" == abcdef1234567890abcdef1234567890abcdef12:* ]]; then
+  while IFS= read -r committed; do
+    if [[ -n "${committed}" && "${committed}" == "${3#*:}" ]]; then
+      printf '%s\n' blob
+      exit 0
+    fi
+  done <<< "${FAKE_COMMITTED_FILES}"
+  printf '%s\n' "fatal: path is not in the fake release commit" >&2
+  exit 128
+fi
+if [[ "$1" == "grep" ]]; then
+  # Search the real checked-out commit, so the release pattern is proven
+  # against the real A1 migration rather than a fixture shaped to match it.
+  [[ "${FAKE_A1_MIGRATION}" == "present" ]] || exit 1
+  arguments=()
+  for argument in "$@"; do
+    if [[ "${argument}" == "abcdef1234567890abcdef1234567890abcdef12" ]]; then
+      arguments+=(HEAD)
+    else
+      arguments+=("${argument}")
+    fi
+  done
+  exec "${FAKE_REAL_GIT}" "${arguments[@]}"
+fi
 exit 91
 """,
     )
@@ -2101,6 +2155,33 @@ for argument in "$@"; do
   fi
 done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "$*" == "run deploy caseops-api "* ]]; then
+  # Apply the api container's governance edits as gcloud does: removals of
+  # present keys first (absent keys are ignored), then updates.
+  container=""
+  previous=""
+  updates=""
+  for argument in "$@"; do
+    if [[ "${previous}" == "--container" ]]; then
+      container="${argument}"
+    elif [[ "${container}" == "api" && "${previous}" == "--remove-env-vars" && \
+      ",${argument}," == *",CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT,"* ]]; then
+      rm -f -- "${FAKE_LIVE_GOVERNANCE_EXPIRY}"
+    elif [[ "${container}" == "api" && "${previous}" == "--update-env-vars" ]]; then
+      updates="${argument#^|^}"
+    fi
+    previous="${argument}"
+  done
+  IFS='|' read -ra assignments <<< "${updates}"
+  for assignment in "${assignments[@]}"; do
+    case "${assignment}" in
+      CASEOPS_IP_RULE_GOVERNANCE_ENABLED=*)
+        printf '%s' "${assignment#*=}" > "${FAKE_LIVE_GOVERNANCE_FLAG}" ;;
+      CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=*)
+        printf '%s' "${assignment#*=}" > "${FAKE_LIVE_GOVERNANCE_EXPIRY}" ;;
+    esac
+  done
+fi
 if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
   "${FAKE_INDEX_HEALTH_MODE}" == "fail" ]]; then
   exit 56
@@ -2174,7 +2255,12 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_TRAFFIC_REVISION='caseops-api-test'
   FAKE_TRAFFIC_LATEST='true'
   FAKE_OBSERVED_GENERATION='2'
-  FAKE_GOVERNANCE_FLAG='false'
+  FAKE_GOVERNANCE_FLAG=$(cat "${FAKE_LIVE_GOVERNANCE_FLAG}")
+  FAKE_GOVERNANCE_EXPIRY_ROW=''
+  if [[ -f "${FAKE_LIVE_GOVERNANCE_EXPIRY}" ]]; then
+    FAKE_GOVERNANCE_EXPIRY_ROW='{"name":"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT","value":"'
+    FAKE_GOVERNANCE_EXPIRY_ROW+="$(cat "${FAKE_LIVE_GOVERNANCE_EXPIRY}")"'"},'
+  fi
   FAKE_MACHINE_SECRET='caseops-machine-readiness-evidence-secret'
   FAKE_LLM_PROVIDER='openai'
   FAKE_LLM_SECRET='caseops-openai-api-key'
@@ -2206,6 +2292,11 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_OBSERVED_GENERATION='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-enabled" ]]; then
     FAKE_GOVERNANCE_FLAG='true'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-disabled" ]]; then
+    FAKE_GOVERNANCE_FLAG='false'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "governance-expiry-stale" ]]; then
+    FAKE_GOVERNANCE_EXPIRY_ROW='{"name":"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT",'
+    FAKE_GOVERNANCE_EXPIRY_ROW+='"value":"2026-11-30T00:00:00Z"},'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "capacity-drift" ]]; then
     FAKE_SERVICE_MIN='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "secret-drift" ]]; then
@@ -2289,7 +2380,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
-    "${FAKE_GOVERNANCE_FLAG}" '"},' \
+    "${FAKE_GOVERNANCE_FLAG}" '"},' "${FAKE_GOVERNANCE_EXPIRY_ROW}" \
     '{"name":"CASEOPS_LLM_PROVIDER","value":"' "${FAKE_LLM_PROVIDER}" '"},' \
     '{"name":"CASEOPS_LLM_MODEL","value":"gpt-5.1"},' \
     '{"name":"CASEOPS_LLM_MODEL_RECOMMENDATIONS","value":"gpt-5-mini"},' \
@@ -2688,6 +2779,16 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
+            "FAKE_GOVERNANCE_STATE": (
+                _read_repo_text(_GOVERNANCE_STATE_FILE)
+                if governance_state is None
+                else json.dumps(governance_state)
+            ),
+            "FAKE_COMMITTED_FILES": "\n".join(committed_files),
+            "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
+            "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
+            "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
+            "FAKE_LIVE_GOVERNANCE_EXPIRY": _bash_path(tmp_path / "live-governance-expiry"),
         }
     )
     if a0_mode is not None:
@@ -3826,6 +3927,184 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
     assert result.returncode != 0, result.stdout + result.stderr
     assert expected_message in result.stdout
     assert "=== deploy-prod.sh — DONE" not in result.stdout
+
+
+_GOVERNANCE_EVIDENCE = "docs/ip-implementation/evidence/m2/IPLF-027B/a2-enable-offline.json"
+
+
+def _utc_in(days: float) -> str:
+    return (datetime.now(UTC) + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _enabled_governance_state(**overrides: object) -> dict[str, object]:
+    state: dict[str, object] = {
+        "schema_version": 1,
+        "enabled": True,
+        "rollout_expires_at": _utc_in(30),
+        "approved_by": "Release Owner",
+        "evidence": _GOVERNANCE_EVIDENCE,
+    }
+    state.update(overrides)
+    return state
+
+
+def _api_deploy_call(tmp_path: Path) -> str:
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    (deploy,) = [call for call in calls if call.startswith("run deploy caseops-api ")]
+    return deploy.split(" --container ")[1]
+
+
+def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
+    tmp_path: Path,
+) -> None:
+    # The live service still carries an earlier A2 configuration.
+    result = _run_deploy_with_fakes(
+        tmp_path, live_governance_flag="true", live_governance_expiry=_utc_in(10)
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    api = _api_deploy_call(tmp_path)
+    assert "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|" in api
+    assert " --remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT " in api
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=" not in api
+    assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "false"
+    assert not (tmp_path / "live-governance-expiry").exists()
+    assert "rule governance explicitly false" in result.stdout
+    assert "DONE abcdef1" in result.stdout
+
+
+def test_deploy_prod_disabled_readback_rejects_a_lingering_expiry(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path, traffic_mode="governance-expiry-stale")
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert result.stderr.strip() == (
+        "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT remains while rule governance is disabled"
+    )
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
+
+
+@pytest.mark.parametrize(
+    ("state", "committed", "a1_migration", "expected_error"),
+    [
+        (
+            _enabled_governance_state(), (), True,
+            f"evidence {_GOVERNANCE_EVIDENCE} is not a committed file",
+        ),
+        (
+            _enabled_governance_state(), (_GOVERNANCE_EVIDENCE,), False,
+            "without A1 migration 20261031_0002 in apps/api/alembic/versions",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at=_utc_in(-1)),
+            (_GOVERNANCE_EVIDENCE,), True, "has passed",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at=_utc_in(181)),
+            (_GOVERNANCE_EVIDENCE,), True, "is more than 180 days away",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at="2026-12-31T18:30:00+00:00"),
+            (_GOVERNANCE_EVIDENCE,), True, "must be a UTC timestamp",
+        ),
+        (
+            {**_enabled_governance_state(), "note": "extra"},
+            (_GOVERNANCE_EVIDENCE,), True, "must be an object with exactly the keys",
+        ),
+        (
+            _enabled_governance_state(approved_by=" "),
+            (_GOVERNANCE_EVIDENCE,), True, "approved_by must name the approving owner",
+        ),
+        (
+            _enabled_governance_state(evidence="../outside.json"),
+            ("../outside.json",), True, "evidence must be a repository-relative file path",
+        ),
+        (
+            _enabled_governance_state(enabled="true"),
+            (_GOVERNANCE_EVIDENCE,), True, "enabled must be true or false",
+        ),
+        (
+            _enabled_governance_state(enabled=False),
+            (_GOVERNANCE_EVIDENCE,), True, "must be null while disabled",
+        ),
+    ],
+    ids=[
+        "evidence-not-committed", "a1-migration-missing", "expired", "beyond-180-days",
+        "offset-timestamp", "extra-key", "blank-approver", "evidence-outside-repo",
+        "string-enabled", "disabled-with-expiry",
+    ],
+)
+def test_deploy_prod_refuses_invalid_governance_state_before_any_cloud_call(
+    tmp_path: Path,
+    state: dict[str, object],
+    committed: tuple[str, ...],
+    a1_migration: bool,
+    expected_error: str,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        governance_state=state,
+        committed_files=committed,
+        a1_migration=a1_migration,
+    )
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert expected_error in result.stdout + result.stderr
+    assert "ERROR:" in result.stdout
+    assert not (tmp_path / "gcloud.log").exists(), "no gh, gcloud or curl call may run"
+
+
+def test_deploy_prod_enabled_state_sets_flag_and_expiry_and_reads_both_back(
+    tmp_path: Path,
+) -> None:
+    state = _enabled_governance_state()
+    result = _run_deploy_with_fakes(
+        tmp_path, governance_state=state, committed_files=(_GOVERNANCE_EVIDENCE,)
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    api = _api_deploy_call(tmp_path)
+    assert (
+        "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=true|"
+        f"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT={state['rollout_expires_at']}|"
+    ) in api
+    assert "--remove-env-vars" not in api
+    assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "true"
+    assert (tmp_path / "live-governance-expiry").read_text(encoding="utf-8") == (
+        state["rollout_expires_at"]
+    )
+    assert f"enabled=true until {state['rollout_expires_at']}" in result.stdout
+    assert "rule governance explicitly true" in result.stdout
+    assert "DONE abcdef1" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("traffic_mode", "expected_error"),
+    [
+        ("flag-disabled", "CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly true"),
+        (
+            "governance-expiry-stale",
+            "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT does not match the checked-in "
+            "rollout expiry",
+        ),
+    ],
+)
+def test_deploy_prod_enabled_readback_requires_the_exact_state(
+    tmp_path: Path, traffic_mode: str, expected_error: str
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        traffic_mode=traffic_mode,
+        governance_state=_enabled_governance_state(),
+        committed_files=(_GOVERNANCE_EVIDENCE,),
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert result.stderr.strip() == expected_error
+    assert "DONE abcdef1" not in result.stdout
 
 
 @pytest.mark.parametrize(

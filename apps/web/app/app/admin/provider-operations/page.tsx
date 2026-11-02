@@ -93,9 +93,12 @@ export default function ProviderOperationsPage() {
   const [actionReason, setActionReason] = useState("");
   const [incidentPrevention, setIncidentPrevention] = useState("");
   const [incidentCanaryEvidence, setIncidentCanaryEvidence] = useState("");
+  // "all" includes resolved and ignored history; "open" lists only operations
+  // that still need action, so handling one makes room for the next.
+  const [view, setView] = useState<"all" | "open">("all");
   const operationsQuery = useQuery({
-    queryKey: ["admin", "provider-operations", "jobs"],
-    queryFn: () => listProviderOperations({ includeResolved: true, limit: 100 }),
+    queryKey: ["admin", "provider-operations", "jobs", view],
+    queryFn: () => listProviderOperations({ includeResolved: view === "all", limit: 100 }),
     enabled: canAdmin,
   });
   const readinessQuery = useQuery({
@@ -231,6 +234,43 @@ export default function ProviderOperationsPage() {
         <Kpi label="Ignored" value={operationsQuery.data?.ignored_count ?? 0} />
         <Kpi label="Resolved" value={operationsQuery.data?.resolved_count ?? 0} />
       </section>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Operations shown">
+        <Button
+          type="button"
+          size="sm"
+          variant={view === "all" ? "primary" : "outline"}
+          aria-pressed={view === "all"}
+          onClick={() => setView("all")}
+        >
+          All operations
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={view === "open" ? "primary" : "outline"}
+          aria-pressed={view === "open"}
+          onClick={() => setView("open")}
+        >
+          Needs action only
+        </Button>
+      </div>
+      {operationsQuery.data?.has_more ? (
+        <p role="status" className="text-sm text-[var(--color-mute)]" data-testid="provider-operations-cap">
+          {view === "all" ? (
+            <>
+              These counts and the list cover the {operationsQuery.data.returned_count} most recently updated
+              operations, including resolved and ignored ones; older operations are not listed here. Choose
+              Needs action only to list the operations that still need action.
+            </>
+          ) : (
+            <>
+              These counts and the list cover the {operationsQuery.data.returned_count} most recently updated
+              operations that need action; more exist. Resolving or ignoring a listed operation removes it from
+              this view and brings the next one in.
+            </>
+          )}
+        </p>
+      ) : null}
 
       <Card>
         <CardHeader>

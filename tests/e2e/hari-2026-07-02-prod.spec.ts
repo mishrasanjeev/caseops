@@ -11,6 +11,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 
+import { disposeMatter } from "./support/retire-records";
+
 const PROD_BASE_URL =
   (process.env.PROD_BASE_URL ?? "").trim() || "https://caseops.ai";
 const PROD_API_BASE_URL =
@@ -137,52 +139,57 @@ test.describe("Hari 2026-07-02 deployed fixes", () => {
     page,
   }) => {
     const { matterId, matterCode } = await createMatter(page);
+    try {
+      await page.goto(`${PROD_BASE_URL}/app/matters/${matterId}`);
+      const cockpitTabs = page.getByRole("navigation", {
+        name: /Matter cockpit tabs/i,
+      });
+      await expect(
+        cockpitTabs.getByRole("link", { name: "Notices", exact: true }),
+      ).toBeVisible();
+      await cockpitTabs.getByRole("link", { name: "Notices", exact: true }).click();
+      await page.waitForURL(/\/notices$/);
+      await expect(
+        page.getByRole("heading", { name: "Notices", exact: true }),
+      ).toBeVisible();
 
-    await page.goto(`${PROD_BASE_URL}/app/matters/${matterId}`);
-    const cockpitTabs = page.getByRole("navigation", {
-      name: /Matter cockpit tabs/i,
-    });
-    await expect(
-      cockpitTabs.getByRole("link", { name: "Notices", exact: true }),
-    ).toBeVisible();
-    await cockpitTabs.getByRole("link", { name: "Notices", exact: true }).click();
-    await page.waitForURL(/\/notices$/);
-    await expect(
-      page.getByRole("heading", { name: "Notices", exact: true }),
-    ).toBeVisible();
+      const fixtureDir = path.join(process.cwd(), ".e2e", "prod-upload-fixtures");
+      fs.mkdirSync(fixtureDir, { recursive: true });
+      const filename = `${matterCode.toLowerCase()}-demand-notice.txt`;
+      const filePath = path.join(fixtureDir, filename);
+      fs.writeFileSync(
+        filePath,
+        `Demand notice under Section 138 for production regression ${matterCode}.`,
+        "utf8",
+      );
 
-    const fixtureDir = path.join(process.cwd(), ".e2e", "prod-upload-fixtures");
-    fs.mkdirSync(fixtureDir, { recursive: true });
-    const filename = `${matterCode.toLowerCase()}-demand-notice.txt`;
-    const filePath = path.join(fixtureDir, filename);
-    fs.writeFileSync(
-      filePath,
-      `Demand notice under Section 138 for production regression ${matterCode}.`,
-      "utf8",
-    );
+      const uploadResponse = page.waitForResponse(
+        (response) =>
+          response.url().includes(`/api/matters/${matterId}/attachments`) &&
+          response.request().method() === "POST",
+        { timeout: 90_000 },
+      );
+      await page.setInputFiles('[data-testid="matter-notice-file-input"]', filePath);
+      const response = await uploadResponse;
+      expect(
+        response.status(),
+        `notice upload expected 2xx, got ${response.status()} ${await response.text()}`,
+      ).toBeGreaterThanOrEqual(200);
+      expect(response.status()).toBeLessThan(300);
 
-    const uploadResponse = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/api/matters/${matterId}/attachments`) &&
-        response.request().method() === "POST",
-      { timeout: 90_000 },
-    );
-    await page.setInputFiles('[data-testid="matter-notice-file-input"]', filePath);
-    const response = await uploadResponse;
-    expect(
-      response.status(),
-      `notice upload expected 2xx, got ${response.status()} ${await response.text()}`,
-    ).toBeGreaterThanOrEqual(200);
-    expect(response.status()).toBeLessThan(300);
+      const noticeRow = page.getByTestId("matter-notice-row");
+      await expect(noticeRow).toContainText(filename, { timeout: 45_000 });
+      await expect(noticeRow).toContainText(/pending|indexed|needs_ocr/i);
 
-    const noticeRow = page.getByTestId("matter-notice-row");
-    await expect(noticeRow).toContainText(filename, { timeout: 45_000 });
-    await expect(noticeRow).toContainText(/pending|indexed|needs_ocr/i);
-
-    await page.goto(`${PROD_BASE_URL}/app/matters/${matterId}/documents`);
-    await expect(page.getByText(filename).first()).toBeVisible({
-      timeout: 45_000,
-    });
-    await expect(page.getByText("Notice").first()).toBeVisible();
+      await page.goto(`${PROD_BASE_URL}/app/matters/${matterId}/documents`);
+      await expect(page.getByText(filename).first()).toBeVisible({
+        timeout: 45_000,
+      });
+      await expect(page.getByText("Notice").first()).toBeVisible();
+    } finally {
+      // Dispose this run's probe Matter whether the journey passed or failed (B4-ADJ-09).
+      await disposeMatter(page.context().request, PROD_API_BASE_URL, await authHeaders(page), matterId,
+        "Hari 2026-07-02 notice upload probe complete; retiring the per-run QA Matter.");
+    }
   });
 });

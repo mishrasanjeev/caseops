@@ -220,7 +220,7 @@ def _deadline_payload(
         report.generated_at,
         report.model_dump(mode="json", exclude={"generated_at", "rows"}),
         [row.model_dump(mode="json") for row in report.rows],
-        not report.counts_are_complete,
+        not report.counts_are_complete or len(report.rows) < report.docket_count,
         freshness,
     )
 

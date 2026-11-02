@@ -75,6 +75,16 @@ GATED_WRITERS: tuple[tuple[str, Writer], ...] = (
             payload=object(),
         ),
     ),
+    (
+        # PUT /api/ip/rule-policies landed after the A0 release without the
+        # fence; A1 puts it behind the same decision as every rule writer.
+        "select_company_rule_version",
+        lambda session: ip_deadline_workflow.select_company_rule_version(
+            session,
+            context=object(),
+            payload=object(),
+        ),
+    ),
 )
 
 
@@ -178,9 +188,15 @@ def test_runtime_setting_changes_do_not_leak_across_the_a0_fence(
     monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "true")
     get_settings.cache_clear()
     enabled_session = _NoDatabaseAccess()
-    with pytest.raises(_DatabaseAccessAttempted, match="execute"):
-        writer(enabled_session)
-    assert enabled_session.accesses == ["execute"]
+    # With the fence open, the next gate is the company entitlement read.
+    with pytest.raises(_DatabaseAccessAttempted, match="scalars"):
+        ip_deadline_workflow.activate_rule_version(
+            enabled_session,
+            context=SimpleNamespace(company=SimpleNamespace(id="company")),
+            rule_version_id="rule-version",
+            payload=object(),
+        )
+    assert enabled_session.accesses == ["scalars"]
 
     monkeypatch.setenv("CASEOPS_IP_RULE_GOVERNANCE_ENABLED", "false")
     get_settings.cache_clear()
@@ -217,9 +233,11 @@ def test_calendar_version_writer_remains_outside_the_rule_ownership_drain(
     (
         (
             lambda session: ip_deadline_workflow.rule_impact(
-                session, context=object(), rule_version_id="rule-version"
+                session,
+                context=SimpleNamespace(company=SimpleNamespace(id="company")),
+                rule_version_id="rule-version",
             ),
-            "get",
+            "execute",
         ),
         (
             lambda session: ip_deadline_workflow.deadline_impact(

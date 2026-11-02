@@ -81,7 +81,7 @@ function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: st
     "    assert company and company.slug==os.environ['IP15_SLUG'] and company.slug.startswith('ip15-')",
     "    owner=session.get(CompanyMembership,os.environ['IP15_OWNER_ID'])",
     "    assert owner and owner.company_id==company.id and owner.is_active and owner.role=='owner'",
-    "    session.add(BillingSubscription(company_id=company.id,status='manual_active',segment='law_firm',source='ip15_local_fixture',externally_billable=False,entitlement_overrides_json={'ip_workspace':True}))",
+    "    session.add(BillingSubscription(company_id=company.id,status='manual_active',segment='law_firm',source='ip15_local_fixture',externally_billable=False,entitlement_overrides_json={'ip_workspace':True,'ip_rule_governance':True}))",
     "    session.commit()",
   ].join("\n");
   const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,

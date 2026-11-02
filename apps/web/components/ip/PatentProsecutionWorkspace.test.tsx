@@ -75,6 +75,21 @@ describe("Patent prosecution and immutable work product", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Patent evidence saved.");
   });
 
+  it("B4-ADJ-22 disables empty source and work-product choices with the in-product path", async () => {
+    mocks.sources.mockResolvedValue({ items: [] });
+    mocks.evidence.mockResolvedValue({ ...page, records: [] });
+    mount("prosecution");
+    fireEvent.click(await screen.findByRole("button", { name: "Record event" }));
+    const form = screen.getByRole("form", { name: "Record patent event" });
+    const sourceSelect = await within(form).findByLabelText("Source evidence");
+    expect(sourceSelect).toBeDisabled();
+    expect(sourceSelect).toHaveAccessibleDescription("No source document on this IP record yet. Use Upload source to add it first.");
+    const product = within(form).getByLabelText("Exact work product");
+    await waitFor(() => expect(product).toBeDisabled());
+    expect(product).toHaveAccessibleDescription(/Prepare one under Evidence first/);
+    expect(within(form).getByRole("button", { name: "Preview event" })).toBeDisabled();
+  });
+
   it("requires impact acknowledgement and invalidates a preview when evidence changes", async () => {
     mount("prosecution");
     fireEvent.click(await screen.findByRole("button", { name: "Record event" }));

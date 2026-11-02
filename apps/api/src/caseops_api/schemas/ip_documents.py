@@ -194,6 +194,12 @@ class IpDocumentVersionRecord(BaseModel):
     latest_processing_job: DocumentProcessingJobRecord | None = None
 
 
+class IpDocumentRetirementRecord(BaseModel):
+    retired_at: datetime
+    retired_by_name: str
+    reason: str
+
+
 class IpDocumentRecord(BaseModel):
     id: str
     taxonomy_key: str
@@ -207,11 +213,66 @@ class IpDocumentRecord(BaseModel):
     updated_at: datetime
     versions: list[IpDocumentVersionRecord]
     links: list[IpDocumentLinkRecord]
+    # Present only once the document is retired; a retired document is kept for
+    # history and audit but is never offered or accepted as evidence again.
+    retirement: IpDocumentRetirementRecord | None = None
+    # Why the document is history only: ``retired``, or ``closed_record`` when
+    # it is listed only because its record is closed (the history view). Such a
+    # document can be downloaded or retired; no state, version or bulk change.
+    read_only_reason: Literal["retired", "closed_record"] | None = None
 
 
 class IpDocumentListResponse(BaseModel):
     items: list[IpDocumentRecord]
     total: int
+
+
+class IpDocumentRetireRequest(BaseModel):
+    expected_current_version: int = Field(ge=1)
+    reason: str = Field(min_length=10, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_has_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if len(stripped) < 10:
+            raise ValueError("Give a reason of at least 10 characters.")
+        return stripped
+
+
+IpDocumentRetirementBlockerKind = Literal[
+    "recordal",
+    "foreign_associate_instruction",
+    "docket_event",
+    "title_interest",
+    "renewal_certificate",
+    "portal_publication",
+    "source_evidence",
+]
+
+
+class IpDocumentRetirementBlocker(BaseModel):
+    """A record that still relies on the document as evidence."""
+
+    kind: IpDocumentRetirementBlockerKind
+    record_id: str
+    label: str
+    status: str | None = None
+    docket_id: str | None = None
+    docket_title: str | None = None
+    resolution: str
+    href: str | None = None
+
+
+class IpDocumentRetirementPreview(BaseModel):
+    document_id: str
+    title: str
+    current_version: int
+    already_retired: bool
+    may_retire: bool
+    permission_reason: str | None = None
+    blockers: list[IpDocumentRetirementBlocker]
+    retirable: bool
 
 
 class IpDocumentDuplicateCandidate(BaseModel):

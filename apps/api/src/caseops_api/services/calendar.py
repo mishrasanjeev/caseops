@@ -19,10 +19,11 @@ Why a service rather than three route handlers:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date
 
-from sqlalchemy import and_, select
+from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -37,6 +38,7 @@ from caseops_api.db.models import (
     MatterTaskStatus,
 )
 from caseops_api.schemas.calendar import (
+    CalendarDaySummary,
     CalendarEventKind,
     CalendarEventRecord,
 )
@@ -91,6 +93,102 @@ def aggregate_calendar_events(
     return events
 
 
+def _open_matter_conditions(
+    session: Session, context: SessionContext
+) -> list[ColumnElement[bool]]:
+    """Tenant, open-matter and ethical-wall scope shared by every calendar read."""
+    return [
+        Matter.company_id == context.company.id,
+        Matter.is_active.is_(True),
+        Matter.status.notin_(("closed", "disposed")),
+        visible_matters_filter(session, context=context),
+    ]
+
+
+def _hearing_conditions(
+    session: Session, context: SessionContext, range_from: date, range_to: date
+) -> list[ColumnElement[bool]]:
+    return [
+        *_open_matter_conditions(session, context),
+        MatterHearing.hearing_on >= range_from,
+        MatterHearing.hearing_on <= range_to,
+        MatterHearing.status.in_((MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)),
+    ]
+
+
+def _task_conditions(
+    session: Session, context: SessionContext, range_from: date, range_to: date
+) -> list[ColumnElement[bool]]:
+    return [
+        *_open_matter_conditions(session, context),
+        MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)),
+        MatterTask.due_on.is_not(None),
+        MatterTask.due_on >= range_from,
+        MatterTask.due_on <= range_to,
+    ]
+
+
+def _deadline_conditions(
+    session: Session, context: SessionContext, range_from: date, range_to: date
+) -> list[ColumnElement[bool]]:
+    return [
+        *_open_matter_conditions(session, context),
+        MatterDeadline.status.notin_((MatterDeadlineStatus.DONE, MatterDeadlineStatus.CANCELLED)),
+        MatterDeadline.due_on >= range_from,
+        MatterDeadline.due_on <= range_to,
+    ]
+
+
+def summarize_calendar_days(
+    session: Session,
+    *,
+    context: SessionContext,
+    range_from: date,
+    range_to: date,
+) -> list[CalendarDaySummary]:
+    """Per-day counts by display type for a bounded range.
+
+    Uses exactly the predicates of :func:`aggregate_calendar_events`, so a
+    day's total always equals the number of events the month list shows for
+    that day. Three grouped queries regardless of row volume.
+    """
+    if range_from > range_to:
+        return []
+    counts: dict[date, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    hearing_rows = session.execute(
+        select(MatterHearing.hearing_on, func.count())
+        .join(Matter, Matter.id == MatterHearing.matter_id)
+        .where(*_hearing_conditions(session, context, range_from, range_to))
+        .group_by(MatterHearing.hearing_on)
+    ).all()
+    for occurs_on, count in hearing_rows:
+        counts[occurs_on]["hearing"] += count
+    task_rows = session.execute(
+        select(MatterTask.due_on, func.count())
+        .join(Matter, Matter.id == MatterTask.matter_id)
+        .where(*_task_conditions(session, context, range_from, range_to))
+        .group_by(MatterTask.due_on)
+    ).all()
+    for occurs_on, count in task_rows:
+        counts[occurs_on]["task_date"] += count
+    deadline_rows = session.execute(
+        select(MatterDeadline.due_on, MatterDeadline.kind, func.count())
+        .join(Matter, Matter.id == MatterDeadline.matter_id)
+        .where(*_deadline_conditions(session, context, range_from, range_to))
+        .group_by(MatterDeadline.due_on, MatterDeadline.kind)
+    ).all()
+    for occurs_on, kind, count in deadline_rows:
+        counts[occurs_on][_deadline_display_type(kind)] += count
+    return [
+        CalendarDaySummary(
+            occurs_on=occurs_on,
+            total=sum(by_type.values()),
+            by_display_type=dict(by_type),
+        )
+        for occurs_on, by_type in sorted(counts.items())
+    ]
+
+
 def _collect_hearings(
     session: Session,
     context: SessionContext,
@@ -101,17 +199,7 @@ def _collect_hearings(
         select(MatterHearing, Matter, ForumCatalogEntry)
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .outerjoin(ForumCatalogEntry, ForumCatalogEntry.id == Matter.forum_catalog_entry_id)
-        .where(
-            Matter.company_id == context.company.id,
-            Matter.is_active.is_(True),
-            Matter.status.notin_(("closed", "disposed")),
-            visible_matters_filter(session, context=context),
-            MatterHearing.hearing_on >= range_from,
-            MatterHearing.hearing_on <= range_to,
-            MatterHearing.status.in_(
-                (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
-            ),
-        )
+        .where(*_hearing_conditions(session, context, range_from, range_to))
     ).all()
     out: list[CalendarEventRecord] = []
     for hearing, matter, forum in rows:
@@ -186,16 +274,7 @@ def _collect_tasks(
     rows = session.execute(
         select(MatterTask, Matter)
         .join(Matter, Matter.id == MatterTask.matter_id)
-        .where(
-            Matter.company_id == context.company.id,
-            Matter.is_active.is_(True),
-            Matter.status.notin_(("closed", "disposed")),
-            visible_matters_filter(session, context=context),
-            MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)),
-            MatterTask.due_on.is_not(None),
-            MatterTask.due_on >= range_from,
-            MatterTask.due_on <= range_to,
-        )
+        .where(*_task_conditions(session, context, range_from, range_to))
     ).all()
     out: list[CalendarEventRecord] = []
     for task, matter in rows:
@@ -234,17 +313,7 @@ def _collect_deadlines(
                 MatterDeadline.source_ref_type.in_(("ip_deadline", "ip_deadline_internal_target")),
             ),
         )
-        .where(
-            Matter.company_id == context.company.id,
-            Matter.is_active.is_(True),
-            Matter.status.notin_(("closed", "disposed")),
-            visible_matters_filter(session, context=context),
-            MatterDeadline.status.notin_(
-                (MatterDeadlineStatus.DONE, MatterDeadlineStatus.CANCELLED)
-            ),
-            MatterDeadline.due_on >= range_from,
-            MatterDeadline.due_on <= range_to,
-        )
+        .where(*_deadline_conditions(session, context, range_from, range_to))
     ).all()
     out: list[CalendarEventRecord] = []
     for deadline, matter, ip_docket_id in rows:
@@ -362,4 +431,4 @@ def _ical_escape(text: str) -> str:
     )
 
 
-__all__ = ["aggregate_calendar_events", "render_events_as_ical"]
+__all__ = ["aggregate_calendar_events", "render_events_as_ical", "summarize_calendar_days"]

@@ -65,6 +65,8 @@ describe("Portfolio renewal corrections through the real HTTP client", () => {
     expect(payload.accept_provider_terms).toBe(expected);
     expect(payload.provider_keys).toEqual(providerKey ? [providerKey] : []);
     expect(payload.provider_terms_version).toBe(providerKey ? "2026.1" : null);
+    // A new configuration lets the server record its own document taxonomy version.
+    expect(payload).not.toHaveProperty("document_taxonomy_version");
   });
 
   it.each(["2029-04-30", null])("serializes correction %s exactly once, including null clearing", async renewalDueDate => {

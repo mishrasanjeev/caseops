@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, bootstrapPatentTenant, enablePatentWorkspace, patentRunId, patentScreenshot, signInPatentTenant } from "./support/patent-acceptance";
 import { assertPatentControlsFit } from "./support/patent-layout";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -24,7 +25,7 @@ for (const width of [393, 768, 1280]) {
     });
     expect(familyResponse.status(), await familyResponse.text()).toBe(201);
     const family = await familyResponse.json();
-    expect((await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers })).status()).toBe(200);
+    await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
     const bytes = Buffer.from(`Synthetic opposition notice, response and decision evidence ${run}; not official legal text. `.repeat(30));
     const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, { headers, multipart: {
       metadata_json: JSON.stringify({ taxonomy_key: "evidence", title: `Opposition source ${run}`, confidentiality: "internal",

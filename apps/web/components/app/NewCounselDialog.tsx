@@ -31,6 +31,26 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { createOutsideCounselProfile } from "@/lib/api/endpoints";
 
+// The API accepts at most 12 of each; extra entries are refused, never dropped.
+const MAX_LIST_ENTRIES = 12;
+
+function tooManyEntries(count: number): string {
+  return `Enter at most ${MAX_LIST_ENTRIES}, separated by commas; ${count} were entered.`;
+}
+
+function splitCsv(value: string | undefined | null): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
+
+function listWithinCap(value: string | undefined, ctx: z.RefinementCtx) {
+  const count = splitCsv(value).length;
+  if (count > MAX_LIST_ENTRIES) ctx.addIssue({ code: "custom", message: tooManyEntries(count) });
+}
+
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters.").max(255),
   primary_contact_name: z.string().max(255).optional(),
@@ -41,8 +61,8 @@ const schema = z.object({
     .or(z.literal("")),
   primary_contact_phone: z.string().max(40).optional(),
   firm_city: z.string().max(255).optional(),
-  jurisdictions: z.string().max(400).optional(),
-  practice_areas: z.string().max(400).optional(),
+  jurisdictions: z.string().max(400).optional().superRefine(listWithinCap),
+  practice_areas: z.string().max(400).optional().superRefine(listWithinCap),
   // Hari-BUG-018/023 (2026-04-22): values MUST match
   // db.models.OutsideCounselPanelStatus. Prior set
   // (active | on_hold | preferred | archived) was the original
@@ -53,15 +73,6 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
-
-function splitCsv(value: string | undefined | null): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0)
-    .slice(0, 12);
-}
 
 export function NewCounselDialog() {
   const [open, setOpen] = useState(false);
@@ -185,21 +196,34 @@ export function NewCounselDialog() {
           <FormField
             id="jurisdictions"
             label="Jurisdictions (comma-separated)"
+            error={form.formState.errors.jurisdictions?.message}
           >
             <Input
               id="jurisdictions"
-              placeholder="Delhi, Bombay, SC"
+              placeholder="Delhi High Court, Bombay High Court, United Kingdom"
+              aria-invalid={form.formState.errors.jurisdictions ? true : undefined}
+              aria-describedby={form.formState.errors.jurisdictions ? "jurisdictions-error jurisdictions-hint" : "jurisdictions-hint"}
               {...form.register("jurisdictions")}
             />
+            <p id="jurisdictions-hint" className="text-xs text-[var(--color-mute)]">
+              For a foreign filing associate, list the countries or offices it
+              files in, by name or code: for example United Kingdom or GB, US,
+              EM (EUIPO), WO (WIPO), EP (EPO). Codes that are also Indian state
+              or court abbreviations (such as SC, MH, TN, CH) count only as the
+              country name written out: Switzerland, not CH.
+            </p>
           </FormField>
 
           <FormField
             id="practice-areas"
             label="Practice areas (comma-separated)"
+            error={form.formState.errors.practice_areas?.message}
           >
             <Input
               id="practice-areas"
               placeholder="Arbitration, IP, White-collar"
+              aria-invalid={form.formState.errors.practice_areas ? true : undefined}
+              aria-describedby={form.formState.errors.practice_areas ? "practice-areas-error" : undefined}
               {...form.register("practice_areas")}
             />
           </FormField>

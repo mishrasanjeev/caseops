@@ -340,3 +340,30 @@ def test_native_concurrent_revocation_wins_over_consumed_replay(owned_engine, re
         )
         assert session.get(AuditEvent, receipt.audit_event_id) is not None
         assert session.scalar(select(func.count()).select_from(AuditEvent)) == 1
+
+
+def test_native_full_ip_grant_entitles_every_ip_feature(owned_engine):
+    from tests import test_qa_full_ip_entitlement as full_cases
+
+    assert owned_engine.dialect.name == "postgresql"
+    full_cases.test_full_ip_grant_entitles_every_ip_feature_and_preserves_everything_else(
+        owned_engine
+    )
+
+
+def test_native_full_ip_replay_is_idempotent_and_never_regrants(owned_engine):
+    from tests import test_qa_full_ip_entitlement as full_cases
+
+    full_cases.test_full_ip_replay_is_idempotent_and_never_regrants_after_revocation(owned_engine)
+
+
+def test_native_full_ip_grant_targets_test_legal_only(owned_engine):
+    from tests import test_qa_full_ip_entitlement as full_cases
+
+    full_cases.test_full_ip_grant_targets_test_legal_only(owned_engine)
+
+
+def test_native_operation_id_is_consumed_by_one_entitlement_set(owned_engine):
+    from tests import test_qa_full_ip_entitlement as full_cases
+
+    full_cases.test_an_operation_id_is_consumed_by_exactly_one_entitlement_set(owned_engine)

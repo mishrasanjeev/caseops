@@ -6,8 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IpWorkspaceConfiguration, IpWorkspaceReadiness } from "@/lib/api/endpoints";
 import { providerAdapterContractRecord } from "@/lib/api/schemas";
 
+const routerReplaceMock = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ replace: routerReplaceMock }),
+  usePathname: () => "/app/ip",
 }));
 
 vi.mock("@/components/app/InAppNotificationCenter", () => ({
@@ -15,6 +19,10 @@ vi.mock("@/components/app/InAppNotificationCenter", () => ({
 }));
 
 const {
+  addIpCostItemMock,
+  fetchMatterWorkspaceMock,
+  fetchIpNiceClassesMock,
+  listMattersMock,
   enableIpWorkspaceMock,
   fetchIpDeadlineDependenciesMock,
   fetchIpDeadlineWorkspaceMock,
@@ -58,6 +66,10 @@ const {
   updateTrademarkApplicationPhaseMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  addIpCostItemMock: vi.fn(),
+  fetchMatterWorkspaceMock: vi.fn(),
+  fetchIpNiceClassesMock: vi.fn(),
+  listMattersMock: vi.fn(),
   enableIpWorkspaceMock: vi.fn(),
   fetchIpDeadlineDependenciesMock: vi.fn(),
   fetchIpDeadlineWorkspaceMock: vi.fn(),
@@ -103,10 +115,15 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  TRADEMARK_MARK_KINDS: ["word", "device", "composite", "label", "colour", "shape", "sound", "other"],
+  fetchMatterWorkspace: fetchMatterWorkspaceMock,
+  fetchIpNiceClasses: fetchIpNiceClassesMock,
+  listMatters: listMattersMock,
   fetchIpDocket: fetchIpDocketMock,
   fetchIpDockets: fetchIpDocketsMock,
   fetchIpDocuments: fetchIpDocumentsMock,
   fetchIpDocumentTaxonomy: fetchIpDocumentTaxonomyMock,
+  seedIpDocumentTaxonomy: vi.fn(),
   previewIpDocumentName: vi.fn(),
   importIpDocumentAliases: vi.fn(),
   downloadApiFile: vi.fn(),
@@ -149,7 +166,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   syncHearingToOutlook: vi.fn(),
   syncHearingToGoogleCalendar: vi.fn(),
   addIpTitleInterest: vi.fn(),
-  addIpCostItem: vi.fn(),
+  addIpCostItem: addIpCostItemMock,
   correctIpCostItem: correctIpCostItemMock,
   discoverIpEvidence: vi.fn(),
   reviewIpEvidenceCandidate: vi.fn(),
@@ -170,6 +187,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   recalculateIpLegalDeadline: vi.fn(),
   completeIpLegalDeadline: vi.fn(),
   proposeIpWorkingCalendar: vi.fn(),
+  fetchIpRulePolicies: vi.fn().mockResolvedValue([]),
+  selectIpRulePolicy: vi.fn(),
   activateIpWorkingCalendar: vi.fn(),
   proposeIpDeadlineRule: vi.fn(),
   fetchIpDeadlineRuleImpact: vi.fn(),
@@ -198,6 +217,86 @@ vi.mock("@/lib/use-session", () => ({
 }));
 
 import IpDocketPage from "@/app/app/ip/page";
+import { availableGovernance } from "@/test/ip-governance-fixtures";
+
+const NICE_HEADINGS: Record<number, string> = {
+  9: "Scientific, research, navigation, surveying apparatus; computer software.",
+  35: "Advertising; business management, organization and administration; office functions.",
+};
+
+function niceCatalogue() {
+  return {
+    edition: "NCL 13-2026",
+    in_force_from: "2026-01-01",
+    source_url: "https://nclpub.wipo.int/enfr/?version=20260101",
+    source_data_url: "https://www.wipo.int/classifications/data/nice/20260101.zip",
+    retrieved_on: "2026-10-31",
+    headings_sha256: "a".repeat(64),
+    attribution: "Nice Classification, 13th edition, version 2026 (NCL 13-2026). Copyright World Intellectual Property Organization (WIPO).",
+    classes: Array.from({ length: 45 }, (_, index) => {
+      const number = index + 1;
+      return {
+        number,
+        kind: number <= 34 ? "goods" : "services",
+        heading: NICE_HEADINGS[number] ?? `Class ${number} heading.`,
+        note: null,
+      };
+    }),
+  };
+}
+
+// Production readiness for test-legal on 2026-10-31 (triage readiness.json):
+// manual docketing available, eight automations missing from the plan.
+function productionShapedReadiness() {
+  const feature = (featureId: string, available: boolean, blocked: string[]) => ({
+    feature_id: featureId,
+    available,
+    reason: blocked[0] ?? "available",
+    blocked_reasons: blocked,
+    owner: "product-ip",
+    required_capabilities: [],
+    missing_capabilities: blocked.includes("missing_capability") ? ["ip:rules_propose"] : [],
+    entitlement_key: `ip_${featureId}`,
+    entitled: !blocked.includes("missing_entitlement"),
+    rollout_flag: `ip_${featureId}_enabled`,
+    rollout_enabled: !blocked.includes("rollout_disabled"),
+    rollout_expires_at: null,
+    manual_fallback_feature_id: available ? null : "manual_docketing",
+  });
+  return {
+    timezone: "Asia/Kolkata",
+    workspace_available: true,
+    manual_docketing_available: true,
+    features: [
+      feature("workspace_core", true, []),
+      feature("manual_docketing", true, []),
+      feature("taxonomy_admin", true, []),
+      feature("registry_sync", false, ["missing_entitlement", "rollout_disabled"]),
+      feature("deadline_automation", false, ["missing_entitlement", "tenant_disabled"]),
+      feature("notification_automation", false, ["missing_entitlement"]),
+      feature("filing_prepare", false, ["missing_entitlement"]),
+      feature("filing_confirm", false, ["missing_entitlement"]),
+      feature("watch_operations", false, ["missing_entitlement"]),
+      feature("cost_operations", false, ["missing_entitlement"]),
+      feature("rule_governance", false, ["missing_capability", "missing_entitlement"]),
+    ],
+  };
+}
+
+async function chooseNiceClass(user: ReturnType<typeof userEvent.setup>, name: string, query: string, option: RegExp) {
+  const input = screen.getByRole("combobox", { name });
+  await waitFor(() => expect(input).toBeEnabled());
+  await user.click(input);
+  await user.type(input, query);
+  await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: option }));
+}
+
+async function fillRequiredTrademarkFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Docket title"), "Aster filing");
+  await user.type(screen.getByLabelText("Word mark"), "ASTER");
+  await user.type(screen.getByLabelText("Applicant"), "Aster Applicant LLP");
+  await user.type(screen.getByLabelText("Representation evidence reference"), "attachment:aster");
+}
 
 function withClient(children: ReactNode, companyUsers?: unknown) {
   const client = new QueryClient({
@@ -382,6 +481,15 @@ describe("IpDocketPage", () => {
     saveIpWorkspaceConfigurationMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
+    routerReplaceMock.mockReset();
+    fetchIpNiceClassesMock.mockReset();
+    fetchIpNiceClassesMock.mockResolvedValue(niceCatalogue());
+    listMattersMock.mockReset();
+    listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
+    addIpCostItemMock.mockReset();
+    addIpCostItemMock.mockResolvedValue({});
+    fetchMatterWorkspaceMock.mockReset();
+    fetchMatterWorkspaceMock.mockResolvedValue({ invoices: [], time_entries: [] });
     fetchIpWorkspaceReadinessMock.mockResolvedValue({
       timezone: "Asia/Calcutta",
       workspace_available: true,
@@ -408,7 +516,7 @@ describe("IpDocketPage", () => {
         weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
         source_reference: "official:calendar", source_hash: "a".repeat(64),
       }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     fetchIpDeadlineDependenciesMock.mockResolvedValue({
       deadline_id: "legal-deadline-1", docket_id: "ip-1", state: "candidate",
@@ -593,6 +701,31 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
+  it("B4-ADJ-11 labels the docket record status so an imported filed mark never reads as Draft", async () => {
+    window.history.replaceState(null, "", "/app/ip");
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [
+        { ...activeDocket(), status: "draft" },
+        { ...activeDocket(), id: "ip-2", title: "BIRCH", primary_identifier: "TM-2" },
+      ],
+      count: 2,
+    });
+    render(withClient(<IpDocketPage />));
+    expect(await screen.findByTestId("ip-docket-ip-1")).toHaveTextContent("TM-1 · Record: particulars draft · v1");
+    expect(screen.getByTestId("ip-docket-ip-2")).toHaveTextContent("TM-2 · Record: active · v1");
+  });
+
+  it("BUG-012 links a national trademark docket to its registry reconciliation", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("link", { name: "Reconcile with registry" })).toHaveAttribute(
+      "href",
+      "/app/ip/registry?docket=ip-1",
+    );
+  });
+
   it("opens ordinary docket links on overview and honors an explicit schedule view", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1");
 
@@ -618,12 +751,23 @@ describe("IpDocketPage", () => {
     ).toBeVisible();
   });
 
+  it("BUG-015 opens the Documents tab from a documents deep link", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&tab=documents");
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("tab", { name: "Documents" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Docket" })).toHaveAttribute("aria-selected", "false");
+  });
+
   it("B2-BUG-001/002 explains absent active calendar and rule prerequisites without enabling calculation", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
       eligible_rule_version_ids: [],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     render(withClient(<IpDocketPage />));
 
@@ -667,7 +811,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1", rules: [], calendars: [], deadlines: [], exceptions: [],
       eligible_rule_version_ids: [],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     await userEvent.click(within(workspace).getByRole("button", { name: "Retry deadline workspace" }));
     await within(workspace).findByText("No active working calendar");
@@ -693,7 +837,7 @@ describe("IpDocketPage", () => {
         { ...rule, id: "fee-rule", rule_kind: "fee" }],
       calendars: [calendar, { ...calendar, id: "calendar-2", version: 2 },
         { ...calendar, id: "candidate-calendar", status: "candidate" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     };
     fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -702,10 +846,15 @@ describe("IpDocketPage", () => {
     const rules = within(workspace).getByLabelText("Active rule version");
     const calendars = within(workspace).getByLabelText("Active working calendar");
     await waitFor(() => expect(rules).toBeEnabled());
-    expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+    // B4-ADJ-08: with several eligible versions nothing is chosen for the lawyer.
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    expect(within(rules).getByRole("option", { name: "Choose a rule version" })).toBeDisabled();
+    expect(within(rules).getAllByRole("option").map(option => (option as HTMLOptionElement).value).filter(Boolean))
       .toEqual(["rule-1", "rule-2"]);
-    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value))
+    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value).filter(Boolean))
       .toEqual(["calendar-1", "calendar-2"]);
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
     await userEvent.selectOptions(rules, "rule-2");
     await userEvent.selectOptions(calendars, "calendar-2");
     expect(rules).toHaveValue("rule-2");
@@ -760,7 +909,7 @@ describe("IpDocketPage", () => {
       docket_id: "ip-1", eligible_rule_version_ids: ["rule-one", "rule-two"],
       rules: [rule, { ...rule, id: "rule-two", rule_set_id: "set-two" }],
       calendars: [calendar, { ...calendar, id: "calendar-two" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     };
     fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -783,6 +932,10 @@ describe("IpDocketPage", () => {
     };
     const ruleCaption = `${rule.key} · version 7 · IN · Intellectual Property Office · active`;
     const calendarCaption = `${calendar.name} · version 8 · IN · Calendar Office · Asia/Kolkata · active`;
+    expect(rules).toHaveValue("");
+    expect(calendars).toHaveValue("");
+    await userEvent.selectOptions(rules, "rule-one");
+    await userEvent.selectOptions(calendars, "calendar-one");
     assertDetail(rules, "rule-one", ruleCaption);
     assertDetail(calendars, "calendar-one", calendarCaption);
     await userEvent.selectOptions(rules, "rule-two");
@@ -799,6 +952,38 @@ describe("IpDocketPage", () => {
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
   });
 
+  it("B4-ADJ-08 offers only working calendars of the chosen rule's jurisdiction", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    const rule = { id: "rule-in", rule_set_id: "set-in", key: "in-tm-exam", version: 1, status: "active",
+      rule_kind: "deadline", jurisdiction: "IN", office: "IP India" };
+    const india = { id: "calendar-in", name: "IP India 2026", version: 1, status: "active", jurisdiction: "IN",
+      office: "IP India", timezone: "Asia/Kolkata" };
+    const uk = { ...india, id: "calendar-gb", name: "UK IPO 2026", jurisdiction: "GB", office: "UK IPO", timezone: "Europe/London" };
+    const data = {
+      docket_id: "ip-1", eligible_rule_version_ids: ["rule-in"], rules: [rule], calendars: [uk, india],
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
+    };
+    fetchIpDeadlineWorkspaceMock.mockResolvedValue(data);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><IpDocketPage /></QueryClientProvider>);
+    const workspace = await screen.findByTestId("ip-deadline-workspace");
+    const rules = within(workspace).getByLabelText("Active rule version");
+    const calendars = within(workspace).getByLabelText("Active working calendar");
+    await waitFor(() => expect(rules).toHaveValue("rule-in"));
+    // The GB calendar would be refused by the API for an IN rule, so it is not offered.
+    expect(within(calendars).getAllByRole("option").map(option => (option as HTMLOptionElement).value)).toEqual(["calendar-in"]);
+    expect(calendars).toHaveValue("calendar-in");
+
+    await act(async () => client.setQueryData(["ip", "deadline-workspace", "ip-1"], { ...data, calendars: [uk] }));
+    await waitFor(() => expect(calendars).toBeDisabled());
+    expect(within(calendars).getByRole("option", { name: "No active IN working calendar" })).toBeInTheDocument();
+    expect(document.getElementById(calendars.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+      "No IN working calendar is active; the selected rule counts its deadline only on a calendar of its jurisdiction.",
+    );
+    expect(within(workspace).getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
+    expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
+  });
+
   it.each([{ label: "empty", ids: [] }, { label: "absent", ids: undefined }])(
     "B2-BUG-002 rejects active rules when server-owned eligibility is $label", async ({ ids }) => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
@@ -808,7 +993,7 @@ describe("IpDocketPage", () => {
         status: "active", rule_kind: "deadline", jurisdiction: "IN", office: "IP India" }],
       calendars: [{ id: "calendar-1", name: "Approved calendar", version: 1,
         status: "active", timezone: "Asia/Kolkata" }],
-      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only",
+      deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
     render(withClient(<IpDocketPage />));
     const workspace = await screen.findByTestId("ip-deadline-workspace");
@@ -820,9 +1005,10 @@ describe("IpDocketPage", () => {
     expect(proposeIpLegalDeadlineMock).not.toHaveBeenCalled();
   });
 
-  it("creates a pre-filing application through one canonical command", async () => {
+  it("BUG-002 creates a two-class application with the catalogue edition on every row", async () => {
+    const user = userEvent.setup();
     createManualTrademarkApplicationMock.mockResolvedValue({
-      docket: { id: "ip-created" },
+      docket: activeDocket(),
       asset: { id: "asset-created" },
       application: { id: "application-created" },
       identifier: null,
@@ -830,27 +1016,29 @@ describe("IpDocketPage", () => {
     });
     render(withClient(<IpDocketPage />));
 
-    fireEvent.click(await screen.findByRole("button", { name: "New trademark" }));
-    fireEvent.change(screen.getByLabelText("Docket title"), {
-      target: { value: "Aster filing" },
-    });
-    fireEvent.change(screen.getByLabelText("Word mark"), {
-      target: { value: "ASTER" },
-    });
-    fireEvent.change(screen.getByLabelText("Goods / services specification"), {
-      target: { value: "Downloadable software" },
-    });
-    fireEvent.change(screen.getByLabelText("Applicant"), {
-      target: { value: "Aster Applicant LLP" },
-    });
-    fireEvent.change(screen.getByLabelText("Representation evidence reference"), {
-      target: { value: "attachment:aster" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create application" }));
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    const submit = screen.getByRole("button", { name: "Create application" });
+    expect(submit).toBeDisabled();
+    expect(screen.getByText(/a Nice class for every class row/)).toBeVisible();
 
-    await waitFor(() =>
-      expect(createManualTrademarkApplicationMock).toHaveBeenCalledTimes(1),
-    );
+    await chooseNiceClass(user, "Nice class, row 1", "advertising", /^Class 35, services:/);
+    await user.type(screen.getByLabelText("Goods and services, row 1"), "Advertising services");
+    await user.click(screen.getByRole("button", { name: "Add class row" }));
+    // The class chosen in row 1 cannot be chosen again in row 2.
+    const second = screen.getByRole("combobox", { name: "Nice class, row 2" });
+    await user.click(second);
+    await user.type(second, "35");
+    expect(within(screen.getByRole("listbox")).getByRole("option", { name: /^Class 35, services: .*Already listed in another row\.$/ }))
+      .toHaveAttribute("aria-disabled", "true");
+    await user.clear(second);
+    await user.type(second, "9");
+    await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: /^Class 9, goods:/ }));
+    await user.type(screen.getByLabelText("Goods and services, row 2"), "Downloadable software");
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+
+    await waitFor(() => expect(createManualTrademarkApplicationMock).toHaveBeenCalledTimes(1));
     expect(createManualTrademarkApplicationMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Aster filing",
@@ -858,8 +1046,206 @@ describe("IpDocketPage", () => {
         filingPhase: "pre_filing",
         applicationNumber: null,
         sourcePendingIdentifierAllocation: false,
+        matterId: null,
+        niceEdition: "NCL 13-2026",
+        classes: [
+          { classNumber: 35, specification: "Advertising services" },
+          { classNumber: 9, specification: "Downloadable software" },
+        ],
       }),
     );
+    expect(screen.queryByRole("region", { name: "New trademark application" })).not.toBeInTheDocument();
+  });
+
+  it("BUG-002 anchors a refused class row to that row's field", async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import("@/lib/api/config");
+    createManualTrademarkApplicationMock.mockRejectedValue(new ApiError(422,
+      "Particulars › Classes › Specification: Class row 2: describe the goods or services for Nice class 9 (at least 3 characters).",
+      { errors: [{ loc: ["body", "particulars", "classes", 1, "specification"], type: "nice_class",
+        msg: "Class row 2: describe the goods or services for Nice class 9 (at least 3 characters)." }] }));
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    await chooseNiceClass(user, "Nice class, row 1", "35", /^Class 35, services:/);
+    await user.type(screen.getByLabelText("Goods and services, row 1"), "Advertising services");
+    await user.click(screen.getByRole("button", { name: "Add class row" }));
+    await chooseNiceClass(user, "Nice class, row 2", "9", /^Class 9, goods:/);
+    await user.type(screen.getByLabelText("Goods and services, row 2"), "Apps");
+    await user.click(screen.getByRole("button", { name: "Create application" }));
+
+    const field = screen.getByLabelText("Goods and services, row 2");
+    await waitFor(() => expect(field).toHaveAttribute("aria-invalid", "true"));
+    const errorId = field.getAttribute("aria-describedby")!;
+    expect(document.getElementById(errorId)).toHaveTextContent(
+      "Class row 2: describe the goods or services for Nice class 9 (at least 3 characters).",
+    );
+    expect(screen.getByLabelText("Goods and services, row 1")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("BUG-002 keeps submit disabled with a reason while the Nice catalogue cannot load", async () => {
+    const user = userEvent.setup();
+    fetchIpNiceClassesMock.mockRejectedValue(new Error("offline"));
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "New trademark" }));
+    await fillRequiredTrademarkFields(user);
+    expect(await screen.findByText(/The Nice class list could not load/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add class row" })).toBeDisabled();
+    expect(createManualTrademarkApplicationMock).not.toHaveBeenCalled();
+  });
+
+  it("BUG-001 opens the form above the readiness summary, scrolls it into view and focuses it", async () => {
+    const user = userEvent.setup();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(productionShapedReadiness());
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) { scrolled.push(this); };
+    try {
+      render(withClient(<IpDocketPage />));
+      const toggle = await screen.findByRole("button", { name: "New trademark" });
+      expect(toggle).toHaveAttribute("type", "button");
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+      await user.click(toggle);
+
+      const panel = screen.getByRole("region", { name: "New trademark application" });
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(toggle).toHaveAttribute("aria-controls", panel.id);
+      expect(scrolled).toContain(panel);
+      expect(screen.getByLabelText("Docket title")).toHaveFocus();
+      const summary = screen.getByTestId("ip-automation-summary");
+      expect(panel.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(summary).toHaveTextContent(
+        "Manual docketing is available. 8 IP features are unavailable: 1 paused by CaseOps, 8 not in your plan, 1 needs setup, 1 your role cannot use.",
+      );
+      expect(screen.queryByText(/owner /)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("ip-automation-registry_sync")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("region", { name: "New trademark application" })).not.toBeInTheDocument();
+      await waitFor(() => expect(toggle).toHaveFocus());
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("BUG-001 picks a transfer's successor docket by name and never offers the docket itself", async () => {
+    const successor = { ...activeDocket(), id: "ip-2", title: "BIRCH", primary_identifier: "TM-2" };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket(), successor], count: 2 });
+    render(withClient(<IpDocketPage />));
+
+    const lifecycle = await screen.findByTestId("ip-lifecycle-workflow");
+    fireEvent.change(within(lifecycle).getByLabelText("Transition"), { target: { value: "transferred" } });
+    expect(within(lifecycle).queryByLabelText("Successor docket ID")).toBeNull();
+    const picker = within(lifecycle).getByRole<HTMLSelectElement>("combobox", { name: "Successor docket" });
+    await waitFor(() => expect(picker).toBeEnabled());
+    expect(Array.from(picker.options, (option) => option.value)).toEqual(["", "ip-2"]);
+    const preview = within(lifecycle).getByRole("button", { name: "Preview lifecycle impact" });
+    fireEvent.change(within(lifecycle).getByLabelText("Reason"), { target: { value: "Assigned to the successor owner." } });
+    fireEvent.change(within(lifecycle).getByLabelText("Outcome"), { target: { value: "transferred" } });
+    fireEvent.change(within(lifecycle).getByLabelText("Evidence reference"), { target: { value: "attachment:assignment-1" } });
+    expect(preview).toBeDisabled();
+    fireEvent.change(picker, { target: { value: "ip-2" } });
+    expect(preview).toBeEnabled();
+    fireEvent.click(preview);
+    await waitFor(() => expect(previewIpDocketLifecycleMock).toHaveBeenCalledTimes(1));
+    expect(previewIpDocketLifecycleMock).toHaveBeenCalledWith(
+      "ip-1",
+      expect.objectContaining({ toStatus: "transferred", successorDocketId: "ip-2" }),
+    );
+  });
+
+  it("BUG-002 posts the chosen cost category and a Matter billing record chosen by name", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    fetchMatterWorkspaceMock.mockResolvedValue({
+      invoices: [{ id: "invoice-1", invoice_number: "INV-2026-001", status: "issued", total_amount_minor: 900000,
+        balance_due_minor: 0, amount_received_minor: 0, currency: "INR", line_items: [] }],
+      time_entries: [],
+    });
+    render(withClient(<IpDocketPage />));
+
+    const costs = await screen.findByTestId("ip-cost-workspace");
+    fireEvent.change(within(costs).getByLabelText("Category"), { target: { value: "professional_fee" } });
+    fireEvent.change(within(costs).getByLabelText("Description"), { target: { value: "Counsel fee for the search" } });
+    fireEvent.change(within(costs).getByLabelText("Amount (INR)"), { target: { value: "9000" } });
+    fireEvent.change(within(costs).getByLabelText("Evidence reference"), { target: { value: "receipt:counsel-1" } });
+    fireEvent.change(within(costs).getByLabelText("Matter billing link type"), { target: { value: "invoice" } });
+    expect(within(costs).queryByLabelText("Matter billing record ID")).toBeNull();
+    const record = within(costs).getByRole<HTMLSelectElement>("combobox", { name: "Matter billing record" });
+    await waitFor(() => expect(record).toBeEnabled());
+    expect(fetchMatterWorkspaceMock).toHaveBeenCalledWith("matter-1", expect.anything());
+    const add = within(costs).getByRole("button", { name: "Add cost evidence" });
+    expect(add).toBeDisabled();
+    fireEvent.change(record, { target: { value: "invoice-1" } });
+    expect(record).toHaveAccessibleDescription("INV-2026-001 · issued · INR 9000.00");
+    fireEvent.click(add);
+    await waitFor(() => expect(addIpCostItemMock).toHaveBeenCalledTimes(1));
+    expect(addIpCostItemMock).toHaveBeenCalledWith(
+      "ip-1",
+      expect.objectContaining({
+        category: "professional_fee",
+        amountMinor: 900000,
+        billingLinkType: "invoice",
+        billingLinkId: "invoice-1",
+      }),
+    );
+  });
+
+  it("BUG-001 explains each unavailable automation by who can change it", async () => {
+    const user = userEvent.setup();
+    fetchIpWorkspaceReadinessMock.mockResolvedValue(productionShapedReadiness());
+    render(withClient(<IpDocketPage />));
+
+    await user.click(await screen.findByRole("button", { name: "Show details" }));
+    const registry = screen.getByTestId("ip-automation-registry_sync");
+    expect(within(registry).getByText(/^Not in your plan\./)).toBeVisible();
+    expect(within(registry).getByText(/^Paused by CaseOps\./)).toBeVisible();
+    const deadlines = screen.getByTestId("ip-automation-deadline_automation");
+    expect(within(deadlines).getByText(/^Needs setup\./)).toBeVisible();
+    const rules = screen.getByTestId("ip-automation-rule_governance");
+    expect(within(rules).getByText(/^Your role cannot use it\./)).toBeVisible();
+    // Lawyers read what the role is missing, never a capability id.
+    expect(rules).toHaveTextContent("It needs permission to propose deadline rules.");
+    expect(rules).not.toHaveTextContent("ip:rules_propose");
+    expect(registry.querySelector('[data-reason="missing_entitlement"]')).toHaveTextContent("ask CaseOps to add it to the plan");
+    expect(screen.queryByRole("link", { name: /workspace plan/i })).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Hide details" });
+    expect(toggle).toHaveAttribute("aria-controls", "ip-automation-readiness-detail");
+    expect(document.getElementById("ip-automation-readiness-detail")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open workspace configuration" }));
+    expect(screen.getByTestId("ip-workspace-configuration-panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide details" }));
+    // A collapsed toggle points at nothing: the detail is not in the document.
+    expect(screen.getByRole("button", { name: "Show details" })).not.toHaveAttribute("aria-controls");
+  });
+
+  it("opens the tab named by ?tab= and writes the tab back to the URL", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/app/ip?tab=documents");
+    try {
+      render(withClient(<IpDocketPage />));
+      expect(await screen.findByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+      await user.click(screen.getByRole("tab", { name: "Domain availability" }));
+      expect(routerReplaceMock).toHaveBeenLastCalledWith("/app/ip?tab=availability", { scroll: false });
+      await user.click(screen.getByRole("tab", { name: "Docket" }));
+      expect(routerReplaceMock).toHaveBeenLastCalledWith("/app/ip", { scroll: false });
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("falls back to the docket tab for an unknown ?tab= value", async () => {
+    window.history.replaceState(null, "", "/app/ip?tab=nonsense");
+    try {
+      render(withClient(<IpDocketPage />));
+      expect(await screen.findByRole("tab", { name: "Docket" })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("shows saved hearing source and complete reminder policy without treating queued as delivered", async () => {
@@ -1088,6 +1474,29 @@ describe("IpDocketPage", () => {
     expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps 48h reminder offsets instead of silently dropping them (B4-ADJ-19)", async () => {
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    createIpSharedHearingMock.mockResolvedValue(unknownTimeHearing());
+    render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Hearings and deadlines" }));
+    const workflow = await screen.findByTestId("ip-hearing-workflow");
+    const offsets = within(workflow).getByLabelText("Reminder offsets");
+    const preview = within(workflow).getByRole("button", { name: "Preview recipients and policy" });
+
+    fireEvent.change(offsets, { target: { value: "48h, soon" } });
+    expect(offsets).toHaveAttribute("aria-invalid", "true");
+    expect(within(workflow).getByRole("alert")).toHaveTextContent('"soon" is not a reminder offset.');
+    expect(preview).toBeDisabled();
+
+    fireEvent.change(offsets, { target: { value: "48h, 1d" } });
+    expect(offsets).not.toHaveAttribute("aria-invalid");
+    expect(within(workflow).getByText(/Before the hearing: 48, 24 hours\./)).toBeVisible();
+    fireEvent.click(preview);
+    fireEvent.click(within(workflow).getByRole("button", { name: "Confirm hearing and reminders" }));
+    await waitFor(() => expect(createIpSharedHearingMock).toHaveBeenCalledTimes(1));
+    expect(createIpSharedHearingMock.mock.calls[0][0].reminderOffsetsHours).toEqual([48, 24]);
+  });
+
   it("keeps typed numbers separate and resolves duplicates on narrow mobile", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
     fetchIpDocketsMock.mockResolvedValue({
@@ -1229,8 +1638,9 @@ describe("IpDocketPage", () => {
     render(withClient(<IpDocketPage />));
 
     expect(await screen.findByRole("heading", { name: "IP workspace setup" })).toBeVisible();
-    expect(screen.getByText("The workspace plan does not include this feature · owner product-ip")).toBeVisible();
-    expect(screen.getByText("The safety rollout has not been enabled · owner integrations")).toBeVisible();
+    expect(screen.getByText("Not in your plan. Your workspace plan does not include it. A workspace admin can ask CaseOps to add it to the plan.")).toBeVisible();
+    expect(screen.getByText("Paused by CaseOps. CaseOps has not switched this feature on yet. Nothing in your workspace needs to change.")).toBeVisible();
+    expect(screen.queryByText(/owner (product-ip|integrations)/)).not.toBeInTheDocument();
     expect(screen.getByText("Manual fallback: manual docketing")).toBeVisible();
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "New trademark" })).not.toBeInTheDocument();
@@ -1277,8 +1687,12 @@ describe("IpDocketPage", () => {
 
     expect(await screen.findByText("No IP records yet")).toBeVisible();
     expect(screen.getByRole("button", { name: "New trademark" })).toBeVisible();
-    expect(screen.getByText("registry sync")).toBeVisible();
-    expect(screen.getByText("Manual fallback remains manual docketing.")).toBeVisible();
+    expect(screen.getByTestId("ip-automation-summary")).toHaveTextContent(
+      "Manual docketing is available. 1 IP feature is unavailable: 1 paused by CaseOps.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText("Registry sync")).toBeVisible();
+    expect(screen.getByText("Until then, use manual docketing.")).toBeVisible();
   });
 
   it("renders the complete setup and isolated-automation actions on narrow mobile", async () => {
@@ -1710,7 +2124,7 @@ describe("IpDocketPage", () => {
     expect(within(hearingWorkflow).getByLabelText("Hearing date")).toBeVisible();
     expect(within(hearingWorkflow).getByLabelText("Time precision")).toBeVisible();
     expect(within(hearingWorkflow).getByLabelText("Virtual hearing link")).toBeVisible();
-    expect(within(hearingWorkflow).getByLabelText("Reminder offsets (hours)")).toBeVisible();
+    expect(within(hearingWorkflow).getByLabelText("Reminder offsets")).toBeVisible();
     const previewReminders = within(hearingWorkflow).getByRole("button", {
       name: "Preview recipients and policy",
     });
@@ -1905,6 +2319,7 @@ describe("IpDocketPage", () => {
     fetchIpDeadlineWorkspaceMock.mockResolvedValue({
       docket_id: "ip-1",
       eligible_rule_version_ids: ["rule-1", "rule-2"],
+      eligible_responsible_membership_ids: ["member-1", "member-2"],
       rules: [
         { id: "rule-1", key: "in-tm-response", version: 1, status: "active", source_reference: "https://official.example/ip-india/tm-rules" },
         { id: "rule-2", key: "in-tm-alternate", version: 2, status: "active", source_reference: "https://official.example/ip-india/tm-rules-alternate" },
@@ -1924,7 +2339,7 @@ describe("IpDocketPage", () => {
         updated_at: "2026-08-09T00:00:00Z", responsibilities: [],
       }],
       exceptions: [{ deadline_id: "legal-deadline-1", docket_id: "ip-1", exception_kinds: ["unowned", "unacknowledged"], critical: true, result_on: "2026-08-18", visible: true }],
-      automation_state: "explicit_confirmation_only",
+      automation_state: "explicit_confirmation_only", governance: availableGovernance(),
     });
 
     render(withClient(<IpDocketPage />));
@@ -1935,7 +2350,10 @@ describe("IpDocketPage", () => {
     );
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
-    expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
+    // Readable labels and the deadline's title, never raw codes or ids.
+    expect(within(deadlineWorkspace).getByText("No responsible lawyer · Owner has not accepted")).toBeVisible();
+    expect(within(deadlineWorkspace).getByText(/Respond to examination report · 2026-08-18/)).toBeVisible();
+    expect(within(deadlineWorkspace).queryByText(/deadline legal-deadline-1/)).not.toBeInTheDocument();
     // 2026-08-16: these were free-text boxes demanding a membership UUID. They
     // are now pickers, so the assertion is that a lawyer can name a colleague.
     const primary = within(deadlineWorkspace).getByLabelText("Responsible lawyer");

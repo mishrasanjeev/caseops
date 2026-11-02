@@ -155,7 +155,7 @@ export default function MatterAuditPage() {
             <Input
               id="audit-actor"
               data-testid="audit-filter-actor"
-              placeholder="Name or membership ID"
+              placeholder="Name"
               onChange={(event) => updateFilter("actor", event.target.value)}
             />
           </div>

@@ -60,6 +60,22 @@ describe("DataTable", () => {
     expect(onRowClick).toHaveBeenNthCalledWith(3, rows[1]);
   });
 
+  it("pins only the last column when the caller asks, so row actions stay on screen", () => {
+    const { unmount } = render(<DataTable columns={columns} data={rows} pinLastColumn />);
+    const pinnedRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
+    const cells = Array.from(pinnedRow.querySelectorAll("td"));
+    // Pinned from 40rem up; below that the table stacks into labelled rows so nothing is covered.
+    expect(cells.at(-1)?.className).toMatch(/@min-\[40rem\]:sticky @min-\[40rem\]:right-0/);
+    expect(cells[0].className).not.toMatch(/sticky/);
+    expect(screen.getByRole("columnheader", { name: "Due" }).className).toMatch(/@min-\[40rem\]:sticky/);
+    expect(pinnedRow.closest("table")?.className).toMatch(/@max-\[40rem\]:stacked-table/);
+    expect(cells.map((cell) => cell.dataset.label)).toEqual(["Name", "Due"]);
+    unmount();
+    render(<DataTable columns={columns} data={rows} />);
+    const plainRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
+    expect(plainRow.innerHTML).not.toMatch(/sticky/);
+  });
+
   it("labels Previous and Next pagination buttons for screen readers", () => {
     render(<DataTable columns={columns} data={rows} />);
     expect(screen.getByRole("button", { name: /Previous page/i })).toBeInTheDocument();

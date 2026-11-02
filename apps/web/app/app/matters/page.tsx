@@ -636,6 +636,7 @@ export default function MattersPage() {
             filterPlaceholder="Search matters, codes, clients…"
             onRowClick={(m) => router.push(`/app/matters/${m.id}`)}
             getRowId={(m) => m.id}
+            pinLastColumn={canEditMatters || canArchiveMatters}
           />
           {hasNextPage ? (
             <div className="flex justify-center">

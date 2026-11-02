@@ -268,7 +268,7 @@ def test_renewals_declares_its_public_workflow_and_compatibility_exports():
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
     }
-    assert len(names) == len(set(names)) == 13
+    assert len(names) == len(set(names)) == 14
     assert set(names) == public_functions | {"imported_renewal_reminder_is_current"}
     assert ip_renewals.__all__ == names
     assert all(callable(getattr(ip_renewals, name)) for name in names)

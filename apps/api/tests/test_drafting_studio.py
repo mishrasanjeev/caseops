@@ -1040,6 +1040,44 @@ def test_generate_draft_quota_error_returns_actionable_503_without_raw_provider_
     assert "No output was saved" in body["detail"]
 
 
+def test_generate_draft_budget_refusal_is_not_presented_as_retryable(
+    client: TestClient, monkeypatch,
+) -> None:
+    """2026-11-01 production: an unreconciled AI month read "retry in a minute"."""
+    from caseops_api.services.ai_money_budget import AiMoneyBudgetError
+    from caseops_api.services.llm import LLMMessage
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUDGET-503")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 505")
+    draft = _create_draft(client, token, matter_id)
+    refusal = "AI monthly spending is awaiting reconciliation. No external request was sent."
+
+    class _BudgetRefusingProvider:
+        name = "openai"
+        model = "gpt-5.1"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise AiMoneyBudgetError(refusal)
+
+    monkeypatch.setattr(
+        "caseops_api.services.drafting.build_provider",
+        lambda *a, **kw: _BudgetRefusingProvider(),
+    )
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/generate",
+        headers=auth_headers(token),
+        json={},
+    )
+
+    assert resp.status_code == 503, resp.text
+    detail = resp.json()["detail"]
+    assert detail == refusal
+    assert "retry" not in detail.lower()
+    assert "AiMoneyBudgetError" not in detail
+
+
 def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:
     """R-UI: the stepper POSTs template_type + facts; both must be
     persisted and surfaced on the response, and the fact values must

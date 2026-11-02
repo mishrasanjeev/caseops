@@ -177,7 +177,8 @@ test("IPLF-049 completes UJ-38 and every governed exception path", async ({
   const headers = await enableWorkspace(api, tenant);
   const application = await createApplication(api, headers);
   await signIn(page, tenant.slug, tenant.email);
-  await page.goto(`/app/ip?docket=${application.docket.id}`);
+  // Proceedings moved to their own docket tab after this spec was written.
+  await page.goto(`/app/ip?docket=${application.docket.id}&view=proceedings`);
 
   const workspace = page.getByTestId("ip-post-registration-workspace");
   await expect(workspace).toBeVisible();
@@ -228,7 +229,11 @@ test("IPLF-049 completes UJ-38 and every governed exception path", async ({
   await profile.getByLabel("Target right").fill("registration:TM-049-2026");
   await profile.getByLabel("Applicant").fill("Claimant Brands Private Limited");
   await profile.getByLabel("Respondent").fill("Registered Proprietor Limited");
-  await profile.getByLabel("Class").fill("9");
+  // BUG-002: the challenged class is chosen from the Nice catalogue.
+  const challengedClass = profile.getByRole("combobox", { name: "Class", exact: true });
+  await challengedClass.click();
+  await challengedClass.fill("9");
+  await page.getByRole("listbox").getByRole("option", { name: /^Class 9, goods:/ }).click();
   await profile
     .getByLabel("Challenged scope")
     .fill("Downloadable legal software");
