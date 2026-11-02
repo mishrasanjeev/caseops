@@ -6,6 +6,7 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
 import { runDocumentWorkerOnce } from "./support/helpers";
+import { terminateContract } from "./support/retire-records";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
@@ -105,120 +106,125 @@ for (const width of [1280, 393]) {
         data: { title, contract_code: `CAI-${run}`, contract_type: "agreement", status: "under_review" } });
       expect(created.status(), "unique retained QA contract").toBe(200);
       const contractId = (await created.json()).id as string;
-      const path = `/api/contracts/${contractId}`;
-      async function add(suffix: string, data: Record<string, unknown>) {
-        const response = await request.post(`${api.origin}${path}/${suffix}`, { headers, data });
-        expect(response.status(), `retain reviewed ${suffix} fixture`).toBe(200);
-        return await response.json();
-      }
-      const manualClause = await add("clauses", { title: "Counsel-reviewed clause", clause_type: "payment",
-        clause_text: SOURCE, risk_level: "low", notes: "Manual review must survive extraction." });
-      const manualDuty = await add("obligations", { title: "Counsel-reviewed duty", description: SOURCE });
-      const rule = await add("playbook-rules", { rule_name: "Counsel-reviewed payment rule", clause_type: "payment",
-        expected_position: SOURCE, severity: "medium" });
-      await page.goto(`/app/contracts/${contractId}`);
-      await expect(page.getByRole("heading", { name: title })).toBeVisible();
-      for (const layoutWidth of [320, 393, 767, 768, 769, 1023, 1024, 1025, 1280]) {
-        await page.setViewportSize({ width: layoutWidth, height: 900 });
+      try {
+        const path = `/api/contracts/${contractId}`;
+        async function add(suffix: string, data: Record<string, unknown>) {
+          const response = await request.post(`${api.origin}${path}/${suffix}`, { headers, data });
+          expect(response.status(), `retain reviewed ${suffix} fixture`).toBe(200);
+          return await response.json();
+        }
+        const manualClause = await add("clauses", { title: "Counsel-reviewed clause", clause_type: "payment",
+          clause_text: SOURCE, risk_level: "low", notes: "Manual review must survive extraction." });
+        const manualDuty = await add("obligations", { title: "Counsel-reviewed duty", description: SOURCE });
+        const rule = await add("playbook-rules", { rule_name: "Counsel-reviewed payment rule", clause_type: "payment",
+          expected_position: SOURCE, severity: "medium" });
+        await page.goto(`/app/contracts/${contractId}`);
+        await expect(page.getByRole("heading", { name: title })).toBeVisible();
+        for (const layoutWidth of [320, 393, 767, 768, 769, 1023, 1024, 1025, 1280]) {
+          await page.setViewportSize({ width: layoutWidth, height: 900 });
+          await assertContractTabsReachable(page);
+          if (local && width === 1280) {
+            await test.info().attach(`contract-tabs-${layoutWidth}px`, {
+              body: await page.getByRole("tablist").screenshot(), contentType: "image/png",
+            });
+          }
+        }
+        await page.setViewportSize({ width, height: 900 });
         await assertContractTabsReachable(page);
-        if (local && width === 1280) {
-          await test.info().attach(`contract-tabs-${layoutWidth}px`, {
-            body: await page.getByRole("tablist").screenshot(), contentType: "image/png",
-          });
-        }
-      }
-      await page.setViewportSize({ width, height: 900 });
-      await assertContractTabsReachable(page);
-      await page.getByRole("tab", { name: /^Clauses/ }).click();
-      await expect(page.getByTestId("contract-extract-clauses")).toBeDisabled();
-      await page.getByRole("tab", { name: /^Attachments/ }).click();
-      const uploading = page.waitForResponse(response => new URL(response.url()).pathname === `${path}/attachments`
-        && response.request().method() === "POST");
-      await page.getByTestId("contract-attachment-input").setInputFiles({
-        name: `contract-source-${run}.txt`, mimeType: "text/plain", buffer: Buffer.from(`${SOURCE}\n`.repeat(8)),
-      });
-      const uploaded = await uploading;
-      expect(uploaded.status(), "original upload without retries").toBe(200);
-      const attachmentId = (await uploaded.json()).id as string;
-      if (local) await runDocumentWorkerOnce();
-      const deadline = Date.now() + 90_000;
-      let indexed = false;
-      while (Date.now() < deadline) {
-        const response = await request.get(`${api.origin}${path}/workspace`, { headers });
-        expect(response.status(), "authorized indexed workspace").toBe(200);
-        const attachment = (await response.json()).attachments.find((row: { id: string }) => row.id === attachmentId);
-        expect(attachment).toBeDefined();
-        if (attachment.processing_status === "failed") throw new Error("Contract fixture indexing failed.");
-        if (attachment.processing_status === "indexed") {
-          expect(attachment.extracted_char_count).toBeGreaterThan(0);
-          indexed = true;
-          break;
-        }
-        await page.waitForTimeout(1500);
-      }
-      expect(indexed, "bounded real worker completion, not a skip").toBe(true);
-      await page.reload();
-      async function action(button: Locator, suffix: string): Promise<Response> {
-        await release(request);
-        await expect(button).toBeVisible();
-        await expect(button).toBeEnabled();
-        await button.scrollIntoViewIfNeeded();
-        const bounds = await button.boundingBox();
-        expect(bounds!.width).toBeGreaterThan(24);
-        expect(bounds!.x).toBeGreaterThanOrEqual(0);
-        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
-        const result = page.waitForResponse(response => new URL(response.url()).pathname === `/api/ai/contracts/${contractId}/${suffix}`
-          && response.request().method() === "POST");
-        await button.click();
-        const response = await result;
-        expect(await response.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
-        expect(response.status(), `first ${suffix} response, without browser retry`).toBe(200);
-        expect((await response.json()).provider, "offline result is not paid-model accuracy evidence").toBe("mock");
-        return response;
-      }
-      await page.getByRole("tab", { name: /^Clauses/ }).click();
-      for (let iteration = 0; iteration < 2; iteration++) {
-        const response = await action(page.getByTestId("contract-extract-clauses"), "clauses/extract");
-        expect(await response.json()).toMatchObject({ inserted: 1, removed: iteration, contract_id: contractId });
-        await expect(page.getByRole("heading", { name: "Offline source excerpt", exact: true })).toBeVisible();
-        await page.reload();
         await page.getByRole("tab", { name: /^Clauses/ }).click();
+        await expect(page.getByTestId("contract-extract-clauses")).toBeDisabled();
+        await page.getByRole("tab", { name: /^Attachments/ }).click();
+        const uploading = page.waitForResponse(response => new URL(response.url()).pathname === `${path}/attachments`
+          && response.request().method() === "POST");
+        await page.getByTestId("contract-attachment-input").setInputFiles({
+          name: `contract-source-${run}.txt`, mimeType: "text/plain", buffer: Buffer.from(`${SOURCE}\n`.repeat(8)),
+        });
+        const uploaded = await uploading;
+        expect(uploaded.status(), "original upload without retries").toBe(200);
+        const attachmentId = (await uploaded.json()).id as string;
+        if (local) await runDocumentWorkerOnce();
+        const deadline = Date.now() + 90_000;
+        let indexed = false;
+        while (Date.now() < deadline) {
+          const response = await request.get(`${api.origin}${path}/workspace`, { headers });
+          expect(response.status(), "authorized indexed workspace").toBe(200);
+          const attachment = (await response.json()).attachments.find((row: { id: string }) => row.id === attachmentId);
+          expect(attachment).toBeDefined();
+          if (attachment.processing_status === "failed") throw new Error("Contract fixture indexing failed.");
+          if (attachment.processing_status === "indexed") {
+            expect(attachment.extracted_char_count).toBeGreaterThan(0);
+            indexed = true;
+            break;
+          }
+          await page.waitForTimeout(1500);
+        }
+        expect(indexed, "bounded real worker completion, not a skip").toBe(true);
+        await page.reload();
+        async function action(button: Locator, suffix: string): Promise<Response> {
+          await release(request);
+          await expect(button).toBeVisible();
+          await expect(button).toBeEnabled();
+          await button.scrollIntoViewIfNeeded();
+          const bounds = await button.boundingBox();
+          expect(bounds!.width).toBeGreaterThan(24);
+          expect(bounds!.x).toBeGreaterThanOrEqual(0);
+          expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+          const result = page.waitForResponse(response => new URL(response.url()).pathname === `/api/ai/contracts/${contractId}/${suffix}`
+            && response.request().method() === "POST");
+          await button.click();
+          const response = await result;
+          expect(await response.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+          expect(response.status(), `first ${suffix} response, without browser retry`).toBe(200);
+          expect((await response.json()).provider, "offline result is not paid-model accuracy evidence").toBe("mock");
+          return response;
+        }
+        await page.getByRole("tab", { name: /^Clauses/ }).click();
+        for (let iteration = 0; iteration < 2; iteration++) {
+          const response = await action(page.getByTestId("contract-extract-clauses"), "clauses/extract");
+          expect(await response.json()).toMatchObject({ inserted: 1, removed: iteration, contract_id: contractId });
+          await expect(page.getByRole("heading", { name: "Offline source excerpt", exact: true })).toBeVisible();
+          await page.reload();
+          await page.getByRole("tab", { name: /^Clauses/ }).click();
+        }
+        await expect(page.getByRole("heading", { name: "Counsel-reviewed clause", exact: true })).toBeVisible();
+        const party = page.getByTestId("party-perspective-panel");
+        await party.getByTestId("party-first-name").fill("Acme India");
+        await party.getByTestId("party-second-name").fill("Supplier India");
+        const extractedParty = await action(party.getByTestId("party-extract-button"), "clauses/extract-by-party");
+        const partyBody = await extractedParty.json();
+        expect(partyBody.dropped_source_unverified_count).toBe(0);
+        expect(partyBody.ambiguous_items).toHaveLength(1);
+        expect(partyBody.ambiguous_items[0].source).toMatchObject({ attachment_id: attachmentId, snippet: SOURCE });
+        await expect(party.getByText(/Ambiguous.*needs review \(1\)/)).toBeVisible();
+        await expect(party.getByText(SOURCE, { exact: false })).toBeVisible();
+        await page.getByRole("tab", { name: /^Obligations/ }).click();
+        const obligations = await action(page.getByTestId("contract-extract-obligations"), "obligations/extract");
+        expect(await obligations.json()).toMatchObject({ contract_id: contractId, inserted: 1, removed: 0 });
+        await expect(page.getByText("Offline source duty", { exact: true })).toBeVisible();
+        await assertContractTabsReachable(page);
+        await page.getByRole("tab", { name: /^Playbook/ }).click();
+        const compared = await action(page.getByTestId("contract-run-playbook-compare"), "playbook/compare");
+        expect((await compared.json()).findings).toEqual([expect.objectContaining({ rule_id: rule.id, status: "missing" })]);
+        await expect(page.getByText("Findings (1)", { exact: true })).toBeVisible();
+        await assertContractTabsReachable(page);
+        const workspace = await request.get(`${api.origin}${path}/workspace`, { headers });
+        expect(workspace.status()).toBe(200);
+        const retained = await workspace.json();
+        expect(retained.clauses).toHaveLength(2);
+        expect(retained.clauses).toContainEqual(expect.objectContaining({ id: manualClause.id, clause_text: SOURCE }));
+        expect(retained.obligations).toHaveLength(2);
+        expect(retained.obligations).toContainEqual(expect.objectContaining({ id: manualDuty.id, description: SOURCE }));
+        expect(retained.playbook_rules).toHaveLength(1);
+        await page.reload();
+        await page.getByRole("tab", { name: /^Obligations/ }).click();
+        await expect(page.getByText("Offline source duty", { exact: true })).toBeVisible();
+        await expect(page.getByText("Counsel-reviewed duty", { exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        await release(request);
+      } finally {
+        // Retire this run's QA Contract whether the journey passed or failed (B4-ADJ-09).
+        await terminateContract(request, api.origin, headers, contractId);
       }
-      await expect(page.getByRole("heading", { name: "Counsel-reviewed clause", exact: true })).toBeVisible();
-      const party = page.getByTestId("party-perspective-panel");
-      await party.getByTestId("party-first-name").fill("Acme India");
-      await party.getByTestId("party-second-name").fill("Supplier India");
-      const extractedParty = await action(party.getByTestId("party-extract-button"), "clauses/extract-by-party");
-      const partyBody = await extractedParty.json();
-      expect(partyBody.dropped_source_unverified_count).toBe(0);
-      expect(partyBody.ambiguous_items).toHaveLength(1);
-      expect(partyBody.ambiguous_items[0].source).toMatchObject({ attachment_id: attachmentId, snippet: SOURCE });
-      await expect(party.getByText(/Ambiguous.*needs review \(1\)/)).toBeVisible();
-      await expect(party.getByText(SOURCE, { exact: false })).toBeVisible();
-      await page.getByRole("tab", { name: /^Obligations/ }).click();
-      const obligations = await action(page.getByTestId("contract-extract-obligations"), "obligations/extract");
-      expect(await obligations.json()).toMatchObject({ contract_id: contractId, inserted: 1, removed: 0 });
-      await expect(page.getByText("Offline source duty", { exact: true })).toBeVisible();
-      await assertContractTabsReachable(page);
-      await page.getByRole("tab", { name: /^Playbook/ }).click();
-      const compared = await action(page.getByTestId("contract-run-playbook-compare"), "playbook/compare");
-      expect((await compared.json()).findings).toEqual([expect.objectContaining({ rule_id: rule.id, status: "missing" })]);
-      await expect(page.getByText("Findings (1)", { exact: true })).toBeVisible();
-      await assertContractTabsReachable(page);
-      const workspace = await request.get(`${api.origin}${path}/workspace`, { headers });
-      expect(workspace.status()).toBe(200);
-      const retained = await workspace.json();
-      expect(retained.clauses).toHaveLength(2);
-      expect(retained.clauses).toContainEqual(expect.objectContaining({ id: manualClause.id, clause_text: SOURCE }));
-      expect(retained.obligations).toHaveLength(2);
-      expect(retained.obligations).toContainEqual(expect.objectContaining({ id: manualDuty.id, description: SOURCE }));
-      expect(retained.playbook_rules).toHaveLength(1);
-      await page.reload();
-      await page.getByRole("tab", { name: /^Obligations/ }).click();
-      await expect(page.getByText("Offline source duty", { exact: true })).toBeVisible();
-      await expect(page.getByText("Counsel-reviewed duty", { exact: true })).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-      await release(request);
     });
   });
 }

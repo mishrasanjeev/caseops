@@ -69,6 +69,7 @@ from caseops_api.services.ip_import_files import (
     normalize_header,
     source_value,
 )
+from caseops_api.services.ip_import_source_status import source_status_key
 from caseops_api.services.ip_operations import _create_ip_docket_record as create_ip_docket
 from caseops_api.services.ip_records import create_ip_asset, create_trademark_application
 from caseops_api.services.matter_access import visible_ip_dockets_filter
@@ -91,6 +92,8 @@ REPRESENTATION_KINDS = {
     "sound",
     "other",
 }
+SOURCE_STATUS_PHASES = {"draft": "draft", "pre_filing": "pre_filing"}
+TERMINAL_SOURCE_STATUSES = frozenset({"refused", "abandoned", "withdrawn", "removed"})
 
 
 @dataclass
@@ -295,8 +298,10 @@ def _validate_row(
             {
                 "source": header,
                 "target": target,
+                # The Status cell is retained as source evidence and also sets
+                # the filing phase, so it is canonical input.
                 "handling": "source_metadata"
-                if target in METADATA_FIELDS
+                if target in METADATA_FIELDS and target != "source_status"
                 else "canonical"
                 if target
                 else "unmapped",
@@ -400,6 +405,23 @@ def _validate_row(
     for field in METADATA_FIELDS - {"priority_date"}:
         if field in mapped:
             normalized[field] = source_value(mapped[field])
+    if "source_status" in mapped:
+        declared = source_status_key(mapped["source_status"])
+        if declared is None:
+            warnings.append({"field": "source_status", "code": "unrecognised_status"})
+        else:
+            phase = SOURCE_STATUS_PHASES.get(declared, "filed")
+            normalized["declared_status"] = declared
+            normalized["filing_phase"] = phase
+            # The same precondition the interactive create command applies.
+            if phase == "filed" and not normalized.get("application_number"):
+                errors.append(
+                    {"field": "application_number", "code": "required_for_source_status"}
+                )
+            if declared not in {"draft", "pre_filing", "filed"}:
+                warnings.append({"field": "source_status", "code": "declared_status_unverified"})
+            if declared in TERMINAL_SOURCE_STATUSES:
+                warnings.append({"field": "source_status", "code": "terminal_status_no_alert"})
 
     representation_kind = mapped.get("representation_kind")
     if representation_kind is not None:
@@ -1188,6 +1210,7 @@ def _particulars_for(normalized: dict[str, Any], *, row_id: str) -> IpImportPart
                         "application_date",
                         "renewal_due_date",
                         "source_status",
+                        "declared_status",
                         "image_reference",
                     )
                     if normalized.get(field) is not None
@@ -1204,10 +1227,17 @@ def _particulars_for(normalized: dict[str, Any], *, row_id: str) -> IpImportPart
             else []
         ),
         agent={"name": normalized["agent_name"]} if normalized.get("agent_name") else None,
+        # Imported particulars stay unverified until someone attaches the
+        # source evidence; a mark the source says is already filed is
+        # verified against the registry record, not prepared for filing.
         filing_manifest=[
             {
                 "key": "portfolio_source_review",
-                "label": "Verify imported source before filing",
+                "label": (
+                    "Verify imported source against the registry record"
+                    if normalized.get("filing_phase") == "filed"
+                    else "Verify imported source before filing"
+                ),
                 "required": True,
                 "evidence_reference": None,
             }
@@ -1401,7 +1431,7 @@ def _materialize_import_row(
                 asset_id=asset.id,
                 office=normalized["office"],
                 jurisdiction=normalized["jurisdiction"],
-                filing_phase="draft",
+                filing_phase=normalized.get("filing_phase", "draft"),
                 application_number=(
                     IpApplicationNumberCreate(
                         raw_value=application_number,
@@ -1416,12 +1446,18 @@ def _materialize_import_row(
         )
     from caseops_api.services.ip_renewals import schedule_imported_renewal_reminder
 
-    reminder = schedule_imported_renewal_reminder(
-        session,
-        context=context,
-        docket_id=docket.id,
-        row_id=row_id,
-        normalized=normalized,
+    # A source that says the mark was refused, abandoned, withdrawn or
+    # removed gets no renewal alert; the row says so in its preview notes.
+    reminder = (
+        None
+        if normalized.get("declared_status") in TERMINAL_SOURCE_STATUSES
+        else schedule_imported_renewal_reminder(
+            session,
+            context=context,
+            docket_id=docket.id,
+            row_id=row_id,
+            normalized=normalized,
+        )
     )
     source_row = session.get(IpImportRow, row_id)
     assert source_row is not None

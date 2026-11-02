@@ -57,6 +57,7 @@ instruction reads, so controlled reopen cannot resurrect actionable work.
 ## API contract
 
 - `GET/POST /api/ip/foreign-associate-instructions`
+- `GET /api/ip/foreign-associate-instructions/create-options?docket_id=&target_jurisdiction=`
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}`
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}/workspace`
 - `POST /api/ip/foreign-associate-instructions/{instruction_id}/transactions`
@@ -65,6 +66,35 @@ instruction reads, so controlled reopen cannot resurrect actionable work.
 The list supports explicit outstanding-response and missing-filing-evidence
 filters. All reads and commands resolve the authenticated company and existing
 docket access policy; cross-company identifiers fail as not found.
+
+`create-options` (IP write or approve) serves the New instruction form from the
+create validator's own predicates: panel associates approved for the target
+jurisdiction, budgeted Matter assignments with the active estimates that fit
+them, active estimates, accepted proceed client instructions and linked
+documents, plus typed blockers that name the missing prerequisite and where it
+is created. Filing jurisdictions use one canonical vocabulary (ISO 3166-1
+alpha-2 plus EM, WO and EP; aliases such as UK and United Kingdom resolve to
+GB). Counsel profile text is normalized on read and match, never migrated;
+create refuses a target outside the vocabulary, while instructions stored
+before normalization keep the exact comparison (create-options returns such a
+stored target unchanged and offers the counsel that comparison accepts, for
+reassignment). On a counsel profile a bare code that is also an Indian state,
+union territory or court abbreviation (AR, AS, BR, CG, CH, GA, HR, LA, MH, ML,
+MN, MP, MZ, NL, PY, SC, SK, TG, TN, TR) names no country; the country must be
+written out ("Switzerland", not "CH"). A filing target, always picked from the
+vocabulary, is unaffected.
+
+Blockers carry a link only when the caller's role can act on it:
+`can_manage_counsel` (outside_counsel:manage: owner, admin, partner) gates the
+Add counsel and Matter assignment links, `can_record_estimate`
+(ip:fees_manage) the quote path, and otherwise the message names who can act.
+The documents blocker deep-links to the record's Documents tab
+(`/app/ip?docket=<id>&area=documents`) and says when uploads first need an
+active document classification (an IP taxonomy admin's setup). For an estimate
+whose amount is withheld from the caller (confidential rate, no fee
+permission), assignment compatibility compares the currency only; create
+checks the budget ceiling. Matter assignments take a currency chosen in Assign
+counsel, so a foreign quote pairs with a budget in the same currency.
 
 ## Migration and rollback
 

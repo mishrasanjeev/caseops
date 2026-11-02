@@ -459,6 +459,9 @@ def submit_oc_invoice(
         status=InvoiceStatus.NEEDS_REVIEW,
         currency=currency.strip().upper() or "INR",
         subtotal_amount_minor=subtotal,
+        # BUG-016: no tax is computed on a submission, so the taxable value is
+        # the subtotal; the default 0 made the PDF's totals disagree.
+        taxable_value_minor=subtotal,
         tax_amount_minor=0,
         total_amount_minor=subtotal,
         amount_received_minor=0,

@@ -302,7 +302,9 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   await shared.getByLabel("Hearing date").fill("2026-12-10");
   const scheduled = page.waitForResponse((row) => row.url().endsWith("/api/ip/hearings") && row.request().method() === "POST");
   await shared.getByRole("button", { name: "Schedule hearing" }).click();
-  expect((await scheduled).status()).toBe(201);
+  const scheduledResponse = await scheduled;
+  expect(scheduledResponse.status()).toBe(201);
+  const hearingId = (await scheduledResponse.json()).id as string;
 
   const scheduledStage = await api.post(
     `${apiBaseUrl}/api/ip/dockets/${application.docket.id}/proceedings/${opposition.id}/stage`,
@@ -325,6 +327,9 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   expect(scheduledStage.status(), await scheduledStage.text()).toBe(200);
   await page.reload();
   await expect(shared.getByText("Next: Record Hearing Preparation", { exact: true })).toBeVisible();
+  // B4-ADJ-22: the hearing is never pre-selected; choose it by server identity.
+  await expect(shared.getByLabel("Shared hearing")).toHaveValue("");
+  await shared.getByLabel("Shared hearing").selectOption(hearingId);
   await shared.getByLabel("Checklist items").fill("Paper book checked, Authorities paginated");
   await shared.getByLabel("Issues").fill("Likelihood of confusion, Prior use");
   await shared.getByLabel("Evidence documents").fill("document:evidence-bundle:043");
@@ -366,7 +371,9 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   await fillCommon(shared, "2026-12-13T12:00", "order");
   const ordered = page.waitForResponse((row) => row.url().endsWith("/opposition-shared-actions") && row.request().method() === "POST");
   await shared.getByRole("button", { name: "Record opposition order" }).click();
-  expect((await ordered).status()).toBe(201);
+  const orderedResponse = await ordered;
+  expect(orderedResponse.status()).toBe(201);
+  const orderEventId = (await orderedResponse.json()).shared_actions.at(-1).id as string;
 
   const decided = await api.post(
     `${apiBaseUrl}/api/ip/dockets/${application.docket.id}/proceedings/${opposition.id}/stage`,
@@ -440,8 +447,12 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   expect(appealPending.status(), await appealPending.text()).toBe(200);
   await page.reload();
   await expect(shared.getByText("Next: Link Appeal", { exact: true })).toBeVisible();
-  await shared.getByLabel("Target record ID").fill(appealBody.id);
-  await shared.getByLabel("Appeal identifier").fill(appealNumber);
+  // B4-ADJ-02: the appeal proceeding and its number are chosen, never typed as IDs.
+  await shared.getByLabel("Appeal target").selectOption("appeal_proceeding");
+  await shared.getByLabel("Appeal proceeding").selectOption(appealBody.id);
+  await shared.getByLabel("Appeal number").selectOption(appealNumber);
+  await expect(shared.getByLabel("Opposition order event")).toHaveValue("");
+  await shared.getByLabel("Opposition order event").selectOption(orderEventId);
   await fillCommon(shared, "2026-12-16T12:00", "appeal");
   const linked = page.waitForResponse((row) => row.url().endsWith("/opposition-shared-actions") && row.request().method() === "POST");
   await shared.getByRole("button", { name: "Record appeal link" }).click();

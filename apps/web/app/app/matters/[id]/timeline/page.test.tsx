@@ -124,6 +124,44 @@ describe("MatterTimelinePage", () => {
     });
   });
 
+  it("B4-ADJ-15 reads timeline pages past the first and says when more exist", async () => {
+    const event = (index: number) => ({
+      id: `activity:${index}`,
+      event_type: "activity",
+      event_date: "2026-05-01",
+      title: `Event ${index}`,
+      summary: null,
+      source_type: "matter_activity",
+      source_id: `a${index}`,
+      badges: [],
+      links: {},
+      metadata: {},
+    });
+    fetchMatterTimelineMock.mockImplementation(async ({ cursor }: { cursor?: string | null }) => ({
+      matter_id: "m1",
+      sort: "asc",
+      generated_at: "2026-05-05T00:00:00Z",
+      next_cursor: cursor ? null : "c2",
+      items: cursor ? [event(201)] : [event(1), event(2)],
+    }));
+    render(withClient(<MatterTimelinePage />));
+    expect(await screen.findByText("Showing the first 2 events in this order. More events exist.")).toBeVisible();
+    expect(screen.queryByText("Event 201")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load more events" }));
+    expect(await screen.findByText("Event 201")).toBeVisible();
+    expect(screen.getByTestId("timeline-count")).toHaveTextContent("3 events.");
+    expect(fetchMatterTimelineMock).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "c2", limit: 200 }));
+  });
+
+  it("shows a failed timeline read with retry instead of an empty timeline", async () => {
+    fetchMatterTimelineMock.mockRejectedValueOnce(new Error("Timeline service unavailable"));
+    render(withClient(<MatterTimelinePage />));
+    expect(await screen.findByText("Could not load the timeline")).toBeVisible();
+    expect(screen.queryByText("No timeline events")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Interim stay granted")).toBeVisible();
+  });
+
   it("renders hearing split, timeline rows, and stay/interim badges", async () => {
     render(withClient(<MatterTimelinePage />));
 

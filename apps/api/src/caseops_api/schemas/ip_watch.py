@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
+from caseops_api.core.jurisdictions import JURISDICTION_HINT, canonical_jurisdiction
 
 WatchDisposition = Literal[
     "new",
@@ -17,6 +27,23 @@ WatchDisposition = Literal[
     "enforcement_opened",
     "closed",
 ]
+
+NICE_CLASS_MIN = 1
+NICE_CLASS_MAX = 45
+_GOODS_CLASS_KEY = re.compile(r"\d{1,2}")
+# Bookkeeping keys that say how evidence was captured, not what it shows.
+_EVIDENCE_BOOKKEEPING_KEYS = frozenset({"capture_method"})
+MAX_EVIDENCE_TEXT_LENGTH = 20_000
+
+
+def _http_url(value: str) -> bool:
+    return value.startswith(("https://", "http://"))
+
+
+def _validate_nice_classes(value: list[int]) -> list[int]:
+    if any(number < NICE_CLASS_MIN or number > NICE_CLASS_MAX for number in value):
+        raise ValueError("Trademark classes must be between 1 and 45.")
+    return value
 
 
 class IpWatchProfileCreateRequest(BaseModel):
@@ -34,24 +61,62 @@ class IpWatchProfileCreateRequest(BaseModel):
     max_cost_minor_per_period: int = Field(default=0, ge=0)
     cost_currency: str = Field(default="INR", min_length=3, max_length=3)
 
+    # Field-level checks keep each 422 anchored to the field that caused it.
+    @field_validator("class_numbers")
+    @classmethod
+    def validate_class_numbers(cls, value: list[int]) -> list[int]:
+        return _validate_nice_classes(value)
+
+    @field_validator("recipient_membership_ids")
+    @classmethod
+    def validate_recipients(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Watch recipients must be unique.")
+        return value
+
+    @field_validator("device_references")
+    @classmethod
+    def validate_device_references(cls, value: list[str]) -> list[str]:
+        if any(not _http_url(ref) for ref in value):
+            raise ValueError("Device references must use HTTP or HTTPS.")
+        return value
+
+    @field_validator("jurisdictions")
+    @classmethod
+    def validate_jurisdictions(cls, value: list[str]) -> list[str]:
+        # Matching compares codes exactly; "India" would be saved and never match.
+        codes: list[str] = []
+        unknown: list[str] = []
+        for item in value:
+            code = canonical_jurisdiction(item)
+            if code is None:
+                unknown.append(item.strip() or "(blank)")
+            elif code not in codes:
+                codes.append(code)
+        if unknown:
+            names = ", ".join(f'"{item}"' for item in unknown)
+            verb = "is not a recognised jurisdiction" if len(unknown) == 1 else (
+                "are not recognised jurisdictions"
+            )
+            raise ValueError(f"{names} {verb}. {JURISDICTION_HINT}")
+        return codes
+
     @model_validator(mode="after")
     def validate_criteria(self) -> IpWatchProfileCreateRequest:
+        # Jurisdiction only narrows a match (services.ip_watch._similarity); a
+        # profile with nothing else would be saved and never match anything.
         criteria = (
             self.word_terms,
             self.phonetic_terms,
             self.device_references,
             self.class_numbers,
             self.proprietor_terms,
-            self.jurisdictions,
         )
         if not any(criteria):
-            raise ValueError("A watch profile requires at least one criterion.")
-        if any(number < 1 or number > 45 for number in self.class_numbers):
-            raise ValueError("Trademark classes must be between 1 and 45.")
-        if len(self.recipient_membership_ids) != len(set(self.recipient_membership_ids)):
-            raise ValueError("Watch recipients must be unique.")
-        if any(not ref.startswith(("https://", "http://")) for ref in self.device_references):
-            raise ValueError("Device references must use HTTP or HTTPS.")
+            raise ValueError(
+                "A watch profile requires at least one criterion: a word, phonetic term, "
+                "device, Nice class or proprietor."
+            )
         return self
 
 
@@ -115,26 +180,124 @@ class IpJournalPublicationCreate(BaseModel):
     supersedes_publication_id: str | None = None
     correction_reason: str | None = Field(default=None, min_length=5, max_length=1000)
 
+    # Field-level checks keep each 422 anchored to the field that caused it.
+    # Cross-field checks read earlier fields from ``info.data``; a field that
+    # failed its own validation is absent there and reports its own error.
+    @field_validator("class_numbers")
+    @classmethod
+    def validate_class_numbers(cls, value: list[int]) -> list[int]:
+        _validate_nice_classes(value)
+        if len(value) != len(set(value)):
+            raise ValueError("Publication classes must be unique; list each Nice class once.")
+        return value
+
+    @field_validator("goods_services")
+    @classmethod
+    def validate_goods_services(
+        cls, value: dict[str, list[str]], info: ValidationInfo
+    ) -> dict[str, list[str]]:
+        published = info.data.get("class_numbers")
+        cleaned: dict[str, list[str]] = {}
+        for key, items in value.items():
+            text = key.strip()
+            number = int(text) if _GOODS_CLASS_KEY.fullmatch(text) else 0
+            if not NICE_CLASS_MIN <= number <= NICE_CLASS_MAX:
+                raise ValueError("List goods and services under a Nice class number from 1 to 45.")
+            if published is not None and number not in published:
+                raise ValueError(
+                    f"Class {number} is not a published class; goods/services scope must "
+                    "belong to a published class."
+                )
+            if str(number) in cleaned:
+                raise ValueError(f"Class {number} goods and services are listed twice.")
+            entries = [item.strip() for item in items]
+            if not entries or not all(entries):
+                raise ValueError(
+                    f"Class {number}: enter each published good or service; "
+                    "blank entries are not allowed."
+                )
+            cleaned[str(number)] = entries
+        return cleaned
+
+    @field_validator("publication_scope")
+    @classmethod
+    def validate_publication_scope(
+        cls, value: dict[str, Any], info: ValidationInfo
+    ) -> dict[str, Any]:
+        if not value:
+            return value  # Older callers omit the scope; it is then unstated.
+        kind = value.get("scope_kind")
+        if kind not in {"full", "partial"}:
+            raise ValueError("Publication scope must be full or partial.")
+        covered = value.get("published_classes")
+        if kind == "full" and covered is None:
+            return value
+        if (
+            not isinstance(covered, list)
+            or not covered
+            or not all(isinstance(item, int) and not isinstance(item, bool) for item in covered)
+        ):
+            raise ValueError("A partial publication must list the published classes it covers.")
+        published = info.data.get("class_numbers")
+        if published is not None and not set(covered).issubset(published):
+            raise ValueError("A publication can only cover classes it publishes.")
+        if published is not None and kind == "full" and set(covered) != set(published):
+            raise ValueError("A full publication covers every published class.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, value: str) -> str:
+        if not _http_url(value):
+            raise ValueError("Journal source URL must use HTTP or HTTPS.")
+        return value
+
+    @field_validator("device_reference")
+    @classmethod
+    def validate_device_reference(cls, value: str | None) -> str | None:
+        if value and not _http_url(value):
+            raise ValueError("Device reference must use HTTP or HTTPS.")
+        return value
+
+    @field_validator("source_retrieved_at")
+    @classmethod
+    def validate_source_retrieved_at(cls, value: datetime | None) -> datetime | None:
+        if value and value.utcoffset() is None:
+            raise ValueError("Source retrieval time must include a timezone.")
+        return value
+
+    @field_validator("raw_evidence")
+    @classmethod
+    def validate_raw_evidence(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Fail closed: a journal entry is only as good as the evidence captured with it."""
+
+        captured = [
+            item
+            for key, item in value.items()
+            if key not in _EVIDENCE_BOOKKEEPING_KEYS and isinstance(item, str) and item.strip()
+        ]
+        if not captured:
+            raise ValueError(
+                "Capture the source evidence: the journal entry as published, or a "
+                "reference to the saved journal page."
+            )
+        if any(
+            isinstance(item, str) and len(item) > MAX_EVIDENCE_TEXT_LENGTH
+            for item in value.values()
+        ):
+            raise ValueError(
+                "Captured evidence entries must be 20,000 characters or fewer; record "
+                "a reference to the saved page instead."
+            )
+        return value
+
     @model_validator(mode="after")
     def validate_publication(self) -> IpJournalPublicationCreate:
         if not (self.mark_text or self.device_reference):
             raise ValueError("A journal entry requires a word mark or device reference.")
-        if not self.source_url.startswith(("https://", "http://")):
-            raise ValueError("Journal source URL must use HTTP or HTTPS.")
-        if self.device_reference and not self.device_reference.startswith(("https://", "http://")):
-            raise ValueError("Device reference must use HTTP or HTTPS.")
-        if any(number < 1 or number > 45 for number in self.class_numbers):
-            raise ValueError("Trademark classes must be between 1 and 45.")
-        if len(self.class_numbers) != len(set(self.class_numbers)):
-            raise ValueError("Publication classes must be unique.")
-        goods_classes = {int(key) for key in self.goods_services}
-        if not goods_classes.issubset(set(self.class_numbers)):
-            raise ValueError("Goods/services scope must belong to a published class.")
         corrected = self.publication_kind in {"correction", "readvertisement"}
         if corrected != bool(self.supersedes_publication_id and self.correction_reason):
             raise ValueError("Correction/re-advertisement requires predecessor and reason.")
-        if self.source_retrieved_at and self.source_retrieved_at.utcoffset() is None:
-            raise ValueError("Source retrieval time must include a timezone.")
         return self
 
 
@@ -172,6 +335,8 @@ class IpJournalPublicationResponse(BaseModel):
     source_retrieved_at: datetime | None
     parser_version: str
     attribution_json: dict[str, Any]
+    # The evidence the operator captured with the entry (IP-WATCH-02).
+    raw_evidence_json: dict[str, Any] = Field(default_factory=dict)
     source_fingerprint: str
     supersedes_publication_id: str | None
     correction_reason: str | None
@@ -291,9 +456,34 @@ class IpWatchHandoffResponse(BaseModel):
     created_at: datetime
 
 
-class IpWatchWorkspaceResponse(BaseModel):
-    profiles: list[IpWatchProfileResponse] = Field(default_factory=list)
-    hits: list[IpWatchHitResponse] = Field(default_factory=list)
+class IpJournalPublicationSearchResponse(BaseModel):
     publications: list[IpJournalPublicationResponse] = Field(default_factory=list)
+
+
+class IpWatchWorkspaceResponse(BaseModel):
+    # One page of each list. `limit` rows from `offset` of the visible profiles
+    # (newest change first), of the hits on every visible profile in scope
+    # (newest hit first) and of the recorded journal entries (newest first);
+    # each `*_total` counts the whole visible list, so a reader can say
+    # "showing N of M" and ask for the next offset.
+    limit: int = 100
+    offset: int = 0
+    profiles: list[IpWatchProfileResponse] = Field(default_factory=list)
+    profile_total: int = 0
+    # Visible profiles not running (paused by a person, by cost or by CaseOps).
+    paused_profile_total: int = 0
+    hits: list[IpWatchHitResponse] = Field(default_factory=list)
+    hit_total: int = 0
+    # The profiles these hits were compared with, which may be on another page.
+    hit_profiles: list[IpWatchProfileResponse] = Field(default_factory=list)
+    # Hit-linked publications plus the page of recorded journal entries, so a
+    # capture with no hits is still listed and can be corrected later.
+    publications: list[IpJournalPublicationResponse] = Field(default_factory=list)
+    publication_total: int = 0
     ingestion_runs: list[IpJournalIngestionRunResponse] = Field(default_factory=list)
+    ingestion_run_total: int = 0
+    ingestion_run_limit: int = 20
     handoffs: list[IpWatchHandoffResponse] = Field(default_factory=list)
+    # Profiles a journal capture is compared with, across every visible docket
+    # (the set ingestion uses). Zero means a capture cannot be evaluated.
+    intake_profile_count: int = 0

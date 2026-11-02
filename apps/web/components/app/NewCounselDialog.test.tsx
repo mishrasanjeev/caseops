@@ -70,4 +70,18 @@ describe("NewCounselDialog", () => {
     expect(call.practiceAreas).toEqual(["Arbitration", "IP", "White-collar"]);
     expect(call.panelStatus).toBe("active");
   });
+
+  it("refuses a thirteenth practice area instead of silently dropping it (B4-ADJ-19 sibling)", async () => {
+    const user = userEvent.setup();
+    createMock.mockResolvedValue({ id: "c1" });
+    render(withClient(<NewCounselDialog />));
+    await user.click(screen.getByTestId("new-counsel-trigger"));
+    await user.type(screen.getByLabelText(/Firm or individual name/i), "Thirteen Areas LLP");
+    const areas = screen.getByLabelText(/Practice areas/i);
+    await user.type(areas, Array.from({ length: 13 }, (_, i) => `Area ${i + 1}`).join(", "));
+    await user.click(screen.getByTestId("new-counsel-submit"));
+    expect(await screen.findByText("Enter at most 12, separated by commas; 13 were entered.")).toBeInTheDocument();
+    expect(areas).toHaveAttribute("aria-invalid", "true");
+    expect(createMock).not.toHaveBeenCalled();
+  });
 });

@@ -42,6 +42,7 @@ from caseops_api.services.idempotency import (
     claim_idempotency,
     complete_idempotency,
 )
+from caseops_api.services.ip_document_citations import citable_ip_document_ids
 from caseops_api.services.ip_document_workflow import (
     _create_link,
     _propagate_private_document_change,
@@ -107,6 +108,16 @@ def _source_version(
         document_ids={version.document_id},
     ):
         raise _error("patent_source_not_found", "Source document version not found.", 404)
+    # A pinned source can never be retired, so this refuses only new pins; the
+    # write path re-runs it after locking the document row.
+    if not citable_ip_document_ids(
+        session, company_id=context.company.id, document_ids={version.document_id}
+    ):
+        raise _error(
+            "patent_source_retired",
+            "This source document was retired. Select a current document.",
+            422,
+        )
     if not compare_digest(version.sha256_hex, source.content_sha256):
         raise _error("patent_source_changed", "The source hash changed. Select the source again.")
     return version

@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
   process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
 const COMPANY_SLUG = process.env.CASEOPS_RAM_PROD_SLUG ?? "legal";
 const TESTER_EMAIL = process.env.CASEOPS_RAM_PROD_EMAIL ?? "hari.gupta@gmail.com";
+const CANARY_DOCKET_IDENTIFIER = "TM-IPLF-024B-PROD";
 
 function requiredPassword(): string {
   const password = process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() ?? "";
@@ -119,11 +121,7 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
   await signIn(page);
   const headers = await csrfHeaders(page);
 
-  const seeded = await page.request.post(
-    `${PROD_API_BASE_URL}/api/ip/document-taxonomy/seed`,
-    { headers },
-  );
-  expect(seeded.status(), await seeded.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(page.request, PROD_API_BASE_URL, headers);
 
   const aliasPreview = await page.request.post(
     `${PROD_API_BASE_URL}/api/ip/document-taxonomy/import-aliases`,
@@ -141,40 +139,34 @@ test("IPLF-024B production runs the reusable, locked, fail-closed document journ
   expect(aliasPreview.status(), await aliasPreview.text()).toBe(200);
   const aliasPreviewBody = await aliasPreview.json();
   expect(aliasPreviewBody.conflicts).toEqual([]);
-  if (aliasPreviewBody.imported_count === 1) {
-    const imported = await page.request.post(
-      `${PROD_API_BASE_URL}/api/ip/document-taxonomy/import-aliases`,
-      {
-        headers,
-        data: {
-          dry_run: false,
-          entries: [{
-            taxonomy_key: "evidence",
-            aliases: ["Production QA Evidence Affidavit"],
-          }],
-        },
-      },
-    );
-    expect(imported.status(), await imported.text()).toBe(200);
-  } else {
-    expect(aliasPreviewBody.unchanged_count).toBe(1);
-  }
+  // Preview only: the shared tester tenant's taxonomy is configuration, and
+  // this journey must not change it to pass.
+  expect(aliasPreviewBody.imported_count + aliasPreviewBody.unchanged_count).toBe(1);
 
-  const listedDockets = await page.request.get(`${PROD_API_BASE_URL}/api/ip/dockets`);
+  // The canary docket is selected by its own identifier, never as whatever
+  // docket happens to be first: the tenant is shared and retains every run.
+  const listedDockets = await page.request.get(`${PROD_API_BASE_URL}/api/ip/dockets`, {
+    params: { query: CANARY_DOCKET_IDENTIFIER, limit: 200 },
+  });
   expect(listedDockets.status(), await listedDockets.text()).toBe(200);
   const docketListing = (await listedDockets.json()) as {
-    dockets?: Array<{ id: string }>;
+    dockets?: Array<{ id: string; primary_identifier: string | null }>;
     count?: number;
+    next_cursor?: string | null;
   };
   expect(Array.isArray(docketListing.dockets), JSON.stringify(docketListing)).toBe(true);
   expect(docketListing.count, JSON.stringify(docketListing)).toBe(docketListing.dockets?.length);
-  let docketId = docketListing.dockets?.[0]?.id;
+  expect(docketListing.next_cursor ?? null, "every canary match is on this page").toBeNull();
+  let docketId = (docketListing.dockets ?? [])
+    .filter((docket) => docket.primary_identifier === CANARY_DOCKET_IDENTIFIER)
+    .map((docket) => docket.id)
+    .sort()[0];
   if (!docketId) {
     const createdDocket = await page.request.post(`${PROD_API_BASE_URL}/api/ip/dockets`, {
       headers,
       data: {
         title: "IPLF-024B production document canary",
-        primary_identifier: "TM-IPLF-024B-PROD",
+        primary_identifier: CANARY_DOCKET_IDENTIFIER,
         particulars: {
           form_key: "TM-A",
           form_version: "2026.1",

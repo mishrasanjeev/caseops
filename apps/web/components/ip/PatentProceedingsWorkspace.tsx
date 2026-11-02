@@ -124,6 +124,10 @@ function ProceedingForm({ application, sequence, record, onSaved, onCancel, onOp
     title: `${document.title} - version ${version.version}`, pin: { kind: "document_version" as const,
       document_id: document.id, document_version_id: version.id, content_sha256: version.sha256_hex },
   }))) ?? [];
+  // Each record choice is disabled with a reason when nothing can be chosen (B4-ADJ-22 class).
+  const noSource = sources.isSuccess && options.length === 0;
+  const manifestChoices = manifests.data?.records.filter((row) => row.is_current && row.anchor_version === application.version && row.lifecycle_version === application.lifecycle_version && ["response", "filing_package"].includes(row.document_kind)) ?? [];
+  const noManifest = manifests.isSuccess && manifestChoices.length === 0;
   function invalidate() { setReview(undefined); setAck(false); setError(""); commandKey.current = null; }
   const prepare = useMutation({ mutationFn: async () => {
     setError("");
@@ -164,7 +168,8 @@ function ProceedingForm({ application, sequence, record, onSaved, onCancel, onOp
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0"><Label htmlFor="pg-number">Proceeding number</Label><Input id="pg-number" value={number} onChange={(e) => setNumber(e.target.value)} maxLength={160} disabled={!!record?.latest.proceeding_number || (!record && pending)} required={!record && !pending} /></div>
         {!record && <label className="flex min-w-0 items-center gap-3 text-sm"><input type="checkbox" className="size-4 shrink-0" checked={pending} onChange={(e) => { setPending(e.target.checked); setNumber(""); }} /><span className="min-w-0">Source confirms number allocation pending</span></label>}
-        <div className="min-w-0"><Label htmlFor="pg-source">Proceeding source</Label><select id="pg-source" className={selectClass} value={sourceId} onChange={(e) => setSourceId(e.target.value)} required><option value="">Select document version</option>{options.map((option) => <option key={option.pin.document_version_id} value={option.pin.document_version_id}>{option.title}</option>)}</select></div>
+        <div className="min-w-0"><Label htmlFor="pg-source">Proceeding source</Label><select id="pg-source" className={selectClass} value={sourceId} onChange={(e) => setSourceId(e.target.value)} required disabled={noSource} aria-describedby={noSource ? "pg-source-empty" : undefined}><option value="">Select document version</option>{options.map((option) => <option key={option.pin.document_version_id} value={option.pin.document_version_id}>{option.title}</option>)}</select>
+          {noSource && <p id="pg-source-empty" className="mt-1 text-xs text-mute">No source document on this IP record yet. Use Upload source to add the notice first.</p>}</div>
         <div className="flex min-w-0 items-end"><Button type="button" variant="ghost" onClick={onOpenDocuments}><Plus size={16} />Upload source</Button></div>
         <div className="min-w-0"><Label htmlFor="pg-received">Received date</Label><Input id="pg-received" type="date" value={received} onChange={(e) => setReceived(e.target.value)} required /></div>
         <div className="min-w-0"><Label htmlFor="pg-effective">Effective date</Label><Input id="pg-effective" type="date" value={effective} onChange={(e) => setEffective(e.target.value)} required /></div>
@@ -173,7 +178,8 @@ function ProceedingForm({ application, sequence, record, onSaved, onCancel, onOp
       {record && <>
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <div className="min-w-0"><Label htmlFor="pg-stage">Proceeding stage</Label><select id="pg-stage" className={selectClass} value={stage} onChange={(e) => setStage(e.target.value as typeof stage)}>{patentProceedingStages.filter((value) => value !== "notice_recorded").map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></div>
-          <div className="min-w-0"><Label htmlFor="pg-manifest">Exact response manifest</Label><select id="pg-manifest" className={selectClass} value={manifestId} required={stage === "response_filed"} onChange={(e) => setManifestId(e.target.value)}><option value="">Select response manifest</option>{manifests.data?.records.filter((row) => row.is_current && row.anchor_version === application.version && row.lifecycle_version === application.lifecycle_version && ["response", "filing_package"].includes(row.document_kind)).map((row) => <option key={row.id} value={row.id}>{row.title} - edition {row.edition}</option>)}</select></div>
+          <div className="min-w-0"><Label htmlFor="pg-manifest">Exact response manifest</Label><select id="pg-manifest" className={selectClass} value={manifestId} required={stage === "response_filed"} disabled={noManifest} aria-describedby={noManifest ? "pg-manifest-empty" : undefined} onChange={(e) => setManifestId(e.target.value)}><option value="">Select response manifest</option>{manifestChoices.map((row) => <option key={row.id} value={row.id}>{row.title} - edition {row.edition}</option>)}</select>
+            {noManifest && <p id="pg-manifest-empty" className="mt-1 text-xs text-mute">No current response or filing-package manifest for this application edition{manifests.data?.next_cursor ? " on this page; use More manifests" : ". Prepare one under Evidence first"}.</p>}</div>
         </div>
         {manifests.isError && <QueryErrorState title="Could not load response manifests" error={manifests.error} onRetry={manifests.refetch} />}
         <div className="flex min-w-0 flex-wrap gap-2"><Button type="button" variant="ghost" disabled={!manifestPage.cursor} onClick={() => { setManifestPage({}); setManifestId(""); invalidate(); }}><ArrowLeft size={16} />First manifests</Button><Button type="button" variant="ghost" disabled={!manifests.data?.next_cursor} onClick={() => { setManifestPage({ cursor: manifests.data?.next_cursor ?? undefined, snapshot: manifests.data?.work_sequence }); setManifestId(""); invalidate(); }}>More manifests<ArrowRight size={16} /></Button></div>
@@ -188,6 +194,6 @@ function ProceedingForm({ application, sequence, record, onSaved, onCancel, onOp
       {!!review.impact.required_acknowledgements.length && <label className="flex min-w-0 items-start gap-3 text-sm"><input type="checkbox" className="mt-1 size-4 shrink-0" checked={ack} onChange={(e) => { e.stopPropagation(); setAck(e.target.checked); }} /><span className="min-w-0 break-words">I reviewed {review.impact.required_acknowledgements.map((code) => code === "backdated_source_review" ? "the backdated source" : "the exceptional stage") .join(" and ")}. Application phase and deadlines remain unchanged.</span></label>}
       <Button type="button" disabled={busy || (!!review.impact.required_acknowledgements.length && !ack)} onClick={() => commit.mutate()}><Save size={16} />Record reviewed stage</Button>
     </section>}
-    <div className="flex min-w-0 flex-wrap gap-2"><Button type="submit" disabled={busy || sources.isPending || sources.isError}><Save size={16} />{record ? "Preview stage" : "Save proceeding"}</Button><Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button></div>
+    <div className="flex min-w-0 flex-wrap gap-2"><Button type="submit" disabled={busy || sources.isPending || sources.isError || !options.some((option) => option.pin.document_version_id === sourceId) || (!!record && stage === "response_filed" && !manifestId)}><Save size={16} />{record ? "Preview stage" : "Save proceeding"}</Button><Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button></div>
   </form>;
 }

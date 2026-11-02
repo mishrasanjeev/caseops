@@ -87,7 +87,19 @@ def _get_invoice(
     company_id: str,
     matter_id: str,
     invoice_id: str,
+    lock_for_update: bool = False,
 ) -> MatterInvoice:
+    if lock_for_update:
+        # Lock first, then load: the read below then sees the committed status.
+        session.execute(
+            select(MatterInvoice.id)
+            .where(
+                MatterInvoice.id == invoice_id,
+                MatterInvoice.matter_id == matter_id,
+                MatterInvoice.company_id == company_id,
+            )
+            .with_for_update()
+        )
     invoice = session.scalar(
         select(MatterInvoice)
         .options(
@@ -198,11 +210,16 @@ def create_invoice_payment_link(
             detail="Only owners and admins can start Pine Labs payment collection.",
         )
 
+    # BUG-016: a draft can now be voided. The invoice row stays locked through
+    # the provider call, so a concurrent void either waits and then sees the
+    # issued invoice, or commits first and this request sees "void" below
+    # instead of turning it back into "issued".
     invoice = _get_invoice(
         session,
         company_id=context.company.id,
         matter_id=matter_id,
         invoice_id=invoice_id,
+        lock_for_update=True,
     )
     # Never log request path values. Snapshot the resolved identifiers before a
     # provider failure can roll back and expire the ORM instances.

@@ -22,6 +22,19 @@ def _isolate_ai_money_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", "false")
 
 
+@pytest.fixture(autouse=True)
+def _pin_nice_edition_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The Nice catalogue served and stamped follows the server date
+    # (NCL 13-2027 from 2027-01-01). Pin the date so suites asserting the
+    # 2026 edition do not change verdict on New Year; edition-switch tests
+    # override it explicitly.
+    from datetime import date
+
+    from caseops_api.services import ip_nice_classes
+
+    monkeypatch.setattr(ip_nice_classes, "_server_date", lambda: date(2026, 10, 31))
+
+
 # Autouse fixture — defense against suite-order leakage.
 #
 # Monkeypatch restores environment variables at test teardown, but it does

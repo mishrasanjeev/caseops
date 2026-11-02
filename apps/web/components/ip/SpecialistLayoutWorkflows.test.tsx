@@ -43,7 +43,7 @@ describe("Source-bounded layout workflows", () => {
     saved = structuredClone(prepared);
     mocks.api.mockReset();
     mocks.documents.mockResolvedValue({ items: [pin, registryPin].map((source, index) => ({ id: source.document_id,
-      title: index ? "Registry publication" : "Layout deposit", versions: [{ id: source.document_version_id, version: 1, state: "retained", sha256_hex: source.content_sha256 }] })) });
+      title: index ? "Registry publication" : "Layout deposit", retirement: null, links: [{ id: `link-${index}`, version_id: null, target_type: "docket", target_id: record.docket_id, created_by_membership_id: "member-1", created_at: "2026-11-01T00:00:00Z" }], versions: [{ id: source.document_version_id, version: 1, state: "retained", sha256_hex: source.content_sha256 }] })) });
     mocks.api.mockImplementation(async (path: string, options?: { method?: string; body?: { facts: unknown } }) => {
       if (path === `${base}?limit=10`) return { records: [deposit, saved], next_cursor: null };
       if (path.endsWith("/cost-options") || path.endsWith("/obligations")) return { records: [], next_cursor: null };

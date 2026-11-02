@@ -14,6 +14,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.core.settings import get_settings
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_on_calendar,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import (
@@ -49,6 +53,7 @@ def _confirmed_deadline(client: TestClient):
     """Build an active confirmed deadline on a fresh tenant."""
 
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -73,7 +78,9 @@ def _confirmed_deadline(client: TestClient):
         == 200
     )
     rule = client.post(
-        "/api/ip/deadline-rules", headers=owner_headers, json=_rule_payload()
+        "/api/ip/deadline-rules",
+        headers=owner_headers,
+        json=rule_payload_on_calendar(_rule_payload(), calendar),
     ).json()
     assert (
         client.post(

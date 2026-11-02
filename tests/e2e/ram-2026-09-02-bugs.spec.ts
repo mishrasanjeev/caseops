@@ -237,9 +237,49 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     expect((await webBuild.json()).release_sha).toBe(expectedSha);
   });
 
-  test("BUG-003: an owner can enable the workspace assistant without an external approval", async ({
+  test("BUG-003: the owner AI control loads live and needs no external approval (read-only)", async ({
     page,
   }) => {
+    // Production runs as Ram on test-legal: this half only reads the shared
+    // tenant AI policy. The toggle cycle below is [local-only].
+    await signIn(page);
+    const patches: string[] = [];
+    page.on("request", (req) => {
+      if (
+        new URL(req.url()).pathname === "/api/admin/tenant-ai-policy" &&
+        req.method() === "PATCH"
+      ) patches.push(req.url());
+    });
+    const loadedPolicy = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/tenant-ai-policy" &&
+        response.request().method() === "GET",
+    );
+    await page.goto(`${BASE_URL}/app/admin`);
+    const policyResponse = await loadedPolicy;
+    await expectStatus(policyResponse, 200, "load assistant policy in browser");
+    const browserPolicy = (await policyResponse.json()) as TenantAIPolicy;
+    expect(browserPolicy.policy_version).toBeGreaterThan(0);
+    const toggle = page.getByTestId("tenant-ai-policy-assistant-toggle");
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute(
+      "aria-pressed",
+      String(browserPolicy.workspace_assistant_enabled),
+    );
+    await expect(toggle).toHaveText(
+      browserPolicy.workspace_assistant_enabled ? "Disable" : "Enable",
+    );
+    expect(patches, "the read-only check never changes the tenant AI policy").toEqual([]);
+  });
+
+  test("BUG-003 [local-only]: an owner can enable the workspace assistant without an external approval", async ({
+    page,
+  }) => {
+    test.skip(
+      !IS_LOCAL,
+      "Toggles the tenant AI policy; production must not change test-legal configuration.",
+    );
     await signIn(page);
     const loadedPolicy = page.waitForResponse(
       (response) =>

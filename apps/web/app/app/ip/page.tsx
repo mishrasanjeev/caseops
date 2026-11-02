@@ -13,7 +13,7 @@ import {
   Settings2,
 } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -21,10 +21,17 @@ import { InAppNotificationCenter } from "@/components/app/InAppNotificationCente
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
+import { IpDeadlineGovernanceCard } from "@/components/ip/IpDeadlineGovernanceCard";
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
 import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
+import { IpAutomationReadiness, readinessReasonText } from "@/components/ip/IpAutomationReadiness";
+import { IP_NEW_TRADEMARK_PANEL_ID, IpTrademarkCreatePanel } from "@/components/ip/IpTrademarkCreatePanel";
+import { IpBillingRecordSelect } from "@/components/ip/IpBillingRecordSelect";
+import { IpDocketClassScope } from "@/components/ip/IpDocketClassScope";
+import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -41,15 +48,12 @@ import {
   addIpCostItem,
   addIpRelatedRightObligation,
   addIpTitleInterest,
-  activateIpDeadlineRule,
-  activateIpWorkingCalendar,
   appendIpDocketEvent,
   bulkReassignIpCoverage,
   completeIpLegalDeadline,
   completeIpRelatedRightObligation,
   confirmIpLegalDeadline,
   createIpDeadlineIncident,
-  createManualTrademarkApplication,
   createIpSharedHearing,
   listCompanyUsers,
   correctIpCostItem,
@@ -62,7 +66,6 @@ import {
   fetchIpCoverageTransfersAwaitingMe,
   fetchIpDeadlineImpact,
   fetchIpDeadlineDependencies,
-  fetchIpDeadlineRuleImpact,
   fetchIpDeadlineWorkspace,
   fetchIpDocket,
   fetchIpDockets,
@@ -73,9 +76,7 @@ import {
   previewIpDocketEvent,
   previewIpIdentifierDuplicates,
   previewIpDocketLifecycle,
-  proposeIpDeadlineRule,
   proposeIpLegalDeadline,
-  proposeIpWorkingCalendar,
   recalculateIpLegalDeadline,
   recordIpDeadlineIncidentAction,
   recordIpDeadlineIncidentImpact,
@@ -89,7 +90,6 @@ import {
   syncHearingToGoogleCalendar,
   syncHearingToOutlook,
   transitionIpDocketLifecycle,
-  transitionIpDeadlineRule,
   overrideIpLegalDeadline,
   type IpCoreRecords,
   type IpDocket,
@@ -110,6 +110,9 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
+import { deadlineExceptionLabel, normalJurisdiction, sameJurisdiction } from "@/lib/ip/governance";
+import { recordStatusLabel } from "@/lib/ip/portfolio-status";
+import { parseReminderOffsetsHours, REMINDER_OFFSET_FORMAT_HINT } from "@/lib/reminder-offsets";
 import { useSession } from "@/lib/use-session";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -121,6 +124,14 @@ type DocketView = (typeof DOCKET_VIEWS)[number];
 
 function requestedDocketView(value: string | null): DocketView {
   return DOCKET_VIEWS.includes(value as DocketView) ? (value as DocketView) : "overview";
+}
+
+// Page areas addressable with ?tab=<value>; anything else opens the docket.
+const WORKSPACE_TABS = ["docket", "documents", "availability"] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+
+function requestedWorkspaceTab(value: string | null): WorkspaceTab {
+  return WORKSPACE_TABS.includes(value as WorkspaceTab) ? (value as WorkspaceTab) : "docket";
 }
 
 function verifiedHttpSource(reference: string | null | undefined): string | null {
@@ -135,6 +146,9 @@ function verifiedHttpSource(reference: string | null | undefined): string | null
 
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const requestedTab = requestedWorkspaceTab(searchParams.get("tab"));
   const requestedDocketId = searchParams.get("docket");
   const requestedView = requestedDocketView(searchParams.get("view"));
   const requestedProceedingId = searchParams.get("proceeding");
@@ -150,8 +164,6 @@ export default function IpDocketPage() {
   const canGenerateDraft = useCapability("drafts:generate");
   const canReviewDraft = useCapability("drafts:review");
   const canFinalizeDraft = useCapability("drafts:finalize");
-  const canProposeRules = useCapability("ip:rules_propose");
-  const canActivateRules = useCapability("ip:rules_activate");
   const canFinance = useCapability("ip:fees_manage");
   const canConfigure = useCapability("ip:taxonomy_admin");
   const canManageAccess = useCapability("matter_access:manage");
@@ -161,6 +173,31 @@ export default function IpDocketPage() {
   );
   const [showCreate, setShowCreate] = useState(false);
   const [showConfiguration, setShowConfiguration] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(requestedTab);
+  const [createdDocketId, setCreatedDocketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(requestedTab);
+  }, [requestedTab]);
+
+  const replaceQuery = (updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+  const changeTab = (value: string) => {
+    const tab = requestedWorkspaceTab(value);
+    setActiveTab(tab);
+    replaceQuery({ tab: tab === "docket" ? null : tab });
+  };
+  const closeCreate = () => {
+    setShowCreate(false);
+    window.setTimeout(() => document.getElementById("ip-new-trademark-toggle")?.focus(), 0);
+  };
 
   const readiness = useQuery({
     queryKey: ["ip", "readiness"],
@@ -204,6 +241,15 @@ export default function IpDocketPage() {
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["ip", "dockets"] });
   };
+
+  useEffect(() => {
+    if (!createdDocketId || selected?.id !== createdDocketId) return;
+    const heading = document.getElementById("ip-docket-title");
+    if (!heading) return;
+    heading.scrollIntoView?.({ block: "start" });
+    heading.focus({ preventScroll: true });
+    setCreatedDocketId(null);
+  }, [createdDocketId, selected?.id]);
 
   if (!canView) {
     return (
@@ -268,13 +314,33 @@ export default function IpDocketPage() {
                 onClick={() => setShowConfiguration((current) => !current)}>
                 <Settings2 className="h-4 w-4" aria-hidden />
               </Button> : null}
-              {canWrite ? <Button size="sm" onClick={() => setShowCreate((value) => !value)}>
+              {canWrite ? <Button id="ip-new-trademark-toggle" type="button" size="sm"
+                variant={showCreate ? "outline" : "primary"}
+                aria-expanded={showCreate} aria-controls={showCreate ? IP_NEW_TRADEMARK_PANEL_ID : undefined}
+                onClick={() => (showCreate ? closeCreate() : setShowCreate(true))}>
                 <Plus className="h-4 w-4" aria-hidden /> New trademark
               </Button> : null}
             </div>
           ) : null
         }
       />
+
+      {showCreate && canWrite ? (
+        <IpTrademarkCreatePanel
+          onCancel={closeCreate}
+          onCreated={async (docket) => {
+            setShowCreate(false);
+            queryClient.setQueryData(["ip", "dockets", docket.id], docket);
+            setSelectedId(docket.id);
+            setCreatedDocketId(docket.id);
+            setActiveTab("docket");
+            if (requestedDocketId || searchParams.get("tab")) {
+              replaceQuery({ docket: null, view: null, proceeding: null, draft: null, tab: null });
+            }
+            await refresh();
+          }}
+        />
+      ) : null}
 
       {canConfigure && showConfiguration ? (
         <section id="ip-workspace-configuration-panel" aria-label="Workspace configuration"
@@ -285,24 +351,22 @@ export default function IpDocketPage() {
         </section>
       ) : null}
 
-      <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
-      <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
+      <IpAutomationReadiness
+        features={readiness.data.features}
+        manualDocketingAvailable={readiness.data.manual_docketing_available}
+        canConfigure={canConfigure}
+        onOpenConfiguration={() => {
+          setShowConfiguration(true);
+          window.setTimeout(() => document.getElementById("ip-workspace-configuration-panel")?.scrollIntoView?.({ block: "start" }), 0);
+        }}
+      />
 
-      {readiness.data.features.some((feature) => !feature.available) ? (
-        <IpAutomationReadiness features={readiness.data.features} />
-      ) : null}
+      <nav aria-label="Other IP work" className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+        <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
+        <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
+      </nav>
 
-      {showCreate && canWrite ? (
-        <CreateTrademarkCard
-          onCreated={async (docket) => {
-            setSelectedId(docket.id);
-            setShowCreate(false);
-            await refresh();
-          }}
-        />
-      ) : null}
-
-      <Tabs defaultValue="docket" className="min-w-0">
+      <Tabs value={activeTab} onValueChange={changeTab} className="min-w-0">
         <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
           <TabsTrigger value="docket">Docket</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -312,13 +376,17 @@ export default function IpDocketPage() {
           <IpDomainAvailability domains={readiness.data.domains} />
         </TabsContent>
         <TabsContent value="documents">
-          <IpDocumentWorkspace
-            dockets={portfolioDockets}
-            canUpload={canWrite && canUploadDocuments}
-            canManage={canWrite && canManageDocuments}
-            canReview={canReview}
-            canConfigure={canConfigure}
-          />
+          {deepLinkDocketPending ? (
+            <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
+          ) : (
+            <IpDocumentWorkspace
+              preferredDocketId={requestedDocketId ?? undefined}
+              canUpload={canWrite && canUploadDocuments}
+              canManage={canWrite && canManageDocuments}
+              canReview={canReview}
+              canConfigure={canConfigure}
+            />
+          )}
         </TabsContent>
         <TabsContent value="docket">
           {deepLinkDocketPending && requestedView === "access" && canManageAccess ? (
@@ -389,7 +457,7 @@ export default function IpDocketPage() {
                 >
                   <span className="block truncate font-semibold">{row.title}</span>
                   <span className="mt-1 block text-xs text-[var(--color-mute)]">
-                    {row.primary_identifier ?? "Unfiled"} · {row.status} · v{row.current_version}
+                    {row.primary_identifier ?? "Unfiled"} · {recordStatusLabel(row.status)} · v{row.current_version}
                   </span>
                 </button>
               ))}
@@ -408,8 +476,6 @@ export default function IpDocketPage() {
               canReviewDraft={canReviewDraft}
               canFinalizeDraft={canFinalizeDraft}
               canFinance={canFinance}
-              canProposeRules={canProposeRules}
-              canActivateRules={canActivateRules}
               canManageAccess={canManageAccess}
               initialView={requestedDocketId === selected.id ? requestedView : "overview"}
               initialProceedingId={
@@ -447,19 +513,6 @@ function IpAccessWorkspaceLoading() {
     </Card>
   );
 }
-
-const READINESS_REASON: Record<IpFeatureReadiness["reason"], string> = {
-  available: "Available",
-  unknown_feature: "Feature is not in the approved catalogue",
-  missing_capability: "Your role does not include the required capability",
-  missing_entitlement: "The workspace plan does not include this feature",
-  rollout_disabled: "The safety rollout has not been enabled",
-  rollout_expired: "The approved pilot window has expired",
-  workspace_not_configured: "Tenant setup has not been saved",
-  tenant_disabled: "Tenant enablement has not passed",
-  readiness_test_failed: "The latest required readiness test has not passed",
-  incident_kill_switch: "A risk incident has stopped this automation",
-};
 
 const DUE_FORMAT = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
@@ -713,7 +766,7 @@ function IpReadinessGate({
               <div className="min-w-0">
                 <div className="break-words font-semibold">{feature.feature_id.replaceAll("_", " ")}</div>
                 <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {READINESS_REASON[feature.reason]} · owner {feature.owner}
+                  {feature.available ? "Ready" : readinessReasonText(feature)}
                 </div>
               </div>
               <span className={feature.available ? "text-sm font-semibold text-emerald-700" : "text-sm font-semibold text-amber-700"}>
@@ -954,7 +1007,8 @@ function IpWorkspaceSetupCard({
         {!configuration ? <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
           <div className="font-semibold">Seeded governance contract</div>
           <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-            Taxonomy ip-taxonomy-2026.1 · event catalogue ip-events-v1 · jurisdiction rule
+            Document taxonomy {status?.document_taxonomy?.taxonomy_version ?? "server default"}
+            {" "}· event catalogue ip-events-v1 · jurisdiction rule
             2026.1 · Monday–Friday working policy · in-app notification · 30-minute critical
             escalation.
           </div>
@@ -1086,146 +1140,6 @@ function IpWorkspaceSetupCard({
             Enable selected tested automations
           </Button>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function IpAutomationReadiness({ features }: { features: IpFeatureReadiness[] }) {
-  const blocked = features.filter((feature) => !feature.available);
-  return (
-    <Card className="min-w-0">
-      <CardHeader><CardTitle as="h2">Automation readiness</CardTitle></CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-2">
-        {blocked.map((feature) => (
-          <div
-            key={feature.feature_id}
-            className="flex min-w-0 w-full flex-col gap-1 rounded-md bg-[var(--color-bg-2)] p-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between"
-            data-testid={`ip-automation-${feature.feature_id}`}
-          >
-            <div className="min-w-0 break-words text-sm font-semibold">
-              {feature.feature_id.replaceAll("_", " ")}
-            </div>
-            <div className="min-w-0 break-words text-xs text-[var(--color-mute)] sm:text-right">
-              Disabled · {READINESS_REASON[feature.reason]} · owner {feature.owner}
-            </div>
-            {feature.manual_fallback_feature_id ? (
-              <div className="w-full break-words text-xs text-[var(--color-mute)]">
-                Manual fallback remains {feature.manual_fallback_feature_id.replaceAll("_", " ")}.
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CreateTrademarkCard({ onCreated }: { onCreated: (docket: IpDocket) => void }) {
-  const [title, setTitle] = useState("");
-  const [markText, setMarkText] = useState("");
-  const [classNumber, setClassNumber] = useState("9");
-  const [specification, setSpecification] = useState("");
-  const [applicant, setApplicant] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [matterId, setMatterId] = useState("");
-  const [restricted, setRestricted] = useState(false);
-  const [jurisdiction, setJurisdiction] = useState("IN");
-  const [office, setOffice] = useState("IP India");
-  const [filingPhase, setFilingPhase] = useState<"draft" | "pre_filing" | "filed">(
-    "pre_filing",
-  );
-  const [applicationNumber, setApplicationNumber] = useState("");
-  const [numberSource, setNumberSource] = useState("manual");
-  const [numberEffectiveFrom, setNumberEffectiveFrom] = useState(TODAY);
-  const [pendingAllocation, setPendingAllocation] = useState(false);
-  const mutation = useMutation({
-    mutationFn: () =>
-      createManualTrademarkApplication({
-        title,
-        matterId: matterId.trim() || null,
-        restricted,
-        assetTitle: markText,
-        jurisdiction,
-        office,
-        filingPhase,
-        sourcePendingIdentifierAllocation:
-          filingPhase === "filed" && !applicationNumber.trim() && pendingAllocation,
-        applicationNumber: applicationNumber.trim() || null,
-        identifierSource: numberSource,
-        identifierEffectiveFrom: numberEffectiveFrom,
-        markText,
-        classNumber: Number(classNumber),
-        specification,
-        applicantName: applicant,
-        evidenceReference: evidence,
-      }),
-    onSuccess: (result) => {
-      toast.success(
-        result.duplicate_candidates.length
-          ? "Draft created. Review the possible duplicate before marking it filed."
-          : "Trademark application created with its canonical identity records.",
-      );
-      onCreated(result.docket);
-    },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not create the trademark application.")),
-  });
-  const filedAllocationValid =
-    filingPhase !== "filed" || Boolean(applicationNumber.trim()) || pendingAllocation;
-  const valid =
-    title.trim().length >= 2 &&
-    markText.trim().length >= 1 &&
-    jurisdiction.trim().length >= 2 &&
-    office.trim().length >= 2 &&
-    specification.trim().length >= 3 &&
-    applicant.trim().length >= 2 &&
-    evidence.trim().length >= 3 &&
-    filedAllocationValid;
-
-  return (
-    <Card>
-      <CardHeader><CardTitle as="h2">New trademark application</CardTitle></CardHeader>
-      <CardContent>
-        <form
-          className="grid min-w-0 gap-4 md:grid-cols-2"
-          onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}
-        >
-          <Field label="Docket title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label="Matter ID (optional)"><Input value={matterId} onChange={(e) => setMatterId(e.target.value)} /></Field>
-          <Field label="Word mark"><Input value={markText} onChange={(e) => setMarkText(e.target.value)} /></Field>
-          <Field label="Nice class"><Input type="number" min={1} max={45} value={classNumber} onChange={(e) => setClassNumber(e.target.value)} /></Field>
-          <Field label="Goods / services specification"><Input value={specification} onChange={(e) => setSpecification(e.target.value)} /></Field>
-          <Field label="Applicant"><Input value={applicant} onChange={(e) => setApplicant(e.target.value)} /></Field>
-          <Field label="Representation evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="attachment:… or drive:…" /></Field>
-          <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value.toUpperCase())} /></Field>
-          <Field label="Registry office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
-          <Field label="Filing phase">
-            <select className={FORM_SELECT_CLASS} value={filingPhase} onChange={(event) => setFilingPhase(event.target.value as typeof filingPhase)}>
-              <option value="draft">Draft</option>
-              <option value="pre_filing">Pre-filing</option>
-              <option value="filed">Filed</option>
-            </select>
-          </Field>
-          <Field label="Application number (optional before filing)"><Input value={applicationNumber} onChange={(event) => { setApplicationNumber(event.target.value); if (event.target.value) setPendingAllocation(false); }} /></Field>
-          {applicationNumber ? (
-            <>
-              <Field label="Number source"><Input value={numberSource} onChange={(event) => setNumberSource(event.target.value)} /></Field>
-              <Field label="Effective from"><Input type="date" value={numberEffectiveFrom} onChange={(event) => setNumberEffectiveFrom(event.target.value)} /></Field>
-            </>
-          ) : null}
-          {filingPhase === "filed" && !applicationNumber ? (
-            <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
-              <input type="checkbox" className="mt-1" checked={pendingAllocation} onChange={(event) => setPendingAllocation(event.target.checked)} />
-              Registry source confirms the application number is still pending allocation
-            </label>
-          ) : null}
-          <label className="flex min-w-0 items-start gap-2 text-sm md:col-span-2">
-            <input type="checkbox" className="mt-1" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} />
-            Restrict this pre-engagement record to explicitly granted members
-          </label>
-          <div className="flex items-end md:col-span-2"><Button type="submit" disabled={!valid || mutation.isPending}>Create application</Button></div>
-        </form>
       </CardContent>
     </Card>
   );
@@ -1453,8 +1367,6 @@ function DocketWorkspace({
   canReviewDraft,
   canFinalizeDraft,
   canFinance,
-  canProposeRules,
-  canActivateRules,
   canManageAccess,
   initialView,
   initialProceedingId,
@@ -1471,8 +1383,6 @@ function DocketWorkspace({
   canReviewDraft: boolean;
   canFinalizeDraft: boolean;
   canFinance: boolean;
-  canProposeRules: boolean;
-  canActivateRules: boolean;
   canManageAccess: boolean;
   initialView: DocketView;
   initialProceedingId: string | null;
@@ -1488,7 +1398,15 @@ function DocketWorkspace({
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">
-        <CardHeader><CardTitle as="h2">{docket.title}</CardTitle></CardHeader>
+        <CardHeader className="gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <CardTitle as="h2" id="ip-docket-title" tabIndex={-1} className="min-w-0 scroll-mt-20 break-words outline-none">{docket.title}</CardTitle>
+          {/* Registry identities attach to national trademark records; Madrid records are reconciled in the Madrid portfolio. */}
+          {docket.record_type === "trademark" ? (
+            <Link href={`/app/ip/registry?docket=${encodeURIComponent(docket.id)}`} className="shrink-0 text-sm font-semibold text-[var(--color-brand-700)] hover:underline">
+              Reconcile with registry
+            </Link>
+          ) : null}
+        </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Readiness" value={docket.current_particulars.readiness_status} icon={FileCheck2} />
           <Metric label="Form" value={`${docket.current_particulars.form_key} ${docket.current_particulars.form_version}`} icon={Scale} />
@@ -1496,13 +1414,7 @@ function DocketWorkspace({
           <Metric label="Cost items" value={String(docket.cost_items.length)} icon={BadgeIndianRupee} />
           <div className="sm:col-span-2 xl:col-span-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Class scope</div>
-            <ul className="mt-2 flex min-w-0 flex-col gap-2">
-              {classes.map((row) => (
-                <li key={row.class_number} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-3 text-sm">
-                  <strong>Class {row.class_number}</strong> · <span className="break-words">{row.specification}</span>
-                </li>
-              ))}
-            </ul>
+            <IpDocketClassScope classes={classes} />
           </div>
         </CardContent>
       </Card>
@@ -1584,16 +1496,13 @@ function DocketWorkspace({
               currentMembershipId={currentMembershipId}
               onChanged={onChanged}
             />
-            <DeadlineGovernanceCard
-              docket={docket}
-              canPropose={canProposeRules}
-              canActivate={canActivateRules}
-              currentMembershipId={currentMembershipId}
-            />
+            <IpDeadlineGovernanceCard docket={docket} />
           </div>
         </TabsContent>
         <TabsContent value="access">
-          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          {/* One column: the docket detail column is too narrow to split
+              without squeezing the Matter picker. */}
+          <div className="flex min-w-0 flex-col gap-5" data-testid="ip-access-tab-panels">
             {canManageAccess ? (
               <IpAccessWorkspace docket={docket} onChanged={onChanged} />
             ) : null}
@@ -1654,10 +1563,9 @@ function HearingWorkflowCard({
   const [previewing, setPreviewing] = useState(false);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [confirmationTimes, setConfirmationTimes] = useState<Record<string, string>>({});
-  const offsetValues = offsets
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value) && value >= 0);
+  const parsedOffsets = parseReminderOffsetsHours(offsets);
+  const offsetValues = parsedOffsets.ok ? parsedOffsets.hours : [];
+  const offsetError = parsedOffsets.ok ? null : parsedOffsets.error;
   const reminderChannels: Array<"email" | "in_app"> = [
     ...(emailReminder ? (["email"] as const) : []),
     ...(inAppReminder ? (["in_app"] as const) : []),
@@ -1787,7 +1695,18 @@ function HearingWorkflowCard({
             <Field label="Location"><Input value={locationText} onChange={(event) => setLocationText(event.target.value)} /></Field>
             <Field label="Virtual hearing link"><Input type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} /></Field>
             <Field label="Source"><Input value={source} onChange={(event) => setSource(event.target.value)} /></Field>
-            <Field label="Reminder offsets (hours)"><Input value={offsets} onChange={(event) => setOffsets(event.target.value)} /></Field>
+            <Field label="Reminder offsets" htmlFor="ip-hearing-reminder-offsets">
+              <Input
+                id="ip-hearing-reminder-offsets"
+                value={offsets}
+                aria-invalid={offsetError ? true : undefined}
+                aria-describedby="ip-hearing-reminder-offsets-help"
+                onChange={(event) => { setOffsets(event.target.value); setPreviewing(false); }}
+              />
+              <p id="ip-hearing-reminder-offsets-help" role={offsetError ? "alert" : undefined} className={`min-w-0 break-words text-xs ${offsetError ? "text-[var(--color-danger-500)]" : "text-[var(--color-mute)]"}`}>
+                {offsetError ?? `Before the hearing: ${offsetValues.join(", ")} hours. ${REMINDER_OFFSET_FORMAT_HINT}`}
+              </p>
+            </Field>
             <fieldset className="col-span-full min-w-0 rounded-md border border-[var(--color-line)] p-3">
               <legend className="px-1 text-sm font-semibold">Reminder channels</legend>
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1799,7 +1718,7 @@ function HearingWorkflowCard({
               <div className="col-span-full min-w-0 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" data-testid="ip-hearing-preview">
                 <strong>Confirm reminder policy</strong>
                 <div className="mt-1 break-words">{timeStatus === "exact" ? `Exact time ${hearingTime}` : timeStatus === "session" ? `Session: ${sessionLabel}` : "Date-based reminder only; no hearing time will be invented."}</div>
-                <div className="mt-1 break-words">Recipients: {recipientIds.join(", ") || "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
+                <div className="mt-1 break-words">Recipients: {recipientIds.length ? recipientIds.map((id, index) => <span key={id}>{index ? ", " : ""}<PersonName membershipId={id} /></span>) : "none"} · Offsets: {offsetValues.join(", ") || "none"} hours · Channels: {reminderChannels.join(", ") || "none"}</div>
               </div>
             ) : null}
             <div className="col-span-full flex min-w-0 flex-wrap gap-2">
@@ -2075,12 +1994,23 @@ function DeadlineWorkspaceCard({
 
   const activeRules = workspace.data?.rules.filter((row) => row.status === "active"
     && row.rule_kind === "deadline" && workspace.data?.eligible_rule_version_ids?.includes(row.id)) ?? [];
-  const activeCalendars =
-    workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
-  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId) ? ruleVersionId : activeRules[0]?.id ?? "";
-  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId) ? calendarVersionId : activeCalendars[0]?.id ?? "";
+  // One eligible option is the only choice; with several the lawyer chooses,
+  // never the first by accident. A deadline is counted only on an active
+  // calendar of its rule's jurisdiction (the API refuses any other).
+  const selectedRuleId = activeRules.some((row) => row.id === ruleVersionId)
+    ? ruleVersionId
+    : activeRules.length === 1 ? activeRules[0].id : "";
   const selectedRule = activeRules.find((row) => row.id === selectedRuleId);
+  const allActiveCalendars =
+    workspace.data?.calendars.filter((row) => row.status === "active") ?? [];
+  const activeCalendars = selectedRule
+    ? allActiveCalendars.filter((row) => sameJurisdiction(row.jurisdiction, selectedRule.jurisdiction))
+    : allActiveCalendars;
+  const selectedCalendarId = activeCalendars.some((row) => row.id === calendarVersionId)
+    ? calendarVersionId
+    : activeCalendars.length === 1 ? activeCalendars[0].id : "";
   const selectedCalendar = activeCalendars.find((row) => row.id === selectedCalendarId);
+  const ruleJurisdiction = selectedRule ? normalJurisdiction(selectedRule.jurisdiction) : null;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({
@@ -2218,7 +2148,7 @@ function DeadlineWorkspaceCard({
           Calculations are proposals. A legal deadline changes operational work only after an
           authorized user explicitly confirms it.
         </div>
-        {workspace.isPending ? <p className="text-sm">Loading deadline evidenceâ€¦</p> : null}
+        {workspace.isPending ? <p className="text-sm">Loading deadline evidence…</p> : null}
         {workspace.isError ? (
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <p className="min-w-0 flex-1 break-words text-sm text-red-700">
@@ -2234,17 +2164,21 @@ function DeadlineWorkspaceCard({
             <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">
               Exception queue
             </div>
-            {workspace.data.exceptions.map((item) => (
-              <div
-                key={item.deadline_id}
-                className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
-              >
-                <strong className="break-words">{item.exception_kinds.join(" Â· ")}</strong>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
-                  {item.result_on ?? "No reliable legal date"} Â· deadline {item.deadline_id}
+            {workspace.data.exceptions.map((item) => {
+              const affected = workspace.data.deadlines.find((row) => row.id === item.deadline_id);
+              return (
+                <div
+                  key={item.deadline_id}
+                  className="min-w-0 rounded-lg border border-amber-300 p-3 text-sm"
+                  data-exception-kinds={item.exception_kinds.join(" ")}
+                >
+                  <strong className="break-words">{item.exception_kinds.map(deadlineExceptionLabel).join(" · ")}</strong>
+                  <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                    {affected ? `${affected.title} · ` : ""}{item.result_on ?? "No reliable legal date"}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -2286,10 +2220,13 @@ function DeadlineWorkspaceCard({
                 value={selectedRuleId}
                 onChange={(event) => setRuleVersionId(event.target.value)}
                 disabled={!workspace.isSuccess || !activeRules.length}
-                aria-describedby={selectedRule ? "ip-active-rule-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
+                aria-describedby={selectedRule ? "ip-active-rule-detail" : workspace.isSuccess && !activeRules.length ? "ip-deadline-prerequisites" : undefined}
               >
                 {!workspace.isSuccess || !activeRules.length ? (
                   <option value="">{workspace.isPending ? "Loading deadline rules…" : workspace.isError ? "Deadline rules unavailable" : "No eligible active deadline rule"}</option>
+                ) : null}
+                {workspace.isSuccess && activeRules.length > 1 && !selectedRule ? (
+                  <option value="" disabled>Choose a rule version</option>
                 ) : null}
                 {activeRules.map((row) => (
                   <option key={row.id} value={row.id}>{deadlineRuleCaption(row)}</option>
@@ -2302,10 +2239,13 @@ function DeadlineWorkspaceCard({
                 value={selectedCalendarId}
                 onChange={(event) => setCalendarVersionId(event.target.value)}
                 disabled={!workspace.isSuccess || !activeCalendars.length}
-                aria-describedby={selectedCalendar ? "ip-active-calendar-detail" : workspace.isSuccess ? "ip-deadline-prerequisites" : undefined}
+                aria-describedby={selectedCalendar ? "ip-active-calendar-detail" : workspace.isSuccess && !activeCalendars.length ? "ip-deadline-prerequisites" : undefined}
               >
                 {!workspace.isSuccess || !activeCalendars.length ? (
-                  <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : "No active working calendar"}</option>
+                  <option value="">{workspace.isPending ? "Loading working calendars…" : workspace.isError ? "Working calendars unavailable" : ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "No active working calendar"}</option>
+                ) : null}
+                {workspace.isSuccess && activeCalendars.length > 1 && !selectedCalendar ? (
+                  <option value="" disabled>Choose a working calendar</option>
                 ) : null}
                 {activeCalendars.map((row) => (
                   <option key={row.id} value={row.id}>{workingCalendarCaption(row)}</option>
@@ -2323,7 +2263,20 @@ function DeadlineWorkspaceCard({
             <div className="col-span-full grid min-w-0 gap-2">
               {selectedRule ? <p id="ip-active-rule-detail" data-selected-option-value={selectedRule.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{deadlineRuleCaption(selectedRule)}</p> : null}
               {selectedCalendar ? <p id="ip-active-calendar-detail" data-selected-option-value={selectedCalendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarCaption(selectedCalendar)}</p> : null}
-              {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? <p id="ip-deadline-prerequisites" className="text-sm text-[var(--color-mute)]">Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.</p> : null}
+              {workspace.isSuccess && (!activeRules.length || !activeCalendars.length) ? (
+                <p id="ip-deadline-prerequisites" className="min-w-0 break-words text-sm text-[var(--color-mute)]">
+                  {!activeRules.length ? "No active deadline rule is selected for company deadlines. " : ""}
+                  {!activeCalendars.length
+                    ? ruleJurisdiction && allActiveCalendars.length
+                      ? `No ${ruleJurisdiction} working calendar is active; the selected rule counts its deadline only on a calendar of its jurisdiction. `
+                      : "No working calendar is active. "
+                    : ""}
+                  {workspace.data.governance?.rule_proposal.available || workspace.data.governance?.calendar_proposal.available
+                    ? "Propose them in Rule and calendar governance below; each version needs independent approval by another owner, admin or partner."
+                    : "See Rule and calendar governance below for why they cannot be proposed here."}{" "}
+                  <a className="font-medium underline underline-offset-2" href="#ip-deadline-governance">Open rule and calendar governance</a>
+                </p>
+              ) : null}
               <Button
                 className="h-auto min-h-10 w-fit max-w-full whitespace-normal py-2 text-left"
                 type="submit"
@@ -2345,7 +2298,13 @@ function DeadlineWorkspaceCard({
         {enabled && workspace.data?.deadlines.length ? (
           <div className={IP_FORM_GRID}>
             <Field label="Responsible lawyer" htmlFor="deadline-primary-owner">
-              <PersonPicker id="deadline-primary-owner" value={primaryId} onChange={setPrimaryId} />
+              <PersonPicker
+                id="deadline-primary-owner"
+                value={primaryId}
+                onChange={setPrimaryId}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
+                emptyText="No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter."
+              />
             </Field>
             <Field label="Backup" htmlFor="deadline-backup-owner">
               <PersonPicker
@@ -2353,6 +2312,7 @@ function DeadlineWorkspaceCard({
                 value={backupId}
                 onChange={setBackupId}
                 excludeMembershipIds={[primaryId]}
+                onlyMembershipIds={workspace.data.eligible_responsible_membership_ids ?? []}
                 placeholder="No backup"
               />
             </Field>
@@ -2374,7 +2334,7 @@ function DeadlineWorkspaceCard({
               <Input
                 value={actionReason}
                 onChange={(event) => setActionReason(event.target.value)}
-                placeholder="Verified source changed the dateâ€¦"
+                placeholder="Verified source changed the date…"
               />
             </Field>
             <Field label="Evidence reference">
@@ -2388,7 +2348,7 @@ function DeadlineWorkspaceCard({
               <Input
                 value={attestation}
                 onChange={(event) => setAttestation(event.target.value)}
-                placeholder="Verified official filing receiptâ€¦"
+                placeholder="Verified official filing receipt…"
               />
             </Field>
           </div>
@@ -2412,7 +2372,7 @@ function DeadlineWorkspaceCard({
                 <div className="min-w-0 flex-1">
                   <div className="break-words font-semibold">{deadline.title}</div>
                   <div className="mt-1 break-words text-sm">
-                    {deadline.result_on ?? "Provisional â€” source date unresolved"} Â· {deadline.state} Â· v{deadline.version}
+                    {deadline.result_on ?? "Provisional — source date unresolved"} · {deadline.state} · v{deadline.version}
                   </div>
                   <div className="mt-2 break-words text-xs text-[var(--color-mute)]">
                     {deadline.explanation}
@@ -2453,16 +2413,21 @@ function DeadlineWorkspaceCard({
                       className="w-full sm:w-auto"
                       size="sm"
                       disabled={
+                        !docket.matter_id ||
                         !primaryId.trim() ||
                         (deadline.is_critical && !backupId.trim()) ||
                         ((deadline.result_on === null || deadline.certainty === "conflicting") &&
                           (!actionDate || !actionReason.trim() || !evidenceReference.trim())) ||
                         deadlineActionPending
                       }
+                      aria-describedby={docket.matter_id ? undefined : `deadline-matter-required-${deadline.id}`}
                       onClick={() => confirm.mutate(deadline)}
                     >
                       Confirm legal deadline
                     </Button>
+                  ) : null}
+                  {(deadline.state === "candidate" || deadline.state === "provisional") && !docket.matter_id ? (
+                    <IpMatterLinkRequired id={`deadline-matter-required-${deadline.id}`} docketId={docket.id} />
                   ) : null}
                   {deadline.state === "confirmed" || deadline.state === "overdue" ? (
                     <>
@@ -2511,247 +2476,6 @@ function DeadlineWorkspaceCard({
           {workspace.data && workspace.data.deadlines.length === 0 ? (
             <p className="text-sm text-[var(--color-mute)]">No legal deadline proposals yet.</p>
           ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DeadlineGovernanceCard({
-  docket,
-  canPropose,
-  canActivate,
-  currentMembershipId,
-}: {
-  docket: IpDocket;
-  canPropose: boolean;
-  canActivate: boolean;
-  currentMembershipId: string | null;
-}) {
-  const queryClient = useQueryClient();
-  const workspace = useQuery({
-    queryKey: ["ip", "deadline-workspace", docket.id],
-    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
-  });
-  const [calendarKey, setCalendarKey] = useState("ip-india-working-calendar");
-  const [calendarName, setCalendarName] = useState("IP India working calendar");
-  const [jurisdiction, setJurisdiction] = useState("IN");
-  const [office, setOffice] = useState("IP India");
-  const [holidays, setHolidays] = useState("");
-  const [sourceReference, setSourceReference] = useState("");
-  const [sourceHash, setSourceHash] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(TODAY);
-  const [governanceReason, setGovernanceReason] = useState("");
-  const [ruleKey, setRuleKey] = useState("in-tm-response-deadline");
-  const [triggerKind, setTriggerKind] = useState("examination_report_received");
-  const [durationValue, setDurationValue] = useState("30");
-  const [ruleCitation, setRuleCitation] = useState("");
-  const [fixtureBaseDate, setFixtureBaseDate] = useState(TODAY);
-  const [fixtureExpectedDate, setFixtureExpectedDate] = useState("");
-  const [reviewerId, setReviewerId] = useState("");
-
-  const activeCalendar = workspace.data?.calendars.find((row) => row.status === "active");
-  const refresh = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["ip", "deadline-workspace", docket.id],
-    });
-  };
-  const result = {
-    onSuccess: async () => {
-      toast.success("Deadline governance record updated");
-      await refresh();
-    },
-    onError: (error: unknown) =>
-      toast.error(apiErrorMessage(error, "Deadline governance rejected the change.")),
-  };
-  const proposeCalendar = useMutation({
-    mutationFn: () =>
-      proposeIpWorkingCalendar({
-        key: calendarKey,
-        name: calendarName,
-        jurisdiction,
-        office,
-        timezone: "Asia/Kolkata",
-        holidays: holidays
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        sourceReference,
-        sourceHash,
-        effectiveFrom,
-      }),
-    ...result,
-  });
-  const activateCalendar = useMutation({
-    mutationFn: (id: string) =>
-      activateIpWorkingCalendar({
-        calendarVersionId: id,
-        reason: governanceReason,
-        conflictReviewed: true,
-      }),
-    ...result,
-  });
-  const proposeRule = useMutation({
-    mutationFn: () => {
-      if (!activeCalendar) throw new Error("Activate a working calendar first.");
-      const calculation = {
-        deadline_kind: "legal_deadline",
-        trigger_kind: triggerKind,
-        base_date: fixtureBaseDate,
-        base_date_certainty: "certain",
-        duration_value: Number(durationValue),
-        duration_unit: "days",
-        calendar_method: "business_days",
-        direction: "after",
-        include_base_date: false,
-        next_working_day: true,
-        extension_days: 0,
-        rule_version_id: "governance-fixture-rule",
-        rule_citation: ruleCitation,
-        source_version: "governance-fixture-source",
-        engine_version: "caseops-ip-deadline-v1",
-        calendar: {
-          calendar_version_id: activeCalendar.id,
-          timezone: activeCalendar.timezone,
-          weekend_days: activeCalendar.weekend_days,
-          holidays: activeCalendar.holidays,
-          exceptional_working_days: activeCalendar.exceptional_working_days,
-          source_reference: activeCalendar.source_reference,
-          source_hash: activeCalendar.source_hash,
-        },
-      };
-      return proposeIpDeadlineRule({
-        key: ruleKey,
-        jurisdiction,
-        office,
-        rightKind: "trademark",
-        stage: "examination",
-        sourceRecordId: `verified-source-${effectiveFrom}`,
-        sourceReference,
-        sourceHash,
-        effectiveFrom,
-        triggerKind,
-        durationValue: Number(durationValue),
-        calendarMethod: "business_days",
-        ruleCitation,
-        fixtureCalculation: calculation,
-        fixtureExpectedState: "candidate",
-        fixtureExpectedResultOn: fixtureExpectedDate || null,
-      });
-    },
-    ...result,
-  });
-  const activateRule = useMutation({
-    mutationFn: (id: string) =>
-      activateIpDeadlineRule({
-        ruleVersionId: id,
-        reviewerMembershipId: reviewerId,
-        impactAcknowledged: true,
-        impactReason: governanceReason,
-      }),
-    ...result,
-  });
-  const disableRule = useMutation({
-    mutationFn: async (id: string) => {
-      const impact = await fetchIpDeadlineRuleImpact(id);
-      return transitionIpDeadlineRule({
-        ruleVersionId: id,
-        impactToken: impact.impact_token,
-        reason: governanceReason,
-        emergencyDisable: true,
-      });
-    },
-    ...result,
-  });
-
-  return (
-    <Card className="min-w-0 xl:col-span-2" data-testid="ip-deadline-governance">
-      <CardHeader><CardTitle as="h3">Rule and calendar governance</CardTitle></CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-5">
-        <p className="text-sm text-[var(--color-mute)]">
-          Versioned sources require independent approval and server-evaluated fixtures. The
-          proposer cannot approve the same calendar, and rule proposal, fixture review, and
-          legal activation must use separate memberships.
-        </p>
-        {canPropose ? (
-          <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] gap-5">
-            <form
-              className={IP_FORM_GRID}
-              onSubmit={(event) => { event.preventDefault(); proposeCalendar.mutate(); }}
-            >
-              <div className="col-span-full text-sm font-semibold">Propose working calendar</div>
-              <Field label="Calendar key"><Input value={calendarKey} onChange={(e) => setCalendarKey(e.target.value)} /></Field>
-              <Field label="Calendar name"><Input value={calendarName} onChange={(e) => setCalendarName(e.target.value)} /></Field>
-              <Field label="Jurisdiction"><Input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} /></Field>
-              <Field label="Office"><Input value={office} onChange={(e) => setOffice(e.target.value)} /></Field>
-              <Field label="Holiday dates (comma separated)"><Input value={holidays} onChange={(e) => setHolidays(e.target.value)} placeholder="2026-01-26, 2026-08-15" /></Field>
-              <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></Field>
-              <Field label="Official source reference"><Input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} /></Field>
-              <Field label="Source SHA-256"><Input value={sourceHash} onChange={(e) => setSourceHash(e.target.value)} /></Field>
-              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!sourceReference || sourceHash.length !== 64 || proposeCalendar.isPending}>Propose calendar version</Button></div>
-            </form>
-            <form
-              className={IP_FORM_GRID}
-              onSubmit={(event) => { event.preventDefault(); proposeRule.mutate(); }}
-            >
-              <div className="col-span-full text-sm font-semibold">Propose tested deadline rule</div>
-              <Field label="Rule key"><Input value={ruleKey} onChange={(e) => setRuleKey(e.target.value)} /></Field>
-              <Field label="Trigger kind"><Input value={triggerKind} onChange={(e) => setTriggerKind(e.target.value)} /></Field>
-              <Field label="Business-day duration"><Input type="number" min={0} value={durationValue} onChange={(e) => setDurationValue(e.target.value)} /></Field>
-              <Field label="Rule citation"><Input value={ruleCitation} onChange={(e) => setRuleCitation(e.target.value)} /></Field>
-              <Field label="Fixture base date"><Input type="date" value={fixtureBaseDate} onChange={(e) => setFixtureBaseDate(e.target.value)} /></Field>
-              <Field label="Expected fixture date"><Input type="date" value={fixtureExpectedDate} onChange={(e) => setFixtureExpectedDate(e.target.value)} /></Field>
-              <div className="col-span-full min-w-0"><Button className="h-auto min-h-10 max-w-full whitespace-normal py-2" type="submit" disabled={!activeCalendar || !ruleCitation || !fixtureExpectedDate || !sourceReference || sourceHash.length !== 64 || proposeRule.isPending}>Propose rule and fixture</Button></div>
-            </form>
-          </div>
-        ) : null}
-
-        {canPropose || canActivate ? (
-          <div className={IP_FORM_GRID}>
-            <Field label="Independent fixture reviewer" htmlFor="rule-fixture-reviewer">
-              <PersonPicker id="rule-fixture-reviewer" value={reviewerId} onChange={setReviewerId} />
-            </Field>
-            <Field label="Governance / impact reason">
-              <Input value={governanceReason} onChange={(event) => setGovernanceReason(event.target.value)} />
-            </Field>
-            <div className="flex items-end text-xs text-[var(--color-mute)]">
-              Current actor: {currentMembershipId ?? "unavailable"}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Calendar versions</div>
-            {workspace.data?.calendars.map((row) => (
-              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
-                <div className="break-words font-semibold">{row.name} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
-                {canActivate && row.status === "candidate" ? (
-                  <Button className="mt-3 w-full sm:w-auto" size="sm" disabled={governanceReason.trim().length < 5 || activateCalendar.isPending} onClick={() => activateCalendar.mutate(row.id)}>Independently activate calendar</Button>
-                ) : null}
-              </div>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Rule versions</div>
-            {workspace.data?.rules.map((row) => (
-              <div key={row.id} className="min-w-0 rounded-lg border border-[var(--color-line)] p-3 text-sm">
-                <div className="break-words font-semibold">{row.key} v{row.version}</div>
-                <div className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.status} Â· {row.source_reference}</div>
-                {canActivate ? (
-                  <div className="mt-3 flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    {row.status === "candidate" ? (
-                      <Button className="w-full sm:w-auto" size="sm" disabled={!reviewerId || activateRule.isPending} onClick={() => activateRule.mutate(row.id)}>Run fixtures and activate rule</Button>
-                    ) : null}
-                    {row.status === "active" ? (
-                      <Button className="w-full sm:w-auto" size="sm" variant="secondary" disabled={governanceReason.trim().length < 5 || disableRule.isPending} onClick={() => disableRule.mutate(row.id)}>Preview impact and emergency-disable</Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
         </div>
       </CardContent>
     </Card>
@@ -3242,7 +2966,16 @@ function LifecycleCard({ docket, enabled, onChanged }: { docket: IpDocket; enabl
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             <Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} /></Field>
-            {toStatus === "transferred" ? <Field label="Successor docket ID"><Input value={successorDocketId} onChange={(event) => setSuccessorDocketId(event.target.value)} /></Field> : null}
+            {toStatus === "transferred" ? (
+              <IpDocketPicker
+                id="lifecycle-successor-docket"
+                label="Successor docket"
+                value={successorDocketId}
+                onChange={(docketId) => setSuccessorDocketId(docketId)}
+                excludeIds={[docket.id]}
+                required
+              />
+            ) : null}
             <Field label="Second approver (optional)" htmlFor="lifecycle-second-approver"><PersonPicker id="lifecycle-second-approver" value={secondApproverMembershipId} onChange={setSecondApproverMembershipId} placeholder="No second approver" /></Field>
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={!valid || preview.isPending}>Preview lifecycle impact</Button>
@@ -3845,7 +3578,7 @@ function CostCorrectionEditor({
                 <select
                   className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                   value={billingLinkType}
-                  onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}
+                  onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}
                 >
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
@@ -3853,10 +3586,15 @@ function CostCorrectionEditor({
                   <option value="time_entry">Time entry</option>
                 </select>
               </Field>
-              {billingLinkType ? (
-                <Field label="Corrected Matter billing record ID">
-                  <Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} />
-                </Field>
+              {billingLinkType && docket.matter_id ? (
+                <IpBillingRecordSelect
+                  id={`ip-cost-correction-billing-record-${row.id}`}
+                  label="Corrected Matter billing record"
+                  matterId={docket.matter_id}
+                  linkType={billingLinkType}
+                  value={billingLinkId}
+                  onChange={setBillingLinkId}
+                />
               ) : null}
             </>
           ) : null}
@@ -3893,6 +3631,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const [fxConvertedAt, setFxConvertedAt] = useState("");
   const [baseAmount, setBaseAmount] = useState("");
   const [baseCurrency, setBaseCurrency] = useState("INR");
+  const [category, setCategory] = useState<IpCostCategory>("official_fee");
 
   // UJ-52-EXC-01: with no billing Matter the cost is still recorded, but only
   // as nonbillable evidence. The billing decision is deferred, not the fee.
@@ -3903,12 +3642,12 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const resetForm = () => {
     setDescription(""); setAmount(""); setEvidence(""); setBillingLinkId("");
     setFxRate(""); setFxRateSource(""); setFxConvertedAt(""); setBaseAmount("");
-    setConverted(false); setCurrency("INR"); setRateConfidential(false);
+    setConverted(false); setCurrency("INR"); setRateConfidential(false); setCategory("official_fee");
   };
 
   const mutation = useMutation({
     mutationFn: () => addIpCostItem(docket.id, {
-      category: "official_fee",
+      category,
       description,
       amountMinor: Math.round(Number(amount) * 100),
       currency,
@@ -3990,6 +3729,11 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
                 attempt, or collection.
               </p>
             ) : null}
+            <Field label="Category">
+              <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={category} onChange={(event) => setCategory(event.target.value as IpCostCategory)}>
+                {COST_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </Field>
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
             <Field label={`Amount (${currency})`}><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
             <Field label="Evidence reference"><Input value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>
@@ -4026,7 +3770,7 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
             ) : null}
             {canLinkBilling ? (
               <Field label="Matter billing link type">
-                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}>
+                <select className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={billingLinkType} onChange={(event) => { setBillingLinkType(event.target.value as typeof billingLinkType); setBillingLinkId(""); }}>
                   <option value="">No billing link</option>
                   <option value="invoice">Invoice</option>
                   <option value="invoice_line_item">Invoice line item</option>
@@ -4040,7 +3784,16 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
                   : "A nonbillable cost is not linked to a billing record."}
               </p>
             )}
-            {canLinkBilling && billingLinkType ? <Field label="Matter billing record ID"><Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} /></Field> : null}
+            {canLinkBilling && billingLinkType && docket.matter_id ? (
+              <IpBillingRecordSelect
+                id="ip-cost-billing-record"
+                label="Matter billing record"
+                matterId={docket.matter_id}
+                linkType={billingLinkType}
+                value={billingLinkId}
+                onChange={setBillingLinkId}
+              />
+            ) : null}
             <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
                 {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
@@ -4055,6 +3808,17 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
     </Card>
   );
 }
+
+type IpCostCategory = "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other";
+
+// Same values as the API's IpCostItemCreate.category literal.
+const COST_CATEGORIES: ReadonlyArray<readonly [IpCostCategory, string]> = [
+  ["official_fee", "Official fee"],
+  ["professional_fee", "Professional fee"],
+  ["associate_fee", "Associate fee"],
+  ["disbursement", "Disbursement"],
+  ["other", "Other"],
+];
 
 function Field({
   label,

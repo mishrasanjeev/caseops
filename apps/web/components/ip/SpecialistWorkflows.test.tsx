@@ -29,10 +29,10 @@ const work = obligationSchema.parse({ id: id(10), task_id: id(11), deadline_id: 
 const base = `/api/ip/specialist/records/${record.id}/workflows/${workflow.id}/obligations`;
 const receipt = { id: id(13), obligation_id: work.id, action: "complete", occurred_on: "2026-09-10", account: "Notice delivered with retained receipt", source, cost_item_id: null, recorded_at: "2026-09-10T01:00:00Z" };
 
-function mount(canWrite = true) {
+function mount(canWrite = true, options = [{ label: "Receipt / Version 1", source }]) {
   const query = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(<QueryClientProvider client={query}><ContractWork record={record} workflow={workflow} canWrite={canWrite}
-    options={[{ label: "Receipt / Version 1", source }]} /></QueryClientProvider>);
+    options={options} /></QueryClientProvider>);
   return query;
 }
 
@@ -82,6 +82,19 @@ describe("Contract obligations and performance", () => {
     expect(mocks.api).toHaveBeenCalledWith(`${base}/${work.id}/performance`, expect.objectContaining({ method: "POST",
       body: { action: "complete", occurred_on: receipt.occurred_on, account: receipt.account, source, replacement_cost_item_id: null, expected_lifecycle_version: 0, expected_status: "open" },
     }));
+  });
+
+  it("B4-ADJ-22 says where to add evidence instead of an enabled empty source select", async () => {
+    mount(true, []);
+    await openPerformanceHistory();
+    const form = await screen.findByRole("form", { name: "Record contract performance" });
+    const version = within(form).getByLabelText("Source document version");
+    expect(version).toBeDisabled();
+    expect(version).toHaveAccessibleDescription("No retained evidence on this record yet. Upload it on the Evidence tab first.");
+    expect(within(form).getByRole("button", { name: "Record performance" })).toBeDisabled();
+    const obligation = screen.getByRole("form", { name: "Contractual obligation" });
+    expect(within(obligation).getByLabelText("Source document version")).toBeDisabled();
+    expect(within(obligation).getByRole("button", { name: "Create obligation" })).toBeDisabled();
   });
 
   it("retains rejected performance inputs and unchanged evidence", async () => {
@@ -134,6 +147,17 @@ describe("Contract obligations and performance", () => {
     expect(mocks.api).toHaveBeenCalledWith(base.replace(/\/obligations$/, "/cost-evidence"), expect.objectContaining({ body: {
       description: "Receipt amount", amount_minor: 25000, currency: "INR", cost_nature: "actual", source, expected_lifecycle_version: 0,
     } }));
+  });
+
+  it("B4-ADJ-22 keeps a source set from being created without retained evidence", async () => {
+    const query = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={query}><WorkflowForm record={record} kind="source_set" options={[]}
+      onSaved={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+    const version = screen.getByLabelText("Source document version");
+    expect(version).toBeDisabled();
+    expect(version).toHaveAccessibleDescription(/Upload it on the Evidence tab first/);
+    fireEvent.change(screen.getByLabelText("title"), { target: { value: "Retained instrument" } });
+    expect(screen.getByRole("button", { name: "Create workflow" })).toBeDisabled();
   });
 
   it("pages reference choices independently, preserves edits and explicitly selects the exact new source revision", async () => {

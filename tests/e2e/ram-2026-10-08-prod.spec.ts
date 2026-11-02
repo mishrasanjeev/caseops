@@ -96,7 +96,7 @@ test("BUG-003: owner-consented Google account remains connected after responsive
   await assertRelease(page);
 });
 
-type IntakeMatter = { id: string; matter_code: string; status: string; updated_at: string };
+type IntakeMatter = { id: string; matter_code: string; title: string; status: string; updated_at: string };
 type IntakeCandidate = {
   id: string; company_id: string; provider_event_id: string; title: string; status: string;
   suggested_matter_id: string | null; linked_matter_id: string | null;
@@ -258,13 +258,16 @@ test("Calendar auto-candidate intake persists the suggested Matter without OAuth
       expect(rows.filter(row => row.provider_event_id === deniedEvent)).toEqual([]);
       await expect(page.getByRole("heading", { name: "Sync conflicts", exact: true })).toBeVisible();
       await expect(page.getByText("Could not load calendar candidates", { exact: true })).toHaveCount(0);
-      await expect(page.getByLabel("Matter id for accept")).toHaveValue("");
-      for (const [record, suggested] of [[matched, matter!.id], [unmatched, "none"]] as const) {
+      // B4-ADJ-02: the Matter is chosen by name, and rows name Matters by caption.
+      await expect(page.getByRole("combobox", { name: "Matter for Accept", exact: true })).toHaveValue("");
+      await expect(page.getByLabel(/matter id/i)).toHaveCount(0);
+      const caption = `${matter!.matter_code} · ${matter!.title}`;
+      for (const [record, suggested] of [[matched, caption], [unmatched, "none"]] as const) {
         const row = page.locator("div.grid").filter({ has: page.getByText(record.title, { exact: true }) });
         await expect(row).toHaveCount(1);
         await expect(row.getByText(record.title, { exact: true })).toBeVisible();
         await expect(row.getByText(`Suggested: ${suggested}`, { exact: true })).toBeVisible();
-        await expect(row.getByText("Linked: none", { exact: true })).toBeVisible();
+        await expect(row.getByText(matter!.id)).toHaveCount(0);
         await expect(row.getByText("new", { exact: true })).toBeVisible();
         const accept = row.getByRole("button", { name: "Accept", exact: true });
         if (record.id === matched.id) await expect(accept).toBeEnabled();

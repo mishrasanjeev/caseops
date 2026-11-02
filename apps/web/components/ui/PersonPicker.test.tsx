@@ -7,7 +7,7 @@ const { listCompanyUsersMock } = vi.hoisted(() => ({ listCompanyUsersMock: vi.fn
 
 vi.mock("@/lib/api/endpoints", () => ({ listCompanyUsers: listCompanyUsersMock }));
 
-import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
+import { PersonChecklist, PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -223,6 +223,41 @@ describe("PersonPicker", () => {
     expect(within(select).queryByRole("option", { name: /Priya Raghavan/ })).toBeNull();
   });
 
+  it("offers only the server's eligible memberships and names an empty list", async () => {
+    const { rerender } = render(
+      withClient(
+        <PersonPicker id="p" value="" onChange={() => {}} onlyMembershipIds={["m-2"]} emptyText="Nobody else can review." />,
+      ),
+    );
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => expect(within(select).getByRole("option", { name: /Anand Rao/ })).toBeInTheDocument());
+    expect(within(select).queryByRole("option", { name: /Priya Raghavan/ })).toBeNull();
+    expect(screen.queryByText("Nobody else can review.")).toBeNull();
+
+    rerender(
+      withClient(
+        <PersonPicker id="p" value="" onChange={() => {}} onlyMembershipIds={[]} emptyText="Nobody else can review." />,
+      ),
+    );
+    expect(await screen.findByText("Nobody else can review.")).toBeVisible();
+    const empty = await screen.findByRole("combobox");
+    expect(within(empty).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual([""]);
+  });
+
+  it("wires a caller's field error to the select and keeps the identity caption", async () => {
+    render(
+      withClient(
+        <>
+          <PersonPicker id="p" value="m-1" onChange={() => {}} errorId="p-error" />
+          <p id="p-error">Choose a qualified reviewer.</p>
+        </>,
+      ),
+    );
+    const select = await screen.findByRole("combobox");
+    await waitFor(() => expect(select).toHaveAttribute("aria-describedby", "p-error p-selected-description"));
+    expect(select).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("clears an explicitly excluded selection without reinserting it", async () => {
     const onChange = vi.fn();
     render(
@@ -276,12 +311,16 @@ describe("PersonPicker", () => {
     expect(await screen.findByText("No colleague matches that filter.")).toBeVisible();
   });
 
-  it("explains itself when the staff list cannot be loaded", async () => {
-    listCompanyUsersMock.mockRejectedValue(new Error("network"));
+  it("explains itself when the staff list cannot be loaded and offers a retry", async () => {
+    listCompanyUsersMock.mockRejectedValueOnce(new Error("network"));
 
     render(withClient(<PersonPicker id="p" value="" onChange={() => {}} />));
 
     expect(await screen.findByText(/staff list could not be loaded/)).toBeVisible();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByText(/staff list could not be loaded/)).toBeNull());
+    expect(screen.getByRole("combobox")).toBeEnabled();
   });
 });
 
@@ -323,5 +362,47 @@ describe("PersonName", () => {
     render(withClient(<PersonName membershipId={null} />));
 
     expect(await screen.findByText("Unassigned")).toBeVisible();
+  });
+});
+
+describe("PersonChecklist", () => {
+  beforeEach(() => {
+    listCompanyUsersMock.mockReset();
+    listCompanyUsersMock.mockResolvedValue(
+      directory([
+        person("m-2", "Anand Rao"),
+        person("m-1", "Priya Raghavan"),
+        person("m-3", "Former Clerk", { membership_active: false }),
+      ]),
+    );
+  });
+
+  it("lists active colleagues by name and email and reports membership ids upward", async () => {
+    function Harness() {
+      const [value, setValue] = useState<string[]>([]);
+      return (
+        <>
+          <PersonChecklist id="attendees" legend="Attending colleagues" value={value} onChange={setValue} />
+          <output data-testid="chosen">{value.join(",")}</output>
+        </>
+      );
+    }
+    render(withClient(<Harness />));
+    const anand = await screen.findByRole("checkbox", { name: "Anand Rao — m-2@example.com" });
+    expect(screen.getByRole("checkbox", { name: "Priya Raghavan — m-1@example.com" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Former Clerk/ })).toBeNull();
+    expect(screen.getByRole("group", { name: "Attending colleagues" })).toBeInTheDocument();
+    fireEvent.click(anand);
+    expect(screen.getByTestId("chosen")).toHaveTextContent("m-2");
+    fireEvent.click(anand);
+    expect(screen.getByTestId("chosen")).toHaveTextContent("");
+  });
+
+  it("offers a retry when the staff list cannot be loaded", async () => {
+    listCompanyUsersMock.mockRejectedValueOnce(new Error("offline"));
+    render(withClient(<PersonChecklist id="attendees" legend="Attending colleagues" value={[]} onChange={() => {}} />));
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    fireEvent.click(retry);
+    expect(await screen.findByRole("checkbox", { name: "Anand Rao — m-2@example.com" })).toBeInTheDocument();
   });
 });

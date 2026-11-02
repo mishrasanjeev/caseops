@@ -7,6 +7,7 @@ import {
   bootstrapPatentTenant, enablePatentWorkspace,
   signInPatentTenant,
 } from "./support/patent-acceptance";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -39,8 +40,7 @@ test("IPLF-080 source pin creates its governed document scope without changing t
   expect(original.status(), await original.text()).toBe(200);
   const originalParticulars = (await original.json()).current_particulars;
   expect(originalParticulars).toBeTruthy();
-  const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-  expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
   const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, {
     headers, multipart: {
       metadata_json: JSON.stringify({ taxonomy_key: "evidence", title: "Imported inventor source",

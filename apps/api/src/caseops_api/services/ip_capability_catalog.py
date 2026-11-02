@@ -55,6 +55,9 @@ class IPFeatureDecision:
     rollout_enabled: bool
     rollout_expires_at: datetime | None
     manual_fallback_feature_id: str | None
+    # Every failing gate in evaluation order. ``reason`` stays the first one for
+    # compatibility; a plan refusal must not hide a platform rollout pause.
+    blocked_reasons: tuple[IPFeatureReason, ...] = ()
 
 
 IP_FEATURES: tuple[IPFeatureDefinition, ...] = (
@@ -215,6 +218,7 @@ def evaluate_ip_feature(
             rollout_enabled=False,
             rollout_expires_at=None,
             manual_fallback_feature_id=None,
+            blocked_reasons=("unknown_feature",),
         )
 
     required = tuple(sorted(feature.required_capabilities))
@@ -230,15 +234,14 @@ def evaluate_ip_feature(
         expiry = expiry.replace(tzinfo=UTC)
     expired = expiry is not None and current >= expiry
 
-    reason: IPFeatureReason = "available"
-    if missing:
-        reason = "missing_capability"
-    elif not entitled:
-        reason = "missing_entitlement"
-    elif not rollout_enabled:
-        reason = "rollout_disabled"
-    elif expired:
-        reason = "rollout_expired"
+    gates: tuple[tuple[bool, IPFeatureReason], ...] = (
+        (bool(missing), "missing_capability"),
+        (not entitled, "missing_entitlement"),
+        (not rollout_enabled, "rollout_disabled"),
+        (expired, "rollout_expired"),
+    )
+    blocked_reasons = tuple(name for failed, name in gates if failed)
+    reason: IPFeatureReason = blocked_reasons[0] if blocked_reasons else "available"
 
     return IPFeatureDecision(
         feature_id=feature.feature_id,
@@ -253,6 +256,7 @@ def evaluate_ip_feature(
         rollout_enabled=rollout_enabled,
         rollout_expires_at=expiry,
         manual_fallback_feature_id=feature.manual_fallback_feature_id,
+        blocked_reasons=blocked_reasons,
     )
 
 
@@ -318,6 +322,50 @@ def assert_ip_rollout_enabled(
             "detail": (
                 f"{feature.feature_id} is disabled by its server-side rollout "
                 f"control. Existing records remain readable."
+            ),
+        },
+    )
+
+
+def ip_feature_entitled(session: Session, *, company_id: str, feature_id: str) -> bool:
+    """The company-entitlement gate alone, shared by writers and read projections."""
+
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    feature = IP_FEATURE_BY_ID[feature_id]
+    entitlements = current_entitlements_for_company(session, company_id)
+    return _entitlement_enabled(entitlements.get(feature.entitlement_key))
+
+
+def assert_ip_feature_entitled(
+    session: Session,
+    *,
+    context: SessionContext,
+    feature_id: str,
+) -> None:
+    """Enforce one IP feature's company entitlement at a writer boundary.
+
+    For writers that must apply the rollout gate first, before any database
+    access, and then enforce capability on a locked membership row. The refusal
+    has the same typed shape as ``assert_ip_feature_available``.
+    """
+
+    feature = IP_FEATURE_BY_ID[feature_id]
+    if ip_feature_entitled(session, company_id=context.company.id, feature_id=feature_id):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "ip_feature_unavailable",
+            "feature_id": feature.feature_id,
+            "reason": "missing_entitlement",
+            "missing_capabilities": [],
+            "entitlement_key": feature.entitlement_key,
+            "rollout_flag": feature.rollout_flag,
+            "rollout_owner": feature.rollout_owner,
+            "detail": (
+                f"This workspace's plan does not include {feature.entitlement_key}. "
+                "Existing records remain readable."
             ),
         },
     )

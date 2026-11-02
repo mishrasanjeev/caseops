@@ -223,11 +223,19 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
   for (const id of ruleIds) {
     expect(data.rules.find(row => row.id === id)).toMatchObject({ status: "active", rule_kind: "deadline" });
   }
-  const calendarIds = data.calendars.filter(row => row.status === "active").map(row => row.id);
-  for (const [label, expectedIds, placeholder] of [
-    ["Active rule version", ruleIds, "No eligible active deadline rule"],
-    ["Active working calendar", calendarIds, "No active working calendar"],
+  const activeCalendars = data.calendars.filter(row => row.status === "active");
+  // 2026-11-01 B4-ADJ-08: calendars are offered only in the chosen rule's jurisdiction.
+  const calendarIdsForRule = async () => {
+    const ruleId = await scope.getByRole("combobox", { name: "Active rule version", exact: true }).inputValue();
+    const jurisdiction = data.rules.find(row => row.id === ruleId)?.jurisdiction.trim().toUpperCase();
+    return activeCalendars.filter(row => !jurisdiction || row.jurisdiction.trim().toUpperCase() === jurisdiction).map(row => row.id);
+  };
+  let calendarIds: string[] = [];
+  for (const [label, placeholder] of [
+    ["Active rule version", "No eligible active deadline rule"],
+    ["Active working calendar", "No active working calendar"],
   ] as const) {
+    const expectedIds = label === "Active rule version" ? ruleIds : (calendarIds = await calendarIdsForRule());
     const select = scope.getByRole("combobox", { name: label, exact: true });
     await expect(select).toHaveCount(1);
     await expect(select).toBeVisible();
@@ -239,7 +247,9 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     const actualIds = await optionIds();
     if (!expectedIds.length) {
       await expect(select).toBeDisabled();
-      await expect(select.getByRole("option", { name: placeholder, exact: true })).toHaveCount(1);
+      const jurisdiction = label === "Active working calendar" && ruleIds.length
+        ? data.rules.find(row => row.id === ruleIds[ruleIds.length - 1])?.jurisdiction.trim().toUpperCase() : undefined;
+      await expect(select.getByRole("option", { name: jurisdiction ? `No active ${jurisdiction} working calendar` : placeholder, exact: true })).toHaveCount(1);
       await expect(select.locator("option")).toHaveCount(1);
     } else {
       await expect(select).toBeEnabled();
@@ -266,7 +276,12 @@ async function assertCurrentSelectorOptions(scope: Locator, data: IpDeadlineWork
     }
   }
   if (!ruleIds.length || !calendarIds.length) {
-    await expect(scope.getByText("Independent approval is required before a working calendar or deadline rule can be used. Company policy must select the active rule.", { exact: true })).toBeVisible();
+    // 2026-10-31 BUG-006: the prerequisite names what is missing and links to governance.
+    const prerequisites = scope.locator("#ip-deadline-prerequisites");
+    await expect(prerequisites).toBeVisible();
+    if (!ruleIds.length) await expect(prerequisites).toContainText("No active deadline rule is selected for company deadlines.");
+    if (!calendarIds.length) await expect(prerequisites).toContainText(activeCalendars.length ? "working calendar is active" : "No working calendar is active.");
+    await expect(prerequisites.getByRole("link", { name: "Open rule and calendar governance" })).toHaveAttribute("href", "#ip-deadline-governance");
     await expect(scope.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
   }
   return { eligible_rule_ids: ruleIds, active_calendar_ids: calendarIds };
@@ -357,6 +372,37 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       geometry.push({ stage, measurements: await checkGeometry(page, scope, requiredSources, stage) });
     };
     try {
+      // A candidate rule proposed by another member, so this viewer gets the
+      // per-candidate fixture reviewer picker (2026-10-31 BUG-006 moved it there).
+      // Its fixture runs on an active working calendar of this tenant (B4-ADJ-08):
+      // version 1 of the calendar the deadline journey below supersedes.
+      const guardCalendar = fixture.legal ? await json(await request.post(`${fixture.api.origin}/api/ip/working-calendars`, { headers: fixture.headers, data: {
+        key: "ip15-calendar", name: "Synthetic reviewed working calendar for independently checked domestic trademark response and renewal operations", jurisdiction: "IN", office: "IP India",
+        timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [], exceptional_working_days: [],
+        source_priority: ["official_gazette"], source_reference: "fixture:ip15-calendar", source_hash: "a".repeat(64), effective_from: "2026-01-01",
+      } }), 201) as { id: string } : null;
+      if (fixture.legal && guardCalendar) {
+        expect(await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/working-calendars/${guardCalendar.id}/activate`, {
+          data: { reason: "Independent review of the isolated synthetic calendar.", conflict_reviewed: true },
+        }))).toMatchObject({ id: guardCalendar.id, status: "active" });
+      }
+      const reviewerCandidate = fixture.legal ? await json(await fixture.legal.post(`${fixture.api.origin}/api/ip/deadline-rules`, { data: {
+        key: "ip15-reviewer-guard", rule_kind: "deadline", jurisdiction: "IN", office: "IP India", right_kind: "trademark",
+        proceeding_kind: "application", role: "applicant", stage: "examination", source_record_id: "fixture-ip15-reviewer-guard",
+        source_hash: "c".repeat(64), source_reference: "fixture:ip15-reviewer-guard", effective_from: "2026-01-01",
+        engine_compatibility: "caseops-ip-deadline-v1",
+        definition: { deadline_kind: "legal_deadline", trigger_kind: "examination_report_received", duration_value: 1,
+          duration_unit: "days", calendar_method: "business_days", direction: "after", include_base_date: false,
+          next_working_day: true, extension_days: 0, rule_citation: "Synthetic IP15 reviewer guard, not legal advice" },
+        fixtures: [{ id: "ip15-reviewer-guard-day", fixture_kind: "boundary", expected_state: "candidate", expected_result_on: "2026-10-16",
+          evidence_reference: "fixture:ip15-reviewer-guard", calculation: { deadline_kind: "legal_deadline",
+            trigger_kind: "examination_report_received", duration_value: 1, duration_unit: "days", calendar_method: "business_days",
+            direction: "after", include_base_date: false, next_working_day: true, extension_days: 0,
+            rule_citation: "Synthetic IP15 reviewer guard, not legal advice", base_date: "2026-10-15", base_date_certainty: "certain",
+            rule_version_id: "fixture-ip15-reviewer-guard", source_version: "fixture-ip15-source", engine_version: "caseops-ip-deadline-v1",
+            calendar: { calendar_version_id: guardCalendar?.id ?? "", timezone: "Asia/Kolkata", weekend_days: [5, 6], holidays: [],
+              exceptional_working_days: [], source_reference: "fixture:ip15-calendar", source_hash: "a".repeat(64) } } }],
+      } }), 201) as { id: string } : null;
       const schedule = `${fixture.web.origin}/app/ip?docket=${fixture.docketId}&view=schedule`;
       let finishRead: () => void = () => {};
       const readGate = new Promise<void>(resolve => { finishRead = resolve; });
@@ -388,8 +434,8 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       await expect(workspace.getByRole("button", { name: "Retry deadline workspace" })).toHaveCount(0);
       const observedOptions = await assertCurrentSelectorOptions(workspace, currentWorkspace);
       if (fixture.local) {
-        await expect(workspace.getByRole("combobox", { name: "Active working calendar", exact: true })).toBeDisabled();
-        await expect(workspace.getByRole("option", { name: "No active working calendar", exact: true })).toHaveCount(1);
+        // The only active calendar is the reviewer guard's; no rule is eligible yet.
+        expect(currentWorkspace.calendars.filter(row => row.status === "active").map(row => row.id)).toEqual([guardCalendar?.id]);
         await expect(workspace.getByRole("combobox", { name: "Active rule version", exact: true })).toBeDisabled();
         await expect(workspace.getByRole("button", { name: "Calculate deadline proposal" })).toBeDisabled();
       }
@@ -397,7 +443,7 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
         ...currentWorkspace.calendars.filter(row => row.status === "active").map(row => row.id)]);
       const hearingFields = page.getByTestId("ip-hearing-workflow");
       for (const label of ["Hearing date", "Time precision", "IANA timezone", "Forum", "Purpose", "Mode",
-        "Location", "Virtual hearing link", "Source", "Reminder offsets (hours)"]) {
+        "Location", "Virtual hearing link", "Source", "Reminder offsets"]) {
         const control = label === "Time precision" || label === "Mode"
           ? hearingFields.getByRole("combobox", { name: label, exact: true })
           : hearingFields.getByLabel(label, { exact: true });
@@ -406,14 +452,28 @@ for (const width of [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 
       await captureGeometry("hearing-initial", hearingFields);
       const governance = page.getByTestId("ip-deadline-governance");
       await captureGeometry("governance-initial", governance);
-      const reviewer = governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true });
-      const reviewerValue = fixture.local ? fixture.reviewerId : fixture.actor.membership.id;
-      await reviewer.selectOption(reviewerValue);
-      await assertSelectedDescription(reviewer, governance.locator("#rule-fixture-reviewer-selected-description"), reviewerValue, {});
-      await captureGeometry("governance-selected-identity", governance, [reviewerValue]);
-      await reviewer.selectOption("");
-      await expect(governance.locator("#rule-fixture-reviewer-selected-description")).toHaveCount(0);
-      expect(Boolean(await reviewer.getAttribute("aria-describedby")), "Clearing must remove the stale description link.").toBe(false);
+      // Reviewers are chosen per candidate rule from the server's eligible list
+      // (2026-10-31 BUG-006): every rendered picker offers exactly that list.
+      const activatable = currentWorkspace.rules.filter(row => row.status === "candidate" && row.can_activate);
+      await expect(governance.getByRole("combobox", { name: "Independent fixture reviewer", exact: true }))
+        .toHaveCount(activatable.length);
+      for (const candidate of activatable) {
+        const picker = governance.locator(`#rule-reviewer-${candidate.id}`);
+        await expect(picker.locator("option")).not.toHaveCount(0);
+        const offered = await picker.locator("option").evaluateAll(rows => rows.map(row => (row as HTMLOptionElement).value).filter(Boolean));
+        expect(offered.sort()).toEqual([...candidate.eligible_reviewer_membership_ids].sort());
+      }
+      if (reviewerCandidate) {
+        expect(activatable.map(row => row.id)).toEqual([reviewerCandidate.id]);
+        const reviewer = governance.locator(`#rule-reviewer-${reviewerCandidate.id}`);
+        const description = governance.locator(`#rule-reviewer-${reviewerCandidate.id}-selected-description`);
+        await reviewer.selectOption(fixture.reviewerId);
+        await assertSelectedDescription(reviewer, description, fixture.reviewerId, {});
+        await captureGeometry("governance-selected-identity", governance, [fixture.reviewerId]);
+        await reviewer.selectOption("");
+        await expect(description).toHaveCount(0);
+        expect(Boolean(await reviewer.getAttribute("aria-describedby")), "Clearing must remove the stale description link.").toBe(false);
+      }
 
       const hearing = page.getByTestId("ip-hearing-workflow");
       const purpose = `Synthetic IP15 hearing ${fixture.run}`;

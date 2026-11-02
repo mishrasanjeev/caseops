@@ -157,3 +157,92 @@ describe("separate mandatory Batch3 production source inventory", () => {
     expect(cases.every(row => !row.titles.some(title => title.includes("[local-only]")))).toBe(true);
   });
 });
+
+const batch4Projects = {
+  "batch4-prod-chromium": 36,
+  "batch4-prod-mobile": 14,
+  "batch4-governance-prod-chromium": 2,
+  "batch4-governance-prod-mobile": 2,
+};
+const batch4Governance = "ram-2026-10-31-governance-ui.spec.ts";
+// The adjacent-defect picker journey is the one 2026-11-01 spec prod-ram runs.
+const batch4File = (name: string) => `ram-2026-${name.startsWith("adj-") ? "11-01" : "10-31"}-${name}.spec.ts`;
+const crawlRoutes = [
+  "/app/ip", "/app/ip Documents tab", "/app/ip/portfolio", "/app/ip/renewals", "/app/ip/madrid", "/app/ip/recordals",
+  "/app/ip/foreign-associates", "/app/ip/registry", "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal",
+  "/app/ip/patents", "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
+  "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
+  "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
+  "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
+];
+const batch4Titles: Record<string, [string, string][]> = {
+  "batch4-prod-chromium": [
+    ["calendar-year", "ENH-017 Year view shows Ram's UI-created hearing and task on their days in distinct colours and survives reload"],
+    ...crawlRoutes.map((route): [string, string] => ["control-crawl", `BUG-015 controls on ${route} are usable or explain themselves`]),
+    ["docket-sweep", "DOCKET-SWEEP calendar-copy reviews: the daily docket counts every pending review the server reports, not the first 100"],
+    ["fixture-honesty", "BUG-002 Ram's Documents Classification is provisioned, never seeded, and previews a classified name"],
+    ["foreign-associates", "BUG-009/010/011/013 Ram walks a new instruction from every empty picker to a created and retired instruction"],
+    ["invoice-pdf", "BUG-016 draft invoice PDF downloaded from the billing page is legible, one page and marked DRAFT"],
+    ["invoice-pdf", "BUG-016 [prod-only] the reported invoices INVR-2026-028 and INVR-2026-068 download legible (read-only)"],
+    ["ip-create", "BUG-001 BUG-002 Ram creates a two-class trademark that opens in view and records its Nice edition"],
+    ["madrid-portal", "BUG-015 Madrid: Ram records an outbound IR choosing the basic mark docket through the picker"],
+    ["madrid-portal", "BUG-015 client portal: every offered grant loads its shareable versions or says why there are none"],
+    ["madrid-portal", "BUG-015 sweep: Madrid, client portal, renewals and reports ask for no internal record ID"],
+    ["matter-links", "BUG-007 Ram finds a Matter by typing among 60+ Matters, links it and retires it at 1440x900"],
+    ["recordals", "BUG-008 Ram uploads an instrument from the recordal form and both parties cite it"],
+    ["registry", "BUG-012 Ram finds a docket beyond the first 50 by its number and records manual registry evidence through structured fields"],
+    ["watch", "BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field"],
+    ["adj-pickers", "B4-ADJ-02 review queues find the Matter by typing and name it, never by id, at 1440x900"],
+  ],
+  "batch4-prod-mobile": [
+    ["calendar-year", "ENH-017 [mobile] Year view opens on screen in one column at 375 px, keeps chips legible, and opens a day"],
+    ["docket-sweep", "[mobile] DOCKET-SWEEP calendar-copy reviews: the count and list state fit at 393px without horizontal page scroll"],
+    ["fixture-honesty", "BUG-002 [mobile] Classification and its upload gate stay on screen without horizontal scroll"],
+    ["foreign-associates", "[mobile] BUG-009/010/011/013 Ram walks the new instruction, records the quote and creates it at 393px"],
+    ["invoice-pdf", "BUG-016 [mobile] draft invoice PDF journey works at 393px without page overflow"],
+    ["invoice-pdf", "BUG-016 [prod-only] [mobile] the reported invoices download legible at 393px (read-only)"],
+    ["ip-create", "BUG-001 BUG-002 [mobile] Ram creates a two-class trademark on a phone without horizontal scroll"],
+    ["madrid-portal", "BUG-015 Madrid [mobile]: intake pickers fit a phone and never offer a dead choice"],
+    ["madrid-portal", "BUG-015 client portal [mobile]: grant and publish controls fit a phone"],
+    ["matter-links", "BUG-007 [mobile] Ram finds, links and retires a Matter on a phone without overflow"],
+    ["recordals", "BUG-008 [mobile] the recordal journey works at Pixel 5 width without horizontal scroll"],
+    ["registry", "BUG-012 [mobile] the registry journey works at phone width without horizontal scroll"],
+    ["watch", "[mobile] BUG-014 journal capture works at 393px without horizontal page scroll"],
+    ["adj-pickers", "B4-ADJ-02 [mobile] review queue Matter pickers fit a phone and name the Matter"],
+  ],
+  "batch4-governance-prod-chromium": [
+    ["governance-ui", "BUG-003/004 opposition governed-rule and calendar pickers are never dead selects"],
+    ["governance-ui", "BUG-005/006 Ram proposes a calendar and sees the honest pending-approval state"],
+  ],
+  "batch4-governance-prod-mobile": [
+    ["governance-ui", "[mobile] BUG-003/004 opposition picker reasons and governance link fit 393px"],
+    ["governance-ui", "[mobile] BUG-005 governance card controls fit 393px with a computed source hash"],
+  ],
+};
+
+describe("separate mandatory Batch4 production source inventory", () => {
+  let cases: Case[];
+
+  beforeAll(() => { cases = collectProjects(batch4Projects); });
+
+  it("collects every production-eligible case per role exactly, with local-only journeys excluded", () => {
+    expect(counts(cases.map(row => row.project))).toEqual(batch4Projects);
+    expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(new Set(cases.map(row => row.id)).size).toBe(54);
+    for (const [project, titles] of Object.entries(batch4Titles)) {
+      expect(cases.filter(row => row.project === project).map(row => [row.file, ...row.titles.slice(1)]).sort())
+        .toEqual(titles.map(([file, title]) => [batch4File(file), title]).sort());
+    }
+    expect(cases.every(row => !row.titles.some(title => title.includes("[local-only]")))).toBe(true);
+  });
+
+  it("keeps the governance spec out of the always-on roles and splits desktop from mobile", () => {
+    for (const row of cases) {
+      expect(row.file === batch4Governance, row.project).toBe(row.project.startsWith("batch4-governance-"));
+      expect(row.titles.at(-1)!.includes("[mobile]"), row.project).toBe(row.project.endsWith("-mobile"));
+    }
+    const projectFiles = new Set(cases.filter(row => !row.project.startsWith("batch4-governance-")).map(row => row.file));
+    expect(projectFiles.has(batch4Governance)).toBe(false);
+    expect(projectFiles.size).toBe(13);
+  });
+});

@@ -7,6 +7,8 @@ import {
   outlookReadinessTestResponse,
   outlookTenantConfigurationResponse,
   outsideCounselAssignmentStatus,
+  outsideCounselMatterSpendSummary,
+  outsideCounselPortfolioSummary,
   outsideCounselSpendStatus,
   panelStatus,
   providerAdapterContractRecord,
@@ -38,6 +40,50 @@ describe("Calendar court metadata contract", () => {
     const record = { ...base, court_label: null, court_identity: null,
       forum_display_order: null, hearing_time: null, timezone: null };
     expect(calendarEventRecord.parse(record)).toEqual(record);
+  });
+});
+
+describe("B4-ADJ-04 fields the API requires are required in the web schema", () => {
+  const event = {
+    id: "task:1", kind: "task", display_type: "task_date", occurs_on: "2026-10-15",
+    title: "Draft reply", matter_id: "matter-1", matter_code: "CAL-1", matter_title: "Calendar contract",
+  };
+
+  it("refuses a calendar event without its display type instead of guessing one from the kind", () => {
+    expect(calendarEventRecord.parse(event).display_type).toBe("task_date");
+    const { display_type: _omitted, ...withoutType } = event;
+    expect(calendarEventRecord.safeParse(withoutType).success).toBe(false);
+  });
+
+  const portfolio = {
+    profile_count: 2, total_counsel_count: 2, active_assignment_count: 1, total_agreed_minor: 0,
+    total_budget_minor: 0, total_spend_minor: 0, approved_spend_minor: 0, total_paid_minor: 0,
+    total_pending_minor: 0, pending_invoice_count: 0, overdue_invoice_count: 0, currency: "INR",
+    currency_codes: ["INR"], currency_count: 1, multi_currency: false, outstanding_invoice_minor: 0,
+    profitability_signal_minor: 0, payment_status_counts: {},
+  };
+
+  it.each(Object.keys(portfolio).filter((key) => !["currency", "currency_codes"].includes(key)))(
+    "refuses an outside-counsel portfolio summary without %s instead of showing zero",
+    (key) => {
+      expect(outsideCounselPortfolioSummary.safeParse(portfolio).success).toBe(true);
+      const { [key]: _omitted, ...rest } = portfolio as Record<string, unknown>;
+      expect(outsideCounselPortfolioSummary.safeParse(rest).success).toBe(false);
+    },
+  );
+
+  it("refuses a Matter spend summary without its currency count or multi-currency flag", () => {
+    const spend = {
+      matter_id: "m1", matter_title: "M", matter_code: "M-1", currency: "INR", currency_codes: ["INR"],
+      currency_count: 1, multi_currency: false, assigned_counsel_count: 1, invoice_count: 0,
+      pending_invoice_count: 0, overdue_invoice_count: 0, total_agreed_minor: 0, total_spend_minor: 0,
+      approved_spend_minor: 0, total_paid_minor: 0, total_pending_minor: 0, payment_status_counts: {},
+    };
+    expect(outsideCounselMatterSpendSummary.safeParse(spend).success).toBe(true);
+    for (const key of ["currency_count", "multi_currency"]) {
+      const { [key]: _omitted, ...rest } = spend as Record<string, unknown>;
+      expect(outsideCounselMatterSpendSummary.safeParse(rest).success).toBe(false);
+    }
   });
 });
 

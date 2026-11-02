@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiErrorMessage, isApiErrorShape } from "./config";
+import {
+  API_FORM_ERROR_KEY,
+  ApiError,
+  apiErrorMessage,
+  apiFieldErrors,
+  describeStructuredProblem,
+  describeValidationIssues,
+  humanizeApiFieldPath,
+  isApiErrorShape,
+} from "./config";
 
 describe("isApiErrorShape (BUG-020 hardening)", () => {
   it("accepts a real ApiError instance", () => {
@@ -100,5 +109,120 @@ describe("apiErrorMessage", () => {
     const err = new Error("boom");
     apiErrorMessage(err, "fallback");
     expect(spy).toHaveBeenCalledWith("[apiErrorMessage]", err);
+  });
+});
+
+// The real 422 body production returned to Ram on 2026-10-30 (BUG-014,
+// request 4610d09266ce42aea5400ab3295be9fe), plus two model-level failures.
+const JOURNAL_422 = {
+  type: "https://httpstatuses.com/422",
+  title: "Unprocessable content",
+  status: 422,
+  detail: "List should have at least 1 item after validation, not 0; Input should be a valid list",
+  errors: [
+    {
+      loc: ["body", "publications", 0, "class_numbers"],
+      msg: "List should have at least 1 item after validation, not 0",
+      type: "too_short",
+    },
+    {
+      loc: ["body", "publications", 0, "goods_services", "45"],
+      msg: "Input should be a valid list",
+      type: "list_type",
+    },
+    {
+      loc: ["body", "publications", 0],
+      msg: "Value error, Goods/services scope must belong to a published class.",
+      type: "value_error",
+    },
+    { loc: ["body"], msg: "Value error, Choose exactly one journal.", type: "value_error" },
+  ],
+};
+
+describe("field-anchored validation errors (BUG-014)", () => {
+  it("humanizes a field path like the API detail does", () => {
+    expect(humanizeApiFieldPath(["body", "publications", 0, "class_numbers"])).toBe(
+      "Publications \u203a Class numbers",
+    );
+    expect(humanizeApiFieldPath(["body", "source_url"])).toBe("Source URL");
+    expect(humanizeApiFieldPath(["query", "matter_id"])).toBe("Matter ID");
+    expect(humanizeApiFieldPath(["body", "payload", "function-after[check(), str]", "[key]"])).toBe(
+      "Payload",
+    );
+    expect(humanizeApiFieldPath(["body"])).toBe("");
+  });
+
+  it("words every failure with its field and without the pydantic prefix", () => {
+    expect(describeValidationIssues(JOURNAL_422.errors)).toBe(
+      "Publications \u203a Class numbers: List should have at least 1 item after validation, not 0; "
+        + "Publications \u203a Goods services \u203a 45: Input should be a valid list; "
+        + "Publications: Goods/services scope must belong to a published class.; "
+        + "Choose exactly one journal.",
+    );
+  });
+
+  it("maps errors[].loc to form control ids, most specific key first", () => {
+    const err = new ApiError(422, "x", JOURNAL_422);
+    expect(apiFieldErrors(err, {
+      class_numbers: "publication-classes",
+      goods_services: "goods-services",
+      "goods_services.45": "goods-class-45",
+      publications: "publication",
+    })).toEqual({
+      "publication-classes": "List should have at least 1 item after validation, not 0",
+      "goods-class-45": "Input should be a valid list",
+      publication: "Goods/services scope must belong to a published class.",
+      [API_FORM_ERROR_KEY]: "Choose exactly one journal.",
+    });
+    // A key naming a middle segment maps every failure beneath it.
+    expect(apiFieldErrors(err, { goods_services: "goods-services" })).toMatchObject({
+      "goods-services": "Input should be a valid list",
+    });
+    // Without a map, every failure keeps its own dotted field path.
+    expect(apiFieldErrors(err)).toEqual({
+      "publications.class_numbers": "List should have at least 1 item after validation, not 0",
+      "publications.goods_services.45": "Input should be a valid list",
+      publications: "Goods/services scope must belong to a published class.",
+      [API_FORM_ERROR_KEY]: "Choose exactly one journal.",
+    });
+  });
+
+  it("joins several failures on one field and ignores errors without a validation body", () => {
+    const err = new ApiError(422, "x", {
+      errors: [
+        { loc: ["body", "title"], msg: "Field required", type: "missing" },
+        { loc: ["body", "title"], msg: "String should have at least 2 characters", type: "string_too_short" },
+        { loc: "not-a-list", msg: "ignored" },
+      ],
+    });
+    expect(apiFieldErrors(err, { title: "matter-title" })).toEqual({
+      "matter-title": "Field required; String should have at least 2 characters",
+    });
+    expect(apiFieldErrors(new ApiError(409, "Conflict", { detail: "Conflict" }))).toEqual({});
+    expect(apiFieldErrors(new Error("network"))).toEqual({});
+  });
+});
+
+describe("structured refusals (code/gaps)", () => {
+  it("replaces a bare status title with the refusal code and its gaps", () => {
+    expect(describeStructuredProblem({
+      code: "ip_opposition_opponent_not_ready",
+      gaps: ["linked_application_required", "forum_required", "confirmed_client_instruction_required"],
+    }, "Conflict")).toBe(
+      "IP opposition opponent not ready. Missing: linked application; forum; confirmed client instruction.",
+    );
+    expect(describeStructuredProblem({ code: "ip_document_locked" }, "Conflict")).toBe(
+      "IP document locked.",
+    );
+  });
+
+  it("keeps a specific message and adds the gaps to it", () => {
+    expect(describeStructuredProblem({ code: "stale_write" }, "The record changed.")).toBe(
+      "The record changed.",
+    );
+    expect(describeStructuredProblem({ gaps: ["forum_required"] }, "Opposition is not ready to file.")).toBe(
+      "Opposition is not ready to file. Missing: forum.",
+    );
+    expect(describeStructuredProblem({ detail: "Conflict" }, "Conflict")).toBeNull();
   });
 });

@@ -156,6 +156,27 @@ export const matterDashboardSummary = z.object({
   recent_matters_limit: z.number().int().positive(),
 });
 
+const matterCountBucket = z.object({
+  key: z.string().nullable(),
+  count: z.number().int().nonnegative(),
+});
+
+/** Counts over every visible Matter, from GET /api/matters/portfolio-health. */
+export const matterPortfolioHealth = z.object({
+  company_id: z.string(),
+  total_visible_count: z.number().int().nonnegative(),
+  active_matters_count: z.number().int().nonnegative(),
+  intake_matters_count: z.number().int().nonnegative(),
+  hearings_next_7_days_count: z.number().int().nonnegative(),
+  status_counts: z.array(matterCountBucket),
+  forum_level_counts: z.array(matterCountBucket),
+  practice_area_counts: z.array(matterCountBucket),
+  idle_after_days: z.number().int().positive(),
+  idle_active_count: z.number().int().nonnegative(),
+  idle_active_matters: z.array(matter),
+  idle_active_limit: z.number().int().positive(),
+});
+
 export const matterHearingPortfolio = z.object({
   company_id: z.string(),
   matters: z.array(matter),
@@ -172,6 +193,7 @@ export const matterHearingFollowUp = z.object({
   overdue_count: z.number().int().nonnegative(),
   missing_date_count: z.number().int().nonnegative(),
   limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative().default(0),
   truncated: z.boolean(),
 });
 
@@ -446,6 +468,7 @@ export type AuthContext = z.infer<typeof authContext>;
 export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
 export type MatterDashboardSummary = z.infer<typeof matterDashboardSummary>;
+export type MatterPortfolioHealth = z.infer<typeof matterPortfolioHealth>;
 export type MatterHearingPortfolio = z.infer<typeof matterHearingPortfolio>;
 export type MatterHearingFollowUp = z.infer<typeof matterHearingFollowUp>;
 export type MatterComplianceExtractionRun = z.infer<typeof matterComplianceExtractionRun>;
@@ -1844,25 +1867,27 @@ export const outsideCounsel = z.object({
   updated_at: z.string(),
 });
 
+// Every count and total is required by the API (OutsideCounselPortfolioSummary);
+// optional fields here let the page invent zeros for a malformed response.
 export const outsideCounselPortfolioSummary = z.object({
-  profile_count: z.number().int().optional(),
-  total_counsel_count: z.number().int().optional(),
-  active_assignment_count: z.number().int().optional(),
-  total_agreed_minor: z.number().int().optional(),
-  total_budget_minor: z.number().int().optional(),
-  total_spend_minor: z.number().int().optional(),
-  approved_spend_minor: z.number().int().optional(),
-  total_paid_minor: z.number().int().optional(),
-  total_pending_minor: z.number().int().optional(),
-  pending_invoice_count: z.number().int().optional(),
-  overdue_invoice_count: z.number().int().optional(),
+  profile_count: z.number().int(),
+  total_counsel_count: z.number().int(),
+  active_assignment_count: z.number().int(),
+  total_agreed_minor: z.number().int(),
+  total_budget_minor: z.number().int(),
+  total_spend_minor: z.number().int(),
+  approved_spend_minor: z.number().int(),
+  total_paid_minor: z.number().int(),
+  total_pending_minor: z.number().int(),
+  pending_invoice_count: z.number().int(),
+  overdue_invoice_count: z.number().int(),
   currency: z.string().default("INR"),
   currency_codes: z.array(z.string()).default(["INR"]),
-  currency_count: z.number().int().optional(),
-  multi_currency: z.boolean().optional(),
-  outstanding_invoice_minor: z.number().int().optional(),
-  profitability_signal_minor: z.number().int().optional(),
-  payment_status_counts: z.record(z.string(), z.number().int()).optional(),
+  currency_count: z.number().int(),
+  multi_currency: z.boolean(),
+  outstanding_invoice_minor: z.number().int(),
+  profitability_signal_minor: z.number().int(),
+  payment_status_counts: z.record(z.string(), z.number().int()),
 }).passthrough();
 
 // Hari-BUG-018/023 follow-up (2026-04-22): assignment status MUST
@@ -1943,8 +1968,8 @@ export const outsideCounselMatterSpendSummary = z.object({
   matter_code: z.string(),
   currency: z.string().default("INR"),
   currency_codes: z.array(z.string()).default(["INR"]),
-  currency_count: z.number().int().optional(),
-  multi_currency: z.boolean().optional(),
+  currency_count: z.number().int(),
+  multi_currency: z.boolean(),
   assigned_counsel_count: z.number().int(),
   invoice_count: z.number().int(),
   pending_invoice_count: z.number().int(),
@@ -2115,6 +2140,38 @@ export const ipDraftValidationReport = z.object({
   findings: z.array(ipDraftValidationFinding),
 });
 
+// BUG-002: WIPO Nice class catalogue served by GET /api/ip/nice-classes. The
+// picker refuses a partial catalogue rather than offering a subset of classes.
+export const ipNiceClass = z.object({
+  number: z.number().int().min(1).max(45),
+  kind: z.enum(["goods", "services"]),
+  heading: z.string().min(1),
+  note: z.string().nullable().optional(),
+});
+
+export const ipNiceClassCatalogue = z
+  .object({
+    edition: z.string().min(1),
+    in_force_from: z.string(),
+    source_url: z.string(),
+    source_data_url: z.string(),
+    retrieved_on: z.string(),
+    headings_sha256: z.string(),
+    attribution: z.string().min(1),
+    classes: z.array(ipNiceClass).length(45),
+  })
+  .superRefine((catalogue, context) => {
+    catalogue.classes.forEach((row, index) => {
+      if (row.number !== index + 1) {
+        context.addIssue({
+          code: "custom",
+          message: "Nice classes must run 1 to 45 in order",
+          path: ["classes", index, "number"],
+        });
+      }
+    });
+  });
+
 export const draftingDataFieldStatus = z.enum([
   "suggested",
   "needs_review",
@@ -2168,6 +2225,8 @@ export type IpPleadingTemplate = z.infer<typeof ipPleadingTemplate>;
 export type IpPleadingTemplateList = z.infer<typeof ipPleadingTemplateList>;
 export type IpDraftValidationFinding = z.infer<typeof ipDraftValidationFinding>;
 export type IpDraftValidationReport = z.infer<typeof ipDraftValidationReport>;
+export type IpNiceClass = z.infer<typeof ipNiceClass>;
+export type IpNiceClassCatalogue = z.infer<typeof ipNiceClassCatalogue>;
 export type DraftingDataFieldStatus = z.infer<typeof draftingDataFieldStatus>;
 export type DraftingDataConfidenceBand = z.infer<typeof draftingDataConfidenceBand>;
 export type DraftingDataField = z.infer<typeof draftingDataField>;
@@ -2197,7 +2256,8 @@ export const calendarProvider = z.enum(["outlook", "google_calendar"]);
 export const calendarEventRecord = z.object({
   id: z.string(),
   kind: calendarEventKind,
-  display_type: calendarEventDisplayType.optional(),
+  // Required by the API (CalendarEventRecord); B4-ADJ-04 removed the optional drift.
+  display_type: calendarEventDisplayType,
   occurs_on: z.string(), // ISO yyyy-mm-dd
   title: z.string(),
   matter_id: z.string(),
@@ -2219,6 +2279,20 @@ export const calendarEventListResponse = z.object({
   range_from: z.string(),
   range_to: z.string(),
   events: z.array(calendarEventRecord),
+});
+
+// ENH-017 / FT-097 — per-day open-item counts for the Year view.
+export const calendarDaySummary = z.object({
+  occurs_on: z.string(),
+  total: z.number().int().min(1),
+  by_display_type: z.partialRecord(calendarEventDisplayType, z.number().int().min(0)),
+});
+
+export const calendarSummaryResponse = z.object({
+  range_from: z.string(),
+  range_to: z.string(),
+  total: z.number().int().min(0),
+  days: z.array(calendarDaySummary),
 });
 
 export const calendarConnectionRecord = z.object({
@@ -2653,6 +2727,11 @@ export const providerOperationRecord = z.object({
 
 export const providerOperationListResponse = z.object({
   operations: z.array(providerOperationRecord),
+  // The server reads the most recent `page_limit` operations; the counts
+  // below describe those rows, and `has_more` says older ones exist.
+  returned_count: z.number().int().min(0),
+  page_limit: z.number().int().min(1),
+  has_more: z.boolean(),
   open_count: z.number().int().min(0),
   ignored_count: z.number().int().min(0),
   resolved_count: z.number().int().min(0),
@@ -3723,6 +3802,8 @@ export type CalendarEventKind = z.infer<typeof calendarEventKind>;
 export type CalendarEventDisplayType = z.infer<typeof calendarEventDisplayType>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
+export type CalendarDaySummary = z.infer<typeof calendarDaySummary>;
+export type CalendarSummaryResponse = z.infer<typeof calendarSummaryResponse>;
 export type CalendarConnectionRecord = z.infer<typeof calendarConnectionRecord>;
 export type CalendarConnectionListResponse = z.infer<typeof calendarConnectionListResponse>;
 export type CalendarConnectionStartResponse = z.infer<typeof calendarConnectionStartResponse>;

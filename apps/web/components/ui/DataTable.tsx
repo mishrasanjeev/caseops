@@ -17,6 +17,12 @@ import type { ReactNode } from "react";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 
+// A pinned last column stays at the right edge of the scrolling table, so a
+// row's actions are on screen (B4-ADJ-13). Below 40rem a pinned column would
+// cover the row's other cells, so the table stacks into labelled rows instead.
+const PINNED_HEADER = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-[var(--color-bg)] @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
+const PINNED_CELL = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-white @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
+
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -25,6 +31,8 @@ type DataTableProps<TData, TValue> = {
   initialPageSize?: number;
   onRowClick?: (row: TData) => void;
   getRowId?: (row: TData, index: number) => string;
+  /** Keep the last column (a row's actions) on screen while the others scroll sideways. */
+  pinLastColumn?: boolean;
 };
 
 export function DataTable<TData, TValue>({
@@ -35,6 +43,7 @@ export function DataTable<TData, TValue>({
   initialPageSize = 25,
   onRowClick,
   getRowId,
+  pinLastColumn = false,
 }: DataTableProps<TData, TValue>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -83,19 +92,22 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-white">
-        <table className="w-full text-sm">
+      <div className={cn("overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-white", pinLastColumn && "@container")}>
+        <table className={cn("w-full text-sm", pinLastColumn && "@max-[40rem]:stacked-table @max-[40rem]:px-4")}>
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-[var(--color-line)] bg-[var(--color-bg)]">
-                {group.headers.map((header) => {
+                {group.headers.map((header, index) => {
                   const canSort = header.column.getCanSort();
                   const dir = header.column.getIsSorted();
                   return (
                     <th
                       key={header.id}
                       scope="col"
-                      className="px-4 py-2.5 text-left font-semibold text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]"
+                      className={cn(
+                        "px-4 py-2.5 text-left font-semibold text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]",
+                        pinLastColumn && index === group.headers.length - 1 && PINNED_HEADER,
+                      )}
                     >
                       {header.isPlaceholder ? null : (
                         <button
@@ -161,8 +173,15 @@ export function DataTable<TData, TValue>({
                         "cursor-pointer hover:bg-[var(--color-bg-2)] focus-visible:bg-[var(--color-bg-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-brand-500)]",
                     )}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-[var(--color-ink-2)]">
+                    {row.getVisibleCells().map((cell, index, cells) => (
+                      <td
+                        key={cell.id}
+                        data-label={pinLastColumn && typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined}
+                        className={cn(
+                          "px-4 py-3 text-[var(--color-ink-2)]",
+                          pinLastColumn && index === cells.length - 1 && PINNED_CELL,
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

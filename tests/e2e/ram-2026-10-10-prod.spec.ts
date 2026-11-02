@@ -5,6 +5,7 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
 import { runDocumentWorkerOnce } from "./support/helpers";
+import { disposeMatter, terminateContract } from "./support/retire-records";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
   trace: "off", screenshot: "off", video: "off" });
@@ -84,96 +85,106 @@ for (const target of ["matter", "contract"] as const) {
             : { title, contract_code: `IDX-${run}`, contract_type: "agreement", status: "under_review" } });
         expect(created.status(), "create this run's unique QA parent").toBe(200);
         const parentId = (await created.json()).id as string;
-        const parentPath = `/api/${collection}/${parentId}`;
-        await page.goto(`/app/${collection}/${parentId}${target === "matter" ? "/documents" : ""}`);
-        if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
-        const filename = `retained-index-${run}.txt`;
-        const body = `Synthetic ${target} index acceptance ${run}. No real legal instruction. `.repeat(40).trim();
-        const digest = createHash("sha256").update(body).digest("hex");
-        const uploading = page.waitForResponse(response => new URL(response.url()).pathname === `${parentPath}/attachments`
-          && response.request().method() === "POST");
-        await release(request);
-        await page.getByTestId(`${target}-attachment-${target === "matter" ? "file-input" : "input"}`)
-          .setInputFiles({ name: filename, mimeType: "text/plain", buffer: Buffer.from(body) });
-        if (target === "matter") await page.getByTestId("matter-attachment-upload").click();
-        const uploaded = await uploading;
-        expect(uploaded.status(), "original upload, without retry").toBe(200);
-        expect(uploaded.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
-        let attachment = await uploaded.json() as Attachment;
-        const attachmentId = attachment.id;
-        const jobIds = new Set<string>();
-        async function complete(jobId: string, action: string) {
-          expect(jobIds.has(jobId), "each command must admit a distinct durable job").toBe(false);
-          jobIds.add(jobId);
-          if (local) await runDocumentWorkerOnce();
-          const deadline = Date.now() + 90_000;
-          while (Date.now() < deadline) {
-            const workspace = await request.get(`${api.origin}${parentPath}/workspace`, { headers });
-            expect(workspace.status(), "read retained index through the authorized workspace").toBe(200);
-            const found = (await workspace.json()).attachments.find((row: Attachment) => row.id === attachmentId) as Attachment | undefined;
-            expect(found, "uploaded source must remain present").toBeDefined();
-            attachment = found!;
-            expect(attachment.latest_job.id).toBe(jobId);
-            expect(attachment.latest_job.action).toBe(action);
-            if (attachment.latest_job.status === "failed") throw new Error(`Index job failed: ${attachment.latest_job.error_message}`);
-            if (attachment.latest_job.status === "completed") {
-              // Separate locations identify a failed invariant even when production errors are redacted.
-              expect(attachment.processing_status, "Completed job source is indexed").toBe("indexed");
-              expect(attachment.sha256_hex === digest, "Retained source hash matches the original upload").toBe(true);
-              expect(attachment.extracted_char_count, "Retained extracted length matches the synthetic source").toBe(body.length);
-              expect(attachment.latest_job.processed_char_count, "Completed job extracted length matches its source").toBe(body.length);
-              expect(attachment.latest_job.error_message, "Completed job has no extraction error").toBeNull();
-              expect(attachment.latest_job.attempt_count, "Original processing attempt completes without a retry").toBe(1);
-              return;
+        try {
+          const parentPath = `/api/${collection}/${parentId}`;
+          await page.goto(`/app/${collection}/${parentId}${target === "matter" ? "/documents" : ""}`);
+          if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
+          const filename = `retained-index-${run}.txt`;
+          const body = `Synthetic ${target} index acceptance ${run}. No real legal instruction. `.repeat(40).trim();
+          const digest = createHash("sha256").update(body).digest("hex");
+          const uploading = page.waitForResponse(response => new URL(response.url()).pathname === `${parentPath}/attachments`
+            && response.request().method() === "POST");
+          await release(request);
+          await page.getByTestId(`${target}-attachment-${target === "matter" ? "file-input" : "input"}`)
+            .setInputFiles({ name: filename, mimeType: "text/plain", buffer: Buffer.from(body) });
+          if (target === "matter") await page.getByTestId("matter-attachment-upload").click();
+          const uploaded = await uploading;
+          expect(uploaded.status(), "original upload, without retry").toBe(200);
+          expect(uploaded.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+          let attachment = await uploaded.json() as Attachment;
+          const attachmentId = attachment.id;
+          const jobIds = new Set<string>();
+          async function complete(jobId: string, action: string) {
+            expect(jobIds.has(jobId), "each command must admit a distinct durable job").toBe(false);
+            jobIds.add(jobId);
+            if (local) await runDocumentWorkerOnce();
+            const deadline = Date.now() + 90_000;
+            while (Date.now() < deadline) {
+              const workspace = await request.get(`${api.origin}${parentPath}/workspace`, { headers });
+              expect(workspace.status(), "read retained index through the authorized workspace").toBe(200);
+              const found = (await workspace.json()).attachments.find((row: Attachment) => row.id === attachmentId) as Attachment | undefined;
+              expect(found, "uploaded source must remain present").toBeDefined();
+              attachment = found!;
+              expect(attachment.latest_job.id).toBe(jobId);
+              expect(attachment.latest_job.action).toBe(action);
+              if (attachment.latest_job.status === "failed") throw new Error(`Index job failed: ${attachment.latest_job.error_message}`);
+              if (attachment.latest_job.status === "completed") {
+                // Separate locations identify a failed invariant even when production errors are redacted.
+                expect(attachment.processing_status, "Completed job source is indexed").toBe("indexed");
+                expect(attachment.sha256_hex === digest, "Retained source hash matches the original upload").toBe(true);
+                expect(attachment.extracted_char_count, "Retained extracted length matches the synthetic source").toBe(body.length);
+                expect(attachment.latest_job.processed_char_count, "Completed job extracted length matches its source").toBe(body.length);
+                expect(attachment.latest_job.error_message, "Completed job has no extraction error").toBeNull();
+                expect(attachment.latest_job.attempt_count, "Original processing attempt completes without a retry").toBe(1);
+                return;
+              }
+              expect(["queued", "processing"]).toContain(attachment.latest_job.status);
+              await page.waitForTimeout(1500);
             }
-            expect(["queued", "processing"]).toContain(attachment.latest_job.status);
-            await page.waitForTimeout(1500);
+            throw new Error("Durable index did not complete within the 90-second acceptance budget.");
           }
-          throw new Error("Durable index did not complete within the 90-second acceptance budget.");
-        }
-        await complete(attachment.latest_job.id, "initial_index");
-        for (let iteration = 0; iteration < 2; iteration++) {
+          await complete(attachment.latest_job.id, "initial_index");
+          for (let iteration = 0; iteration < 2; iteration++) {
+            await page.reload();
+            if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
+            const row = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
+            await expect(row).toBeVisible();
+            await expect(row.getByText("indexed", { exact: true })).toBeVisible();
+            await release(request);
+            if (target === "matter") {
+              const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === `${parentPath}/attachments/${attachmentId}/reindex`
+                && response.request().method() === "POST");
+              const button = page.getByTestId(`matter-attachment-reindex-${attachmentId}`);
+              await expect(button).toBeVisible();
+              await expect(button).toBeEnabled();
+              await button.scrollIntoViewIfNeeded();
+              const box = await button.boundingBox();
+              expect(box!.width).toBeGreaterThan(24);
+              expect(box!.x).toBeGreaterThanOrEqual(0);
+              expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+              await button.click();
+              const response = await responsePromise;
+              expect(response.status(), "original browser reindex, without retry").toBe(200);
+              attachment = await response.json() as Attachment;
+            } else {
+              // Contract currently exposes reindex through its public API, not a
+              // browser control. Prove that boundary and the visible workspace.
+              const response = await request.post(`${api.origin}${parentPath}/attachments/${attachmentId}/reindex`, { headers });
+              expect(response.status(), "original public Contract reindex, without retry").toBe(200);
+              attachment = await response.json() as Attachment;
+            }
+            await complete(attachment.latest_job.id, "reindex");
+          }
+          expect(jobIds.size).toBe(3);
           await page.reload();
           if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
-          const row = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
-          await expect(row).toBeVisible();
-          await expect(row.getByText("indexed", { exact: true })).toBeVisible();
+          const finalRow = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
+          await expect(finalRow).toBeVisible();
+          await expect(finalRow.getByText("indexed", { exact: true })).toBeVisible();
+          const downloaded = await request.get(`${api.origin}${parentPath}/attachments/${attachmentId}/download`, { headers });
+          expect(downloaded.status(), "authorized immutable original bytes").toBe(200);
+          expect(await downloaded.body()).toEqual(Buffer.from(body));
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
           await release(request);
+        } finally {
+          // Retire this run's QA parent whether the journey passed or failed (B4-ADJ-09).
           if (target === "matter") {
-            const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === `${parentPath}/attachments/${attachmentId}/reindex`
-              && response.request().method() === "POST");
-            const button = page.getByTestId(`matter-attachment-reindex-${attachmentId}`);
-            await expect(button).toBeVisible();
-            await expect(button).toBeEnabled();
-            await button.scrollIntoViewIfNeeded();
-            const box = await button.boundingBox();
-            expect(box!.width).toBeGreaterThan(24);
-            expect(box!.x).toBeGreaterThanOrEqual(0);
-            expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
-            await button.click();
-            const response = await responsePromise;
-            expect(response.status(), "original browser reindex, without retry").toBe(200);
-            attachment = await response.json() as Attachment;
+            await disposeMatter(request, api.origin, headers, parentId,
+              "Index retention QA run complete; retiring the per-run QA Matter.");
           } else {
-            // Contract currently exposes reindex through its public API, not a
-            // browser control. Prove that boundary and the visible workspace.
-            const response = await request.post(`${api.origin}${parentPath}/attachments/${attachmentId}/reindex`, { headers });
-            expect(response.status(), "original public Contract reindex, without retry").toBe(200);
-            attachment = await response.json() as Attachment;
+            await terminateContract(request, api.origin, headers, parentId);
           }
-          await complete(attachment.latest_job.id, "reindex");
         }
-        expect(jobIds.size).toBe(3);
-        await page.reload();
-        if (target === "contract") await page.getByRole("tab", { name: /^Attachments/ }).click();
-        const finalRow = page.getByRole(target === "matter" ? "row" : "listitem").filter({ hasText: filename });
-        await expect(finalRow).toBeVisible();
-        await expect(finalRow.getByText("indexed", { exact: true })).toBeVisible();
-        const downloaded = await request.get(`${api.origin}${parentPath}/attachments/${attachmentId}/download`, { headers });
-        expect(downloaded.status(), "authorized immutable original bytes").toBe(200);
-        expect(await downloaded.body()).toEqual(Buffer.from(body));
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-        await release(request);
       });
     });
   }

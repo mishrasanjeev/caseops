@@ -71,7 +71,7 @@ function validationMessage(issue: { field?: string; code?: string }, row: IpImpo
   const labels: Record<string, string> = {
     class_number: "Class", class_numbers: "Classes", image_reference: "Image reference",
     applicant_name: "Applicant", mark_text: "Mark", application_date: "Application date",
-    renewal_due_date: "Renewal due date",
+    renewal_due_date: "Renewal due date", source_status: "Status", application_number: "Application number",
   };
   const label = labels[field] ?? `${field.charAt(0).toUpperCase()}${field.slice(1).replaceAll("_", " ")}`;
   let message: string;
@@ -93,6 +93,18 @@ function validationMessage(issue: { field?: string; code?: string }, row: IpImpo
       break;
     case "blank_row":
       message = "Blank source row; excluded from import.";
+      break;
+    case "unrecognised_status":
+      message = `"${textValue(row, "source_status")}" is not a status this import recognises, so the row imports in the Draft phase. The portfolio shows "${textValue(row, "source_status")}" as its unverified source status; record the real phase on the record once the registry confirms it.`;
+      break;
+    case "required_for_source_status":
+      message = `Required: a "${textValue(row, "source_status")}" mark has been filed, so the row needs its application number.`;
+      break;
+    case "declared_status_unverified":
+      message = `Imported as Filed. "${textValue(row, "source_status")}" is kept as the unverified source status until registry evidence or a recorded event confirms it.`;
+      break;
+    case "terminal_status_no_alert":
+      message = "No renewal alert is scheduled for a mark the source says is no longer pending or registered.";
       break;
     default:
       message = (issue.code ?? "invalid").replaceAll("_", " ");
@@ -448,8 +460,8 @@ export default function IpPortfolioImportsPage() {
             </div>
           ) : null}
 
-          <div className="relative mt-5 overflow-x-auto border-y border-[var(--color-line)]">
-            <table className="w-full min-w-[900px] text-left text-sm">
+          <div className="@container relative mt-5 overflow-x-auto border-y border-[var(--color-line)]" data-testid="ip-import-rows">
+            <table className="w-full text-left text-sm @min-[900px]:min-w-[900px] @max-[900px]:stacked-table">
               <thead className="bg-[var(--color-bg-2)] text-xs uppercase text-[var(--color-mute)]">
                 <tr><th className="px-3 py-2">Row</th><th className="px-3 py-2">Mark</th><th className="px-3 py-2">Application</th><th className="px-3 py-2">Class</th><th className="px-3 py-2">Applicant</th><th className="px-3 py-2">Renewal due date</th><th className="px-3 py-2">Validation</th><th className="px-3 py-2">Duplicate decision</th></tr>
               </thead>
@@ -505,17 +517,17 @@ function ImportRow({ row, decision, disabled, canEditDate, onDecision }: { row: 
   const docketCandidates = row.duplicate_candidates.filter((candidate) => candidate.docket_id);
   return (
     <tr className="align-top">
-      <td className="px-3 py-3 font-mono text-xs">{row.row_number}</td>
-      <td className="px-3 py-3"><span className="block font-medium">{textValue(row, "mark_text")}</span><span className="text-xs text-[var(--color-mute)]">{textValue(row, "title")}</span></td>
-      <td className="px-3 py-3 font-mono text-xs">{textValue(row, "application_number")}</td>
-      <td className="px-3 py-3">{textValue(row, "class_numbers") === "Not recorded" ? textValue(row, "class_number") : textValue(row, "class_numbers")}</td>
-      <td className="px-3 py-3">{textValue(row, "applicant_name")}</td>
-      <td className="px-3 py-3">
+      <td data-label="Row" className="px-3 py-3 font-mono text-xs">{row.row_number}</td>
+      <td data-label="Mark" className="px-3 py-3"><span className="block font-medium">{textValue(row, "mark_text")}</span><span className="text-xs text-[var(--color-mute)]">{textValue(row, "title")}</span></td>
+      <td data-label="Application" className="px-3 py-3 font-mono text-xs">{textValue(row, "application_number")}</td>
+      <td data-label="Class" className="px-3 py-3">{textValue(row, "class_numbers") === "Not recorded" ? textValue(row, "class_number") : textValue(row, "class_numbers")}</td>
+      <td data-label="Applicant" className="px-3 py-3">{textValue(row, "applicant_name")}</td>
+      <td data-label="Renewal due date" className="px-3 py-3">
         <span className="block">{textValue(row, "renewal_due_date")}</span>
         {row.normalized.renewal_due_date ? <span className="text-xs text-[var(--color-mute)]">Source date, unverified</span> : null}
         {row.normalized._renewal_reminder ? <span className="block text-xs text-[var(--color-mute)]">Alert: {String((row.normalized._renewal_reminder as { status: string }).status).replaceAll("_", " ")}</span> : null}
       </td>
-      <td className="min-w-[240px] max-w-sm break-words px-3 py-3">
+      <td data-label="Validation" className="min-w-[240px] max-w-sm break-words px-3 py-3">
         <Badge tone={statusTone(row.validation_status)}>{row.validation_status}</Badge>
         {row.errors.length ? (
           <div role="group" aria-label={`Blocking issues for row ${row.row_number}`} className="mt-2 text-xs text-[var(--color-danger-600)]">
@@ -542,7 +554,7 @@ function ImportRow({ row, decision, disabled, canEditDate, onDecision }: { row: 
         {row.created_docket_id ? <Button href={`/app/ip?docket=${row.created_docket_id}`} variant="ghost" size="sm">Open record</Button> : null}
         {row.created_docket_id && canEditDate ? <RenewalDateEditor docketId={row.created_docket_id} /> : null}
       </td>
-      <td className="w-[260px] px-3 py-3">
+      <td data-label="Duplicate decision" className="w-[260px] px-3 py-3">
         {row.duplicate_candidates.length ? (
           <div className="space-y-2">
             <p className="text-xs text-[var(--color-mute)]">{row.duplicate_candidates.map((candidate) => candidate.title ?? `Row ${candidate.row_number}`).join(", ")}</p>

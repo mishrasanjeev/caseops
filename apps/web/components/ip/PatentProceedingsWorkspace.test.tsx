@@ -97,6 +97,21 @@ describe("Concrete patent pre-grant proceeding workspace", () => {
       source_pending_identifier_allocation: true, proceeding_number: null }), expect.any(String));
   });
 
+  it("B4-ADJ-22 disables an empty source or manifest choice with the in-product path", async () => {
+    mocks.sources.mockResolvedValue({ items: [] });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /Separate pre-grant opposition/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Update proceeding" }));
+    const form = screen.getByRole("form", { name: "Update patent proceeding" });
+    const sourceSelect = within(form).getByLabelText("Proceeding source");
+    await waitFor(() => expect(sourceSelect).toBeDisabled());
+    expect(sourceSelect).toHaveAccessibleDescription("No source document on this IP record yet. Use Upload source to add the notice first.");
+    const manifest = within(form).getByLabelText("Exact response manifest");
+    await waitFor(() => expect(manifest).toBeDisabled());
+    expect(manifest).toHaveAccessibleDescription(/Prepare one under Evidence first/);
+    expect(within(form).getByRole("button", { name: "Preview stage" })).toBeDisabled();
+  });
+
   it("hydrates before editing and retains drafts plus original tokens across background errors", async () => {
     const { client } = mount(); const form = await edit();
     mocks.list.mockRejectedValueOnce(new Error("Interrupted list read"));

@@ -336,6 +336,36 @@ describe("IpPortfolioImportsPage", () => {
     expect(screen.queryByRole("button", { name: "Refresh preview" })).not.toBeInTheDocument();
   });
 
+  it("B4-ADJ-11 explains the source status at the field: phase, unrecognised wording and missing number", async () => {
+    const source = preview();
+    source.rows[0].normalized.source_status = "Registered";
+    source.rows[0].normalized._warnings = [{ field: "source_status", code: "declared_status_unverified" }];
+    const refused = structuredClone(source.rows[0]);
+    refused.row_number = 2;
+    refused.id = "row-2";
+    refused.normalized = { ...refused.normalized, source_status: "Regsitered",
+      _warnings: [{ field: "source_status", code: "unrecognised_status" }] };
+    const numberless = structuredClone(source.rows[0]);
+    numberless.row_number = 3;
+    numberless.id = "row-3";
+    numberless.validation_status = "invalid";
+    numberless.normalized = { ...numberless.normalized, _warnings: [] };
+    numberless.errors = [{ field: "application_number", code: "required_for_source_status" }];
+    source.rows.push(refused, numberless);
+    uploadMock.mockResolvedValue(source);
+    render(withClient(<IpPortfolioImportsPage />));
+    const user = userEvent.setup();
+    await user.upload(screen.getByLabelText("CSV or XLSX file"), new File(["Trademark\nSynthetic"], "source.csv"));
+    await user.click(screen.getByRole("button", { name: "Validate file" }));
+    const notes = await screen.findByRole("group", { name: "Non-blocking notes for row 1" });
+    expect(within(notes).getByText(/Status: Imported as Filed\. "Registered" is kept as the unverified source status/)).toBeVisible();
+    const typo = screen.getByRole("group", { name: "Non-blocking notes for row 2" });
+    expect(within(typo).getByText(/Status: "Regsitered" is not a status this import recognises, so the row imports in the Draft phase/)).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Blocking issues for row 2" })).not.toBeInTheDocument();
+    const missing = screen.getByRole("group", { name: "Blocking issues for row 3" });
+    expect(within(missing).getByText(/Application number: Required: a "Registered" mark has been filed/)).toBeVisible();
+  });
+
   it("retains unknown blocking codes and cannot refresh or commit without write access", async () => {
     useCapabilityMock.mockImplementation((capability: string) => capability === "ip:read");
     const blocked = preview();

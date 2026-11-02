@@ -903,6 +903,8 @@ def test_uj62_exc03_candidate_decisions_are_authorized_and_never_import_a_provid
     assert listed.status_code == 200, listed.text
     body = listed.json()["candidates"]
     assert [row["id"] for row in body] == [first.reconciliation_candidate_id]
+    # The total counts every pending candidate, so a bounded page can say so.
+    assert listed.json()["total"] == 1
     assert body[0]["observed_snapshot"]["start_date"] == moved_date
 
     purposes: list[str] = []
@@ -1152,6 +1154,7 @@ def test_uj62_exc03_candidate_listing_does_not_disclose_restricted_docket_eviden
 
     from caseops_api.db.models import Company, CompanyMembership
     from caseops_api.services.calendar_sync import (
+        count_ip_calendar_projection_reconciliation_candidates,
         list_ip_calendar_projection_reconciliation_candidates,
     )
     from tests.test_ip_deadline_workflow import _member
@@ -1183,6 +1186,14 @@ def test_uj62_exc03_candidate_listing_does_not_disclose_restricted_docket_eviden
                 include_resolved=True,
             )
             == []
+        )
+        assert (
+            count_ip_calendar_projection_reconciliation_candidates(
+                session,
+                context=outsider_context,
+                include_resolved=True,
+            )
+            == 0
         )
 
 
