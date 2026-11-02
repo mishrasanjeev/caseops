@@ -157,6 +157,17 @@ test('a failed runtime fence creates no session; cleanup uncertainty and unknown
   assert.equal(uncertain.calls.filter(id => id === 'FILES-04').length, 1);
 });
 
+test('an unavailable failure capture keeps the fixed refusal code beside the original call failure', async () => {
+  const f = controller({ failCall: 'FILES-02' });
+  await executeAndroidFilesCases({ ...f.args, onCallFailure: async () => { throw new Error('ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND'); } });
+  const capture = f.events.find(event => event.type === 'native_call_failure_capture_unavailable');
+  assert.deepEqual(capture, { type: 'native_call_failure_capture_unavailable', id: 'android:FILES-02', reason: 'ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND' });
+  assert.equal(f.events.find(event => event.id === 'android:FILES-02' && event.phase === 'call' && event.type === 'phase_result').reason, 'UNIT_CALL_FAILED');
+  const unexpected = controller({ failCall: 'FILES-02' });
+  await executeAndroidFilesCases({ ...unexpected.args, onCallFailure: async () => { throw new Error('private /path and value'); } });
+  assert.equal(unexpected.events.find(event => event.type === 'native_call_failure_capture_unavailable').reason, 'ANDROID_FILES_FAILURE_CAPTURE_FAILED');
+});
+
 test('unverified logout dependency cannot create the final signed-out session or silently authenticate it', async () => {
   const f = controller({ failCall: 'FILES-16' }); await executeAndroidFilesCases(f.args);
   assert.equal(f.starts.includes('FILES-17'), false); assert.equal(f.calls.includes('FILES-17'), false);

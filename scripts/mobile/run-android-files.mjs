@@ -233,7 +233,11 @@ export async function executeAndroidFilesCases({ cases = scenarios, createDriver
     else {
       try { await scenario.run(context); called = true; record({ type: 'phase_result', id, phase: 'call', status: 'passed' }); }
       catch (error) {
-        try { await onCallFailure(context, scenario, id); } catch { record({ type: 'native_call_failure_capture_unavailable', id }); }
+        // Keep which capture fence refused (fixed codes only); an unexplained
+        // unavailable capture hid the state behind Android Files failures.
+        try { await onCallFailure(context, scenario, id); } catch (captureError) {
+          record({ type: 'native_call_failure_capture_unavailable', id, reason: safeFailure(captureError, 'ANDROID_FILES_FAILURE_CAPTURE_FAILED') });
+        }
         recovery = scenario.id;
         record({ type: 'phase_result', id, phase: 'call', status: error instanceof FixtureUnavailable ? 'blocked' : 'failed', reason: safeFailure(error, 'ANDROID_FILES_ASSERTION_FAILED') });
       }
