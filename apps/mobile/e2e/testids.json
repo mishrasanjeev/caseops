@@ -1,0 +1,22 @@
+{
+  "status": "Parent reports matching UI IDs implemented; native accessibility exposure remains unverified",
+  "ids": {
+    "principal": "account-principal",
+    "workspace": "account-workspace",
+    "accountClose": "back",
+    "matterIdentity": "matter-code",
+    "savedNote": "note-latest-body",
+    "signedOut": "signed-out",
+    "searchSubmit": "matter-search-submit",
+    "noteAcknowledgement": "note-confirmed",
+    "noteReturn": "note-return",
+    "noteOpen": "note-add",
+    "activityOpen": "matter-activity",
+    "screens": {
+      "today": "screen-today",
+      "matters": "screen-matters",
+      "calendar": "screen-calendar",
+      "work": "screen-work"
+    }
+  }
+}

@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 
 from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.routes import native_auth
 from caseops_api.core.cookies import (
     clear_session_cookies,
     issue_session_cookies,
@@ -53,6 +54,7 @@ from caseops_api.services.security import (
 )
 
 router = APIRouter()
+router.include_router(native_auth.router, prefix="/native")
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
 # SQLAlchemy, password hashing and MFA services are synchronous. Dispatch the

@@ -189,6 +189,22 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
         "PROD_BASE_URL": "${{ vars.PROD_BASE_URL }}",
         "PROD_API_BASE_URL": "${{ vars.PROD_API_BASE_URL }}",
         "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+        # Node runs only under the prepared host trust policy, like every other
+        # Node step (scripts/mobile/tooling.test.mjs owns that contract).
+        **{
+            key: "${{ steps.node_trust.outputs." + key + " }}"
+            for key in (
+                "NODE_OPTIONS",
+                "SSL_CERT_FILE",
+                "SSL_CERT_DIR",
+                "CASEOPS_HOST_NODE_TRUST_POLICY_FILE",
+                "CASEOPS_HOST_NODE_TRUST_POLICY_SHA256",
+                "NPM_CONFIG_USERCONFIG",
+                "NPM_CONFIG_GLOBALCONFIG",
+                "NPM_CONFIG_STRICT_SSL",
+                "NPM_CONFIG_REGISTRY",
+            )
+        },
     }
     # Every variable the Batch4 production runtime requires is supplied by the step.
     support = (REPO_ROOT / "tests/e2e/support/ram-bugs4.ts").read_text()
@@ -602,9 +618,12 @@ def test_scheduled_prod_verification_is_read_only() -> None:
     steps_digest = hashlib.sha256(
         json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    # Reviewed 15 October: trusted-main admission precedes serving code; no npm cache.
-    # Exact statute/source bytes, native capture and four read-only workers remain.
-    assert steps_digest == "7667cd82b237b2375ede43fbe0c7e8ed5bbd76f363e3da1a2b023006e70e1b2e"
+    # Reviewed 28 October against the retained 15 October step projection:
+    # Node is pinned to22.23.4; one trust preparation and nine scoped outputs
+    # cover npm, Chromium, wrapper preparation and its actual Node invocation.
+    # Removing exactly that reviewed delta reproduces the original7667cd82
+    # projection. Every original read-only step, argument and bound remains.
+    assert steps_digest == "9cb14295f2fe2118958676830220a8c734272f7f233bc12a6e77918f2e39f19f"
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert (
         'name: "statute-source-prod-chromium",\n'
@@ -1233,6 +1252,7 @@ BROWSER_WORKFLOW_JOBS = {
         "scheduled-statute-verification",
     ),
     "release-verify.yml": ("release-playwright",),
+    "mobile-source.yml": ("source", "browser-handoff"),
 }
 
 

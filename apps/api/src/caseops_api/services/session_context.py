@@ -15,3 +15,5 @@ class SessionContext:
     # otherwise a password reset can revoke the caller and still lose to a
     # stale refresh that mints a newer, usable token after the cutoff.
     token_issued_at: float | None = None
+    # Set only after native family and credential validation, never by headers.
+    native_session_id: str | None = None

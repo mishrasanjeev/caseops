@@ -116,8 +116,8 @@ def test_native_xlsx_dates_stage_as_json_safe_source_evidence(client: TestClient
     )
 
 
-def _actor(client: TestClient, *, configure: bool = True) -> dict:
-    actor = bootstrap_company(client)
+def _actor(client: TestClient, *, configure: bool = True, bootstrapper=None) -> dict:
+    actor = (bootstrap_company if bootstrapper is None else bootstrapper)(client)
     actor["headers"] = {
         **auth_headers(str(actor["access_token"])),
         "X-CaseOps-Automated-Test": "no-paid-providers",

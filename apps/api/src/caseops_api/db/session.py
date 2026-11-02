@@ -16,6 +16,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db import models
 from caseops_api.db.base import Base
 from caseops_api.db.connection_safety import postgres_timeout_options, postgres_url_options
+from caseops_api.db.statement_clock import StatementUtc
 
 if models.__name__ != "caseops_api.db.models":
     raise RuntimeError("caseops_api.db.models did not import correctly")
@@ -37,7 +38,10 @@ _READ_FUNCTIONS = frozenset({
     "abs", "avg", "char_length", "coalesce", "count", "current_date", "current_timestamp",
     "convert_to", "date", "date_trunc", "datetime", "distinct", "encode", "extract",
     "greatest", "json_array_length",
-    "jsonb_array_length", "julianday",
+    # PostgreSQL standard pure value constructor and non-assigning
+    # transaction observation. Assigning variants and packaged calls remain denied.
+    "jsonb_array_length", "jsonb_build_object", "julianday",
+    "txid_current_if_assigned",
     "least", "length", "lower", "max", "min", "now", "nullif", "octet_length", "pg_backend_pid",
     "pg_current_xact_id_if_assigned", "plainto_tsquery", "round", "row_number",
     "strftime", "substr",
@@ -128,6 +132,10 @@ def _proven_read_statement(statement) -> bool:
             "1", "*", "NULL", "true", "false",
         }:
             return False
+        if isinstance(node, StatementUtc) and type(node._deannotate()) is StatementUtc:
+            if len(node.clauses) != 0:
+                return False
+            continue
         if isinstance(node, FunctionElement) and (
             str(getattr(node, "name", "")).lower() not in _READ_FUNCTIONS
             or getattr(node, "packagenames", ())
