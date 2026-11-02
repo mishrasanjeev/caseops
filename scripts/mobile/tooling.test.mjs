@@ -5001,11 +5001,17 @@ test('CI-COMMAND-02 hardening refuses missing context foreign command names alia
   });
 });
 test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
-  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
+  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, { status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
     assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
     assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
   }, { proof: () => failure });
+  for (const stage of ['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']) await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}`);
+    assert.equal(ciTrustFailureCode(refused), `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}`);
+    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => ({ status: 1, stdout: '', stderr: `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}` }) });
   await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
     assert.equal(refused?.message, 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE');
