@@ -157,6 +157,20 @@ test('a failed runtime fence creates no session; cleanup uncertainty and unknown
   assert.equal(uncertain.calls.filter(id => id === 'FILES-04').length, 1);
 });
 
+test('failure capture uses a selector UiAutomator2 accepts and still refuses any password field', async t => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-capture-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const capture = (passwords) => {
+    const queries = [];
+    const driver = { getCurrentPackage: async () => 'unit-app', switchContext: async () => {},
+      $$: async query => { queries.push(query); assert.equal(query, '//*[@password="true"]', 'UIAUTOMATOR2_ACCEPTED_SELECTOR_REQUIRED'); return Array(passwords).fill({}); },
+      getPageSource: async () => '<hierarchy><node resource-id="files-reload" password="false"/></hierarchy>' };
+    return { queries, run: output => captureAndroidFilesFailure({ driver, fixture: { appId: 'unit-app', syntheticDataOnly: true, environment: 'docker-integration' } }, output) };
+  };
+  const ok = capture(0), saved = await ok.run(path.join(root, 'capture.xml'));
+  assert.equal(readFileSync(saved.path, 'utf8').includes('files-reload'), true);
+  await assert.rejects(capture(1).run(path.join(root, 'refused.xml')), /ANDROID_FILES_CREDENTIAL_CAPTURE_REFUSED/);
+});
+
 test('an unavailable failure capture keeps the fixed refusal code beside the original call failure', async () => {
   const f = controller({ failCall: 'FILES-02' });
   await executeAndroidFilesCases({ ...f.args, onCallFailure: async () => { throw new Error('ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND'); } });

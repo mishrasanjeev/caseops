@@ -195,7 +195,8 @@ export async function captureAndroidFilesFailure(context, output) {
   assert.equal(context.fixture.environment, 'docker-integration', 'ANDROID_FILES_ISOLATED_FAILURE_ONLY');
   assert.equal(await context.driver.getCurrentPackage(), context.fixture.appId, 'ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND');
   await context.driver.switchContext('NATIVE_APP');
-  assert.equal((await context.driver.$$('android=new UiSelector().password(true)')).length, 0, 'ANDROID_FILES_CREDENTIAL_CAPTURE_REFUSED');
+  // UiAutomator2 rejects UiSelector().password(); every capture failed on it.
+  assert.equal((await context.driver.$$('//*[@password="true"]')).length, 0, 'ANDROID_FILES_CREDENTIAL_CAPTURE_REFUSED');
   const source = await context.driver.getPageSource();
   assert.ok(typeof source === 'string' && Buffer.byteLength(source) <= 524288 && !/\bpassword\s*=\s*["']true["']/i.test(source), 'ANDROID_FILES_CREDENTIAL_OR_OVERSIZE_CAPTURE_REFUSED');
   writeFileSync(output, source, { flag: 'wx', mode: 0o600 }); return ref(output);
