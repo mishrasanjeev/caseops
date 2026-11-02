@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## November 2 Disclosure Work Coverage Pending
+
+IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and
+its actual custom/generic/auto work, not only authorized family-page selection.
+The exact1c fresh Docker failure is retained. Existing scale/integrity profiles
+stay unchanged; add `test_patent_family_list_default_join_scale_profiles[fresh_mixed]`
+with explicit disclosure statistics. Candidate runtime tenant-key reuse is
+unverified until focused PostgreSQL, complete replacement Docker/CI and the
+exact-serving dated journeys pass. No app/Mac/readthrough ownership change.
+
 ## October 31 Actual Family And Mail Candidate Coverage
 
 Scheduled-history addition: J08/M08/J14/M14 now bind ten reviewed public

@@ -3630,3 +3630,13 @@ requirements when using the fallback.
   and regress changed bytes, new origins and the complete all-refs boundary.
   Historical review tests must not require unselected deleted-branch objects
   forever; report selection separately and reject any missing selected blob.
+- Exact composite-key equality does not alone prove bounded disclosure loading.
+  Reconcile every later hydration plan under custom, generic and automatic
+  planning with fresh/skewed and stale tenant statistics. Retain actual keys,
+  catalogue/index validity and raw work; a valid composite index may still lose
+  to a repeated company-only scan. Keep original tuple/buffer limits and all
+  missing-key, current-version, tenant and source-integrity rejection paths.
+- An owned Windows CTRL-C may leave an outer PowerShell exit code of zero.
+  Keep the interruption receipt and require the complete native inventory,
+  canonical completion evidence and final PASS before accepting a Docker gate;
+  an outer zero cannot override an interrupted child or retained call failure.

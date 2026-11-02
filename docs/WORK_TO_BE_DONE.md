@@ -1,5 +1,14 @@
 # CaseOps  - Work To Be Done
 
+## November 2 Disclosure Work Replacement Pending
+
+NO-GO:1c Docker02 retained a real fresh-mixed disclosure-loading failure and
+was deliberately stopped for repair; its remaining inventory is unverified.
+Keep all original plans and incomplete evidence. Prove runtime-bound tenant
+lookup and controlled fresh-mixed/default-join profile against actual PostgreSQL
+before full fresh-image Docker/current CI/main/live/cadence and both Excel
+publications. No threshold increase, fixture dilution or Mac/app/0008 change.
+
 ## October 31 All-Refs Security And Interrupted Docker
 
 NO-GO: Docker37 passed76fixturecases but the13:55UTC workstation reboot stopped

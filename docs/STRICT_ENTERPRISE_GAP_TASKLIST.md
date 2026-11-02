@@ -1,5 +1,16 @@
 # Strict Enterprise Gap Tasklist
 
+## November 2 Fresh Disclosure Statistics: NO-GO
+
+Partially implemented. Exact1c Docker02 exposed later disclosure hydration:
+first/cursor custom and automatic plans charge482800/492800 total work and
+29022/29616 blocks versus unchanged<50000/<10000. The unique composite index
+is present/valid/ready; a company-only index is selected100 times. Candidate
+reuses the page's runtime tenant key inside the exact version lookup and adds
+controlled fresh-mixed/default-join regression. No schema, planner override,
+budget or security relaxation. Full source-specific replacement/live evidence
+remains required; interrupted baseline cannot certify release or Excel verdicts.
+
 ## November 1 Scheduled All-Refs Findings: Release-Gated
 
 Partially implemented/NO-GO for the new candidate. Security41301909540 failed

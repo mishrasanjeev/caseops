@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 Disclosure Loading: Partially Fixed, NO-GO
+
+Docker02/1c failed the fresh-mixed physical-work case after successful setup:
+disclosure hydration, not outer family selection, repeatedly scans tenant
+versions under custom/auto planning. Raw first/cursor plans, exact SQL/bindings
+and valid-index catalogue are preserved. Runtime tenant-key reuse and a new
+default-join fresh-mixed profile are candidate changes, not verified fixes.
+Original bounds, complete unique predicates, negative integrity and all other
+profiles remain. Require focused PostgreSQL and full replacement Docker/CI/
+main/live plus actual paired Excel publication. No Mac/app/0008 work included.
+
 ## October 31 Historical Secret Findings: Partially Fixed
 
 Actual scheduled Security41193137288 rejected ten historical findings outside
