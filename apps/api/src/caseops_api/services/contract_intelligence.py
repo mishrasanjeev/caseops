@@ -71,7 +71,10 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
-from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
+)
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -175,7 +178,8 @@ def _structured_with_retry(
             on_completion_accounted=account if phase is not None else None,
         )
         if phase is not None:
-            phase.finalize(purpose=context.purpose, model=p.model)
+            # Reauthorize the model that actually produced the output.
+            phase.finalize(purpose=context.purpose, model=completion.model)
             run = session.get(ModelRun, phase.pending_model_run_id)
             run.status = "ok"
         else:
@@ -210,6 +214,7 @@ def _structured_with_retry(
                 detail=(
                     f"Could not {feature}: {type(retry_exc).__name__}: {retry_exc}. "
                     "Please retry in a minute, or contact support if this persists."
+                    + fallback_refusal_suffix(retry_exc)
                 ),
             ) from retry_exc
 

@@ -55,7 +55,10 @@ from caseops_api.services.llm import (
     generate_structured,
     max_tokens_for_purpose,
 )
-from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.llm_http import (
+    fallback_refusal_suffix,
+    provider_failure_http_exception,
+)
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -408,6 +411,7 @@ def generate_hearing_pack(
                     f"Could not assemble a hearing pack: "
                     f"{type(retry_exc).__name__}: {retry_exc}. Please retry "
                     f"in a minute, or contact support if this persists."
+                    + fallback_refusal_suffix(retry_exc)
                 ),
             ) from retry_exc
     except LLMProviderError as exc:
@@ -427,6 +431,7 @@ def generate_hearing_pack(
             detail=(
                 f"Could not assemble a hearing pack: {type(exc).__name__}: {exc}. "
                 "Please retry in a minute, or contact support if this persists."
+                + fallback_refusal_suffix(exc)
             ),
         ) from exc
 

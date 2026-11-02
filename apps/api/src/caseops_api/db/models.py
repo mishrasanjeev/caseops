@@ -32,6 +32,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.ai_spend_models import (  # noqa: F401
+    AiGeminiSpendAdmission,
+    AiGeminiSpendMonth,
     AiProviderSpendAdmission,
     AiProviderSpendMonth,
 )

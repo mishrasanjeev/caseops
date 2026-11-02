@@ -539,6 +539,9 @@ function duePhrase(dueOn: string | null, daysUntilDue: number | null) {
 function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }) {
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+  const [deepLinked] = useState(
+    () => typeof window !== "undefined" && window.location.hash === "#coverage-decisions",
+  );
   const awaiting = useQuery({
     queryKey: ["ip-coverage-awaiting-me"],
     queryFn: fetchIpCoverageTransfersAwaitingMe,
@@ -579,22 +582,22 @@ function CoverageDecisionsCard({ onChanged }: { onChanged: () => Promise<void> }
   }, [awaiting.data]);
 
   const initialDecisionError = awaiting.isError && awaiting.data === undefined;
+  // The band exists only when there is a decision. Only a deep link holds its
+  // place while loading: an empty placeholder above the docket collapsed after
+  // a new docket had scrolled into view and pushed it off screen (BUG-001).
   const showDecisionCard =
-    awaiting.isPending || initialDecisionError || transfers.length > 0;
+    (awaiting.isPending && deepLinked) || initialDecisionError || transfers.length > 0;
 
   // The target is query-backed and usually does not exist when the browser
   // first processes /app/ip#coverage-decisions. Honor the deep link once the
   // asynchronous card has actually mounted.
   useEffect(() => {
-    if (
-      showDecisionCard &&
-      window.location.hash === "#coverage-decisions"
-    ) {
+    if (showDecisionCard && deepLinked) {
       document.getElementById("coverage-decisions")?.scrollIntoView({
         block: "start",
       });
     }
-  }, [showDecisionCard]);
+  }, [deepLinked, showDecisionCard]);
 
   if (!showDecisionCard) return null;
 

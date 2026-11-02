@@ -40,6 +40,11 @@ does not run there and is recorded as such, not as a pass.
   AGENTS.md fixture rule, so before release the owner must record a residue
   exception or the upload half moves to `[local-only]`; triage probe docket
   7ece82b7-f2fb-46db-bb09-2487ca1df185 remains for owner retirement.
+  Adjacent (PR #571, 2ff7ca05): under CI timing the coverage-decision band's
+  loading placeholder above the docket collapsed after the new docket had
+  scrolled into view, pushing its heading off screen; the band now holds no
+  place while loading unless opened through `#coverage-decisions`
+  (`apps/web/app/app/ip/page.test.tsx`).
 - BUG-002 Classification dropdown shows no classes. Status: Inconclusive -
   complete local proof; production verification as the reporting tester
   pending. (a) Nice class: a catalogue picker in create, opposition and
