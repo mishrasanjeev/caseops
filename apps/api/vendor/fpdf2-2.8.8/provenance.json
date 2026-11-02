@@ -1,0 +1,116 @@
+{
+  "advisories": [
+    {
+      "cve": "CVE-2026-114609",
+      "id": "GHSA-rw7v-4hrq-x6r9",
+      "upstreamPatchedVersion": "2.8.8",
+      "url": "https://github.com/py-pdf/fpdf2/security/advisories/GHSA-rw7v-4hrq-x6r9"
+    },
+    {
+      "cve": "CVE-2026-114610",
+      "id": "GHSA-wqw6-wpr3-45rh",
+      "upstreamPatchedVersion": "2.8.8",
+      "url": "https://github.com/py-pdf/fpdf2/security/advisories/GHSA-wqw6-wpr3-45rh"
+    }
+  ],
+  "artifacts": [
+    {
+      "filename": "fpdf2-2.8.8-py3-none-any.whl",
+      "packagetype": "bdist_wheel",
+      "sha256": "3557a478fc577a929c94aace9666aed4dcc432b5ab6764232e6a59f1ccd75f17",
+      "sizeBytes": 337000,
+      "uploadTimeIso8601": "2026-08-09T23:32:43.728247Z",
+      "url": "https://files.pythonhosted.org/packages/f5/be/af012eda9507494f28b99b077423806c43a11573eb6225dd46f19ae2d263/fpdf2-2.8.8-py3-none-any.whl"
+    },
+    {
+      "filename": "fpdf2-2.8.8.tar.gz",
+      "packagetype": "sdist",
+      "sha256": "9e94e155e85e8053329a9a1fce8b566fd7a7c5bb79e98a1a3952d379b947c5b9",
+      "sizeBytes": 374689,
+      "uploadTimeIso8601": "2026-08-09T23:32:45.334623Z",
+      "url": "https://files.pythonhosted.org/packages/1e/bc/8fd4321aed40cadadddc8f311c65b6082346b252bca048f7b476d8f35d72/fpdf2-2.8.8.tar.gz"
+    }
+  ],
+  "bundledFiles": {
+    "COPYING.GPLv3": {
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "sizeBytes": 35149
+    },
+    "LICENSE": {
+      "sha256": "f97bc4bb9b7ae8a653941073678b5c7775e8de44a01c3bcc21e7cdc148b90e61",
+      "sizeBytes": 7632
+    },
+    "NOTICE.txt": {
+      "sha256": "e439e154c29118d0953d7fc7ba723939c6d22312959db78caeb178bb9f0ce7ae",
+      "sizeBytes": 1862
+    },
+    "fpdf2-2.8.8.tar.gz": {
+      "sha256": "9e94e155e85e8053329a9a1fce8b566fd7a7c5bb79e98a1a3952d379b947c5b9",
+      "sizeBytes": 374689
+    }
+  },
+  "gplText": {
+    "alternativeFetches": [
+      {
+        "result": "accepted",
+        "url": "https://raw.githubusercontent.com/coreutils/coreutils/v9.8/COPYING"
+      },
+      {
+        "result": "accepted",
+        "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING3"
+      },
+      {
+        "result": "accepted",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.txt?source=caseops-license-review"
+      }
+    ],
+    "primarySource": "GNU project official source repository",
+    "purpose": "Supplemental full GPLv3 text referenced by LGPLv3; not a claimed fpdf2 archive member",
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "sizeBytes": 35149,
+    "url": "https://raw.githubusercontent.com/coreutils/coreutils/v9.8/COPYING"
+  },
+  "imageLocation": "/usr/share/doc/caseops-api/third-party/fpdf2-2.8.8",
+  "libraryModified": false,
+  "licenseExpression": "LGPL-3.0-only",
+  "name": "fpdf2",
+  "pypi": {
+    "response": {
+      "sha256": "446e5dcf3e4b93687bd8f1dd3eb33d2948c1fb1901299937c7b5cebb60e35089",
+      "sizeBytes": 91885
+    },
+    "url": "https://pypi.org/pypi/fpdf2/2.8.8/json"
+  },
+  "release": {
+    "commit": "e1fc653d8fce65d2fb118755bda8581a9bf1e4d9",
+    "tag": "2.8.8",
+    "tagApiUrl": "https://api.github.com/repos/py-pdf/fpdf2/git/ref/tags/2.8.8",
+    "url": "https://github.com/py-pdf/fpdf2/releases/tag/2.8.8"
+  },
+  "schemaVersion": 1,
+  "scope": "API Python dependency only; JavaScript inventories unchanged",
+  "sourceArchiveExecuted": false,
+  "upstreamMembers": {
+    "sdistLicense": {
+      "path": "fpdf2-2.8.8/LICENSE",
+      "sha256": "f97bc4bb9b7ae8a653941073678b5c7775e8de44a01c3bcc21e7cdc148b90e61",
+      "sizeBytes": 7632
+    },
+    "sdistMetadata": {
+      "path": "fpdf2-2.8.8/PKG-INFO",
+      "sha256": "b7d0e7d8c32104ca54bec2e3d8744e8529eae9182c58113d650cbb0ae7eaa9b2",
+      "sizeBytes": 86026
+    },
+    "wheelLicense": {
+      "path": "fpdf2-2.8.8.dist-info/licenses/LICENSE",
+      "sha256": "f97bc4bb9b7ae8a653941073678b5c7775e8de44a01c3bcc21e7cdc148b90e61",
+      "sizeBytes": 7632
+    },
+    "wheelMetadata": {
+      "path": "fpdf2-2.8.8.dist-info/METADATA",
+      "sha256": "b7d0e7d8c32104ca54bec2e3d8744e8529eae9182c58113d650cbb0ae7eaa9b2",
+      "sizeBytes": 86026
+    }
+  },
+  "version": "2.8.8"
+}

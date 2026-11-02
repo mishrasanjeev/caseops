@@ -97,6 +97,7 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
     app_path.write_text(
         """async def app(scope, receive, send):
     assert scope[\"type\"] == \"http\"
+    assert (b\"x-caseops-automated-test\", b\"no-paid-providers\") in scope[\"headers\"]
     await send({
         \"type\": \"http.response.start\",
         \"status\": 200,
@@ -139,7 +140,9 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
                 with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
                     client.settimeout(2)
                     client.sendall(
-                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n"
+                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                        b"X-CaseOps-Automated-Test: no-paid-providers\r\n"
+                        b"Connection: keep-alive\r\n\r\n"
                     )
                     while chunk := client.recv(4096):
                         response += chunk
@@ -703,9 +706,12 @@ def test_web_image_uses_committed_workspace_lockfile() -> None:
     gcloudignore = _read_repo_text(".gcloudignore")
 
     assert "COPY package.json package-lock.json ./" in dockerfile
-    assert "RUN npm ci --no-audit --no-fund" in dockerfile
+    assert (
+        "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund"
+        in dockerfile
+    )
     assert "npm install" not in dockerfile
-    assert "npm prune --omit=dev" in dockerfile
+    assert "npm-tooling.mjs prune --omit=dev" in dockerfile
     assert "context: ." in compose
     assert "dockerfile: apps/web/Dockerfile" in compose
     assert "apps/web/Dockerfile" in cloudbuild
@@ -920,7 +926,7 @@ def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
     workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
     shards = workflow["jobs"]["postgres-validation-shards"]
-    assert shards["strategy"]["matrix"] == {"total_shards": [24], "shard": list(range(1, 25))}
+    assert shards["strategy"]["matrix"] == {"total_shards": [32], "shard": list(range(1, 33))}
     total = shards["strategy"]["matrix"]["total_shards"][0]
     assert shards["strategy"]["max-parallel"] == 4
     assert shards["name"] == (
@@ -1023,10 +1029,26 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     image = _read_repo_text("apps/api/Dockerfile")
 
     assert "COPY pyproject.toml uv.lock README.md ./" in image
+    # Installed integrity checks require independent single-link files on Linux
+    # as well as macOS, rather than UV's shared-cache hardlink default.
+    assert "    UV_LINK_MODE=copy \\" in image
+    assert image.index("UV_LINK_MODE=copy") < image.index("RUN pip install")
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image
-    assert "uv pip install --system --requirements /tmp/requirements.lock" in image
+    # Keep the frozen artifact URLs/hashes instead of resolving names again
+    # through large live Simple indexes. The local archive path is lock-relative.
+    dependencies = image[image.index("RUN uv export"):image.index("Tokenizer.from_pretrained")]
+    assert "--offline" in dependencies
+    assert "--format pylock.toml" in dependencies
+    assert "--no-hashes" not in dependencies
+    assert "--output-file /app/pylock.toml" in dependencies
+    assert "uv pip install --system --requirements /app/pylock.toml" in dependencies
+    assert "rm /app/pylock.toml" in dependencies
+    # The unchanged graph contains a source distribution whose build system
+    # still needs its normal isolated admission; do not invent binary-only closure.
+    assert "--no-index" not in dependencies
+    assert "--only-binary" not in dependencies
     assert "uv pip install --system --no-deps ." in image
     assert image.index("--frozen") < image.index("COPY src ./src")
     assert image.index("Tokenizer.from_pretrained") < image.index("COPY src ./src")
@@ -1174,6 +1196,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
     required = _web_external_unit_dependencies(REPO_ROOT)
     assert {
         "tests/fixtures/statutes/structured-schedule-api.json",
+        "tests/fixtures/node-default-tls-probe.cjs",
         "tests/e2e/support/prod-failure-diagnostics.ts",
         "tests/e2e/support/bounded-network-evidence.ts",
         "tests/e2e/support/prod-api-response-evidence.ts",
@@ -1203,12 +1226,16 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
     references = re.compile(
         r"\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)[\"'](\.[^\"']+)[\"']",
     )
+    fixture_urls = re.compile(
+        r"\bnew\s+URL\(\s*[\"'](\.[^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)",
+    )
     while pending:
         importer = pending.pop()
         if importer in visited:
             continue
         visited.add(importer)
-        for reference in references.findall(importer.read_text(encoding="utf-8")):
+        source = importer.read_text(encoding="utf-8")
+        for reference in [*references.findall(source), *fixture_urls.findall(source)]:
             base = (importer.parent / reference).resolve()
             assert base.is_relative_to(root.resolve()), "Fixture import escapes repository"
             candidates = [base, *(Path(str(base) + suffix) for suffix in (".ts", ".tsx", ".json")),
@@ -1218,13 +1245,13 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
             if dependency.is_relative_to(web.resolve()):
                 continue
             required.add(dependency.relative_to(root.resolve()).as_posix())
-            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs", ".cjs"}:
                 pending.append(dependency)
     return required
 
 
 def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
-    assert "FROM node:22.14.0-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
     builder, runner = dockerfile.split("FROM trusted-base AS runner", 1)
     builder = builder.split("FROM deps AS builder", 1)[1]
     lines = set(builder.splitlines())
@@ -1243,13 +1270,103 @@ def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str])
         f"COPY {path} /app/{path}" for path in required
     } for line in lines), "Do not copy the whole test tree"
     assert "/app/tests" not in runner and "COPY tests/" not in runner
+    _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+def _web_npm_tooling_inputs(root: Path) -> set[str]:
+    helper = "scripts/mobile/npm-tooling.mjs"
+    source = (root / helper).read_text(encoding="utf-8")
+    assert "from './npm-registry.mjs'" in source
+    artifact = re.findall(r"relative: '([^']+)'", source)
+    assert artifact == [
+        "apps/mobile/vendor/npm-11.12.1-caseops-security/"
+        "npm-11.12.1-caseops-security.tgz"
+    ]
+    required = {helper, "scripts/mobile/npm-registry.mjs", artifact[0]}
+    assert all((root / path).is_file() for path in required), "Missing pinned npm source input"
+    return required
+
+
+def _assert_web_npm_tooling_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
+    tooling = dockerfile.split("FROM trusted-base AS builder-tooling", 1)[1].split(
+        "FROM builder-tooling AS deps", 1)[0]
+    assert (
+        "COPY scripts/mobile/npm-tooling.mjs scripts/mobile/npm-registry.mjs "
+        "/opt/caseops/scripts/mobile/" in tooling
+    )
+    artifact = next(path for path in required if path.endswith(".tgz"))
+    assert f"COPY {artifact} /opt/caseops/{artifact}" in tooling, "Missing pinned npm archive COPY"
+    patterns = set(ignore.splitlines())
+    parents = {parent.as_posix() + "/" for path in required for parent in Path(path).parents
+               if parent != Path(".")}
+    assert {
+        f"!{path}" for path in required | parents
+    } <= patterns, "Missing pinned npm context input"
+    actual = {line[1:] for line in patterns if line.startswith(("!scripts/", "!apps/mobile/"))}
+    assert actual == {
+        path for path in required | parents if path.startswith(("scripts/", "apps/mobile/"))
+    }, "Npm context must admit only its exact source closure"
+    runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
+    assert all(
+        value not in runner for value in (
+            "builder-tooling", "COPY scripts/", "COPY apps/mobile/",
+            "/opt/caseops/scripts/mobile",
+        )
+    ), "Npm tooling must remain builder only"
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("path", [
+    "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+])
+def test_web_npm_tooling_closure_rejects_each_omission(boundary: str, path: str) -> None:
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(path, "missing-tooling-input")
+    else:
+        ignore = ignore.replace(f"!{path}\n", "")
+    with pytest.raises(AssertionError):
+        _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+def test_web_npm_tooling_closure_rejects_broad_sibling_admission(ignore_path: str) -> None:
+    with pytest.raises(AssertionError, match="exact source closure"):
+        _assert_web_npm_tooling_inputs(
+            _read_repo_text("apps/web/Dockerfile"),
+            _read_repo_text(ignore_path) + "\n!scripts/mobile/**\n",
+            _web_npm_tooling_inputs(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
+    path = "tests/fixtures/node-default-tls-probe.cjs"
+    required = _web_external_unit_dependencies(REPO_ROOT)
+    assert path in required
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(f"COPY {path} /app/{path}", "")
+        message = f"Missing builder input: {re.escape(path)}"
+    else:
+        ignore = ignore.replace(f"!{path}", "")
+        message = f"Missing context input: {re.escape(path)}"
+    with pytest.raises(AssertionError, match=message):
+        _assert_web_builder_inputs(dockerfile, ignore, required)
 
 
 def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
     files = {
         "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
         "tests/e2e/support/first.ts": 'export { value } from "./second";',
-        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth");',
+        "tests/e2e/support/second.ts": (
+            'import("./third"); require("./fourth"); '
+            'new URL("./native.cjs", import.meta.url);'
+        ),
+        "tests/e2e/support/native.cjs": 'require("./leaf.json");',
         "tests/e2e/support/third.ts": 'import "./leaf.json";',
         "tests/e2e/support/fourth.ts": 'import { value } from "./first";',
         "tests/e2e/support/leaf.json": '{}',
@@ -1325,7 +1442,10 @@ def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
     assert {"**/*.ts", "**/*.tsx"} <= set(config["include"])
     assert config["exclude"] == ["node_modules"]
     assert "ignoreBuildErrors" not in _read_repo_text("apps/web/next.config.ts")
-    assert "RUN npm run build" in _read_repo_text("apps/web/Dockerfile")
+    assert (
+        "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build"
+        in _read_repo_text("apps/web/Dockerfile")
+    )
 
 
 def _assert_ci_web_builder_gate(workflow: dict) -> None:
@@ -1496,6 +1616,9 @@ def test_api_startup_dependency_removal_is_rerunnable(
     snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
         "# Prepare only on canonical main", 1
     )[0]
+    consumers = [line.strip().removesuffix("\\").strip()
+                 for line in script.splitlines() if "API_DEPENDENCY_FLAGS[@]" in line]
+    assert len(consumers) == 1
     fake = tmp_path / "gcloud"
     _write_fake_executable(
         fake, "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
@@ -1505,7 +1628,7 @@ def test_api_startup_dependency_removal_is_rerunnable(
     result = subprocess.run(
         [_find_working_bash(), "-c", "set -euo pipefail\nREGION=local\nPROJECT=offline\n"
          "API_DEPENDENCY_FLAGS=()" + snippet
-         + '\nprintf "<%s>" "${API_DEPENDENCY_FLAGS[@]}"'],
+         + '\nprintf "<%s>" ' + consumers[0]],
         env=env, capture_output=True, text=True, timeout=5, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -2946,7 +3069,7 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
     ):
         assert replacing_flag not in arguments
     assert (
-        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
+        'CMD ["sh", "-c", "exec uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
         '--port ${PORT} --app-dir src"]'
     ) in _read_repo_text("apps/api/Dockerfile")
 
@@ -3834,6 +3957,11 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
         ("clean", None, None, False),
         ("security-helper", "scripts/release_security_gate.py", "modify", True),
         ("security-policy", ".github/workflows/security.yml", "modify", True),
+        ("npm-helper", "scripts/mobile/npm-tooling.mjs", "modify", True),
+        ("npm-registry", "scripts/mobile/npm-registry.mjs", "modify", True),
+        ("npm-archive",
+         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+         "modify", True),
         ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
         ("registry", "license-policy/reviewed-packages.json", "modify", True),
         ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
@@ -3841,6 +3969,7 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
          "modify", True),
         ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
          "modify", True),
+        ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs", "modify", True),
         ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
         ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
         ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
@@ -3898,6 +4027,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
             ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
             ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
+            ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs"),
             ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
             ("network", "tests/e2e/support/bounded-network-evidence.ts"),
             ("api", "tests/e2e/support/prod-api-response-evidence.ts"),
@@ -3907,6 +4037,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("public-release-identity", "tests/e2e/support/public-release-identity.ts"),
         ]),
     }
+    initial_paths.update(_web_npm_tooling_inputs(REPO_ROOT))
     for relative in initial_paths:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -17,6 +17,7 @@ LEAVES = (
     "ip_document_policy",
     "calendar_projection_tombstones",
     "ip_coverage_read",
+    "matter_work_queue_policy",
 )
 WORKFLOWS = (
     "private_retrieval",
@@ -29,6 +30,8 @@ WORKFLOWS = (
     "ip_coverage_projection",
     "notification_delivery",
     "storage_governance",
+    "matter_work_queue",
+    "task_queue_pages",
 )
 ALERT_EDGES = (
     (423, "ip_document_workflow", "document_jobs"),
@@ -49,6 +52,8 @@ ALERT_EDGES = (
     (526, "employee_deactivation", "ip_operations"),
     (527, "identity", "employee_deactivation"),
     (528, "ip_document_workflow", "matter_access"),
+    (685, "matter_work_queue", "task_queue_pages"),
+    (686, "task_queue_pages", "matter_work_queue"),
 )
 
 
@@ -101,7 +106,10 @@ def test_shared_policy_leaves_never_depend_on_workflows(
         assert route is None, route
 
 
-@pytest.mark.parametrize("first", (*LEAVES, "private_retrieval", "ip_document_workflow"))
+@pytest.mark.parametrize(
+    "first",
+    (*LEAVES, "private_retrieval", "ip_document_workflow", "matter_work_queue", "task_queue_pages"),
+)
 def test_fresh_process_import_order_and_public_function_identity(first: str) -> None:
     program = """
 import importlib
@@ -112,7 +120,8 @@ prefix = 'caseops_api.services.'
 first = importlib.import_module(prefix + sys.argv[2])
 assert pathlib.Path(first.__file__).resolve().is_relative_to(pathlib.Path(sys.argv[1]).resolve())
 if sys.argv[2] in ('record_access_policy', 'ip_document_policy',
-                   'calendar_projection_tombstones', 'ip_coverage_read'):
+                   'calendar_projection_tombstones', 'ip_coverage_read',
+                   'matter_work_queue_policy'):
     forbidden = sys.argv[3:]
     assert not [name for name in forbidden if prefix + name in sys.modules]
 policy = importlib.import_module(prefix + 'record_access_policy')
@@ -137,9 +146,15 @@ assert private.get_ip_document_policies is documents.get_ip_document_policies
 assert coverage.CalendarProjectionTombstoneResult is tombstones.CalendarProjectionTombstoneResult
 assert (coverage.tombstone_membership_calendar_projections
         is tombstones.tombstone_membership_calendar_projections)
+queue = importlib.import_module(prefix + 'matter_work_queue')
+pages = importlib.import_module(prefix + 'task_queue_pages')
+queue_policy = importlib.import_module(prefix + 'matter_work_queue_policy')
+assert set(queue_policy.__all__) == {'_current_actor', '_utc'}
+assert queue._current_actor is pages._current_actor is queue_policy._current_actor
+assert queue._utc is pages._utc is queue_policy._utc
 """
     result = subprocess.run(
-        [sys.executable, "-I", "-c", program, str(SRC), first, *WORKFLOWS],
+        [sys.executable, "-I", "-B", "-c", program, str(SRC), first, *WORKFLOWS],
         env=os.environ.copy(),
         capture_output=True,
         text=True,
@@ -147,6 +162,44 @@ assert (coverage.tombstone_membership_calendar_projections
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "module,names",
+    [
+        ("account_privacy_models", ("AccountDeletionRequest",)),
+        (
+            "counsel_page_models",
+            ("CounselReadPage", "CounselReadPageDirty", "CounselReadPageMember"),
+        ),
+        (
+            "matter_readthrough_page_models",
+            (
+                "MatterDecisionReadPage",
+                "MatterHearingPackReadPage",
+                "MatterOptionReadPage",
+                "MatterPackItemReadPage",
+                "MatterReadthroughDirty",
+                "MatterRecommendationReadPage",
+            ),
+        ),
+        (
+            "task_queue_page_models",
+            ("MatterTaskQueueDirty", "MatterTaskQueueGroup", "MatterTaskQueuePage"),
+        ),
+    ],
+)
+def test_registered_model_public_exports_keep_actual_class_and_table_identity(module, names):
+    import importlib
+
+    from caseops_api.db import models
+    from caseops_api.db.base import Base
+
+    owner = importlib.import_module("caseops_api.db." + module)
+    for name in names:
+        exported = getattr(models, name)
+        assert exported is getattr(owner, name)
+        assert exported.__table__ is Base.metadata.tables[exported.__table__.name]
 
 
 def test_extracted_document_policy_retains_fail_closed_threshold() -> None:
@@ -218,16 +271,23 @@ def test_upload_target_helpers_have_one_owner_without_a_worker_workflow_cycle(
 ) -> None:
     from caseops_api.services import ip_document_targets, ip_document_workflow
 
-    assert SERVICE_PREFIX + "ip_document_workflow" not in dependency_graph[
-        SERVICE_PREFIX + "document_jobs"
-    ]
-    assert _route(
-        dependency_graph, SERVICE_PREFIX + "ip_document_targets",
-        SERVICE_PREFIX + "ip_document_workflow",
-    ) is None
+    assert (
+        SERVICE_PREFIX + "ip_document_workflow"
+        not in dependency_graph[SERVICE_PREFIX + "document_jobs"]
+    )
+    assert (
+        _route(
+            dependency_graph,
+            SERVICE_PREFIX + "ip_document_targets",
+            SERVICE_PREFIX + "ip_document_workflow",
+        )
+        is None
+    )
     for name in (
-        "_target_docket_id", "_upload_target_lifecycles",
-        "_upload_document_targets", "_lock_upload_targets",
+        "_target_docket_id",
+        "_upload_target_lifecycles",
+        "_upload_document_targets",
+        "_lock_upload_targets",
     ):
         function = getattr(ip_document_targets, name)
         assert function.__module__ == SERVICE_PREFIX + "ip_document_targets"

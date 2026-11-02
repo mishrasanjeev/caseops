@@ -1,5 +1,62 @@
 # CaseOps agent instructions
 
+- Empty Expo permission lists do not remove permissions inherited from native
+  libraries. Prove reviewed removals through the actual manifest projection and
+  a fresh APK; preserve unrelated permissions. Match the production iOS minimum
+  deployment target to its HTTPS authentication requirement while retaining
+  separately bound local QA behavior. Configuration checks are not store archives.
+
+- A clean filesystem audit needs complete, unique root-present inventories and
+  final path/metadata reconciliation. Charge both observations to the existing
+  entry/byte/deadline limits; an empty successful command or a file inserted
+  after discovery cannot become a complete zero-copy result.
+- Public fixture staging must transfer the descriptor-verified bytes. Keep the
+  bounded verified buffer through the exclusive device write; reopening its
+  pathname can disclose replacement bytes before a later hash refusal.
+- Fixture provenance must bind immutable configuration bytes, not a mutable
+  gateway configuration path that a normal ledger reset replaces. Validate that
+  snapshot in both producer and consumer and retain the original run separately.
+
+- A SwiftUI control embedded in a React Native safe-area container must not
+  apply that container inset again. Compare native button and host frames,
+  visibility and hittability after scrolling; a visible label does not prove
+  its control is tappable. Preserve keyboard insets when adjusting the host.
+
+- An iOS picker URI returned without the SDK's cache copy is not guaranteed
+  immediately readable. Use the documented cache-copy contract, validate the
+  returned direct-child path, size and ownership before staging, and purge every
+  owned private copy. The SDK's native copy precedes JavaScript size validation.
+  Preserve the OS-managed Inbox parent while purging validated owned files;
+  directory preservation alone did not repair the observed unreadable URI.
+  Prove repeated select/clear/select on the native build without a host byte-read
+  that can prewarm the provider under investigation.
+- A rejected busy command must not run the first command's completion cleanup.
+  Hold a synchronous interaction lease outside React's render cycle, read live
+  state in retained Clear/Choose/leave callbacks, and exercise rapid input with
+  the actual controller, staging and provider cleanup composed together.
+- WebdriverIO element click wrappers can refetch and reexecute a stale click
+  even with transport retries disabled. Dispatch native clicks through the
+  driver's single protocol command; preserve stale/lost acknowledgements and
+  never silently replay a possible mutation.
+
+- Passive native diagnostics must return the original promise unchanged; adding
+  an async wrapper or await can change the race being investigated. Keep fixed,
+  secret-free operation labels behind the explicit QA flag and retain the failed
+  candidate separately from later diagnostic builds.
+- Descriptor identity must remain portable without weakening file ownership.
+  Windows can report lstat.dev=0 while fstat.dev is nonzero; require the same
+  inode and a regular, non-symlink pathname on every platform, and compare device
+  IDs on platforms that expose them consistently. Simulated metadata is not
+  actual Windows acceptance.
+
+- Native acceptance is not a platform-named JavaScript export. Bind the actual
+  APK or Simulator app, source fingerprint, backend revision and complete Appium
+  inventory independently for Android and iOS. A stable wrapper can contain
+  experimental native components; inspect the actual pinned theme/dependencies.
+- Native save preflight does not close a lifecycle race. Carry the observed
+  lifecycle version through the request DTO and check it under the same parent
+  lock as the mutation, including close/reopen between read and submit.
+
 - A parameterized LIMIT 1 does not tell a generic plan that only one row will
   execute. A composite range plus partial-index incremental sort can read the
   entire tenant per admitted key. Put every exact unique-key equality inside
@@ -1422,6 +1479,32 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- Native authorization can require fresh browser-session MFA even when ordinary
+  tenant login policy is optional. Exercise that exact combination through the
+  real system browser; a working server refusal without an inline verification
+  path is not a usable sign-in. Keep the typed refusal, same-browser proof,
+  principal recheck and explicit post-verification Connect; never auto-grant or
+  turn off MFA to make the native journey pass.
+- A privacy foreground flag that only updates a ref cannot redraw a signed-out
+  app after background. Test actual Home/return with no credential or identity
+  update, require the usable sign-in panel, and prove no automatic auth request.
+
+- A native system picker can background and unmount private screens. Preserve
+  only opaque tenant/user/membership/login/parent identity and the originally
+  observed lifecycle version at the root; revalidate on return, require an
+  explicit upload, and reject that original version under the server lock both
+  before and after I/O. Never retain a hidden Matter DTO or adopt a reopened
+  parent's new version to make an old selection succeed.
+- A private native reader needs a genuinely streaming, bounded transport, not
+  an unbounded global fetch followed by a size check. Bind exact download paths,
+  source hashes, no-store, deadline/abort and login generation; purge visible
+  content before renewing access. Unit/desktop rendering is not native cache,
+  capture or revocation proof.
+- Test screenshots and raw reports must remain outside the app's build input
+  inventory. A passing renderer test that writes into its own source directory
+  can dirty or change a frozen candidate; retain unique external evidence and
+  compare the actual input fingerprint before and after the native build.
 
 - A timed-out Docker client can leave an unsettled create request even after a
   momentary exact-name absence. A scanner must acknowledge creation before
@@ -3501,6 +3584,136 @@ requirements when using the fallback.
   existing authorized serialized role; reconcile the complete semantic union
   and independent per-role inventories. Require an actual passed zero-retry
   receipt for the repaired journey, not a skip or a green collection alone.
+- A native acceptance gateway cannot predeclare a future current-session ID.
+  Bind a reviewed dynamic-admission policy to the actual gateway implementation,
+  isolation receipt and runtime ledger; prove the fresh marked session-list
+  request, exact current-ID admission and one acknowledged DELETE through the
+  real UI. No wildcard, invented ID or token injection may replace that proof.
+  Size bounded evidence history for the complete intended journeys including
+  process-restore/account checks, and fail closed on overflow without discarding
+  earlier events. Test both the repeated-read budget and its overflow boundary.
+- Native browser acceptance must use the driver's documented exact-resource-ID
+  setting and assert its readback; an ignored capability is not configuration.
+  A disabled browser submit may be absent from the accessibility tree until its
+  required input is filled. Wait for request-backed MFA states without gestures
+  that can trigger pull-to-refresh and erase the very state being asserted.
+  Keep fixed-name, secret-free step evidence and mark downstream journeys
+  blocked after initial authentication fails instead of repeatedly probing them.
+- Native accessibility may flatten a rendered record container into an empty
+  identity marker and sibling content. Put the immutable record identity on the
+  actual body Text, assert that exact ID and value after reload, and inspect the
+  real hierarchy before diagnosing lost data. Use source-owned button IDs and
+  observed platform dialog captions. Long native acceptance must renew MFA
+  through the real browser at declared phase boundaries, never extend its policy
+  lifetime or replay an uncertain mutation to keep a suite running.
+- An Appium app path and enforce-install flag do not prove the installed binary.
+  UiAutomator2 noReset can bypass installation. Replace only the owned emulator
+  package without clearing its data and hash the actual installed base APK at
+  preflight, every session boundary and postflight; retain wrong-binary runs as
+  incomplete evidence, never as tests of the newer source.
+- Native multipart acceptance must execute the pinned transport SDK's real
+  encoder. An append-only FormData double can approve a URI part that Expo fetch
+  rejects before network dispatch. Preserve bounded staged bytes, canonical
+  server filename handling, explicit lifecycle version, redirect/privacy fences
+  and no replay after an uncertain outcome, then prove picker/upload/reload/open
+  on the rebuilt binary. A successful picker is not an uploaded file.
+- Calendar event identities are opaque server DTO values, not hearing/task
+  primary keys. Retain the returned event ID in fixture evidence and use that
+  exact native control; matching titles and dates cannot authorize a guessed ID.
+- Expensive fixture-worker imports belong in bounded, hash-bound preflight
+  readiness, not inside each short authoritative command. Keep operation/SQL
+  deadlines, current tenant/ACL/lifecycle checks, single-inflight command limits,
+  durable no-replay claims and cleanup unchanged; do not retain a DB transaction
+  while the worker waits. Classify a fixture deadline separately from app bugs.
+- A visible native sign-in button can be disabled while secure-store restoration
+  is still loading. Require non-loading state and enabled authoritative account
+  or signed-out controls, including after logout; preserve the existing deadline.
+  Browser authentication must not race a session that is already being restored.
+- A browser Custom Tab and full Firefox can expose the same URL-box resource ID.
+  Observe a distinct full-browser marker and never use scroll gestures to wait
+  for asynchronous consent/MFA states. Accept terms only with owner authority;
+  install a public fixture CA through normal isolated-device settings, not a TLS
+  warning bypass, credential injection or host-wide trust change.
+- A native upload test must derive its exact acknowledgement status and fields
+  from the canonical route/OpenAPI contract. HTTP200 is the existing Matter
+  attachment contract, not201. Prove the complete positive picker/save/reload/open
+  path as well as rejection; retain a mismatched test verdict and reconcile an
+  already-saved attachment read-only instead of uploading it again.
+- Dependency audits must run before expensive platform exports, not first after
+  native acceptance. An unpatched transitive advisory remains a release blocker;
+  do not force an incompatible SDK downgrade, disguise a fork's version or waive
+  the audit to claim green CI. Keep the complete independent tooling inventory
+  selected by the standard CI command, including its positive native-path doubles.
+- Appending a file row can move an upload acknowledgement below the native
+  viewport. First establish the one exact canonical transport acknowledgement,
+  then scroll within the existing bound and assert the reachable confirmation
+  plus persisted source identity and bytes. A server200 alone cannot certify
+  UI completion, and an offscreen message never authorizes another upload.
+- A function bundled into Hermes bytecode is not a serializable browser program.
+  Actual pinned Hermes returned a `[bytecode]` function placeholder from
+  `Function.toString()`; interpolating it into WebView HTML prevented reader
+  readiness and page/zoom acknowledgements despite Node/Chromium unit passes.
+  Generate the self-contained public browser script before Metro/Hermes, check
+  its deterministic output before native source capture, and regress bytecode,
+  native and unavailable function-source behavior. Preserve CSP, nonce, bridge,
+  network and asset bounds; prove PDF and image acknowledgements on each rebuilt
+  signed platform. A Hermes round-trip or exported bundle alone is not native
+  WebView acceptance, and earlier failed full inventories must remain retained.
+- A test emulator that installs environment values directly must register their
+  originals with the same pytest monkeypatch scope before installation. A later
+  negative-test override may otherwise outlive close(), then undo to the closed
+  adapter URL and poison unrelated tests. Regress absent and preexisting values
+  plus the complete adjacent notification inventory; preserve the correctly
+  refusing production transport fence and the original ordered failure.
+- A route handler's security headers may be suppressed by headers already set
+  by Next proxy or global configuration. Regress the installed sendResponse
+  behavior, then verify effective CSP/referrer headers and the actual fixed-script
+  URL scrub in the built browser. Scope exceptions to the exact document/method;
+  preserve every other page's nonce policy and never exchange callback secrets.
+- A nonzero GNU_RELRO end modulo does not by itself prove 16 KiB incompatibility.
+  Apply the documented own-LOAD exception and compare rounded protection against
+  every writable LOAD range. Retain the incomplete modulo-only report and prove
+  the negative shared-tail/overlap controls; static alignment is not device proof.
+- A DocumentsUI resource namespace must match the observed system provider,
+  rather than assume every Android image uses the AOSP package. Verify the
+  installed system APK and actual picker controls, allow only reviewed packages,
+  and reject mixed namespaces before a click. Mocked package support is not UI
+  visibility, URI readability or upload proof.
+- A native browser's optional entry controls need one finite readiness contract
+  before credentials. Poll only exact admitted controls, preserve lower-field
+  scrolling, reject ambiguity/read errors, and dispatch each resolved navigation
+  once outside polling. A delayed-control unit counterexample does not establish
+  the cause of an earlier native failure that fresh device probes did not repeat.
+- A static renderer program embedded in Hermes does not prove compatibility
+  with Apple's shipped WKWebView. PDF.js text extraction can require stream
+  async iteration absent in that runtime even when Chromium or Playwright
+  WebKit passes. Use bounded serial getReader reads, preserve embedded text,
+  cancel and release on every exit, and prove the exact native failure boundary
+  without widening CSP, network access, authority leases or render deadlines.
+- Downloaded document bytes are not a displayed page acknowledgement. Do not
+  enable navigation or zoom from the default Page 1 of 1 position. Bind the
+  acknowledged position to its live controller, content revision and authority
+  lease; renewal, source changes and retained late callbacks need fresh proof.
+- Store build reservations belong to one platform and that platform's app
+  identity. Hashing both platform IDs together lets a change to the other app
+  reuse an existing counter. Retain partial reservations, distinguish declared
+  history from an actual store read, and never treat a command plan as a signed
+  archive or bundle.
+- A size check before readFileSync(fd) does not bound descriptor consumption
+  when the file can grow. Bound the read itself through the same descriptor,
+  retain the verified bytes, reconcile final pathname identity and metadata,
+  and close on every refusal. Apply this to every reachable configuration
+  reader, not only the newly added helper.
+- Synthetic credential JSON needs private permissions before its first byte,
+  independent of umask. MFA augmentation must retain an admitted owned regular
+  descriptor and reject symlinks, extra links or changed namespace identity
+  before truncation. A later chmod fixes that one run, not the producer. Keep
+  Windows named-path device portability distinct from actual ACL acceptance.
+- A first-failure pixel observation must precede metadata that can change the
+  state under investigation. Optional window serialization must not discard
+  later same-session accessibility evidence or replace the original failure.
+  A later fresh-session target becoming visible does not prove a setting fix.
+
 - A filtered cloud list with a small limit cannot prove resource absence: the
   limit may precede the local identity filter. Read the exact owned ServiceUsage
   resource against the verified numeric project, service name and state; read
@@ -3517,7 +3730,7 @@ requirements when using the fallback.
   require a complete replacement phase inventory; never weaken payload bounds.
 - Respect each package's supported host runtime before classifying a failure.
   The native client requires Node24 (its tooling minimum is22.19), whereas the
-  web workspace pins22.14. Do not transpose that older web pin into native
+  web workspace has its own pinned runtime. Do not transpose that web pin into native
   descriptor or gateway checks. Preserve unsupported-host results separately,
   rerun on the documented runtime and keep genuine remaining failures open.
 - A real session-provider page test has separate authentication and report

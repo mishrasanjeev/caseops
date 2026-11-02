@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "7ad4ff107c6b7a901af0b2f9205a5b47fa880b6e8bcef7f74578fb5a2118df1e"
-MAP_SCHEMA_FINGERPRINT = "6419b97d8d79b1e656fc002e453c37994c2aa0a2f6ba1cfa43d27981be2833f1"
+MAP_DOCUMENT_FINGERPRINT = "5df59cb70b20a734f28c580081b6f726a15cc13c5adc9a64032ed5c0fc509e6f"
+MAP_SCHEMA_FINGERPRINT = "a2cc2fd5683e3d8522e781aa168029ff758a1d5a1578ab57dfda5571bf0c58f4"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "c889557a2b963db865fdc9fd4f9724e273e057f37b7040ba79a694e1b8cc5099"
+ORM_SCHEMA_FINGERPRINT = "844d1384ff4b209b429b1362fed0f304c4042d26bfbe48586ed5448b69e07be7"
 
-PROJECTION_ID = "0b14e1d8e4037dd444a1f3705205c894c3e07734b0d84329a8afe9b0ba9b722a"
+PROJECTION_ID = "2a8740f947665e7a21c5852b086f1ba016f64988dc30337b46b7aafefa1c717d"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -42,6 +42,7 @@ INVENTORIED_SQL_TABLES = frozenset(
     {
         "access_review_campaigns",
         "access_review_decisions",
+        "account_deletion_requests",
         "account_setup_tokens",
         "affidavit_intelligence_runs",
         "affidavit_questions",
@@ -127,6 +128,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "contract_playbook_rules",
         "contract_term_suggestions",
         "contracts",
+        "counsel_read_page_dirty",
+        "counsel_read_page_members",
+        "counsel_read_pages",
         "courts",
         "custom_roles",
         "data_retention_policies",
@@ -281,7 +285,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "matter_court_sync_jobs",
         "matter_court_sync_runs",
         "matter_deadlines",
+        "matter_decision_read_pages",
         "matter_file_qa_entries",
+        "matter_hearing_pack_read_pages",
         "matter_hearings",
         "matter_intake_requests",
         "matter_invoice_exports",
@@ -291,13 +297,20 @@ INVENTORIED_SQL_TABLES = frozenset(
         "matter_next_hearing_history",
         "matter_next_hearing_suggestions",
         "matter_notes",
+        "matter_option_read_pages",
         "matter_outside_counsel_assignments",
+        "matter_pack_item_read_pages",
         "matter_portal_grants",
         "matter_proceeding_signals",
+        "matter_readthrough_dirty",
+        "matter_recommendation_read_pages",
         "matter_statute_references",
         "matter_strategy_entries",
         "matter_tag_assignments",
         "matter_tags",
+        "matter_task_queue_dirty",
+        "matter_task_queue_groups",
+        "matter_task_queue_pages",
         "matter_tasks",
         "matter_time_entries",
         "matters",
@@ -305,6 +318,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "mock_hearing_responses",
         "mock_hearing_sessions",
         "model_runs",
+        "native_authorization_codes",
+        "native_device_sessions",
+        "native_refresh_tokens",
         "notification_delivery_events",
         "notification_delivery_intents",
         "notification_rules",

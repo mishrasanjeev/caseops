@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     IpDeadline,
     IpDocketRecord,
     Matter,
+    MatterHearing,
     MatterPortalGrant,
     NotificationDeliveryChannel,
     NotificationDeliveryEvent,
@@ -36,6 +37,7 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
+from caseops_api.services.hearing_channel_policy import explicit_hearing_channel_allowed
 from caseops_api.services.matter_access import can_access, can_access_ip_docket
 from caseops_api.services.matter_operational_guard import (
     MatterNotOperationalError,
@@ -760,6 +762,25 @@ def enqueue_notification_delivery_intent(
     if existing is not None:
         return existing
 
+    if source_type == "hearing_reminder" and schedule_source_type == "matter_hearing":
+        # For Matter targets the existing parent lock and ACL check precede
+        # this current-source read, before primary or companion admission.
+        # Existing idempotency rows remain retained, never reactivated here.
+        hearing_row = session.execute(
+            select(MatterHearing.id, MatterHearing.reminder_policy_json).where(
+                MatterHearing.id == schedule_source_id,
+                MatterHearing.company_id == context.company.id,
+                MatterHearing.matter_id.is_not_distinct_from(matter.id if matter else None),
+                MatterHearing.ip_docket_id.is_not_distinct_from(
+                    ip_docket.id if ip_docket else None
+                ),
+            )
+        ).first()
+        if hearing_row is None or not explicit_hearing_channel_allowed(
+            hearing_row[1], str(channel)
+        ):
+            return None
+
     is_in_app = channel == NotificationDeliveryChannel.IN_APP
     if is_in_app and recipient_membership is None:
         return None
@@ -1031,6 +1052,21 @@ def _ensure_in_app_fallback(
 ) -> None:
     if intent.fallback_intent_id is not None:
         return
+    if (
+        intent.source_type == "hearing_reminder"
+        and intent.schedule_source_type == "matter_hearing"
+    ):
+        hearing_row = session.execute(
+            select(MatterHearing.id, MatterHearing.reminder_policy_json)
+            .where(
+                MatterHearing.id == intent.schedule_source_id,
+                MatterHearing.company_id == intent.company_id,
+                MatterHearing.matter_id.is_not_distinct_from(intent.matter_id),
+                MatterHearing.ip_docket_id.is_not_distinct_from(intent.ip_docket_id),
+            )
+        ).first()
+        if hearing_row is None or not explicit_hearing_channel_allowed(hearing_row[1], "in_app"):
+            return
     recipient = intent.recipient_membership
     if recipient is None and intent.escalation_membership_id:
         recipient = session.get(CompanyMembership, intent.escalation_membership_id)
@@ -1262,8 +1298,22 @@ def process_notification_delivery_intent(
     )
 
     intent_row = session.execute(
-        select(NotificationDeliveryIntent, Company)
+        select(
+            NotificationDeliveryIntent, Company, MatterHearing.id,
+            MatterHearing.reminder_policy_json,
+        )
         .join(Company, Company.id == NotificationDeliveryIntent.company_id)
+        .outerjoin(
+            MatterHearing,
+            and_(
+                NotificationDeliveryIntent.source_type == "hearing_reminder",
+                NotificationDeliveryIntent.schedule_source_type == "matter_hearing",
+                MatterHearing.id == NotificationDeliveryIntent.schedule_source_id,
+                MatterHearing.company_id == NotificationDeliveryIntent.company_id,
+                MatterHearing.matter_id.is_not_distinct_from(NotificationDeliveryIntent.matter_id),
+                MatterHearing.ip_docket_id.is_not_distinct_from(NotificationDeliveryIntent.ip_docket_id),
+            ),
+        )
         .where(
             NotificationDeliveryIntent.id == intent_id,
             NotificationDeliveryIntent.company_id == expected_company_id,
@@ -1360,6 +1410,32 @@ def process_notification_delivery_intent(
             session,
             intent=intent,
             event_type="delivery_permission_blocked",
+            status_value=str(intent.status),
+            error=intent.last_error_redacted,
+        )
+        session.flush()
+        return _delivery_result(intent)
+    if (
+        intent.source_type == "hearing_reminder"
+        and intent.schedule_source_type == "matter_hearing"
+        and (
+            intent_row[2] is None
+            or not explicit_hearing_channel_allowed(intent_row[3], str(intent.channel))
+        )
+    ):
+        # Parent locks above stabilize the current hearing policy. This also
+        # fences queued/retry work admitted by the earlier [] -> email bug;
+        # terminal deliveries and uncertain claims retain their original state.
+        intent.status = NotificationDeliveryStatus.BLOCKED
+        intent.dead_letter_reason = "hearing_channel_not_requested"
+        intent.last_error_redacted = "The hearing does not request this notification channel."
+        intent.failed_at = _now()
+        intent.next_attempt_at = None
+        session.add(intent)
+        _record_delivery_event(
+            session,
+            intent=intent,
+            event_type="delivery_channel_blocked",
             status_value=str(intent.status),
             error=intent.last_error_redacted,
         )

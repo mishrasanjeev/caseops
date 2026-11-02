@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 from itertools import islice
 from typing import Any
 
-from sqlalchemy import and_, exists, or_, select, tuple_
+from sqlalchemy import DateTime, and_, exists, or_, select, tuple_
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from caseops_api.db.models import (
     Company,
@@ -36,7 +37,7 @@ def _team_scoping_enabled(session: Session, company_id: str) -> bool:
 
 
 
-def _active_grant_window(now: datetime) -> Any:
+def _active_grant_window(now: datetime | ColumnElement[datetime]) -> Any:
     return and_(
         MatterAccessGrant.revoked_at.is_(None),
         or_(
@@ -51,7 +52,7 @@ def _active_grant_window(now: datetime) -> Any:
 
 
 
-def _active_wall_window(now: datetime) -> Any:
+def _active_wall_window(now: datetime | ColumnElement[datetime]) -> Any:
     return and_(
         EthicalWall.revoked_at.is_(None),
         or_(EthicalWall.effective_from.is_(None), EthicalWall.effective_from <= now),
@@ -98,6 +99,7 @@ def visible_matters_filter(
     session: Session,
     *,
     context: SessionContext,
+    statement_time: ColumnElement[datetime] | None = None,
 ) -> Any:
     """Return a SQLAlchemy `where(...)` clause that restricts a matter
     query to the matters this membership is allowed to see.
@@ -114,6 +116,11 @@ def visible_matters_filter(
     (matter.team_id IS NULL -> firm-wide -> still visible; otherwise
     the member must belong to that team).
     """
+    if statement_time is not None and (
+        not isinstance(statement_time, ColumnElement)
+        or not isinstance(statement_time.type, DateTime)
+    ):
+        raise TypeError("Matter policy statement time must be a typed DateTime expression.")
     if _is_owner(context):
         return and_(True)
 
@@ -121,7 +128,7 @@ def visible_matters_filter(
         membership_id=context.membership.id,
         owner=False,
         team_scoping=_team_scoping_clause(context.company.id),
-        now=datetime.now(UTC),
+        now=statement_time if statement_time is not None else datetime.now(UTC),
     )
 
 
@@ -135,7 +142,8 @@ def _team_scoping_clause(company_id: Any) -> Any:
 
 
 def _matter_visibility_predicate(
-    *, membership_id: Any, owner: Any, team_scoping: Any, now: datetime,
+    *, membership_id: Any, owner: Any, team_scoping: Any,
+    now: datetime | ColumnElement[datetime],
 ) -> Any:
     # Scalar callers and bounded recipient batches compose the same live policy.
     wall = (
@@ -270,21 +278,8 @@ def _active_ip_subject_match(
 
 
 
-def visible_ip_dockets_filter(
-    session: Session,
-    *,
-    context: SessionContext,
-) -> Any:
-    """Return the single fail-closed internal policy for IP docket queries.
-
-    Linked Matter access is intentionally not inherited. An IP wall always
-    wins, and a restricted IP record requires an effective membership or team
-    grant. Company owners follow the same rule as every other membership.
-    """
-
-    del session
-    membership_id = context.membership.id
-    now = datetime.now(UTC)
+def active_actor_team_ids(*, company_id: Any, membership_id: Any) -> Any:
+    """Exact active tenant teams, materialized only within one statement."""
     # A flattenable team join can rescan the global catalog for every docket.
     # Probe one Team per membership row, then check its exact identity and eligibility.
     team_candidate = (
@@ -299,13 +294,13 @@ def visible_ip_dockets_filter(
         select(team_candidate.c.id)
         .where(
             team_candidate.c.id == TeamMembership.team_id,
-            team_candidate.c.company_id == context.company.id,
+            team_candidate.c.company_id == company_id,
             team_candidate.c.is_active.is_(True),
         )
         .correlate(TeamMembership)
         .scalar_subquery()
     )
-    active_teams = (
+    return (
         select(TeamMembership.team_id)
         .where(
             TeamMembership.membership_id == membership_id,
@@ -316,6 +311,23 @@ def visible_ip_dockets_filter(
         .cte()
         .prefix_with("MATERIALIZED", dialect="postgresql")
     )
+
+
+def visible_ip_dockets_filter(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> Any:
+    """Return the single fail-closed internal policy for IP docket queries.
+
+    Linked Matter access is intentionally not inherited. An IP wall always
+    wins, and a restricted IP record requires an effective membership or team
+    grant. Company owners follow the same rule as every other membership.
+    """
+    del session
+    membership_id = context.membership.id
+    now = datetime.now(UTC)
+    active_teams = active_actor_team_ids(company_id=context.company.id, membership_id=membership_id)
     member_wall = _active_ip_subject_match(
         EthicalWall, EthicalWall.excluded_membership_id, membership_id, now
     )

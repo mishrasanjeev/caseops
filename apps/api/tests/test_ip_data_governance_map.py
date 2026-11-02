@@ -21,6 +21,26 @@ def test_committed_data_governance_map_covers_current_repository_inventory() -> 
     assert ip_data_governance_map.validate(_map()) == []
 
 
+def test_native_auth_credentials_have_restricted_fail_closed_governance() -> None:
+    data = _map()
+    tables = {row["table_name"]: row for row in data["sql_tables"]}
+    for name in ("native_authorization_codes", "native_device_sessions", "native_refresh_tokens"):
+        row = tables[name]
+        assert row["policy_profile_id"] == "security_identity_control"
+        assert row["disposition_handler_id"] == "registry_fail_closed"
+        assert row["purpose"] == data["table_purpose_overrides"][name]
+        assert name not in data["table_disposition_handler_overrides"]
+    for column in ("code_hash", "code_challenge"):
+        assert tables["native_authorization_codes"]["columns"][column]["category_id"] == (
+            "security_secret_or_credential"
+        )
+    assert tables["native_refresh_tokens"]["columns"]["token_hash"]["category_id"] == (
+        "security_secret_or_credential"
+    )
+    assert "not a hardware-bound key" in tables["native_device_sessions"]["purpose"]
+    assert "state" not in tables["native_authorization_codes"]["columns"]
+
+
 def test_manual_ip_qa_receipts_use_existing_owners_without_policy_activation() -> None:
     data = _map()
     rows = {row["table_name"]: row for row in data["sql_tables"]}
@@ -49,7 +69,8 @@ def test_manual_ip_qa_receipts_use_existing_owners_without_policy_activation() -
 def test_sendgrid_leaf_keeps_existing_provider_class_and_requires_change_review() -> None:
     data = _map()
     provider = next(
-        row for row in data["non_sql_data_classes"]
+        row
+        for row in data["non_sql_data_classes"]
         if row["id"] == "connector-and-payment-provider-held-records"
     )
     transport = "apps/api/src/caseops_api/services/sendgrid_transport.py"
@@ -67,16 +88,20 @@ def test_sendgrid_leaf_keeps_existing_provider_class_and_requires_change_review(
     assert ip_data_governance_map.change_gate_errors(
         [transport], source_by_path={transport: source}
     ) == [f"data-bearing changes require DATA_GOVERNANCE_MAP.yaml update: {transport}"]
-    assert ip_data_governance_map.change_gate_errors(
-        [transport, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
-        source_by_path={transport: source},
-    ) == []
+    assert (
+        ip_data_governance_map.change_gate_errors(
+            [transport, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"],
+            source_by_path={transport: source},
+        )
+        == []
+    )
 
 
 def test_activity_report_delivery_inventory_matches_private_scheduler_contract() -> None:
     data = _map()
     report = next(
-        row for row in data["non_sql_data_classes"]
+        row
+        for row in data["non_sql_data_classes"]
         if row["id"] == "operational-activity-report-delivery"
     )
     inventory = json.loads(
@@ -92,12 +117,16 @@ def test_activity_report_delivery_inventory_matches_private_scheduler_contract()
     assert delivery["time_zone"] == job["time_zone"] == "Asia/Kolkata"
     assert delivery["max_retries"] == job["bootstrap"]["max_retries"] == 0
     assert delivery["recipient_setting"] == "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"
-    assert delivery["configured_recipients"] == job["bootstrap"]["environment"][
-        delivery["recipient_setting"]
-    ].split(";") == [
-        "mishra.sanjeev@gmail.com", "sanjeev@orchestrum.in",
-        "ram.gupta@edumatica.io", "uday.chauhan@edumatica.io",
-    ]
+    assert (
+        delivery["configured_recipients"]
+        == job["bootstrap"]["environment"][delivery["recipient_setting"]].split(";")
+        == [
+            "mishra.sanjeev@gmail.com",
+            "sanjeev@orchestrum.in",
+            "ram.gupta@edumatica.io",
+            "uday.chauhan@edumatica.io",
+        ]
+    )
     assert delivery["max_unique_recipients"] == 4
     assert delivery["http_posts_per_send"] == delivery["to_per_personalization"] == 1
     assert delivery["cc_bcc"] is False
@@ -149,8 +178,27 @@ def test_hold_release_evidence_is_registered_without_disposition_admission() -> 
 def test_private_projection_is_the_only_runtime_disposition_override() -> None:
     data = _map()
     assert data["table_disposition_handler_overrides"] == {
-        "private_index_projections": "private_retrieval_disposition"
+        "private_index_projections": "private_retrieval_disposition",
+        "counsel_read_page_dirty": "registry_fail_closed",
+        "counsel_read_page_members": "registry_fail_closed",
+        "counsel_read_pages": "registry_fail_closed",
+        "matter_task_queue_dirty": "registry_fail_closed",
+        "matter_task_queue_groups": "registry_fail_closed",
+        "matter_task_queue_pages": "registry_fail_closed",
+        "matter_recommendation_read_pages": "registry_fail_closed",
+        "matter_option_read_pages": "registry_fail_closed",
+        "matter_decision_read_pages": "registry_fail_closed",
+        "matter_hearing_pack_read_pages": "registry_fail_closed",
+        "matter_pack_item_read_pages": "registry_fail_closed",
+        "matter_readthrough_dirty": "registry_fail_closed",
     }
+    # Derived read pages/dirty markers add no disposition authority. Only the
+    # private retrieval projection has a non-fail-closed runtime handler.
+    assert {
+        name: handler
+        for name, handler in data["table_disposition_handler_overrides"].items()
+        if handler != "registry_fail_closed"
+    } == {"private_index_projections": "private_retrieval_disposition"}
     private_projection = next(
         row for row in data["sql_tables"] if row["table_name"] == "private_index_projections"
     )
@@ -171,8 +219,10 @@ def test_patent_work_product_is_registered_without_export_or_purge_admission() -
     data = _map()
     tables = {row["table_name"]: row for row in data["sql_tables"]}
     for name in (
-        "ip_patent_evidence_versions", "ip_patent_evidence_documents",
-        "ip_patent_prosecution_events", "ip_patent_proceeding_details",
+        "ip_patent_evidence_versions",
+        "ip_patent_evidence_documents",
+        "ip_patent_prosecution_events",
+        "ip_patent_proceeding_details",
         "ip_patent_proceeding_events",
     ):
         assert tables[name]["policy_profile_id"] == "tenant_restricted_legal_content"
@@ -383,13 +433,14 @@ def test_committed_change_gate_ignores_binary_evidence_but_checks_governed_sourc
         target.write_bytes(content)
     monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
-        ip_data_governance_map, "MAP_PATH",
+        ip_data_governance_map,
+        "MAP_PATH",
         tmp_path / "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
     )
     monkeypatch.setattr(
-        ip_data_governance_map, "_git_output", lambda *args: "\n".join(
-            (evidence, migration, provider)
-        )
+        ip_data_governance_map,
+        "_git_output",
+        lambda *args: "\n".join((evidence, migration, provider)),
     )
 
     errors = ip_data_governance_map.check_change("origin/main")
@@ -403,9 +454,11 @@ def test_committed_change_gate_ignores_binary_evidence_but_checks_governed_sourc
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        ip_data_governance_map, "_git_output", lambda *args: "\n".join(
+        ip_data_governance_map,
+        "_git_output",
+        lambda *args: "\n".join(
             (evidence, migration, provider, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml")
-        )
+        ),
     )
     assert ip_data_governance_map.check_change("origin/main") == []
 
@@ -419,7 +472,8 @@ def test_committed_change_gate_rejects_unreadable_governed_source(
     target.write_bytes(b"\xff")
     monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
-        ip_data_governance_map, "MAP_PATH",
+        ip_data_governance_map,
+        "MAP_PATH",
         tmp_path / "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
     )
     monkeypatch.setattr(ip_data_governance_map, "_git_output", lambda *args: source)

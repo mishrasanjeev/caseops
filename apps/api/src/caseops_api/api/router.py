@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from caseops_api.api.routes import (
     access_reviews,
+    account_privacy,
     admin,
     ai,
     ai_feedback,
@@ -39,7 +40,9 @@ from caseops_api.api.routes import (
     machine_readiness,
     mailbox,
     matter_billing,
+    matter_readthrough,
     matter_tags,
+    matter_work_queue,
     matters,
     me,
     meta,
@@ -55,6 +58,7 @@ from caseops_api.api.routes import (
     private_retrieval,
     product_guide,
     provider_operations,
+    recipient_inbox,
     recommendations,
     source_actions,
     statutes,
@@ -64,6 +68,18 @@ from caseops_api.api.routes import (
 
 
 def register_api_routes(application: FastAPI) -> None:
+    application.include_router(
+        matter_work_queue.router, prefix="/api/matter-work-queue", tags=["work"]
+    )
+    application.include_router(
+        matter_readthrough.router, prefix="/api/matter-readthrough", tags=["matter-reads"]
+    )
+    application.include_router(
+        account_privacy.router, prefix="/api/account", tags=["account-privacy"]
+    )
+    application.include_router(
+        recipient_inbox.router, prefix="/api/recipient-inbox", tags=["notifications"]
+    )
     application.include_router(
         access_reviews.router, prefix="/api/access-reviews", tags=["access-reviews"]
     )

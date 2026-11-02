@@ -232,12 +232,15 @@ assert_current_main "release preflight"
 DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "${API_SOURCE_DIR}" "apps/web" package.json package-lock.json \
   .dockerignore .gcloudignore "license-policy" \
+  "scripts/mobile/npm-tooling.mjs" "scripts/mobile/npm-registry.mjs" \
+  "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
   "scripts/qa_manual_ip_grant_release.py" "scripts/release_security_gate.py" \
   "scripts/portfolio_export_release.py" "infra/cloudrun/scheduler-inventory.json" \
   ".github/workflows/security.yml" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
+  "tests/fixtures/node-default-tls-probe.cjs" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \
   "tests/e2e/support/bounded-network-evidence.ts" \
   "tests/e2e/support/prod-api-response-evidence.ts" \
@@ -920,7 +923,7 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
-  "${API_DEPENDENCY_FLAGS[@]}" \
+  ${API_DEPENDENCY_FLAGS[@]+"${API_DEPENDENCY_FLAGS[@]}"} \
   --startup-probe "tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120" \
   --update-secrets "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=${PORTFOLIO_EXPORT_WORKER_SECRET}:latest,CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION},CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
   --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|${PUBLIC_LEAD_MAIL_ENV}|${PORTFOLIO_EXPORT_ENV}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \

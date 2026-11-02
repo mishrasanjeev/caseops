@@ -336,5 +336,3 @@ def test_close_publishes_stopped_only_after_shutdown_returns(monkeypatch, shutdo
         assert owned.observer.snapshots == 1 and owned.observer.disposals == 1
     finally:
         _cleanup(owned)
-
-

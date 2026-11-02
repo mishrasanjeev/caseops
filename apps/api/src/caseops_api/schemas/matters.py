@@ -592,6 +592,7 @@ class MatterWorkspaceMembership(BaseModel):
 
 class MatterNoteCreateRequest(BaseModel):
     body: str = Field(min_length=2, max_length=4000)
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
 
 
 class MatterNoteRecord(BaseModel):
@@ -605,6 +606,7 @@ class MatterNoteRecord(BaseModel):
 
 
 class MatterTaskCreateRequest(BaseModel):
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
     title: str = Field(min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     owner_membership_id: str | None = None
@@ -614,6 +616,8 @@ class MatterTaskCreateRequest(BaseModel):
 
 
 class MatterTaskUpdateRequest(BaseModel):
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
+    expected_updated_at: datetime | None = None
     title: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     owner_membership_id: str | None = None
@@ -621,8 +625,25 @@ class MatterTaskUpdateRequest(BaseModel):
     status: MatterTaskWriteStatusLiteral | None = None
     priority: MatterTaskPriorityLiteral | None = None
 
+    @field_validator("expected_updated_at", mode="before")
+    @classmethod
+    def require_datetime_token(cls, value: object) -> object:
+        if value is not None and not isinstance(value, (str, datetime)):
+            raise ValueError("expected_updated_at must be an offset-aware datetime")
+        return value
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def require_offset_for_task_version(cls, value: datetime | None) -> datetime | None:
+        if value is not None:
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("expected_updated_at must include a UTC offset")
+            return value.astimezone(UTC)
+        return value
+
 
 class MatterTaskRecord(BaseModel):
+    immutable_lifecycle_history: bool = False
     id: str
     matter_id: str
     created_by_membership_id: str | None
@@ -690,6 +711,7 @@ class MatterDeadlineListResponse(BaseModel):
 
 
 class MatterHearingCreateRequest(BaseModel):
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
     hearing_on: date
     forum_name: str = Field(min_length=2, max_length=255)
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -731,6 +753,8 @@ class MatterHearingCreateRequest(BaseModel):
 
 
 class MatterHearingUpdateRequest(BaseModel):
+    expected_lifecycle_version: int | None = Field(default=None, ge=0, strict=True)
+    expected_record_version: str | None = Field(default=None, pattern=r"^mhv1:[0-9a-f]{64}$")
     status: Literal["scheduled", "completed", "adjourned", "cancelled"] | None = None
     outcome_note: str | None = Field(default=None, max_length=4000)
     hearing_on: date | None = None
@@ -747,6 +771,10 @@ class MatterHearingUpdateRequest(BaseModel):
 
 
 class MatterHearingRecord(BaseModel):
+    immutable_lifecycle_history: bool = False
+    # A keyed content-state fingerprint, not a monotonic history counter.
+    # Default preserves older in-process DTO fixtures; authoritative reads populate it.
+    record_version: str | None = Field(default=None, pattern=r"^mhv1:[0-9a-f]{64}$")
     id: str
     matter_id: str
     hearing_on: date

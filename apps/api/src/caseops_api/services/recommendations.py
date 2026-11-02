@@ -2258,7 +2258,7 @@ def list_matter_recommendations(
                 Recommendation.matter_id == matter_id,
                 Recommendation.type != "intelligent_review",
             )
-            .order_by(Recommendation.created_at.desc())
+            .order_by(Recommendation.created_at.desc(), Recommendation.id.desc())
         )
     )
 

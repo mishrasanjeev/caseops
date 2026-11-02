@@ -170,6 +170,55 @@ f87d19d62468ed6d6add4d289be49d9d357973f0:apps/api/vendor/fastembed-0.8.0-1caseop
 # path-wide, rule-wide or future-origin exception is introduced.
 a4770e87192a9d872d2af3ed19b1c339846e2589:apps/api/tests/test_platform_console_emulator_20261020.py:generic-api-key:426
 
+# 2026-10-26: exact public RFC 6238 Appendix B SHA-1 test vector, encoded
+# as Base32 in the pure mobile TOTP unit test; never an enrolled account key.
+# https://www.rfc-editor.org/rfc/rfc6238.html#appendix-B
+# Immutable whole-line SHA256:
+# 92e61d715b87e88b3152d737e72f08862cd37b51b80871373ff6b18c5cd0a60e
+# The reviewed origin is an ancestor and the complete span is byte-identical.
+# No path/rule exemption, changed value or future origin is covered.
+
+# 2026-10-26: six exact historical public-key fingerprint report lines from
+# Mozilla's signed Firefox 158.0.2 ARM64 APK, not private/signing material.
+# https://archive.mozilla.org/pub/fenix/releases/158.0.2/android/fenix-158.0.2-android-arm64-v8a/fenix-158.0.2.multi.android-arm64-v8a.apk
+# SDK37 apksigner cryptographically verified the retained APK again; the three
+# public fingerprint lines match both immutable fixture copies byte-for-byte.
+# Exact-origin provenance applies; changed bytes and future origins still fail.
+
+# 2026-10-28: reviewed public synthetic fixture receipt protocol labels.
+# Exact immutable origins in the retained local and API-published histories;
+# changed spans, new origins and new rules remain blocking.
+f43c10e3eed509ea2240f5add52e09aea5c4857a:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225
+
+# 2026-10-28: exact public certifi2026.10.19 cacert.pem SHA256, independently
+# byte-matched to its official PyPI wheel. Complete immutable line SHA256:
+# 0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4
+# Local integration and separately published source have distinct origins.
+# No path/rule/value-wide exclusion; future origins and changed bytes still fail.
+751b47fa9369d276c8dd280030fbc88b2837cf9d:scripts/mobile/host-platform-trust.py:generic-api-key:80
+# The first local prototype encoded the same independently verified public
+# bundle digest in a different complete line (SHA25699aa023b...71b8c).
+# Its exact historical span is reviewed separately; current-tree proof above
+# does not confer a history waiver.
+2fe2d37cc8623fe91d9e463244a2880469939612:scripts/mobile/host-platform-trust.py:generic-api-key:35
+
+# 2026-10-29: exact public Vitest4.1.12 cli-api chunk SHA256, verified
+# against package/dist/chunks/cli-api.B0Pz1_R7.js in the official archive:
+# https://registry.npmjs.org/vitest/-/vitest-4.1.12.tgz
+# The archive matches the unchanged package-lock SHA512; its SHA256 is
+# ac79c9561c99eabc1cc29e0a839cbd03d1ff0e45bbecb5a2edfa6c3827c823d1.
+# The complete immutable source-line SHA256 is
+# 571a3a818d58fb5c9897e4594e97bb563dc31d4c602d68db8f122f0e8413de5a.
+# Local integration and the separately published object have distinct origins.
+# Only these historical spans are reviewed; changed bytes, future origins and
+# newly introduced credentials still fail. No path/rule/value-wide exclusion.
+a5052a0f417cfd0514f0f612a2b359b88b1653e3:apps/web/lib/vitest-host-pool.ts:generic-api-key:15
+
+# Canonical main 2026-10-31 scheduled all-refs review is retained by the same
+# exact immutable fingerprints above. Its complete origin/span provenance and
+# hashes are in docs/security/history-finding-review-2026-10-31.md.
+# This merge adds no origins, values, paths, rules or span-wide exclusions.
+
 # 2026-10-31 scheduled all-refs:
 # Exact immutable public file/bundle checksums, synthetic receipt-kind labels,
 # SDK public-key digest report fixtures and the published RFC6238 test vector.

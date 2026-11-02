@@ -1,0 +1,31 @@
+fpdf2 2.8.9 — CaseOps API third-party notice
+
+Python distribution: fpdf2; Python import namespace: fpdf
+Upstream project: https://github.com/py-pdf/fpdf2
+Release: https://pypi.org/project/fpdf2/2.8.9/
+License: LGPL-3.0-only (the GNU Lesser General Public License, version 3 only).
+This dependency is not MIT-licensed.
+
+Upstream authors, as listed by the distribution metadata:
+Olivier PLATHEY, Max, Lucas Cimon (@Lucas-C), Georg Mischler (@gmischler),
+Anderson Herzogenrath da Costa (@andersonhc), and the fpdf2 contributors.
+
+The API image installs the unmodified upstream library through its locked Python
+requirements. CaseOps has not modified the fpdf2 library. The unmodified complete
+source distribution is included alongside this notice as fpdf2-2.8.9.tar.gz.
+Its original LICENSE is reproduced byte-for-byte. COPYING.GPLv3 supplies the GNU
+GPL version 3 text incorporated by the LGPL version 3 additional permissions.
+Artifact origins, exact SHA-256 digests, extents and release metadata are recorded
+in provenance.json. The source archive can be unpacked independently with normal
+tar tools; neither it nor any upstream build script is executed by verify.py.
+
+The library remains a separate Python package. Recipients may replace or modify
+it in their own copy of the API image, including for debugging those changes,
+subject to the accompanying license terms. The library's source and license
+must accompany any further distribution as required by those terms. This notice
+does not add restrictions on the library or state that an entire application is
+licensed under the LGPL. The API's application code and resource-access policy
+are separate from the unmodified library.
+
+These materials are API-only. They do not add fpdf2 to the JavaScript dependency
+exception policy, browser image, mobile app, or public JavaScript notice bundle.

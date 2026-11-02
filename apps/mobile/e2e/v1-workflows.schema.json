@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "caseops:native-v1-source-work-2026-10-27-v3",
+  "title": "Independent native SOURCE/WORK/Counsel/Inbox request",
+  "description": "Prepared templates are not native workflow evidence. Actual APK and Simulator runs require independent future source, installed device, backend, authentication, controls and full-inventory references.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "readyForLive",
+    "preparedOnly",
+    "platform",
+    "repoRoot",
+    "reportRoot"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "inventoryId": {
+      "const": "native-v1-source-work-2026-10-27-v3"
+    },
+    "readyForLive": {
+      "type": "boolean"
+    },
+    "preparedOnly": {
+      "type": "boolean"
+    },
+    "platform": {
+      "enum": [
+        "android",
+        "ios",
+        "PENDING"
+      ]
+    },
+    "repoRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reportRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expectedSourceSha": {
+      "type": "string"
+    },
+    "expectedSourceFingerprint": {
+      "type": "string"
+    },
+    "expectedInputFileCount": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expectedBinaryHash": {
+      "type": "string"
+    },
+    "expectedHarnessFingerprint": {
+      "type": "string"
+    },
+    "fixtureEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "buildReceipt": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "dockerReceipt": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "deviceEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "installedEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "authObservation": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "viewerEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "producerEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "controlsEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "gatewayEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "codeClosure": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "members": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "credentialEvidence",
+          "fixtureEvidence",
+          "authObservation"
+        ],
+        "properties": {
+          "credentialEvidence": {
+            "$ref": "#/$defs/pendingPrivateReference"
+          },
+          "fixtureEvidence": {
+            "$ref": "#/$defs/pendingReference"
+          },
+          "authObservation": {
+            "$ref": "#/$defs/pendingReference"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "pending": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inboxEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    },
+    "aggregateFixtureEvidence": {
+      "$ref": "#/$defs/pendingReference"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "readyForLive": {
+            "const": true
+          }
+        },
+        "required": [
+          "readyForLive"
+        ]
+      },
+      "then": {
+        "required": [
+          "expectedSourceSha",
+          "expectedSourceFingerprint",
+          "expectedInputFileCount",
+          "expectedBinaryHash",
+          "expectedHarnessFingerprint",
+          "fixtureEvidence",
+          "buildReceipt",
+          "dockerReceipt",
+          "deviceEvidence",
+          "installedEvidence",
+          "authObservation",
+          "producerEvidence",
+          "viewerEvidence",
+          "controlsEvidence",
+          "gatewayEvidence",
+          "codeClosure",
+          "members",
+          "inboxEvidence",
+          "aggregateFixtureEvidence"
+        ],
+        "properties": {
+          "preparedOnly": {
+            "const": false
+          },
+          "platform": {
+            "enum": [
+              "android",
+              "ios"
+            ]
+          },
+          "expectedSourceSha": {
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "expectedSourceFingerprint": {
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expectedInputFileCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expectedBinaryHash": {
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expectedHarnessFingerprint": {
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "fixtureEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "buildReceipt": {
+            "$ref": "#/$defs/reference"
+          },
+          "dockerReceipt": {
+            "$ref": "#/$defs/reference"
+          },
+          "deviceEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "installedEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "authObservation": {
+            "$ref": "#/$defs/reference"
+          },
+          "producerEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "viewerEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "controlsEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "gatewayEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "codeClosure": {
+            "$ref": "#/$defs/reference"
+          },
+          "inboxEvidence": {
+            "$ref": "#/$defs/reference"
+          },
+          "aggregateFixtureEvidence": {
+            "$ref": "#/$defs/reference"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "preparedOnly": {
+            "const": true
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "reference": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "pendingReference": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/reference"
+        }
+      ]
+    },
+    "privateReference": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "uid"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "pendingPrivateReference": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/privateReference"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

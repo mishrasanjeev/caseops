@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ai.caseops.qa.privacyobserver">
+ <uses-permission android:name="ai.caseops.mobile.dev.localacceptance.permission.QA_OBSERVE_PRIVATE" />
+ <queries><package android:name="ai.caseops.mobile.dev.localacceptance" /></queries>
+ <application android:testOnly="true" android:debuggable="false" android:allowBackup="false" android:usesCleartextTraffic="false" />
+ <instrumentation android:name="ai.caseops.qa.privacyobserver.ObserverInstrumentation" android:targetPackage="ai.caseops.qa.privacyobserver" android:functionalTest="false" android:handleProfiling="false" />
+</manifest>

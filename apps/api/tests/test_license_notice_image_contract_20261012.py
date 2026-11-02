@@ -14,6 +14,8 @@ REVIEW = "docs/security/js-license-compliance-review-2026-10-12.md"
 REGISTRY = "license-policy/reviewed-packages.json"
 QR_SOURCE = "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"
 QR_SOURCE_SHA256 = "ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff"
+NODE_SOURCE = "license-policy/upstream/node_22.23.4/LICENSE"
+NODE_SOURCE_SHA256 = "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
 
 
 def test_security_runs_and_retains_the_native_upload_gate():
@@ -74,7 +76,7 @@ def test_compliance_context_is_narrow_and_blocks_hidden_material(name):
 
 def test_runner_retains_public_notices_and_nonpublic_operator_materials():
     dockerfile = (ROOT / "apps/web/Dockerfile").read_text()
-    assert "FROM node:22.14.0-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
     runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
     copies = [shlex.split(line) for line in runner.splitlines() if line.startswith("COPY ")]
     public = [tokens for tokens in copies if tokens[-2:] == ["/app/apps/web/public", "./public"]]
@@ -113,6 +115,9 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
     # The new MIT source notice uses the base policy, not a historical exception.
     assert QR_SOURCE not in expected
     expected[QR_SOURCE] = QR_SOURCE_SHA256
+    # The base runtime is supplemental material, not an npm license exception.
+    assert NODE_SOURCE not in expected
+    expected[NODE_SOURCE] = NODE_SOURCE_SHA256
     actual = set()
     for visited, path in enumerate((ROOT / "license-policy/upstream").rglob("*"), start=1):
         assert visited <= 128
@@ -126,7 +131,7 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 55
+    assert len(actual) == 56
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
 
@@ -148,3 +153,21 @@ def test_qr_runtime_and_public_notice_match_retained_source():
     source = ROOT / QR_SOURCE
     assert public.read_bytes() == source.read_bytes() == notice["text"].encode("utf-8")
     assert hashlib.sha256(source.read_bytes()).hexdigest() == QR_SOURCE_SHA256
+
+
+def test_node_runtime_public_notice_matches_retained_immutable_source():
+    dockerfile = (ROOT / "apps/web/Dockerfile").read_text()
+    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
+    notices = json.loads((ROOT / "apps/web/app/third-party-notices/notices.json").read_text())
+    component = next(item for item in notices["components"] if item["packageName"] == "node")
+    assert component["version"] == "22.23.4"
+    assert len(component["notices"]) == 1
+    notice = component["notices"][0]
+    assert notice["retainedSource"] == NODE_SOURCE
+    assert notice["sourceUrl"] == "https://raw.githubusercontent.com/nodejs/node/27f213124280b4db4cd1e3dd42f6f8afd01ceff7/LICENSE"
+    assert notice["sha256"] == NODE_SOURCE_SHA256
+    source = (ROOT / NODE_SOURCE).read_bytes()
+    public = (ROOT / "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt").read_bytes()
+    assert len(source) == 145485
+    assert source == public == notice["text"].encode("utf-8")
+    assert hashlib.sha256(source).hexdigest() == NODE_SOURCE_SHA256

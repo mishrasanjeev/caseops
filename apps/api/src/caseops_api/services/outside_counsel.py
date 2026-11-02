@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import UTC, date, datetime
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import (
+    Session,
+    joinedload,
+    raiseload,
+    selectinload,
+    with_loader_criteria,
+)
 
 from caseops_api.db.models import (
     CompanyMembership,
@@ -23,6 +30,8 @@ from caseops_api.db.models import (
     OutsideCounselSpendStatus,
 )
 from caseops_api.schemas.outside_counsel import (
+    MatterCounselContextResponse,
+    MatterCounselPageCurrency,
     OutsideCounselAssignmentCreateRequest,
     OutsideCounselAssignmentRecord,
     OutsideCounselCreateRequest,
@@ -41,6 +50,7 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselSpendRecord as OutsideCounselSpendRecordResponse,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.counsel_read_pages import counsel_page_statement, source_row_from_page
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
@@ -321,21 +331,23 @@ def _serialize_counsel_record(
 
 def _serialize_assignment_record(
     assignment: MatterOutsideCounselAssignment,
+    *,
+    labels: tuple[Matter, str | None] | None = None,
 ) -> OutsideCounselAssignmentRecord:
     return OutsideCounselAssignmentRecord(
         id=assignment.id,
         company_id=assignment.company_id,
         matter_id=assignment.matter_id,
-        matter_title=assignment.matter.title,
-        matter_code=assignment.matter.matter_code,
+        matter_title=(labels[0] if labels is not None else assignment.matter).title,
+        matter_code=(labels[0] if labels is not None else assignment.matter).matter_code,
         counsel_id=assignment.counsel_id,
         counsel_name=assignment.counsel.name,
         assigned_by_membership_id=assignment.assigned_by_membership_id,
-        assigned_by_name=(
+        assigned_by_name=(labels[1] if labels is not None else (
             assignment.assigned_by_membership.user.full_name
             if assignment.assigned_by_membership and assignment.assigned_by_membership.user
             else None
-        ),
+        )),
         role_summary=assignment.role_summary,
         budget_amount_minor=assignment.budget_amount_minor,
         fee_agreed_minor=assignment.budget_amount_minor,
@@ -349,22 +361,24 @@ def _serialize_assignment_record(
 
 def _serialize_spend_record(
     record: OutsideCounselSpendRecord,
+    *,
+    labels: tuple[Matter, str | None] | None = None,
 ) -> OutsideCounselSpendRecordResponse:
     return OutsideCounselSpendRecordResponse(
         id=record.id,
         company_id=record.company_id,
         matter_id=record.matter_id,
-        matter_title=record.matter.title,
-        matter_code=record.matter.matter_code,
+        matter_title=(labels[0] if labels is not None else record.matter).title,
+        matter_code=(labels[0] if labels is not None else record.matter).matter_code,
         counsel_id=record.counsel_id,
         counsel_name=record.counsel.name,
         assignment_id=record.assignment_id,
         recorded_by_membership_id=record.recorded_by_membership_id,
-        recorded_by_name=(
+        recorded_by_name=(labels[1] if labels is not None else (
             record.recorded_by_membership.user.full_name
             if record.recorded_by_membership and record.recorded_by_membership.user
             else None
-        ),
+        )),
         invoice_reference=record.invoice_reference,
         stage_label=record.stage_label,
         description=record.description,
@@ -542,6 +556,154 @@ def _build_matter_summaries(
         )
     summaries.sort(key=lambda item: (item.matter_code, item.matter_title))
     return summaries
+
+
+def _matter_context_page_statement(
+    model, *, company_id, matter_id, after, limit, dialect_name="postgresql",
+):
+    """Tenant/Matter leading seek; no portfolio materialization or OFFSET."""
+    if model is MatterOutsideCounselAssignment:
+        actor = model.assigned_by_membership
+    elif model is OutsideCounselSpendRecord:
+        actor = model.recorded_by_membership
+    else:
+        raise ValueError("Unsupported Matter counsel page model.")
+    if dialect_name == "postgresql":
+        return counsel_page_statement(model, company_id=company_id, matter_id=matter_id,
+                                      after=after, limit=limit)
+    if dialect_name != "sqlite":
+        raise ValueError("Unsupported Matter counsel read dialect.")
+    statement = (
+        select(model)
+        .join(OutsideCounsel, OutsideCounsel.id == model.counsel_id)
+        .where(model.company_id == company_id, model.matter_id == matter_id,
+               OutsideCounsel.company_id == company_id)
+        .options(
+            joinedload(model.matter), joinedload(model.counsel),
+            joinedload(actor).joinedload(CompanyMembership.user),
+            with_loader_criteria(CompanyMembership, CompanyMembership.company_id == company_id),
+            raiseload("*"),
+        )
+        .order_by(model.id)
+        .limit(limit + 1)
+        .execution_options(populate_existing=True)
+    )
+    return statement.where(model.id > after) if after is not None else statement
+
+
+def _matter_context_after(session, model, *, context, matter_id, value):
+    if value is None:
+        return None
+    try:
+        canonical = str(UUID(value))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(422, detail="A page continuation must be a record UUID.") from exc
+    anchor = session.scalar(select(model.id).where(
+        model.id == canonical, model.company_id == context.company.id, model.matter_id == matter_id,
+    ).limit(1))
+    if anchor is None:
+        _raise_not_found("Page continuation was not found in this Matter.")
+    return anchor
+
+
+def get_matter_counsel_context(
+    session: Session, *, context: SessionContext, matter_id: str,
+    assignment_limit: int = 10, spend_limit: int = 10,
+    assignment_after: str | None = None, spend_after: str | None = None,
+) -> MatterCounselContextResponse:
+    for limit in (assignment_limit, spend_limit):
+        if type(limit) is not int or not 1 <= limit <= 25:
+            raise HTTPException(422, detail="Matter counsel page limits must be between 1 and 25.")
+    matter = session.scalar(select(Matter).where(
+        Matter.id == matter_id, Matter.company_id == context.company.id,
+    ).options(raiseload("*")).execution_options(populate_existing=True))
+    if matter is None:
+        _raise_not_found("Matter was not found in the current company.")
+    # Same read authority as the existing workspace, with walls/teams/current
+    # grants rechecked for every page. Closed Matter history remains readable.
+    assert_access(session, context=context, matter=matter)
+    assignment_after = _matter_context_after(
+        session, MatterOutsideCounselAssignment, context=context,
+        matter_id=matter.id, value=assignment_after,
+    )
+    spend_after = _matter_context_after(
+        session, OutsideCounselSpendRecord, context=context,
+        matter_id=matter.id, value=spend_after,
+    )
+    dialect = session.get_bind().dialect.name
+
+    def page_rows(model, after, limit):
+        statement = _matter_context_page_statement(
+            model, company_id=context.company.id, matter_id=matter.id,
+            after=after, limit=limit, dialect_name=dialect,
+        )
+        if dialect == "postgresql":
+            return [source_row_from_page(model, item["source_payload"], item["source_note"],
+                        item["actor_name"], company_id=context.company.id, matter_id=matter.id)
+                    for item in session.execute(statement).mappings()]
+        records = list(session.scalars(statement))
+        def actor_name(record):
+            member = (record.assigned_by_membership if model is MatterOutsideCounselAssignment
+                      else record.recorded_by_membership)
+            return member.user.full_name if member and member.user else None
+        return [(record, actor_name(record)) for record in records]
+
+    assignment_rows = page_rows(MatterOutsideCounselAssignment, assignment_after, assignment_limit)
+    spend_rows = page_rows(OutsideCounselSpendRecord, spend_after, spend_limit)
+    assignments = [row[0] for row in assignment_rows]
+    spending = [row[0] for row in spend_rows]
+    assignment_names = {row[0].id: row[1] for row in assignment_rows}
+    spend_names = {row[0].id: row[1] for row in spend_rows}
+    assignment_next = (
+        assignments[assignment_limit - 1].id if len(assignments) > assignment_limit else None
+    )
+    spend_next = spending[spend_limit - 1].id if len(spending) > spend_limit else None
+    assignments, spending = assignments[:assignment_limit], spending[:spend_limit]
+    currencies = {}
+
+    def currency(value):
+        return currencies.setdefault(value, MatterCounselPageCurrency(
+            currency=value, recorded_budget_minor=0, unpriced_assignment_count=0,
+            amount_minor=0, approved_amount_minor=0, paid_amount_minor=0, pending_amount_minor=0,
+        ))
+
+    for assignment in assignments:
+        item = currency(assignment.currency)
+        if assignment.budget_amount_minor is None:
+            item.unpriced_assignment_count += 1
+        else:
+            item.recorded_budget_minor += assignment.budget_amount_minor
+    for record in spending:
+        item = currency(record.currency)
+        item.amount_minor += record.amount_minor
+        item.approved_amount_minor += record.approved_amount_minor
+        item.paid_amount_minor += _paid_amount_minor(record)
+        item.pending_amount_minor += _pending_amount_minor(record)
+
+    def dated(record):
+        # These persisted columns are known UTC; SQLite drops their offset.
+        return record.model_copy(update={
+            key: (getattr(record, key).replace(tzinfo=UTC)
+                  if getattr(record, key).tzinfo is None else getattr(record, key).astimezone(UTC))
+            for key in ("created_at", "updated_at")
+        })
+
+    return MatterCounselContextResponse(
+        matter_id=matter.id, matter_title=matter.title, matter_code=matter.matter_code,
+        matter_status=matter.status, matter_is_active=matter.is_active,
+        lifecycle_version=matter.lifecycle_version, totals_scope="page",
+        assignments=[
+            dated(_serialize_assignment_record(item, labels=(matter, assignment_names[item.id])))
+            for item in assignments
+        ],
+        spend_records=[
+            dated(_serialize_spend_record(item, labels=(matter, spend_names[item.id])))
+            for item in spending
+        ],
+        assignment_limit=assignment_limit, spend_limit=spend_limit,
+        assignment_next_after=assignment_next, spend_next_after=spend_next,
+        currencies=[currencies[key] for key in sorted(currencies)],
+    )
 
 
 def get_outside_counsel_workspace(

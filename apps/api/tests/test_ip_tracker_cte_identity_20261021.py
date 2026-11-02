@@ -1,11 +1,13 @@
 """Anonymous stage-seed reuse must not capture a different current-source CTE."""
 
+import re
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import event
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import selectable, visitors
+from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql.selectable import CTE
 
 from caseops_api.db.models import Company, CompanyMembership, IpDocketRecord, User
@@ -57,7 +59,25 @@ def test_five_stage_names_preserve_pg_materialization_acl_and_current_source(mon
     assert all(node.nesting for node in ctes.values() if str(node.name) in _STAGES)
     compiled = statement.compile(dialect=postgresql.dialect())
     sql = compiled.string.lower()
-    assert sql.count("materialized") == 6
+    materialized_ctes = [
+        node
+        for node in ctes.values()
+        if any(
+            isinstance(prefix, TextClause)
+            and prefix.text == "MATERIALIZED"
+            and dialect == "postgresql"
+            for prefix, dialect in node._prefixes
+        )
+    ]
+    assert len(materialized_ctes) == len(ctes) == 6
+    declaration = r"\bas\s+materialized\s*\("
+    assert len(re.findall(declaration, sql)) == 6
+    decoy = (
+        "with ip_materialized_proof_seek as (select 1) "
+        "select ip_materialized_proof_seek.value from ip_materialized_proof_seek"
+    )
+    assert decoy.count("materialized") == 3
+    assert re.findall(declaration, decoy) == []
     for fence in (
         "team_memberships",
         "ethical_walls",

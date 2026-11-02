@@ -2,6 +2,7 @@ import { clearSession, getStoredContext, storeSession } from "@/lib/session";
 import type { AuthSession } from "@/lib/api/schemas";
 
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
+import { localAcceptanceRequest } from "./local-acceptance";
 
 const REFRESH_PATH = "/api/auth/refresh";
 const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
@@ -76,6 +77,11 @@ export async function consumeResponseWithTimeout<T>(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError("timeoutMs must be a positive finite number.");
   }
+  const guardedInit = localAcceptanceRequest(
+    input, init,
+    process.env.NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE === "1",
+    typeof window === "undefined" ? null : window.location.origin,
+  );
   const controller = new AbortController();
   const suppliedSignal = init.signal;
   let timedOut = false;
@@ -91,7 +97,7 @@ export async function consumeResponseWithTimeout<T>(
   }, timeoutMs);
   try {
     // JSON readers keep cancellation and the deadline through body consumption.
-    return await consume(await fetch(input, { ...init, signal: controller.signal }), controller.signal);
+    return await consume(await fetch(input, { ...guardedInit, signal: controller.signal }), controller.signal);
   } catch (error) {
     if (timedOut) {
       throw new NetworkError(

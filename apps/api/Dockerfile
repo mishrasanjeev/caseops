@@ -5,6 +5,7 @@ FROM python:3.13-slim AS runtime-base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
     PORT=8000
 
 WORKDIR /app
@@ -35,29 +36,41 @@ RUN python /tmp/caseops-remove-compromised-ca.py \
 # Verification stays enabled against this explicitly selected patched OS bundle.
 ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
     PIP_USE_DEPRECATED=legacy-certs
-RUN pip install --no-cache-dir uv==0.13.4
+# uv0.13.5 keeps the clean120 Mozilla roots and fixes the separate verifier advisory.
+# Retain both exact upstream base-policy notices with this API-only installer.
+COPY vendor/uv-0.13.5 /usr/share/doc/caseops-api/third-party/uv-0.13.5
+RUN pip install --no-cache-dir uv==0.13.5
 
 FROM runtime-base AS api
 
 COPY pyproject.toml uv.lock README.md ./
 COPY vendor/fastembed-0.8.0-1caseops1-py3-none-any.whl ./vendor/
 COPY vendor/fastembed-0.8.0-1caseops1.json ./vendor/
+# API-only LGPL notices and the exact unmodified corresponding source archive.
+# The web/mobile JavaScript notice and exception inventories are separate.
+COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9
+# The official dnspython 2.9.0 archives omit their tagged ISC notice.
+COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently
 # skips OCR fallback when pdfminer returns sparse text — and scanned
 # matter attachments + older judgment PDFs then miss chunking / embed.
 # Add `[observability]` here if/when we wire OTel in prod.
+# Preserve the lock's exact artifact URLs and hashes. Name-only requirements
+# otherwise re-fetch large live package indexes during an immutable install.
 RUN uv export \
+      --offline \
       --frozen \
+      --format pylock.toml \
       --no-dev \
       --extra ocr \
       --no-emit-project \
       --no-header \
-      --no-hashes \
-      --output-file /tmp/requirements.lock \
-  && uv pip install --system --requirements /tmp/requirements.lock \
-  && rm /tmp/requirements.lock \
+      --output-file /app/pylock.toml \
+  && uv pip install --system --requirements /app/pylock.toml \
+  && rm /app/pylock.toml \
+  && python /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9/verify.py --installed \
   && python -m compileall -q --invalidation-mode checked-hash /usr/local/lib/python3.13/site-packages
 
 # Voyage token counting uses Hugging Face's tokenizer cache before every
@@ -97,4 +110,4 @@ LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 # Cloud Run injects PORT (default 8080); local uses the ENV default
 # above. Bind to all interfaces so the container is reachable from
 # the proxy.
-CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 --port ${PORT} --app-dir src"]
+CMD ["sh", "-c", "exec uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 --port ${PORT} --app-dir src"]

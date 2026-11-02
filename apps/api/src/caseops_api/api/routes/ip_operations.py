@@ -171,6 +171,7 @@ from caseops_api.schemas.ip_operations import (
     IpDocketQueueRecord,
     IpDocketQueueSaveRequest,
     IpDocketRecordResponse,
+    IpDocketSummaryResponse,
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateReviewRequest,
     IpEvidenceDiscoveryResponse,
@@ -391,6 +392,7 @@ from caseops_api.services.ip_operations import (
     discover_ip_evidence_candidates,
     get_ip_control_review,
     get_ip_docket,
+    get_ip_docket_summary,
     ip_daily_docket,
     ip_docket_control_report,
     list_ip_assigned_coverage,
@@ -2400,6 +2402,15 @@ async def post_manual_trademark_application(
         ),
         duplicate_candidates=[IpIdentifierResponse.model_validate(row) for row in duplicates],
     )
+
+
+@router.get("/dockets/{docket_id}/summary", response_model=IpDocketSummaryResponse)
+async def get_ip_docket_summary_record(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocketSummaryResponse:
+    return get_ip_docket_summary(session, context=context, docket_id=docket_id)
 
 
 @router.get("/dockets/{docket_id}", response_model=IpDocketRecordResponse)

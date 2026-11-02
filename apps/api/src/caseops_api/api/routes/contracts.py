@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -12,6 +13,7 @@ from caseops_api.api.dependencies import (
     get_current_context,
     require_capability,
 )
+from caseops_api.schemas.contract_obligation_context import ContractObligationContextPage
 from caseops_api.schemas.contracts import (
     ContractAttachmentMetadataUpdateRequest,
     ContractAttachmentRecord,
@@ -44,6 +46,7 @@ from caseops_api.schemas.contracts import (
     TenantPlaybookRuleUpdateRequest,
     TenantPlaybookUpdateRequest,
 )
+from caseops_api.services.contract_obligation_context import list_contract_obligation_context
 from caseops_api.services.contract_redline import parse_redline_docx
 from caseops_api.services.contracts import (
     create_contract,
@@ -439,6 +442,24 @@ async def post_current_company_contract_obligation(
         context=context,
         contract_id=contract_id,
         payload=payload,
+    )
+
+
+@router.get(
+    "/{contract_id}/obligations",
+    response_model=ContractObligationContextPage,
+    summary="Read a bounded page of recorded contract obligations",
+)
+def current_contract_obligations(
+    contract_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=25)] = 10,
+    after: UUID | None = None,
+) -> ContractObligationContextPage:
+    return list_contract_obligation_context(
+        session, context=context, contract_id=contract_id, limit=limit,
+        after=str(after) if after is not None else None,
     )
 
 

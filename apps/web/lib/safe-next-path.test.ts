@@ -8,6 +8,7 @@ describe("safePostLoginPath", () => {
     [undefined, "/app"],
     ["/app", "/app"],
     ["/app/", "/app/"],
+    ["/native/sign-in?state=opaque", "/native/sign-in?state=opaque"],
     [
       "/app/matters?status=open#recent",
       "/app/matters?status=open#recent",
@@ -31,6 +32,9 @@ describe("safePostLoginPath", () => {
     "data:text/html,phish",
     "/admin/users",
     "/application",
+    "/native/sign-in/other",
+    "/native/sign-in/../admin",
+    "/native/other",
     "/app/../admin",
     "/app/%2e%2e/admin",
     "/app/%2f%2fattacker.example",

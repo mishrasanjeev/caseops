@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.engine import make_url
 
 from caseops_api.core.security import hash_password
@@ -222,7 +222,13 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
             session.execute(update(model).where(model.id == target_id).values(**values))
             session.commit()
 
-    with CaseOpsSession(engine) as login, ThreadPoolExecutor(max_workers=1) as pool:
+    with (
+        engine.connect() as observer,
+        CaseOpsSession(engine) as login,
+        ThreadPoolExecutor(max_workers=1) as pool,
+    ):
+        observer_pid = observer.scalar(text("SELECT pg_backend_pid()"))
+        assert isinstance(observer_pid, int) and observer_pid > 0
         assert issue_auth_session_under_fence(
             login, company_id=company_id, membership_id=membership_id
         ).access_token
@@ -230,16 +236,16 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
         pending = pool.submit(writer)
         try:
             assert started.wait(1)
-            with engine.connect() as observer:
-                deadline = monotonic() + 1
-                while monotonic() < deadline:
-                    blockers = observer.scalar(
-                        text("SELECT pg_blocking_pids(:pid)"), {"pid": pids[0]}
-                    )
-                    if login_pid in blockers:
-                        break
-                    sleep(0.01)
-                assert login_pid in blockers
+            deadline = monotonic() + 1
+            blockers = []
+            while monotonic() < deadline:
+                blockers = observer.scalar(
+                    text("SELECT pg_blocking_pids(:pid)"), {"pid": pids[0]}
+                )
+                if login_pid in blockers:
+                    break
+                sleep(0.01)
+            assert login_pid in blockers
         finally:
             login.rollback()
         pending.result(timeout=3)
@@ -252,6 +258,106 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
                 source_token_issued_at=old_issued_at,
             )
         assert denial.value.status_code == (401 if mutation == "cutoff" else 403)
+
+
+
+def _run_auth_fence_with_delayed_observer_cleanup(monkeypatch, engine, module, body):
+    """Delay only the actual oracle observer's rollback; retain the original Future."""
+    observers, pid_connections, auth_entries, futures = [], [], [], []
+    receipts, cleanup_errors = [], []
+    completed = Event()
+    original_issue, original_pool = module.issue_auth_session_under_fence, module.ThreadPoolExecutor
+
+    def before(connection, _cursor, statement, _parameters, _context, _many):
+        if statement.startswith("SELECT pg_backend_pid()"):
+            pid_connections.append(connection)
+        if statement.startswith("SELECT pg_blocking_pids("):
+            if not any(connection is value for value in observers):
+                observers.append(connection)
+
+    def observer_rollback(connection):
+        if not any(connection is value for value in observers):
+            return
+        # FINISHED can precede callbacks. Record before waiting; raising here
+        # would mask the original writer's native PostgreSQL exception.
+        receipt = {"done_on_entry": len(futures) == 1 and futures[0].done(),
+                   "started_at": monotonic()}
+        receipts.append(receipt)
+        receipt["completion_observed"] = completed.wait(3)
+        receipt["finished_at"] = monotonic()
+        if not receipt["completion_observed"]:
+            cleanup_errors.append(AssertionError("Owned writer completion was not observed"))
+
+    def issue(*args, **kwargs):
+        auth_entries.append(tuple(pid_connections))
+        return original_issue(*args, **kwargs)
+
+    class ObservedPool(original_pool):
+        def submit(self, fn, /, *args, **kwargs):
+            future = super().submit(fn, *args, **kwargs)
+            futures.append(future)
+            future.add_done_callback(lambda _future: completed.set())
+            return future
+
+    installed = []
+    body_error = None
+    patch = monkeypatch.context()
+    scoped = patch.__enter__()
+    try:
+        for name, callback in (("before_cursor_execute", before), ("rollback", observer_rollback)):
+            event.listen(engine, name, callback)
+            installed.append((name, callback))
+        scoped.setattr(module, "ThreadPoolExecutor", ObservedPool)
+        scoped.setattr(module, "issue_auth_session_under_fence", issue)
+        try:
+            body()
+        except BaseException as error:
+            body_error = error
+    finally:
+        for name, callback in reversed(installed):
+            try:
+                event.remove(engine, name, callback)
+            except BaseException as error:
+                cleanup_errors.append(error)
+        try:
+            patch.__exit__(None, None, None)
+        except BaseException as error:
+            cleanup_errors.append(error)
+    return {"body_error": body_error, "cleanup_errors": cleanup_errors,
+            "observers": observers, "auth_entries": auth_entries,
+            "futures": futures, "cleanup_receipts": receipts}
+
+
+def _assert_auth_fence_observer_receipt(receipt):
+    # Cleanup assertions must not replace the body's original native failure.
+    if receipt["body_error"] is not None:
+        raise receipt["body_error"]
+    assert receipt["cleanup_errors"] == []
+    assert len(receipt["observers"]) == 1
+    observer = receipt["observers"][0]
+    assert receipt["auth_entries"] and len(receipt["auth_entries"][0]) == 1
+    assert receipt["auth_entries"][0][0] is observer
+    assert len(receipt["futures"]) == 1 and receipt["futures"][0].done()
+    assert len(receipt["cleanup_receipts"]) == 1
+    cleanup = receipt["cleanup_receipts"][0]
+    assert cleanup["done_on_entry"] is True
+    assert cleanup["completion_observed"] is True
+
+
+@pytest.mark.parametrize("mutation", ["membership-deactivate", "user-deactivate", "cutoff"])
+def test_review_auth_fence_releases_before_delayed_observer_cleanup(
+    review_owned, monkeypatch, mutation,
+):
+    import sys
+
+    engine, _identity = review_owned
+    receipt = _run_auth_fence_with_delayed_observer_cleanup(
+        monkeypatch, engine, sys.modules[__name__],
+        lambda: test_review_no_key_update_still_serializes_non_key_identity_changes(
+            review_owned, mutation,
+        ),
+    )
+    _assert_auth_fence_observer_receipt(receipt)
 
 
 def test_review_cached_password_and_cutoff_are_refreshed_under_fence(review_owned):

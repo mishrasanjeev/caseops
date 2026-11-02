@@ -110,6 +110,7 @@ from caseops_api.schemas.ip_operations import (
     IpDocketQueueRecord,
     IpDocketQueueSaveRequest,
     IpDocketRecordResponse,
+    IpDocketSummaryResponse,
     IpDocketVersionCreateRequest,
     IpEvidenceCandidateRecord,
     IpEvidenceCandidateReviewRequest,
@@ -1143,6 +1144,33 @@ def list_ip_dockets(
         dockets=visible,
         count=len(visible),
         has_more=has_more,
+    )
+
+
+def get_ip_docket_summary(
+    session: Session, *, context: SessionContext, docket_id: str
+) -> IpDocketSummaryResponse:
+    # The canonical lookup enforces tenant, active lifecycle and current
+    # wall/team/grant policy. Do not use the trademark-only child serializer.
+    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    return IpDocketSummaryResponse(
+        id=docket.id,
+        company_id=docket.company_id,
+        matter_id=docket.matter_id,
+        record_type=docket.record_type,
+        title=docket.title,
+        primary_identifier=docket.primary_identifier,
+        status=docket.status,
+        is_active=docket.is_active,
+        lifecycle_version=docket.lifecycle_version,
+        access_policy_version=docket.access_policy_version,
+        current_version=docket.current_version,
+        # SQLite returns naive datetimes for this known-UTC persistence field.
+        updated_at=(
+            docket.updated_at.replace(tzinfo=UTC)
+            if docket.updated_at.tzinfo is None
+            else docket.updated_at.astimezone(UTC)
+        ),
     )
 
 

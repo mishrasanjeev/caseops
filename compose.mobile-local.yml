@@ -1,0 +1,145 @@
+name: ${CASEOPS_MOBILE_PROJECT:?task-owned project required}
+
+x-api-env: &api-env
+  CASEOPS_ENV: local
+  CASEOPS_AUTO_MIGRATE: "false"
+  CASEOPS_RELEASE_SHA: ${CASEOPS_MOBILE_API_SHA:-unavailable}
+  K_REVISION: ${CASEOPS_MOBILE_API_REVISION:?source-bound revision required}
+  CASEOPS_PUBLIC_APP_URL: https://10.0.2.2:${CASEOPS_MOBILE_WEB_PORT:-3443}
+  CASEOPS_CORS_ORIGINS: '["https://10.0.2.2:${CASEOPS_MOBILE_WEB_PORT:-3443}","https://127.0.0.1:${CASEOPS_MOBILE_WEB_PORT:-3443}","https://localhost:${CASEOPS_MOBILE_WEB_PORT:-3443}"]'
+  CASEOPS_DATABASE_URL: ${CASEOPS_MOBILE_DATABASE_URL:?isolated database required}
+  CASEOPS_AUTH_SECRET: ${CASEOPS_MOBILE_AUTH_SECRET:?local secret required}
+  CASEOPS_CLAMAV_HOST: scanner
+  CASEOPS_CLAMAV_REQUIRED: "true"
+  CASEOPS_CLAMAV_TIMEOUT_S: "2"
+  CASEOPS_NATIVE_AUTH_ENABLED: "true"
+  CASEOPS_NATIVE_SIGNING_SECRET: ${CASEOPS_MOBILE_NATIVE_SECRET:?local secret required}
+  CASEOPS_LLM_PROVIDER: mock
+  CASEOPS_LLM_MODEL: caseops-mock-1
+  CASEOPS_CASE_TRACKING_ENABLED: "false"
+  CASEOPS_CASE_TRACKING_PROVIDER: disabled
+  CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS: test-legal,test-mobile-other
+  CASEOPS_DOCUMENT_STORAGE_BACKEND: local
+  CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
+  CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
+  CASEOPS_REDIS_URL: redis://valkey:6379/0
+
+services:
+  postgres:
+    image: pgvector/pgvector@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    environment:
+      POSTGRES_USER: caseops
+      POSTGRES_DB: caseops_mobile
+      POSTGRES_PASSWORD: ${CASEOPS_MOBILE_DB_PASSWORD:?local database secret required}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init/00-extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U caseops -d caseops_mobile"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:8.1
+    healthcheck:
+      test: [CMD, valkey-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  scanner:
+    image: clamav/clamav@sha256:71fbb76b397cd84a90043caf1178a7f81bd0c131a031e7b0619afd721fbfad41
+    environment:
+      CLAMAV_NO_FRESHCLAMD: "true"
+    mem_limit: 1500m
+
+  migrate:
+    image: ${CASEOPS_MOBILE_API_IMAGE:?owned API image required}
+    build:
+      context: ./apps/api
+      args:
+        CASEOPS_RELEASE_SHA: ${CASEOPS_MOBILE_API_SHA:-unavailable}
+    environment: *api-env
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ${CASEOPS_MOBILE_API_IMAGE:?owned API image required}
+    environment: *api-env
+    volumes:
+      - documents:/app/storage
+      - ./scripts/mobile:/mobile-fixture:ro
+      - ${CASEOPS_MOBILE_CACHE:?outside-Git cache required}:/fixture-state
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      scanner:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/api/health',headers={'X-CaseOps-Automated-Test':'no-paid-providers'}),timeout=3)"]
+      interval: 3s
+      timeout: 4s
+      retries: 60
+      start_period: 30s
+
+  web:
+    image: ${CASEOPS_MOBILE_WEB_IMAGE:?owned web image required}
+    # local-bootstrap.py builds a retained canonical-derived Dockerfile through
+    # Docker's stdin interface, including the explicit local acceptance marker.
+    environment:
+      CASEOPS_RELEASE_SHA: ${CASEOPS_MOBILE_WEB_SHA:-unavailable}
+      K_REVISION: ${CASEOPS_MOBILE_WEB_REVISION:?source-bound revision required}
+      CASEOPS_API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/release-identity',{headers:{'X-CaseOps-Automated-Test':'no-paid-providers'}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 4s
+      retries: 30
+      start_period: 15s
+
+  gateway:
+    image: ${CASEOPS_MOBILE_API_IMAGE:?owned API image required}
+    command: [python, /mobile-fixture/local-gateway.py]
+    environment:
+      CASEOPS_ENV: local
+      CASEOPS_RELEASE_SHA: ${CASEOPS_MOBILE_API_SHA:-unavailable}
+      # Only the explicitly enabled read-only observer uses this isolated DB.
+      # Auth/native signing secrets are not inherited by the gateway.
+      CASEOPS_DATABASE_URL: ${CASEOPS_MOBILE_DATABASE_URL:?isolated database required}
+      CASEOPS_MOBILE_RUN_ID: ${CASEOPS_MOBILE_GATEWAY_RUN_ID:-${CASEOPS_MOBILE_PROJECT}}
+      CASEOPS_MOBILE_API_PORT: ${CASEOPS_MOBILE_API_PORT:-8443}
+      CASEOPS_MOBILE_WEB_PORT: ${CASEOPS_MOBILE_WEB_PORT:-3443}
+      CASEOPS_MOBILE_V1_CONTROLS: ${CASEOPS_MOBILE_V1_CONTROLS:-0}
+      CASEOPS_MOBILE_V1_PROFILE: ${CASEOPS_MOBILE_V1_PROFILE:-source-work-v3}
+      CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256: ${CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256:-}
+      CASEOPS_MOBILE_V1_REGISTRATION: ${CASEOPS_MOBILE_V1_REGISTRATION:-}
+      CASEOPS_MOBILE_V1_REGISTRATION_SHA256: ${CASEOPS_MOBILE_V1_REGISTRATION_SHA256:-}
+    volumes:
+      - ./scripts/mobile:/mobile-fixture:ro
+      - ${CASEOPS_MOBILE_CACHE:?outside-Git cache required}:/fixture-state
+    ports:
+      - 127.0.0.1:${CASEOPS_MOBILE_API_PORT:-8443}:8443
+      - 127.0.0.1:${CASEOPS_MOBILE_WEB_PORT:-3443}:3443
+    networks: [default, ingress]
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+networks:
+  default:
+    internal: true
+  ingress: {}
+
+volumes:
+  postgres: {}
+  documents: {}

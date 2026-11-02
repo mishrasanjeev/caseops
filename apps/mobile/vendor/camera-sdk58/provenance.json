@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "scope": "Declared SDK58 camera native inputs; not a resolved Gradle/IPA inventory",
+  "retrievedUtc": "2026-10-27T17:43:44.505482+00:00",
+  "materials": [
+    {
+      "path": "GLIDE-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/bumptech/glide/v5.0.5/LICENSE",
+      "sizeBytes": 4899,
+      "sha256": "52973598be02761fb153f9c237f6c6706841d666611bc1c5fd18edfdcb3d47fa"
+    },
+    {
+      "path": "ANDROID-IMAGE-CROPPER-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/CanHub/Android-Image-Cropper/4.7.0/LICENSE.txt",
+      "sizeBytes": 11365,
+      "sha256": "2b6147e01a15739eb62231e16d8d66608b244b11aaee46e50d6a825fb8a58d97"
+    }
+  ],
+  "declaredNativeCoordinates": [
+    {
+      "name": "androidx.activity:activity-ktx",
+      "version": "1.11.0"
+    },
+    {
+      "name": "androidx.appcompat:appcompat",
+      "version": "1.7.1"
+    },
+    {
+      "name": "androidx.core:core-ktx",
+      "version": "1.17.0"
+    },
+    {
+      "name": "androidx.exifinterface:exifinterface",
+      "version": "1.4.1"
+    },
+    {
+      "name": "com.vanniktech:android-image-cropper",
+      "version": "4.7.0"
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+      "version": "1.10.2"
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+      "version": "1.10.2"
+    },
+    {
+      "name": "com.github.bumptech.glide:glide",
+      "version": "5.0.5"
+    }
+  ],
+  "resolutionAndFinalBinaryPending": true
+}

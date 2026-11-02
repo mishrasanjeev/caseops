@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { rootCertificates } from "node:tls";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, expect, test } from "vitest";
 
@@ -42,7 +43,9 @@ async function child(args: string[], env = cleanEnv()) {
 }
 
 beforeAll(() => {
-  temp = fs.mkdtempSync(path.join(os.tmpdir(), "caseops-node-trust-"));
+  // Node resolves the copied module's __dirname through macOS /var -> /private/var.
+  // Use that same canonical fixture path in the child's exact trust environment.
+  temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "caseops-node-trust-")));
   trust = path.join(temp, "trust");
   fs.mkdirSync(trust);
   for (const name of ["node-trust.cjs", "node-trust-start.cjs"]) {
@@ -55,11 +58,46 @@ afterAll(() => fs.rmSync(temp, { recursive: true, force: true }));
 
 test("Docker generates trust before npm and inherits it into build and runtime", () => {
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
-  expect(docker).toMatch(/FROM node:22\.14\.0-alpine AS trusted-base/);
-  expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm ci"));
-  expect(docker).toMatch(/FROM trusted-base AS deps/);
+  expect(docker).toMatch(/FROM node:22\.23\.4-alpine AS trusted-base/);
+  expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm-tooling.mjs ci"));
+  expect(docker).toMatch(/FROM trusted-base AS builder-tooling/);
+  expect(docker).toMatch(/FROM builder-tooling AS deps/);
   expect(docker).toMatch(/FROM trusted-base AS runner/);
   expect(docker).toContain("SSL_CERT_DIR=/opt/caseops/trust/empty");
+  expect(docker).toContain('test "$(node /opt/caseops/scripts/mobile/npm-tooling.mjs --version)" = "11.12.1"');
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund");
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund");
+  expect(docker).toContain("RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build");
+  const runner = docker.split("FROM trusted-base AS runner")[1];
+  expect(runner).not.toMatch(/COPY.*(?:builder-tooling|scripts\/mobile|apps\/mobile\/vendor)/);
+});
+
+test("Docker's exact runtime tool-absence program rejects files, dangling launchers and metadata errors", async () => {
+  const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
+  const program = docker.match(/&& node -e '([^']+UNUSED_GLOBAL_TOOL_REMAINS[^']+)'/);
+  assert.ok(program, "Missing actual trusted-base absence program");
+  for (const mode of ["absent", "file", "dangling-link", "metadata-error"]) {
+    const root = path.join(temp, `tool-absence-${mode}`);
+    fs.mkdirSync(root);
+    const name = mode === "dangling-link" ? "/usr/local/bin/npm" : "/usr/local/lib/node_modules/npm";
+    const target = path.join(root, name.slice(1));
+    if (mode === "file" || mode === "dangling-link") {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (mode === "file") fs.writeFileSync(target, "synthetic retained tool");
+      else fs.symlinkSync(path.join(root, "missing-owned-target"), target);
+    }
+    const prelude = `const actualFs=require('node:fs'), actualPath=require('node:path');
+      const originalStat=actualFs.lstatSync;
+      actualFs.lstatSync=(p,...args)=>{
+        if(${JSON.stringify(mode)}==='metadata-error') throw Error('SYNTHETIC_METADATA_REFUSAL');
+        if(typeof p!=='string'||!p.startsWith('/')) throw Error('UNEXPECTED_ABSENCE_PATH');
+        return originalStat(actualPath.join(${JSON.stringify(root)},p.slice(1)),...args);
+      };`;
+    const result = await child(["-e", prelude + program[1]]);
+    expect(result.code, mode).toBe(mode === "absent" ? 0 : 1);
+    expect(result.stdout).toBe("");
+    if (mode === "file" || mode === "dangling-link") expect(fs.lstatSync(target)).toBeTruthy();
+  }
 });
 
 test("Docker runtime explicitly preloads the guard independently of NODE_OPTIONS", () => {
@@ -73,20 +111,37 @@ function policy() {
   };
 }
 
-test("removes only exact G3 and preserves every other bundled root", () => {
+test("preserves every current upstream root when G3 is already absent", () => {
   const bundle = policy().createBundle(rootCertificates);
   const before = rootCertificates.map(fingerprint);
   const after = (bundle.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? []).map(fingerprint);
-  expect(before).toHaveLength(149);
-  expect(before.filter((value) => value === denied)).toHaveLength(1);
-  expect(after).toHaveLength(148);
+  expect(before).toHaveLength(116);
+  expect(before.filter((value) => value === denied)).toHaveLength(0);
+  expect(after).toHaveLength(116);
   expect(after.sort()).toEqual(before.filter((value) => value !== denied).sort());
-  expect(createHash("sha256").update(bundle).digest("hex")).toBe("553a980a0de1e9e7fd65bcea308db009f4e2269f08475227d6f6b04beeab2554");
+  expect(createHash("sha256").update(bundle).digest("hex")).toBe("c2929361a5be0afcf231461fa8b4b00e4454d49cfea9592c12089d8efdc8c64f");
+});
+
+test("requires the exact shipping Node runtime for positive trust acceptance", () => {
+  expect(process.versions.node).toBe("22.23.4");
+});
+
+test("already-removed G3 trust filtering is idempotent", () => {
+  const once = policy().createBundle(rootCertificates);
+  const roots = once.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
+  expect(policy().createBundle(roots)).toBe(once);
+});
+
+test("reintroduced compromised root is rejected at the exact root boundary", () => {
+  const compromised = "-----BEGIN CERTIFICATE-----\nMIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG\nEwJJTjETMBEGA1UECxMKZW1TaWduIFBLSTElMCMGA1UEChMcZU11ZGhyYSBUZWNo\nbm9sb2dpZXMgTGltaXRlZDEgMB4GA1UEAxMXZW1TaWduIEVDQyBSb290IENBIC0g\nRzMwHhcNMTgwMjE4MTgzMDAwWhcNNDMwMjE4MTgzMDAwWjBrMQswCQYDVQQGEwJJ\nTjETMBEGA1UECxMKZW1TaWduIFBLSTElMCMGA1UEChMcZU11ZGhyYSBUZWNobm9s\nb2dpZXMgTGltaXRlZDEgMB4GA1UEAxMXZW1TaWduIEVDQyBSb290IENBIC0gRzMw\ndjAQBgcqhkjOPQIBBgUrgQQAIgNiAAQjpQy4LRL1KPOxst3iAhKAnjlfSU2fySU0\nWXTsuwYc58Byr+iuL+FBVIcUqEqy6HyC5ltqtdyzdc6LBtCGI79G1Y4PPwT01xyS\nfvalY8L1X44uT6EYGQIrMgqCZH0Wk9GjQjBAMB0GA1UdDgQWBBR8XQKEE9TMipuB\nzhccLikenEhjQjAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAKBggq\nhkjOPQQDAwNpADBmAjEAvvNhzwIQHWSVB7gYboiFBS+DCBeQyh+KTOgNG3qxrdWB\nCUfvO6wIBHxcmbHtRwfSAjEAnbpV/KlK6O3t5nYBQnvI+GDZjVGLVTv7jHvrZQnD\n+JbNR6iC8hZVdyR+EhCVBCyj\n-----END CERTIFICATE-----\n";
+  expect(fingerprint(compromised)).toBe(denied);
+  expect(() => policy().createBundle([...rootCertificates, compromised])).toThrow();
+  expect(() => policy().createBundle([...rootCertificates.slice(1), compromised])).toThrow();
 });
 
 test("missing, duplicate or changed input roots cannot create a bundle", () => {
   const roots = [...rootCertificates];
-  expect(() => policy().createBundle(roots.filter((pem) => fingerprint(pem) !== denied))).toThrow();
+  expect(() => policy().createBundle(roots.slice(1))).toThrow();
   expect(() => policy().createBundle([...roots, roots[0]])).toThrow();
   expect(() => policy().createBundle([...roots.slice(1), roots[1]])).toThrow();
   expect(() => policy().createBundle(["not a certificate", ...roots.slice(1)])).toThrow();
@@ -214,7 +269,7 @@ test("extra or competing trust settings fail before app", async () => {
 });
 
 test("actual fetch and https enforce selected CA and hostname verification offline", async () => {
-  const probe = path.resolve(web, "..", "..", "tests", "fixtures", "node-default-tls-probe.cjs");
+  const probe = fileURLToPath(new URL("../../../tests/fixtures/node-default-tls-probe.cjs", import.meta.url));
   for (const target of ["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"]) {
     const rejected = await child([probe, target]);
     expect(rejected.code, target).not.toBe(0);
@@ -235,7 +290,15 @@ test("actual fetch and https enforce selected CA and hostname verification offli
   fs.mkdirSync(empty);
   const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(fixture, "trusted.pem"), SSL_CERT_DIR: empty };
   for (const name of ["trusted", "untrusted", "wrong-host"]) {
-    const server = https.createServer({ key: fs.readFileSync(path.join(fixture, `${name}.key`)), cert: fs.readFileSync(path.join(fixture, `${name}.pem`)) }, (_request, response) => response.end("local-only"));
+    const receivedMarkers: string[][] = [];
+    const server = https.createServer({ key: fs.readFileSync(path.join(fixture, `${name}.key`)), cert: fs.readFileSync(path.join(fixture, `${name}.pem`)) }, (request, response) => {
+      const markers: string[] = [];
+      for (let index = 0; index < request.rawHeaders.length; index += 2) {
+        if (request.rawHeaders[index].toLowerCase() === "x-caseops-automated-test") markers.push(request.rawHeaders[index + 1]);
+      }
+      receivedMarkers.push(markers);
+      response.end("local-only");
+    });
     const sockets = new Set<import("node:net").Socket>();
     server.on("connection", (socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); });
     server.listen(0, "127.0.0.1");
@@ -247,6 +310,7 @@ test("actual fetch and https enforce selected CA and hostname verification offli
       expect(result.code, result.stderr).toBe(0);
       const expected = name === "trusted" ? "local-only" : name === "untrusted" ? "DEPTH_ZERO_SELF_SIGNED_CERT" : "ERR_TLS_CERT_ALTNAME_INVALID";
       expect(JSON.parse(result.stdout)).toEqual([expected, expected]);
+      expect(receivedMarkers).toEqual(name === "trusted" ? [["no-paid-providers"], ["no-paid-providers"]] : []);
     } finally {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

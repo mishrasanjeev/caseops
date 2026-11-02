@@ -14,14 +14,14 @@ from packaging.version import Version
 
 
 @pytest.mark.parametrize(
-    "name,minimum",
-    [("dnspython", "2.9.0"), ("fpdf2", "2.8.8")],
+    "name,minimum,specifier",
+    [("dnspython", "2.9.0", ">=2.9.0"), ("fpdf2", "2.8.9", "==2.8.9")],
 )
-def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, minimum):
+def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, minimum, specifier):
     api = Path(__file__).resolve().parents[1]
     manifest = tomllib.loads((api / "pyproject.toml").read_text(encoding="utf-8"))
     lock = tomllib.loads((api / "uv.lock").read_text(encoding="utf-8"))
-    assert f"{name}>={minimum}" in manifest["project"]["dependencies"]
+    assert f"{name}{specifier}" in manifest["project"]["dependencies"]
     rows = [row for row in lock["package"] if row["name"] == name]
     assert len(rows) == 1
     assert Version(rows[0]["version"]) >= Version(minimum)
@@ -55,7 +55,7 @@ def test_observability_manifest_and_lock_exclude_vulnerable_tracestate_parser(na
     api = Path(__file__).resolve().parents[1]
     manifest = tomllib.loads((api / "pyproject.toml").read_text(encoding="utf-8"))
     lock = tomllib.loads((api / "uv.lock").read_text(encoding="utf-8"))
-    assert f"{name}>={minimum}" in manifest["project"]["optional-dependencies"]["observability"]
+    assert f"{name}=={minimum}" in manifest["project"]["optional-dependencies"]["observability"]
     rows = [row for row in lock["package"] if row["name"] == name]
     assert len(rows) == 1
     assert Version(rows[0]["version"]) >= Version(minimum)
