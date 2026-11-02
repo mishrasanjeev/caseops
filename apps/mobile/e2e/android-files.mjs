@@ -195,6 +195,21 @@ export async function rapidActivateAndroidUpload(context, button) {
   if (failure) throw failure;
   event(context, 'android-native-upload-two-tap-input', { tapAttempts: 2, nativeProtocolDispatches: 1, gapMs: 10, frame });
 }
+// The app confirms persistence only after its own readback reload, which can
+// finish while a scroll sweep has already moved past the one status element
+// (files-24 FILES-04). After the transport acknowledgement, bring that status
+// into view in whatever state it shows, then wait for the readback in place
+// without gestures. Unknown and rejected outcomes still refuse immediately.
+export const ANDROID_UPLOAD_STATUS_QUERY = 'android=new UiSelector().resourceIdMatches("files-upload-(uploading|acknowledged|persisted|unknown|rejected)")';
+export const ANDROID_UPLOAD_READBACK_MS = 15000;
+export async function awaitAndroidUploadReadback(context) {
+  await findQuery(context, ANDROID_UPLOAD_STATUS_QUERY, { scroll: true });
+  await wait(context, async () => {
+    if (await visible(context.driver, 'id=files-upload-unknown')) fail('ANDROID_FILES_UPLOAD_UNKNOWN_NO_REPLAY');
+    assert.equal(await visible(context.driver, 'id=files-upload-rejected'), undefined, 'ANDROID_FILES_UPLOAD_REJECTED');
+    return !!await visible(context.driver, 'id=files-upload-persisted');
+  }, ANDROID_UPLOAD_READBACK_MS, 'ANDROID_FILES_UPLOAD_READBACK_REQUIRED');
+}
 async function upload(context, kind) {
   const asset = validateAndroidFileAsset(context, kind); await enterFiles(context); await noSelection(context);
   const query = `android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(asset.filename)})`;
@@ -209,7 +224,7 @@ async function upload(context, kind) {
     return delta(before, await traffic(context)).some(row => row.method === 'POST' && row.route === `/api/matters/${context.source.matterId}/attachments` && row.status === 200);
   }, 30000, 'ANDROID_FILES_UPLOAD_ACK_REQUIRED');
   const ack = validateAndroidUploadAcknowledgement(delta(before, await traffic(context)), context.source.matterId);
-  await find(context, 'id', 'files-upload-persisted', { scroll: true }); await find(context, 'text', ANDROID_UPLOAD_PERSISTED_MESSAGE, { scroll: true });
+  await awaitAndroidUploadReadback(context); await find(context, 'text', ANDROID_UPLOAD_PERSISTED_MESSAGE, { scroll: true });
   const names = await context.driver.$$(query); assert.equal(names.length, 1, 'ANDROID_FILES_UPLOADED_FILENAME_NOT_UNIQUE');
   const id = /^files-name-([a-f0-9-]{36})$/.exec(await names[0].getAttribute('resource-id'))?.[1];
   assert.ok(UUID.test(id || '') && id !== context.source.attachmentId, 'ANDROID_FILES_ACKNOWLEDGED_NEW_ID_REQUIRED');
