@@ -179,3 +179,43 @@ def test_entitlement_values_are_explicit_and_unknown_features_fail_closed() -> N
     )
     assert unknown.available is False
     assert unknown.reason == "unknown_feature"
+
+
+def test_feature_decision_lists_every_failing_gate_in_reason_order() -> None:
+    now = datetime(2026, 8, 6, tzinfo=UTC)
+    settings = Settings(
+        ip_workspace_enabled=False,
+        ip_workspace_rollout_expires_at=now - timedelta(days=1),
+    )
+    decision = evaluate_ip_feature(
+        "manual_docketing",
+        granted_capabilities=set(),
+        entitlements={},
+        settings=settings,
+        now=now,
+    )
+    assert decision.blocked_reasons == (
+        "missing_capability",
+        "missing_entitlement",
+        "rollout_disabled",
+        "rollout_expired",
+    )
+    assert decision.reason == "missing_capability"
+
+    available = evaluate_ip_feature(
+        "manual_docketing",
+        granted_capabilities={"ip:write"},
+        entitlements={"ip_workspace": True},
+        settings=Settings(ip_workspace_enabled=True),
+        now=now,
+    )
+    assert available.available is True
+    assert available.blocked_reasons == ()
+
+    unknown = evaluate_ip_feature(
+        "not-a-feature",
+        granted_capabilities=set(),
+        entitlements={},
+        settings=settings,
+    )
+    assert unknown.blocked_reasons == ("unknown_feature",)

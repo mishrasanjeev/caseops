@@ -269,7 +269,9 @@ test("IPLF-051 reconciles immutable registry evidence without claiming a provide
   );
   await expect(page.getByText("No external call")).toBeVisible();
 
-  const markRow = page.getByRole("row").filter({ hasText: "/mark_name" });
+  // The decision list reads by field name; it stacks into list items when its card is narrower than the table.
+  const markRow = page.getByRole("row").or(page.getByRole("listitem"))
+    .filter({ hasText: "Mark as shown on the register" }).filter({ visible: true });
   await expect(markRow).toContainText("added");
   await page
     .locator("#review-reason")

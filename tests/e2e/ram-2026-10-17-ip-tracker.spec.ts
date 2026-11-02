@@ -87,10 +87,15 @@ for (const width of [1280, 393]) {
       const menu = page.getByRole("menu");
       const labels = menu.locator("label");
       expect(await labels.count()).toBeGreaterThanOrEqual(3);
+      // Mark is pinned (always shown, first column), so its option is checked and cannot be cleared.
+      const pinnedMark = menu.getByRole("checkbox", { name: "Mark (always shown)", exact: true });
+      await expect(pinnedMark).toBeChecked();
+      await expect(pinnedMark).toBeDisabled();
       for (const label of await labels.all()) {
         const name = (await label.innerText()).trim();
+        if (name === "Mark (always shown)") continue;
         const checkbox = label.getByRole("checkbox");
-        if (["Mark", "Application Date", "Renewal Due Date"].includes(name)) await checkbox.check();
+        if (["Application Date", "Renewal Due Date"].includes(name)) await checkbox.check();
         else await checkbox.uncheck();
       }
       await page.keyboard.press("Escape");

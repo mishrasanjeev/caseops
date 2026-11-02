@@ -2678,6 +2678,23 @@ export interface paths {
         patch: operations["patch_provider_event_candidate_api_calendar_provider_event_candidates__candidate_id__patch"];
         trace?: never;
     };
+    "/api/calendar/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-day open-item counts by display type for up to one year. */
+        get: operations["summarize_calendar_api_calendar_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/sync-status": {
         parameters: {
             query?: never;
@@ -6480,6 +6497,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition-references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Transition References */
+        get: operations["get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/title-interests": {
         parameters: {
             query?: never;
@@ -6702,6 +6736,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/documents/{document_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Retire */
+        post: operations["post_ip_document_retire_api_ip_documents__document_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/retirement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Retirement Preview */
+        get: operations["get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/documents/{document_id}/versions/{version_number}/download": {
         parameters: {
             query?: never;
@@ -6899,6 +6967,27 @@ export interface paths {
         };
         /** Foreign Associate Instruction Workspace */
         get: operations["foreign_associate_instruction_workspace_api_ip_foreign_associate_instructions__instruction_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/foreign-associate-instructions/create-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Foreign Associate Instruction Create Options
+         * @description The associates, assignments, estimates, client instructions and
+         *     documents the create endpoint accepts for one docket, with blockers.
+         */
+        get: operations["foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7173,6 +7262,23 @@ export interface paths {
         };
         /** International Registration Workspace */
         get: operations["international_registration_workspace_api_ip_international_registrations__record_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/nice-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Nice Class Catalogue */
+        get: operations["nice_class_catalogue_api_ip_nice_classes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7699,6 +7805,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portal/grants/{grant_id}/shareable-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portal Grant Shareable Documents */
+        get: operations["get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portal/report-publications": {
         parameters: {
             query?: never;
@@ -7967,6 +8090,27 @@ export interface paths {
         };
         /** Recordal Workspace */
         get: operations["recordal_workspace_api_ip_recordals__recordal_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/recordals/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recordal Instrument Options
+         * @description The documents the recordal form may offer for one docket (declared before
+         *     /recordals/{recordal_id} so the static path is not read as an id).
+         */
+        get: operations["recordal_instrument_options_api_ip_recordals_instruments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8662,6 +8806,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Watch Publication Search */
+        get: operations["watch_publication_search_api_ip_watch_publications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/working-calendars": {
         parameters: {
             query?: never;
@@ -8690,6 +8851,23 @@ export interface paths {
         put?: never;
         /** Post Ip Working Calendar Activation */
         post: operations["post_ip_working_calendar_activation_api_ip_working_calendars__calendar_version_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/working-calendars/{calendar_version_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Working Calendar Withdrawal */
+        post: operations["post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10411,6 +10589,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/invoices/{invoice_id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a draft matter invoice */
+        post: operations["issue_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__issue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/invoices/{invoice_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void a draft matter invoice */
+        post: operations["void_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/ip-links": {
         parameters: {
             query?: never;
@@ -11339,6 +11551,23 @@ export interface paths {
         };
         /** Download the CSV/XLSX bulk matter import template */
         get: operations["download_current_company_matter_import_template_api_matters_imports_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/portfolio-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count every visible matter by status, forum and practice area */
+        get: operations["current_company_matter_portfolio_health_api_matters_portfolio_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -17448,6 +17677,23 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /**
+         * CalendarDaySummary
+         * @description Open-item counts for one date, by the same display types as the feed.
+         */
+        CalendarDaySummary: {
+            /** By Display Type */
+            by_display_type: {
+                [key: string]: number;
+            };
+            /**
+             * Occurs On
+             * Format: date
+             */
+            occurs_on: string;
+            /** Total */
+            total: number;
+        };
         /** CalendarEventListResponse */
         CalendarEventListResponse: {
             /** Events */
@@ -17714,6 +17960,26 @@ export interface components {
             candidate: components["schemas"]["CalendarProviderEventCandidateRecord"];
             /** Hearing Id */
             hearing_id?: string | null;
+        };
+        /**
+         * CalendarSummaryResponse
+         * @description Per-day counts for the Year view. Only dates with open items appear.
+         */
+        CalendarSummaryResponse: {
+            /** Days */
+            days: components["schemas"]["CalendarDaySummary"][];
+            /**
+             * Range From
+             * Format: date
+             */
+            range_from: string;
+            /**
+             * Range To
+             * Format: date
+             */
+            range_to: string;
+            /** Total */
+            total: number;
         };
         /** CalendarSyncCapabilityStatus */
         CalendarSyncCapabilityStatus: {
@@ -25867,6 +26133,8 @@ export interface components {
         IpCalendarReconciliationCandidateListResponse: {
             /** Candidates */
             candidates?: components["schemas"]["IpCalendarReconciliationCandidateRecord"][];
+            /** Total */
+            total: number;
         };
         /** IpCalendarReconciliationCandidateRecord */
         IpCalendarReconciliationCandidateRecord: {
@@ -27185,7 +27453,7 @@ export interface components {
             /** Docket Id */
             docket_id: string;
             /** Exception Kinds */
-            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled")[];
+            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled" | "rule_retired")[];
             /** Result On */
             result_on: string | null;
             /**
@@ -27193,6 +27461,13 @@ export interface components {
              * @default true
              */
             visible: boolean;
+        };
+        /** IpDeadlineGovernanceProjection */
+        IpDeadlineGovernanceProjection: {
+            calendar_activation: components["schemas"]["IpGovernanceActionDecision"];
+            calendar_proposal: components["schemas"]["IpGovernanceActionDecision"];
+            rule_activation: components["schemas"]["IpGovernanceActionDecision"];
+            rule_proposal: components["schemas"]["IpGovernanceActionDecision"];
         };
         /** IpDeadlineImpactResponse */
         IpDeadlineImpactResponse: {
@@ -27630,10 +27905,13 @@ export interface components {
             deadlines: components["schemas"]["IpDeadlineRecord"][];
             /** Docket Id */
             docket_id: string;
+            /** Eligible Responsible Membership Ids */
+            eligible_responsible_membership_ids?: string[];
             /** Eligible Rule Version Ids */
             eligible_rule_version_ids?: string[];
             /** Exceptions */
             exceptions: components["schemas"]["IpDeadlineExceptionRecord"][];
+            governance: components["schemas"]["IpDeadlineGovernanceProjection"];
             /** Rules */
             rules: components["schemas"]["IpRuleVersionRecord"][];
         };
@@ -27908,6 +28186,10 @@ export interface components {
              * @default false
              */
             has_more: boolean;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** IpDocketMatterLinkListResponse */
         IpDocketMatterLinkListResponse: {
@@ -28380,6 +28662,9 @@ export interface components {
             is_privileged: boolean;
             /** Links */
             links: components["schemas"]["IpDocumentLinkRecord"][];
+            /** Read Only Reason */
+            read_only_reason?: ("retired" | "closed_record") | null;
+            retirement?: components["schemas"]["IpDocumentRetirementRecord"] | null;
             /** Taxonomy Key */
             taxonomy_key: string;
             /** Taxonomy Label */
@@ -28393,6 +28678,69 @@ export interface components {
             updated_at: string;
             /** Versions */
             versions: components["schemas"]["IpDocumentVersionRecord"][];
+        };
+        /**
+         * IpDocumentRetirementBlocker
+         * @description A record that still relies on the document as evidence.
+         */
+        IpDocumentRetirementBlocker: {
+            /** Docket Id */
+            docket_id?: string | null;
+            /** Docket Title */
+            docket_title?: string | null;
+            /** Href */
+            href?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "recordal" | "foreign_associate_instruction" | "docket_event" | "title_interest" | "renewal_certificate" | "portal_publication" | "source_evidence";
+            /** Label */
+            label: string;
+            /** Record Id */
+            record_id: string;
+            /** Resolution */
+            resolution: string;
+            /** Status */
+            status?: string | null;
+        };
+        /** IpDocumentRetirementPreview */
+        IpDocumentRetirementPreview: {
+            /** Already Retired */
+            already_retired: boolean;
+            /** Blockers */
+            blockers: components["schemas"]["IpDocumentRetirementBlocker"][];
+            /** Current Version */
+            current_version: number;
+            /** Document Id */
+            document_id: string;
+            /** May Retire */
+            may_retire: boolean;
+            /** Permission Reason */
+            permission_reason?: string | null;
+            /** Retirable */
+            retirable: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpDocumentRetirementRecord */
+        IpDocumentRetirementRecord: {
+            /** Reason */
+            reason: string;
+            /**
+             * Retired At
+             * Format: date-time
+             */
+            retired_at: string;
+            /** Retired By Name */
+            retired_by_name: string;
+        };
+        /** IpDocumentRetireRequest */
+        IpDocumentRetireRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Reason */
+            reason: string;
         };
         /** IpDocumentStateTransitionRequest */
         IpDocumentStateTransitionRequest: {
@@ -28455,6 +28803,20 @@ export interface components {
             updated_at: string;
             /** Version */
             version: number;
+        };
+        /**
+         * IpDocumentTaxonomyReadiness
+         * @description Whether IP documents can be classified, so an empty taxonomy is visible.
+         */
+        IpDocumentTaxonomyReadiness: {
+            /** Active Entry Count */
+            active_entry_count: number;
+            /** Ready */
+            ready: boolean;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Total Entry Count */
+            total_entry_count: number;
         };
         /** IpDocumentTaxonomyResponse */
         IpDocumentTaxonomyResponse: {
@@ -28811,6 +29173,8 @@ export interface components {
             available: boolean;
             /** Blocked By Incident Id */
             blocked_by_incident_id?: string | null;
+            /** Blocked Reasons */
+            blocked_reasons?: ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch")[];
             /** Entitled */
             entitled: boolean;
             /** Entitlement Key */
@@ -28823,11 +29187,8 @@ export interface components {
             missing_capabilities: string[];
             /** Owner */
             owner: string;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch";
+            /** Reason */
+            reason: "available" | ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch");
             /** Required Capabilities */
             required_capabilities: string[];
             /** Rollout Enabled */
@@ -28877,6 +29238,15 @@ export interface components {
              * @enum {string}
              */
             transaction_kind: "acknowledgement_received" | "defect_recorded" | "rejected" | "accepted";
+        };
+        /** IpFilingJurisdictionOption */
+        IpFilingJurisdictionOption: {
+            /** Associate Count */
+            associate_count: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
         };
         /** IpFilingPreparationTransactionRequest */
         IpFilingPreparationTransactionRequest: {
@@ -28970,6 +29340,70 @@ export interface components {
             /** Transaction Kind */
             transaction_kind: string;
         };
+        /** IpForeignAssociateCreateBlocker */
+        IpForeignAssociateCreateBlocker: {
+            /** Action Label */
+            action_label?: string | null;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "no_panel_associate" | "no_associate_for_jurisdiction" | "no_assignment_for_matter" | "no_active_estimate" | "no_linked_documents";
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "outside_counsel_id" | "assignment_id" | "estimate_cost_item_id" | "selected_document_refs";
+            /** Href */
+            href?: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * IpForeignAssociateCreateOptionsResponse
+         * @description Every value the create validator accepts for one docket, and why not.
+         *
+         *     Built from the same predicates as ``create_ip_foreign_associate_instruction``
+         *     so a picker never offers a value the API rejects (BUG-009/010/011/013).
+         */
+        IpForeignAssociateCreateOptionsResponse: {
+            /** Assignment Required */
+            assignment_required: boolean;
+            /** Assignments */
+            assignments: components["schemas"]["IpForeignAssociateOptionAssignment"][];
+            /** Associates */
+            associates: components["schemas"]["IpForeignAssociateOptionAssociate"][];
+            /** Blockers */
+            blockers: components["schemas"]["IpForeignAssociateCreateBlocker"][];
+            /** Can Manage Counsel */
+            can_manage_counsel: boolean;
+            /** Can Record Estimate */
+            can_record_estimate: boolean;
+            /** Client Instructions */
+            client_instructions: components["schemas"]["IpForeignAssociateOptionClientInstruction"][];
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Documents */
+            documents: components["schemas"]["IpForeignAssociateOptionDocument"][];
+            /** Estimates */
+            estimates: components["schemas"]["IpForeignAssociateOptionEstimate"][];
+            /** Jurisdictions */
+            jurisdictions: components["schemas"]["IpFilingJurisdictionOption"][];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Matter Title */
+            matter_title: string | null;
+            /** Panel Associate Count */
+            panel_associate_count: number;
+            /** Target Jurisdiction */
+            target_jurisdiction: string | null;
+            /** Unbudgeted Assignment Count */
+            unbudgeted_assignment_count: number;
+        };
         /** IpForeignAssociateCreateRequest */
         IpForeignAssociateCreateRequest: {
             /** Assignment Id */
@@ -29023,6 +29457,87 @@ export interface components {
             tax_rate_percent?: number | null;
             /** Tax Type */
             tax_type?: string | null;
+        };
+        /** IpForeignAssociateOptionAssignment */
+        IpForeignAssociateOptionAssignment: {
+            /** Budget Amount Minor */
+            budget_amount_minor: number;
+            /** Compatible Estimate Ids */
+            compatible_estimate_ids: string[];
+            /** Counsel Id */
+            counsel_id: string;
+            /** Counsel Name */
+            counsel_name: string;
+            /** Currency */
+            currency: string;
+            /** Id */
+            id: string;
+            /** Role Summary */
+            role_summary: string | null;
+            /** Status */
+            status: string;
+        };
+        /** IpForeignAssociateOptionAssociate */
+        IpForeignAssociateOptionAssociate: {
+            /** Filing Jurisdictions */
+            filing_jurisdictions: string[];
+            /** Firm City */
+            firm_city: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Panel Status */
+            panel_status: string;
+            /** Primary Contact Email */
+            primary_contact_email: string | null;
+            /** Primary Contact Name */
+            primary_contact_name: string | null;
+        };
+        /** IpForeignAssociateOptionClientInstruction */
+        IpForeignAssociateOptionClientInstruction: {
+            /** Id */
+            id: string;
+            /** Instruction Kind */
+            instruction_kind: string;
+            /** Instruction Version */
+            instruction_version: number;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Submitted By */
+            submitted_by: string;
+        };
+        /** IpForeignAssociateOptionDocument */
+        IpForeignAssociateOptionDocument: {
+            /** Id */
+            id: string;
+            /** Is Privileged */
+            is_privileged: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpForeignAssociateOptionEstimate */
+        IpForeignAssociateOptionEstimate: {
+            /** Amount Minor */
+            amount_minor: number | null;
+            /** Amount Withheld */
+            amount_withheld: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
         };
         /** IpForeignAssociatePageResponse */
         IpForeignAssociatePageResponse: {
@@ -29288,6 +29803,24 @@ export interface components {
             response_overdue: boolean;
             /** Transactions */
             transactions: components["schemas"]["IpDocketEventResponse"][];
+        };
+        /**
+         * IpGovernanceActionDecision
+         * @description One governance action for the current viewer, from the writers' gates.
+         */
+        IpGovernanceActionDecision: {
+            /** Available */
+            available: boolean;
+            /** Code */
+            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch");
+            /** Entitlement Key */
+            entitlement_key: string;
+            /** Reasons */
+            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
+            /** Required Capability */
+            required_capability: string;
+            /** Rollout Flag */
+            rollout_flag: string | null;
         };
         /** IpHearingReminderPolicyRequest */
         IpHearingReminderPolicyRequest: {
@@ -29892,6 +30425,10 @@ export interface components {
             publication_scope_json: {
                 [key: string]: unknown;
             };
+            /** Raw Evidence Json */
+            raw_evidence_json?: {
+                [key: string]: unknown;
+            };
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Source Page */
@@ -29904,6 +30441,11 @@ export interface components {
             source_url: string;
             /** Supersedes Publication Id */
             supersedes_publication_id: string | null;
+        };
+        /** IpJournalPublicationSearchResponse */
+        IpJournalPublicationSearchResponse: {
+            /** Publications */
+            publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -30424,6 +30966,20 @@ export interface components {
              */
             target_kind: "appeal_proceeding" | "matter";
         };
+        /**
+         * IpOppositionAppealProceedingOption
+         * @description An appeal proceeding the appeal-link validator accepts, with its numbers.
+         */
+        IpOppositionAppealProceedingOption: {
+            /** Appeal Identifiers */
+            appeal_identifiers: string[];
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
+            /** Stage */
+            stage: string;
+        };
         /** IpOppositionApplicantActionRequest */
         IpOppositionApplicantActionRequest: {
             /**
@@ -30855,6 +31411,8 @@ export interface components {
             client_instruction_status: "pending" | "confirmed" | "not_required";
             /** Corrective Task Id */
             corrective_task_id: string | null;
+            /** Deadline Proposal Gaps */
+            deadline_proposal_gaps?: string[];
             /** Deadlines */
             deadlines: components["schemas"]["IpOppositionOpponentDeadlineRecord"][];
             /**
@@ -30975,6 +31533,20 @@ export interface components {
             source_notice_document_ref: string | null;
             /** Source Notice Reference */
             source_notice_reference: string | null;
+        };
+        /**
+         * IpOppositionRelatedApplicationOption
+         * @description An application the scope-review validator accepts as related.
+         */
+        IpOppositionRelatedApplicationOption: {
+            /** Application Number */
+            application_number: string | null;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
         };
         /** IpOppositionScopeDecision */
         IpOppositionScopeDecision: {
@@ -31162,10 +31734,18 @@ export interface components {
         IpOppositionSharedWorkflowResponse: {
             /** Active Deadlines */
             active_deadlines: components["schemas"]["IpDeadlineRecord"][];
+            /** Appeal Proceedings */
+            appeal_proceedings?: components["schemas"]["IpOppositionAppealProceedingOption"][];
             /** Application Scopes */
             application_scopes: components["schemas"]["IpOppositionApplicationScopeRecord"][];
             /** Current Stage */
             current_stage: string;
+            /** Disposition Trigger Events */
+            disposition_trigger_events?: components["schemas"]["IpDocketEventResponse"][];
+            /** Hearing Statuses By Action */
+            hearing_statuses_by_action?: {
+                [key: string]: string[];
+            };
             /**
              * Next Required Action
              * @enum {string}
@@ -31173,6 +31753,8 @@ export interface components {
             next_required_action: "complete_role_workflow" | "record_evidence_package" | "advance_to_hearing" | "schedule_hearing" | "record_hearing_preparation" | "await_hearing" | "record_post_hearing_note" | "advance_to_order" | "record_order" | "review_appeal_or_close" | "link_appeal" | "complete_appeal_or_close" | "closed";
             /** Proceeding Id */
             proceeding_id: string;
+            /** Related Applications */
+            related_applications?: components["schemas"]["IpOppositionRelatedApplicationOption"][];
             /**
              * Represented Side
              * @enum {string}
@@ -31815,6 +32397,8 @@ export interface components {
              * @enum {string}
              */
             source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Declared Status */
+            source_declared_status?: string | null;
             /** Source Renewal Alert At */
             source_renewal_alert_at?: string | null;
             /** Source Renewal Alert Body */
@@ -31829,6 +32413,8 @@ export interface components {
              * @enum {string}
              */
             source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Status Text */
+            source_status_text?: string | null;
             /** Team Id */
             team_id?: string | null;
             /** Team Name */
@@ -32276,10 +32862,95 @@ export interface components {
             /** Supporting Instrument Refs */
             supporting_instrument_refs: string[];
         };
+        /**
+         * IpRecordalInstrumentOptionsResponse
+         * @description Documents a recordal on one docket may cite as its supporting instruments.
+         *
+         *     Built from the same predicate the create and transaction validators apply:
+         *     linked to the docket or to one of its events or deadlines, and readable by
+         *     the viewer. `truncated` is true when more than the listed documents exist.
+         */
+        IpRecordalInstrumentOptionsResponse: {
+            /** Docket Id */
+            docket_id: string;
+            /** Items */
+            items: components["schemas"]["IpDocumentRecord"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * IpRecordalListItemResponse
+         * @description A list row also names its docket, so the list never shows a raw docket id.
+         */
+        IpRecordalListItemResponse: {
+            /** Acceptance Evidence Refs Json */
+            acceptance_evidence_refs_json: string[];
+            /** Affected Classes Json */
+            affected_classes_json: number[];
+            /** Affected Registration Refs Json */
+            affected_registration_refs_json: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Deadline Rule Key */
+            deadline_rule_key: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Effective On */
+            effective_on: string | null;
+            /** Executed On */
+            executed_on: string | null;
+            /** Fee Cost Item Refs Json */
+            fee_cost_item_refs_json: string[];
+            /** Filing Evidence Refs Json */
+            filing_evidence_refs_json: string[];
+            /** Form Code */
+            form_code: string;
+            /** Id */
+            id: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /** Parties Json */
+            parties_json: {
+                [key: string]: unknown;
+            }[];
+            /** Recordal Type */
+            recordal_type: string;
+            /** Registry Snapshot Id */
+            registry_snapshot_id: string | null;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Supporting Instrument Refs Json */
+            supporting_instrument_refs_json: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
         /** IpRecordalPageResponse */
         IpRecordalPageResponse: {
             /** Items */
-            items: components["schemas"]["IpRecordalResponse"][];
+            items: components["schemas"]["IpRecordalListItemResponse"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -32376,11 +33047,8 @@ export interface components {
             };
             /** Document Refs */
             document_refs?: string[];
-            /**
-             * Effective At
-             * Format: date-time
-             */
-            effective_at: string;
+            /** Effective At */
+            effective_at?: string | null;
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Lifecycle Version */
@@ -32419,6 +33087,8 @@ export interface components {
         };
         /** IpRecordalWorkspaceResponse */
         IpRecordalWorkspaceResponse: {
+            /** Cited Documents */
+            cited_documents?: components["schemas"]["IpDocumentRecord"][];
             /** Current Registered Interests */
             current_registered_interests: components["schemas"]["IpTitleInterestRecord"][];
             deadline_workspace: components["schemas"]["IpDeadlineWorkspaceResponse"];
@@ -32552,8 +33222,11 @@ export interface components {
             application_id?: string | null;
             /** Capability Version */
             capability_version: string;
-            /** Identifier Kind */
-            identifier_kind: string;
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
             /** Jurisdiction */
             jurisdiction: string;
             /** Match Confidence */
@@ -33147,6 +33820,44 @@ export interface components {
             /** Items */
             items: components["schemas"]["IpRenewalWorkflowRecord"][];
         };
+        /** IpRenewalReferenceDeadline */
+        IpRenewalReferenceDeadline: {
+            /** Id */
+            id: string;
+            /** Result On */
+            result_on: string | null;
+            /** State */
+            state: string;
+            /** Title */
+            title: string;
+            /** Trigger Event Id */
+            trigger_event_id: string | null;
+        };
+        /** IpRenewalReferenceDocument */
+        IpRenewalReferenceDocument: {
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** IpRenewalReferenceEvent */
+        IpRenewalReferenceEvent: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Event Kind */
+            event_kind: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+        };
         /** IpRenewalReminderIntentRecord */
         IpRenewalReminderIntentRecord: {
             /** Delivered At */
@@ -33404,6 +34115,26 @@ export interface components {
             status: "scheduled" | "active" | "sent" | "failed" | "missing_date" | "overdue" | "cancelled";
             /** Timezone */
             timezone: string;
+        };
+        /**
+         * IpRenewalTransitionReferences
+         * @description Records the transition validator accepts as this term's references.
+         *
+         *     Each list is built from the same predicate the transition endpoint
+         *     enforces. A next-term deadline is accepted only when its
+         *     trigger_event_id equals the acceptance event the transition uses.
+         */
+        IpRenewalTransitionReferences: {
+            /** Acceptance Events */
+            acceptance_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Certificate Documents */
+            certificate_documents: components["schemas"]["IpRenewalReferenceDocument"][];
+            /** Filing Events */
+            filing_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Next Term Deadlines */
+            next_term_deadlines: components["schemas"]["IpRenewalReferenceDeadline"][];
+            /** Term Id */
+            term_id: string;
         };
         /** IpRenewalWorkflowRecord */
         IpRenewalWorkflowRecord: {
@@ -33772,6 +34503,8 @@ export interface components {
             open_deadline_count: number;
             /** Rule Version Id */
             rule_version_id: string;
+            /** Superseded Versions */
+            superseded_versions?: number[];
         };
         /** IpRuleTransitionRequest */
         IpRuleTransitionRequest: {
@@ -33832,6 +34565,15 @@ export interface components {
         IpRuleVersionRecord: {
             /** Activated At */
             activated_at: string | null;
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
             /**
              * Created At
              * Format: date-time
@@ -33850,6 +34592,8 @@ export interface components {
             effective_from: string;
             /** Effective Until */
             effective_until: string | null;
+            /** Eligible Reviewer Membership Ids */
+            eligible_reviewer_membership_ids?: string[];
             /** Engine Compatibility */
             engine_compatibility: string;
             /** Fixtures */
@@ -33870,6 +34614,8 @@ export interface components {
             office: string | null;
             /** Proceeding Kind */
             proceeding_kind: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Reviewer Label Snapshot */
@@ -34606,12 +35352,59 @@ export interface components {
         IpWatchWorkspaceResponse: {
             /** Handoffs */
             handoffs?: components["schemas"]["IpWatchHandoffResponse"][];
+            /** Hit Profiles */
+            hit_profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Hit Total
+             * @default 0
+             */
+            hit_total: number;
             /** Hits */
             hits?: components["schemas"]["IpWatchHitResponse"][];
+            /**
+             * Ingestion Run Limit
+             * @default 20
+             */
+            ingestion_run_limit: number;
+            /**
+             * Ingestion Run Total
+             * @default 0
+             */
+            ingestion_run_total: number;
             /** Ingestion Runs */
             ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
+            /**
+             * Intake Profile Count
+             * @default 0
+             */
+            intake_profile_count: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Paused Profile Total
+             * @default 0
+             */
+            paused_profile_total: number;
+            /**
+             * Profile Total
+             * @default 0
+             */
+            profile_total: number;
             /** Profiles */
             profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Publication Total
+             * @default 0
+             */
+            publication_total: number;
             /** Publications */
             publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
@@ -34689,6 +35482,7 @@ export interface components {
         /** IpWorkspaceConfigurationStatusResponse */
         IpWorkspaceConfigurationStatusResponse: {
             configuration: components["schemas"]["IpWorkspaceConfigurationResponse"] | null;
+            document_taxonomy: components["schemas"]["IpDocumentTaxonomyReadiness"];
             /** Enablement Blockers */
             enablement_blockers: string[];
             /** Provider Adapters */
@@ -34714,7 +35508,7 @@ export interface components {
                 [key: string]: string;
             };
             /** Document Taxonomy Version */
-            document_taxonomy_version: string;
+            document_taxonomy_version?: string | null;
             /** Enabled Asset Types */
             enabled_asset_types: "trademark"[];
             /** Escalation Owner Membership Id */
@@ -35508,12 +36302,26 @@ export interface components {
         };
         /** LegalCalendarVersionRecord */
         LegalCalendarVersionRecord: {
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
             /** Approved At */
             approved_at: string | null;
             /** Approver Label Snapshot */
             approver_label_snapshot: string | null;
             /** Calendar Id */
             calendar_id: string;
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
+            /**
+             * Can Withdraw
+             * @default false
+             */
+            can_withdraw: boolean;
             /**
              * Created At
              * Format: date-time
@@ -35540,6 +36348,8 @@ export interface components {
             name: string;
             /** Office */
             office: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Source Hash */
@@ -35559,6 +36369,14 @@ export interface components {
             version: number;
             /** Weekend Days */
             weekend_days: number[];
+        };
+        /**
+         * LegalCalendarWithdrawalRequest
+         * @description The proposer withdraws its own candidate before anyone activates it.
+         */
+        LegalCalendarWithdrawalRequest: {
+            /** Reason */
+            reason: string;
         };
         /** LegalKnowledgeGraphEdgeRecord */
         LegalKnowledgeGraphEdgeRecord: {
@@ -37991,6 +38809,13 @@ export interface components {
             /** Submitted At */
             submitted_at?: string | null;
         };
+        /** MatterCountBucket */
+        MatterCountBucket: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string | null;
+        };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
             /** Bench Name */
@@ -38822,6 +39647,11 @@ export interface components {
             missing_date_count: number;
             /** Missing Date Matters */
             missing_date_matters: components["schemas"]["MatterRecord"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Overdue Count */
             overdue_count: number;
             /** Overdue Matters */
@@ -39164,6 +39994,36 @@ export interface components {
             id: string;
             /** Matter Id */
             matter_id: string;
+        };
+        /**
+         * MatterPortfolioHealthResponse
+         * @description Roll-up of every Matter the reader can see, counted on the server.
+         */
+        MatterPortfolioHealthResponse: {
+            /** Active Matters Count */
+            active_matters_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Forum Level Counts */
+            forum_level_counts: components["schemas"]["MatterCountBucket"][];
+            /** Hearings Next 7 Days Count */
+            hearings_next_7_days_count: number;
+            /** Idle Active Count */
+            idle_active_count: number;
+            /** Idle Active Limit */
+            idle_active_limit: number;
+            /** Idle Active Matters */
+            idle_active_matters: components["schemas"]["MatterRecord"][];
+            /** Idle After Days */
+            idle_after_days: number;
+            /** Intake Matters Count */
+            intake_matters_count: number;
+            /** Practice Area Counts */
+            practice_area_counts: components["schemas"]["MatterCountBucket"][];
+            /** Status Counts */
+            status_counts: components["schemas"]["MatterCountBucket"][];
+            /** Total Visible Count */
+            total_visible_count: number;
         };
         /**
          * MatterRecord
@@ -40451,6 +41311,45 @@ export interface components {
              * @default false
              */
             unverified: boolean;
+        };
+        /** NiceClassCatalogueResponse */
+        NiceClassCatalogueResponse: {
+            /** Attribution */
+            attribution: string;
+            /** Classes */
+            classes: components["schemas"]["NiceClassRecord"][];
+            /** Edition */
+            edition: string;
+            /** Headings Sha256 */
+            headings_sha256: string;
+            /**
+             * In Force From
+             * Format: date
+             */
+            in_force_from: string;
+            /**
+             * Retrieved On
+             * Format: date
+             */
+            retrieved_on: string;
+            /** Source Data Url */
+            source_data_url: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** NiceClassRecord */
+        NiceClassRecord: {
+            /** Heading */
+            heading: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "goods" | "services";
+            /** Note */
+            note?: string | null;
+            /** Number */
+            number: number;
         };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
@@ -43484,6 +44383,16 @@ export interface components {
         PortalInstructionListResponse: {
             /** Instructions */
             instructions?: components["schemas"]["PortalInstructionRecord"][];
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** PortalInstructionRecord */
         PortalInstructionRecord: {
@@ -43673,6 +44582,13 @@ export interface components {
             portal_user_id: string;
             /** Portal User Name */
             portal_user_name: string;
+            /** Publication Blocked Reason */
+            publication_blocked_reason?: ("revoked" | "expired" | "client_inactive" | "docket_closed" | "docket_not_visible") | null;
+            /**
+             * Publishable
+             * @default false
+             */
+            publishable: boolean;
             /** Revoked At */
             revoked_at: string | null;
             /** Row Version */
@@ -44071,6 +44987,37 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
+        };
+        /** PortalShareableDocumentListResponse */
+        PortalShareableDocumentListResponse: {
+            /** Docket Title */
+            docket_title: string;
+            /** Document Categories */
+            document_categories: string[];
+            /** Documents */
+            documents: components["schemas"]["PortalShareableDocumentRecord"][];
+            /** Grant Id */
+            grant_id: string;
+        };
+        /**
+         * PortalShareableDocumentRecord
+         * @description One document version the publish endpoint would accept for a grant.
+         */
+        PortalShareableDocumentRecord: {
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Taxonomy Label */
+            taxonomy_label: string;
+            /** Version Number */
+            version_number: number;
+            /** Version State */
+            version_state: string;
         };
         /** PortalUserRecord */
         PortalUserRecord: {
@@ -48211,6 +49158,8 @@ export interface components {
         TrademarkClassScope: {
             /** Class Number */
             class_number: number;
+            /** Nice Edition */
+            nice_edition?: string;
             /** Specification */
             specification: string;
         };
@@ -53920,6 +54869,40 @@ export interface operations {
             };
         };
     };
+    summarize_calendar_api_calendar_summary_get: {
+        parameters: {
+            query: {
+                /** @description Inclusive start date (yyyy-mm-dd). */
+                from: string;
+                /** @description Inclusive end date (yyyy-mm-dd). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_calendar_sync_status_api_calendar_sync_status_get: {
         parameters: {
             query?: never;
@@ -59121,7 +60104,10 @@ export interface operations {
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
             query?: {
+                cursor?: string | null;
                 limit?: number;
+                query?: string | null;
+                record_type?: ("trademark" | "international_registration" | "international_designation")[] | null;
             };
             header?: never;
             path?: never;
@@ -61989,6 +62975,38 @@ export interface operations {
             };
         };
     };
+    get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTransitionReferences"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_title_interest_api_ip_dockets__docket_id__title_interests_post: {
         parameters: {
             query?: never;
@@ -62237,6 +63255,7 @@ export interface operations {
         parameters: {
             query?: {
                 docket_id?: string | null;
+                include_history?: boolean;
             };
             header?: never;
             path?: never;
@@ -62418,6 +63437,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_retire_api_ip_documents__document_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentRetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRetirementPreview"];
                 };
             };
             /** @description Validation Error */
@@ -62839,6 +63924,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpForeignAssociateWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+                target_jurisdiction?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateCreateOptionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -63446,6 +64563,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrademarkInternationalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nice_class_catalogue_api_ip_nice_classes_get: {
+        parameters: {
+            query?: {
+                /** @description A held edition to read, for example the one a class row recorded. Omitted: the edition in force on the server date. */
+                edition?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NiceClassCatalogueResponse"];
                 };
             };
             /** @description Validation Error */
@@ -64752,6 +65901,37 @@ export interface operations {
             };
         };
     };
+    get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalShareableDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_portal_report_publication_api_ip_portal_report_publications_post: {
         parameters: {
             query?: never;
@@ -65410,6 +66590,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpRecordalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_instrument_options_api_ip_recordals_instruments_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalInstrumentOptionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -66732,6 +67943,7 @@ export interface operations {
             query?: {
                 docket_id?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -66930,6 +68142,38 @@ export interface operations {
             };
         };
     };
+    watch_publication_search_api_ip_watch_publications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalPublicationSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_working_calendar_api_ip_working_calendars_post: {
         parameters: {
             query?: never;
@@ -66975,6 +68219,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LegalCalendarActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalCalendarVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalCalendarWithdrawalRequest"];
             };
         };
         responses: {
@@ -68066,6 +69345,7 @@ export interface operations {
                 cursor?: string | null;
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 has_stay?: boolean | null;
+                id?: string | null;
                 limit?: number | null;
                 max_claim_amount_minor?: number | null;
                 min_claim_amount_minor?: number | null;
@@ -70636,6 +71916,70 @@ export interface operations {
             };
         };
     };
+    issue_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__issue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_ip_links_api_matters__matter_id__ip_links_get: {
         parameters: {
             query?: never;
@@ -72243,6 +73587,9 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
+                /** @description Read the rows of one queue only (the other list comes back empty). Both counts are always returned. */
+                queue?: ("overdue" | "missing_date") | null;
             };
             header?: never;
             path?: never;
@@ -72572,6 +73919,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_portfolio_health_api_matters_portfolio_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterPortfolioHealthResponse"];
                 };
             };
         };

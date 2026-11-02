@@ -24,6 +24,7 @@ from caseops_api.schemas.ip_documents import (
 )
 from caseops_api.services.ip_documents import preview_ip_document_name
 from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_ip_document_taxonomy_provisioning_20261031 import enable_ip_workspace
 
 
 def _bootstrap_tenant(client: TestClient, *, slug: str, email: str) -> dict:
@@ -124,13 +125,17 @@ def test_taxonomy_seed_upsert_aliases_audit_and_tenant_isolation(client: TestCli
     first_headers = auth_headers(str(first["access_token"]))
     first_company_id = str(first["company"]["id"])
 
-    before_seed = client.get("/api/ip/document-taxonomy", headers=first_headers)
-    assert before_seed.status_code == 200
-    assert before_seed.json()["entries"] == []
+    # An enabled IP workspace never has an empty taxonomy: enabling it through
+    # the product path provisions the defaults, and /seed is then idempotent.
+    enable_ip_workspace(client, first_headers, str(first["membership"]["id"]))
+    enabled = client.get("/api/ip/document-taxonomy", headers=first_headers)
+    assert enabled.status_code == 200
+    assert len(enabled.json()["entries"]) == 14
 
     seeded = client.post("/api/ip/document-taxonomy/seed", headers=first_headers)
     assert seeded.status_code == 200, seeded.text
     entries = seeded.json()["entries"]
+    assert entries == enabled.json()["entries"]
     assert len(entries) == 14
     assert {row["key"] for row in entries} == {
         "trademark_filing",
@@ -255,6 +260,7 @@ def test_taxonomy_seed_upsert_aliases_audit_and_tenant_isolation(client: TestCli
     assert len(first_entries) == 14
     assert len(first_aliases) == 16
     assert {
+        "ip_document_taxonomy.defaults_provisioned",
         "ip_document_taxonomy.seeded",
         "ip_document_taxonomy.updated",
     }.issubset(actions)

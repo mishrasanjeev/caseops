@@ -381,7 +381,7 @@ describe("centralized notice management", () => {
     fireEvent.change(within(dialog).getByLabelText("Subject"), {
       target: { value: uploaded.subject },
     });
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-001/ }));
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /MAT-001/ }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-002/ }));
     const file = new File(["notice bytes"], "sent-notice.pdf", {
       type: "application/pdf",
@@ -475,7 +475,7 @@ describe("centralized notice management", () => {
     fireEvent.change(within(dialog).getByLabelText("Owner"), {
       target: { value: "owner-2" },
     });
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-001/ }));
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /MAT-001/ }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-002/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
@@ -572,10 +572,13 @@ describe("centralized notice management", () => {
     fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "" } });
     await screen.findByText("Alpha demand");
 
-    fireEvent.change(screen.getByLabelText("Filter by matter"), { target: { value: "matter-1" } });
+    // The matter filter is a server-searched MatterPicker with "All matters".
+    const matterFilter = screen.getByLabelText("Filter by matter");
+    await waitFor(() => expect(within(matterFilter).getByRole("option", { name: /MAT-001/ })).toBeInTheDocument());
+    fireEvent.change(matterFilter, { target: { value: "matter-1" } });
     await screen.findByText("Alpha demand");
     expect(screen.queryByText("Beta summons")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Filter by matter"), { target: { value: "all" } });
+    fireEvent.change(matterFilter, { target: { value: "" } });
     await screen.findByText("Beta summons");
 
     fireEvent.change(screen.getByLabelText("Filter by owner"), { target: { value: "owner-2" } });
@@ -824,15 +827,19 @@ describe("centralized notice management", () => {
           ],
         }),
     ]);
-    listMattersMock.mockImplementation(async ({ q }: { q?: string }) =>
-      q
+    listMattersMock.mockImplementation(async ({ q, cursor }: { q?: string; cursor?: string }) =>
+      q === "NO SUCH MATTER"
+        ? { matters: [], next_cursor: null }
+        : q
         ? {
             matters: [
               { id: "matter-101", matter_code: "MAT-101", title: "Later page matter" },
             ],
             next_cursor: null,
           }
-        : { matters: [matterOptions[0]], next_cursor: "page-2" },
+        : cursor === "page-2"
+          ? { matters: [{ ...matterOptions[0], id: "matter-150", matter_code: "MAT-150", title: "Oldest matter" }], next_cursor: null }
+          : { matters: [matterOptions[0]], next_cursor: "page-2" },
     );
     render(withClient(<NoticesPage />));
 
@@ -842,23 +849,42 @@ describe("centralized notice management", () => {
     const dialog = await screen.findByTestId("create-notice-dialog");
     const first = await within(dialog).findByRole("checkbox", { name: /MAT-001/ });
     expect(first).toBeChecked();
+    // B4-ADJ-03: the list states its cap and reaches the next server page.
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent(
+      "Showing the 1 most recently updated matches. Search, or load more.",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Load more matters" }));
+    expect(await within(dialog).findByRole("checkbox", { name: /MAT-150/ })).toBeVisible();
+    expect(listMattersMock).toHaveBeenCalledWith({ limit: 50, q: undefined, cursor: "page-2" });
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent("2 matters.");
     fireEvent.click(first);
     fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
       target: { value: "MAT-101" },
     });
-    const later = await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
-    fireEvent.click(later);
+    await within(dialog).findByRole("checkbox", { name: /MAT-101/ });
+    // B4-ADJ-03 review: the count is the server's answer for the search; the
+    // notice's existing link is listed apart and is not counted as a match.
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent("1 matter matches this search.");
+    const linkedGroup = within(dialog).getByRole("group", { name: "Linked to this notice (1)" });
+    expect(within(linkedGroup).getByRole("checkbox", { name: /MAT-001/ })).not.toBeChecked();
+    fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
+      target: { value: "NO SUCH MATTER" },
+    });
+    expect(await within(dialog).findByText("No accessible matters match this search.")).toBeVisible();
+    expect(within(dialog).getByTestId("notice-matter-count")).toHaveTextContent("0 matters match this search.");
+    expect(within(linkedGroup).getByRole("checkbox", { name: /MAT-001/ })).toBeVisible();
+    fireEvent.change(within(dialog).getByLabelText("Search accessible matters"), {
+      target: { value: "MAT-101" },
+    });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: /MAT-101/ }));
     fireEvent.change(within(dialog).getByLabelText("Remarks"), {
       target: { value: "Corrected links" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(1));
-    expect(listMattersMock).toHaveBeenNthCalledWith(1, { limit: 100, q: undefined });
-    expect(listMattersMock).toHaveBeenLastCalledWith({
-      limit: 100,
-      q: "MAT-101",
-    });
+    expect(listMattersMock).toHaveBeenCalledWith({ limit: 50, q: undefined, cursor: undefined });
+    expect(listMattersMock).toHaveBeenCalledWith({ limit: 50, q: "MAT-101", cursor: undefined });
     expect(updateNoticeMock).toHaveBeenCalledWith(
       "notice-1",
       expect.objectContaining({
@@ -952,7 +978,9 @@ describe("centralized notice management", () => {
       target: { value: "Awaiting tribunal review" },
     });
     await screen.findByText("Unfiltered first-page row");
-    fireEvent.change(screen.getByLabelText("Filter by matter"), {
+    const matterFilter = screen.getByLabelText("Filter by matter");
+    await waitFor(() => expect(within(matterFilter).getByRole("option", { name: /MAT-001/ })).toBeInTheDocument());
+    fireEvent.change(matterFilter, {
       target: { value: "matter-1" },
     });
     await screen.findByText("Unfiltered first-page row");

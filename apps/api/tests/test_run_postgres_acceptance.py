@@ -555,6 +555,47 @@ def test_runtime_reparse_directory_is_rejected_without_copying_outside(tmp_path)
     assert (target / "not-runtime.bin").read_bytes() == b"outside-original"
 
 
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("This process may not create symbolic links")
+
+
+def test_pytest_current_links_are_dropped_and_their_numbered_targets_retained(tmp_path):
+    """An elevated Windows run lets pytest link each numbered basetemp entry."""
+    fixtures, destination = tmp_path / "fixtures", tmp_path / "retained"
+    numbered = fixtures / "test_upload_commit0"
+    numbered.mkdir(parents=True)
+    (numbered / "evidence.bin").write_bytes(b"retained bytes")
+    destination.mkdir()
+    _symlink_or_skip(fixtures / "test_upload_commitcurrent", numbered)
+
+    assert driver.drop_pytest_current_links(fixtures) == ["test_upload_commitcurrent"]
+    assert not os.path.lexists(fixtures / "test_upload_commitcurrent")
+    driver.retain_runtime(fixtures, destination)
+    assert (destination / "test_upload_commit0/evidence.bin").read_bytes() == b"retained bytes"
+
+
+@pytest.mark.parametrize("shape", ["outside", "unnumbered", "other-name"])
+def test_any_other_link_is_kept_and_still_refused(tmp_path, shape):
+    fixtures, outside = tmp_path / "fixtures", tmp_path / "outside"
+    fixtures.mkdir()
+    outside.mkdir()
+    (outside / "not-runtime.bin").write_bytes(b"outside")
+    sibling = fixtures / ("test_casex" if shape == "unnumbered" else "test_case0")
+    sibling.mkdir()
+    (sibling / "evidence.bin").write_bytes(b"inside")
+    name = "test_case_link" if shape == "other-name" else "test_casecurrent"
+    target = outside if shape == "outside" else sibling
+    _symlink_or_skip(fixtures / name, target)
+
+    assert driver.drop_pytest_current_links(fixtures) == []
+    assert os.path.lexists(fixtures / name)
+    with pytest.raises(ValueError, match="Reparse point"):
+        driver.fixture_inventory(fixtures)
+
+
 @pytest.mark.parametrize("fault", ["outside", "identity", "marker", "extra"])
 def test_owned_cleanup_refuses_changed_creation_containment_or_bytes(tmp_path, fault):
     root = tmp_path / "captured-temp-root"

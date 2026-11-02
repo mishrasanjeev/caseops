@@ -233,7 +233,7 @@ describe("IpDailyDocketPage", () => {
       checked_at: "2026-08-15T08:00:00Z",
       findings: [],
     });
-    fetchIpCalendarReconciliationCandidatesMock.mockResolvedValue({ candidates: [] });
+    fetchIpCalendarReconciliationCandidatesMock.mockResolvedValue({ candidates: [], total: 0 });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchIpDailyDocketMock.mockResolvedValue(FRESH_DOCKET);
@@ -1291,8 +1291,8 @@ describe("IpDailyDocketPage", () => {
       created_at: "2026-08-20T08:00:00Z",
     };
     fetchIpCalendarReconciliationCandidatesMock
-      .mockResolvedValueOnce({ candidates: [candidate] })
-      .mockResolvedValue({ candidates: [] });
+      .mockResolvedValueOnce({ candidates: [candidate], total: 1 })
+      .mockResolvedValue({ candidates: [], total: 0 });
     decideIpCalendarReconciliationCandidateMock.mockResolvedValue({
       ...candidate,
       status: "rejected",
@@ -1344,6 +1344,7 @@ describe("IpDailyDocketPage", () => {
           created_at: "2026-08-20T08:00:00Z",
         },
       ],
+      total: 1,
     });
 
     render(withClient(<IpDailyDocketPage />));
@@ -1352,5 +1353,35 @@ describe("IpDailyDocketPage", () => {
     expect(within(row).getByText("Unverified")).toBeVisible();
     expect(within(row).queryByRole("button", { name: "Restore from CaseOps" })).toBeNull();
     expect(within(row).getByRole("button", { name: "Record review" })).toBeVisible();
+  });
+
+  it("says when the review list holds only the newest of more pending reviews", async () => {
+    const candidates = Array.from({ length: 100 }, (_, index) => ({
+      id: `candidate-${index}`,
+      calendar_event_sync_id: `sync-${index}`,
+      calendar_connection_id: "connection-1",
+      source_type: "matter_deadline",
+      source_id: `deadline-${index}`,
+      ip_docket_id: `ip-${index}`,
+      drift_status: "unknown",
+      snapshot_schema_version: 1,
+      expected_snapshot: { occurs_on: "2026-09-20" },
+      observed_snapshot: { readable: false },
+      snapshot_sha256: "c".repeat(64),
+      status: "pending",
+      detected_by_membership_id: "member-1",
+      decided_by_membership_id: null,
+      decision_evidence_reference: null,
+      decided_at: null,
+      created_at: "2026-08-20T08:00:00Z",
+    }));
+    fetchIpCalendarReconciliationCandidatesMock.mockResolvedValue({ candidates, total: 137 });
+
+    render(withClient(<IpDailyDocketPage />));
+
+    expect(await screen.findByTestId("ip-calendar-candidates-partial")).toHaveTextContent(
+      "Showing the 100 newest of 137 reviews.",
+    );
+    expect(screen.getByText("137")).toBeVisible();
   });
 });

@@ -33,6 +33,7 @@ from caseops_api.schemas.ip_operations import (
     IpDocketRecordResponse,
 )
 from caseops_api.services import ip_imports, ip_operations
+from caseops_api.services.ip_nice_classes import nice_catalogue_in_force
 from caseops_api.services.session_context import SessionContext
 from tests.sql_observation import is_read_only_select
 from tests.test_ip_portfolio_spec_20261013 import _actor, _commit, _upload
@@ -196,7 +197,11 @@ def _full_public_dto(data, payload):
     assert particular["form_key"] == "TM-A" and particular["form_version"] == "2026.1"
     assert particular["mark_kind"] == "word"
     assert particular["representation_json"] == payload["particulars"]["representation"]
-    assert particular["classes_json"] == payload["particulars"]["classes"]
+    # The server stamps each class row with the Nice edition in force today.
+    edition = nice_catalogue_in_force().edition
+    assert particular["classes_json"] == [
+        {**row, "nice_edition": edition} for row in payload["particulars"]["classes"]
+    ]
     assert particular["parties_json"] == payload["particulars"]["parties"]
     assert particular["filing_manifest_json"] == payload["particulars"]["filing_manifest"]
     assert particular["readiness_status"] == "incomplete"

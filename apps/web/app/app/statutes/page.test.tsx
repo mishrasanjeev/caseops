@@ -309,6 +309,25 @@ describe("StatutesIndexPage", () => {
     );
   });
 
+  it("refuses a ninth statute term instead of silently dropping it (B4-ADJ-19 sibling)", async () => {
+    const user = userEvent.setup();
+    listStatutesMock.mockResolvedValue({ statutes: [], total_section_count: 0 });
+
+    render(withClient(<StatutesIndexPage />));
+
+    await user.type(await screen.findByTestId("legal-update-name"), "Nine terms");
+    const terms = screen.getByTestId("legal-update-terms");
+    await user.type(terms, Array.from({ length: 9 }, (_, i) => `Section ${i + 1}`).join(", "));
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter at most 8 terms, separated by commas; 9 were entered.");
+    expect(terms).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByTestId("legal-update-create")).toBeDisabled();
+    await user.clear(terms);
+    await user.type(terms, Array.from({ length: 8 }, (_, i) => `Section ${i + 1}`).join(", "));
+    expect(screen.getByTestId("legal-update-create")).toBeEnabled();
+    await user.click(screen.getByTestId("legal-update-create"));
+    expect(createLegalUpdateWatchlistMock.mock.calls[0][0].statute_terms).toHaveLength(8);
+  });
+
   it("shows source-backed updates and gates source sync by capability", async () => {
     const user = userEvent.setup();
     listStatutesMock.mockResolvedValue({

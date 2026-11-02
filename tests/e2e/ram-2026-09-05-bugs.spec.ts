@@ -126,7 +126,11 @@ test.describe("Ram September 05 reported workflows", () => {
     }
   });
 
-  test("billing profile save waits for discovery and remains visible after reload", async ({ page }) => {
+  test("billing profile form waits for discovery before enabling save (read-only)", async ({ page }) => {
+    // BUG-016: production runs read the tester's billing profile and never save
+    // it. An earlier version of this test wrote a fake GSTIN, address and
+    // 47-day terms onto test-legal's real default profile, and a real tester
+    // invoice snapshotted them.
     await login(page);
     const originalResponse = await api.get(`${API}/api/admin/matter-billing`, { headers: headers() });
     expect(originalResponse.status()).toBe(200);
@@ -152,6 +156,23 @@ test.describe("Ram September 05 reported workflows", () => {
       await expect(page.getByText("Loading billing profiles...")).toBeVisible();
       await expect(page.getByText("No billing profiles")).toBeHidden();
       release();
+      await expect(save).toBeEnabled();
+      await expect(page.getByLabel("GSTIN", { exact: true })).toHaveValue(original?.firm_gstin ?? "");
+    } finally {
+      release();
+      await page.unroute("**/api/admin/matter-billing");
+    }
+  });
+
+  test("[local-only] billing profile save remains visible after reload", async ({ page }) => {
+    test.skip(!LOCAL, "Writes the default billing profile; never run against a tester's production tenant (BUG-016).");
+    await login(page);
+    const originalResponse = await api.get(`${API}/api/admin/matter-billing`, { headers: headers() });
+    expect(originalResponse.status()).toBe(200);
+    const original = (await originalResponse.json()).profiles.find((profile: { is_default: boolean }) => profile.is_default);
+    try {
+      await page.goto(`${BASE}/app/admin/matter-billing`);
+      const save = page.getByRole("button", { name: "Save default profile" });
       await expect(save).toBeEnabled();
       await page.getByLabel("GSTIN", { exact: true }).fill("07ABCDE1234F1Z5");
       await page.getByLabel("PAN", { exact: true }).fill("ABCDE1234F");
@@ -189,7 +210,6 @@ test.describe("Ram September 05 reported workflows", () => {
       const reloaded = await api.get(`${API}/api/admin/matter-billing`, { headers: headers() });
       expect((await reloaded.json()).profiles.filter((profile: { is_default: boolean }) => profile.is_default)).toHaveLength(1);
     } finally {
-      release();
       if (original) {
         const restoreFields = [
           "name", "is_default", "currency", "firm_legal_name", "firm_address", "firm_gstin",

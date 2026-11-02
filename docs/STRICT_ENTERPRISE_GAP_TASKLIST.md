@@ -1,5 +1,63 @@
 # Strict Enterprise Gap Tasklist
 
+## October 31 Ram Batch 4 Enterprise Gaps
+
+Surfaced by the batch-4 lanes on `codex/ram-bugs4-20261031` (bug detail in
+`STRICT_BUG_TASKLIST_2026-04-22.md`, October 31 Ram Batch 4). Nothing below
+has production runtime proof yet, so nothing is `Implemented`.
+
+- EH-B4-01 Portal invitation ethical-wall bypass. Status: Missing. POST
+  `/api/admin/portal/invitations` (`api/routes/portal.py:1000`,
+  `services/portal_auth.py:173`, Matter check at :237-248) checks only
+  `Matter.company_id`; a walled admin with portal:invite can grant external
+  portal access to a walled Matter by id. Matter-level permissions and ethical
+  walls must override role access on every write, not only in the picker.
+  Required: the shared Matter access predicate in the service, a walled-admin
+  403/404 regression and an audit assertion; `list_admin_ip_grants` must stop
+  showing walled docket titles.
+- EH-B4-02 Truncation at the first page (100-row class). Status: Partially
+  implemented. Landed in code, not deployed: IP reports, control reviews, the
+  daily docket, linked documents, Madrid designations, the recordal
+  relationship-cycle check and offset-list clients read their complete
+  population (`test_ip_docket_full_population.py`,
+  `test_ip_detail_lists_complete_20261101.py`,
+  `apps/web/lib/api/ip-offset-lists.test.ts`); bare first-page docket
+  dropdowns are pinned by `apps/web/lib/ip/docket-dropdowns.test.ts`, which
+  allowlists whole files. Open: the Documents "Linked docket" picker on
+  `/app/ip` (first 100 dockets, no search, no cap statement; B4-ADJ-18), the
+  watch workspace (`limit=250`, no total), Matter lists on notices, drafting,
+  recommendations and portfolio, and unaudited non-IP `limit=100` defaults. No
+  repository-wide guard exists for a list read that neither pages to the end
+  nor reports a total.
+- EH-B4-03 Client-only policy enforcement. Status: Missing. A rule needing an
+  active working calendar is enforced only in `IpDeadlineGovernanceCard.tsx`;
+  `propose_deadline` and the opposition proposers do not check rule/calendar
+  jurisdiction and trigger kind against the proceeding; the docket-scoped
+  document list and the recordal/Madrid validators use different predicates.
+  Each policy must live in one server predicate that both the picker and the
+  write path read, with a direct-API negative test.
+- EH-B4-04 Production test-data retirement. Status: Missing. Production
+  acceptance journeys create records the product cannot retire: IP documents
+  have no retire path, counsel profiles are deactivated through the API because
+  no edit screen exists, and triage probes (docket 7ece82b7, registry link
+  83b46b3c, calendar 189148f7) remain in test-legal. Earlier specs also wrote
+  shared tester configuration (AI policy, default billing profile); the batch
+  removed those two, but `support/notice-upload-access.ts` and caseops-ip-qa
+  specs still mutate shared configuration. Required: a retire path or an
+  owner-recorded residue budget per record type before a production spec may
+  create it, and a static guard against configuration writes in production
+  specs (only the IP document taxonomy has one:
+  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`). The batch-4
+  production ip-create and recordals journeys already upload one unretirable
+  IP document per run; the release needs the owner's residue exception or a
+  `[local-only]` split first (B4-ADJ-07).
+- EH-B4-05 Repeated record-access CTE. Status: Partially implemented.
+  `visible_ip_dockets_filter` (`services/record_access_policy.py:316`) emits an
+  anonymous materialized CTE; two calls in one statement produced a 500 on
+  journal watch (fixed there in eb421f4c). The root fix (named CTE or one shared
+  visible-docket subquery) and a PostgreSQL double-call regression across its
+  call sites are open.
+
 ## October 31 All-Refs Security Review: Release-Gated
 
 Partially implemented/NO-GO. Main's actual scheduled secret-scan failure was

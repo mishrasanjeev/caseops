@@ -1,7 +1,14 @@
 import { clearSession, getStoredContext, storeSession } from "@/lib/session";
 import type { AuthSession } from "@/lib/api/schemas";
 
-import { API_BASE_URL, ApiError, NetworkError } from "./config";
+import {
+  API_BASE_URL,
+  ApiError,
+  NetworkError,
+  apiValidationIssues,
+  describeStructuredProblem,
+  describeValidationIssues,
+} from "./config";
 
 const REFRESH_PATH = "/api/auth/refresh";
 const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
@@ -183,9 +190,28 @@ function extractDetail(data: unknown, fallback: string): string {
   if (typeof data === "string") return data;
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
+    // A validation problem names each field, whichever API version answered,
+    // so a toast never says "Input should be a valid list" about nothing.
+    const issues = apiValidationIssues(obj);
+    if (issues.length > 0) return describeValidationIssues(issues);
     const detail = obj.detail;
-    if (typeof detail === "string") return detail;
+    // A structured refusal ({code, gaps}) otherwise reads as just "Conflict".
+    if (typeof detail === "string") return describeStructuredProblem(obj, detail) ?? detail;
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const nested = detail as Record<string, unknown>;
+      const message = typeof nested.detail === "string"
+        ? nested.detail
+        : typeof nested.message === "string" ? nested.message : null;
+      const structured = describeStructuredProblem(nested, message);
+      if (structured) return structured;
+      if (message) return message;
+    }
     if (Array.isArray(detail)) {
+      // A bare FastAPI 422 ({"detail": [...]}) outside the problem envelope.
+      const bareIssues = apiValidationIssues({ errors: detail });
+      if (bareIssues.length > 0 && bareIssues.length === detail.length) {
+        return describeValidationIssues(bareIssues);
+      }
       return detail
         .map((item) => {
           if (typeof item === "string") return item;

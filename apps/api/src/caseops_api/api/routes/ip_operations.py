@@ -25,6 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from caseops_api.api.dependencies import (
     DbSession,
     require_all_capabilities,
+    require_any_capability,
     require_capability,
 )
 from caseops_api.api.routes.ip_patents import router as patent_router
@@ -74,6 +75,7 @@ from caseops_api.schemas.ip_deadlines import (
     LegalCalendarActivationRequest,
     LegalCalendarVersionProposalRequest,
     LegalCalendarVersionRecord,
+    LegalCalendarWithdrawalRequest,
 )
 from caseops_api.schemas.ip_documents import (
     IpDocumentAddLinksRequest,
@@ -91,6 +93,8 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentPolicyActionResponse,
     IpDocumentPolicyResponse,
     IpDocumentRecord,
+    IpDocumentRetirementPreview,
+    IpDocumentRetireRequest,
     IpDocumentStateTransitionRequest,
     IpDocumentTaxonomyEntryRecord,
     IpDocumentTaxonomyResponse,
@@ -179,6 +183,7 @@ from caseops_api.schemas.ip_operations import (
     IpRelatedRightObligationCompleteRequest,
     IpRelatedRightObligationCreateRequest,
     IpTitleInterestCreateRequest,
+    IpTrademarkDocketRecordType,
     IpWorkspaceReadinessResponse,
     ManualTrademarkApplicationCreateRequest,
     ManualTrademarkApplicationCreateResponse,
@@ -259,6 +264,7 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalTermListResponse,
     IpRenewalTermRecord,
     IpRenewalTermTransitionRequest,
+    IpRenewalTransitionReferences,
 )
 from caseops_api.schemas.ip_reports import (
     IpReportFoundationContract,
@@ -319,6 +325,11 @@ from caseops_api.services.ip_deadline_workflow import (
     rule_impact,
     select_company_rule_version,
     transition_rule_version,
+    withdraw_calendar_version,
+)
+from caseops_api.services.ip_document_retirement import (
+    preview_ip_document_retirement,
+    retire_ip_document,
 )
 from caseops_api.services.ip_document_workflow import (
     add_ip_document_links,
@@ -481,6 +492,7 @@ from caseops_api.services.ip_renewals import (
     create_renewal_term,
     list_renewal_portfolio,
     list_renewal_terms,
+    list_renewal_transition_references,
     renewal_foundation_contract,
     schedule_renewal_instruction_reminders,
     transition_renewal_term,
@@ -540,6 +552,12 @@ IpRuleProposer = Annotated[
 IpRuleActivator = Annotated[
     SessionContext,
     Depends(require_capability("ip:rules_activate")),
+]
+# Company rule selection is a compare-and-swap made by activators, so everyone
+# who may select (ip:rules_activate) or propose rules can read the current one.
+IpRulePolicyReader = Annotated[
+    SessionContext,
+    Depends(require_any_capability("ip:rules_propose", "ip:rules_activate")),
 ]
 IpFinance = Annotated[SessionContext, Depends(require_capability("ip:fees_manage"))]
 IpWorkspaceAdmin = Annotated[
@@ -924,6 +942,24 @@ async def post_ip_client_instruction_acknowledgement(
     )
 
 
+@router.get(
+    "/dockets/{docket_id}/renewal-terms/{term_id}/transition-references",
+    response_model=IpRenewalTransitionReferences,
+)
+async def get_ip_renewal_transition_references(
+    docket_id: str,
+    term_id: str,
+    context: IpWriter,
+    session: DbSession,
+) -> IpRenewalTransitionReferences:
+    return list_renewal_transition_references(
+        session,
+        context=context,
+        docket_id=docket_id,
+        term_id=term_id,
+    )
+
+
 @router.post(
     "/dockets/{docket_id}/renewal-terms/{term_id}/transition",
     response_model=IpRenewalTermRecord,
@@ -972,8 +1008,11 @@ async def get_ip_documents(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str | None, Query(max_length=36)] = None,
+    include_history: Annotated[bool, Query()] = False,
 ) -> IpDocumentListResponse:
-    return list_ip_documents(session, context=context, docket_id=docket_id)
+    return list_ip_documents(
+        session, context=context, docket_id=docket_id, include_history=include_history
+    )
 
 
 @router.post("/documents/upload", response_model=IpDocumentUploadResponse)
@@ -1031,6 +1070,30 @@ async def get_ip_document_route(
     session: DbSession,
 ) -> IpDocumentRecord:
     return get_ip_document(session, context=context, document_id=document_id)
+
+
+@router.get(
+    "/documents/{document_id}/retirement",
+    response_model=IpDocumentRetirementPreview,
+)
+async def get_ip_document_retirement_preview(
+    document_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocumentRetirementPreview:
+    return preview_ip_document_retirement(session, context=context, document_id=document_id)
+
+
+@router.post("/documents/{document_id}/retire", response_model=IpDocumentRecord)
+async def post_ip_document_retire(
+    document_id: str,
+    payload: IpDocumentRetireRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpDocumentRecord:
+    return retire_ip_document(
+        session, context=context, document_id=document_id, payload=payload
+    )
 
 
 @router.post("/documents/{document_id}/links", response_model=IpDocumentRecord)
@@ -1283,7 +1346,7 @@ async def post_ip_deadline_rule_transition(
     response_model=list[IpCompanyRulePolicyRecord],
 )
 async def get_ip_rule_policies(
-    context: IpRuleProposer,
+    context: IpRulePolicyReader,
     session: DbSession,
 ) -> list[IpCompanyRulePolicyRecord]:
     return list_company_rule_policies(session, context=context)
@@ -1325,6 +1388,24 @@ async def post_ip_working_calendar_activation(
     session: DbSession,
 ) -> LegalCalendarVersionRecord:
     return activate_calendar_version(
+        session,
+        context=context,
+        calendar_version_id=calendar_version_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/working-calendars/{calendar_version_id}/withdraw",
+    response_model=LegalCalendarVersionRecord,
+)
+async def post_ip_working_calendar_withdrawal(
+    calendar_version_id: str,
+    payload: LegalCalendarWithdrawalRequest,
+    context: IpRuleProposer,
+    session: DbSession,
+) -> LegalCalendarVersionRecord:
+    return withdraw_calendar_version(
         session,
         context=context,
         calendar_version_id=calendar_version_id,
@@ -1474,38 +1555,41 @@ async def get_ip_workspace_readiness(
     )
     features: list[dict[str, object]] = []
     for decision in decisions:
-        available = decision.available
-        reason = decision.reason
         blocked_by_incident_id = incident_kill_switches.get(decision.feature_id)
+        # ``reason`` keeps its historical precedence (incident, then the
+        # capability/entitlement/rollout gates, then workspace configuration).
+        # ``blocked_reasons`` lists every failing gate in that same order, so a
+        # missing plan entitlement can no longer hide a platform rollout pause.
+        blocked_reasons: list[str] = []
         if blocked_by_incident_id is not None:
-            available = False
-            reason = "incident_kill_switch"
-        if available:
-            if configuration is None:
-                available = False
-                reason = "workspace_not_configured"
-            elif not configuration.workspace_enabled:
-                available = False
-                reason = "tenant_disabled"
-            elif decision.feature_id in {
+            blocked_reasons.append("incident_kill_switch")
+        blocked_reasons.extend(decision.blocked_reasons)
+        if configuration is None:
+            blocked_reasons.append("workspace_not_configured")
+        else:
+            if not configuration.workspace_enabled:
+                blocked_reasons.append("tenant_disabled")
+            if decision.feature_id in {
                 "registry_sync",
                 "deadline_automation",
                 "notification_automation",
             }:
                 if decision.feature_id not in configuration.enabled_automations_json:
-                    available = False
-                    reason = "tenant_disabled"
-                elif any(
+                    blocked_reasons.append("tenant_disabled")
+                if any(
                     blocker.startswith(f"{decision.feature_id}:")
                     for blocker in configuration_status.enablement_blockers
                 ):
-                    available = False
-                    reason = "readiness_test_failed"
+                    blocked_reasons.append("readiness_test_failed")
+        blocked_reasons = list(dict.fromkeys(blocked_reasons))
+        available = not blocked_reasons
+        reason = blocked_reasons[0] if blocked_reasons else "available"
         features.append(
             {
                 "feature_id": decision.feature_id,
                 "available": available,
                 "reason": reason,
+                "blocked_reasons": blocked_reasons,
                 "owner": decision.owner,
                 "required_capabilities": list(decision.required_capabilities),
                 "missing_capabilities": list(decision.missing_capabilities),
@@ -2082,6 +2166,7 @@ async def get_ip_calendar_reconciliation_candidates(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> IpCalendarReconciliationCandidateListResponse:
     from caseops_api.services.calendar_sync import (
+        count_ip_calendar_projection_reconciliation_candidates,
         list_ip_calendar_projection_reconciliation_candidates,
     )
 
@@ -2092,7 +2177,10 @@ async def get_ip_calendar_reconciliation_candidates(
         limit=limit,
     )
     return IpCalendarReconciliationCandidateListResponse(
-        candidates=[_calendar_reconciliation_candidate_record(row) for row in rows]
+        candidates=[_calendar_reconciliation_candidate_record(row) for row in rows],
+        total=count_ip_calendar_projection_reconciliation_candidates(
+            session, context=context, include_resolved=include_resolved
+        ),
     )
 
 
@@ -2299,8 +2387,20 @@ async def get_ip_dockets(
     context: IpViewer,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    # Narrows the trademark docket types listed, so totals and pages count
+    # only those types (the registry picker lists national dockets only).
+    record_type: Annotated[list[IpTrademarkDocketRecordType] | None, Query()] = None,
 ) -> IpDocketListResponse:
-    return list_ip_dockets(session, context=context, limit=limit)
+    return list_ip_dockets(
+        session,
+        context=context,
+        limit=limit,
+        query=query,
+        cursor=cursor,
+        record_types=record_type,
+    )
 
 
 @router.get("/portfolio", response_model=IpPortfolioListResponse)

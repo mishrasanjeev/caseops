@@ -1,0 +1,2232 @@
+{
+ "captured_at": "2026-10-31T08:06:00Z",
+ "source": "gcloud run revisions list --service caseops-api --region asia-south1 --project perfect-period-305406 --format=json (read-only)",
+ "service_traffic": "100% caseops-api-00504-478, untagged",
+ "revisions_total": 504,
+ "delete_count": 246,
+ "rows": [
+  {
+   "revision": "caseops-api-00258-zv8",
+   "created": "2026-08-09T06:23:57.196819Z",
+   "release_sha": "d8ac94da22f014dfa205079c9b1b049e98bd5347",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:158c809accbc466ef162f47b932253ad4f0950dbaafc24f80b730c2adca61905",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00259-kpk",
+   "created": "2026-08-09T08:05:24.038843Z",
+   "release_sha": "54dd8f5fdbee3391112a068c242952029c7894d7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e425a3a2729ab47e35c2b588dd0409bcc60349d1e979c03dad0fd267858f3686",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00260-j75",
+   "created": "2026-08-09T10:41:15.753334Z",
+   "release_sha": "4b9ebc4f8017fe545d7699b9df3c7cf8f708975c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d7c1481bcee55a3e412351bebce9b3e29a25bc82dd48ed5e94c7d2b2c5278e5a",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00261-xnb",
+   "created": "2026-08-09T11:42:24.775555Z",
+   "release_sha": "bc7ba3c56c57a6ee192686079d0cbd96fed1b7f3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a4efd592b45ff2c2ec44005b2ff289e03541cb2727d1b932edb096e130cecaa8",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00262-8p5",
+   "created": "2026-08-09T13:26:24.420820Z",
+   "release_sha": "65f7c5cd2a669a0751b99280f136a4d18bbc9df2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:21320fad44c8e8e208615113c3d8ecf468686ddc13ea937784287cd025fbd34c",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00263-zl4",
+   "created": "2026-08-09T14:47:15.304865Z",
+   "release_sha": "9970764378f170760f0a094c9e68a345e1813d40",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4d376f2ecaa8a270fcc2a6a265bccbc0a3c2c1dbd198a75092544d92c429324a",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00264-jmx",
+   "created": "2026-08-09T17:38:54.539999Z",
+   "release_sha": "d874c0c5cd4ced1574e7ce49acb33fdb72c43c26",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:be3ce8645746b319d3f7d44a9a2934ee8e6c10eff1f7c5d6e1acc0656c0e2783",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00265-7zt",
+   "created": "2026-08-09T18:49:41.057330Z",
+   "release_sha": "64f6360b7bd9f4943be56c3d2c28662ce361bf5f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:dbfd70d30ea103aa7965d0fce1aacf7b2c1fc342a463e4ad7266c6bee72fee66",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00266-lcq",
+   "created": "2026-08-10T00:56:42.895892Z",
+   "release_sha": "aee6d2da94a2f9a38105e98a93529c0ca5bdeba4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ba72018956b4d5653e6e794f55db6750d21fb608fe8dd2f32fb2409b3027f68d",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00267-swr",
+   "created": "2026-08-10T02:08:53.458932Z",
+   "release_sha": "18a199bfb0ef6377f88d7bd401d22b42f68faf91",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:927f9285d531c7734a0f2a05884cb189aa6a6a200fcf60ea58b75fb2c8f1d0a3",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00268-6p9",
+   "created": "2026-08-10T04:06:19.833545Z",
+   "release_sha": "2f27f044dd27d47c805e1d2a35b92f4fbee893ae",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f0f77718e1aeea087378d1e6c54cf000c43d753010c19125b235446b1537ab26",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00269-d5g",
+   "created": "2026-08-10T05:41:17.343306Z",
+   "release_sha": "b8dbde8b08cb3ef2b4eb13725d66a948090d60db",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:7962d58d740a773d1ea2bed1d4243e153d44e29c3cab84c3b4378fb4722ae414",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00270-5zs",
+   "created": "2026-08-10T13:35:55.125293Z",
+   "release_sha": "b1e10a0470587583a6e81bd7786dc307ec847d83",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6e9e66130dfbea02f262f00eec40603521f7326ee73c6ebb56e41d0e4fd37393",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00271-cg8",
+   "created": "2026-08-10T15:03:17.221061Z",
+   "release_sha": "73a274f4d619c51d4bb688e01b2c718372451c4b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8b38cfc8b17ef0760c7ee64c5c84a75d3e26f4c06283baed600e677748a69f53",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00272-2cs",
+   "created": "2026-08-10T15:52:32.213984Z",
+   "release_sha": "73a274f4d619c51d4bb688e01b2c718372451c4b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8b38cfc8b17ef0760c7ee64c5c84a75d3e26f4c06283baed600e677748a69f53",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00273-v99",
+   "created": "2026-08-10T17:13:28.193682Z",
+   "release_sha": "88ef0b990114a2b0d30006513fdb955ca0bf13e4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a673ed9d71fb3f6e2d1e6b607717531b0b8cafcd45ac229374af3fad554c19ad",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00274-phv",
+   "created": "2026-08-11T00:37:45.520314Z",
+   "release_sha": "61f749c037118500f157582dbb2f972675b73d40",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6375bcde3ae2205b1a48ed1df2f868e6a8212c119d7478a8761607c078002f54",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00275-f7n",
+   "created": "2026-08-11T03:30:02.649269Z",
+   "release_sha": "90812bfc0401de2fd1a88dbe98f9521166149b0a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:3627aa5b9ee891a39d97e56a93f702497af89f32538d34f8ffbb188e48bfad08",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00276-zq8",
+   "created": "2026-08-11T05:24:19.934138Z",
+   "release_sha": "a1ff9a8b8c9d96329685150675c393b9168ea2a8",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8597c6172de6e7ab9e41d0d73fc5d46140c06030d740d0533a123659db871590",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00277-2ws",
+   "created": "2026-08-11T05:42:30.098256Z",
+   "release_sha": "551f4cfe15a5920d149872ead3885154b5d63bc1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:eb27233f2399a2b2ae124e2d1b0b7f3e2b8d9875235d94d2e6a06fc7131b898b",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00278-4rq",
+   "created": "2026-08-11T06:56:47.552266Z",
+   "release_sha": "f0e5fecfd5c28a8cd50d60262a73b87ffa6f2fd1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a240a974dbd8ed12a05b9ee179209dc1d8da3618fed2899bd07e877e84d78b4b",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00279-6pg",
+   "created": "2026-08-11T16:01:31.207685Z",
+   "release_sha": "0dd342c656f66d07fdcc3a301c682fc93c0a407c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4d4273c5c050a3b9452f7f81ccb7a0f0d3a63e1dce831d228d01dd246da45b62",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00280-qpf",
+   "created": "2026-08-12T00:42:22.673225Z",
+   "release_sha": "4458ea8cc81903efc19e308e55462c5d34cccbf3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4349ae07d2debd3e484d7bb4592a19d5fa3855de036fc1c36d4841db8f8dec0d",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00281-9bt",
+   "created": "2026-08-12T05:08:59.750392Z",
+   "release_sha": "d97969d1ac8e6cf9da0418f534349257ba487393",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:91497eb798a7451490bdc216c245f80a74f2528251660fcd7369d5dc4e6217ca",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00282-j82",
+   "created": "2026-08-12T17:00:02.280963Z",
+   "release_sha": "f64386bdf77a7459897222b33a5a0ecc1d6100f4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b80ac61b8107de72c484742cb84d6b463743a7663150a4691109ee2cd19abf94",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00283-k2x",
+   "created": "2026-08-13T01:39:14.009914Z",
+   "release_sha": "2a66a56d32b4b096027a02f409d1f142dd298af1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:19c57151b32792ee7613afa65965c5130e43833d3878c4e8b321470d923ec460",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00284-jzh",
+   "created": "2026-08-13T01:42:05.775165Z",
+   "release_sha": "2a66a56d32b4b096027a02f409d1f142dd298af1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:19c57151b32792ee7613afa65965c5130e43833d3878c4e8b321470d923ec460",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00285-skg",
+   "created": "2026-08-13T02:42:44.319300Z",
+   "release_sha": "0ad7a43de3d136e9991191d29cc8feeb75602443",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9b67291a5f369f87e9c215ba9de17b5e7816241a211ce705112ff12a9dbcabce",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00286-8x7",
+   "created": "2026-08-13T06:51:07.476309Z",
+   "release_sha": "2aa839d5391b12479ead576645c89c45ff6de09f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bd39abed8b81d7cebefc2691761428aa418a278bc29968d3c7b58d1d26ad2daa",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00287-ml7",
+   "created": "2026-08-13T16:40:33.792867Z",
+   "release_sha": "733007282d994b1ab10b95a8fe05bb7c0dd41d25",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:582314c888e2b79c534f29963895395e6ee4ffb42c9c67041df802cf2c3b1fe4",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00288-ccf",
+   "created": "2026-08-14T02:13:48.609583Z",
+   "release_sha": "c462bc60a010b3e694b8b3adfab14eb057b9662e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fcdc8eca364153a9a25fef385c9d22405a14caacbf0669e50a1b91ec76b1e6f3",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00289-l9g",
+   "created": "2026-08-14T03:27:59.443702Z",
+   "release_sha": "6db34b644d04fa075fe7e3a0ceb5fb0c391114c3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:5a8d2c96acc7efa89444f844d75c6050537155c1fdc26cb41dd5d71e53e8eff6",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00290-plb",
+   "created": "2026-08-14T06:13:14.702164Z",
+   "release_sha": "12aa42ce583cc998c30bc9052ed672d57dafe710",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2b85e72570090283cd29ca7d4721e1766d8dcbaaee2dc33a22c12ea95cc1a22e",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00291-62b",
+   "created": "2026-08-14T11:59:09.089752Z",
+   "release_sha": "52cb925d3dacd74890b607208588d95fb6000473",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c09eb2bf26b0af10ed9d4b8fdf692c9995d41c8e2282ce765617436ef0707684",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00292-sr5",
+   "created": "2026-08-14T13:47:59.877849Z",
+   "release_sha": "8d9654bbe556ad4fa24caf64578ac9cf55343a0e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:de2ce8390e727d7c612a21829d1a6c636f1efdb3c619e4515d5d5c194ce79629",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00293-nf2",
+   "created": "2026-08-14T16:36:08.205479Z",
+   "release_sha": "3177f0176305e8790f40c3f771daebe595087955",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ade0528b789513012960f9ceae2fb915d41306d604512befb0b0641e22b62537",
+   "governance_flag": null,
+   "contains_5d58cc2f": false,
+   "disposition": "delete: original unfenced rule writers (approved 36)"
+  },
+  {
+   "revision": "caseops-api-00294-x7w",
+   "created": "2026-08-15T04:42:28.566170Z",
+   "release_sha": "6a78850100b5be0fddcf4278f42bcbc930e89d62",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c5e6e687f6f37dc625711e4dbfa73a3766fa51e9b955c4bfb70da4faf7b3981c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": false,
+   "disposition": "keep: A0 fenced release"
+  },
+  {
+   "revision": "caseops-api-00295-xsk",
+   "created": "2026-08-16T01:34:02.837083Z",
+   "release_sha": "ba869fa2676dbb2b62ee1fb72798ef606780d43a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:62a2d6f2067ac18b23448a8e527e81f53a3751c17e0d60540f08cea1259a4cf7",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00296-5ws",
+   "created": "2026-08-16T15:31:09.883470Z",
+   "release_sha": "fa89fd3294d13a148a4ccff5d4fe7ff1b0c27e6d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:20755c684fff07d56f2d29aaaef1454cbcc81c671a07ebdff6522031d1e94175",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00297-5w8",
+   "created": "2026-08-16T17:12:04.749192Z",
+   "release_sha": "7642366a8cf7efca2a7f61f353aee2c61d80290f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:13e9ae39fc2abfb4a9af09eea34591a51d44c56aff1a6c1e32c0fa06062dff55",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00298-fk6",
+   "created": "2026-08-16T19:37:07.633250Z",
+   "release_sha": "9e56353e3de3d45c9602ca2da2ba1221a5fca921",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8d248f06eabc6ca25547ecba7282030ce3b683c485dab1904824ef03358bc693",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00299-7m4",
+   "created": "2026-08-16T19:41:37.899695Z",
+   "release_sha": "9e56353e3de3d45c9602ca2da2ba1221a5fca921",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8d248f06eabc6ca25547ecba7282030ce3b683c485dab1904824ef03358bc693",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00300-8pz",
+   "created": "2026-08-17T07:56:27.245481Z",
+   "release_sha": "78a0edf323042dcc56780c52e10f6e48813678d1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cbbdaf29f526c26b826f6adf26d9337b7bc299377ac9415db72d73b1247b85f5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00301-w65",
+   "created": "2026-08-17T11:32:33.778888Z",
+   "release_sha": "48d4cfd708c3a3b33f662c616e3258ad8d3032f5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:036b2a7f6e0877cc524ac701d39a2cf4f60f125e190d8852151288c8fdd5b096",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00302-n66",
+   "created": "2026-08-18T01:07:28.041597Z",
+   "release_sha": "5ca09c290b3e2850d074c7dd802b2c5705c75140",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ed29ceb579f2c6a1159eeb5ebff5be0749f3f34bf722eb9f4f857f552e7aea70",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00303-p8j",
+   "created": "2026-08-18T10:55:00.630547Z",
+   "release_sha": "539f3529cd99cbc26dcde7d1d77669ed312572ff",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2eaf469fc72ea7780c3a5a94c74820c1890201f69f3e76647d84647f66f9149c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00304-2z5",
+   "created": "2026-08-18T14:25:47.219368Z",
+   "release_sha": "5668fbaf8b5f729fa7382df41a48bdb8aff32ca7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:71e41e9960237a3af597c01dd7e830ea3850a869eca5eae8bc19d1086cd40b15",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00305-n6m",
+   "created": "2026-08-19T00:31:50.020087Z",
+   "release_sha": "58c2b525c57aabf48e735b6d573e27303b0dbe89",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:39568daab9e9113f24e6987523ae12cd4424d9032d23bed0de6400371b7de12b",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00306-8b7",
+   "created": "2026-08-19T05:48:25.511589Z",
+   "release_sha": "32a745e95b57bb88615067f81e6eb939e69944b6",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a38b37a4256f853cf43fb22b4940b5178590bca705e10128e5d97c07ac12fe9e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00307-kc8",
+   "created": "2026-08-19T12:22:14.231130Z",
+   "release_sha": "6e9035e713f05f1c030db33ed6358622ece3256a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d2e81f27590fb6fbd0cb1b1a114d23f624649089781a898160546178a6db45c8",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00308-pxd",
+   "created": "2026-08-19T14:56:55.381541Z",
+   "release_sha": "3bb0237be3cd431ade4ea9e666c78b9c94a4041b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e5172272f836a4644a774a2564bdd2765ecd0223fa189b0b0ccfffbc8fcd2233",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00309-r8t",
+   "created": "2026-08-19T17:13:17.849806Z",
+   "release_sha": "4db36224b866697365b7b0da13a8d2ade675b9c9",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6b99ee2cd2fab8205176d2ed2f70ecf42858ec625584bd075b39c7f04ead6bca",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00310-8kx",
+   "created": "2026-08-20T03:20:24.993518Z",
+   "release_sha": "3d6e36faaf98af66f626ce15384ddfd8ede4cbe4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:1c4d3217f98bce47e4ee8a87555e3904e1c0b719ff74dd8923b8459c0311d183",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00311-grq",
+   "created": "2026-08-20T11:21:33.228551Z",
+   "release_sha": "9e458efd43cd8db8450bd7de96ff46a941744edc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cc841140c58d14aead3c8efd8f0fb57f457a18f814892acb48ab84dcc0bb6a36",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00312-mj8",
+   "created": "2026-08-22T02:15:16.568507Z",
+   "release_sha": "6a421c0b6097c6ff7f6d58341176aaf6e81d9de0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bfafabf3155e75e31a9ab5d274a06d38ac4eefe4140a238b3c133441b008d15b",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00313-pc6",
+   "created": "2026-08-22T03:26:00.619016Z",
+   "release_sha": "1a1ee0effb640d2c91238b2f917021de2b4297b4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:77312878151ed776a674be01ec47c245f36d90509952276d633953f869d6f0b0",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00314-6dz",
+   "created": "2026-08-22T06:01:37.242553Z",
+   "release_sha": "475b476165876278873aef5cdc8bc58024768e17",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b9a68c16799a6cf1fca4b53bbbaf2f22a593dbdb3f287027cf6b03b8014c590a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00315-d97",
+   "created": "2026-08-22T07:17:02.451023Z",
+   "release_sha": "cfd05705918386424aea63b23fe4b664a00bd075",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9808d14fe6d53b78c5ec0a55933cdf39abef3bf9ac6b9e3ed4ff44fdb9d48359",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00316-4m5",
+   "created": "2026-08-22T08:35:23.978113Z",
+   "release_sha": "717763ee72a77cda015d322f5bae6c8d02cf8068",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b7f6fe4bfc1ec1838a1591e076d05ab9b6b9b0b88e7d8ec5fa02de2c428aa469",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00317-r24",
+   "created": "2026-08-22T10:01:08.097768Z",
+   "release_sha": "3ba0bb9c472cff16366de48031b9ac83bc1f9a58",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e92b5b8aa7ee5865d0f4ae6bc71c15a4098d26350d1ccfba23b7753eaa680434",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00318-9g9",
+   "created": "2026-08-22T11:28:08.522641Z",
+   "release_sha": "bb5e877ee0a89c8d0f79a34c3abe227ad62bb7f6",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:83778aed2ed150be102811090c9b6da1eea6dbd600be07c987aaadac33d74989",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00319-lxr",
+   "created": "2026-08-22T13:59:32.964809Z",
+   "release_sha": "f0592eafe3d6d2be6daa69d483ded34093ee4efc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b549885d19fa3b9bd06832b965f4ae42ca254b089b7cdac8cc80ad13785eada5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00320-jvm",
+   "created": "2026-08-22T16:52:17.367426Z",
+   "release_sha": "ef34627791e25cd7d93b92356e10d0ed047b6163",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c1a8813c554f8f7141cc19fd030f2393588bf2ce96d3eeafc62badbe6e4fea5d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00321-58r",
+   "created": "2026-08-22T18:13:38.285441Z",
+   "release_sha": "a1f85a61f3014c0c0b4caf3a4470ba6808f05ecd",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:193e91509e83464c950671ff8b89f64888f81084151ff9b634a52fc18dbb3ccb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00322-bst",
+   "created": "2026-08-22T18:46:31.706552Z",
+   "release_sha": "27c7ee3aed6e5033bc9d5c2847949905a00ffb9c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:66dfdd07b9b7064616738bf28f16230d31d4d343865655b9b5ce44f4fe108bef",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00323-mnf",
+   "created": "2026-08-22T20:16:21.234544Z",
+   "release_sha": "bc171a43f9f67917fef3eb1afcfad5ff765721ec",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:362c2f38ce51e71c8cb3d1ec220805b2ec35948758922538fa53e4e7f1f838e1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00324-7hv",
+   "created": "2026-08-22T21:46:54.034441Z",
+   "release_sha": "2304e4aee8f999d69af25c5934e4271e895b0648",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c6367dd887fc3f124894bed723ac1b953a0adc6d69172665b45b13eb7ccde774",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00325-bhp",
+   "created": "2026-08-22T23:08:54.674656Z",
+   "release_sha": "dc6401acda9dbc3afb4c38260b078079d00425fe",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:55e471b0ee6527add0b0152486e097184ec839129c592f3b6caab523c02e26e7",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00326-nb7",
+   "created": "2026-08-23T01:25:14.520981Z",
+   "release_sha": "99b568df05456a6a0a327c1af124132da9ef8cf2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:01ee514a3b6186fb614e153203b0c9b123eafec54ed32cd1b08b9b15d40f2f71",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00327-gpv",
+   "created": "2026-08-23T06:22:52.774446Z",
+   "release_sha": "f8181510ce0fab6eb2da636555c5d3bce9a28333",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cf169ab7ec27eb04e8d4f3d2e413e1307bdfa52fda03d17b40d68ba6772df4d4",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00328-4d5",
+   "created": "2026-08-23T14:47:01.881970Z",
+   "release_sha": "00e3b762b9065a83a7f832094770275ee74bc8e0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8d282da91853f072a40605d31736307caf59aa55d16796c7a7132910c1077643",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00329-zmg",
+   "created": "2026-08-23T15:55:29.799916Z",
+   "release_sha": "351fc72a8247703b7ca3a496e0bf07f7738905d7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:95681cf8af71ff21cf933e14f7f8f90e2ffd4df40f0864dbd74a6f94d266bb51",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00330-s2w",
+   "created": "2026-08-23T19:33:36.654386Z",
+   "release_sha": "425715f25f2645cd1ae5a464380819e0ac094d67",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:35560452f4e0e7afd8d71817f8f24a852066edf6bb44c537c374c6b0f92cd7b2",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00331-472",
+   "created": "2026-08-23T21:46:56.497243Z",
+   "release_sha": "352c469eccfda8e1ba92b6ad846f5ea77c563d23",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:26e671ab51cf6b31cea84aa5d2d56cab96747662514ad3d5591a2cd9bbe7e9b5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00332-6zq",
+   "created": "2026-08-23T23:56:04.212724Z",
+   "release_sha": "d130096bb004f604e9ddbbdeca84034fccbdb4c0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:901099cbb2365af161a3ec570002cb287e9e310c90f0083ca9bdbedac8622297",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00333-92n",
+   "created": "2026-08-24T01:11:01.317088Z",
+   "release_sha": "349710dbfeecca5f8c51ef058d92bb807c9d1e0c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0b46545c08267a60fbc9d3ad90dd8e1c452d3c7aab25cc13cdf8423c0c4c6bba",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00334-rlg",
+   "created": "2026-08-24T03:00:24.252683Z",
+   "release_sha": "cc38cc2854d6adb69390b1b7a7dcca704f61f178",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:5eec439cd22d757d35c3082877e8961fc1575bcc7bb68d4b5cf31918a876a7ca",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00335-gw6",
+   "created": "2026-08-24T04:21:31.948905Z",
+   "release_sha": "2736c1530d76a7b5a122250c00ba218a36ce336a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b53be95c08f06fd3d74c42b8128e127a9fc3b4015bbcf82d20d50024c334d917",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00336-6gw",
+   "created": "2026-08-24T06:50:40.083251Z",
+   "release_sha": "474b842d0573042d8a5e6fe1a88d4f6cf33d68ea",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c9f92dad99b5e3df538b5525c443fba13fa8354ddf5958ce2148842395bfdf4e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00337-4hv",
+   "created": "2026-08-24T08:48:42.546663Z",
+   "release_sha": "98e22f049939c8bb1979f12185653d2438c5bfac",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c9184c934a4e864877f301b7f5c65d7c36cf03bba2110db11454f6c132e4b8ec",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00338-vvd",
+   "created": "2026-08-24T12:33:54.548003Z",
+   "release_sha": "4b63a4bac3c8ba13ecf0e6983a461cf7a746001e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:53caa78c8f3d941422291225e51750acd864f7f060b295b3277dc074a528bba6",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00339-f68",
+   "created": "2026-08-24T13:54:35.675231Z",
+   "release_sha": "4f9ed0e877f87ea03a984cceb6ad2d3121d859af",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:65b8f3ed7191604f77ec75715a28ca7634c90f09cf1fa28e3cf56961a8e8af88",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00340-z22",
+   "created": "2026-08-24T15:04:10.305821Z",
+   "release_sha": "f929c6476868929eb84beed875eb6725a7d29fa4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:23c9306c6f938dced78f2505dee4ed0237c0dd84341ad2bf6c19d63370b2b928",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00341-6pz",
+   "created": "2026-08-24T15:15:30.545154Z",
+   "release_sha": "40e781a95c00428eccf6fe39507e95ed1b1ad39f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f0ed756641652eafcefbf79cea850ded643cd6d28933b52e108c87470cda7e9a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00342-jwg",
+   "created": "2026-08-24T15:32:53.580542Z",
+   "release_sha": "eac2f8f49d49086170e9669ba663843668ce76cd",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9e441e57d69c2a9decffcb4ea477bee07c86636f4c2f6528d1506cd7261fdcfa",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00343-l88",
+   "created": "2026-08-24T18:55:27.311002Z",
+   "release_sha": "34dc2a33b38a5ae1e5da3c787a469845129061f5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8af7962b2b80739a6db677bb749eeb05cf763710715a92540b4998eb0be54fad",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00344-b8v",
+   "created": "2026-08-24T20:04:12.624970Z",
+   "release_sha": "8ed5351374e194044e24abe773501f52f75b8c3c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:67800985f4c23ed1f06833443bb10161d82d82b95a8bd08a42b30f9da409009d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00345-z9l",
+   "created": "2026-08-24T23:36:01.270346Z",
+   "release_sha": "b319f845df9f9e467c64d638022f3a5357b0e196",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4c9042ba1ce9f90132cf4a38689dda195b33a6856c0d8af89df513b90448401a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00346-6bp",
+   "created": "2026-08-25T02:29:32.820691Z",
+   "release_sha": "cb31627fbd6d08e168024f159105195929390ed4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ad9862558aadc6db81af6b2a953e8c3307b1f71ea37b9e9987c704e76919a079",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00347-6ls",
+   "created": "2026-08-25T04:15:08.370283Z",
+   "release_sha": "ec5846a0c5f9add68531efac2bbf5acaa429c50f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:3d1aeea0342137e9a20e8cbd41c41aa84424191030f50b991466a215481adaef",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00348-b64",
+   "created": "2026-08-25T05:44:50.321038Z",
+   "release_sha": "fdbfe8af459ddfabf6cd32f6d01e81a2902a58d2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0dc551f482b820715457a24ae2429f9be11504160ce2b832b1ecfb0dc281edb5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00349-2zh",
+   "created": "2026-08-25T07:38:27.218218Z",
+   "release_sha": "1ef14d2c7f48c549a53d6afefb2633c845ffe6e8",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8a309ef5a1cd4db00b1170931f61253b0737dff689163553e60a74a867b7907a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00350-nj9",
+   "created": "2026-08-25T10:17:48.002066Z",
+   "release_sha": "57706e9bb51fd17e495ecc9cd9f4533bb7511010",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ad6351f57ddba8e8b6e2bb236527fd46668b104bc8a11414cbf2a188c56c07e4",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00351-kbv",
+   "created": "2026-08-25T12:15:00.223111Z",
+   "release_sha": "d8e10baa7a145be5d4dd70ddc0888a77a6f2b7bc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f10786de5a2cfcf2b05f032aa987abceef3eaa661571d6f66e8c0892db2beefb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00352-wzp",
+   "created": "2026-08-25T13:58:26.323353Z",
+   "release_sha": "1880b81648df7603d7f0e3313873d9c3bcbf9b5a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e22af8f7e3511f4e709bab301cffe893e263579f6897cc4b07f20e1c81be67f3",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00353-v4n",
+   "created": "2026-08-25T15:33:30.081534Z",
+   "release_sha": "1f76c749dd7523497942578141e8f3b9d27c32b7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:590f425a387ef63f1238c5b1d3567173f89421648b82ab9f88c6c01d4304eb76",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00354-lcs",
+   "created": "2026-08-25T15:46:05.143874Z",
+   "release_sha": "971c1cf4ac856c62f4cfee95e90d1163a6ad70da",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b92faac94dbe0cb656733bbb3e2b2ba355b4a446f38b301a270fbb4718d75e24",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00355-8rn",
+   "created": "2026-08-25T17:05:20.433092Z",
+   "release_sha": "7809ed33c0b26f7f3b8e84d3a107d6ef690c8c56",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:34c731b099bcf0071ddef5743a24880b3c1e7c2e308d0e78b36e34dfcaec5dd9",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00356-5f4",
+   "created": "2026-08-25T18:11:49.769617Z",
+   "release_sha": "e7ac28217bd587b8859689ce4b3eace7622dcfbf",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:90d18b416badb81d1ce02d2a4c975753d2090c6810ed09ed944d1ea0c60d78bd",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00357-cn7",
+   "created": "2026-08-25T21:20:44.293067Z",
+   "release_sha": "f56e5a2f2c48f1e0e5149b5004568635c49793b3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:26dda6eb7e9471ee16ff823ba9fe005dc5ee5b0e16ffa570920416759b04ebe7",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00358-m2v",
+   "created": "2026-08-25T23:05:07.515285Z",
+   "release_sha": "398c822c2bc3b4dbc62041e975fcf1d37dcbd9b1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:72c5cef994a116f770b0b528de5a31b56bd3f04ffbf580c3458e36ac31d2be29",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00359-7d2",
+   "created": "2026-08-26T01:17:19.189762Z",
+   "release_sha": "754789b5d4f41aeaa9146e6de0e26cb4be9cece7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ae0755370005ed9429d10767059e09acf3fa8c697c060004fdc931dd8a1520e1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00360-8c6",
+   "created": "2026-08-26T02:39:20.400897Z",
+   "release_sha": "a3de6fc41c9b4cb8abcb4b376b774938f633f1b5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:329a29cbf2ad0687eae325ae19954a18f225da436c74700d44b67f49d374c564",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00361-4xr",
+   "created": "2026-08-26T03:22:20.543900Z",
+   "release_sha": "cd6dca1832ea038a80dd291ec778038ffb0cdcb8",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:87330e74722fb406d6f1c27af0f2b8dea075d4faaa9d111c02a156de66489483",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00362-skr",
+   "created": "2026-08-26T04:17:32.980463Z",
+   "release_sha": "fd928899840d81cb02c46323a4a4f09a45bcf60a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:599d13e50996b6cc62531409a884f779165f1258c5b71279dcdef894589cf684",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00363-qrp",
+   "created": "2026-08-26T06:03:25.986410Z",
+   "release_sha": "527adb8d48043b7a6087a4bce7c0026aa95e5cc6",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2d4ec6b3fcaae80384725bdd6282b7ac87dfa01d2891cb6240df52afa8009206",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00364-pq4",
+   "created": "2026-08-26T07:14:02.776424Z",
+   "release_sha": "bdbf785a1adee218fd21698983f94d7d50c49e74",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0209f039a451e74c7f040b7d130d0ac7301a1fc7e549ae797487f6ca2e2a3d7a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00365-gqq",
+   "created": "2026-08-26T08:45:39.542598Z",
+   "release_sha": "3ce3e93e7ee07161c396344e0fe24d7a162216c2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:63dec6751cc2a4dc49c94fd0035c3a68009804ef4e9e4cf288d4af3d0234a8fd",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00366-f2n",
+   "created": "2026-08-26T09:54:26.368368Z",
+   "release_sha": "f746d6923144a72abd9f8318f53ce2b611bdca1f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0d3f2542607f7d03a32fd2377ae12dbc32974dadd10d151d75b07e11d18f3184",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00367-ldl",
+   "created": "2026-08-26T12:30:34.416945Z",
+   "release_sha": "d2e2791841a4002d6edb1e399cf944270362fb72",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0254d30638072f911e3a2933340d8d1677b278b2a8ca3b1e0d367c3ca7a7ba78",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00368-gz2",
+   "created": "2026-08-26T13:25:45.014672Z",
+   "release_sha": "60328f48514ce1006c655bb274c2b1289c6a51c0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:36e33ffafd506b837957683d20eae142960991100e6795188b78db579ac2692f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00369-29s",
+   "created": "2026-08-26T14:38:38.768363Z",
+   "release_sha": "bf223d8691f13c3f02fed5dcace901fe954d38b0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:eb60f829194fd135e7958b48e4dfcede0e5ce2001d49e1ce052905b07881eea2",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00370-69x",
+   "created": "2026-08-26T21:18:02.656514Z",
+   "release_sha": "35d4877cf850f1ea9613352f1e3fe383643aa8be",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fcc077959cc855d90dc9f609afb40a3ae933fbb77ada737bc58356e0d5905b74",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00371-8nk",
+   "created": "2026-08-27T13:35:55.993938Z",
+   "release_sha": "d7c7835b077054206d497822426a54e1aeb3c5f4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:5be05b997f42bb7df253b9f1454c6fea0dd6c20305eb6b4896af4935f8d74215",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00372-w68",
+   "created": "2026-08-27T19:55:45.509875Z",
+   "release_sha": "55cc1baa3ed2118237e0db01b7d4cc87d1581d7f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:72241da925457e9d528e5a59716c06f90f3bb84d1a49541c995645c71d56a72f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00373-54x",
+   "created": "2026-08-27T21:39:53.491232Z",
+   "release_sha": "1267ea8c8b4788902266674e2783f97797e190f5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:601f80ab08b8e4281b6d717d75f6278e060df60c5fbcc5cb778c4c7e1248ba14",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00374-5tg",
+   "created": "2026-08-28T03:10:53.313711Z",
+   "release_sha": "ffe4a6ac0be99186bddc0137dc2f3495e1793148",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4a9caade18780d138cf37dd03f495c2aaba39a068fd0ad3b93f6ee6aada4c1bc",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00375-4xk",
+   "created": "2026-08-28T04:46:47.183222Z",
+   "release_sha": "157dff3916f1c613ab731d3ed0ad74b9bc79f716",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:3d209506fe8f912f1169791d0fdcec4062e93169edad2de889157e786bfbf018",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00376-dcv",
+   "created": "2026-08-28T09:26:43.779720Z",
+   "release_sha": "3598d79121248151cb82ef566bac315e3774ad17",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ab672417c6357435772c1010179e26a66b484a662fb5f05dbfd2243344e9e8d8",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00377-v6j",
+   "created": "2026-08-28T14:49:00.264575Z",
+   "release_sha": "63d834b0e4683f4dd0332200985c6ee92fc21b7d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:448135870fe88044d8e633c14dd979e64af68641d387bd279737c30203a261cc",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00378-4lw",
+   "created": "2026-08-28T21:14:52.431530Z",
+   "release_sha": "362a70297f284144854aeb029385d6ea5d63fd19",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ac633675e28f759a39e998f45372a3315653b20de9fa1ec49e357bb3d4ee1636",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00379-rb8",
+   "created": "2026-08-29T00:25:23.203743Z",
+   "release_sha": "8f9047d66409f5a77830f2b43b7fa0f14cd3eee1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e7c7ed4863972c8c2a738f32a6de0698b1bfeb3c1ebfd92d160c71b42a500358",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00380-mtg",
+   "created": "2026-08-29T04:56:24.928198Z",
+   "release_sha": "b09b1bdf82dacd077ea573aad4bcd0a12be0fcd0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:51628aed8dc2977b4de9958921c173b7f047f65719d766bbd9f0cacde7358329",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00381-47z",
+   "created": "2026-08-29T08:05:39.785551Z",
+   "release_sha": "c35d1fc31e7b27fb5d35cb92c33b930a8b9f812e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:385bd09085c4a52ae4471a195d790d36edabdea571cb0b1af8cda4e3743f42dd",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00382-rb5",
+   "created": "2026-08-29T10:21:51.409931Z",
+   "release_sha": "dd7e1e8cce6232d47032723396ad0e936772c332",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0072e0b05788379042cbd3a57913032a4454e2c726951111727ac844048efbad",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00383-6km",
+   "created": "2026-08-29T12:30:26.527903Z",
+   "release_sha": "0610be30d8f856cd75898625c9357265d734b0b4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d8a1cbbed0cbbb965bcdbfce0fa2d5909623a57058d736ab1c85cd8b370604de",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00384-mwr",
+   "created": "2026-08-29T18:10:25.882287Z",
+   "release_sha": "c407ed9399ca501070cb72d3be3200286fa5b3d2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:266be063b16a056f7de23e11b21abddfae50afc8d5346b39af47114eb311f978",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00385-f9g",
+   "created": "2026-08-30T00:33:53.209129Z",
+   "release_sha": "602cd8376cb52f7b93205c10cfadb18e0cf2c033",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2758f62e937502ae13dd134735bb4c5828f9db75359dfc00cb76607c5e4e1a1d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00386-8px",
+   "created": "2026-08-30T04:28:10.877273Z",
+   "release_sha": "c419c3e56c148716fadcb282f9031e930b3ae95d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:16254ae1a46fefe61e77bd411156a3f1a62246164b467de115795795c4a569cb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00387-sgz",
+   "created": "2026-08-30T06:44:09.699702Z",
+   "release_sha": "820e34bbf71750d9513ba0efbae6ab614963e916",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:41eba29c697c416086a1c83ff5e58d55cc44d449c899214f503ca348f7fa94db",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00388-crg",
+   "created": "2026-08-30T09:38:34.197218Z",
+   "release_sha": "45ba2853b2a4d7fff316161922cb5d080e3f6ade",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b7c816f9f6fba57c8bb770c009582495e46978a06ca7938673371a7fb642fc73",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00389-hc5",
+   "created": "2026-08-30T14:48:46.333471Z",
+   "release_sha": "676d236aaa462338e964a44ff199445afb181def",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:10e2be5dcf4c5c5f91c3caa0bf3affa99b335d0ae90c5c0437849a86db3212af",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00390-gtp",
+   "created": "2026-08-30T16:15:10.780260Z",
+   "release_sha": "3ae2206282c3de84ac3ad892661191a2d6133eee",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:756d7ed0855abf40e4b973bbd909b214d0e941e1ea67c25a5844ef9906bf683a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00391-2mq",
+   "created": "2026-08-30T16:45:23.101868Z",
+   "release_sha": "3ae2206282c3de84ac3ad892661191a2d6133eee",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:756d7ed0855abf40e4b973bbd909b214d0e941e1ea67c25a5844ef9906bf683a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00392-65f",
+   "created": "2026-08-30T17:14:28.642392Z",
+   "release_sha": "9ad93e7deb4f439ff1d8607ae4273784e46a183c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:75db15ab3be1406d15d74b94e8e6a8e644c89daa02f38bb45f0ae3514e725bad",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00393-dv4",
+   "created": "2026-08-30T19:07:50.407196Z",
+   "release_sha": "eb584dad11e3a913b1b2182cb1121d024382ff35",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c687340144c11b0b816941dce8c48a7faa5c02f6637674caba4ab98b88cb313d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00394-nkf",
+   "created": "2026-08-30T21:12:22.281246Z",
+   "release_sha": "6ace3780553c025bcc71fddd5e8af716863aa8a9",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:63e987a0ec8a9636f374d44568313b991e85988b9f99c92cd995d576733fa737",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00395-2mj",
+   "created": "2026-08-31T11:49:21.811351Z",
+   "release_sha": "9851b60657767cc9cbe7f7f78fe57f20be73a22a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:caab6e7015045d217b62fa524ab3133490dd70feb38d9ab03d2da1092efc0eeb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00396-4tb",
+   "created": "2026-08-31T14:51:06.070169Z",
+   "release_sha": "57ab8c3da07290c4245e4c3f7f31787c9b367c77",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6c2ad201b5dbd319a38e9b214beda32c6063bc9fae11a1dba54b580b9c6ccdda",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00397-44l",
+   "created": "2026-08-31T16:04:32.009663Z",
+   "release_sha": "7ddde1c3ac2221e93a368529c3efed083144def0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:08322086a9569fdba146f748d2b2144c7616dc61ad0b748c666a029c71158cee",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00398-cks",
+   "created": "2026-08-31T19:09:01.844311Z",
+   "release_sha": "5ad2a0831d90e27097dc747057b80aa626a59a3b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:038a3ba69cbedbd676320cf61551ad57baad1e6b50ec2be6ebc80813b0ae8023",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00399-8xj",
+   "created": "2026-08-31T19:36:36.808622Z",
+   "release_sha": "cc491c644c2c360ec7cb29c71e18d8532c132f59",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fed1705e3442f62afbcd02f1cd92fc8a3b7e93055d9470ffad59640c1fc76598",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00400-k29",
+   "created": "2026-08-31T22:56:43.048688Z",
+   "release_sha": "3bf6f10adca57d70597d481ebce7be4ccb1bdaee",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e6b0096651658d025c920400426a8381b1febe7f132ef7a8d4839226dbd8aaf8",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00401-77r",
+   "created": "2026-09-01T00:41:16.978730Z",
+   "release_sha": "d47310d0243e273bf47d24dcea46f5efbfc4ea75",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6d20e9aec0f6a681f78c337c58149feae970f227da86ba31e13c4dbbd079d976",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00402-2dm",
+   "created": "2026-09-01T06:42:44.283768Z",
+   "release_sha": "294d49159ac86c639ef08fa1f9fac44d1d311232",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2b833ca8d5bf312907fab34ee8d9d44069cdfbfe86d8381a80ae86308db8f7fa",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00403-zsv",
+   "created": "2026-09-01T08:37:54.727110Z",
+   "release_sha": "a58eb2a3158c7525e875e361e816f14fd25aa945",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:759a99ddbd6793fde704e675d049063b25a7fdd49ad6d3a69b914f246584367d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00404-gjt",
+   "created": "2026-09-01T11:18:16.835997Z",
+   "release_sha": "3301f90f529a86d0d63708b26b9d35f01dd89cc7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:1efa0904882d8ca85e0fb0106ab712f2a11cf8f441b7880669ba623147687fed",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00405-9xk",
+   "created": "2026-09-01T14:27:09.995535Z",
+   "release_sha": "fdd7cb905262603bf53175398436ac89074f482f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6dbe4a9ff6891121d42bfce05f540e6758c67d21b414f3333a359b9a654115c5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00406-tm8",
+   "created": "2026-09-01T18:17:51.826653Z",
+   "release_sha": "02920c87d706c22d258b6cb3d39c96310257491f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:562cbfbadbcb27dc0c3e21301e3d2087d79c3c53d2afc6ef0cc769a95b22c380",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00407-45p",
+   "created": "2026-09-02T02:26:17.471715Z",
+   "release_sha": "4e7a8362c172fa859f44e7cfba779f7b471d0c71",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ca6871dea4c89d077de24b5fccbcce37d8786671624ede4a29e34b752836a310",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00408-zlr",
+   "created": "2026-09-02T02:42:46.322947Z",
+   "release_sha": "b4a00854e4562955b65fc76934a21abee70bc33f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fcef1423027320957828646a7d81a415033d7512d1cf8bca124314b4fb05a03a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00409-xx5",
+   "created": "2026-09-02T03:39:57.510744Z",
+   "release_sha": "82c241370321d7a87183703352c2af0054d0e0f7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:69a20de454f4fd771b3910948e270d223dc9f3a361078f5c9d941ed525acc84d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00410-cjp",
+   "created": "2026-09-02T04:25:56.818253Z",
+   "release_sha": "13c8746c4207449feb57a2d5ace254c5af813196",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d5e4be31f79eaaf9c6c0f2ef501327d3dcf8867fe69cd399d8676c41d18e00e9",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00411-bl2",
+   "created": "2026-09-02T05:27:56.742592Z",
+   "release_sha": "6c834591b5d2d716643f31ebe791f023d5c78f9a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bb29b83b185a2f1f16c3f92644b8e4ae182486beb82a4f057b87f5faaf9ea112",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00412-zrb",
+   "created": "2026-09-02T06:50:01.745427Z",
+   "release_sha": "edeccaea89616f15634fe34c0eedeb3f931915dc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f6483198a2a70cffd6b5ffa87353e4a88b0c18ecb9ad2a64a56fd4c73d7446c8",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00413-5l8",
+   "created": "2026-09-02T08:23:53.180825Z",
+   "release_sha": "078e37bc4743b472e18f3126a25ab2d0b04dd784",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4945300fe6b0518829a2954cda8521b14eeb84b3d86006c963ce5c202c3aa6ef",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00414-wnp",
+   "created": "2026-09-02T09:19:21.009878Z",
+   "release_sha": "6d28b79b7a74f5a9d439b4cc75387c2b4cc54c40",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d4a00be4e1f4248f412a31076e7911928a995e585bb3b82eecc219080e744f95",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00415-r78",
+   "created": "2026-09-02T14:45:55.128063Z",
+   "release_sha": "9bbdb75c16856f3a1a0d6eecdeaa4c2b001ce682",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:7c92837cca4f8bca505c53afb12ddf39286ecdb701989ac2b01cefa1a55da914",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00416-249",
+   "created": "2026-09-02T15:14:08.256307Z",
+   "release_sha": "1099d5fa33056b1bfe5bad461b2c436d726c1465",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8089cdec1a1b91711d302ec7eb9644972dd38b5ed06ff74e9fc2ce27181898f3",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00417-p8d",
+   "created": "2026-09-02T15:39:44.238495Z",
+   "release_sha": "4dc9478aa51ccc305aa041556d023d00a709d3b3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2aef53aa7639fbc2bae2b063e5b4163fa2535f548084ad31aa6f07548770e0eb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00418-spq",
+   "created": "2026-09-02T17:38:54.932223Z",
+   "release_sha": "487d2d7fcdd5c33e0c8488049269a3cf1798d12d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d14ecc38b2ed98c94cdba65beea17150b01e0799fb9f33828f7e527227756df9",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00419-7m5",
+   "created": "2026-09-02T19:30:37.217078Z",
+   "release_sha": "ca2ae7f53c328284b04cd5dcdb6ea0b6ed655468",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d919128056de286f404fc05c20e65a3c1f1f9b1ef55d50908fda53428306d60e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00420-gnh",
+   "created": "2026-09-02T22:44:47.364472Z",
+   "release_sha": "c18d28be78f5fd6c23709a5952555c5dc22b43b4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:19d11bf0bea0f6a4fa9222ce8fec2a0ee885b29e9daae6fe4f5b5b576f0263dc",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00421-v2j",
+   "created": "2026-09-03T00:36:02.356667Z",
+   "release_sha": "a5f7a170d5230a49274c7ce374e1943de6603f22",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:183c3529159172d62371e1376418ebf2b3815b29fe781e31780696d01faf7399",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00422-jfv",
+   "created": "2026-09-03T01:06:05.668002Z",
+   "release_sha": "a5f7a170d5230a49274c7ce374e1943de6603f22",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:183c3529159172d62371e1376418ebf2b3815b29fe781e31780696d01faf7399",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00423-rf8",
+   "created": "2026-09-03T04:14:10.355406Z",
+   "release_sha": "b16b29522cf5fcf5a969ac04450fa840f017f0c8",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:78fab94929869ad23f0d4f1b7af4c723c78432bfeb1f590756dfd8c088530478",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00424-xr5",
+   "created": "2026-09-03T04:33:55.789150Z",
+   "release_sha": "9ed6a62157d8ca5a3248fe2c1ba5294bd2e087e8",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:1d7be555b9ffca57b97e8ad0a8a1b83affd6b980deb638f5845e441a3fc94501",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00425-gfp",
+   "created": "2026-09-03T05:34:56.943397Z",
+   "release_sha": "4900871ad5c93ab47e66b6b00b69f8868721b467",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:1fc7c5a8504420a04ed79f27fc6062a7a11a3bf707bd3c2852a0a3497057a610",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00426-ds7",
+   "created": "2026-09-03T06:52:22.943664Z",
+   "release_sha": "e403dc727f6c20b47a4f4f5716dc7e0400ebafbe",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bc1a0d4cf7c7f0cac1441b858ad797c8435e0f9c042c5596557f7842af4a8ba7",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00427-n4q",
+   "created": "2026-09-03T07:10:22.439033Z",
+   "release_sha": "f4dff75a53ffcf00900c5e7890a99f1242a3a45e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ccf4ae2a13e26d85f0febedd7e8b27ad58a6a250273e55ec0bb1a6b654c8ffe0",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00428-q6c",
+   "created": "2026-09-03T07:28:31.904684Z",
+   "release_sha": "2fc5b702efdd033042aba5b344bf207ba760d4ab",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:82faa02c23c3b70beb1eff22c69b55673cf34c06a56524d4914bfccd75852d76",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00429-j2t",
+   "created": "2026-09-03T09:56:55.367077Z",
+   "release_sha": "537ca5f1960f8c0c2ac3dea7e37489d554e31818",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fc43df54f2f538e6d34c5ddaf29f32bbc5a2a1055e2b0bfe47cab48e84b6490c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00430-vms",
+   "created": "2026-09-03T11:47:08.053309Z",
+   "release_sha": "35ad1c7b19b46b047c1eba051aac2f388422e632",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9a254ef9423fd53d79d7771d8727ad8bf1069149e7a3124b4b4cb2861aa31fa1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00431-z9m",
+   "created": "2026-09-03T14:41:46.400787Z",
+   "release_sha": "70f41a5bc7539ebcc43bc31823bbc17f81c30959",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a8c9bcaee4566995af8b62a7913c28ba2c6ecf96a5e762913b89b3a6b7154603",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00432-6q8",
+   "created": "2026-09-03T15:38:14.199042Z",
+   "release_sha": "74b51cd3e8425dbd1efed6ba86815cded77da758",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b142a597f88c35c7da6239b0298684c2ee39d6c2c744a4e4cad14c2c16ec7b41",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00433-chr",
+   "created": "2026-09-03T17:22:08.387395Z",
+   "release_sha": "552fb2910263c96a19142db27deb2ca64b5c6b55",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:75a8bb49a7982ea12f220292b01a7d581df3b2bc5d677c94f3ecb60869cda06a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00434-vmb",
+   "created": "2026-09-03T19:22:28.053577Z",
+   "release_sha": "52b8f625f3291386145be6959a7855dc5bb63888",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9b7bbb69166d209c1e65bbb98db6b8f276e7d41caced025d6a17dfb2dae61a29",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00435-7nh",
+   "created": "2026-09-03T20:57:56.061551Z",
+   "release_sha": "9abc137152aae0ef4a55523b636f4aa20dfef282",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6a6b5511a48bacf3a1c8726698daae289c2cc0dde76505035b79cbb846c63d08",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00436-csn",
+   "created": "2026-09-03T22:02:38.198532Z",
+   "release_sha": "9bc3b2b5007e5c3c962be31ff1eba08e160ceb0d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9ac4905537038666ce290e1387aef49c3b7cab19e0c692ee37ba8329af26e315",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00437-pv6",
+   "created": "2026-09-03T23:55:17.705736Z",
+   "release_sha": "8fcd0c3afba43d38a2960861cf2c6e845ed7f619",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f108a13ecaa6f1d78744950f6b93034e079e048b4367a02faf6e5600c4309845",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00438-pl7",
+   "created": "2026-09-04T08:39:57.640890Z",
+   "release_sha": "72453c77dda08255faacea5e83f33bd154c76df2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:4a76db48d994fb962398cbb7bae95165926666abcb153b130aaccc9438171cc0",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00439-r8d",
+   "created": "2026-09-04T11:06:54.205912Z",
+   "release_sha": "633d23757b5449062e92ace78392a589f3da4b1e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:160cd45b921334c5133689f62e8491f847e930b245372affee2d466718e8e0a7",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00440-gn4",
+   "created": "2026-09-04T17:05:14.978275Z",
+   "release_sha": "67b89bdf57ef95df3a671fb2dc2290de5a100046",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:ea73a6a831e93cde7abe449241c743c846305444e983c951c12f50366e62bf7c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00441-wq9",
+   "created": "2026-09-04T21:55:31.732926Z",
+   "release_sha": "7734ec35f1fce08b2d53ad222b2fb745e252a1bf",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e06210942233507cfa07252da66f2ed92c68e16480fa731a6af631032e4afe0e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00442-n4p",
+   "created": "2026-09-05T01:01:04.096548Z",
+   "release_sha": "c0d3874e55ba00d35cf498f6eb9c9393f2e404b0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2d48717660938c7e7cf17e4ce093bde10f942a549a8564a461765a7fac9f8469",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00443-s4j",
+   "created": "2026-09-05T07:10:58.775318Z",
+   "release_sha": "6a85cd5025101fd453bdc9b8472e963d16ba708a",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:db7eea1e8ade01c301f4c5a2c3c9d2efd93af684f3bd428ca0e70a75683b0793",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00444-dv9",
+   "created": "2026-09-07T21:55:53.157103Z",
+   "release_sha": "2664ee296be13c91e7c4c5c06fd62514f2412c73",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:29edf7e45eaaf693d6ee1948de3f8966b48d6a68f381e534978ce1c9ff880b7e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00445-wdz",
+   "created": "2026-09-08T02:15:45.145836Z",
+   "release_sha": "5145fb3a4b51b26af116220ff10a7389bde6324d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2078bd982ddcca6266ddd9e70c2917e86330a6369247ce361336fcf7049648cc",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00446-gxg",
+   "created": "2026-09-12T11:33:12.958624Z",
+   "release_sha": "7041f96b1b31ee6da9b5582ad3d0d4b7da2c69de",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:00037416448e479e7f92c6df735d4f33dbf5979cd5e0a30843228ec5db4ebd37",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00447-fg9",
+   "created": "2026-09-12T15:10:25.432023Z",
+   "release_sha": "1df2ffe1e414eb52b275b612f23ece1c035cacab",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c84c02a23adab7b38573bb3a2ee41181451e57e67cb447857a180a094f0db299",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00448-mbn",
+   "created": "2026-09-12T17:16:35.878340Z",
+   "release_sha": "a710263e89d8fd874afc3b33a9f399bfd1e0f91b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f285f3f60cbe52588ff59e0b717e6399b6775cb4e2268433ecbc8d0d5f041f1f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00449-7nk",
+   "created": "2026-09-13T01:10:17.291586Z",
+   "release_sha": "edfd0eadc6ba76e03924b61e065313ce7b5f8725",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:692524932d06e99d176631c0c59c58d799436333769f90023e5b44fb5e019222",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00450-cth",
+   "created": "2026-09-13T06:58:19.143985Z",
+   "release_sha": "0de9d641023bdb7707275fcfebb34a0f46ef5d3c",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a68c37c5254ce7e387ff0baeb30a7f49e8e04503567590b89c12337189b2dcf5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00451-b57",
+   "created": "2026-09-13T10:28:36.982532Z",
+   "release_sha": "3681517726993b7b59e2ab7bd342b86de729627f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:70c9a029f3fd209144cfdad153732a69bd7e48ae62fd3cdc58b351b800cfbd2c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00452-qd6",
+   "created": "2026-09-14T06:29:36.530349Z",
+   "release_sha": "f4f39eb257fb17b12a103e17939de72debdfd71d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f6fae8a1e21de2911035492dbd8c0af11f47b873fca90c554f4ca775778e9705",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00453-xk8",
+   "created": "2026-09-15T07:31:05.110935Z",
+   "release_sha": "3c23288380bbe9d9d8133ebabbd73e21685428da",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d25343471bc9a56e751cc0f2cbf391b29268a9309a60d46e2f8fe413a3faa51a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00454-qtx",
+   "created": "2026-09-20T13:26:31.757975Z",
+   "release_sha": "a286435d5e7e210dda5e751aea20c921063d89dc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e342baeddbfa9f6e1d1da734a89b303ca5db7d7aa32a89a7e3bc0594546a5402",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00455-jj6",
+   "created": "2026-09-20T15:41:23.587749Z",
+   "release_sha": "05188d688097157b4327af6073fddc5806d1ca19",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:181a8f4ce6af37336c812a403dab19add34181e31c1539abb59c38a1b81f9e47",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00456-vh8",
+   "created": "2026-09-21T17:47:07.490017Z",
+   "release_sha": "6a780b88076cb33471dbd1fdadba02b0f912cefc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0c5a15a8e1f4d8222b86f2e990091dc78633dcb9621ede8d769836c3ca349e9a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00457-k7d",
+   "created": "2026-09-21T19:17:55.171914Z",
+   "release_sha": "fd7d05254d9392097a32a2c422a0442dffdb3ac4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cc501a970b91fe016834f8871c32cc12410119e627e5cec1c6052fd920958d08",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00458-t8q",
+   "created": "2026-09-21T19:49:26.956922Z",
+   "release_sha": "b9827cfaa7b4c63f709d3da2ede4262ee8ffecd1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:14cb47ef5f9fbd7bb476eb9556f19ff2332f4abf863321f0b802fdd742ca2c7f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00459-grx",
+   "created": "2026-09-21T21:10:07.579826Z",
+   "release_sha": "b3a93225466563dd45f6f17d619653f3595206bb",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a8db2bae35e960a0838af5eb90065ad1ecccc355d0a7d1fd76f33ff57d86f21e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00460-5jq",
+   "created": "2026-09-23T15:33:49.383174Z",
+   "release_sha": "f0835ae6c9839035574782ab68022f54d5c08dba",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a7798731747b9674c728be7d60f64b34ce669da24413fbe6c63209ecc7d06f51",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00461-92p",
+   "created": "2026-09-23T18:17:05.276318Z",
+   "release_sha": "723debe8f507ed099cee1bf6c5a40ef9753108ca",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f47ca190166e31ab6521c50e1aa1840b77572f3016297391ea6d33615ee40eb1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00462-t2l",
+   "created": "2026-09-24T22:41:52.468384Z",
+   "release_sha": "3729a48774c57d55d87a6a3af7af616a64673d60",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a401798b1b4ed33f437b02cc1e233245132eef03c3f3ca39bc35343a684455fb",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00463-2qp",
+   "created": "2026-09-25T03:25:17.466184Z",
+   "release_sha": "91719e47fb75c67466a3da103abff4f6e0a8d1c1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fbe7c96411a55120bc55e3ab7f3a4b03c1b28c12c188994b337f51ac2de82a46",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00464-9wd",
+   "created": "2026-09-25T07:16:44.341517Z",
+   "release_sha": "1b21c9b8c8a983b88f566e7660012353d6852aad",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:409cce67643de857377a18d4caf2bd74802e3787cbf44da1c4f1f4a8b6b63a6f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00465-pm9",
+   "created": "2026-09-25T08:23:12.770324Z",
+   "release_sha": "65a9c5b04e9583fea0d0cce590c621fa635a3d00",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:2cb3806dbbba528ae2b77f06beb6cecd49d2eec79f6f08e74b76eb1eaa6a0148",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00466-vdt",
+   "created": "2026-09-25T17:43:21.988583Z",
+   "release_sha": "15af60424c965dd48280dcab98c9ab209f9b0bf3",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cafe518b507d9bf9f5b119fb439c7c0249464319964794d333d6f9e035af7eab",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00467-dw6",
+   "created": "2026-09-25T18:47:25.401315Z",
+   "release_sha": "b1ffd1c7d549e8acb149f91315592329e41e403b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6980537037e059c40527666af8d9953349966f2794d2241c94bc7ac88cf21dc1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00468-wcp",
+   "created": "2026-09-26T04:20:29.586230Z",
+   "release_sha": "dd07291eeacf1e742d5485139c22a25ba31cc907",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:7f2a51381c84783a0d2dc40df000101b8b0c953a1c68c0194fb12b0b82f95b4e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00469-kpd",
+   "created": "2026-09-26T15:21:41.347934Z",
+   "release_sha": "e99e71883c8086e2e06577502ea8f2e2084bd8fc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:bbbcded1359dca289dd698a15aaa10a055763d23439c4920b912ff58ae1e9dae",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00470-msx",
+   "created": "2026-09-26T22:28:56.373857Z",
+   "release_sha": "2febd211dbd3afffc6caf6fcd6e15b7b2517251e",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:8217fd12de3196b6f226c2398d07e113163f3e10246ad6f7ab9706bb7ddf53de",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00471-n4q",
+   "created": "2026-09-27T03:27:59.364318Z",
+   "release_sha": "1c617a318ef1eaa2113d6547407466e19db4000f",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9c1df145be9012b314a55607872fb94d658d4a353638c37b9e1c811ac39edede",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00472-5p5",
+   "created": "2026-09-27T06:46:06.534962Z",
+   "release_sha": "328761c54ffc9d48522aae2fe3e2865086e5ed57",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:298f8d127bca8ee37927986ba6fd3db5793eb219a90fcc316bc6ac3e9797d208",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00473-zkx",
+   "created": "2026-09-27T17:06:21.225145Z",
+   "release_sha": "41751b47b4b1d7635dae7b4b198807346cc807f4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d1bff404270a8a9b08c2b2051efe56c64723760912507b31ffb033ae6aa07c66",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00474-m5n",
+   "created": "2026-09-27T19:13:41.753936Z",
+   "release_sha": "da0b28aa5f0a5bdf732525994c59fb7ae0f627cb",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d5ec42ed2280ac9001e5ce280f936514d69622e41ea2d253b3a348ddd0c2842f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00475-77m",
+   "created": "2026-09-28T07:33:03.705553Z",
+   "release_sha": "c6def4b425311f5f350b0a234de9c4ca08d60fc1",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d31bd327a2ba41b92bf9b9e5ac1712488f5591f8c7e792753cf03988e89ae479",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00476-6gv",
+   "created": "2026-09-29T15:49:14.107154Z",
+   "release_sha": "37d54ec9cffd52100425452f4a4c8235f1674c53",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:14cbca1c62d882d46a6f4e2de24940949edc3a573b8110af4a70bf7098245d6b",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00477-pwk",
+   "created": "2026-09-30T07:22:25.357703Z",
+   "release_sha": "ba6468f128856320239eaa38ce62e414b2f31447",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:7118059dffea273325c0c804fcc16b98b9deeda21e32af1a14689b2805033666",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00478-v9w",
+   "created": "2026-09-30T09:43:37.172008Z",
+   "release_sha": "7362af734be8519a42f7d5c99646b6ca8187b083",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6f2e1ffaa35204bdbd975aa253d59e1be76891319edbcd6c4ef1f344bbdff7e5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00479-thj",
+   "created": "2026-10-03T11:47:23.913841Z",
+   "release_sha": "741e9a9bf33a24cb78b8e83d828906c856dddb72",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c688b2204f7562d5adaeb70dd06337b1869d3fde69a7ddc83bc1385262b2bbbd",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00480-rnj",
+   "created": "2026-10-03T13:50:26.091844Z",
+   "release_sha": "966e37f6f9e02800c6b7947e0a41ce5e1fed80ec",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:59c82a084b5e2996507925db2ba03643350facf18ba73fcdc9bec185b9f9b2c1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00481-vz7",
+   "created": "2026-10-04T11:15:52.072125Z",
+   "release_sha": "b15c25035249833194faac0f9bb1fc38c4a84a6b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d9f3b78bb329153ff3527031651ac2dc1072196fdbd31850fdbfe60e796abe4f",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00482-lvt",
+   "created": "2026-10-05T05:41:04.347079Z",
+   "release_sha": "a2d79d636d9c379875c07fcb25b55e66a59a5558",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f14b474bcc59af0d7a47defe9050d99c380cbf319c448c8a408e3e6dd8ed97fe",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00483-8k2",
+   "created": "2026-10-05T19:39:15.311359Z",
+   "release_sha": "ec5431f07dec90b7ef48b077fdd0c9cd86f8e604",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:d7305890b50c501b36e0ef49b7d11d7a05e41ca972df033a435b4293b7b5c0df",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00484-mx2",
+   "created": "2026-10-05T22:56:25.356103Z",
+   "release_sha": "32c5aea260f4ef9652fdb6f1826b185d591f47b5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:cc15f36ab3f8bd185cfae4d2693a9d60d99cde2fe847e36ea23b4a7487fadfe5",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00485-vzv",
+   "created": "2026-10-07T05:39:05.778972Z",
+   "release_sha": "82a6d9325a73fcdd9857c7f637892719555b4b02",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:98113fd034205cb58fdcf80e98ee58ee6371fefe7f943a7aee1ac31051396b19",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00486-g44",
+   "created": "2026-10-08T02:00:51.170302Z",
+   "release_sha": "b20f86bddeecf985fc961012bb93fa2c41889c49",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:e40abe19975ddb4cfb58a397309aa67849d2117af945405779b27728c48cdf2a",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00487-m58",
+   "created": "2026-10-09T09:01:26.083944Z",
+   "release_sha": "b1d3fb23a73bf16ee2000ddc230d422085ba45e4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a2b44704d14331626882e4007955859dd811de338c6da84d73c57b1ac3eeb348",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00488-5sd",
+   "created": "2026-10-10T07:56:05.372328Z",
+   "release_sha": "3dbf364d9834316d181d4a52b2e9b4c7bee431b4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:edacee1199eb311569a215a6b1be6159e1efc615434d791491dd5d7ef2e7f50e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00489-gdl",
+   "created": "2026-10-14T16:53:46.327907Z",
+   "release_sha": "09d7952758a198e908e591498363f2ee222773e7",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:5b621dd69d33422acc5921b1f823ad1132ea3adce05f19a8d6e3652127153c43",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00490-glj",
+   "created": "2026-10-15T00:07:13.375659Z",
+   "release_sha": "62243583ae52afbbf6cd89ee755b68a277298ca4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:835d21bee5e142cb7041fc0172f2bb332f2c46c516d2bcd10a9cba7a0af06380",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00491-vv8",
+   "created": "2026-10-15T06:24:58.663896Z",
+   "release_sha": "0c82fbb008b524cd8ad75df0a445edaeabc1199d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:3024fe0e2eb8f3e392cce0bf470fee93a045181124b37b0f404e2e0abe92b2df",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00492-z2l",
+   "created": "2026-10-15T17:13:10.106618Z",
+   "release_sha": "b4bee6f86a6cca032455a6660e1bf24b15d2a5d9",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:205f13c15ea8bff363817137ea2eed8dbe5287731c7bfeb79bdaf4f9b6edcdc1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00493-9hp",
+   "created": "2026-10-16T10:11:19.092927Z",
+   "release_sha": "599defc31471ab4e532afcbd855ebaf6963fc8d5",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6eaa8f668f82da96d7f9047678bd74b2de8cc706096d9b37ecf8825d86c811c9",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00494-k9s",
+   "created": "2026-10-16T17:37:40.823761Z",
+   "release_sha": "29d35f8f5662be08fc0b64846ab02bfeb964b6f4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fbcb094a33883ca13f9262a1a9687cc4cb41104dd2fbc57bf56ebdddb602f07e",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00495-x66",
+   "created": "2026-10-17T00:17:57.118108Z",
+   "release_sha": "6af384f81037d6e3a1609f70d54b4525a6772a9b",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:3075001a6e2a73f678b89dec93c1e5ac592169479de43deb62d1be156f3f60ef",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00496-fxc",
+   "created": "2026-10-17T14:41:12.434231Z",
+   "release_sha": "ee351e0c30d2687a3adfe8f081fcbf79eb9e8bc0",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:6a64ea9649540cdae9b4fdeff3b07b465228d6afd5d3af375f8dfc164420cd0d",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00497-4jr",
+   "created": "2026-10-18T15:51:49.622666Z",
+   "release_sha": "9cf76f2b420fcb38a9aaa4b87ac63270bb3c0535",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:de49935ad13a11f2bcaf6cd41e4b750f8c2ff29fe0b90242459e33817feb13d1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00498-6bp",
+   "created": "2026-10-21T09:51:17.953279Z",
+   "release_sha": "afa0be7667de13cb7846171d09234b16623436fc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:f7aad3abd0a35a7cf909b9d174938ff058ad6e6bbf0a31f6969cf803b73798d1",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00499-gmk",
+   "created": "2026-10-21T19:45:57.768175Z",
+   "release_sha": "92f162b45200cc4e8fd626de7960c648b1039dfc",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:b4f72344c0f92d041d1867c269d226ce453849bfe638a1c3fdd38958850f92dc",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00500-fkt",
+   "created": "2026-10-23T00:43:47.859683Z",
+   "release_sha": "44d3d0be39b8aac3dbd1294ea3927627ef4eb53d",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a49ed5303c6a8227f236918bd52d2a3e3ef4b5efbe8000c91f51c774b6ac9a50",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00501-zcf",
+   "created": "2026-10-23T06:51:09.217675Z",
+   "release_sha": "875f424c576e1568094b6f910c3e6a81b477d8b4",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:c3e25b10f3ab57cc29f7ea71b9d10039c8431399b3bfb25e00439faddeb9c47c",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00502-kzp",
+   "created": "2026-10-23T14:10:04.323010Z",
+   "release_sha": "e3b20ee648bf0d6bb20546a64b51a6afba5c2423",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:0a51a2254daa8b6e1c4b0157c2c6de21e01cb24365a5454e0f4a90157ae3bf79",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00503-kw2",
+   "created": "2026-10-26T01:37:50.479621Z",
+   "release_sha": "29865557c2745997f6b7d6253e995404b5a11673",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:fc31341ac1b5022e767c8ef3bf95b61978d7826d80005b0a8700e84401bf60ce",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete: unfenced PUT /api/ip/rule-policies (5d58cc2f)"
+  },
+  {
+   "revision": "caseops-api-00504-478",
+   "created": "2026-10-26T12:25:03.553179Z",
+   "release_sha": "f49b274e2098cdbd0284e505c2eb5fc363b820d2",
+   "api_image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:a95f9fcae711c62d14e63cd90df1e9d3245e73b9caeaaf7ff77333dd18bab147",
+   "governance_flag": "false",
+   "contains_5d58cc2f": true,
+   "disposition": "delete last: serving pre-A1 revision, after A1 acceptance"
+  }
+ ]
+}

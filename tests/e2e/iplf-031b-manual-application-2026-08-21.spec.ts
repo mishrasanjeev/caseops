@@ -137,6 +137,14 @@ async function signIn(page: Page, slug: string, email: string): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
+async function chooseNiceClass(page: Page, row: number, query: string, option: RegExp): Promise<void> {
+  const input = page.getByRole("combobox", { name: `Nice class, row ${row}` });
+  await expect(input).toBeEnabled();
+  await input.click();
+  await input.fill(query);
+  await page.getByRole("listbox").getByRole("option", { name: option }).click();
+}
+
 test("IPLF-031B completes manual identity and duplicate exception paths", async ({ page }) => {
   test.setTimeout(180_000);
   const api = await request.newContext();
@@ -151,10 +159,15 @@ test("IPLF-031B completes manual identity and duplicate exception paths", async 
   await signIn(page, tenant.slug, tenant.email);
   await page.goto("/app/ip");
   await page.getByRole("button", { name: "New trademark" }).click();
+  // BUG-001: the click alone puts the form on screen and focuses it.
+  await expect(page.getByRole("heading", { name: "New trademark application" })).toBeInViewport();
+  await expect(page.getByLabel("Docket title", { exact: true })).toBeFocused();
   const creationForm = page.locator("form").filter({ has: page.getByLabel("Docket title") });
   await creationForm.getByLabel("Docket title").fill("ASTER SEPARATE FILING");
   await creationForm.getByLabel("Word mark").fill("ASTER");
-  await creationForm.getByLabel("Goods / services specification").fill("Downloadable legal software");
+  // BUG-002: the class is chosen from the Nice catalogue, one row per class.
+  await chooseNiceClass(page, 1, "9", /^Class 9, goods:/);
+  await creationForm.getByLabel("Goods and services, row 1").fill("Downloadable legal software");
   await creationForm.getByLabel("Applicant").fill("Aster Products Private Limited");
   await creationForm.getByLabel("Representation evidence reference").fill("e2e:aster-separate");
   await creationForm.getByLabel("Filing phase").selectOption("filed");

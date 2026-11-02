@@ -16,6 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from caseops_api.core.jurisdictions import canonical_jurisdiction
 from caseops_api.db.models import (
     CompanyMembership,
     IpDocketRecord,
@@ -92,15 +93,42 @@ MAX_INGEST_PUBLICATIONS = 50
 MAX_ACTIVE_PROFILES_PER_INGEST = 100
 MAX_PROFILE_PUBLICATION_COMPARISONS = 2_500
 MAX_HITS_PER_INGEST = 250
+# Profiles a capture is evaluated against; ingestion resets a quota pause itself.
+INTAKE_PROFILE_STATUSES = ("active", "paused_cost_quota")
+# The operator records each journal entry; no journal source is polled.
+MANUAL_JOURNAL_PROVIDER = "manual-journal"
+# Prefix of scheduler-written runs; manual-profile ones were "succeeded 0/0"
+# rows that polled nothing (B4-ADJ-20) and are not ingestion history.
+SCHEDULER_RUN_PREFIX = "scheduler:"
 
 
 @dataclass(frozen=True, slots=True)
 class JournalWatchSchedulerResult:
     due_profiles: int
+    #: Profiles whose automated source was actually checked. No journal
+    #: provider is activated yet, so a profile paused for that is not one.
     checked_profiles: int
     cost_paused_profiles: int
     provider_paused_profiles: int
     external_calls: int
+    #: Manual-only profiles: no run is recorded and nothing is polled.
+    manual_profiles: int = 0
+
+
+def _assert_automated_watch_available(session: Session, *, context: SessionContext) -> None:
+    """Gate anything that claims an automated journal source.
+
+    Readiness models journal watch as the automated ``watch_operations``
+    feature with manual docketing as its fallback, and the watch page says
+    manual intake needs only journal-watch management. Manual profiles and
+    captures therefore stay capability-gated; an automated profile, its
+    reactivation, or a capture claiming an external call needs the complete
+    decision (capability, ip_watch entitlement and rollout).
+    """
+
+    from caseops_api.services.ip_capability_catalog import assert_ip_feature_available
+
+    assert_ip_feature_available(session, context=context, feature_id="watch_operations")
 
 
 def _now() -> datetime:
@@ -248,6 +276,8 @@ def create_watch_profile(
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )
+    if payload.provider_key.strip() != MANUAL_JOURNAL_PROVIDER:
+        _assert_automated_watch_available(session, context=locked)
     docket = _docket_or_404(session, context=locked, docket_id=payload.docket_id, for_update=True)
     recipient_ids = sorted(set(payload.recipient_membership_ids))
     recipients = list(
@@ -285,7 +315,8 @@ def create_watch_profile(
         spent_cost_minor_in_period=0,
         cost_currency=payload.cost_currency.upper(),
         poll_status="active",
-        next_poll_at=now,
+        # A manual profile is compared at intake; it has no poll to schedule.
+        next_poll_at=None if payload.provider_key.strip() == MANUAL_JOURNAL_PROVIDER else now,
         criteria_version=CRITERIA_VERSION,
         created_by_membership_id=locked.membership.id,
     )
@@ -319,9 +350,13 @@ def update_watch_profile_status(
     profile = _profile_or_404(session, context=locked, profile_id=profile_id, for_update=True)
     if profile.version != payload.expected_version:
         raise HTTPException(status_code=409, detail="Watch profile changed; reload and retry.")
+    manual = profile.provider_key == MANUAL_JOURNAL_PROVIDER
+    if payload.poll_status == "active" and not manual:
+        _assert_automated_watch_available(session, context=locked)
     profile.poll_status = payload.poll_status
     profile.pause_reason = None if payload.poll_status == "active" else payload.reason.strip()
-    profile.next_poll_at = _now() if payload.poll_status == "active" else None
+    # Only an automated source has a poll to schedule.
+    profile.next_poll_at = _now() if payload.poll_status == "active" and not manual else None
     profile.version += 1
     record_from_context(
         session,
@@ -349,6 +384,119 @@ def _publication_fingerprint(provider_key: str, payload: IpJournalPublicationCre
             "source_page": payload.source_page,
             "source_url": payload.source_url,
         }
+    )
+
+
+def _publication_content(
+    item: IpJournalPublicationCreate | IpJournalPublication,
+) -> dict[str, Any]:
+    """What the operator recorded beyond the fingerprint identity."""
+
+    if isinstance(item, IpJournalPublication):
+        return {
+            "application_id": item.application_id,
+            "mark_text": item.mark_text,
+            "device_reference": item.device_reference,
+            "proprietor_name": item.proprietor_name,
+            "goods_services": item.goods_services_json,
+            "publication_scope": item.publication_scope_json,
+            "raw_evidence": item.raw_evidence_json,
+        }
+    return {
+        "application_id": item.application_id,
+        "mark_text": item.mark_text.strip() if item.mark_text else None,
+        "device_reference": item.device_reference,
+        "proprietor_name": item.proprietor_name.strip() if item.proprietor_name else None,
+        "goods_services": item.goods_services,
+        "publication_scope": item.publication_scope,
+        "raw_evidence": item.raw_evidence,
+    }
+
+
+def _intake_profiles_statement(session: Session, *, context: SessionContext) -> Any:
+    """Visible watch profiles a journal capture is compared with (one predicate)."""
+
+    return (
+        select(IpWatchProfile)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == IpWatchProfile.docket_id)
+            & (IpDocketRecord.company_id == IpWatchProfile.company_id),
+        )
+        .outerjoin(
+            Matter,
+            (Matter.id == IpDocketRecord.matter_id)
+            & (Matter.company_id == IpDocketRecord.company_id),
+        )
+        .where(
+            IpWatchProfile.company_id == context.company.id,
+            IpWatchProfile.poll_status.in_(INTAKE_PROFILE_STATUSES),
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
+
+
+# A viewer's own recent captures stay visible to them without a hit. Bounded so
+# the listing query stays cheap; older own zero-hit captures fall back to the
+# hit and docket rules below.
+OWN_CAPTURE_RUN_WINDOW = 500
+
+
+def _visible_publications_condition(session: Session, *, context: SessionContext) -> Any:
+    """The one predicate for which journal entries a viewer may see.
+
+    An entry linked to an application is visible when that application's docket
+    is visible. An unlinked entry is visible when it produced a hit on a watch
+    profile the viewer can see, or the viewer recorded it. An unlinked capture
+    whose only hits are on walled dockets therefore stays behind the wall, with
+    its capture notes.
+    """
+
+    # The docket policy is built once per statement: each call creates its own
+    # anonymous team CTE, and two of them in one statement can be given the
+    # same name ("Multiple, unrelated CTEs found with the same name").
+    visible_dockets = select(IpDocketRecord.id).where(
+        IpDocketRecord.company_id == context.company.id,
+        visible_ip_dockets_filter(session, context=context),
+    )
+    visible_applications = select(TrademarkApplication.id).where(
+        TrademarkApplication.company_id == context.company.id,
+        TrademarkApplication.docket_id.in_(visible_dockets),
+    )
+    visible_profiles = select(IpWatchProfile.id).where(
+        IpWatchProfile.company_id == context.company.id,
+        IpWatchProfile.docket_id.in_(visible_dockets),
+    )
+    has_visible_hit = (
+        select(IpWatchHit.id)
+        .where(
+            IpWatchHit.company_id == context.company.id,
+            IpWatchHit.publication_id == IpJournalPublication.id,
+            IpWatchHit.profile_id.in_(visible_profiles),
+        )
+        .exists()
+    )
+    own_ids: set[str] = set()
+    for ids in session.scalars(
+        select(IpJournalIngestionRun.publication_ids_json)
+        .where(
+            IpJournalIngestionRun.company_id == context.company.id,
+            IpJournalIngestionRun.requested_by_membership_id == context.membership.id,
+            IpJournalIngestionRun.publications_seen > 0,
+        )
+        .order_by(IpJournalIngestionRun.created_at.desc())
+        .limit(OWN_CAPTURE_RUN_WINDOW)
+    ):
+        own_ids.update(ids or [])
+    unlinked_visible = [has_visible_hit]
+    if own_ids:
+        unlinked_visible.append(IpJournalPublication.id.in_(sorted(own_ids)))
+    return or_(
+        IpJournalPublication.application_id.in_(visible_applications),
+        (IpJournalPublication.application_id.is_(None)) & or_(*unlinked_visible),
     )
 
 
@@ -380,10 +528,14 @@ def _similarity(profile: IpWatchProfile, publication: IpJournalPublication) -> d
         if proprietor
         else []
     )
-    jurisdiction_match = (
-        not profile.jurisdictions_json
-        or publication.jurisdiction.upper() in profile.jurisdictions_json
-    )
+    # Normalised on match, so profiles saved before the canonical vocabulary
+    # (for example "INDIA") still match without migrating stored text.
+    profile_jurisdictions = {
+        canonical_jurisdiction(item) or item.strip().upper() for item in profile.jurisdictions_json
+    }
+    jurisdiction_match = not profile_jurisdictions or (
+        canonical_jurisdiction(publication.jurisdiction) or publication.jurisdiction.upper()
+    ) in profile_jurisdictions
     supplied_device = (publication.raw_evidence_json or {}).get("device_similarity")
     supplied_device_match = bool(
         isinstance(supplied_device, dict)
@@ -447,6 +599,7 @@ def _source_snapshot(publication: IpJournalPublication) -> dict[str, Any]:
         "source_status": publication.source_status,
         "source_fingerprint": publication.source_fingerprint,
         "supersedes_publication_id": publication.supersedes_publication_id,
+        "raw_evidence": publication.raw_evidence_json,
     }
 
 
@@ -567,6 +720,8 @@ def ingest_journal(
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )
+    if payload.external_call:
+        _assert_automated_watch_available(session, context=locked)
     request_sha256 = _fingerprint(payload.model_dump(mode="json", exclude={"idempotency_key"}))
     replay = session.scalar(
         select(IpJournalIngestionRun).where(
@@ -609,29 +764,20 @@ def ingest_journal(
     now = _now()
     profiles = list(
         session.scalars(
-            select(IpWatchProfile)
-            .join(
-                IpDocketRecord,
-                (IpDocketRecord.id == IpWatchProfile.docket_id)
-                & (IpDocketRecord.company_id == IpWatchProfile.company_id),
-            )
-            .outerjoin(
-                Matter,
-                (Matter.id == IpDocketRecord.matter_id)
-                & (Matter.company_id == IpDocketRecord.company_id),
-            )
-            .where(
-                IpWatchProfile.company_id == locked.company.id,
-                IpWatchProfile.poll_status.in_(("active", "paused_cost_quota")),
-                IpDocketRecord.is_active.is_(True),
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-                or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
-                visible_ip_dockets_filter(session, context=locked),
-            )
+            _intake_profiles_statement(session, context=locked)
             .with_for_update(of=IpWatchProfile)
             .limit(MAX_ACTIVE_PROFILES_PER_INGEST + 1)
         )
     )
+    if not profiles:
+        # Recording a run that compares nothing would read as a completed check.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No active watch profile can be compared with this journal entry. "
+                "Create or resume a watch profile, then capture the entry."
+            ),
+        )
     if len(payload.publications) > MAX_INGEST_PUBLICATIONS:
         raise HTTPException(
             status_code=422,
@@ -746,6 +892,8 @@ def ingest_journal(
                 select(IpJournalPublication).where(
                     IpJournalPublication.company_id == locked.company.id,
                     IpJournalPublication.id.in_(predecessor_ids),
+                    # Only an entry the operator can see can be corrected.
+                    _visible_publications_condition(session, context=locked),
                 )
             )
         )
@@ -754,8 +902,35 @@ def ingest_journal(
     )
     predecessors_by_id = {publication.id: publication for publication in predecessors}
     candidate_publications_by_id: dict[str, IpJournalPublication] = {}
-    for item, fingerprint in item_fingerprints:
+    for index, (item, fingerprint) in enumerate(item_fingerprints):
         publication = publications_by_fingerprint.get(fingerprint)
+        if publication is not None and _publication_content(publication) != _publication_content(
+            item
+        ):
+            # The record is append-only; silently keeping the old content would
+            # drop what the operator just captured. Point at the recorded entry
+            # (when the operator may see it); a correction is recorded only when
+            # the journal itself publishes one.
+            visible = session.scalar(
+                select(IpJournalPublication.id).where(
+                    IpJournalPublication.id == publication.id,
+                    _visible_publications_condition(session, context=locked),
+                )
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "type": "journal_entry_already_recorded",
+                    "detail": (
+                        f"Journal {publication.journal_number}, application "
+                        f"{publication.application_number} is already recorded with "
+                        "different details or evidence. The first capture is kept "
+                        "unchanged. Review the recorded entry; record a correction or "
+                        "re-advertisement only if the journal itself published one."
+                    ),
+                    "publication_id": visible,
+                },
+            )
         if publication is None:
             if item.application_id and item.application_id not in applications_by_id:
                 raise HTTPException(status_code=404, detail="Trademark application not found.")
@@ -769,7 +944,16 @@ def ingest_journal(
                 ):
                     raise HTTPException(
                         status_code=422,
-                        detail="Correction must preserve the advertised application identity.",
+                        detail=[
+                            {
+                                "loc": ["body", "publications", index, "application_number"],
+                                "msg": (
+                                    "A correction keeps the application number of the entry "
+                                    f"it corrects ({predecessor.application_number})."
+                                ),
+                                "type": "value_error",
+                            }
+                        ],
                     )
             retrieved = item.source_retrieved_at
             delay = max(
@@ -935,7 +1119,11 @@ def ingest_journal(
     for profile in active_profiles:
         profile.spent_cost_minor_in_period += payload.cost_minor
         profile.last_polled_at = now
-        profile.next_poll_at = _next_poll(profile.frequency, now)
+        profile.next_poll_at = (
+            None
+            if profile.provider_key == MANUAL_JOURNAL_PROVIDER
+            else _next_poll(profile.frequency, now)
+        )
         profile.poll_status = "active"
         profile.pause_reason = None
         profile.version += 1
@@ -1231,13 +1419,59 @@ def create_watch_handoff(
     return handoff
 
 
+def search_journal_publications(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str | None = None,
+    limit: int = 25,
+) -> list[IpJournalPublication]:
+    """Recorded journal entries the viewer may see, newest first, by text."""
+
+    statement = select(IpJournalPublication).where(
+        IpJournalPublication.company_id == context.company.id,
+        _visible_publications_condition(session, context=context),
+    )
+    term = (query or "").strip().lower()
+    if term:
+        # LIKE wildcards typed by the user are dropped so they cannot widen the search.
+        pattern = f"%{re.sub(r'[%_\\]', '', term)}%"
+        statement = statement.where(
+            or_(
+                func.lower(IpJournalPublication.journal_number).like(pattern),
+                func.lower(IpJournalPublication.application_number).like(pattern),
+                func.lower(func.coalesce(IpJournalPublication.mark_text, "")).like(pattern),
+            )
+        )
+    return list(
+        session.scalars(
+            statement.order_by(
+                IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc()
+            ).limit(limit)
+        )
+    )
+
+
+WATCH_RUN_LIMIT = 20
+
+
+def _count(session: Session, statement: Any) -> int:
+    return session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+
+
 def list_watch_workspace(
     session: Session,
     *,
     context: SessionContext,
     docket_id: str | None = None,
     limit: int = 100,
+    offset: int = 0,
 ) -> IpWatchWorkspaceResponse:
+    """One page of each watch list with its whole-list total (B4-ADJ-05).
+
+    The lists used to stop at `limit` with no total, and hits were read only
+    for the profiles on that page, so hits on later profiles never appeared.
+    """
     if docket_id:
         _docket_or_404(session, context=context, docket_id=docket_id, for_update=False)
     profile_statement = (
@@ -1263,38 +1497,86 @@ def list_watch_workspace(
     if docket_id:
         profile_statement = profile_statement.where(IpWatchProfile.docket_id == docket_id)
     profiles = list(
-        session.scalars(profile_statement.order_by(IpWatchProfile.updated_at.desc()).limit(limit))
+        session.scalars(
+            profile_statement.order_by(IpWatchProfile.updated_at.desc(), IpWatchProfile.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
     )
-    profile_ids = [item.id for item in profiles]
-    hits = (
+    profile_total = _count(session, profile_statement.with_only_columns(IpWatchProfile.id))
+    paused_profile_total = _count(
+        session,
+        profile_statement.with_only_columns(IpWatchProfile.id).where(
+            IpWatchProfile.poll_status != "active"
+        ),
+    )
+    hit_statement = select(IpWatchHit).where(
+        IpWatchHit.company_id == context.company.id,
+        IpWatchHit.profile_id.in_(profile_statement.with_only_columns(IpWatchProfile.id)),
+    )
+    hits = list(
+        session.scalars(
+            hit_statement.order_by(
+                IpWatchHit.hit_date.desc(), IpWatchHit.created_at.desc(), IpWatchHit.id.desc()
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+    hit_total = _count(session, hit_statement.with_only_columns(IpWatchHit.id))
+    listed_profile_ids = {item.id for item in profiles}
+    missing_profile_ids = {hit.profile_id for hit in hits} - listed_profile_ids
+    hit_profiles = (
         list(
             session.scalars(
-                select(IpWatchHit)
-                .where(
-                    IpWatchHit.company_id == context.company.id,
-                    IpWatchHit.profile_id.in_(profile_ids),
-                )
-                .order_by(IpWatchHit.hit_date.desc(), IpWatchHit.created_at.desc())
-                .limit(limit)
+                profile_statement.where(IpWatchProfile.id.in_(missing_profile_ids))
             )
         )
-        if profile_ids
+        if missing_profile_ids
         else []
     )
     publication_ids = list(dict.fromkeys(hit.publication_id for hit in hits))
-    publications = (
+    hit_publications = (
         list(
             session.scalars(
-                select(IpJournalPublication)
-                .where(
+                select(IpJournalPublication).where(
                     IpJournalPublication.company_id == context.company.id,
                     IpJournalPublication.id.in_(publication_ids),
                 )
-                .order_by(IpJournalPublication.journal_date.desc())
             )
         )
         if publication_ids
         else []
+    )
+    # List recent visible entries even without a hit, so a capture is visible
+    # and can be corrected (visibility: _visible_publications_condition).
+    recent_statement = select(IpJournalPublication).where(
+        IpJournalPublication.company_id == context.company.id,
+        _visible_publications_condition(session, context=context),
+    )
+    recent_publications = list(
+        session.scalars(
+            recent_statement.order_by(
+                IpJournalPublication.created_at.desc(), IpJournalPublication.id.desc()
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+    publication_total = _count(
+        session, recent_statement.with_only_columns(IpJournalPublication.id)
+    )
+    publications = sorted(
+        {item.id: item for item in [*hit_publications, *recent_publications]}.values(),
+        key=lambda item: (item.journal_date, item.created_at),
+        reverse=True,
+    )
+    intake_profile_count = session.scalar(
+        select(func.count()).select_from(
+            _intake_profiles_statement(session, context=context)
+            .with_only_columns(IpWatchProfile.id)
+            .subquery()
+        )
     )
     hit_ids = [item.id for item in hits]
     handoffs = (
@@ -1311,20 +1593,38 @@ def list_watch_workspace(
         if hit_ids
         else []
     )
+    run_statement = select(IpJournalIngestionRun).where(
+        IpJournalIngestionRun.company_id == context.company.id,
+        # Legacy scheduler rows for manual profiles polled nothing.
+        ~(
+            (IpJournalIngestionRun.provider_key == MANUAL_JOURNAL_PROVIDER)
+            & IpJournalIngestionRun.idempotency_key.startswith(SCHEDULER_RUN_PREFIX)
+        ),
+    )
     runs = list(
         session.scalars(
-            select(IpJournalIngestionRun)
-            .where(IpJournalIngestionRun.company_id == context.company.id)
-            .order_by(IpJournalIngestionRun.created_at.desc())
-            .limit(20)
+            run_statement.order_by(
+                IpJournalIngestionRun.created_at.desc(), IpJournalIngestionRun.id.desc()
+            ).limit(WATCH_RUN_LIMIT)
         )
     )
+    run_total = _count(session, run_statement.with_only_columns(IpJournalIngestionRun.id))
     return IpWatchWorkspaceResponse(
+        limit=limit,
+        offset=offset,
         profiles=[IpWatchProfileResponse.model_validate(item) for item in profiles],
+        profile_total=profile_total,
+        paused_profile_total=paused_profile_total,
         hits=[IpWatchHitResponse.model_validate(item) for item in hits],
+        hit_total=hit_total,
+        hit_profiles=[IpWatchProfileResponse.model_validate(item) for item in hit_profiles],
         publications=[IpJournalPublicationResponse.model_validate(item) for item in publications],
+        publication_total=publication_total,
         ingestion_runs=[IpJournalIngestionRunResponse.model_validate(item) for item in runs],
+        ingestion_run_total=run_total,
+        ingestion_run_limit=WATCH_RUN_LIMIT,
         handoffs=[IpWatchHandoffResponse.model_validate(item) for item in handoffs],
+        intake_profile_count=intake_profile_count or 0,
     )
 
 
@@ -1355,6 +1655,13 @@ def run_journal_watch_scheduler(
                     IpWatchProfile.next_poll_at.is_(None),
                     IpWatchProfile.next_poll_at <= current,
                 ),
+                # A manual-only profile has nothing to poll; it is due only
+                # when its cost-quota period ends.
+                or_(
+                    IpWatchProfile.provider_key != MANUAL_JOURNAL_PROVIDER,
+                    (IpWatchProfile.poll_status == "paused_cost_quota")
+                    & IpWatchProfile.next_poll_at.is_not(None),
+                ),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
                 or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
@@ -1363,9 +1670,9 @@ def run_journal_watch_scheduler(
             .with_for_update(of=IpWatchProfile)
         )
     )
-    checked = 0
     cost_paused = 0
     provider_paused = 0
+    manual_profiles = 0
     for profile in profiles:
         _reset_cost_period_if_due(profile, current)
         if (
@@ -1382,8 +1689,16 @@ def run_journal_watch_scheduler(
             profile.version += 1
             cost_paused += 1
             continue
-        manual = profile.provider_key == "manual-journal"
-        scheduler_key = f"scheduler:{profile.id}:{current.strftime('%Y%m%dT%H%M%SZ')}"
+        if profile.provider_key == MANUAL_JOURNAL_PROVIDER:
+            # No automated source: nothing is polled, so no run is recorded
+            # and nothing claims a check. The quota reset above was the only
+            # scheduled work; it changed the profile, so its version moves.
+            profile.next_poll_at = None
+            profile.version += 1
+            manual_profiles += 1
+            continue
+        scheduled = current.strftime("%Y%m%dT%H%M%SZ")
+        scheduler_key = f"{SCHEDULER_RUN_PREFIX}{profile.id}:{scheduled}"
         request_sha256 = _fingerprint(
             {
                 "profile_id": profile.id,
@@ -1396,7 +1711,7 @@ def run_journal_watch_scheduler(
             provider_key=profile.provider_key,
             idempotency_key=scheduler_key,
             request_sha256=request_sha256,
-            status="succeeded" if manual else "failed",
+            status="failed",
             external_call=False,
             cost_minor=0,
             currency=profile.cost_currency,
@@ -1405,33 +1720,27 @@ def run_journal_watch_scheduler(
             hits_created=0,
             duplicate_hits=0,
             stale_source_alert=False,
-            error_redacted=(
-                None
-                if manual
-                else "Journal provider is not activated; no external call was attempted."
-            ),
+            error_redacted="Journal provider is not activated; no external call was attempted.",
             requested_by_membership_id=profile.created_by_membership_id,
             started_at=current,
             completed_at=current,
         )
         session.add(run)
         profile.last_polled_at = current
-        if manual:
-            profile.next_poll_at = _next_poll(profile.frequency, current)
-            checked += 1
-        else:
-            profile.poll_status = "paused"
-            profile.pause_reason = (
-                "Journal provider activation, licensing, and credentials are required."
-            )
-            profile.next_poll_at = None
-            provider_paused += 1
+        profile.poll_status = "paused"
+        profile.pause_reason = (
+            "Journal provider activation, licensing, and credentials are required."
+        )
+        profile.next_poll_at = None
+        provider_paused += 1
         profile.version += 1
     session.commit()
     return JournalWatchSchedulerResult(
         due_profiles=len(profiles),
-        checked_profiles=checked,
+        # No activated journal provider exists, so nothing is checked yet.
+        checked_profiles=0,
         cost_paused_profiles=cost_paused,
         provider_paused_profiles=provider_paused,
         external_calls=0,
+        manual_profiles=manual_profiles,
     )

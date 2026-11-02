@@ -933,6 +933,65 @@ def test_ip_matter_links_are_effective_dated_many_to_many_and_timeline_is_refere
     assert retired.json()["operational_pointer_cleared"] is False
 
 
+def test_operational_link_to_a_non_operational_matter_is_a_409_with_its_reason(
+    client: TestClient,
+) -> None:
+    # Ram 2026-10-30 BUG-007 review: an operational link to a disposed (or
+    # closed) Matter raised an unmapped MatterNotOperationalError, a generic
+    # 500 with no reason. The picker lists such a Matter as disabled for the
+    # Operational role, but a stale page or a direct caller still reaches here.
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    disposed_matter = _mk_matter(client, str(bootstrap["access_token"]), "IP-LINK-DISPOSED-001")
+    created = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Operational guard mark",
+            "matter_id": None,
+            "primary_identifier": "TM-LINK-DISPOSED-001",
+            "restricted": False,
+            "particulars": _particulars(mark="DISPOSED"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket = created.json()
+    disposed = client.patch(
+        f"/api/matters/{disposed_matter['id']}/lifecycle/status",
+        headers=headers,
+        json={
+            "to_status": "disposed",
+            "expected_from_status": disposed_matter["status"],
+            "expected_updated_at": disposed_matter["updated_at"],
+            "reason": "Engagement completed and file disposition approved",
+        },
+    )
+    assert disposed.status_code == 200, disposed.text
+
+    def link(role: str):
+        return client.post(
+            f"/api/ip/dockets/{docket['id']}/matter-links",
+            headers=headers,
+            json={
+                "matter_id": disposed_matter["id"],
+                "relation_role": role,
+                "reason": "Disposed Matter link attempt.",
+                "expected_docket_updated_at": client.get(
+                    f"/api/ip/dockets/{docket['id']}", headers=headers
+                ).json()["updated_at"],
+            },
+        )
+
+    refused = link("operational")
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["code"] == "ip_matter_not_operational"
+    assert "open (intake, active or on hold) Matter" in refused.json()["detail"]
+    links = client.get(f"/api/ip/dockets/{docket['id']}/matter-links", headers=headers)
+    assert links.json()["active_count"] == 0
+    # Another role stays available, exactly as the picker offers it.
+    assert link("advisory").status_code == 201
+
+
 def test_matter_ip_link_query_count_is_bounded_by_page_not_link_count(
     client: TestClient,
 ) -> None:

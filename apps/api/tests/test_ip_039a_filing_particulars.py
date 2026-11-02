@@ -84,8 +84,13 @@ def test_uj03_normal_create_trademark_application_manually(client: TestClient) -
     assert particulars["form_key"] == "TM-A"
     assert particulars["form_version"] == "2026.1"
     assert particulars["mark_kind"] == "word"
+    # BUG-002: each class row records the Nice edition it was validated against.
     assert particulars["classes_json"] == [
-        {"class_number": 9, "specification": "Downloadable software"}
+        {
+            "class_number": 9,
+            "specification": "Downloadable software",
+            "nice_edition": "NCL 13-2026",
+        }
     ]
     assert particulars["parties_json"][0]["role"] == "applicant"
     assert particulars["readiness_status"] == "ready"

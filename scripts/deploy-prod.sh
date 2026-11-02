@@ -118,6 +118,13 @@ WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
 # releases preserve the historical path exactly.
 A0_CAPTURE_RULE_GOVERNANCE_BASELINE="${CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE:-false}"
 A0_RULE_GOVERNANCE_BASELINE_OUTPUT="${CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT:-}"
+# IPLF-027B: whether IP rule governance is on is checked-in release state, read
+# from the exact commit this release labels; no shell variable or live value
+# decides it. The A2 enable/rollback between releases is a config-only revision
+# made by scripts/ip-rule-governance-a2.sh (docs/runbooks/ip-rule-governance-a2.md).
+IP_RULE_GOVERNANCE_STATE_FILE=deploy/ip-rule-governance-state.json
+# Governance may be enabled only by a release carrying the A1 ownership schema.
+IP_RULE_GOVERNANCE_A1_REVISION=20261031_0002
 # Destructive exact-release browser verification writes the two dedicated QA
 # tenants for several minutes. Default to holding projection maintenance until
 # that verification finishes and two operator-controlled clean cadences pass.
@@ -175,6 +182,102 @@ if [[ "$#" -eq 1 ]]; then
     exit 1
   fi
 fi
+
+# Validate the committed rule-governance state before any cloud call.
+if ! IP_RULE_GOVERNANCE_STATE_JSON=$(git show "${HEAD_SHA}:${IP_RULE_GOVERNANCE_STATE_FILE}"); then
+  echo "ERROR: ${IP_RULE_GOVERNANCE_STATE_FILE} is not committed at ${HEAD_SHA}; refusing release."
+  exit 2
+fi
+if ! IP_RULE_GOVERNANCE_DECISION=$(IP_RULE_GOVERNANCE_STATE_JSON="${IP_RULE_GOVERNANCE_STATE_JSON}" \
+  python - "${IP_RULE_GOVERNANCE_STATE_FILE}" <<'PY' | tr -d '\r'
+import json
+import os
+import re
+import sys
+from datetime import datetime, timedelta, timezone
+
+name = sys.argv[1]
+keys = {"schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence"}
+
+
+def refuse(reason):
+    print(f"ERROR: {name}: {reason}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+try:
+    state = json.loads(os.environ["IP_RULE_GOVERNANCE_STATE_JSON"])
+except ValueError:
+    refuse("is not valid JSON")
+if not isinstance(state, dict) or set(state) != keys:
+    refuse("must be an object with exactly the keys " + ", ".join(sorted(keys)))
+if type(state["schema_version"]) is not int or state["schema_version"] != 1:
+    refuse("schema_version must be 1")
+if type(state["enabled"]) is not bool:
+    refuse("enabled must be true or false")
+if not state["enabled"]:
+    if any(state[key] is not None for key in ("rollout_expires_at", "approved_by", "evidence")):
+        refuse("rollout_expires_at, approved_by and evidence must be null while disabled")
+    print("false||")
+    raise SystemExit(0)
+expires_at = state["rollout_expires_at"]
+if not isinstance(expires_at, str) or not re.fullmatch(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", expires_at
+):
+    refuse("rollout_expires_at must be a UTC timestamp such as 2027-01-31T18:30:00Z")
+try:
+    expiry = datetime.strptime(expires_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+except ValueError:
+    refuse(f"rollout_expires_at {expires_at} is not a calendar time")
+now = datetime.now(timezone.utc)
+if expiry <= now:
+    refuse(f"rollout_expires_at {expires_at} has passed")
+if expiry - now > timedelta(days=180):
+    refuse(f"rollout_expires_at {expires_at} is more than 180 days away")
+approved_by = state["approved_by"]
+if (
+    not isinstance(approved_by, str)
+    or not approved_by.strip()
+    or not approved_by.isprintable()
+    or len(approved_by) > 200
+):
+    refuse("approved_by must name the approving owner")
+evidence = state["evidence"]
+if not isinstance(evidence, str) or not re.fullmatch(
+    r"[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*", evidence
+):
+    refuse("evidence must be a repository-relative file path")
+print(f"true|{expires_at}|{evidence}")
+PY
+); then
+  echo "ERROR: ${IP_RULE_GOVERNANCE_STATE_FILE} at ${HEAD_SHA} is invalid; refusing release."
+  exit 2
+fi
+IFS='|' read -r IP_RULE_GOVERNANCE_ENABLED IP_RULE_GOVERNANCE_EXPIRES_AT \
+  IP_RULE_GOVERNANCE_EVIDENCE <<< "${IP_RULE_GOVERNANCE_DECISION}"
+IP_RULE_GOVERNANCE_ENV="CASEOPS_IP_RULE_GOVERNANCE_ENABLED=${IP_RULE_GOVERNANCE_ENABLED}"
+# A disabled release also deletes any expiry an earlier A2 revision set. gcloud
+# applies --remove-env-vars before --update-env-vars and ignores an absent key.
+IP_RULE_GOVERNANCE_REMOVE_FLAGS=(--remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT)
+if [[ "${IP_RULE_GOVERNANCE_ENABLED}" == "true" ]]; then
+  IP_RULE_GOVERNANCE_EVIDENCE_TYPE=$(git cat-file -t \
+    "${HEAD_SHA}:${IP_RULE_GOVERNANCE_EVIDENCE}" 2>/dev/null || true)
+  if [[ "${IP_RULE_GOVERNANCE_EVIDENCE_TYPE}" != "blob" ]]; then
+    echo "ERROR: rule-governance evidence ${IP_RULE_GOVERNANCE_EVIDENCE} is not a committed file at ${HEAD_SHA}; refusing release."
+    exit 2
+  fi
+  if ! git grep --quiet -E "^revision = \"${IP_RULE_GOVERNANCE_A1_REVISION}\"[[:space:]]*\$" \
+    "${HEAD_SHA}" -- apps/api/alembic/versions; then
+    echo "ERROR: rule governance cannot be enabled without A1 migration ${IP_RULE_GOVERNANCE_A1_REVISION} in apps/api/alembic/versions at ${HEAD_SHA}; refusing release."
+    exit 2
+  fi
+  IP_RULE_GOVERNANCE_ENV="${IP_RULE_GOVERNANCE_ENV}|CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=${IP_RULE_GOVERNANCE_EXPIRES_AT}"
+  IP_RULE_GOVERNANCE_REMOVE_FLAGS=()
+elif [[ "${IP_RULE_GOVERNANCE_ENABLED}" != "false" ]]; then
+  echo "ERROR: ${IP_RULE_GOVERNANCE_STATE_FILE} produced no governance decision; refusing release."
+  exit 2
+fi
+echo "  rule governance from ${IP_RULE_GOVERNANCE_STATE_FILE}: enabled=${IP_RULE_GOVERNANCE_ENABLED}${IP_RULE_GOVERNANCE_EXPIRES_AT:+ until ${IP_RULE_GOVERNANCE_EXPIRES_AT}}"
 
 assert_current_main() {
   local phase="$1"
@@ -923,7 +1026,8 @@ gcloud run deploy caseops-api \
   "${API_DEPENDENCY_FLAGS[@]}" \
   --startup-probe "tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120" \
   --update-secrets "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=${PORTFOLIO_EXPORT_WORKER_SECRET}:latest,CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION},CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
-  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|${PUBLIC_LEAD_MAIL_ENV}|${PORTFOLIO_EXPORT_ENV}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
+  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|${PUBLIC_LEAD_MAIL_ENV}|${PORTFOLIO_EXPORT_ENV}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|${IP_RULE_GOVERNANCE_ENV}|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
+  "${IP_RULE_GOVERNANCE_REMOVE_FLAGS[@]}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -984,7 +1088,9 @@ if ! LIVE_API_REVISION=$(python - \
   "${API_CONCURRENCY}" \
   "${API_TIMEOUT_SECONDS}" \
   "${API_MAX_INSTANCES}" \
-  "${LIVE_API_SERVICE_JSON}" <<'PY'
+  "${LIVE_API_SERVICE_JSON}" \
+  "${IP_RULE_GOVERNANCE_ENABLED}" \
+  "${IP_RULE_GOVERNANCE_EXPIRES_AT}" <<'PY'
 import json
 import sys
 
@@ -1016,6 +1122,9 @@ expected_concurrency = sys.argv[15]
 expected_timeout_seconds = sys.argv[16]
 expected_max = sys.argv[17]
 service = json.loads(sys.argv[18])
+expected_rule_governance = sys.argv[19]
+# Empty when governance is disabled: the expiry variable must then be absent.
+expected_rule_governance_expiry = sys.argv[20]
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
@@ -1117,8 +1226,29 @@ else:
         errors.append("API startup probe does not match the bounded readiness contract")
     if str((env.get("CASEOPS_RELEASE_SHA") or {}).get("value")) != expected_sha:
         errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
-    if str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value")) != "false":
-        errors.append("CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly false")
+    if (
+        str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value"))
+        != expected_rule_governance
+    ):
+        errors.append(
+            f"CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly {expected_rule_governance}"
+        )
+    rule_governance_expiry = env.get("CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT")
+    if not expected_rule_governance_expiry:
+        if rule_governance_expiry is not None:
+            errors.append(
+                "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT remains while rule "
+                "governance is disabled"
+            )
+    elif (
+        rule_governance_expiry is None
+        or "valueFrom" in rule_governance_expiry
+        or str(rule_governance_expiry.get("value")) != expected_rule_governance_expiry
+    ):
+        errors.append(
+            "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT does not match the "
+            "checked-in rollout expiry"
+        )
     for name, expected_value in expected_llm_env.items():
         if str((env.get(name) or {}).get("value")) != expected_value:
             errors.append(f"{name} is missing or stale")
@@ -1214,7 +1344,7 @@ python scripts/reconcile_rate_identity_edge.py verify --expected-sha "${HEAD_SHA
 python scripts/portfolio_export_release.py verify --expected-sha "${HEAD_SHA}" \
   --project "${PROJECT}" --region "${REGION}" > "${PORTFOLIO_EXPORT_EVIDENCE_DIR}/verified.json"
 echo "  health=${HEALTH}"
-echo "  api=${LIVE_API_TAG} revision=${LIVE_API_REVISION} web=${LIVE_WEB_TAG} (matches HEAD ${TAG}; rule governance explicitly false)"
+echo "  api=${LIVE_API_TAG} revision=${LIVE_API_REVISION} web=${LIVE_WEB_TAG} (matches HEAD ${TAG}; rule governance explicitly ${IP_RULE_GOVERNANCE_ENABLED})"
 
 # EG-003 regression guard. The clamav sidecar was wired via
 # scripts/eg003-apply-clamav.sh on 2026-04-25. `gcloud run deploy

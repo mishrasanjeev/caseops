@@ -191,6 +191,15 @@ export type PortalIpGrant = {
   revoked_at: string | null;
   row_version: number;
   active: boolean;
+  /** True only when publishing to this grant would be accepted (same rule as publish). */
+  publishable: boolean;
+  publication_blocked_reason:
+    | "revoked"
+    | "expired"
+    | "client_inactive"
+    | "docket_closed"
+    | "docket_not_visible"
+    | null;
 };
 
 export async function fetchAdminPortalIpGrants(): Promise<{ grants: PortalIpGrant[] }> {
@@ -258,6 +267,29 @@ export async function publishIpReportToPortal(input: {
   });
 }
 
+export type PortalShareableDocument = {
+  document_id: string;
+  document_title: string;
+  version_number: number;
+  version_state: string;
+  display_name: string;
+  taxonomy_key: string;
+  taxonomy_label: string;
+};
+
+/**
+ * Document versions the publish endpoint accepts for one active grant: the
+ * grant's docket, its granted categories, approved non-privileged versions.
+ */
+export async function fetchPortalGrantShareableDocuments(grantId: string): Promise<{
+  grant_id: string;
+  docket_title: string;
+  document_categories: string[];
+  documents: PortalShareableDocument[];
+}> {
+  return apiRequest(`/api/ip/portal/grants/${encodeURIComponent(grantId)}/shareable-documents`);
+}
+
 export async function publishIpDocumentToPortal(input: {
   portalUserId: string;
   grantId: string;
@@ -298,7 +330,8 @@ export type PortalInstruction = {
   updated_at: string;
 };
 
-export async function fetchFirmPortalInstructions(): Promise<{ instructions: PortalInstruction[] }> {
+/** `instructions` is the newest `limit` of `total` visible instructions. */
+export async function fetchFirmPortalInstructions(): Promise<{ instructions: PortalInstruction[]; total: number; limit: number }> {
   return apiRequest("/api/ip/portal/client-instructions");
 }
 

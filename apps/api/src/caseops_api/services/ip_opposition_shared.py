@@ -22,7 +22,9 @@ from caseops_api.db.models import (
 from caseops_api.schemas.ip_deadlines import IpDeadlineOverrideRequest
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.schemas.ip_oppositions import (
+    IpOppositionAppealProceedingOption,
     IpOppositionApplicationScopeRecord,
+    IpOppositionRelatedApplicationOption,
     IpOppositionSharedActionRequest,
     IpOppositionSharedHearingRecord,
     IpOppositionSharedWorkflowResponse,
@@ -39,6 +41,17 @@ from caseops_api.services.session_context import SessionContext
 
 _ACTIVE_DEADLINE_STATES = frozenset({"confirmed", "overdue"})
 _HEARING_STAGES = frozenset({"hearing_pending", "hearing_scheduled", "reserved_for_order"})
+# The hearing statuses each hearing-bound record accepts. The validators read
+# this table and the shared-workflow response serves it, so the form's
+# choices and the write rules cannot drift apart (B4-ADJ-22).
+HEARING_STATUSES_BY_ACTION: dict[str, frozenset[str]] = {
+    "hearing_preparation_recorded": frozenset({"scheduled", "adjourned"}),
+    "post_hearing_note_recorded": frozenset({"completed"}),
+    "hearing_notice_recorded": frozenset({"scheduled", "adjourned"}),
+    "adjournment_recorded": frozenset({"scheduled", "adjourned"}),
+    "written_arguments_recorded": frozenset({"scheduled", "adjourned", "completed"}),
+    "attendance_recorded": frozenset({"completed"}),
+}
 _FURTHER_EVIDENCE_STAGES = frozenset(
     {
         "opponent_evidence_filed",
@@ -153,6 +166,84 @@ def _application_scopes(
     )
 
 
+_DISPOSITION_OUTCOME_STAGES = frozenset({"decided", "withdrawn", "closed"})
+
+
+def _is_disposition_trigger(event: IpDocketEvent) -> bool:
+    return (
+        event.payload_json.get("action_kind") == "order_recorded"
+        or event.resulting_stage in _DISPOSITION_OUTCOME_STAGES
+    )
+
+
+def _appeal_proceeding_options(
+    session: Session, proceeding: IpProceeding
+) -> list[tuple[IpProceeding, list[str]]]:
+    """Appeal proceedings on this docket with their current appeal numbers."""
+    targets = list(
+        session.scalars(
+            select(IpProceeding)
+            .where(
+                IpProceeding.company_id == proceeding.company_id,
+                IpProceeding.docket_id == proceeding.docket_id,
+                IpProceeding.proceeding_kind == "appeal",
+                IpProceeding.id != proceeding.id,
+            )
+            .order_by(IpProceeding.created_at, IpProceeding.id)
+        )
+    )
+    if not targets:
+        return []
+    numbers: dict[str, list[str]] = {row.id: [] for row in targets}
+    for identifier in session.scalars(
+        select(IpIdentifier)
+        .where(
+            IpIdentifier.company_id == proceeding.company_id,
+            IpIdentifier.proceeding_id.in_(list(numbers)),
+            IpIdentifier.identifier_kind == "appeal",
+            IpIdentifier.effective_until.is_(None),
+        )
+        .order_by(IpIdentifier.is_primary.desc(), IpIdentifier.effective_from, IpIdentifier.id)
+    ):
+        numbers[str(identifier.proceeding_id)].append(identifier.raw_value)
+    return [(row, numbers[row.id]) for row in targets]
+
+
+def _related_application_options(
+    session: Session, proceeding: IpProceeding
+) -> list[tuple[TrademarkApplication, str | None]]:
+    """Other applications on this IP record (amendments or divisions)."""
+    conditions = [
+        TrademarkApplication.company_id == proceeding.company_id,
+        TrademarkApplication.docket_id == proceeding.docket_id,
+    ]
+    if proceeding.application_id is not None:
+        conditions.append(TrademarkApplication.id != proceeding.application_id)
+    applications = list(
+        session.scalars(
+            select(TrademarkApplication)
+            .where(*conditions)
+            .order_by(TrademarkApplication.created_at, TrademarkApplication.id)
+        )
+    )
+    if not applications:
+        return []
+    numbers: dict[str, str] = {}
+    for identifier in session.scalars(
+        select(IpIdentifier)
+        .where(
+            IpIdentifier.company_id == proceeding.company_id,
+            IpIdentifier.application_id.in_([row.id for row in applications]),
+            IpIdentifier.proceeding_id.is_(None),
+            IpIdentifier.identifier_kind == "application",
+            IpIdentifier.effective_until.is_(None),
+        )
+        .order_by(IpIdentifier.is_primary.desc(), IpIdentifier.effective_from, IpIdentifier.id)
+    ):
+        numbers.setdefault(str(identifier.application_id), identifier.raw_value)
+    return [(row, numbers.get(row.id)) for row in applications]
+
+
 def _next_required_action(
     proceeding: IpProceeding,
     actions: list[IpDocketEvent],
@@ -233,10 +324,37 @@ def get_shared_workflow(
         for_update=False,
         required_capability="ip:read",
     )
-    actions = _shared_actions(_proceeding_events(session, proceeding))
+    events = _proceeding_events(session, proceeding)
+    actions = _shared_actions(events)
     deadlines = _active_deadlines(session, proceeding)
     hearings = _shared_hearings(session, proceeding)
     return IpOppositionSharedWorkflowResponse(
+        appeal_proceedings=[
+            IpOppositionAppealProceedingOption(
+                id=row.id,
+                office=row.office,
+                stage=row.stage,
+                appeal_identifiers=numbers,
+            )
+            for row, numbers in _appeal_proceeding_options(session, proceeding)
+        ],
+        related_applications=[
+            IpOppositionRelatedApplicationOption(
+                id=row.id,
+                application_number=number,
+                office=row.office,
+                filing_phase=row.filing_phase,
+            )
+            for row, number in _related_application_options(session, proceeding)
+        ],
+        disposition_trigger_events=[
+            IpDocketEventResponse.model_validate(row)
+            for row in events
+            if _is_disposition_trigger(row)
+        ],
+        hearing_statuses_by_action={
+            action: sorted(statuses) for action, statuses in HEARING_STATUSES_BY_ACTION.items()
+        },
         proceeding_id=proceeding.id,
         represented_side=proceeding.side,
         current_stage=proceeding.stage,
@@ -298,7 +416,7 @@ def _assert_hearing(
     *,
     proceeding: IpProceeding,
     hearing_id: str,
-    require_completed: bool,
+    action_kind: str,
 ) -> MatterHearing:
     hearing = session.scalar(
         select(MatterHearing).where(
@@ -310,12 +428,13 @@ def _assert_hearing(
     )
     if hearing is None:
         raise HTTPException(status_code=404, detail="Shared opposition hearing not found.")
-    if require_completed and hearing.status != "completed":
+    allowed = HEARING_STATUSES_BY_ACTION[action_kind]
+    if hearing.status not in allowed and "completed" in allowed:
         raise HTTPException(
             status_code=409,
             detail="Complete the shared hearing before adding notes.",
         )
-    if not require_completed and hearing.status not in {"scheduled", "adjourned"}:
+    if hearing.status not in allowed:
         raise HTTPException(
             status_code=409,
             detail="Hearing preparation requires an active hearing.",
@@ -408,7 +527,7 @@ def _assert_specialized_hearing(
     *,
     proceeding: IpProceeding,
     hearing_id: str,
-    allowed_statuses: set[str],
+    allowed_statuses: frozenset[str],
 ) -> MatterHearing:
     hearing = session.scalar(
         select(MatterHearing).where(
@@ -443,19 +562,16 @@ def _assert_specialized_action(
             proceeding=proceeding,
             scope_ids=[row.application_scope_id for row in detail.decisions],
         )
-        if detail.related_application_id:
-            related = session.scalar(
-                select(TrademarkApplication.id).where(
-                    TrademarkApplication.id == detail.related_application_id,
-                    TrademarkApplication.company_id == proceeding.company_id,
-                    TrademarkApplication.id != proceeding.application_id,
-                )
+        # The same predicate the form's choices come from: another
+        # application on this IP record, never one on a docket the actor
+        # may not see.
+        if detail.related_application_id and detail.related_application_id not in {
+            row.id for row, _ in _related_application_options(session, proceeding)
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail="Related amendment or division application not found.",
             )
-            if related is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Related amendment or division application not found.",
-                )
     elif payload.action_kind in {
         "hearing_notice_recorded",
         "adjournment_recorded",
@@ -470,12 +586,7 @@ def _assert_specialized_action(
         }
         detail = details[payload.action_kind]
         assert detail is not None
-        allowed = {
-            "hearing_notice_recorded": {"scheduled", "adjourned"},
-            "adjournment_recorded": {"scheduled", "adjourned"},
-            "written_arguments_recorded": {"scheduled", "adjourned", "completed"},
-            "attendance_recorded": {"completed"},
-        }[payload.action_kind]
+        allowed = HEARING_STATUSES_BY_ACTION[payload.action_kind]
         _assert_specialized_hearing(
             session,
             proceeding=proceeding,
@@ -498,11 +609,7 @@ def _assert_specialized_action(
                 IpDocketEvent.proceeding_id == proceeding.id,
             )
         )
-        valid_trigger = trigger is not None and (
-            trigger.payload_json.get("action_kind") == "order_recorded"
-            or trigger.resulting_stage in {"decided", "withdrawn", "closed"}
-        )
-        if not valid_trigger:
+        if trigger is None or not _is_disposition_trigger(trigger):
             raise HTTPException(
                 status_code=409,
                 detail="Disposition review requires this opposition's outcome event.",
@@ -575,25 +682,12 @@ def _assert_appeal(
             detail="Appeal must link to this opposition's order event.",
         )
     if appeal.target_kind == "appeal_proceeding":
-        target = session.scalar(
-            select(IpProceeding).where(
-                IpProceeding.id == appeal.target_id,
-                IpProceeding.company_id == proceeding.company_id,
-                IpProceeding.docket_id == proceeding.docket_id,
-                IpProceeding.proceeding_kind == "appeal",
-                IpProceeding.id != proceeding.id,
-            )
-        )
-        identifier = session.scalar(
-            select(IpIdentifier).where(
-                IpIdentifier.company_id == proceeding.company_id,
-                IpIdentifier.proceeding_id == appeal.target_id,
-                IpIdentifier.identifier_kind == "appeal",
-                IpIdentifier.raw_value == appeal.appeal_identifier,
-                IpIdentifier.effective_until.is_(None),
-            )
-        )
-        if target is None or identifier is None:
+        # The same predicate the form's appeal choices come from.
+        numbers = {
+            row.id: identifiers
+            for row, identifiers in _appeal_proceeding_options(session, proceeding)
+        }
+        if appeal.appeal_identifier not in numbers.get(appeal.target_id, []):
             raise HTTPException(
                 status_code=409,
                 detail="Appeal proceeding and identifier are required.",
@@ -747,7 +841,7 @@ def record_shared_action(
             session,
             proceeding=proceeding,
             hearing_id=preparation.shared_hearing_id,
-            require_completed=payload.action_kind == "post_hearing_note_recorded",
+            action_kind=payload.action_kind,
         )
     elif payload.action_kind == "order_recorded":
         _assert_order(session, proceeding=proceeding, payload=payload, actions=actions)

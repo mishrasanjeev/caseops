@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { MatterPicker } from "@/components/app/MatterPicker";
 import { RoadmapStub } from "@/components/app/RoadmapStub";
 import { TenantAIPolicyCard } from "@/components/app/TenantAIPolicyCard";
 import { Button } from "@/components/ui/Button";
@@ -33,11 +34,10 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
+import { API_BASE_URL, apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   fetchTenantEnterpriseReadiness,
   getStorageGovernance,
-  listMatters,
   updateStorageGovernance,
   type FirmStorageUsageSummary,
 } from "@/lib/api/endpoints";
@@ -188,6 +188,7 @@ export default function AdminPage() {
   const [portalFullName, setPortalFullName] = useState("");
   const [portalRole, setPortalRole] = useState<PortalUserRole>("client");
   const [portalMatterId, setPortalMatterId] = useState("");
+  const [portalMatterError, setPortalMatterError] = useState<string | null>(null);
   const [portalCanReply, setPortalCanReply] = useState(true);
   const [portalCanUpload, setPortalCanUpload] = useState(false);
   const [portalCanInvoice, setPortalCanInvoice] = useState(false);
@@ -222,13 +223,6 @@ export default function AdminPage() {
     },
   });
 
-  const portalMattersQuery = useQuery({
-    queryKey: ["admin", "portal-invite", "matters"],
-    queryFn: () => listMatters({ limit: 100 }),
-    enabled: canPortalInvite,
-  });
-  const portalMatterOptions = portalMattersQuery.data?.matters ?? [];
-
   const portalInviteMutation = useMutation({
     mutationFn: () =>
       invitePortalUser({
@@ -251,8 +245,14 @@ export default function AdminPage() {
       setPortalCanReply(true);
       setPortalCanUpload(false);
       setPortalCanInvoice(false);
+      setPortalMatterError(null);
     },
     onError: (err) => {
+      // The server answers a Matter you can no longer see (an ethical wall or
+      // restriction added after you chose it) exactly like a missing one.
+      if (isApiErrorShape(err) && err.status === 404) {
+        setPortalMatterError("This Matter is no longer available to you. Choose another Matter, or ask a workspace owner to send this invite.");
+      }
       toast.error(apiErrorMessage(err, "Could not invite portal user."));
     },
   });
@@ -721,31 +721,15 @@ export default function AdminPage() {
                   <option value="outside_counsel">Outside counsel portal</option>
                 </select>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="portal-invite-matter">Matter grant</Label>
-                <select
-                  id="portal-invite-matter"
-                  // A matter title can be long; the select must not widen the form.
-                  className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
-                  value={portalMatterId}
-                  onChange={(e) => setPortalMatterId(e.target.value)}
-                  disabled={portalMattersQuery.isPending}
-                  data-testid="portal-invite-matter"
-                >
-                  <option value="">
-                    {portalMattersQuery.isPending
-                      ? "Loading matters..."
-                      : "Select a matter"}
-                  </option>
-                  {portalMatterOptions.map((matter) => (
-                    <option key={matter.id} value={matter.id}>
-                      {[matter.matter_code, matter.title]
-                        .filter(Boolean)
-                        .join(" - ")}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <MatterPicker
+                id="portal-invite-matter"
+                className="md:col-span-2"
+                label="Matter grant"
+                searchLabel="Search Matters to grant"
+                value={portalMatterId}
+                error={portalMatterError}
+                onChange={(matterId) => { setPortalMatterId(matterId); setPortalMatterError(null); }}
+              />
               <div className="md:col-span-2">
                 <fieldset className="grid gap-2 rounded-md border border-[var(--color-line)] px-3 py-2 text-sm sm:grid-cols-3">
                   <legend className="px-1 text-xs font-medium text-[var(--color-mute)]">

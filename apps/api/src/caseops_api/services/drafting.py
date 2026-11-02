@@ -58,6 +58,7 @@ from caseops_api.db.models import (
     Matter,
     ModelRun,
 )
+from caseops_api.services.ai_money_budget import AiMoneyBudgetError
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.authorities import search_authority_catalog
 from caseops_api.services.citations import (
@@ -1313,7 +1314,8 @@ def _run_drafting_llm(
         type(failure).__name__,
         failure,
     )
-    if isinstance(failure, LLMQuotaExhaustedError):
+    # A budget refusal or exhausted quota is not fixed by retrying in a minute.
+    if isinstance(failure, (AiMoneyBudgetError, LLMQuotaExhaustedError)):
         raise provider_failure_http_exception(noun="draft", exc=failure) from failure
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

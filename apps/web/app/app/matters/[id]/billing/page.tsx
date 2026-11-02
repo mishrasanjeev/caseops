@@ -33,7 +33,9 @@ import {
   createInvoicePaymentLink,
   downloadMatterInvoicePdf,
   fetchPaymentConfig,
+  issueMatterInvoiceDraft,
   syncInvoicePaymentLink,
+  voidMatterInvoiceDraft,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -53,8 +55,25 @@ function formatHourlyRate(entry: WorkspaceTimeEntry): string {
 }
 
 function canIssuePaymentLink(inv: WorkspaceInvoice): boolean {
-  if (inv.status === "void" || inv.status === "paid") return false;
+  // BUG-016: a draft PDF says it is not payable; it is issued first, from its
+  // own action, before a payment link is offered.
+  if (inv.status === "void" || inv.status === "paid" || inv.status === "draft") return false;
   return inv.balance_due_minor > 0;
+}
+
+// BUG-016 (2026-10-31): a draft, an outside-counsel submission or a voided
+// invoice is not an issued invoice; the download names what the PDF is.
+function invoicePdfLabel(inv: WorkspaceInvoice): string {
+  if (inv.status === "draft") return "Draft PDF";
+  if (inv.status === "needs_review") return "Review copy PDF";
+  if (inv.status === "void") return "Void PDF";
+  return "PDF";
+}
+
+// BUG-016: a voided draft was never billed and has nothing to collect, so it
+// stays in the list but never in the money figures.
+function billedInvoices(invoices: WorkspaceInvoice[]): WorkspaceInvoice[] {
+  return invoices.filter((invoice) => invoice.status !== "void");
 }
 
 function hasPaymentAttempt(inv: WorkspaceInvoice): boolean {
@@ -70,6 +89,7 @@ export default function MatterBillingPage() {
   const { data } = useMatterWorkspace(matterId);
   const queryClient = useQueryClient();
   const canIssueInvoice = useCapability("invoices:issue");
+  const canVoidInvoice = useCapability("invoices:void");
   const canSendPaymentLink = useCapability("invoices:send_payment_link");
   const canWriteTimeEntry = useCapability("time_entries:write");
   // BUG-015 Codex fix 2026-04-21: gate Pay Link on environment-
@@ -135,6 +155,35 @@ export default function MatterBillingPage() {
       toast.error(apiErrorMessage(err, "Could not download invoice PDF."));
     },
   });
+  // BUG-016: a draft is either issued (final; the firm's invoice) or voided
+  // (created by mistake). Both are two-step; the API refuses either on
+  // anything but a draft, so neither is offered on other rows.
+  const [confirmDraft, setConfirmDraft] = useState<
+    { id: string; action: "issue" | "void" } | null
+  >(null);
+  const issueDraftMutation = useMutation({
+    mutationFn: (invoiceId: string) => issueMatterInvoiceDraft({ matterId, invoiceId }),
+    onSuccess: async (record) => {
+      setConfirmDraft(null);
+      await invalidate();
+      toast.success(`Invoice ${record.invoice_number} issued.`);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not issue the draft invoice."));
+    },
+  });
+  const voidDraftMutation = useMutation({
+    mutationFn: (invoiceId: string) => voidMatterInvoiceDraft({ matterId, invoiceId }),
+    onSuccess: async (record) => {
+      setConfirmDraft(null);
+      await invalidate();
+      toast.success(`Draft ${record.invoice_number} voided.`);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not void the draft invoice."));
+    },
+  });
+  const draftActionPending = issueDraftMutation.isPending || voidDraftMutation.isPending;
 
   const filteredTimeEntries = useMemo(() => {
     if (!data) return [] as WorkspaceTimeEntry[];
@@ -148,15 +197,16 @@ export default function MatterBillingPage() {
 
   if (!data) return null;
 
-  const totalBilled = data.invoices.reduce(
+  const billed = billedInvoices(data.invoices);
+  const totalBilled = billed.reduce(
     (acc, invoice) => acc + invoice.total_amount_minor,
     0,
   );
-  const totalReceived = data.invoices.reduce(
+  const totalReceived = billed.reduce(
     (acc, invoice) => acc + invoice.amount_received_minor,
     0,
   );
-  const balanceDue = data.invoices.reduce(
+  const balanceDue = billed.reduce(
     (acc, invoice) => acc + invoice.balance_due_minor,
     0,
   );
@@ -204,7 +254,9 @@ export default function MatterBillingPage() {
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
             <CardTitle>Invoices</CardTitle>
-            <CardDescription>Every invoice on this matter.</CardDescription>
+            <CardDescription>
+              Every invoice on this matter. A draft is not payable until it is issued.
+            </CardDescription>
           </div>
           {canIssueInvoice ? <NewInvoiceDialog matterId={matterId} /> : null}
         </CardHeader>
@@ -215,12 +267,14 @@ export default function MatterBillingPage() {
               title="No invoices yet"
               description={
                 canIssueInvoice
-                  ? "Issue the first invoice on this matter. Uninvoiced billable time rolls in by default."
-                  : "Ask a team member with billing permissions to issue the first invoice."
+                  ? "Create the first draft invoice on this matter. Uninvoiced billable time rolls in by default."
+                  : "Ask a team member with billing permission to create the first invoice."
               }
             />
           ) : (
-            <table className="w-full text-sm tabular">
+            // BUG-016: the invoice actions must not widen the page at 393px.
+            <div className="@container overflow-x-auto" data-testid="matter-invoices-table">
+            <table className="w-full text-sm tabular @max-[48rem]:stacked-table">
               <thead>
                 <tr className="border-b border-[var(--color-line)] bg-[var(--color-bg)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
                   <th className="px-4 py-2.5 text-left font-semibold">Invoice</th>
@@ -239,23 +293,23 @@ export default function MatterBillingPage() {
                       key={inv.id}
                       className="border-b border-[var(--color-line-2)] last:border-0"
                     >
-                      <td className="px-4 py-3 font-medium text-[var(--color-ink)]">
+                      <td data-label="Invoice" className="px-4 py-3 font-medium text-[var(--color-ink)]">
                         {inv.invoice_number}
                       </td>
-                      <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                      <td data-label="Issued" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                         {inv.issued_on ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td data-label="Total" className="px-4 py-3 text-right">
                         {formatMoney(inv.total_amount_minor, inv.currency)}
                       </td>
-                      <td className="px-4 py-3 text-right text-[var(--color-ink-2)]">
+                      <td data-label="Balance" className="px-4 py-3 text-right text-[var(--color-ink-2)]">
                         {formatMoney(inv.balance_due_minor, inv.currency)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td data-label="Status" className="px-4 py-3">
                         <StatusBadge status={inv.status} />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex items-center gap-2">
+                      <td data-label="Actions" className="px-4 py-3 text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-2 @max-[48rem]:justify-start">
                           {canIssueInvoice ? (
                             <Button
                               type="button"
@@ -264,10 +318,84 @@ export default function MatterBillingPage() {
                               disabled={downloadInvoiceMutation.isPending}
                               onClick={() => downloadInvoiceMutation.mutate(inv.id)}
                               data-testid={`invoice-pdf-${inv.id}`}
+                              aria-label={`${invoicePdfLabel(inv)} for ${inv.invoice_number}`}
                             >
-                              <Download className="h-4 w-4" aria-hidden />
-                              PDF
+                              {downloadInvoiceMutation.isPending
+                              && downloadInvoiceMutation.variables === inv.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                              ) : (
+                                <Download className="h-4 w-4" aria-hidden />
+                              )}
+                              {invoicePdfLabel(inv)}
                             </Button>
+                          ) : null}
+                          {inv.status === "draft" && confirmDraft?.id === inv.id ? (
+                            <>
+                              <span
+                                className="text-xs text-[var(--color-ink-2)]"
+                                data-testid={`invoice-confirm-note-${inv.id}`}
+                              >
+                                {confirmDraft.action === "issue"
+                                  ? "Issuing is final; an issued invoice cannot be voided here."
+                                  : "The draft is kept as void; its time can be billed again."}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={draftActionPending}
+                                onClick={() =>
+                                  confirmDraft.action === "issue"
+                                    ? issueDraftMutation.mutate(inv.id)
+                                    : voidDraftMutation.mutate(inv.id)
+                                }
+                                data-testid={`invoice-${confirmDraft.action}-confirm-${inv.id}`}
+                                aria-label={`Confirm ${confirmDraft.action} of draft ${inv.invoice_number}`}
+                              >
+                                {draftActionPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                ) : null}
+                                {confirmDraft.action === "issue" ? "Confirm issue" : "Confirm void"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={draftActionPending}
+                                onClick={() => setConfirmDraft(null)}
+                              >
+                                Keep draft
+                              </Button>
+                            </>
+                          ) : inv.status === "draft" ? (
+                            <>
+                              {canIssueInvoice ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={draftActionPending}
+                                  onClick={() => setConfirmDraft({ id: inv.id, action: "issue" })}
+                                  data-testid={`invoice-issue-${inv.id}`}
+                                  aria-label={`Issue invoice ${inv.invoice_number}`}
+                                >
+                                  Issue invoice
+                                </Button>
+                              ) : null}
+                              {canVoidInvoice ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={draftActionPending}
+                                  onClick={() => setConfirmDraft({ id: inv.id, action: "void" })}
+                                  data-testid={`invoice-void-${inv.id}`}
+                                  aria-label={`Void draft ${inv.invoice_number}`}
+                                >
+                                  Void draft
+                                </Button>
+                              ) : null}
+                            </>
                           ) : null}
                           {canSendPaymentLink ? (
                             <>
@@ -316,6 +444,7 @@ export default function MatterBillingPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -423,7 +552,10 @@ function KpiCard({
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
             {label}
           </div>
-          <div className="tabular text-xl font-semibold tracking-tight text-[var(--color-ink)]">
+          <div
+            className="tabular text-xl font-semibold tracking-tight text-[var(--color-ink)]"
+            data-testid={`billing-kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
             {value}
           </div>
         </div>

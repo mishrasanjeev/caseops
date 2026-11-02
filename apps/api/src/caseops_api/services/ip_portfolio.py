@@ -1053,9 +1053,11 @@ def _portfolio_rows(
         context=context,
         docket_ids=docket_ids,
     )
-    from caseops_api.services.ip_portfolio_dates import page_date_details
+    from caseops_api.services.ip_portfolio_dates import page_source_details
 
-    date_details = page_date_details(session, company_id=context.company.id, docket_ids=docket_ids)
+    date_details, source_statuses = page_source_details(
+        session, company_id=context.company.id, docket_ids=docket_ids
+    )
     for application, asset, docket in visible:
         open_count, unconfirmed, overdue = deadlines.get(docket.id, (0, 0, 0))
         primary_identifier = primary_identifiers.get(application.id)
@@ -1089,6 +1091,7 @@ def _portfolio_rows(
                         for key, value in date_details.get(docket.id, {}).items()
                         if key != "docket_id"
                     },
+                    **source_statuses.get(docket.id, {}),
                 },
                 client_name=matter_detail.get("client_name"),
                 responsible_lawyer=matter_detail.get("responsible_lawyer"),
