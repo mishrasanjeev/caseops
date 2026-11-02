@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ANDROID_FILES_SCAN_LIMITS, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy, stageAndroidFilesAssets, snapshotAndroidCameraPrivacy } from './android-files-privacy.mjs';
+import { ANDROID_FILES_SCAN_LIMITS, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy, stageAndroidFilesAssets, snapshotAndroidCameraPrivacy, settleAndroidProviderMetadata } from './android-files-privacy.mjs';
 import { assertCameraCopiesRemoved, CAMERA_PRIVACY_LIMITS } from './camera-files-privacy.mjs';
 
 const APP = 'ai.caseops.mobile.dev.localacceptance';
@@ -168,7 +168,7 @@ function fixture(t, selectedProfile = null) {
   };
   if(observing){state.packageUid='10123';observerDescriptor={...observerDescriptorBase,udid:SERIAL};privacyObserver=save('observer-installation.json',observerDescriptor);options.privacyObserver=privacyObserver;}
   const containers = attestAndroidFilesContainers(options), manifestEvidence = manifest('012345abcdef');
-  const stage = (suffix = 'first', selectedManifest = manifestEvidence) => stageAndroidFilesAssets({ ...options, containers,
+  const stage = (suffix = 'first', selectedManifest = manifestEvidence) => stageAndroidFilesAssets({ ...options, containers, settleMs: 0,
     manifestEvidence: selectedManifest, runId: `unit-run-${suffix}`, output: path.join(root, `provider-${suffix}.json`) });
   const snapshot = (stagingEvidence, extra = {}) => snapshotAndroidFilesPrivacy({ ...options, containers, stagingEvidence, verifyProviderBytes: true,
     output: path.join(root, `snapshot-${Math.random().toString(16).slice(2)}.json`), ...extra });
@@ -734,4 +734,25 @@ test('signed QA scan refuses a main-process lifecycle change instead of reportin
 });
 test('signed QA camera unknown entry refuses and never becomes empty acceptance',t=>{
  const f=fixture(t,{...PHONE,observer:true}),r=PRIVATE+'/cache/ImagePicker';f.add(r);f.add(r+'/unknown-name.png','synthetic');assert.throws(()=>f.camera(),/CAMERA_NAME/);
+});
+
+test('provider metadata settles before it is recorded and admits only a ctime move', () => {
+  const written = [{ devicePath: '/storage/emulated/0/Download/x/a.txt',
+    providerMetadata: { kind: 'file', uid: 10204, device: '97', inode: '1', sizeBytes: 24, modified: 'm1', changed: 'c1' } }];
+  let clock = 0, reads = 0;
+  const later = { ...written[0].providerMetadata, changed: 'c2' };
+  // Observed shape: the media provider bumps ctime once, just after the write.
+  const settled = settleAndroidProviderMetadata(written, () => (++reads > 1 ? later : written[0].providerMetadata),
+    { settleMs: 1000, sleep: ms => { clock += ms; }, now: () => clock });
+  assert.deepEqual(settled[0].providerMetadata, later);
+  assert.equal(settled[0].writeChanged, 'c1');
+  assert.ok(clock >= 1000);
+  for (const changed of [{ sizeBytes: 25 }, { modified: 'm2' }, { inode: '2' }, { uid: 0 }]) {
+    let t = 0, n = 0;
+    assert.throws(() => settleAndroidProviderMetadata(written, () => (++n > 1 ? { ...later, ...changed } : written[0].providerMetadata),
+      { settleMs: 1000, sleep: ms => { t += ms; }, now: () => t }), /PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING/);
+  }
+  let t = 0, n = 0;
+  assert.throws(() => settleAndroidProviderMetadata(written, () => ({ ...later, changed: `c${++n}` }),
+    { settleMs: 1000, sleep: ms => { t += ms; }, now: () => t }), /ANDROID_FILES_PROVIDER_METADATA_NOT_SETTLED/);
 });

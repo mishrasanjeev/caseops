@@ -256,7 +256,29 @@ function knownSource(value) {
   return { id: value.id, filename: value.filename, sha256: value.sha256, sizeBytes: value.sizeBytes,
     ...(value.marker ? { marker: value.marker } : {}) };
 }
-export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, output, ...options }) {
+// Android's media provider finishes its own post-write processing after the
+// exclusive write closes; on emulator-5584 a staged TXT's ctime moved 4 ms
+// after it was recorded, failing preflight. Record metadata only once it has
+// held still, and refuse any change other than ctime.
+export const ANDROID_PROVIDER_SETTLE_MS = 3000;
+const ANDROID_PROVIDER_SETTLE_DEADLINE_MS = 20000;
+export function settleAndroidProviderMetadata(written, statOf, { settleMs = ANDROID_PROVIDER_SETTLE_MS,
+  sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), now = Date.now } = {}) {
+  const end = now() + settleMs + ANDROID_PROVIDER_SETTLE_DEADLINE_MS;
+  let last = written.map(({ devicePath }) => statOf(devicePath)), stableSince = now();
+  while (now() - stableSince < settleMs) {
+    assert.ok(now() < end, 'ANDROID_FILES_PROVIDER_METADATA_NOT_SETTLED');
+    sleep(Math.min(250, settleMs));
+    const current = written.map(({ devicePath }) => statOf(devicePath));
+    if (JSON.stringify(current) !== JSON.stringify(last)) { last = current; stableSince = now(); }
+  }
+  return written.map((asset, index) => {
+    for (const key of Object.keys({ ...asset.providerMetadata, ...last[index] })) if (key !== 'changed')
+      assert.equal(last[index]?.[key], asset.providerMetadata[key], 'PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING');
+    return { ...asset, providerMetadata: last[index], writeChanged: asset.providerMetadata.changed };
+  });
+}
+export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, output, settleMs = ANDROID_PROVIDER_SETTLE_MS, ...options }) {
   absoluteOutput(output); const io = current(containers, options), manifest = read(manifestEvidence);
   assert.equal(manifest.schemaVersion, 1, 'ANDROID_FILES_MANIFEST_VERSION_REQUIRED');
   assert.equal(manifest.platform, 'android', 'ANDROID_FILES_MANIFEST_PLATFORM_REQUIRED');
@@ -301,12 +323,13 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     observed.push({ ...knownSource(asset), devicePath, transferSha256: hash(asset.bytes),
       transferMethod: 'verified-buffer-exclusive-device-write', providerMetadata: metadata });
   }
+  const settled = settleAndroidProviderMetadata(observed, file => io.stat(file), { settleMs });
   current(containers, options);
   const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',
     udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers),
     ...(Object.hasOwn(containers, 'avdName') ? { avdName: containers.avdName } : {}),
     manifestEvidence, attemptEvidence, folderName, deviceFolderPath, provider: containers.provider,
-    appData: containers.appData, assets: observed, originalsDeleted: false, providerOriginalsRead: false,
+    appData: containers.appData, assets: settled, providerSettleMs: settleMs, originalsDeleted: false, providerOriginalsRead: false,
     providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight' };
   return { receipt, evidence: save(output, receipt) };
 }
