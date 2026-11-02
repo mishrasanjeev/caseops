@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `8a96a264709676fe9e2ccee707f264ca22f8a22318aaa2c05aaaf69dd133cf6d`
-- SQL tables: `344`
-- SQL columns: `5446`
-- ORM indexes: `1793`
-- Alembic/raw index declarations: `1577`
+- Canonical map SHA-256: `7cbd5a65bd0a9788eddfc0cefa1e7b75ae339cc4ffb4819387f87229fa91be1c`
+- SQL tables: `346`
+- SQL columns: `5455`
+- ORM indexes: `1794`
+- Alembic/raw index declarations: `1578`
 - Non-SQL data classes: `16`
 
 ## Boundary
@@ -31,6 +31,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `agent_grants` | `tenant_operational_record` | 15 | `registry_fail_closed` |
 | `agent_tool_calls` | `platform_operational_reference` | 9 | `registry_fail_closed` |
 | `ai_feedback_items` | `tenant_operational_record` | 21 | `registry_fail_closed` |
+| `ai_gemini_spend_admissions` | `billing_provider_evidence` | 5 | `registry_fail_closed` |
+| `ai_gemini_spend_months` | `billing_provider_evidence` | 4 | `registry_fail_closed` |
 | `ai_governance_approvals` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `ai_provider_spend_admissions` | `billing_provider_evidence` | 6 | `registry_fail_closed` |
 | `ai_provider_spend_months` | `billing_provider_evidence` | 8 | `registry_fail_closed` |

@@ -12,6 +12,9 @@ auth dependency + route bodies — this middleware only plants the
 
 from __future__ import annotations
 
+import time
+from contextvars import ContextVar
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -31,6 +34,32 @@ from caseops_api.core.observability import (
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
+# Time an interactive request keeps after a provider answer for validation,
+# persistence and serialization (recommendations use the same 20 s).
+REQUEST_PERSISTENCE_MARGIN_SECONDS = 20.0
+
+_request_fallback_deadline: ContextVar[float | None] = ContextVar(
+    "caseops_request_fallback_deadline", default=None
+)
+
+
+def request_fallback_deadline() -> float | None:
+    """Latest ``time.perf_counter()`` by which a provider fallback must finish.
+
+    Set at request start from the platform request timeout minus the
+    persistence margin, so a fallback never starts after the platform has
+    already answered 504. ``None`` outside HTTP requests (jobs, CLIs).
+    """
+    return _request_fallback_deadline.get()
+
+
+def _start_request_fallback_deadline():
+    from caseops_api.core.settings import get_settings
+
+    timeout = get_settings().api_request_timeout_seconds
+    return _request_fallback_deadline.set(
+        time.perf_counter() + timeout - REQUEST_PERSISTENCE_MARGIN_SECONDS
+    )
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -47,9 +76,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request.headers.get(NO_PAID_PROVIDERS_HEADER)
         )
         replay_token = set_provider_replay_request(request.headers.get(PROVIDER_REPLAY_HEADER))
+        deadline_token = _start_request_fallback_deadline()
         try:
             response = await call_next(request)
         finally:
+            _request_fallback_deadline.reset(deadline_token)
             # Even if the handler raises, drop the identifiers so the
             # next request starts clean. FastAPI reuses threads across
             # requests under uvicorn workers.
@@ -65,4 +96,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         return response
 
 
-__all__ = ["REQUEST_ID_HEADER", "RequestContextMiddleware"]
+__all__ = [
+    "REQUEST_ID_HEADER",
+    "REQUEST_PERSISTENCE_MARGIN_SECONDS",
+    "RequestContextMiddleware",
+    "request_fallback_deadline",
+]

@@ -1779,7 +1779,11 @@ def generate_recommendation(
 
     matter_intelligence_context = _build_matter_intelligence_context(session, matter)
     _stage("build_matter_intelligence_context")
-    llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
+    # Recommendations own their fallback plan below (source revalidation before
+    # each attempt), so the general availability fallback is not layered on.
+    llm = provider or build_provider(
+        purpose=PURPOSE_RECOMMENDATIONS, availability_fallback=False
+    )
     messages = _build_prompt(
         rec_type=rec_type,
         matter=matter,
@@ -1807,11 +1811,15 @@ def generate_recommendation(
     use_fallback_plan = (
         provider is None and llm.name == "openai" and recommendation_fallback_enabled()
     )
-    if use_fallback_plan and any(item.grounding_lineage is None for item in retrieved):
-        raise HTTPException(409, "Authority edition evidence is missing. No model was called.")
-    source_grounding_state = (
-        _authority_grounding_state(session, retrieved) if use_fallback_plan else None
-    )
+    # A healthy primary must behave exactly as with the fallback off, so missing
+    # or unbounded edition evidence only makes the fallback ineligible; it never
+    # blocks the primary. The baseline lets a fallback detect later source edits.
+    source_grounding_state: str | None = None
+    if use_fallback_plan and all(item.grounding_lineage is not None for item in retrieved):
+        try:
+            source_grounding_state = _authority_grounding_state(session, retrieved)
+        except HTTPException:
+            source_grounding_state = None
 
     def _revalidate_before_provider() -> None:
         nonlocal context
@@ -1859,14 +1867,32 @@ def generate_recommendation(
             )
         session.rollback()
 
+    def _fallback_model_permitted(model: str) -> bool:
+        # Checked before switching: a tenant that does not allow the fallback
+        # model gets the primary failure, never a policy error or an ADC fetch.
+        from caseops_api.services.tenant_ai_policy import (
+            is_model_allowed,
+            resolve_tenant_policy,
+        )
+
+        if session.new or session.dirty or session.deleted:
+            raise RuntimeError("Recommendation fallback policy check has pending writes.")
+        permitted = is_model_allowed(
+            resolve_tenant_policy(session, company_id=_call_context.tenant_id),
+            purpose=_call_context.purpose,
+            model=model,
+        )
+        session.rollback()
+        return permitted
+
     fallback_plan = (
         RecommendationFallbackPlan(
             started_at=_t0,
-            primary_factory=lambda timeout: build_provider(
-                purpose=PURPOSE_RECOMMENDATIONS,
-                timeout_seconds=timeout,
-            ),
+            # The primary keeps its normal provider and 100-second budget.
+            primary_factory=lambda _timeout: llm,
             revalidate=_revalidate_before_provider,
+            eligible=lambda: source_grounding_state is not None,
+            fallback_permitted=_fallback_model_permitted,
         )
         if use_fallback_plan
         else None
@@ -1893,9 +1919,9 @@ def generate_recommendation(
             return fallback_plan.run(active_messages, _invoke_one)
         return _invoke_one(active, active_messages)
 
-    # Preserve October's existing same-model format/safety repair. When the
-    # November availability fallback is enabled, both repairs consume the same
-    # two-attempt deadline; a refusal or invalid answer cannot switch models.
+    # Preserve October's existing same-model format/safety repair. A refusal or
+    # invalid answer cannot switch models; once the availability fallback has
+    # answered, no further provider call is made for this request.
     provider_retry_used = False
     safety_repair_category: str | None = None
     safety_repair_error: str | None = None
@@ -1964,7 +1990,8 @@ def generate_recommendation(
     # the terminal commit makes disposal and recommendation persistence
     # mutually exclusive.
     session.commit()
-    if fallback_plan is not None:
+    fallback_used = fallback_plan is not None and fallback_plan.fallback_used
+    if fallback_used:
         _revalidate_before_provider()
         from caseops_api.services.tenant_ai_policy import is_model_allowed, resolve_tenant_policy
 
@@ -1995,7 +2022,7 @@ def generate_recommendation(
             ),
         )
 
-    if fallback_plan is not None:
+    if fallback_used:
         # Keep current source locks until persistence; new chunks need the
         # parent FK lock. Do not rerun an external embedder under these locks.
         current_grounding = _authority_grounding_state(session, retrieved, lock_sources=True)
@@ -2175,7 +2202,7 @@ def generate_recommendation(
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,
-            **(fallback_plan.audit_metadata() if fallback_plan is not None else {}),
+            **(fallback_plan.audit_metadata() if fallback_used else {}),
             "safety_repair": {
                 "attempted": safety_repair_category is not None,
                 "source_category": safety_repair_category,

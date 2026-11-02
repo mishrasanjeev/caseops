@@ -54,15 +54,14 @@ money_db = _money_db_fixture
 
 @pytest.fixture
 def enabled(monkeypatch):
+    # 2026-11-01: the general OpenAI availability fallback replaced the
+    # recommendations-only flag, and it no longer depends on the shared money
+    # guard (off by default); the Gemini-only cap applies instead.
     def activate():
         monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
         monkeypatch.setenv("CASEOPS_LLM_API_KEY", "offline-not-a-real-key")
-        monkeypatch.setenv("CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED", "true")
+        monkeypatch.setenv("CASEOPS_LLM_FALLBACK_ENABLED", "true")
         monkeypatch.setenv("CASEOPS_LLM_GEMINI_PROJECT", "offline-caseops-project")
-        monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", "true")
-        monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_START_MONTH", "2026-11")
-        monkeypatch.setattr(routing, "current_budget_month", lambda: "2026-11")
-        monkeypatch.setattr(routing, "budget_applies", lambda: True)
         get_settings.cache_clear()
 
     activate()
@@ -74,9 +73,10 @@ class _Unavailable:
     name = "openai"
     model = "gpt-6-luna"
 
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, error=LLMTransientProviderError):
         self.calls = 0
         self.callback = callback
+        self.error = error
         self.request_session = None
 
     def generate(self, messages, **kwargs):
@@ -85,14 +85,14 @@ class _Unavailable:
         self.calls += 1
         if self.callback:
             self.callback()
-        raise LLMTransientProviderError("The provider is temporarily unavailable.")
+        raise self.error("The provider is temporarily unavailable.")
 
 
 class _GroundedFallback(MockProvider):
     name = "gemini"
 
     def __init__(self):
-        super().__init__("gemini-3.5-flash-lite")
+        super().__init__("gemini-3.8-flash")
         self.calls = 0
         self.request_session = None
         self.callback = None
@@ -353,12 +353,13 @@ def test_final_grounding_lock_protects_source_until_persistence(isolated_postgre
             writer.commit()
 
 
+@pytest.mark.parametrize("primary_error", [LLMTransientProviderError, LLMQuotaExhaustedError])
 @pytest.mark.parametrize(
     "client_fixture",
     ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
 )
 def test_availability_fallback_saves_actual_provider_and_grounded_options(
-    request, client_fixture, monkeypatch, enabled
+    request, client_fixture, monkeypatch, enabled, primary_error
 ):
     client = request.getfixturevalue(client_fixture)
     enabled()
@@ -369,7 +370,8 @@ def test_availability_fallback_saves_actual_provider_and_grounded_options(
         expected = client_fixture == "isolated_postgres_client"
         assert paid_providers_blocked_for_request() is expected
 
-    primary, fallback = _Unavailable(observe_preserved_marker), _GroundedFallback()
+    primary = _Unavailable(observe_preserved_marker, error=primary_error)
+    fallback = _GroundedFallback()
     fallback.callback = observe_preserved_marker
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
@@ -381,7 +383,7 @@ def test_availability_fallback_saves_actual_provider_and_grounded_options(
         record = session.get(Recommendation, response.json()["id"])
         run = session.get(ModelRun, record.model_run_id)
         assert run.provider == "gemini"
-        assert run.model == "gemini-3.5-flash-lite"
+        assert run.model == "gemini-3.8-flash"
         event = session.scalar(
             select(AuditEvent).where(AuditEvent.action == "recommendation.generated")
         )
@@ -430,7 +432,9 @@ def test_fallback_rechecks_changes_after_unavailable_primary(
     primary, fallback = _Unavailable(change_current_state), _GroundedFallback()
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
-    assert response.status_code == (403 if change == "policy" else 409), response.text
+    # A tenant policy that no longer allows the fallback model gets the primary
+    # failure (502), never a policy error and never a credentials fetch.
+    assert response.status_code == (502 if change == "policy" else 409), response.text
     assert primary.calls == 1
     assert fallback.calls == 0
     with factory() as session:
@@ -555,8 +559,10 @@ def test_changed_edition_between_retrieval_and_baseline_prevents_any_model_call(
     primary, fallback = _Unavailable(), _GroundedFallback()
     _wire(monkeypatch, primary, fallback)
     response = _post(client, token, matter_id)
-    assert response.status_code == 409, response.text
-    assert primary.calls == fallback.calls == 0
+    # Since 2026-11-01 review: a changed edition never blocks the primary (the
+    # flag-off behaviour); it only makes the fallback ineligible.
+    assert response.status_code == 502, response.text
+    assert primary.calls == 1 and fallback.calls == 0
     with get_session_factory()() as session:
         assert session.scalar(select(Recommendation.id)) is None
 
@@ -690,7 +696,7 @@ def test_rejected_fallback_cannot_make_a_third_call(
             assert len(runs) == 1
             assert runs[0].status == "rejected_unsafe_output"
             assert runs[0].provider == "gemini"
-            assert runs[0].model == "gemini-3.5-flash-lite"
+            assert runs[0].model == "gemini-3.8-flash"
             assert "repair_error=LLMProviderError" in runs[0].error
             assert response.headers["X-Model-Run-Id"] == runs[0].id
         else:
@@ -701,7 +707,7 @@ def test_rejected_fallback_cannot_make_a_third_call(
     "error",
     [
         AiMoneyBudgetError("The shared monthly budget is exhausted."),
-        LLMQuotaExhaustedError("Provider credit is exhausted."),
+        # Since 2026-11-01 upstream quota exhaustion switches; see below.
         LLMDailyCapReachedError("Daily cap reached."),
         LLMResponseFormatError("Malformed/refused structured output."),
         LLMProviderError("Authentication/configuration failed."),
@@ -727,10 +733,38 @@ def test_financial_policy_schema_and_configuration_errors_never_switch(error):
     assert plan.fallback_used is False
 
 
+@pytest.mark.parametrize("primary_error", [LLMTransientProviderError, LLMQuotaExhaustedError])
+def test_upstream_quota_exhaustion_and_transient_failure_both_switch_once(primary_error):
+    providers = []
+    plan = routing.RecommendationFallbackPlan(
+        started_at=time.perf_counter(),
+        primary_factory=lambda timeout: providers.append("primary") or _Unavailable(),
+        fallback_factory=lambda timeout: providers.append("fallback") or _GroundedFallback(),
+        revalidate=lambda: None,
+    )
+
+    def invoke(provider, messages):
+        if provider.name == "openai":
+            raise primary_error("Offline primary failure")
+        return "validated", provider.generate(messages)
+
+    assert plan.run([LLMMessage("user", "Offline source fixture")], invoke)[0] == "validated"
+    assert providers == ["primary", "fallback"]
+    assert plan.audit_metadata() == {
+        "availability_fallback_used": True,
+        "provider_attempt_count": 2,
+    }
+
+
 @pytest.mark.parametrize("boundary", ["allowed", "exhausted", "unknown-price"])
 def test_fallback_retains_primary_liability_and_requires_its_own_admission(
     enabled, money_db, monkeypatch, boundary
 ):
+    # The shared guard is off by default but, when an operator enables it, it
+    # still charges both attempts inside its own allowance.
+    monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_AI_MONEY_BUDGET_START_MONTH", "2026-11")
+    get_settings.cache_clear()
     # Deliberately fictitious arithmetic, never a provider invoice/price claim.
     rate = {
         "input_usd_per_million": "1",
@@ -740,7 +774,7 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
     }
     prices = {"openai:gpt-6-luna": rate}
     if boundary != "unknown-price":
-        prices["gemini:gemini-3.5-flash-lite"] = rate
+        prices["gemini:gemini-3.8-flash"] = rate
     _seed(money_db, limit=30 if boundary == "exhausted" else 100, prices=prices)
     monkeypatch.setattr(money, "current_budget_month", lambda: "2026-11")
     transports = []
@@ -768,8 +802,11 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
         assert plan.run([], invoke)[0] == "validated-offline-fixture"
         assert transports == ["openai", "gemini"]
     else:
-        with pytest.raises(AiMoneyBudgetError):
+        # A refused fallback reports the primary failure plus why no fallback ran.
+        with pytest.raises(LLMTransientProviderError) as caught:
             plan.run([], invoke)
+        assert "Offline primary outage" in str(caught.value)
+        assert caught.value.fallback_refusal.endswith("No external request was sent.")
         assert transports == ["openai"]
     opening, admitted, receipts = _state(money_db)
     assert opening == 0
@@ -778,49 +815,126 @@ def test_fallback_retains_primary_liability_and_requires_its_own_admission(
     assert all(amount == 30 for _, amount in receipts)
 
 
-def test_deadline_is_shared_with_retrieval_and_no_third_provider_attempt(monkeypatch):
-    clock = [80.0]
+def test_primary_keeps_its_budget_and_fallback_gets_only_the_leftover(monkeypatch):
+    clock = [10.0]
     monkeypatch.setattr(routing.time, "perf_counter", lambda: clock[0])
     timeouts = []
     plan = routing.RecommendationFallbackPlan(
         started_at=0.0,
-        primary_factory=lambda timeout: timeouts.append(timeout) or _Unavailable(),
-        fallback_factory=lambda timeout: timeouts.append(timeout) or _GroundedFallback(),
+        primary_factory=lambda timeout: timeouts.append(("primary", timeout)) or _Unavailable(),
+        fallback_factory=lambda timeout: timeouts.append(("fallback", timeout))
+        or _GroundedFallback(),
         revalidate=lambda: None,
     )
 
     def invoke(provider, messages):
         if provider.name == "openai":
-            clock[0] += 15.0
+            clock[0] += 50.0
             raise LLMTransientProviderError("Timeout")
         return "validated", provider.generate(messages)
 
     assert plan.run([LLMMessage("user", "Offline fixture")], invoke)[0] == "validated"
-    assert timeouts == [20.0, 5.0]
+    # The primary is the caller's normal provider; the fallback gets 100 - 60 s.
+    assert timeouts == [("primary", None), ("fallback", 40.0)]
     with pytest.raises(LLMProviderError, match="attempt budget"):
         plan.run([], invoke)
     assert len(timeouts) == 2
 
 
-def test_elapsed_deadline_or_second_transient_never_creates_another_fallback(monkeypatch):
+@pytest.mark.parametrize("spent", [71.0, 100.0])
+def test_too_little_time_left_never_creates_a_fallback(monkeypatch, spent):
     clock = [0.0]
     monkeypatch.setattr(routing.time, "perf_counter", lambda: clock[0])
     calls = []
     plan = routing.RecommendationFallbackPlan(
         started_at=0.0,
         primary_factory=lambda timeout: _Unavailable(),
-        fallback_factory=lambda timeout: _GroundedFallback(),
-        revalidate=lambda: None,
+        fallback_factory=lambda timeout: calls.append("fallback") or _GroundedFallback(),
+        revalidate=lambda: calls.append("revalidate"),
     )
 
     def invoke(provider, messages):
         calls.append(provider.name)
-        clock[0] += 100.0
+        clock[0] += spent
         raise LLMTransientProviderError("Timeout")
 
-    with pytest.raises(LLMProviderError, match="attempt budget"):
+    with pytest.raises(LLMTransientProviderError, match="Timeout"):
         plan.run([], invoke)
     assert calls == ["openai"]
+
+
+def test_static_allowlist_without_the_fallback_model_never_fetches_credentials(
+    client: TestClient, monkeypatch, enabled
+):
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    with get_session_factory()() as session:
+        session.add(
+            TenantAIPolicy(
+                company_id=_company_id_for_matter(matter_id),
+                allowed_models_recommendations_json=json.dumps(["gpt-6-luna"]),
+            )
+        )
+        session.commit()
+    primary, fallback = _Unavailable(), _GroundedFallback()
+    _wire(monkeypatch, primary, fallback)
+    built = []
+    monkeypatch.setattr(
+        routing,
+        "build_recommendation_fallback",
+        lambda **kwargs: built.append("credentials") or fallback,
+    )
+    response = _post(client, token, matter_id)
+    assert response.status_code == 502, response.text
+    assert "temporarily unavailable" in response.json()["detail"]
+    assert primary.calls == 1 and fallback.calls == 0 and built == []
+
+
+def test_healthy_slow_primary_with_flag_on_matches_flag_off(
+    client: TestClient, monkeypatch, enabled
+):
+    """A 60-second healthy primary keeps its budget; missing lineage never blocks it."""
+    import dataclasses
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    original = recommendations._gather_authorities_with_trace
+
+    def without_lineage(*args, **kwargs):
+        retrieved, trace = original(*args, **kwargs)
+        return [dataclasses.replace(item, grounding_lineage=None) for item in retrieved], trace
+
+    monkeypatch.setattr(recommendations, "_gather_authorities_with_trace", without_lineage)
+    real_clock = time.perf_counter
+
+    class _SlowHealthyPrimary(MockProvider):
+        name = "openai"
+
+        def __init__(self):
+            super().__init__("gpt-6-luna")
+            self.calls = 0
+
+        def generate(self, messages, **kwargs):
+            self.calls += 1
+            # The primary answers after 60 s (well past the old 45 s plan cut).
+            monkeypatch.setattr(time, "perf_counter", lambda: real_clock() + 60.0)
+            return super().generate(messages, **kwargs)
+
+    primary, fallback = _SlowHealthyPrimary(), _GroundedFallback()
+    monkeypatch.setattr(recommendations, "build_provider", lambda *a, **k: primary)
+    monkeypatch.setattr(routing, "build_recommendation_fallback", lambda **kwargs: fallback)
+    monkeypatch.setattr(routing, "paid_providers_blocked_for_request", lambda: False)
+    response = _post(client, token, matter_id)
+    assert response.status_code == 200, response.text
+    assert primary.calls == 1 and fallback.calls == 0
+    with get_session_factory()() as session:
+        record = session.get(Recommendation, response.json()["id"])
+        assert session.get(ModelRun, record.model_run_id).provider == "openai"
+        event = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "recommendation.generated")
+        )
+        # Audit metadata is the flag-off shape when the fallback was not used.
+        assert "availability_fallback_used" not in json.loads(event.metadata_json)
 
 
 def test_late_no_paid_marker_blocks_fallback_construction():
@@ -847,13 +961,19 @@ def test_late_no_paid_marker_blocks_fallback_construction():
     assert called == []
 
 
-@pytest.mark.parametrize("month", ["2026-10", "2026-11"])
-def test_october_primary_is_preserved_and_missing_activation_remains_off(
-    enabled, monkeypatch, month
-):
-    monkeypatch.setattr(routing, "current_budget_month", lambda: month)
-    assert routing.recommendation_fallback_enabled() is (month == "2026-11")
-    monkeypatch.setenv("CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED", "false")
+@pytest.mark.parametrize("primary", ["openai", "mock"])
+def test_activation_needs_the_general_flag_and_an_openai_primary(enabled, monkeypatch, primary):
+    # The month and the shared money guard no longer gate activation.
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", primary)
+    monkeypatch.delenv("CASEOPS_AI_MONEY_BUDGET_ENABLED", raising=False)
+    get_settings.cache_clear()
+    assert routing.recommendation_fallback_enabled() is (primary == "openai")
+    marker = set_automated_test_request("no-paid-providers")
+    try:
+        assert routing.recommendation_fallback_enabled() is False
+    finally:
+        reset_automated_test_request(marker)
+    monkeypatch.setenv("CASEOPS_LLM_FALLBACK_ENABLED", "false")
     get_settings.cache_clear()
     assert routing.recommendation_fallback_enabled() is False
 
@@ -861,14 +981,14 @@ def test_october_primary_is_preserved_and_missing_activation_remains_off(
 def test_pinned_model_and_managed_project_are_required(monkeypatch):
     from pydantic import ValidationError
 
-    monkeypatch.setenv("CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_LLM_FALLBACK_ENABLED", "true")
     monkeypatch.delenv("CASEOPS_LLM_GEMINI_PROJECT", raising=False)
     get_settings.cache_clear()
     with pytest.raises(ValidationError, match="paid managed endpoint"):
         get_settings()
     monkeypatch.setenv("CASEOPS_LLM_GEMINI_PROJECT", "offline-caseops-project")
-    monkeypatch.setenv("CASEOPS_LLM_RECOMMENDATION_FALLBACK_MODEL", "invented-model")
+    monkeypatch.setenv("CASEOPS_LLM_FALLBACK_MODEL", "invented-model")
     get_settings.cache_clear()
-    with pytest.raises(ValidationError, match="gemini-3.5-flash-lite"):
+    with pytest.raises(ValidationError, match="gemini-3.8-flash"):
         get_settings()
     get_settings.cache_clear()

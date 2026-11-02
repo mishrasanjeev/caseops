@@ -3913,7 +3913,10 @@ def test_deploy_prod_fails_closed_on_api_traffic_or_config_drift(
     traffic_mode: str,
     expected_message: str,
 ) -> None:
-    result = _run_deploy_with_fakes(tmp_path, traffic_mode=traffic_mode)
+    # A disabled release, so an enabled live flag is drift whatever the repo state says.
+    result = _run_deploy_with_fakes(
+        tmp_path, traffic_mode=traffic_mode, governance_state=_DISABLED_GOVERNANCE_STATE
+    )
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert expected_message in result.stdout
@@ -3940,6 +3943,13 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
 
 
 _GOVERNANCE_EVIDENCE = "docs/ip-implementation/evidence/m2/IPLF-027B/a2-enable-offline.json"
+_DISABLED_GOVERNANCE_STATE: dict[str, object] = {
+    "schema_version": 1,
+    "enabled": False,
+    "rollout_expires_at": None,
+    "approved_by": None,
+    "evidence": None,
+}
 
 
 def _utc_in(days: float) -> str:
@@ -4024,7 +4034,10 @@ def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
 ) -> None:
     # The live service still carries an earlier A2 configuration.
     result = _run_deploy_with_fakes(
-        tmp_path, live_governance_flag="true", live_governance_expiry=_utc_in(10)
+        tmp_path,
+        governance_state=_DISABLED_GOVERNANCE_STATE,
+        live_governance_flag="true",
+        live_governance_expiry=_utc_in(10),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -4039,7 +4052,11 @@ def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
 
 
 def test_deploy_prod_disabled_readback_rejects_a_lingering_expiry(tmp_path: Path) -> None:
-    result = _run_deploy_with_fakes(tmp_path, traffic_mode="governance-expiry-stale")
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        traffic_mode="governance-expiry-stale",
+        governance_state=_DISABLED_GOVERNANCE_STATE,
+    )
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert "TRAFFIC/REVISION DRIFT" in result.stdout
