@@ -522,6 +522,27 @@ def test_batch3_policy_preserves_other_roles_legitimate_skipped_envelopes(captur
 BATCH4_GOVERNANCE_FILE = "ram-2026-10-31-governance-ui.spec.ts"
 
 
+def test_mandatory_titles_survive_both_redactors_unchanged():
+    """A mandatory title must be a fixed point of the Python and browser redactors.
+
+    They word redactions differently (and only the browser redacts record ids), so
+    a title with a query string or a UUID matched in local contract tests and
+    failed the first production run (prod-verify 41428563260, batch4-desktop
+    mandatory_batch4_case_inventory_mismatch).
+    """
+    cases = [(row[1], row[2]) for row in evidence.BATCH3_MANDATORY_CASES.values()]
+    cases += [case for _, rows in evidence.BATCH4_MANDATORY_CASES.values() for case in rows]
+    browser_redacted = re.compile(
+        r"https?://|\S*\?\S+|\bBearer\s|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}"
+        r"|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b",
+        re.I,
+    )
+    assert cases
+    for file, title in cases:
+        assert evidence._safe(title, {}) == title, (file, title)
+        assert not browser_redacted.search(title), (file, title)
+
+
 def _batch4_source_cases():
     """Derive every production-eligible Batch4 case per role from the spec sources."""
     roles = {invocation: Counter() for invocation in evidence.BATCH4_MANDATORY_CASES}
@@ -712,6 +733,8 @@ def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture
         (file, evidence._safe(title, {})) for file, title in cases
     )
     assert all(evidence._safe(title, {}) == title for _, title in cases)
+    # Mandatory titles carry no query or record id, so evidence keeps them verbatim.
+    assert not any("redacted" in row["title_path"][-1] for row in rows)
     assert all(
         row["project_name"] == project and row["status"] == "expected"
         and [result["status"] for result in row["results"]] == ["passed"]
@@ -731,7 +754,7 @@ def test_batch4_case_identity_uses_public_workflows_not_private_route_values(inv
     if invocation == "batch4-desktop":
         titles = {title for _, title in cases}
         assert evidence._B4_CRAWL("/app/ip reported docket") in titles
-        assert evidence._B4_CRAWL("/app/matters reported billing") in titles
+        assert evidence._B4_CRAWL("/app/matters reported Matter billing") in titles
 
 
 @pytest.mark.parametrize("invocation", list(evidence.BATCH4_MANDATORY_CASES))
@@ -1572,11 +1595,11 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "34")
+    record_property("native_reporter_test_count", "35")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "# tests 34" in result.stdout
-        and "# pass 34" in result.stdout
+        "# tests 35" in result.stdout
+        and "# pass 35" in result.stdout
         and "# fail 0" in result.stdout
         and "# skipped 0" in result.stdout
         and "# cancelled 0" in result.stdout

@@ -485,6 +485,15 @@ enterprise-ledger status is named where one exists:
   lists now read one page, state "Showing N of M" and read older rows with Load
   more (`apps/web/lib/api/ip-offset-lists.test.ts`, Madrid page test). Local
   vitest passes; production proof waits for the next release's tester shard.
+- B4-ADJ-26 Status: Partially fixed. The same run never executed Ram's Batch4
+  production cases: the wrapper refused `batch4-desktop` with
+  `mandatory_batch4_case_inventory_mismatch` before any test ran. Two control
+  crawl titles carried a query string and a Matter UUID, which the browser
+  reporter and the Python contract redact in different words; the local
+  contract used the Python redactor on both sides and passed. The production
+  routes now have word labels, and `test_mandatory_titles_survive_both_redactors_unchanged`
+  requires every mandatory title to be a fixed point of both redactors (red on
+  the old titles). Production proof waits for the next release's Batch4 roles.
 
 ## October 31 Historical Secret Findings: Partially Fixed
 
