@@ -11,6 +11,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
+import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
 import type { SpecialistRecord } from "@/lib/api/ip-specialist";
 import { fetchWorkflow, fetchWorkflows, fetchContractObligations, fetchContractPerformance, fetchContractCostOptions, saveContractPerformance,
   obligationKey, recordContractCost, voidContractCost, saveContractObligation, saveWorkflow, workflowFactsSchema, workflowKey,
@@ -65,12 +66,16 @@ function FieldInput({ field, value, set, prefix = "workflow" }: { field: Field; 
           onChange={(event) => set(event.target.value ? field.kind === "number" ? Number(event.target.value) : event.target.value : null)} />}</div>;
 }
 
+// No retained version: the select is disabled and says where evidence is added,
+// instead of an enabled select that offers only its placeholder (B4-ADJ-22 class).
 function SourcePicker({ options, value, onChange, prefix }: { options: SourceOption[]; value?: WorkflowSource; onChange: (source: WorkflowSource) => void; prefix: string }) {
+  const empty = options.length === 0;
   return <div className="grid min-w-0 gap-3 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor={`${prefix}-version`}>Source document version</Label>
-    <select id={`${prefix}-version`} required className={selectClass} value={value?.document_version_id ?? ""} onChange={(event) => {
+    <select id={`${prefix}-version`} required className={selectClass} value={value?.document_version_id ?? ""} disabled={empty} aria-describedby={empty ? `${prefix}-version-empty` : undefined} onChange={(event) => {
       const selected = options.find((row) => row.source.document_version_id === event.target.value);
       if (selected) onChange({ ...selected.source, locator: value?.locator ?? "" });
-    }}><option value="">Select retained source</option>{options.map((row) => <option key={row.source.document_version_id} value={row.source.document_version_id}>{row.label}</option>)}</select></div>
+    }}><option value="">Select retained source</option>{options.map((row) => <option key={row.source.document_version_id} value={row.source.document_version_id}>{row.label}</option>)}</select>
+    {empty && <p id={`${prefix}-version-empty`} className="mt-1 text-xs text-mute">No retained evidence on this record yet. Upload it on the Evidence tab first.</p>}</div>
     <div className="min-w-0"><Label htmlFor={`${prefix}-locator`}>Page or locator</Label><Input id={`${prefix}-locator`} required maxLength={500} value={value?.locator ?? ""} onChange={(event) => { if (value) onChange({ ...value, locator: event.target.value }); }} /></div></div>;
 }
 
@@ -87,7 +92,7 @@ export function SpecialistWorkflows({ record, canWrite, onEvidence }: { record: 
   const documents = useQuery({ queryKey: ["ip", "documents", record.docket_id], queryFn: () => fetchIpDocumentsForDocket(record.docket_id) });
   const history = useQuery({ queryKey: [...workflowKey(record.id), selected?.id, historicalVersion],
     queryFn: ({ signal }) => fetchWorkflow(record.id, selected!.id, historicalVersion, signal), enabled: !!selected && !!historicalVersion });
-  const options: SourceOption[] = documents.data?.items.flatMap((document) => document.versions.filter((version) => !["rejected", "superseded"].includes(version.state)).map((version) => ({
+  const options: SourceOption[] = documents.data?.items.filter((document) => isSpecialistSourceDocument(document, record.docket_id)).flatMap((document) => document.versions.filter((version) => !["rejected", "superseded"].includes(version.state)).map((version) => ({
     label: `${document.title} / Version ${version.version}`, source: { document_id: document.id, document_version_id: version.id, content_sha256: version.sha256_hex },
   }))) ?? [];
   async function saved(next: WorkflowRecord) {
@@ -160,7 +165,14 @@ export function WorkflowForm({ record: currentRecord, kind, initial: serverIniti
   const sourceReference = values.source_set as { id: string; version: number } | undefined;
   const hasRetainedSource = sourceReference && !sources.some((row) => row.id === sourceReference.id && row.version === sourceReference.version);
   const finance = (values.financial_terms ?? {}) as Record<string, unknown>;
-  const canSubmit = !save.isPending && (kind === "source_set" || references.isSuccess);
+  // Every source the form requires must be chosen; a disabled empty picker
+  // skips the browser's required check, so the button waits instead.
+  const missingSource = kind === "source_set" ? members.some((member) => !member.source)
+    : (!sourceReference
+      || (kind === "layout_application" && values.publication === "reported_published" && !values.registry_source)
+      || (kind === "design_application" && !!values.variant_of && !values.variant_basis)
+      || (kind === "licence" && issues.some((issue) => !issue.source)));
+  const canSubmit = !save.isPending && !missingSource && (kind === "source_set" || references.isSuccess);
   return <form aria-label={initial ? "Revise domain workflow" : "New domain workflow"} className="min-w-0 space-y-4 border-y border-line py-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit) save.mutate(); }}>
     {kind !== "source_set" && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" aria-label="Workflow reference pages">
       <h3 className="text-sm font-medium">Reference choices</h3><div className="flex shrink-0 gap-2">
@@ -182,9 +194,10 @@ export function WorkflowForm({ record: currentRecord, kind, initial: serverIniti
         <FieldInput field={{ key: "publication_instruction", kind: "note", optional: values.confidentiality !== "publication_authorized" }} value={values.publication_instruction} set={(v) => set("publication_instruction", v)} />
         <FieldInput field={{ key: "publication_on_as_supplied", kind: "date", optional: true }} value={values.publication_on_as_supplied} set={(v) => set("publication_on_as_supplied", v)} />
       </> : <>
-        <div><Label htmlFor="workflow-source-set">Source set</Label><select id="workflow-source-set" required className={selectClass} value={sourceReference ? `${sourceReference.id}:${sourceReference.version}` : ""} onChange={(event) => {
+        <div><Label htmlFor="workflow-source-set">Source set</Label><select id="workflow-source-set" required className={selectClass} value={sourceReference ? `${sourceReference.id}:${sourceReference.version}` : ""} disabled={!sources.length && !hasRetainedSource} aria-describedby={!sources.length && !hasRetainedSource ? "workflow-source-set-empty" : undefined} onChange={(event) => {
           const source = sources.find((row) => `${row.id}:${row.version}` === event.target.value); if (source) set("source_set", { id: source.id, version: source.version });
-        }}><option value="">Select current source set</option>{hasRetainedSource && <option value={`${sourceReference.id}:${sourceReference.version}`}>Retained source set / Version {sourceReference.version}</option>}{sources.map((row) => <option key={row.id} value={`${row.id}:${row.version}`}>{row.facts.title} / Version {row.version}</option>)}</select></div>
+        }}><option value="">Select current source set</option>{hasRetainedSource && <option value={`${sourceReference.id}:${sourceReference.version}`}>Retained source set / Version {sourceReference.version}</option>}{sources.map((row) => <option key={row.id} value={`${row.id}:${row.version}`}>{row.facts.title} / Version {row.version}</option>)}</select>
+          {!sources.length && !hasRetainedSource && references.isSuccess && <p id="workflow-source-set-empty" className="mt-1 text-xs text-mute">No current {human(refPurpose[kind as keyof typeof refPurpose] ?? "")} source set on this page of workflows. Create a Source set workflow first, or check the next reference page.</p>}</div>
         <div className="grid min-w-0 gap-4 sm:grid-cols-2"><FieldInput field={{ key: "occurred_on", title: "Source event date", kind: "date" }} value={values.occurred_on} set={(v) => set("occurred_on", v)} />
           {definitions.map((field) => <FieldInput key={field.key} field={field} value={values[field.key]} set={(v) => {
             if (kind === "layout_application" && field.key === "publication" && v === "not_recorded") {
@@ -298,7 +311,7 @@ function PerformancePanel({ record, workflow, obligation, options, canWrite, onS
         <FieldInput prefix="performance" field={{ key: "account", title: "Performance evidence account", kind: "note" }} value={account} set={(v) => setAccount(String(v ?? ""))} />
         <SourcePicker prefix="performance" options={options} value={source} onChange={setSource} />
         <CostPicker record={record} workflow={workflow} prefix="performance" value={replacementCost} set={setReplacementCost} />
-        <Button type="submit"><Check size={16} />{save.isPending ? "Saving..." : "Record performance"}</Button>
+        <Button type="submit" disabled={!source}><Check size={16} />{save.isPending ? "Saving..." : "Record performance"}</Button>
       </fieldset>
     </form>}
     {save.isError && <p role="alert" className="break-words text-sm text-danger-500">{errorMessage(save.error)}</p>}
@@ -327,7 +340,7 @@ function ObligationForm({ record: currentRecord, workflow: currentWorkflow, opti
       <FieldInput prefix="obligation" field={{ key: "title" }} value={title} set={(v) => setTitle(String(v ?? ""))} />
       <FieldInput prefix="obligation" field={{ key: "due", title: layout ? "Layout work due date as supplied" : "Contractual due date as supplied", kind: "date" }} value={due} set={(v) => setDue(String(v ?? ""))} />
       <SourcePicker prefix="obligation" options={options} value={source} onChange={setSource} />
-      <CostPicker record={record} workflow={workflow} prefix="obligation" value={cost} set={setCost} /><Button type="submit"><Plus size={16} />Create obligation</Button></fieldset>
+      <CostPicker record={record} workflow={workflow} prefix="obligation" value={cost} set={setCost} /><Button type="submit" disabled={!source}><Plus size={16} />Create obligation</Button></fieldset>
     {save.isError && <p role="alert">{errorMessage(save.error)}</p>}{save.data && <p role="status">{layout ? "Layout task and calendar obligation" : "Contractual task and calendar obligation"} saved for {save.data.due_on}.</p>}
   </form>;
 }
@@ -381,7 +394,7 @@ function CostEvidencePanel({ record: currentRecord, workflow, options }: { recor
         </div>}
         <FieldInput prefix="cost-evidence" field={{ key: "description", title: mode === "void" ? "Void reason" : "Cost description", kind: "note" }} value={description} set={(v) => setDescription(String(v ?? ""))} />
         <SourcePicker prefix="cost-evidence" options={options} value={source} onChange={setSource} />
-        <Button type="submit"><Check size={16} />{mode === "void" ? "Void cost evidence" : "Record cost evidence"}</Button>
+        <Button type="submit" disabled={!source}><Check size={16} />{mode === "void" ? "Void cost evidence" : "Record cost evidence"}</Button>
       </fieldset>
       {save.isError && <p role="alert" className="break-words text-sm text-danger-500">{errorMessage(save.error)}</p>}
       {save.isSuccess && <p role="status">Cost evidence retained.</p>}

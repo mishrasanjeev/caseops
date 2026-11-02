@@ -57,8 +57,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             reset_automated_test_request(paid_provider_token)
             clear_context()
         response.headers[REQUEST_ID_HEADER] = rid
-        if request.url.path == "/api/platform-console" or request.url.path.startswith(
-            "/api/platform-console/"
+        if request.url.path in {
+            "/api/platform-console", "/api/recipient-inbox", "/api/matter-work-queue",
+            "/api/matter-readthrough",
+        } or request.url.path.startswith(
+            (
+                "/api/platform-console/", "/api/recipient-inbox/", "/api/matter-work-queue/",
+                "/api/matter-readthrough/",
+            )
         ):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers["Referrer-Policy"] = "no-referrer"

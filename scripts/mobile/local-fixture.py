@@ -7,7 +7,9 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
+import stat
 import sys
 import time
 
@@ -17,10 +19,213 @@ CLEAN = b"Synthetic CaseOps mobile source. No legal authority or customer data.\
 EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
 
+def _load_local_transport():
+    import hashlib as _hashlib
+    import os as _os
+    import stat as _stat
+    _path = Path(__file__).absolute().with_name("local-transport.py")
+    _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    _frame = lambda value: tuple(getattr(value, key) for key in _keys)
+    assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
+    def _namespace():
+        rows = []
+        for parent in _path.parents:
+            value = parent.lstat()
+            assert len(rows) < 128 and _stat.S_ISDIR(value.st_mode) and not _stat.S_ISLNK(value.st_mode), "Local transport source namespace required"
+            rows.append((str(parent), *(getattr(value, key) for key in _keys[:5])))
+        return rows
+    _parents = _namespace()
+    _named = _path.lstat()
+    _fd = _os.open(_path, _os.O_RDONLY | getattr(_os, "O_NOFOLLOW", 0) | getattr(_os, "O_NONBLOCK", 0) | getattr(_os, "O_BINARY", 0))
+    try:
+        _first = _os.fstat(_fd)
+        assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        _data = bytearray()
+        while len(_data) <= _first.st_size:
+            _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
+            if not _part:
+                break
+            _data.extend(_part)
+        _raw = bytes(_data)
+        assert len(_raw) == _first.st_size and _hashlib.sha256(_raw).hexdigest() == "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae" and _frame(_first) == _frame(_os.fstat(_fd)) and _frame(_named) == _frame(_path.lstat()) and _parents == _namespace(), "Local transport source changed"
+    finally:
+        _os.close(_fd)
+    _scope = {"__name__": "caseops_local_transport", "__file__": str(_path)}
+    exec(compile(_raw, str(_path), "exec"), _scope)
+    return _scope
+
+_LOCAL_TRANSPORT = _load_local_transport()
+
+def initial_gateway_routes(matter_id, draft_id):
+    # Exact method/path admission only. Query validation and native authority
+    # remain API contracts; this public policy GET still needs the no-paid marker.
+    return {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
+            "GET /api/auth/native/compatibility",
+            "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
+            "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
+            "GET /api/auth/native/sessions", f"GET /api/matters/{matter_id}",
+            f"GET /api/matters/{matter_id}/workspace", f"POST /api/matters/{matter_id}/notes",
+            f"GET /api/matters/{matter_id}/drafts", f"GET /api/matters/{matter_id}/drafts/{draft_id}"}
+
+
+def private_name(name):
+    leaf = Path(name).name if isinstance(name, (str, os.PathLike)) else None
+    return leaf in ("credentials.json", "compose-secrets.json", "supplied-credentials.json") or bool(
+        leaf and re.fullmatch(r"core-credentials-[a-f0-9]{12}\.json", leaf))
+
+
+def _private_metadata(value, *, mode=True):
+    assert stat.S_ISREG(value.st_mode) and value.st_nlink == 1, "Single-link regular private fixture required"
+    if os.name != "nt":
+        assert value.st_uid == os.getuid(), "Owned private fixture required"
+        assert not mode or stat.S_IMODE(value.st_mode) == 0o600, "Private fixture mode must remain 0600"
+
+
+def private_metadata_equal(first, second, *, named_path=False, windows=False):
+    assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
+    fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    return all(getattr(first, key) == getattr(second, key) for key in fields
+               if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
+
+
+def _write_private(name, value, *, update=False, expected=None, expected_root=None):
+    assert isinstance(name, str) and private_name(name) and Path(name).name == name, "Direct owned secret filename required"
+    content = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+    target = ROOT / name
+    # Optional external producer admission is checked through the descriptor
+    # that will be truncated, never by a hash-then-reopen sequence.
+    identity_fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    namespace = None
+    def namespace_frame():
+        rows = []
+        assert ROOT.is_absolute() and ROOT.resolve(strict=True) == ROOT, "Canonical private root required"
+        for parent in (ROOT, *ROOT.parents):
+            item = parent.lstat()
+            assert stat.S_ISDIR(item.st_mode) and not stat.S_ISLNK(item.st_mode), "Private namespace required"
+            rows.append((str(parent), item.st_dev, item.st_ino, item.st_uid, item.st_gid, item.st_mode))
+        return rows
+    if expected_root is not None:
+        root_fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")
+        assert set(expected_root) == set(root_fields) and all(isinstance(item, str) and re.fullmatch(r"0|[1-9][0-9]*", item) for item in expected_root.values()), "Expected private root required"
+        namespace = namespace_frame()
+        assert all(getattr(ROOT.lstat(), key) == int(expected_root[key]) for key in root_fields), "Expected private root changed"
+    if expected is not None:
+        assert update and set(expected) == {"identity", "sha256"}, "Expected private update required"
+        assert set(expected["identity"]) == set(identity_fields), "Complete expected private identity required"
+        assert all(isinstance(item, str) and re.fullmatch(r"0|[1-9][0-9]*", item) for item in expected["identity"].values()), "Lossless private identity required"
+        assert re.fullmatch(r"[a-f0-9]{64}", expected["sha256"]), "Expected private digest required"
+        namespace = namespace_frame()
+    previous = target.lstat() if update else None
+    if previous is not None:
+        _private_metadata(previous)
+    assert os.name == "nt" or hasattr(os, "O_NOFOLLOW"), "No-follow private file support required"
+    flags = os.O_RDWR if update else (os.O_RDWR if expected_root is not None else os.O_WRONLY) | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(target, flags, 0o600)
+    try:
+        opened = os.fstat(descriptor)
+        _private_metadata(opened, mode=update)
+        if not update and os.name != "nt":
+            # Creation is already at most 0600, including under umask 0.
+            # Restore owner access before the first byte if umask was stricter.
+            os.fchmod(descriptor, 0o600)
+            opened = os.fstat(descriptor)
+        named = target.lstat()
+        _private_metadata(opened)
+        _private_metadata(named)
+        assert private_metadata_equal(opened, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed"
+        if namespace is not None:
+            assert namespace_frame() == namespace, "Private namespace changed before write"
+        if previous is not None:
+            assert private_metadata_equal(opened, previous, named_path=True, windows=os.name == "nt"), "Private fixture changed before update"
+            if expected is not None:
+                assert all(getattr(opened, key) == int(expected["identity"][key]) for key in identity_fields), "Expected private identity changed"
+                assert 0 < opened.st_size <= 16384, "Bounded private update required"
+                original = bytearray()
+                while len(original) <= opened.st_size:
+                    part = os.read(descriptor, min(65536, opened.st_size + 1 - len(original)))
+                    if not part:
+                        break
+                    original.extend(part)
+                try:
+                    assert len(original) == opened.st_size and hashlib.sha256(original).hexdigest() == expected["sha256"], "Expected private bytes changed"
+                    assert private_metadata_equal(opened, os.fstat(descriptor)), "Private fixture changed during admission"
+                    assert private_metadata_equal(opened, target.lstat(), named_path=True, windows=os.name == "nt"), "Private fixture path changed during admission"
+                    assert namespace_frame() == namespace, "Private namespace changed during admission"
+                finally:
+                    original[:] = b"\0" * len(original)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+            # Never use O_TRUNC: all ownership/path/descriptor checks precede it.
+            os.ftruncate(descriptor, 0)
+        remaining = memoryview(content)
+        while remaining:
+            count = os.write(descriptor, remaining)
+            assert 0 < count <= len(remaining), "Private fixture write incomplete"
+            remaining = remaining[count:]
+        os.fsync(descriptor)
+        final, named = os.fstat(descriptor), target.lstat()
+        _private_metadata(final)
+        _private_metadata(named)
+        assert private_metadata_equal(final, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed during write"
+        assert (final.st_dev, final.st_ino, final.st_uid, final.st_gid, final.st_mode, final.st_nlink) == (
+            opened.st_dev, opened.st_ino, opened.st_uid, opened.st_gid, opened.st_mode, opened.st_nlink), "Private fixture identity changed"
+        assert final.st_size == len(content), "Private fixture write incomplete"
+        if namespace is not None:
+            assert namespace_frame() == namespace, "Private namespace changed during write"
+        if expected_root is not None:
+            # Publish the writer's own descriptor observation. A later path
+            # reopen cannot supply creation or update provenance.
+            assert 0 < final.st_size <= 16384, "Bounded private publication required"
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            actual = bytearray()
+            try:
+                while len(actual) <= final.st_size:
+                    part = os.read(descriptor, min(65536, final.st_size + 1 - len(actual)))
+                    if not part:
+                        break
+                    actual.extend(part)
+                assert bytes(actual) == content, "Private descriptor publication bytes changed"
+                assert private_metadata_equal(final, os.fstat(descriptor)), "Private descriptor changed before publication"
+                assert private_metadata_equal(final, target.lstat(), named_path=True, windows=os.name == "nt"), "Private publication pathname changed"
+                assert namespace_frame() == namespace, "Private publication namespace changed"
+                return {"evidence": {"path": str(target), "sha256": hashlib.sha256(actual).hexdigest(), "uid": final.st_uid},
+                        "mode": stat.S_IMODE(final.st_mode), "canonicalWriter": "local-fixture.py",
+                        "identity": {"dev": str(final.st_dev), "ino": str(final.st_ino), "uid": final.st_uid},
+                        "frame": {key: str(getattr(final, key)) for key in identity_fields}, "ownedNoFollowSingleLink": True}
+            finally:
+                actual[:] = b"\0" * len(actual)
+    finally:
+        os.close(descriptor)
+
+
+def update_private(name, value):
+    _write_private(name, value, update=True)
+
+
 def save(name, value):
+    if private_name(name):
+        _write_private(name, value)
+        return
     with (ROOT / name).open("x", encoding="utf-8") as target:
         json.dump(value, target, indent=2)
         target.write("\n")
+
+
+def certificate_time_utc(certificate, attribute):
+    """X.509 legacy validity fields are naive UTC; never local wall time."""
+    if attribute not in ("not_valid_before", "not_valid_after"):
+        raise ValueError("INVALID_CERTIFICATE_TIME_FIELD")
+    try:
+        value = getattr(certificate, attribute + "_utc")
+    except AttributeError:
+        value = getattr(certificate, attribute)
+        if not isinstance(value, datetime) or value.tzinfo is not None:
+            raise ValueError("INVALID_LEGACY_CERTIFICATE_TIME")
+        return value.replace(tzinfo=UTC)
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError("INVALID_CERTIFICATE_UTC_TIME")
+    return value.astimezone(UTC)
 
 
 def prepare(args):
@@ -82,7 +287,7 @@ def prepare(args):
         "caSha256": ca.fingerprint(hashes.SHA256()).hex(),
         "serverSha256": cert.fingerprint(hashes.SHA256()).hex(),
         "subjectAlternativeNames": ["localhost", "127.0.0.1", "10.0.2.2"],
-        "privateKeysOutsideGit": True, "expires": cert.not_valid_after_utc.isoformat(),
+        "privateKeysOutsideGit": True, "expires": certificate_time_utc(cert, "not_valid_after").isoformat(),
     })
     save("gateway-routes.json", {"routes": ["GET /api/build", "GET /api/health"]})
     print(json.dumps({"prepared": True, "publicCA": "tls/ca.crt", "passwordLogged": False}))
@@ -103,7 +308,8 @@ def repair_tls(args):
         (tls / f"{name}-failed-{stamp}.crt").write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
         builder = (x509.CertificateBuilder().subject_name(certificate.subject).issuer_name(certificate.issuer)
                    .public_key(key.public_key()).serial_number(x509.random_serial_number())
-                   .not_valid_before(certificate.not_valid_before_utc).not_valid_after(certificate.not_valid_after_utc))
+                   .not_valid_before(certificate_time_utc(certificate, "not_valid_before"))
+                   .not_valid_after(certificate_time_utc(certificate, "not_valid_after")))
         for extension in certificate.extensions:
             if extension.oid not in (x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER, x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER):
                 builder = builder.add_extension(extension.value, extension.critical)
@@ -216,6 +422,8 @@ def login(http, credentials):
 
 
 def seed(args):
+    assert type(args.mfa) is bool, "Explicit MFA Boolean required"
+    mfa_enabled = args.mfa is True
     assert not (ROOT / "seed.json").exists(), "Existing fixture must never be reseeded"
     credentials = json.loads((ROOT / "credentials.json").read_text())
     with client() as http:
@@ -278,19 +486,14 @@ def seed(args):
         workspace = expect(http.get(f"/api/matters/{mid}/workspace"))
         assert not workspace["notes"], "Native note fixture must start empty"
         # Enroll through actual endpoints. The operator browser still has to perform its own MFA step-up.
-        if args.mfa and not credentials.get("totp_secret"):
+        if mfa_enabled and not credentials.get("totp_secret"):
             from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
             enrollment = expect(http.post("/api/auth/mfa/enroll"))
             secret = enrollment["secret"]
             expect(http.post("/api/auth/mfa/enroll/verify", json={"code": _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS)}))
             credentials["totp_secret"] = secret
-            (ROOT / "credentials.json").write_text(json.dumps(credentials), encoding="utf-8")
-        routes = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
-                  "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
-                  "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
-                  "GET /api/auth/native/sessions", f"GET /api/matters/{mid}",
-                  f"GET /api/matters/{mid}/workspace", f"POST /api/matters/{mid}/notes",
-                  f"GET /api/matters/{mid}/drafts", f"GET /api/matters/{mid}/drafts/{draft['id']}"}
+            update_private("credentials.json", credentials)
+        routes = initial_gateway_routes(mid, draft["id"])
         (ROOT / "gateway-routes.json").write_text(json.dumps({"routes": sorted(routes)}), encoding="utf-8")
         save("seed.json", {
             "environment": "docker-integration", "syntheticDataOnly": True,
@@ -301,12 +504,12 @@ def seed(args):
             "draftId": draft["id"], "sourceId": clean["id"],
             "sourceSha256": hashlib.sha256(CLEAN).hexdigest(),
             "closedMatterId": closed["id"], "otherCompanyId": other["company"]["id"],
-            "otherMatterId": other_matter["id"], "mfaEnrolled": args.mfa,
+            "otherMatterId": other_matter["id"], "mfaEnrolled": mfa_enabled,
             "nativeNotesBeforeRun": 0, "crossTenantWorkspaceDenied": True,
             "terminalNoteDenied": True, "cleanUploadAndDownload": True, "eicarRejected": True,
         })
     print(json.dumps({"seeded": True, "syntheticTenants": 2, "nativeNoteCount": 0,
-                      "realScannerCleanAndEicar": True, "mfaEnrolled": args.mfa}))
+                      "realScannerCleanAndEicar": True}))
 
 
 def probe(args):
@@ -370,15 +573,16 @@ def auth_probe(args):
     state = json.loads((ROOT / "seed.json").read_text())
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    transport = _LOCAL_TRANSPORT["policy"](json.loads((ROOT / "config.json").read_text()))
     authorization = {"code_challenge": challenge, "state": secrets.token_urlsafe(32),
-                     "platform": "android", "redirect_uri": "caseops://oauth/callback"}
+                     "platform": transport["platform"], "redirect_uri": "caseops://oauth/callback"}
     with client() as browser, client() as token_http, client() as native:
         expect(browser.post("/api/auth/login", json={
             "email": credentials["email"], "password": credentials["password"],
             "company_slug": credentials["company_slug"],
         }))
         browser.headers["X-CSRF-Token"] = browser.cookies.get("caseops_csrf")
-        browser.headers["Origin"] = "https://10.0.2.2:3443"
+        browser.headers["Origin"] = transport["webOrigin"]
         expect(browser.post("/api/auth/native/authorize", json=authorization), 403)
         expect(browser.post("/api/auth/mfa/step-up", json={
             "code": _hotp(credentials["totp_secret"], int(time.time()) // TOTP_PERIOD_SECONDS),
@@ -387,7 +591,7 @@ def auth_probe(args):
         grant = expect(browser.post("/api/auth/native/authorize", json=authorization))
         assert grant["state"] == authorization["state"] and grant["redirect_uri"] == authorization["redirect_uri"]
         payload = {"code": grant["code"], "code_verifier": verifier,
-                   "platform": "android", "redirect_uri": authorization["redirect_uri"]}
+                   "platform": transport["platform"], "redirect_uri": authorization["redirect_uri"]}
         tokens = expect(token_http.post("/api/auth/native/token", json=payload))
         expect(token_http.post("/api/auth/native/token", json=payload), 401)
         native.headers["Authorization"] = f"Bearer {tokens['access_token']}"
@@ -496,6 +700,7 @@ def admit_source(args):
         observations = []
         for byte_range, expected_status in ((None, 200), ("bytes=0-15", 206)):
             context = ssl.create_default_context(cafile=str(ROOT / "tls/ca.crt"))
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
             # Docker DNS maps the logical localhost origin to the dedicated TLS gateway.
             # Hostname and CA verification remain enabled for that exact logical origin.
             raw = socket.create_connection(("gateway", 8443), timeout=3)
@@ -528,6 +733,14 @@ def admit_source(args):
         print(json.dumps({"sourceRouteAdmitted": True, "rangeGET": 206, "receipt": name}))
 
 
+def failure_diagnostic(error, mode):
+    import traceback
+    return {"failed": mode, "errorType": type(error).__name__,
+            "frames": [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+                       for frame in traceback.extract_tb(error.__traceback__)],
+            "detail": "See owned container diagnostics; values redacted"}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("prepare", "repair-tls", "seed", "prepare-reviews", "probe", "auth-probe", "scanner-probe", "admit-upload", "admit-source"))
@@ -539,10 +752,6 @@ if __name__ == "__main__":
          "auth-probe": auth_probe, "scanner-probe": scanner_probe,
          "prepare-reviews": prepare_reviews, "admit-upload": admit_upload, "admit-source": admit_source}[options.mode](options)
     except Exception as error:
-        import traceback
-        # Exceptions from transport/auth can include secrets. Retain only type and explicit safe assertions.
-        print(json.dumps({"failed": options.mode, "errorType": type(error).__name__,
-                          "frames": [{"file": Path(frame.filename).name, "line": frame.lineno,
-                                      "function": frame.name} for frame in traceback.extract_tb(error.__traceback__)],
-                          "detail": str(error) if isinstance(error, AssertionError) else "See owned container diagnostics; values redacted"}), file=sys.stderr)
+        # Assertion messages can include response/request secrets too.
+        print(json.dumps(failure_diagnostic(error, options.mode)), file=sys.stderr)
         sys.exit(1)

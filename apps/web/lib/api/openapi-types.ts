@@ -107,6 +107,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/account/deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_api_account_deletion_requests_get"];
+        put?: never;
+        /** Submit */
+        post: operations["submit_api_account_deletion_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account/deletion-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_account_deletion_requests__request_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-feedback": {
         parameters: {
             query?: never;
@@ -1565,6 +1600,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/native/compatibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Client Compatibility */
+        get: operations["client_compatibility_api_auth_native_compatibility_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/native/logout": {
         parameters: {
             query?: never;
@@ -2780,6 +2832,23 @@ export interface paths {
         patch: operations["patch_provider_event_candidate_api_calendar_provider_event_candidates__candidate_id__patch"];
         trace?: never;
     };
+    "/api/calendar/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-day open-item counts by display type for up to one year. */
+        get: operations["summarize_calendar_api_calendar_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/sync-status": {
         parameters: {
             query?: never;
@@ -3856,7 +3925,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Read a bounded page of recorded contract obligations */
+        get: operations["current_contract_obligations_api_contracts__contract_id__obligations_get"];
         put?: never;
         /** Add an obligation to a contract */
         post: operations["post_current_company_contract_obligation_api_contracts__contract_id__obligations_post"];
@@ -6582,6 +6652,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/renewal-terms/{term_id}/transition-references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Renewal Transition References */
+        get: operations["get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Summary Record */
+        get: operations["get_ip_docket_summary_record_api_ip_dockets__docket_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/title-interests": {
         parameters: {
             query?: never;
@@ -6804,6 +6908,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/documents/{document_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Document Retire */
+        post: operations["post_ip_document_retire_api_ip_documents__document_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/documents/{document_id}/retirement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Document Retirement Preview */
+        get: operations["get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/documents/{document_id}/versions/{version_number}/download": {
         parameters: {
             query?: never;
@@ -7001,6 +7139,27 @@ export interface paths {
         };
         /** Foreign Associate Instruction Workspace */
         get: operations["foreign_associate_instruction_workspace_api_ip_foreign_associate_instructions__instruction_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/foreign-associate-instructions/create-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Foreign Associate Instruction Create Options
+         * @description The associates, assignments, estimates, client instructions and
+         *     documents the create endpoint accepts for one docket, with blockers.
+         */
+        get: operations["foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7275,6 +7434,23 @@ export interface paths {
         };
         /** International Registration Workspace */
         get: operations["international_registration_workspace_api_ip_international_registrations__record_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/nice-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Nice Class Catalogue */
+        get: operations["nice_class_catalogue_api_ip_nice_classes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7801,6 +7977,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portal/grants/{grant_id}/shareable-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portal Grant Shareable Documents */
+        get: operations["get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portal/report-publications": {
         parameters: {
             query?: never;
@@ -8069,6 +8262,27 @@ export interface paths {
         };
         /** Recordal Workspace */
         get: operations["recordal_workspace_api_ip_recordals__recordal_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/recordals/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recordal Instrument Options
+         * @description The documents the recordal form may offer for one docket (declared before
+         *     /recordals/{recordal_id} so the static path is not read as an id).
+         */
+        get: operations["recordal_instrument_options_api_ip_recordals_instruments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8764,6 +8978,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Watch Publication Search */
+        get: operations["watch_publication_search_api_ip_watch_publications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/working-calendars": {
         parameters: {
             query?: never;
@@ -8792,6 +9023,23 @@ export interface paths {
         put?: never;
         /** Post Ip Working Calendar Activation */
         post: operations["post_ip_working_calendar_activation_api_ip_working_calendars__calendar_version_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/working-calendars/{calendar_version_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Working Calendar Withdrawal */
+        post: operations["post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9276,6 +9524,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pack */
+        get: operations["pack_api_matter_readthrough__matter_id__hearing_packs__pack_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/hearing-packs/{pack_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pack Items */
+        get: operations["pack_items_api_matter_readthrough__matter_id__hearing_packs__pack_id__items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/hearings/{hearing_id}/pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Pack */
+        get: operations["latest_pack_api_matter_readthrough__matter_id__hearings__hearing_id__pack_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendations */
+        get: operations["recommendations_api_matter_readthrough__matter_id__recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendation */
+        get: operations["recommendation_api_matter_readthrough__matter_id__recommendations__recommendation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decisions */
+        get: operations["decisions_api_matter_readthrough__matter_id__recommendations__recommendation_id__decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matter-readthrough/{matter_id}/recommendations/{recommendation_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Options */
+        get: operations["options_api_matter_readthrough__matter_id__recommendations__recommendation_id__options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matter-tags/": {
         parameters: {
             query?: never;
@@ -9310,6 +9677,23 @@ export interface paths {
         head?: never;
         /** Update a matter tag */
         patch: operations["patch_current_company_matter_tag_api_matter_tags__tag_id__patch"];
+        trace?: never;
+    };
+    "/api/matter-work-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queue */
+        get: operations["queue_api_matter_work_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/matters/": {
@@ -10513,6 +10897,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/invoices/{invoice_id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a draft matter invoice */
+        post: operations["issue_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__issue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/invoices/{invoice_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void a draft matter invoice */
+        post: operations["void_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/ip-links": {
         parameters: {
             query?: never;
@@ -11449,6 +11867,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/portfolio-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count every visible matter by status, forum and practice area */
+        get: operations["current_company_matter_portfolio_health_api_matters_portfolio_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/today": {
         parameters: {
             query?: never;
@@ -11660,6 +12095,23 @@ export interface paths {
         put?: never;
         /** Link outside counsel to a matter */
         post: operations["post_current_company_outside_counsel_assignment_api_outside_counsel_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/outside-counsel/matters/{matter_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded outside counsel and spend pages for one visible Matter */
+        get: operations["get_current_matter_counsel_context_api_outside_counsel_matters__matter_id__context_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13462,6 +13914,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recipient-inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inbox */
+        get: operations["inbox_api_recipient_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recipient-inbox/{notification_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change Inbox Status */
+        patch: operations["change_inbox_status_api_recipient_inbox__notification_id__patch"];
+        trace?: never;
+    };
     "/api/recommendations/{recommendation_id}/decisions": {
         parameters: {
             query?: never;
@@ -14411,6 +14897,50 @@ export interface components {
             status: string;
             /** Title */
             title: string;
+        };
+        /** AccountDeletionRequestCreate */
+        AccountDeletionRequestCreate: {
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: "request_account_deletion";
+            /** Operation Id */
+            operation_id: string;
+        };
+        /** AccountDeletionRequestCurrent */
+        AccountDeletionRequestCurrent: {
+            request: components["schemas"]["AccountDeletionRequestReceipt"] | null;
+        };
+        /** AccountDeletionRequestReceipt */
+        AccountDeletionRequestReceipt: {
+            /**
+             * Deletion Completed
+             * @default false
+             * @constant
+             */
+            deletion_completed: false;
+            /** Id */
+            id: string;
+            /** Operation Id */
+            operation_id: string;
+            /**
+             * Request Type
+             * @default account_deletion
+             * @constant
+             */
+            request_type: "account_deletion";
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /**
+             * Status
+             * @default received
+             * @constant
+             */
+            status: "received";
         };
         /** AccountSetupCompleteRequest */
         AccountSetupCompleteRequest: {
@@ -17552,6 +18082,23 @@ export interface components {
             /** Unavailable Reason */
             unavailable_reason?: string | null;
         };
+        /**
+         * CalendarDaySummary
+         * @description Open-item counts for one date, by the same display types as the feed.
+         */
+        CalendarDaySummary: {
+            /** By Display Type */
+            by_display_type: {
+                [key: string]: number;
+            };
+            /**
+             * Occurs On
+             * Format: date
+             */
+            occurs_on: string;
+            /** Total */
+            total: number;
+        };
         /** CalendarEventListResponse */
         CalendarEventListResponse: {
             /** Events */
@@ -17818,6 +18365,26 @@ export interface components {
             candidate: components["schemas"]["CalendarProviderEventCandidateRecord"];
             /** Hearing Id */
             hearing_id?: string | null;
+        };
+        /**
+         * CalendarSummaryResponse
+         * @description Per-day counts for the Year view. Only dates with open items appear.
+         */
+        CalendarSummaryResponse: {
+            /** Days */
+            days: components["schemas"]["CalendarDaySummary"][];
+            /**
+             * Range From
+             * Format: date
+             */
+            range_from: string;
+            /**
+             * Range To
+             * Format: date
+             */
+            range_to: string;
+            /** Total */
+            total: number;
         };
         /** CalendarSyncCapabilityStatus */
         CalendarSyncCapabilityStatus: {
@@ -20828,6 +21395,54 @@ export interface components {
              */
             kind: "royalty" | "reporting" | "audit" | "quality_control" | "recordal" | "notice" | "renewal" | "termination" | "filing" | "office_response" | "hearing";
             source: components["schemas"]["SpecialistSource"];
+            /** Title */
+            title: string;
+        };
+        /** ContractObligationContextPage */
+        ContractObligationContextPage: {
+            /** Company Id */
+            company_id: string;
+            /** Contract Id */
+            contract_id: string;
+            /** Limit */
+            limit: number;
+            /** Next After */
+            next_after: string | null;
+            /** Obligations */
+            obligations: components["schemas"]["ContractObligationContextRecord"][];
+            /**
+             * Ordering
+             * @default id_ascending
+             */
+            ordering: string;
+        };
+        /** ContractObligationContextRecord */
+        ContractObligationContextRecord: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Contract Id */
+            contract_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Description Truncated */
+            description_truncated: boolean;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Priority */
+            priority: string;
+            /** Status */
+            status: string;
             /** Title */
             title: string;
         };
@@ -24113,6 +24728,21 @@ export interface components {
              */
             status: "consent_required" | "no_mock_hearing_responses";
         };
+        /** HearingPackContent */
+        HearingPackContent: {
+            /** Generated By Membership Id */
+            generated_by_membership_id: string | null;
+            /** Model Run Id */
+            model_run_id: string | null;
+            /** Review Required */
+            review_required: boolean;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string;
+        };
         /**
          * HearingPackGenerateRequest
          * @description Body is empty for now — kept as a placeholder for future options
@@ -24121,6 +24751,59 @@ export interface components {
         HearingPackGenerateRequest: {
             /** Focus Note */
             focus_note?: string | null;
+        };
+        /** HearingPackItemContent */
+        HearingPackItemContent: {
+            /** Body */
+            body: string;
+            /** Item Type */
+            item_type: string;
+            /** Source Ref */
+            source_ref: string | null;
+            /** Title */
+            title: string;
+        };
+        /** HearingPackItemPage */
+        HearingPackItemPage: {
+            /** Items */
+            items: components["schemas"]["HearingPackItemRead"][];
+            /**
+             * Kind
+             * @default hearing_pack_items
+             * @constant
+             */
+            kind: "hearing_pack_items";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default rank_asc_id_asc
+             * @constant
+             */
+            order: "rank_asc_id_asc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** HearingPackItemRead */
+        HearingPackItemRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Rank */
+            rank: number;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["HearingPackItemContent"] | null;
         };
         /** HearingPackItemRecord */
         HearingPackItemRecord: {
@@ -24144,6 +24827,27 @@ export interface components {
             source_ref: string | null;
             /** Title */
             title: string;
+        };
+        /** HearingPackRead */
+        HearingPackRead: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Hearing Id */
+            hearing_id: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["HearingPackContent"] | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            scope: components["schemas"]["MatterReadScope"];
         };
         /** HearingPackRecord */
         HearingPackRecord: {
@@ -24711,6 +25415,55 @@ export interface components {
             event_id?: string | null;
             /** Status */
             status: ("new" | "linked_metadata" | "content_import_requested" | "content_imported" | "ignored" | "rejected" | "failed") | "rejected";
+        };
+        /** InboxPage */
+        InboxPage: {
+            /** History Exhausted */
+            history_exhausted: boolean;
+            /** Items */
+            items?: components["schemas"]["InboxRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Scope
+             * @default delivered_hearing_and_ip_renewal
+             * @constant
+             */
+            scope: "delivered_hearing_and_ip_renewal";
+        };
+        /** InboxRecord */
+        InboxRecord: {
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Read At */
+            read_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unread" | "read" | "dismissed";
+            target: components["schemas"]["InboxTarget"];
+            /** Target Label */
+            target_label: string | null;
+            /** Title */
+            title: string;
+        };
+        /** InboxTarget */
+        InboxTarget: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "matter" | "ip_docket";
         };
         /** IndianKanoonAttribution */
         IndianKanoonAttribution: {
@@ -25971,6 +26724,8 @@ export interface components {
         IpCalendarReconciliationCandidateListResponse: {
             /** Candidates */
             candidates?: components["schemas"]["IpCalendarReconciliationCandidateRecord"][];
+            /** Total */
+            total: number;
         };
         /** IpCalendarReconciliationCandidateRecord */
         IpCalendarReconciliationCandidateRecord: {
@@ -27289,7 +28044,7 @@ export interface components {
             /** Docket Id */
             docket_id: string;
             /** Exception Kinds */
-            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled")[];
+            exception_kinds: ("overdue" | "unacknowledged" | "unowned" | "conflicting" | "uncertain" | "source_stale" | "rule_disabled" | "rule_retired")[];
             /** Result On */
             result_on: string | null;
             /**
@@ -27297,6 +28052,13 @@ export interface components {
              * @default true
              */
             visible: boolean;
+        };
+        /** IpDeadlineGovernanceProjection */
+        IpDeadlineGovernanceProjection: {
+            calendar_activation: components["schemas"]["IpGovernanceActionDecision"];
+            calendar_proposal: components["schemas"]["IpGovernanceActionDecision"];
+            rule_activation: components["schemas"]["IpGovernanceActionDecision"];
+            rule_proposal: components["schemas"]["IpGovernanceActionDecision"];
         };
         /** IpDeadlineImpactResponse */
         IpDeadlineImpactResponse: {
@@ -27734,10 +28496,13 @@ export interface components {
             deadlines: components["schemas"]["IpDeadlineRecord"][];
             /** Docket Id */
             docket_id: string;
+            /** Eligible Responsible Membership Ids */
+            eligible_responsible_membership_ids?: string[];
             /** Eligible Rule Version Ids */
             eligible_rule_version_ids?: string[];
             /** Exceptions */
             exceptions: components["schemas"]["IpDeadlineExceptionRecord"][];
+            governance: components["schemas"]["IpDeadlineGovernanceProjection"];
             /** Rules */
             rules: components["schemas"]["IpRuleVersionRecord"][];
         };
@@ -28012,6 +28777,10 @@ export interface components {
              * @default false
              */
             has_more: boolean;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** IpDocketMatterLinkListResponse */
         IpDocketMatterLinkListResponse: {
@@ -28132,6 +28901,39 @@ export interface components {
             title: string;
             /** Title Interests */
             title_interests?: components["schemas"]["IpTitleInterestRecord"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * IpDocketSummaryResponse
+         * @description Current scalar source facts, independent of IP type and child volume.
+         */
+        IpDocketSummaryResponse: {
+            /** Access Policy Version */
+            access_policy_version: number;
+            /** Company Id */
+            company_id: string;
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Type */
+            record_type: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
             /**
              * Updated At
              * Format: date-time
@@ -28484,6 +29286,9 @@ export interface components {
             is_privileged: boolean;
             /** Links */
             links: components["schemas"]["IpDocumentLinkRecord"][];
+            /** Read Only Reason */
+            read_only_reason?: ("retired" | "closed_record") | null;
+            retirement?: components["schemas"]["IpDocumentRetirementRecord"] | null;
             /** Taxonomy Key */
             taxonomy_key: string;
             /** Taxonomy Label */
@@ -28497,6 +29302,69 @@ export interface components {
             updated_at: string;
             /** Versions */
             versions: components["schemas"]["IpDocumentVersionRecord"][];
+        };
+        /**
+         * IpDocumentRetirementBlocker
+         * @description A record that still relies on the document as evidence.
+         */
+        IpDocumentRetirementBlocker: {
+            /** Docket Id */
+            docket_id?: string | null;
+            /** Docket Title */
+            docket_title?: string | null;
+            /** Href */
+            href?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "recordal" | "foreign_associate_instruction" | "docket_event" | "title_interest" | "renewal_certificate" | "portal_publication" | "source_evidence";
+            /** Label */
+            label: string;
+            /** Record Id */
+            record_id: string;
+            /** Resolution */
+            resolution: string;
+            /** Status */
+            status?: string | null;
+        };
+        /** IpDocumentRetirementPreview */
+        IpDocumentRetirementPreview: {
+            /** Already Retired */
+            already_retired: boolean;
+            /** Blockers */
+            blockers: components["schemas"]["IpDocumentRetirementBlocker"][];
+            /** Current Version */
+            current_version: number;
+            /** Document Id */
+            document_id: string;
+            /** May Retire */
+            may_retire: boolean;
+            /** Permission Reason */
+            permission_reason?: string | null;
+            /** Retirable */
+            retirable: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpDocumentRetirementRecord */
+        IpDocumentRetirementRecord: {
+            /** Reason */
+            reason: string;
+            /**
+             * Retired At
+             * Format: date-time
+             */
+            retired_at: string;
+            /** Retired By Name */
+            retired_by_name: string;
+        };
+        /** IpDocumentRetireRequest */
+        IpDocumentRetireRequest: {
+            /** Expected Current Version */
+            expected_current_version: number;
+            /** Reason */
+            reason: string;
         };
         /** IpDocumentStateTransitionRequest */
         IpDocumentStateTransitionRequest: {
@@ -28559,6 +29427,20 @@ export interface components {
             updated_at: string;
             /** Version */
             version: number;
+        };
+        /**
+         * IpDocumentTaxonomyReadiness
+         * @description Whether IP documents can be classified, so an empty taxonomy is visible.
+         */
+        IpDocumentTaxonomyReadiness: {
+            /** Active Entry Count */
+            active_entry_count: number;
+            /** Ready */
+            ready: boolean;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Total Entry Count */
+            total_entry_count: number;
         };
         /** IpDocumentTaxonomyResponse */
         IpDocumentTaxonomyResponse: {
@@ -28915,6 +29797,8 @@ export interface components {
             available: boolean;
             /** Blocked By Incident Id */
             blocked_by_incident_id?: string | null;
+            /** Blocked Reasons */
+            blocked_reasons?: ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch")[];
             /** Entitled */
             entitled: boolean;
             /** Entitlement Key */
@@ -28927,11 +29811,8 @@ export interface components {
             missing_capabilities: string[];
             /** Owner */
             owner: string;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "available" | "unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch";
+            /** Reason */
+            reason: "available" | ("unknown_feature" | "missing_capability" | "missing_entitlement" | "rollout_disabled" | "rollout_expired" | "workspace_not_configured" | "tenant_disabled" | "readiness_test_failed" | "incident_kill_switch");
             /** Required Capabilities */
             required_capabilities: string[];
             /** Rollout Enabled */
@@ -28981,6 +29862,15 @@ export interface components {
              * @enum {string}
              */
             transaction_kind: "acknowledgement_received" | "defect_recorded" | "rejected" | "accepted";
+        };
+        /** IpFilingJurisdictionOption */
+        IpFilingJurisdictionOption: {
+            /** Associate Count */
+            associate_count: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
         };
         /** IpFilingPreparationTransactionRequest */
         IpFilingPreparationTransactionRequest: {
@@ -29074,6 +29964,70 @@ export interface components {
             /** Transaction Kind */
             transaction_kind: string;
         };
+        /** IpForeignAssociateCreateBlocker */
+        IpForeignAssociateCreateBlocker: {
+            /** Action Label */
+            action_label?: string | null;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "no_panel_associate" | "no_associate_for_jurisdiction" | "no_assignment_for_matter" | "no_active_estimate" | "no_linked_documents";
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "outside_counsel_id" | "assignment_id" | "estimate_cost_item_id" | "selected_document_refs";
+            /** Href */
+            href?: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * IpForeignAssociateCreateOptionsResponse
+         * @description Every value the create validator accepts for one docket, and why not.
+         *
+         *     Built from the same predicates as ``create_ip_foreign_associate_instruction``
+         *     so a picker never offers a value the API rejects (BUG-009/010/011/013).
+         */
+        IpForeignAssociateCreateOptionsResponse: {
+            /** Assignment Required */
+            assignment_required: boolean;
+            /** Assignments */
+            assignments: components["schemas"]["IpForeignAssociateOptionAssignment"][];
+            /** Associates */
+            associates: components["schemas"]["IpForeignAssociateOptionAssociate"][];
+            /** Blockers */
+            blockers: components["schemas"]["IpForeignAssociateCreateBlocker"][];
+            /** Can Manage Counsel */
+            can_manage_counsel: boolean;
+            /** Can Record Estimate */
+            can_record_estimate: boolean;
+            /** Client Instructions */
+            client_instructions: components["schemas"]["IpForeignAssociateOptionClientInstruction"][];
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Documents */
+            documents: components["schemas"]["IpForeignAssociateOptionDocument"][];
+            /** Estimates */
+            estimates: components["schemas"]["IpForeignAssociateOptionEstimate"][];
+            /** Jurisdictions */
+            jurisdictions: components["schemas"]["IpFilingJurisdictionOption"][];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Matter Title */
+            matter_title: string | null;
+            /** Panel Associate Count */
+            panel_associate_count: number;
+            /** Target Jurisdiction */
+            target_jurisdiction: string | null;
+            /** Unbudgeted Assignment Count */
+            unbudgeted_assignment_count: number;
+        };
         /** IpForeignAssociateCreateRequest */
         IpForeignAssociateCreateRequest: {
             /** Assignment Id */
@@ -29127,6 +30081,87 @@ export interface components {
             tax_rate_percent?: number | null;
             /** Tax Type */
             tax_type?: string | null;
+        };
+        /** IpForeignAssociateOptionAssignment */
+        IpForeignAssociateOptionAssignment: {
+            /** Budget Amount Minor */
+            budget_amount_minor: number;
+            /** Compatible Estimate Ids */
+            compatible_estimate_ids: string[];
+            /** Counsel Id */
+            counsel_id: string;
+            /** Counsel Name */
+            counsel_name: string;
+            /** Currency */
+            currency: string;
+            /** Id */
+            id: string;
+            /** Role Summary */
+            role_summary: string | null;
+            /** Status */
+            status: string;
+        };
+        /** IpForeignAssociateOptionAssociate */
+        IpForeignAssociateOptionAssociate: {
+            /** Filing Jurisdictions */
+            filing_jurisdictions: string[];
+            /** Firm City */
+            firm_city: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Panel Status */
+            panel_status: string;
+            /** Primary Contact Email */
+            primary_contact_email: string | null;
+            /** Primary Contact Name */
+            primary_contact_name: string | null;
+        };
+        /** IpForeignAssociateOptionClientInstruction */
+        IpForeignAssociateOptionClientInstruction: {
+            /** Id */
+            id: string;
+            /** Instruction Kind */
+            instruction_kind: string;
+            /** Instruction Version */
+            instruction_version: number;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Submitted By */
+            submitted_by: string;
+        };
+        /** IpForeignAssociateOptionDocument */
+        IpForeignAssociateOptionDocument: {
+            /** Id */
+            id: string;
+            /** Is Privileged */
+            is_privileged: boolean;
+            /** Title */
+            title: string;
+        };
+        /** IpForeignAssociateOptionEstimate */
+        IpForeignAssociateOptionEstimate: {
+            /** Amount Minor */
+            amount_minor: number | null;
+            /** Amount Withheld */
+            amount_withheld: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Id */
+            id: string;
         };
         /** IpForeignAssociatePageResponse */
         IpForeignAssociatePageResponse: {
@@ -29392,6 +30427,24 @@ export interface components {
             response_overdue: boolean;
             /** Transactions */
             transactions: components["schemas"]["IpDocketEventResponse"][];
+        };
+        /**
+         * IpGovernanceActionDecision
+         * @description One governance action for the current viewer, from the writers' gates.
+         */
+        IpGovernanceActionDecision: {
+            /** Available */
+            available: boolean;
+            /** Code */
+            code: "available" | ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch");
+            /** Entitlement Key */
+            entitlement_key: string;
+            /** Reasons */
+            reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
+            /** Required Capability */
+            required_capability: string;
+            /** Rollout Flag */
+            rollout_flag: string | null;
         };
         /** IpHearingReminderPolicyRequest */
         IpHearingReminderPolicyRequest: {
@@ -29996,6 +31049,10 @@ export interface components {
             publication_scope_json: {
                 [key: string]: unknown;
             };
+            /** Raw Evidence Json */
+            raw_evidence_json?: {
+                [key: string]: unknown;
+            };
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Source Page */
@@ -30008,6 +31065,11 @@ export interface components {
             source_url: string;
             /** Supersedes Publication Id */
             supersedes_publication_id: string | null;
+        };
+        /** IpJournalPublicationSearchResponse */
+        IpJournalPublicationSearchResponse: {
+            /** Publications */
+            publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
@@ -30528,6 +31590,20 @@ export interface components {
              */
             target_kind: "appeal_proceeding" | "matter";
         };
+        /**
+         * IpOppositionAppealProceedingOption
+         * @description An appeal proceeding the appeal-link validator accepts, with its numbers.
+         */
+        IpOppositionAppealProceedingOption: {
+            /** Appeal Identifiers */
+            appeal_identifiers: string[];
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
+            /** Stage */
+            stage: string;
+        };
         /** IpOppositionApplicantActionRequest */
         IpOppositionApplicantActionRequest: {
             /**
@@ -30959,6 +32035,8 @@ export interface components {
             client_instruction_status: "pending" | "confirmed" | "not_required";
             /** Corrective Task Id */
             corrective_task_id: string | null;
+            /** Deadline Proposal Gaps */
+            deadline_proposal_gaps?: string[];
             /** Deadlines */
             deadlines: components["schemas"]["IpOppositionOpponentDeadlineRecord"][];
             /**
@@ -31079,6 +32157,20 @@ export interface components {
             source_notice_document_ref: string | null;
             /** Source Notice Reference */
             source_notice_reference: string | null;
+        };
+        /**
+         * IpOppositionRelatedApplicationOption
+         * @description An application the scope-review validator accepts as related.
+         */
+        IpOppositionRelatedApplicationOption: {
+            /** Application Number */
+            application_number: string | null;
+            /** Filing Phase */
+            filing_phase: string;
+            /** Id */
+            id: string;
+            /** Office */
+            office: string;
         };
         /** IpOppositionScopeDecision */
         IpOppositionScopeDecision: {
@@ -31266,10 +32358,18 @@ export interface components {
         IpOppositionSharedWorkflowResponse: {
             /** Active Deadlines */
             active_deadlines: components["schemas"]["IpDeadlineRecord"][];
+            /** Appeal Proceedings */
+            appeal_proceedings?: components["schemas"]["IpOppositionAppealProceedingOption"][];
             /** Application Scopes */
             application_scopes: components["schemas"]["IpOppositionApplicationScopeRecord"][];
             /** Current Stage */
             current_stage: string;
+            /** Disposition Trigger Events */
+            disposition_trigger_events?: components["schemas"]["IpDocketEventResponse"][];
+            /** Hearing Statuses By Action */
+            hearing_statuses_by_action?: {
+                [key: string]: string[];
+            };
             /**
              * Next Required Action
              * @enum {string}
@@ -31277,6 +32377,8 @@ export interface components {
             next_required_action: "complete_role_workflow" | "record_evidence_package" | "advance_to_hearing" | "schedule_hearing" | "record_hearing_preparation" | "await_hearing" | "record_post_hearing_note" | "advance_to_order" | "record_order" | "review_appeal_or_close" | "link_appeal" | "complete_appeal_or_close" | "closed";
             /** Proceeding Id */
             proceeding_id: string;
+            /** Related Applications */
+            related_applications?: components["schemas"]["IpOppositionRelatedApplicationOption"][];
             /**
              * Represented Side
              * @enum {string}
@@ -31919,6 +33021,8 @@ export interface components {
              * @enum {string}
              */
             source_application_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Declared Status */
+            source_declared_status?: string | null;
             /** Source Renewal Alert At */
             source_renewal_alert_at?: string | null;
             /** Source Renewal Alert Body */
@@ -31933,6 +33037,8 @@ export interface components {
              * @enum {string}
              */
             source_renewal_state: "missing" | "manual" | "imported_unverified" | "verified";
+            /** Source Status Text */
+            source_status_text?: string | null;
             /** Team Id */
             team_id?: string | null;
             /** Team Name */
@@ -32380,10 +33486,95 @@ export interface components {
             /** Supporting Instrument Refs */
             supporting_instrument_refs: string[];
         };
+        /**
+         * IpRecordalInstrumentOptionsResponse
+         * @description Documents a recordal on one docket may cite as its supporting instruments.
+         *
+         *     Built from the same predicate the create and transaction validators apply:
+         *     linked to the docket or to one of its events or deadlines, and readable by
+         *     the viewer. `truncated` is true when more than the listed documents exist.
+         */
+        IpRecordalInstrumentOptionsResponse: {
+            /** Docket Id */
+            docket_id: string;
+            /** Items */
+            items: components["schemas"]["IpDocumentRecord"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * IpRecordalListItemResponse
+         * @description A list row also names its docket, so the list never shows a raw docket id.
+         */
+        IpRecordalListItemResponse: {
+            /** Acceptance Evidence Refs Json */
+            acceptance_evidence_refs_json: string[];
+            /** Affected Classes Json */
+            affected_classes_json: number[];
+            /** Affected Registration Refs Json */
+            affected_registration_refs_json: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Deadline Rule Key */
+            deadline_rule_key: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Effective On */
+            effective_on: string | null;
+            /** Executed On */
+            executed_on: string | null;
+            /** Fee Cost Item Refs Json */
+            fee_cost_item_refs_json: string[];
+            /** Filing Evidence Refs Json */
+            filing_evidence_refs_json: string[];
+            /** Form Code */
+            form_code: string;
+            /** Id */
+            id: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /** Parties Json */
+            parties_json: {
+                [key: string]: unknown;
+            }[];
+            /** Recordal Type */
+            recordal_type: string;
+            /** Registry Snapshot Id */
+            registry_snapshot_id: string | null;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Supporting Instrument Refs Json */
+            supporting_instrument_refs_json: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
         /** IpRecordalPageResponse */
         IpRecordalPageResponse: {
             /** Items */
-            items: components["schemas"]["IpRecordalResponse"][];
+            items: components["schemas"]["IpRecordalListItemResponse"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -32480,11 +33671,8 @@ export interface components {
             };
             /** Document Refs */
             document_refs?: string[];
-            /**
-             * Effective At
-             * Format: date-time
-             */
-            effective_at: string;
+            /** Effective At */
+            effective_at?: string | null;
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Lifecycle Version */
@@ -32523,6 +33711,8 @@ export interface components {
         };
         /** IpRecordalWorkspaceResponse */
         IpRecordalWorkspaceResponse: {
+            /** Cited Documents */
+            cited_documents?: components["schemas"]["IpDocumentRecord"][];
             /** Current Registered Interests */
             current_registered_interests: components["schemas"]["IpTitleInterestRecord"][];
             deadline_workspace: components["schemas"]["IpDeadlineWorkspaceResponse"];
@@ -32656,8 +33846,11 @@ export interface components {
             application_id?: string | null;
             /** Capability Version */
             capability_version: string;
-            /** Identifier Kind */
-            identifier_kind: string;
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
             /** Jurisdiction */
             jurisdiction: string;
             /** Match Confidence */
@@ -33251,6 +34444,44 @@ export interface components {
             /** Items */
             items: components["schemas"]["IpRenewalWorkflowRecord"][];
         };
+        /** IpRenewalReferenceDeadline */
+        IpRenewalReferenceDeadline: {
+            /** Id */
+            id: string;
+            /** Result On */
+            result_on: string | null;
+            /** State */
+            state: string;
+            /** Title */
+            title: string;
+            /** Trigger Event Id */
+            trigger_event_id: string | null;
+        };
+        /** IpRenewalReferenceDocument */
+        IpRenewalReferenceDocument: {
+            /** Current Version */
+            current_version: number;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** IpRenewalReferenceEvent */
+        IpRenewalReferenceEvent: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Event Kind */
+            event_kind: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+        };
         /** IpRenewalReminderIntentRecord */
         IpRenewalReminderIntentRecord: {
             /** Delivered At */
@@ -33508,6 +34739,26 @@ export interface components {
             status: "scheduled" | "active" | "sent" | "failed" | "missing_date" | "overdue" | "cancelled";
             /** Timezone */
             timezone: string;
+        };
+        /**
+         * IpRenewalTransitionReferences
+         * @description Records the transition validator accepts as this term's references.
+         *
+         *     Each list is built from the same predicate the transition endpoint
+         *     enforces. A next-term deadline is accepted only when its
+         *     trigger_event_id equals the acceptance event the transition uses.
+         */
+        IpRenewalTransitionReferences: {
+            /** Acceptance Events */
+            acceptance_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Certificate Documents */
+            certificate_documents: components["schemas"]["IpRenewalReferenceDocument"][];
+            /** Filing Events */
+            filing_events: components["schemas"]["IpRenewalReferenceEvent"][];
+            /** Next Term Deadlines */
+            next_term_deadlines: components["schemas"]["IpRenewalReferenceDeadline"][];
+            /** Term Id */
+            term_id: string;
         };
         /** IpRenewalWorkflowRecord */
         IpRenewalWorkflowRecord: {
@@ -33876,6 +35127,8 @@ export interface components {
             open_deadline_count: number;
             /** Rule Version Id */
             rule_version_id: string;
+            /** Superseded Versions */
+            superseded_versions?: number[];
         };
         /** IpRuleTransitionRequest */
         IpRuleTransitionRequest: {
@@ -33936,6 +35189,15 @@ export interface components {
         IpRuleVersionRecord: {
             /** Activated At */
             activated_at: string | null;
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
             /**
              * Created At
              * Format: date-time
@@ -33954,6 +35216,8 @@ export interface components {
             effective_from: string;
             /** Effective Until */
             effective_until: string | null;
+            /** Eligible Reviewer Membership Ids */
+            eligible_reviewer_membership_ids?: string[];
             /** Engine Compatibility */
             engine_compatibility: string;
             /** Fixtures */
@@ -33974,6 +35238,8 @@ export interface components {
             office: string | null;
             /** Proceeding Kind */
             proceeding_kind: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Reviewer Label Snapshot */
@@ -34710,12 +35976,59 @@ export interface components {
         IpWatchWorkspaceResponse: {
             /** Handoffs */
             handoffs?: components["schemas"]["IpWatchHandoffResponse"][];
+            /** Hit Profiles */
+            hit_profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Hit Total
+             * @default 0
+             */
+            hit_total: number;
             /** Hits */
             hits?: components["schemas"]["IpWatchHitResponse"][];
+            /**
+             * Ingestion Run Limit
+             * @default 20
+             */
+            ingestion_run_limit: number;
+            /**
+             * Ingestion Run Total
+             * @default 0
+             */
+            ingestion_run_total: number;
             /** Ingestion Runs */
             ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
+            /**
+             * Intake Profile Count
+             * @default 0
+             */
+            intake_profile_count: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Paused Profile Total
+             * @default 0
+             */
+            paused_profile_total: number;
+            /**
+             * Profile Total
+             * @default 0
+             */
+            profile_total: number;
             /** Profiles */
             profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /**
+             * Publication Total
+             * @default 0
+             */
+            publication_total: number;
             /** Publications */
             publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
@@ -34793,6 +36106,7 @@ export interface components {
         /** IpWorkspaceConfigurationStatusResponse */
         IpWorkspaceConfigurationStatusResponse: {
             configuration: components["schemas"]["IpWorkspaceConfigurationResponse"] | null;
+            document_taxonomy: components["schemas"]["IpDocumentTaxonomyReadiness"];
             /** Enablement Blockers */
             enablement_blockers: string[];
             /** Provider Adapters */
@@ -34818,7 +36132,7 @@ export interface components {
                 [key: string]: string;
             };
             /** Document Taxonomy Version */
-            document_taxonomy_version: string;
+            document_taxonomy_version?: string | null;
             /** Enabled Asset Types */
             enabled_asset_types: "trademark"[];
             /** Escalation Owner Membership Id */
@@ -35612,12 +36926,26 @@ export interface components {
         };
         /** LegalCalendarVersionRecord */
         LegalCalendarVersionRecord: {
+            /** Activation Blocked Reason */
+            activation_blocked_reason?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch") | null;
+            /** Activation Blocked Reasons */
+            activation_blocked_reasons?: ("not_candidate" | "rule_kind_unsupported" | "rollout_disabled" | "rollout_expired" | "missing_entitlement" | "missing_capability" | "proposer_unavailable" | "proposer_cannot_self_approve" | "no_qualified_reviewer" | "no_other_approver" | "fixtures_not_passing" | "fixture_calendar_not_active" | "fixture_calendar_jurisdiction_mismatch")[];
             /** Approved At */
             approved_at: string | null;
             /** Approver Label Snapshot */
             approver_label_snapshot: string | null;
             /** Calendar Id */
             calendar_id: string;
+            /**
+             * Can Activate
+             * @default false
+             */
+            can_activate: boolean;
+            /**
+             * Can Withdraw
+             * @default false
+             */
+            can_withdraw: boolean;
             /**
              * Created At
              * Format: date-time
@@ -35644,6 +36972,8 @@ export interface components {
             name: string;
             /** Office */
             office: string | null;
+            /** Proposed By Membership Id */
+            proposed_by_membership_id?: string | null;
             /** Proposer Label Snapshot */
             proposer_label_snapshot: string;
             /** Source Hash */
@@ -35663,6 +36993,14 @@ export interface components {
             version: number;
             /** Weekend Days */
             weekend_days: number[];
+        };
+        /**
+         * LegalCalendarWithdrawalRequest
+         * @description The proposer withdraws its own candidate before anyone activates it.
+         */
+        LegalCalendarWithdrawalRequest: {
+            /** Reason */
+            reason: string;
         };
         /** LegalKnowledgeGraphEdgeRecord */
         LegalKnowledgeGraphEdgeRecord: {
@@ -38095,6 +39433,68 @@ export interface components {
             /** Submitted At */
             submitted_at?: string | null;
         };
+        /**
+         * MatterCounselContextResponse
+         * @description Two independent bounded pages; monetary totals describe only these pages.
+         */
+        MatterCounselContextResponse: {
+            /** Assignment Limit */
+            assignment_limit: number;
+            /** Assignment Next After */
+            assignment_next_after: string | null;
+            /** Assignments */
+            assignments: components["schemas"]["OutsideCounselAssignmentRecord"][];
+            /** Currencies */
+            currencies: components["schemas"]["MatterCounselPageCurrency"][];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Is Active */
+            matter_is_active: boolean;
+            /** Matter Status */
+            matter_status: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Spend Limit */
+            spend_limit: number;
+            /** Spend Next After */
+            spend_next_after: string | null;
+            /** Spend Records */
+            spend_records: components["schemas"]["OutsideCounselSpendRecord"][];
+            /**
+             * Totals Scope
+             * @default page
+             * @constant
+             */
+            totals_scope: "page";
+        };
+        /** MatterCounselPageCurrency */
+        MatterCounselPageCurrency: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Approved Amount Minor */
+            approved_amount_minor: number;
+            /** Currency */
+            currency: string;
+            /** Paid Amount Minor */
+            paid_amount_minor: number;
+            /** Pending Amount Minor */
+            pending_amount_minor: number;
+            /** Recorded Budget Minor */
+            recorded_budget_minor: number;
+            /** Unpriced Assignment Count */
+            unpriced_assignment_count: number;
+        };
+        /** MatterCountBucket */
+        MatterCountBucket: {
+            /** Count */
+            count: number;
+            /** Key */
+            key: string | null;
+        };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
             /** Bench Name */
@@ -38870,6 +40270,8 @@ export interface components {
         MatterHearingCreateRequest: {
             /** Escalation Membership Id */
             escalation_membership_id?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
             /** Forum Name */
             forum_name: string;
             /**
@@ -38926,6 +40328,11 @@ export interface components {
             missing_date_count: number;
             /** Missing Date Matters */
             missing_date_matters: components["schemas"]["MatterRecord"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Overdue Count */
             overdue_count: number;
             /** Overdue Matters */
@@ -38969,6 +40376,11 @@ export interface components {
             hearing_time: string | null;
             /** Id */
             id: string;
+            /**
+             * Immutable Lifecycle History
+             * @default false
+             */
+            immutable_lifecycle_history: boolean;
             /** Judge Name */
             judge_name: string | null;
             /** Matter Id */
@@ -38977,6 +40389,8 @@ export interface components {
             outcome_note: string | null;
             /** Purpose */
             purpose: string;
+            /** Record Version */
+            record_version?: string | null;
             /** Reminder Policy */
             reminder_policy: {
                 [key: string]: unknown;
@@ -39000,6 +40414,10 @@ export interface components {
         MatterHearingUpdateRequest: {
             /** Create Follow Up */
             create_follow_up?: boolean | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
+            /** Expected Record Version */
+            expected_record_version?: string | null;
             /** Hearing On */
             hearing_on?: string | null;
             /** Hearing Time */
@@ -39270,6 +40688,49 @@ export interface components {
             id: string;
             /** Matter Id */
             matter_id: string;
+        };
+        /**
+         * MatterPortfolioHealthResponse
+         * @description Roll-up of every Matter the reader can see, counted on the server.
+         */
+        MatterPortfolioHealthResponse: {
+            /** Active Matters Count */
+            active_matters_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Forum Level Counts */
+            forum_level_counts: components["schemas"]["MatterCountBucket"][];
+            /** Hearings Next 7 Days Count */
+            hearings_next_7_days_count: number;
+            /** Idle Active Count */
+            idle_active_count: number;
+            /** Idle Active Limit */
+            idle_active_limit: number;
+            /** Idle Active Matters */
+            idle_active_matters: components["schemas"]["MatterRecord"][];
+            /** Idle After Days */
+            idle_after_days: number;
+            /** Intake Matters Count */
+            intake_matters_count: number;
+            /** Practice Area Counts */
+            practice_area_counts: components["schemas"]["MatterCountBucket"][];
+            /** Status Counts */
+            status_counts: components["schemas"]["MatterCountBucket"][];
+            /** Total Visible Count */
+            total_visible_count: number;
+        };
+        /** MatterReadScope */
+        MatterReadScope: {
+            /** Company Id */
+            company_id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Is Active */
+            matter_is_active: boolean;
+            /** Matter Lifecycle Version */
+            matter_lifecycle_version: number;
+            /** Matter Status */
+            matter_status: string;
         };
         /**
          * MatterRecord
@@ -39710,6 +41171,8 @@ export interface components {
             description?: string | null;
             /** Due On */
             due_on?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
             /** Owner Membership Id */
             owner_membership_id?: string | null;
             /**
@@ -39758,6 +41221,11 @@ export interface components {
             due_on: string | null;
             /** Id */
             id: string;
+            /**
+             * Immutable Lifecycle History
+             * @default false
+             */
+            immutable_lifecycle_history: boolean;
             /** Matter Id */
             matter_id: string;
             /** Owner Membership Id */
@@ -39798,6 +41266,10 @@ export interface components {
             description?: string | null;
             /** Due On */
             due_on?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version?: number | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Owner Membership Id */
             owner_membership_id?: string | null;
             /** Priority */
@@ -39958,6 +41430,41 @@ export interface components {
             temporary_e_case_number?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** MatterWorkQueuePage */
+        MatterWorkQueuePage: {
+            /**
+             * Dates
+             * @enum {string}
+             */
+            dates: "all" | "dated" | "undated";
+            /** Due From */
+            due_from: string | null;
+            /** Due To */
+            due_to: string | null;
+            /** Items */
+            items: components["schemas"]["WorkQueueTask"][];
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Ownership
+             * @enum {string}
+             */
+            ownership: "mine" | "team" | "unassigned";
+            /**
+             * Scope
+             * @default matter_tasks
+             * @constant
+             */
+            scope: "matter_tasks";
+            /**
+             * Sort
+             * @default due_on_created_at_id
+             * @constant
+             */
+            sort: "due_on_created_at_id";
         };
         /** MatterWorkspaceMembership */
         MatterWorkspaceMembership: {
@@ -40546,6 +42053,29 @@ export interface components {
             /** State */
             state: string;
         };
+        /** NativeClientCompatibility */
+        NativeClientCompatibility: {
+            /** Client Version */
+            client_version: string;
+            /** Minimum Supported Version */
+            minimum_supported_version: string | null;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /**
+             * Protocol Version
+             * @default 1
+             * @constant
+             */
+            protocol_version: 1;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "update_required";
+        };
         /** NativeRefreshRequest */
         NativeRefreshRequest: {
             /** Refresh Token */
@@ -40657,6 +42187,45 @@ export interface components {
              * @default false
              */
             unverified: boolean;
+        };
+        /** NiceClassCatalogueResponse */
+        NiceClassCatalogueResponse: {
+            /** Attribution */
+            attribution: string;
+            /** Classes */
+            classes: components["schemas"]["NiceClassRecord"][];
+            /** Edition */
+            edition: string;
+            /** Headings Sha256 */
+            headings_sha256: string;
+            /**
+             * In Force From
+             * Format: date
+             */
+            in_force_from: string;
+            /**
+             * Retrieved On
+             * Format: date
+             */
+            retrieved_on: string;
+            /** Source Data Url */
+            source_data_url: string;
+            /** Source Url */
+            source_url: string;
+        };
+        /** NiceClassRecord */
+        NiceClassRecord: {
+            /** Heading */
+            heading: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "goods" | "services";
+            /** Note */
+            note?: string | null;
+            /** Number */
+            number: number;
         };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
@@ -43690,6 +45259,16 @@ export interface components {
         PortalInstructionListResponse: {
             /** Instructions */
             instructions?: components["schemas"]["PortalInstructionRecord"][];
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** PortalInstructionRecord */
         PortalInstructionRecord: {
@@ -43879,6 +45458,13 @@ export interface components {
             portal_user_id: string;
             /** Portal User Name */
             portal_user_name: string;
+            /** Publication Blocked Reason */
+            publication_blocked_reason?: ("revoked" | "expired" | "client_inactive" | "docket_closed" | "docket_not_visible") | null;
+            /**
+             * Publishable
+             * @default false
+             */
+            publishable: boolean;
             /** Revoked At */
             revoked_at: string | null;
             /** Row Version */
@@ -44277,6 +45863,37 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
+        };
+        /** PortalShareableDocumentListResponse */
+        PortalShareableDocumentListResponse: {
+            /** Docket Title */
+            docket_title: string;
+            /** Document Categories */
+            document_categories: string[];
+            /** Documents */
+            documents: components["schemas"]["PortalShareableDocumentRecord"][];
+            /** Grant Id */
+            grant_id: string;
+        };
+        /**
+         * PortalShareableDocumentRecord
+         * @description One document version the publish endpoint would accept for a grant.
+         */
+        PortalShareableDocumentRecord: {
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Taxonomy Key */
+            taxonomy_key: string;
+            /** Taxonomy Label */
+            taxonomy_label: string;
+            /** Version Number */
+            version_number: number;
+            /** Version State */
+            version_state: string;
         };
         /** PortalUserRecord */
         PortalUserRecord: {
@@ -45419,6 +47036,84 @@ export interface components {
             /** Suggested Actions */
             suggested_actions?: string[];
         };
+        /** RecommendationContent */
+        RecommendationContent: {
+            analysis: components["schemas"]["RecommendationAnalysisRecord"] | null;
+            /** Assumptions */
+            assumptions: string[];
+            /** Confidence */
+            confidence: string;
+            /** Missing Facts */
+            missing_facts: string[];
+            /** Next Action */
+            next_action: string | null;
+            /** Primary Option Index */
+            primary_option_index: number;
+            /** Rationale */
+            rationale: string;
+            /** Retrieved Authorities */
+            retrieved_authorities: string[];
+            /** Review Required */
+            review_required: boolean;
+            /** Status */
+            status: string;
+            strategy_payload: components["schemas"]["LitigationStrategyPayload"] | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** RecommendationDecisionContent */
+        RecommendationDecisionContent: {
+            /** Actor Membership Id */
+            actor_membership_id: string | null;
+            /** Decision */
+            decision: string;
+            /** Notes */
+            notes: string | null;
+            /** Selected Option Index */
+            selected_option_index: number | null;
+        };
+        /** RecommendationDecisionPage */
+        RecommendationDecisionPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationDecisionRead"][];
+            /**
+             * Kind
+             * @default recommendation_decisions
+             * @constant
+             */
+            kind: "recommendation_decisions";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default created_at_desc_id_desc
+             * @constant
+             */
+            order: "created_at_desc_id_desc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** RecommendationDecisionRead */
+        RecommendationDecisionRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationDecisionContent"] | null;
+        };
         /** RecommendationDecisionRecord */
         RecommendationDecisionRecord: {
             /** Actor Membership Id */
@@ -45452,6 +47147,28 @@ export interface components {
             /** Selected Option Index */
             selected_option_index?: number | null;
         };
+        /** RecommendationDetail */
+        RecommendationDetail: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationContent"] | null;
+            scope: components["schemas"]["MatterReadScope"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** RecommendationGenerateRequest */
         RecommendationGenerateRequest: {
             /** Custom Goal */
@@ -45474,6 +47191,69 @@ export interface components {
             /** Recommendations */
             recommendations: components["schemas"]["RecommendationRecord"][];
         };
+        /** RecommendationMetadata */
+        RecommendationMetadata: {
+            /** Confidence */
+            confidence: string;
+            /** Review Required */
+            review_required: boolean;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** RecommendationOptionContent */
+        RecommendationOptionContent: {
+            /** Confidence */
+            confidence: string;
+            /** Label */
+            label: string;
+            /** Rationale */
+            rationale: string;
+            /** Risk Notes */
+            risk_notes: string | null;
+            /** Supporting Citations */
+            supporting_citations: string[];
+        };
+        /** RecommendationOptionPage */
+        RecommendationOptionPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationOptionRead"][];
+            /**
+             * Kind
+             * @default recommendation_options
+             * @constant
+             */
+            kind: "recommendation_options";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default rank_asc_id_asc
+             * @constant
+             */
+            order: "rank_asc_id_asc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
+        };
+        /** RecommendationOptionRead */
+        RecommendationOptionRead: {
+            /** Id */
+            id: string;
+            /** Rank */
+            rank: number;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationOptionContent"] | null;
+        };
         /** RecommendationOptionRecord */
         RecommendationOptionRecord: {
             /**
@@ -45493,6 +47273,30 @@ export interface components {
             risk_notes: string | null;
             /** Supporting Citations */
             supporting_citations: string[];
+        };
+        /** RecommendationPage */
+        RecommendationPage: {
+            /** Items */
+            items: components["schemas"]["RecommendationSummary"][];
+            /**
+             * Kind
+             * @default recommendations
+             * @constant
+             */
+            kind: "recommendations";
+            /** Limit */
+            limit: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Order
+             * @default created_at_desc_id_desc
+             * @constant
+             */
+            order: "created_at_desc_id_desc";
+            /** Parent Id */
+            parent_id: string | null;
+            scope: components["schemas"]["MatterReadScope"];
         };
         /** RecommendationRecord */
         RecommendationRecord: {
@@ -45542,6 +47346,27 @@ export interface components {
              * @enum {string}
              */
             type: "forum" | "authority" | "remedy" | "next_best_action" | "litigation_strategy";
+        };
+        /** RecommendationSummary */
+        RecommendationSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Read State
+             * @enum {string}
+             */
+            read_state: "available" | "unsupported_size" | "unsupported_legacy";
+            record: components["schemas"]["RecommendationMetadata"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * RecommendedDraft
@@ -48417,6 +50242,8 @@ export interface components {
         TrademarkClassScope: {
             /** Class Number */
             class_number: number;
+            /** Nice Edition */
+            nice_edition?: string;
             /** Specification */
             specification: string;
         };
@@ -48967,6 +50794,59 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** WorkQueueMatter */
+        WorkQueueMatter: {
+            /** Id */
+            id: string;
+            /**
+             * Is Active
+             * @constant
+             */
+            is_active: true;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Matter Code */
+            matter_code: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "intake" | "active" | "on_hold";
+            /** Title */
+            title: string;
+        };
+        /** WorkQueueTask */
+        WorkQueueTask: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            matter: components["schemas"]["WorkQueueMatter"];
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high" | "urgent";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "todo" | "in_progress" | "blocked";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** WorkspaceAssistantFeedbackCreateRequest */
         WorkspaceAssistantFeedbackCreateRequest: {
             /** Category */
@@ -49213,6 +51093,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TargetPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_api_account_deletion_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestCurrent"];
+                };
+            };
+        };
+    };
+    submit_api_account_deletion_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletionRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_account_deletion_requests__request_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionRequestReceipt"];
                 };
             };
             /** @description Validation Error */
@@ -52183,6 +54147,38 @@ export interface operations {
             };
         };
     };
+    client_compatibility_api_auth_native_compatibility_get: {
+        parameters: {
+            query: {
+                client_version: string;
+                platform: "android" | "ios";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeClientCompatibility"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     logout_api_auth_native_logout_post: {
         parameters: {
             query?: never;
@@ -54292,6 +56288,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarProviderEventCandidateReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_calendar_api_calendar_summary_get: {
+        parameters: {
+            query: {
+                /** @description Inclusive start date (yyyy-mm-dd). */
+                from: string;
+                /** @description Inclusive end date (yyyy-mm-dd). */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarSummaryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -56667,6 +58697,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContractRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_contract_obligations_api_contracts__contract_id__obligations_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractObligationContextPage"];
                 };
             };
             /** @description Validation Error */
@@ -59506,7 +61570,10 @@ export interface operations {
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
             query?: {
+                cursor?: string | null;
                 limit?: number;
+                query?: string | null;
+                record_type?: ("trademark" | "international_registration" | "international_designation")[] | null;
             };
             header?: never;
             path?: never;
@@ -62374,6 +64441,69 @@ export interface operations {
             };
         };
     };
+    get_ip_renewal_transition_references_api_ip_dockets__docket_id__renewal_terms__term_id__transition_references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                term_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRenewalTransitionReferences"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_docket_summary_record_api_ip_dockets__docket_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_title_interest_api_ip_dockets__docket_id__title_interests_post: {
         parameters: {
             query?: never;
@@ -62622,6 +64752,7 @@ export interface operations {
         parameters: {
             query?: {
                 docket_id?: string | null;
+                include_history?: boolean;
             };
             header?: never;
             path?: never;
@@ -62803,6 +64934,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_document_retire_api_ip_documents__document_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDocumentRetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_document_retirement_preview_api_ip_documents__document_id__retirement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocumentRetirementPreview"];
                 };
             };
             /** @description Validation Error */
@@ -63224,6 +65421,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpForeignAssociateWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_create_options_api_ip_foreign_associate_instructions_create_options_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+                target_jurisdiction?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateCreateOptionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -63831,6 +66060,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrademarkInternationalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    nice_class_catalogue_api_ip_nice_classes_get: {
+        parameters: {
+            query?: {
+                /** @description A held edition to read, for example the one a class row recorded. Omitted: the edition in force on the server date. */
+                edition?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NiceClassCatalogueResponse"];
                 };
             };
             /** @description Validation Error */
@@ -65137,6 +67398,37 @@ export interface operations {
             };
         };
     };
+    get_ip_portal_grant_shareable_documents_api_ip_portal_grants__grant_id__shareable_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalShareableDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_portal_report_publication_api_ip_portal_report_publications_post: {
         parameters: {
             query?: never;
@@ -65795,6 +68087,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpRecordalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_instrument_options_api_ip_recordals_instruments_get: {
+        parameters: {
+            query: {
+                docket_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalInstrumentOptionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -67117,6 +69440,7 @@ export interface operations {
             query?: {
                 docket_id?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -67315,6 +69639,38 @@ export interface operations {
             };
         };
     };
+    watch_publication_search_api_ip_watch_publications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalPublicationSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_working_calendar_api_ip_working_calendars_post: {
         parameters: {
             query?: never;
@@ -67360,6 +69716,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LegalCalendarActivationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalCalendarVersionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_working_calendar_withdrawal_api_ip_working_calendars__calendar_version_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalCalendarWithdrawalRequest"];
             };
         };
         responses: {
@@ -68324,6 +70715,241 @@ export interface operations {
             };
         };
     };
+    pack_api_matter_readthrough__matter_id__hearing_packs__pack_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pack_items_api_matter_readthrough__matter_id__hearing_packs__pack_id__items_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_pack_api_matter_readthrough__matter_id__hearings__hearing_id__pack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hearing_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingPackRead"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommendations_api_matter_readthrough__matter_id__recommendations_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommendation_api_matter_readthrough__matter_id__recommendations__recommendation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decisions_api_matter_readthrough__matter_id__recommendations__recommendation_id__decisions_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationDecisionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    options_api_matter_readthrough__matter_id__recommendations__recommendation_id__options_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationOptionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_tags_api_matter_tags__get: {
         parameters: {
             query?: never;
@@ -68441,6 +71067,42 @@ export interface operations {
             };
         };
     };
+    queue_api_matter_work_queue_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                dates?: "all" | "dated" | "undated";
+                due_from?: string | null;
+                due_to?: string | null;
+                limit?: number;
+                ownership?: "mine" | "team" | "unassigned";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterWorkQueuePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     current_company_matters_api_matters__get: {
         parameters: {
             query?: {
@@ -68451,6 +71113,7 @@ export interface operations {
                 cursor?: string | null;
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 has_stay?: boolean | null;
+                id?: string | null;
                 limit?: number | null;
                 max_claim_amount_minor?: number | null;
                 min_claim_amount_minor?: number | null;
@@ -71021,6 +73684,70 @@ export interface operations {
             };
         };
     };
+    issue_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__issue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_current_company_matter_invoice_draft_api_matters__matter_id__invoices__invoice_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_ip_links_api_matters__matter_id__ip_links_get: {
         parameters: {
             query?: never;
@@ -72628,6 +75355,9 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                offset?: number;
+                /** @description Read the rows of one queue only (the other list comes back empty). Both counts are always returned. */
+                queue?: ("overdue" | "missing_date") | null;
             };
             header?: never;
             path?: never;
@@ -72957,6 +75687,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_portfolio_health_api_matters_portfolio_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterPortfolioHealthResponse"];
                 };
             };
         };
@@ -73448,6 +76198,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OutsideCounselAssignmentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_matter_counsel_context_api_outside_counsel_matters__matter_id__context_get: {
+        parameters: {
+            query?: {
+                assignment_after?: string | null;
+                assignment_limit?: number;
+                spend_after?: string | null;
+                spend_limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterCounselContextResponse"];
                 };
             };
             /** @description Validation Error */
@@ -76784,6 +79570,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductGuideSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_api_recipient_inbox_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                view?: "active" | "dismissed";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_inbox_status_api_recipient_inbox__notification_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InAppNotificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxRecord"];
                 };
             };
             /** @description Validation Error */

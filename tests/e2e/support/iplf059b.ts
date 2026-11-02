@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
 import { expectStatus } from "./iplf058b";
+import { expectProvisionedDocumentTaxonomy } from "./ip-document-taxonomy";
 
 type Json = Record<string, any>;
 
@@ -106,8 +107,7 @@ export async function createForeignAssociateFixture(
     201,
   );
 
-  const taxonomy = await api.post(`${apiBase}/api/ip/document-taxonomy/seed`, { headers });
-  await expectStatus(taxonomy, 200, "seed document taxonomy");
+  await expectProvisionedDocumentTaxonomy(api, apiBase, headers);
   const filingDocumentId = await uploadDocument(
     api, apiBase, headers, docket.id, runId, false,
   );

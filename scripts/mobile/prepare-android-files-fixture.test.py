@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -59,6 +60,71 @@ class Fixtures(unittest.TestCase):
     def write_inputs(self):
         for path, body in ((self.cache / "config.json", self.config), (self.cache / "seed.json", self.seed), (self.receipt, self.core)):
             path.write_text(json.dumps(body))
+
+    def test_windows_named_zero_is_only_a_cross_api_exception_before_payload(self):
+        actual_lstat, actual_fdopen = Path.lstat, fixture.os.fdopen
+        for platform, device in (("win32", "zero"), ("win32", "same"), ("win32", "other"), ("darwin", "zero")):
+            with self.subTest(platform=platform, device=device):
+                reads, descriptors = [], []
+                def named(path, *args, **kwargs):
+                    info = actual_lstat(path, *args, **kwargs)
+                    if path != self.receipt:
+                        return info
+                    values = {key: getattr(info, key) for key in dir(info) if key.startswith("st_")}
+                    values["st_dev"] = 0 if device == "zero" else info.st_dev if device == "same" else info.st_dev + 1
+                    return types.SimpleNamespace(**values)
+                def opened(descriptor, mode):
+                    descriptors.append(descriptor)
+                    source = actual_fdopen(descriptor, mode)
+                    class Reader:
+                        def __enter__(self): return self
+                        def __exit__(self, *args): return source.__exit__(*args)
+                        def fileno(self): return source.fileno()
+                        def read(self, count): reads.append(count); return source.read(count)
+                    return Reader()
+                with patch.object(fixture.sys, "platform", platform), patch.object(Path, "lstat", named), patch.object(fixture.os, "fdopen", opened):
+                    if platform == "win32" and device in ("zero", "same"):
+                        self.assertEqual(fixture.read_bound(self.receipt)[0], self.receipt.read_bytes())
+                    else:
+                        with self.assertRaisesRegex(ValueError, "identity changed"):
+                            fixture.read_bound(self.receipt)
+                        self.assertEqual(reads, [])
+                self.assertEqual(len(descriptors), 1)
+                with self.assertRaises(OSError):
+                    fixture.os.fstat(descriptors[0])
+
+    def test_descriptor_and_named_final_frames_include_all_nine_fields(self):
+        actual_lstat, actual_fstat, actual_fdopen = Path.lstat, fixture.os.fstat, fixture.os.fdopen
+        fields = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        for target in ("fd", "named"):
+            for field in fields:
+                with self.subTest(target=target, field=field):
+                    state = {"read": False, "descriptor": None}
+                    def changed(info):
+                        values = {key: getattr(info, key) for key in dir(info) if key.startswith("st_")}
+                        values[field] += 1
+                        return types.SimpleNamespace(**values)
+                    def named(path, *args, **kwargs):
+                        info = actual_lstat(path, *args, **kwargs)
+                        return changed(info) if path == self.receipt and target == "named" and state["read"] else info
+                    def fstat(descriptor):
+                        info = actual_fstat(descriptor)
+                        return changed(info) if target == "fd" and state["read"] else info
+                    def opened(descriptor, mode):
+                        state["descriptor"] = descriptor
+                        source = actual_fdopen(descriptor, mode)
+                        class Reader:
+                            def __enter__(self): return self
+                            def __exit__(self, *args): return source.__exit__(*args)
+                            def fileno(self): return source.fileno()
+                            def read(self, count):
+                                data = source.read(count); state["read"] = True; return data
+                        return Reader()
+                    with patch.object(fixture.sys, "platform", "win32"), patch.object(Path, "lstat", named), patch.object(fixture.os, "fstat", fstat), patch.object(fixture.os, "fdopen", opened):
+                        with self.assertRaisesRegex(ValueError, "changed while reading"):
+                            fixture.read_bound(self.receipt)
+                    with self.assertRaises(OSError):
+                        actual_fstat(state["descriptor"])
 
     def generate(self, output=None):
         result = fixture.prepare(self.cache, self.receipt, output or self.output)
@@ -249,6 +315,51 @@ class Fixtures(unittest.TestCase):
         Path(reference["path"]).write_bytes(b'{"changed":"must-not-verify"}')
         with self.assertRaisesRegex(ValueError, "hash mismatch"):
             fixture.read_bound(reference["path"], reference["sha256"])
+
+
+
+class UsbReverseFixtures(unittest.TestCase):
+    setUp = Fixtures.setUp
+    write_inputs = Fixtures.write_inputs
+    def usb(self):
+        self.config['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'] = 'usb-reverse'
+        self.core['androidTransportMode'] = 'usb-reverse'
+        for key, port in (('apiOrigin', '8453'), ('webOrigin', '3453')):
+            self.core[key] = 'https://127.0.0.1:' + port
+            self.config['CASEOPS_MOBILE_' + ('API' if key == 'apiOrigin' else 'WEB') + '_ORIGIN'] = self.core[key]
+        helper = fixture.HERE / 'local-transport.py'
+        self.core['fixtureSourceHashes']['scripts/mobile/local-transport.py'] = hashlib.sha256(helper.read_bytes()).hexdigest()
+        self.write_inputs()
+
+    def test_usb_binding_and_snapshot_preserve_mode_after_gateway_reset(self):
+        self.usb(); fixture.prepare(self.cache, self.receipt, self.output)
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertEqual(manifest['androidTransportMode'], 'usb-reverse')
+        self.assertEqual(manifest['apiOrigin'], 'https://127.0.0.1:8453')
+        snapshot = manifest['configEvidence']; before = Path(snapshot['path']).read_bytes()
+        self.config['CASEOPS_MOBILE_GATEWAY_RUN_ID'] = 'later-unit-reset'; self.write_inputs()
+        self.assertEqual(fixture.read_bound(snapshot['path'], snapshot['sha256'])[0], before)
+        self.assertEqual(json.loads(before)['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'], 'usb-reverse')
+
+    def test_usb_missing_or_wrong_mode_receipt_is_refused(self):
+        self.usb()
+        for mode in (None, 'emulator', 'unknown'):
+            with self.subTest(mode=mode):
+                self.core.pop('androidTransportMode', None)
+                if mode is not None: self.core['androidTransportMode'] = mode
+                self.write_inputs()
+                with self.assertRaises(ValueError): fixture.binding(self.cache, self.receipt)
+
+    def test_usb_mixed_origin_and_helper_source_are_refused(self):
+        self.usb(); self.core['webOrigin'] = 'https://10.0.2.2:3453'; self.write_inputs()
+        with self.assertRaises(ValueError): fixture.binding(self.cache, self.receipt)
+        self.usb(); self.core['fixtureSourceHashes']['scripts/mobile/local-transport.py'] = '0' * 64; self.write_inputs()
+        with self.assertRaisesRegex(ValueError, 'transport source hash mismatch'): fixture.binding(self.cache, self.receipt)
+
+    def test_usb_unknown_config_mode_is_refused_before_asset_creation(self):
+        self.config['CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'] = 'unknown'; self.write_inputs()
+        with self.assertRaises(ValueError): fixture.prepare(self.cache, self.receipt, self.output)
+        self.assertFalse(self.output.exists())
 
 
 if __name__ == "__main__":

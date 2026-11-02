@@ -18,13 +18,50 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestIosFilesContainers, snapshotIosFilesPrivacy } from './ios-files-privacy.mjs';
 
+export function captureIosFilesPrivacy(options, phase, snapshot = snapshotIosFilesPrivacy) {
+  assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'FILES_PRIVACY_PHASE_REQUIRED');
+  const result = snapshot({ ...options, verifyProviderBytes: phase === 'postflight' }), value = result.snapshot;
+  assert.equal(value.schemaVersion, 2, 'FILES_COLD_PRIVACY_SCHEMA_REQUIRED');
+  assert.equal(value.complete, true, 'COMPLETE_FILES_PRIVACY_SCAN_REQUIRED');
+  assert.equal(value.providerMetadataPreserved, true, 'FILES_PROVIDER_METADATA_CHANGED');
+  assert.equal(value.providerByteVerification, phase === 'postflight' ? 'postflight' : 'deferred-until-postflight', 'FILES_PROVIDER_VERIFICATION_PHASE_MISMATCH');
+  assert.equal(value.providerOriginalsRead, phase === 'postflight', 'FILES_PROVIDER_READ_PHASE_MISMATCH');
+  assert.equal(value.providerOriginalsPreserved, phase === 'postflight' ? true : null, 'FILES_PROVIDER_ORIGINALS_CHANGED');
+  assert.equal(value.counts.ownedStagingFiles, 0, 'FILES_OWNED_STAGING_REMAINS');
+  assert.equal(value.counts.privateAssetMatchCount, 0, 'FILES_PRIVATE_COPY_REMAINS');
+  return result;
+}
+
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const readRef = (reference) => JSON.parse(verifiedFile(reference?.path, reference?.sha256));
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const ref = (file) => ({ path: file, sha256: digest(readFileSync(file)) });
+export function validateIosFilesCache(fixture) {
+  const cache = fixture.filesCache;
+  assert.ok(typeof cache === 'string' && path.isAbsolute(cache) && path.normalize(cache) === cache,
+    'IOS_FILES_EXPLICIT_ABSOLUTE_CACHE_REQUIRED');
+  const manifest = readRef(fixture.files?.manifestEvidence);
+  assert.equal(path.dirname(fixture.isolationEvidence.path), cache, 'IOS_FILES_RECEIPT_CACHE_MISMATCH');
+  assert.equal(path.dirname(manifest.isolationReceipt.path), cache, 'IOS_FILES_MANIFEST_CACHE_MISMATCH');
+  assert.equal(manifest.baseSeed.path, path.join(cache, 'seed.json'), 'IOS_FILES_SEED_CACHE_MISMATCH');
+  assert.equal(fixture.publicCa.path, path.join(cache, 'tls/ca.crt'), 'IOS_FILES_CA_CACHE_MISMATCH');
+  return cache;
+}
+export function iosSourceAdmissionDiagnostic(result) {
+  const knownClasses = new Set(['AssertionError', 'ValueError', 'TimeoutError', 'FileExistsError',
+    'FileNotFoundError', 'PermissionError', 'RuntimeError', 'JSONDecodeError']);
+  let failureClass = 'unclassified';
+  try {
+    const value = JSON.parse(result.stderr || '');
+    if (value.sourceRouteAdmitted === false && knownClasses.has(value.error)) failureClass = value.error;
+  } catch { /* Argparse and transport output remain unclassified; never retain their text. */ }
+  return { exitStatus: Number.isInteger(result.status) ? result.status : null,
+    timedOut: result.error?.code === 'ETIMEDOUT',
+    launchFailed: !!result.error && result.error.code !== 'ETIMEDOUT', failureClass };
+}
 export function knownFileSources(assets) {
   const previous = assets.priorManifestEvidence || [];
-  assert.ok(Array.isArray(previous) && previous.length <= 5, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
+  assert.ok(Array.isArray(previous) && previous.length <= 6, 'BOUNDED_PRIOR_FILES_COHORTS_REQUIRED');
   const current = readRef(assets.manifestEvidence);
   assert.equal(current.syntheticDataOnly, true, 'SYNTHETIC_CURRENT_FILES_REQUIRED');
   assert.equal(current.kind, 'ios-files-synthetic-fixtures', 'CURRENT_FILES_MANIFEST_REQUIRED');
@@ -124,6 +161,7 @@ export async function runIosFiles() {
     assert.equal(fixture.syntheticDataOnly, true, 'SYNTHETIC_FIXTURE_REQUIRED');
     assert.equal(fixture.filesInventory, inventory.inventoryId, 'EXACT_FILES_INVENTORY_REQUIRED');
     assets = fixture.files;
+    validateIosFilesCache(fixture);
     readRef(assets.manifestEvidence); readRef(assets.pickerEvidence);
     validateSourceSeed(fixture, assets.source);
     const fileInputs = { fixture, assets, source: assets.source, provider: assets.provider };
@@ -140,10 +178,10 @@ export async function runIosFiles() {
     const staged = readRef(assets.providerEvidence);
     assert.equal(staged.folderName, assets.provider.folderName, 'FILES_STAGED_PICKER_FOLDER_MISMATCH');
     assert.deepEqual(staged.manifestEvidence, assets.manifestEvidence, 'FILES_STAGED_MANIFEST_MISMATCH');
-    const preflightPrivacy = snapshotIosFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
-      knownSources: knownFileSources(assets), output: path.join(report, 'preflight-filesystem.json') });
+    const preflightPrivacy = captureIosFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
+      knownSources: knownFileSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');
     assert.equal(preflightPrivacy.snapshot.complete, true, 'COMPLETE_FILES_PREFLIGHT_SCAN_REQUIRED');
-    assert.equal(preflightPrivacy.snapshot.providerOriginalsPreserved, true, 'FILES_PROVIDER_ORIGINALS_CHANGED');
+    assert.equal(preflightPrivacy.snapshot.providerMetadataPreserved, true, 'FILES_PROVIDER_ORIGINALS_CHANGED');
     assert.equal(preflightPrivacy.snapshot.counts.privateAssetMatchCount, 0, 'FILES_PREFLIGHT_PRIVATE_COPY_REMAINS');
     assert.equal(preflightPrivacy.snapshot.counts.ownedStagingFiles, 0, 'FILES_PREFLIGHT_STAGING_REMAINS');
     const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
@@ -199,16 +237,17 @@ export async function runIosFiles() {
           assert.ok(knownAssetHashes.every(hash => hash === assets.source.sha256 || manifest.assets.some(asset => asset.sha256 === hash)), 'UNOWNED_PRIVACY_ASSET');
           const currentContainers = attestIosFilesContainers({ udid: fixture.udid, appId: fixture.appId });
           assert.equal(currentContainers.appData.path, containers.appData.path, 'FILES_APP_CONTAINER_CHANGED');
-          const { snapshot, snapshotEvidence } = snapshotIosFilesPrivacy({ containers: currentContainers, stagingEvidence: assets.providerEvidence,
-            knownSources: knownFileSources(assets), output });
+          const { snapshot, snapshotEvidence } = captureIosFilesPrivacy({ containers: currentContainers, stagingEvidence: assets.providerEvidence,
+            knownSources: knownFileSources(assets), output }, 'checkpoint');
           assert.equal(snapshot.complete, true, 'COMPLETE_FILES_PRIVACY_SCAN_REQUIRED');
           assert.equal(snapshot.udid, fixture.udid, 'FILES_DEVICE_MISMATCH');
           assert.equal(snapshot.appId, fixture.appId, 'FILES_APP_MISMATCH');
           assert.equal(snapshot.appDataPath, containers.appData.path, 'FILES_APP_CONTAINER_MISMATCH');
           const assertionPath = `${output}.assertion.json`;
-          writeFileSync(assertionPath, `${JSON.stringify({ schemaVersion: 1, observed: true, platform: 'ios', udid: snapshot.udid,
+          writeFileSync(assertionPath, `${JSON.stringify({ schemaVersion: 2, observed: true, platform: 'ios', udid: snapshot.udid,
             bundleId: snapshot.appId, boundary, ownedAppScopeOnly: true,
-            providerOriginalsUnchanged: snapshot.providerOriginalsPreserved, stagedFileCount: snapshot.counts.ownedStagingFiles,
+            providerOriginalsUnchanged: snapshot.providerOriginalsPreserved, providerMetadataUnchanged: snapshot.providerMetadataPreserved,
+            providerOriginalsRead: snapshot.providerOriginalsRead, providerByteVerification: snapshot.providerByteVerification, stagedFileCount: snapshot.counts.ownedStagingFiles,
             privateByteMatchCount: snapshot.counts.privateAssetMatchCount, rawEvidence: snapshotEvidence }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
           const evidence = ref(assertionPath);
           journal.write({ type: 'filesystem_observation', id, boundary, evidence, rawEvidence: snapshotEvidence });
@@ -220,13 +259,14 @@ export async function runIosFiles() {
           const matches = manifest.assets.filter(asset => asset.sha256 === anchor.sha256 && asset.filename === anchor.filename && asset.sizeBytes === anchor.sizeBytes);
           assert.equal(matches.length, 1, 'EXACT_ACKNOWLEDGED_ASSET_REQUIRED');
           const output = path.join(report, `${scenario.id}-source-admission-${randomUUID().slice(0, 8)}.json`);
-          const result = spawnSync('python3', [path.join(root, 'scripts/mobile/admit-ios-file-source.py'),
+          const result = spawnSync(process.env.PYTHON || 'python3', [path.join(root, 'scripts/mobile/admit-ios-file-source.py'),
             '--cache', fixture.filesCache, '--receipt', fixture.isolationEvidence.path, '--manifest', assets.manifestEvidence.path,
             '--manifest-sha256', assets.manifestEvidence.sha256, '--asset-id', matches[0].id,
             '--attachment-id', anchor.attachmentId, '--sha256', anchor.sha256, '--size-bytes', String(anchor.sizeBytes),
             // Two ten-second container inspections plus the helper's bounded
             // 55-second proof. This does not extend the 30-second upload wait.
             '--filename', anchor.filename, '--ack-request-id', ack.requestId, '--output', output], { cwd: root, encoding: 'utf8', timeout: 80000, maxBuffer: 65536 });
+          journal.write({ type: 'source_admission_process', id, ...iosSourceAdmissionDiagnostic(result), automaticRetry: false });
           assert.equal(result.status, 0, 'EXACT_UPLOADED_SOURCE_ADMISSION_FAILED');
           const admission = JSON.parse(result.stdout.trim());
           journal.write({ type: 'source_admission', id, ...admission });
@@ -277,6 +317,13 @@ export async function runIosFiles() {
       writeFileSync(path.join(report, 'gateway-after.json'), `${JSON.stringify(after, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     } catch { journal.write({ type: 'gateway_capture_failed', reason: 'FILES_POSTFLIGHT_LEDGER_UNAVAILABLE' }); }
     try {
+      // The17-case loop has ended. Original bytes are read only here, after all
+      // picker journeys and their session teardown; timeout leaves this unverified.
+      const finalContainers = attestIosFilesContainers({ udid: fixture.udid, appId: fixture.appId });
+      assert.equal(finalContainers.appData.path, containers.appData.path, 'FILES_APP_CONTAINER_CHANGED');
+      const originals = captureIosFilesPrivacy({ containers: finalContainers,
+        stagingEvidence: assets.providerEvidence, knownSources: knownFileSources(assets), output: path.join(report, 'postflight-filesystem.json') }, 'postflight');
+      journal.write({ type: 'provider_originals_postflight', evidence: originals.snapshotEvidence, status: 'passed' });
       assert.equal(iosFilesHarnessFingerprint(), frozen, 'HARNESS_CHANGED_DURING_RUN');
       const source = sourceSnapshot(root);
       assert.equal(source.sourceSha, fixture.binarySourceSha, 'SOURCE_COMMIT_CHANGED_DURING_RUN');

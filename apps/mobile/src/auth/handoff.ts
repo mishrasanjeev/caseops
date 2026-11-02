@@ -1,3 +1,4 @@
+import { allowsNativeRedirect, DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from "../../../web/lib/native-link-policy.cjs";
 export const NATIVE_CALLBACK = "caseops://oauth/callback";
 export type Handoff = {
   state: string;
@@ -6,19 +7,32 @@ export type Handoff = {
   platform: "android" | "ios";
 };
 
-export function authorizationUrl(webOrigin: string, handoff: Handoff): string {
+export function authSessionCallback(policy: NativeLinkPolicy, platform: string, osVersion: unknown): { redirectUri: string; options: { preferEphemeralSession: true; preferUniversalLinks?: true } } {
+  if (policy.mode === "disabled" || !allowsNativeRedirect(policy.redirectUri, policy)) throw new Error("NATIVE_SIGN_IN_NOT_CONFIGURED");
+  if (!["ios", "android"].includes(platform)) throw new Error("NATIVE_PLATFORM_REQUIRED");
+  if (policy.mode === "https" && platform === "ios") {
+    const version = typeof osVersion === "string" && /^(\d+)\.(\d+)(?:\.\d+)*$/.exec(osVersion);
+    if (!version || Number(version[1]) < 17 || (Number(version[1]) === 17 && Number(version[2]) < 4))
+      throw new Error("IOS_HTTPS_CALLBACK_REQUIRES_17_4");
+    return { redirectUri: policy.redirectUri, options: { preferEphemeralSession: true, preferUniversalLinks: true } };
+  }
+  return { redirectUri: policy.redirectUri, options: { preferEphemeralSession: true } };
+}
+
+export function authorizationUrl(webOrigin: string, handoff: Handoff, policy: NativeLinkPolicy = DISABLED_NATIVE_LINK_POLICY): string {
+  if (policy.mode === "disabled" || !allowsNativeRedirect(policy.redirectUri, policy)) throw new Error("NATIVE_SIGN_IN_NOT_CONFIGURED");
   const url = new URL("/native/sign-in", webOrigin);
   url.searchParams.set("code_challenge", handoff.challenge);
   url.searchParams.set("state", handoff.state);
   url.searchParams.set("platform", handoff.platform);
-  url.searchParams.set("redirect_uri", NATIVE_CALLBACK);
+  url.searchParams.set("redirect_uri", policy.redirectUri);
   return url.href;
 }
 
-export function parseCallback(value: string, expectedState: string): string {
+export function parseCallback(value: string, expectedState: string, policy: NativeLinkPolicy = DISABLED_NATIVE_LINK_POLICY): string {
   const url = new URL(value);
   if (
-    `${url.protocol}//${url.host}${url.pathname}` !== NATIVE_CALLBACK ||
+    !allowsNativeRedirect(`${url.protocol}//${url.host}${url.pathname}`, policy) ||
     url.hash ||
     url.username ||
     url.password ||

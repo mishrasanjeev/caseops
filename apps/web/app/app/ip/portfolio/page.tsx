@@ -73,6 +73,8 @@ import {
   type IpPortfolioSavedView,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { parseNiceClasses } from "@/lib/ip/nice-classes";
+import { exportColumns, phaseLabel, portfolioStatus, recordStatusLabel, sourceStatusIsAhead } from "@/lib/ip/portfolio-status";
 
 const COLUMN_OPTIONS = [
   ["mark", "Mark"],
@@ -100,6 +102,12 @@ const COLUMN_OPTIONS = [
 ] as const;
 
 type ColumnKey = (typeof COLUMN_OPTIONS)[number][0];
+
+// The Mark column carries the record link and Edit dates, so it is always
+// shown first and stays pinned while the other columns scroll (B4-ADJ-13).
+function withMarkFirst(columns: ColumnKey[]): ColumnKey[] {
+  return ["mark", ...columns.filter((column) => column !== "mark")];
+}
 
 const DEFAULT_COLUMNS: ColumnKey[] = [
   "mark",
@@ -141,6 +149,12 @@ export default function IpPortfolioPage() {
   const canView = useCapability("ip:read");
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<IpPortfolioFilters>(EMPTY_FILTERS);
+  // What the person typed in the Nice class filter; null shows the applied classes.
+  const [classDraft, setClassDraft] = useState<string | null>(null);
+  const classParse = parseNiceClasses(classDraft ?? "");
+  const classFilterError = classDraft !== null && classParse.errors.length
+    ? classParse.errors.map((row) => row.message).join(" ")
+    : null;
   const [queryDraft, setQueryDraft] = useState("");
   const [columns, setColumns] = useState<ColumnKey[]>(DEFAULT_COLUMNS);
   const [selectedViewId, setSelectedViewId] = useState("none");
@@ -233,7 +247,7 @@ export default function IpPortfolioPage() {
   });
 
   const previewExport = useMutation({
-    mutationFn: () => previewIpPortfolioExport({ filters, columns, rowLimit: 50000 }),
+    mutationFn: () => previewIpPortfolioExport({ filters, columns: exportColumns(columns), rowLimit: 50000 }),
     onSuccess: setExportPreview,
     onError: (error) => toast.error(apiErrorMessage(error, "Could not preview the export.")),
   });
@@ -243,7 +257,7 @@ export default function IpPortfolioPage() {
       if (!exportPreview) throw new Error("Export preview is required.");
       return createIpPortfolioExport({
         filters,
-        columns,
+        columns: exportColumns(columns),
         rowLimit: 50000,
         previewToken: exportPreview.preview_token,
       });
@@ -276,8 +290,9 @@ export default function IpPortfolioPage() {
     const view = savedViews.data?.views.find((candidate) => candidate.id === id);
     if (!view) return;
     setFilters(view.filters);
+    setClassDraft(null);
     setQueryDraft(view.filters.query ?? "");
-    setColumns(view.columns.filter(isColumnKey));
+    setColumns(withMarkFirst(view.columns.filter(isColumnKey)));
     if (viewMode === "tracker") {
       const supported = new Set(["query", "renewal_tracker_state", "application_date_from",
         "application_date_to", "renewal_due_from", "renewal_due_to"]);
@@ -333,6 +348,7 @@ export default function IpPortfolioPage() {
               </Button>
               <Button size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"}
                 aria-label="Deadline tracker view" title="Deadline tracker view" onClick={() => {
+                  setClassDraft(null);
                   setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state?.slice(0, 1) ?? [],
                     application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
                     renewal_due_from: filters.renewal_due_from, renewal_due_to: filters.renewal_due_to });
@@ -416,9 +432,9 @@ export default function IpPortfolioPage() {
               onChange={(value) => setFilters((current) => ({ ...current, filing_phase: one(value) }))}
             />
             <FilterSelect
-              label="Status"
+              label="Record status"
               value={first(filters.docket_status)}
-              options={[["all", "All statuses"], ["draft", "Draft"], ["ready", "Ready"], ["on_hold", "On hold"], ["closed", "Closed"]]}
+              options={[["all", "All record statuses"], ["draft", "Particulars draft"], ["ready", "Particulars ready"], ["on_hold", "On hold"], ["closed", "Closed"]]}
               onChange={(value) => setFilters((current) => ({ ...current, docket_status: one(value) }))}
             />
           </div>
@@ -433,6 +449,7 @@ export default function IpPortfolioPage() {
               <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
               {COLUMN_OPTIONS.map(([key, label]) => {
                 const checked = columns.includes(key);
+                const pinned = key === "mark";
                 return (
                   <label
                     key={key}
@@ -441,6 +458,7 @@ export default function IpPortfolioPage() {
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={pinned}
                       onChange={() => {
                         setColumns((current) =>
                           checked
@@ -451,7 +469,7 @@ export default function IpPortfolioPage() {
                         );
                       }}
                     />
-                    <span>{label}</span>
+                    <span>{pinned ? `${label} (always shown)` : label}</span>
                   </label>
                 );
               })}
@@ -493,20 +511,28 @@ export default function IpPortfolioPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="portfolio-class-filter">Nice class</Label>
+                <Label htmlFor="portfolio-class-filter">Nice classes</Label>
                 <Input
                   id="portfolio-class-filter"
-                  inputMode="numeric"
-                  value={filters.nice_class?.[0] ?? ""}
+                  value={classDraft ?? (filters.nice_class ?? []).join(", ")}
+                  placeholder="e.g. 9, 42"
+                  aria-invalid={classFilterError ? true : undefined}
+                  aria-describedby={classFilterError ? "portfolio-class-filter-error" : undefined}
                   onChange={(event) => {
-                    const value = Number(event.target.value);
-                    setFilters((current) => ({
-                      ...current,
-                      nice_class:
-                        Number.isInteger(value) && value >= 1 && value <= 45 ? [value] : [],
-                    }));
+                    const text = event.target.value;
+                    setClassDraft(text);
+                    const parsed = parseNiceClasses(text);
+                    // An unreadable token keeps the last valid filter instead of silently widening it.
+                    if (!parsed.errors.length) {
+                      setFilters((current) => ({ ...current, nice_class: parsed.classes }));
+                    }
                   }}
                 />
+                {classFilterError ? (
+                  <p id="portfolio-class-filter-error" className="text-sm text-[var(--color-danger-500)]">
+                    {classFilterError}
+                  </p>
+                ) : null}
               </div>
               <FilterSelect
                 label="Deadline state"
@@ -921,7 +947,12 @@ function PortfolioTable({ rows, columns, onEdit }: { rows: IpPortfolioRow[]; col
         <thead className="bg-[var(--color-bg-2)] text-xs font-semibold text-[var(--color-mute)]">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="w-44 px-3 py-2.5">
+              <th
+                key={column}
+                className={column === "mark"
+                  ? "sticky left-0 z-[1] w-56 bg-[var(--color-bg-2)] px-3 py-2.5 shadow-[1px_0_0_var(--color-line)]"
+                  : "w-44 px-3 py-2.5"}
+              >
                 {COLUMN_OPTIONS.find(([key]) => key === column)?.[1]}
               </th>
             ))}
@@ -929,9 +960,14 @@ function PortfolioTable({ rows, columns, onEdit }: { rows: IpPortfolioRow[]; col
         </thead>
         <tbody className="divide-y divide-[var(--color-line)]">
           {rows.map((row) => (
-            <tr key={row.application_id} className="align-top hover:bg-[var(--color-bg-2)]/60">
+            <tr key={row.application_id} className="group align-top hover:bg-[var(--color-bg-2)]">
               {columns.map((column) => (
-                <td key={column} className="px-3 py-3">
+                <td
+                  key={column}
+                  className={column === "mark"
+                    ? "sticky left-0 z-[1] bg-[var(--color-bg)] px-3 py-3 shadow-[1px_0_0_var(--color-line)] group-hover:bg-[var(--color-bg-2)]"
+                    : "px-3 py-3"}
+                >
                   <PortfolioValue row={row} column={column} onEdit={onEdit} />
                 </td>
               ))}
@@ -1014,10 +1050,28 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
       return row.jurisdiction ?? "Not recorded";
     case "office":
       return row.office ?? "Not recorded";
-    case "status":
-      return <Badge>{row.docket_status.replaceAll("_", " ")}</Badge>;
+    case "status": {
+      // B4-ADJ-11: the headline is the mark's status (its filing phase, or an
+      // import's source wording marked unverified); the docket's particulars
+      // state is labelled beneath it and never reads as the mark's status.
+      const status = portfolioStatus(row);
+      return (
+        <span className="flex min-w-0 flex-col items-start gap-1" data-testid={`ip-portfolio-status-${row.docket_id}`}>
+          <Badge tone={status.unverified ? "warning" : "neutral"}>{status.label}</Badge>
+          {status.unverified ? (
+            <span className="text-xs text-[var(--color-mute)]">Filing phase: {phaseLabel(row.filing_phase)}</span>
+          ) : null}
+          <span className="text-xs text-[var(--color-mute)]">{recordStatusLabel(row.docket_status)}</span>
+        </span>
+      );
+    }
     case "phase":
-      return row.filing_phase.replaceAll("_", " ");
+      return (
+        <span>
+          {phaseLabel(row.filing_phase)}
+          <DeclaredStatus row={row} />
+        </span>
+      );
     case "proprietors":
       return <ListValue values={row.proprietors} />;
     case "agents":
@@ -1070,6 +1124,16 @@ function PortfolioValue({ row, column, onEdit }: { row: IpPortfolioRow; column: 
     case "updated_at":
       return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(row.updated_at));
   }
+}
+
+/** Status a portfolio import's source declared; never shown as the legal phase. */
+function DeclaredStatus({ row }: { row: IpPortfolioRow }) {
+  if (!sourceStatusIsAhead(row)) return null;
+  return (
+    <span className="mt-1 block text-xs text-[var(--color-mute)]" data-testid={`ip-portfolio-declared-status-${row.docket_id}`}>
+      Source status: {row.source_status_text} (unverified)
+    </span>
+  );
 }
 
 function ListValue({ values, mono = false }: { values: string[]; mono?: boolean }) {

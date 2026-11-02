@@ -54,7 +54,13 @@ const root = process.argv[2];
 assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.12\.1\+1\b/, 'PINNED_TEMURIN_21_REQUIRED');
 assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.20\.1\+1\b/, 'PINNED_TEMURIN_17_REQUIRED');
 NODE
-export PATH="$JAVA_HOME/bin:$PATH"
+if [[ -n "${CASEOPS_ANDROID_HOST_POLICY_FILE:-}" || -n "${CASEOPS_ANDROID_HOST_POLICY_SHA256:-}" ]]; then
+  : "${CASEOPS_ANDROID_HOST_POLICY_FILE:?Supply the admitted Android role policy}"
+  : "${CASEOPS_ANDROID_HOST_POLICY_SHA256:?Supply its exact SHA256}"
+  [[ "$(command -v java)" = "$JAVA_HOME/bin/java" ]] || { echo 'ADMITTED_ANDROID_JAVA_PATH_REQUIRED' >&2; exit 1; }
+else
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
 export CASEOPS_MOBILE_BUILD_PROFILE=android-local-acceptance CASEOPS_MOBILE_AUTOMATED_TEST=1
 export CASEOPS_MOBILE_RELEASE_SHA="$(git -C "$repo" rev-parse HEAD)"
 export NODE_ENV=production EXPO_NO_DOTENV=1 CMAKE_BUILD_PARALLEL_LEVEL=2
@@ -63,6 +69,7 @@ aapt="$ANDROID_HOME/build-tools/37.0.0/aapt2"
 apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
 [[ -x "$aapt" && -x "$apksigner" ]] || { echo 'Pinned AAPT2 and apksigner are required; no SDK installation is performed.' >&2; exit 1; }
 cd "$repo/apps/mobile"
+node "$repo/scripts/mobile/prepare-viewer-assets.mjs" --check 2>&1 | tee "$run/viewer-assets-check.log"
 node "$proof" check android "$run/before.json" 2>&1 | tee "$run/check.log"
 node ./node_modules/expo/bin/cli prebuild --platform android --no-install 2>&1 | tee "$run/prebuild.log"
 node - "$PWD/android" "$run" <<'NODE'
@@ -82,17 +89,25 @@ fs.writeFileSync(path.join(output, 'generated-android-inputs.json'), JSON.string
 NODE
 (
   cd android
-  ./gradlew :app:assembleLocalAcceptance -PreactNativeArchitectures=arm64-v8a \
-    -Pandroid.compileSdkVersion=37 -Pandroid.buildToolsVersion=37.0.0 \
-    -Pandroid.ndkVersion=27.1.12297006 -Pandroid.cmakeVersion=3.30.5 -Pandroid.builder.sdkDownload=false \
-    "-Dorg.gradle.java.installations.paths=$CASEOPS_ANDROID_JDK17_HOME,$JAVA_HOME" \
-    -Dorg.gradle.java.installations.auto-download=false --no-daemon --max-workers=2 --console=plain
+  gradle_command=(./gradlew :app:assembleLocalAcceptance -PreactNativeArchitectures=arm64-v8a
+    -Pandroid.compileSdkVersion=37 -Pandroid.buildToolsVersion=37.0.0
+    -Pandroid.ndkVersion=27.1.12297006 -Pandroid.cmakeVersion=3.30.5 -Pandroid.builder.sdkDownload=false
+    "-Dorg.gradle.java.installations.paths=$CASEOPS_ANDROID_JDK17_HOME,$JAVA_HOME"
+    -Dorg.gradle.java.installations.auto-download=false --no-daemon --max-workers=2 --console=plain)
+  if [[ -n "${CASEOPS_ANDROID_HOST_POLICY_FILE:-}" || -n "${CASEOPS_ANDROID_HOST_POLICY_SHA256:-}" ]]; then
+    : "${CASEOPS_ANDROID_HOST_POLICY_FILE:?Supply the admitted Android role policy}"
+    : "${CASEOPS_ANDROID_HOST_POLICY_SHA256:?Supply its exact SHA256}"
+    node "$repo/scripts/mobile/android-host-launch.mjs" gradle -- "${gradle_command[@]}"
+  else
+    "${gradle_command[@]}"
+  fi
 ) 2>&1 | tee "$run/gradle.log"
 apk="$run/caseops-local-acceptance-arm64.apk"
 cp android/app/build/outputs/apk/localAcceptance/app-localAcceptance.apk "$apk"
-node - "$apk" "$run/apk-before-inspection.json" <<'NODE'
+node - "$apk" "$run/apk-before-inspection.json" "$proof" <<'NODE'
 const fs = require('node:fs'), crypto = require('node:crypto');
-const [apk, output] = process.argv.slice(2), sha256 = crypto.createHash('sha256').update(fs.readFileSync(apk)).digest('hex');
+const [apk, output, proofModule] = process.argv.slice(2), { readBuildInput } = require(proofModule);
+const sha256 = crypto.createHash('sha256').update(readBuildInput(apk, 512 * 1024 * 1024)).digest('hex');
 fs.writeFileSync(output, JSON.stringify({ sha256 }) + '\n', { flag: 'wx' });
 NODE
 "$aapt" dump badging "$apk" >"$run/apk-badging.log" 2>"$run/apk-badging.stderr"
@@ -125,9 +140,9 @@ with zipfile.ZipFile(apk) as source:
     with (root/'apk-abi.json').open('x') as output:json.dump({'schemaVersion':1,'abis':abis,'nativeLibraryCount':len(libraries),'elfClass':64,'elfMachine':183},output)
 PY
 node "$proof" android-zip "$run/android-resources.json" "$run/apk-zip-inventory.json" "$run/public-ca-from-apk.pem" "$run/before.json" "$apk" "$run/android-security.json" 2>&1 | tee "$run/zip.log"
-node - "$run" "$apk" <<'NODE'
+node - "$run" "$apk" "$proof" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
-const [root, apk] = process.argv.slice(2), digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const [root, apk, proofModule] = process.argv.slice(2), { readBuildInput } = require(proofModule), digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const badging = fs.readFileSync(path.join(root, 'apk-badging.log'), 'utf8'), signing = fs.readFileSync(path.join(root, 'apk-signing.log'), 'utf8');
 assert.ok(Buffer.byteLength(badging) <= 1048576 && Buffer.byteLength(signing) <= 1048576, 'BOUNDED_SDK_IDENTITY_OUTPUT_REQUIRED');
 const identity = /^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/m.exec(badging);
@@ -144,7 +159,7 @@ const certificates = signingLines.filter(line => line.includes('certificate SHA-
 assert.equal(certificates.length, 1, 'ONE_APK_SIGNER_REQUIRED');
 const certificate = /^(?:Signer #1 certificate|V2 Signer: certificate) SHA-256 digest: ([a-fA-F0-9]{64})$/.exec(certificates[0]);
 assert.ok(certificate, 'ONE_APK_SIGNER_REQUIRED');
-const artifactSha256 = digest(fs.readFileSync(apk));
+const artifactSha256 = digest(readBuildInput(apk, 512 * 1024 * 1024));
 assert.equal(artifactSha256, JSON.parse(fs.readFileSync(path.join(root, 'apk-before-inspection.json'), 'utf8')).sha256, 'APK_CHANGED_DURING_SIGNING_OR_ABI_INSPECTION');
 assert.ok(Number.isSafeInteger(Number(identity[2])) && Number(identity[2]) > 0, 'POSITIVE_APK_VERSION_CODE_REQUIRED');
 const refs = ['apk-badging.log', 'apk-signing.log', 'apk-abi.json', 'generated-android-inputs.json', 'java21.log', 'java17.log']

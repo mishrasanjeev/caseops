@@ -6,6 +6,7 @@ import {
   decodeRendererEvent,
 } from "./security.ts";
 import { createViewerHtml } from "./html.ts";
+import { rendererMain } from "./renderer-runtime.ts";
 const id = "a".repeat(32);
 
 test("native-viewer security: navigation never hands off network/file/custom schemes", () => {
@@ -103,4 +104,23 @@ test("native-viewer security: generated HTML is public-only with nonce CSP, no e
     /Bearer |access_token|refresh_token|\/api\/matters\//,
   );
   assert.throws(() => createViewerHtml(`"><script`));
+});
+
+test("native-viewer security: browser program survives bytecode/native/absent Function source without runtime serialization", () => {
+  const baseline = createViewerHtml(id);
+  const previous = Object.getOwnPropertyDescriptor(rendererMain, "toString");
+  try {
+    for (const value of [() => "function rendererMain(a0) { [bytecode] }", () => "function rendererMain(a0) { [native code] }", () => { throw new Error("HERMES_FUNCTION_SOURCE_UNAVAILABLE"); }]) {
+      Object.defineProperty(rendererMain, "toString", { value, configurable: true });
+      const actual = createViewerHtml(id);
+      assert.equal(actual, baseline);
+      assert.ok(actual.includes("const host = window"));
+      assert.ok(actual.includes('send("ready")'));
+      assert.equal(actual.includes("[bytecode]"), false);
+      assert.equal(actual.includes("[native code]"), false);
+    }
+  } finally {
+    if (previous) Object.defineProperty(rendererMain, "toString", previous);
+    else Reflect.deleteProperty(rendererMain, "toString");
+  }
 });

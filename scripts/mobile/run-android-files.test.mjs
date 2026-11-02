@@ -1,16 +1,35 @@
+import { OBSERVER_SOURCE_INPUTS } from './android-qa-observer.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { androidFilesInventory, collectAndroidFiles } from '../../apps/mobile/e2e/android-files.mjs';
-import { assembleAndroidFilesFixture, androidFilesKnownSources, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
-  captureAndroidFilesFailure, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
+import { assembleAndroidFilesFixture, androidFilesKnownSources, androidFilesHarnessFingerprint, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
+  captureAndroidFilesFailure, captureAndroidFilesPrivacy, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+test('controller keeps every preflight/checkpoint cold and overrides input flags only for final postflight', () => {
+  for (const phase of ['preflight','checkpoint','postflight']) {
+    let observed;
+    captureAndroidFilesPrivacy({ verifyProviderBytes: phase !== 'postflight' }, phase, options => {
+      observed = options.verifyProviderBytes;
+      return { snapshot: { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: observed,
+        providerOriginalsPreserved: observed ? true : null, providerByteVerification: observed ? 'postflight' : 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } } };
+    }); assert.equal(observed, phase === 'postflight');
+  }
+});
+test('controller refuses early provider reads, pending final proof and private copies before returning a success', () => {
+  let calls = 0; assert.throws(() => captureAndroidFilesPrivacy({}, 'unknown', () => { calls++; }), /ANDROID_FILES_PRIVACY_PHASE_REQUIRED/); assert.equal(calls, 0);
+  const good = { schemaVersion: 2, complete: true, providerMetadataPreserved: true, providerOriginalsRead: false,
+    providerOriginalsPreserved: null, providerByteVerification: 'deferred-until-postflight', counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 } };
+  for (const change of [{ providerOriginalsRead: true }, { providerOriginalsPreserved: true }, { providerMetadataPreserved: false }, { counts: { ownedStagingFiles: 1, privateAssetMatchCount: 0 } }, { counts: { ownedStagingFiles: 0, privateAssetMatchCount: 1 } }])
+    assert.throws(() => captureAndroidFilesPrivacy({}, 'checkpoint', () => ({ snapshot: { ...good, ...change } })));
+  assert.throws(() => captureAndroidFilesPrivacy({}, 'postflight', () => ({ snapshot: good })));
+});
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-run-unit-')); t.after(() => rmSync(root, { recursive: true, force: true })); let serial = 0;
   const save = (name, value) => { const file = path.join(root, `${name}-${serial++}.json`), bytes = Buffer.from(JSON.stringify(value)); writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) }; };
@@ -32,13 +51,14 @@ function fixture(t) {
     backendSha: receipt.backendSha, backendRevision: receipt.backendRevision, companyId: seed.companyId, matter: seed.matter,
     isolationReceipt, source, assets };
   const manifestEvidence = save('manifest', manifest), folderName = 'CaseOpsFiles-unit-run-files';
-  const staged = { schemaVersion: 1, observed: true, platform: 'android', kind: 'android-files-provider-assets', udid: coreFixture.udid, appId: coreFixture.appId, manifestEvidence, folderName,
+  const staged = { schemaVersion: 2, providerOriginalsRead: false, observed: true, platform: 'android', kind: 'android-files-provider-assets', udid: coreFixture.udid, appId: coreFixture.appId, manifestEvidence, folderName,
     assets: assets.map(({ id, filename, sha256, sizeBytes }) => ({ id, filename, sha256, sizeBytes })) };
-  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: coreFixture.udid, appId: coreFixture.appId, packageName: 'com.android.documentsui',
+  const providerEvidence = save('provider', staged);
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: providerEvidence, observed: true, platform: 'android', udid: coreFixture.udid, appId: coreFixture.appId, packageName: 'com.android.documentsui',
     manifestEvidence, buildReceipt, folderName, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
       downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' },
-    assets: assets.map(value => ({ ...value, pickerName: value.filename, observedProviderHash: value.sha256 })) };
-  const request = { coreFixture, manifestEvidence, providerEvidence: save('provider', staged), pickerEvidence: save('picker', picker), filesCache: root };
+    assets: assets.map(value => ({ ...value, pickerName: value.filename, transferSha256: value.sha256 })) };
+  const request = { coreFixture, manifestEvidence, providerEvidence, pickerEvidence: save('picker', picker), filesCache: root };
   return { root, save, request, manifest, staged, picker, source };
 }
 
@@ -137,6 +157,31 @@ test('a failed runtime fence creates no session; cleanup uncertainty and unknown
   assert.equal(uncertain.calls.filter(id => id === 'FILES-04').length, 1);
 });
 
+test('failure capture uses a selector UiAutomator2 accepts and still refuses any password field', async t => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-capture-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const capture = (passwords) => {
+    const queries = [];
+    const driver = { getCurrentPackage: async () => 'unit-app', switchContext: async () => {},
+      $$: async query => { queries.push(query); assert.equal(query, '//*[@password="true"]', 'UIAUTOMATOR2_ACCEPTED_SELECTOR_REQUIRED'); return Array(passwords).fill({}); },
+      getPageSource: async () => '<hierarchy><node resource-id="files-reload" password="false"/></hierarchy>' };
+    return { queries, run: output => captureAndroidFilesFailure({ driver, fixture: { appId: 'unit-app', syntheticDataOnly: true, environment: 'docker-integration' } }, output) };
+  };
+  const ok = capture(0), saved = await ok.run(path.join(root, 'capture.xml'));
+  assert.equal(readFileSync(saved.path, 'utf8').includes('files-reload'), true);
+  await assert.rejects(capture(1).run(path.join(root, 'refused.xml')), /ANDROID_FILES_CREDENTIAL_CAPTURE_REFUSED/);
+});
+
+test('an unavailable failure capture keeps the fixed refusal code beside the original call failure', async () => {
+  const f = controller({ failCall: 'FILES-02' });
+  await executeAndroidFilesCases({ ...f.args, onCallFailure: async () => { throw new Error('ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND'); } });
+  const capture = f.events.find(event => event.type === 'native_call_failure_capture_unavailable');
+  assert.deepEqual(capture, { type: 'native_call_failure_capture_unavailable', id: 'android:FILES-02', reason: 'ANDROID_FILES_FAILURE_APP_NOT_FOREGROUND' });
+  assert.equal(f.events.find(event => event.id === 'android:FILES-02' && event.phase === 'call' && event.type === 'phase_result').reason, 'UNIT_CALL_FAILED');
+  const unexpected = controller({ failCall: 'FILES-02' });
+  await executeAndroidFilesCases({ ...unexpected.args, onCallFailure: async () => { throw new Error('private /path and value'); } });
+  assert.equal(unexpected.events.find(event => event.type === 'native_call_failure_capture_unavailable').reason, 'ANDROID_FILES_FAILURE_CAPTURE_FAILED');
+});
+
 test('unverified logout dependency cannot create the final signed-out session or silently authenticate it', async () => {
   const f = controller({ failCall: 'FILES-16' }); await executeAndroidFilesCases(f.args);
   assert.equal(f.starts.includes('FILES-17'), false); assert.equal(f.calls.includes('FILES-17'), false);
@@ -200,4 +245,65 @@ test('actual runner source preserves runtime fences, actual capability readback,
   assert.ok(source.includes('connectionRetryCount: 0')); assert.equal(/\.click\s*\(/.test(source), false);
   assert.ok(source.includes("newJson(path.join(report, 'gateway-after.json'), after)"));
   assert.ok(source.includes('assert.equal(source.sourceDirty, false'));
+});
+
+
+test('physical private-root rebinding retains the complete run-as USB identity and rejects every changed field', () => {
+  const metadata = { kind: 'directory', uid: 10087, device: '1', inode: '2' };
+  const base = { udid: 'CASEOPSUNITUSB01', appId: 'ai.caseops.mobile.dev.localacceptance', bootId: 'unit-boot', packageUid: 10087,
+    transportMode: 'usb-reverse', deviceKind: 'physical', access: 'run-as', shellUid: 2000, runAsUid: 10087,
+    usbDevPath: 'usb:1-2.5', apiLevel: 36, abi: 'arm64-v8a', qemuOff: true,
+    appData: { path: '/data/user/0/ai.caseops.mobile.dev.localacceptance', metadata },
+    provider: { path: '/storage/emulated/0/Download', metadata }, externalAppData: null };
+  const actual = structuredClone(base); assert.equal(bindAndroidFilesPrivateRoots(base, actual), actual);
+  for (const patch of [{ transportMode: 'emulator' }, { transportMode: undefined }, { deviceKind: 'emulator' }, { access: 'root' },
+    { shellUid: 0 }, { runAsUid: 10088 }, { usbDevPath: 'usb:2-3' }, { apiLevel: 35 }, { abi: 'x86_64' }, { qemuOff: false },
+    { rootUid: 0 }, { avdName: 'fabricated-avd' }]) {
+    assert.throws(() => bindAndroidFilesPrivateRoots(base, { ...actual, ...patch }), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/);
+  }
+  const external = { ...actual, externalAppData: { path: '/storage/emulated/0/Android/data/ai.caseops.mobile.dev.localacceptance',
+    metadata: { ...metadata, inode: '3' } } };
+  assert.equal(bindAndroidFilesPrivateRoots(base, external), external);
+  assert.throws(() => bindAndroidFilesPrivateRoots(external, { ...external, externalAppData: null }), /ANDROID_FILES_PRIVATE_ROOT_CHANGED/);
+});
+
+test('physical rebinding requires complete attested fields and cannot accept two equally incomplete or fabricated identities', () => {
+  const metadata = { kind: 'directory', uid: 10087, device: '1', inode: '2' };
+  const base = { udid: 'CASEOPSUNITUSB01', appId: 'ai.caseops.mobile.dev.localacceptance', bootId: 'unit-boot', packageUid: 10087,
+    transportMode: 'usb-reverse', deviceKind: 'physical', access: 'run-as', shellUid: 2000, runAsUid: 10087,
+    usbDevPath: 'usb:1-2.5', apiLevel: 36, abi: 'arm64-v8a', qemuOff: true,
+    appData: { path: '/data/user/0/ai.caseops.mobile.dev.localacceptance', metadata },
+    provider: { path: '/storage/emulated/0/Download', metadata }, externalAppData: null };
+  for (const key of ['deviceKind', 'access', 'shellUid', 'runAsUid', 'usbDevPath', 'apiLevel', 'abi', 'qemuOff']) {
+    const incomplete = { ...base }; delete incomplete[key];
+    assert.throws(() => bindAndroidFilesPrivateRoots(incomplete, structuredClone(incomplete)), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/, key);
+  }
+  for (const patch of [{ shellUid: 0 }, { runAsUid: 0 }, { usbDevPath: 'tcp:127.0.0.1' }, { rootUid: 0 }, { avdName: 'fabricated' }]) {
+    const invalid = { ...base, ...patch };
+    assert.throws(() => bindAndroidFilesPrivateRoots(invalid, structuredClone(invalid)), /ANDROID_FILES_PRIVATE_RUNTIME_CHANGED/);
+  }
+});
+
+
+test('actual Files fingerprint closes local transport helper bytes and refuses its missing-source boundary', t => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'caseops-files-helper-fingerprint-')); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  mkdirSync(path.join(directory, 'scripts/mobile'), { recursive: true }); mkdirSync(path.join(directory, 'apps/mobile/e2e'), { recursive: true });
+  const source = fileURLToPath(new URL('../../', import.meta.url));
+  for (const name of ['run-android-files.mjs','android-files-privacy.mjs','source-snapshot.mjs','prepare-android-files-fixture.py','admit-android-file-source.py','local-transport.py']) {
+    writeFileSync(path.join(directory, 'scripts/mobile', name), readFileSync(path.join(source, 'scripts/mobile', name)));
+  }
+  for(const name of OBSERVER_SOURCE_INPUTS){const out=path.join(directory,name);mkdirSync(path.dirname(out),{recursive:true});writeFileSync(out,readFileSync(path.join(source,name)));}
+  writeFileSync(path.join(directory, 'apps/mobile/e2e/android-local-profile.mjs'), readFileSync(path.join(source, 'apps/mobile/e2e/android-local-profile.mjs')));
+  const file = path.join(directory, 'scripts/mobile/local-transport.py'), original = readFileSync(file), first = androidFilesHarnessFingerprint(directory);
+  writeFileSync(file, Buffer.concat([original, Buffer.from('\n# synthetic fingerprint mutation only\n')]));
+  assert.notEqual(androidFilesHarnessFingerprint(directory), first);
+  writeFileSync(file, original); assert.equal(androidFilesHarnessFingerprint(directory), first);
+  rmSync(file); assert.throws(() => androidFilesHarnessFingerprint(directory), { code: 'ENOENT' });
+});
+
+test('Files fingerprint binds every observer Java manifest transform and build-helper byte',t=>{
+ const directory=mkdtempSync(path.join(os.tmpdir(),'caseops-observer-fingerprint-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));const source=fileURLToPath(new URL('../../',import.meta.url));
+ const names=[...OBSERVER_SOURCE_INPUTS,'scripts/mobile/run-android-files.mjs','scripts/mobile/android-files-privacy.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/prepare-android-files-fixture.py','scripts/mobile/admit-android-file-source.py','scripts/mobile/local-transport.py','apps/mobile/e2e/android-local-profile.mjs'];
+ for(const name of names){const out=path.join(directory,name);mkdirSync(path.dirname(out),{recursive:true});writeFileSync(out,readFileSync(path.join(source,name)));}
+ const first=androidFilesHarnessFingerprint(directory);for(const name of OBSERVER_SOURCE_INPUTS){const file=path.join(directory,name),original=readFileSync(file);writeFileSync(file,Buffer.concat([original,Buffer.from('\n') ]));assert.notEqual(androidFilesHarnessFingerprint(directory),first,name);writeFileSync(file,original);assert.equal(androidFilesHarnessFingerprint(directory),first,name);}
 });

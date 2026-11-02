@@ -1,5 +1,46 @@
 # Durable Document Execution And Production Certification - 2026-10-10
 
+## October 31 Cold Disabled-Worker Continuation
+
+**Partially fixed / NO-GO.** PR567 candidate
+`ab505b0907249bd68a0cfc796c2a2d340c36a88a` completed the focused five-case
+disclosure replay (five passed, 15 phases, no skips/retries). All 13 API and
+24 PostgreSQL hosted shards passed at the last metadata read, but the browser
+job was still running. Neither fact certified its full local Docker gate.
+
+Canonical fresh Docker31 built the candidate images, migrated its isolated
+database and reached a healthy stack. It then failed the disabled document
+worker's unchanged 30-second, network-disabled cloud-startup check: exit124,
+empty output. The supervised process naturally completed and was reaped with
+exit1 at 06:57:40 UTC. Native product tests had not started. Browser discovery
+contained 640 identities across 148 files, including both 1280px and 393px IP18
+journeys; none executed. Do not read the discovery report's skipped statuses
+as executed skips or carry forward old full-Docker counts.
+
+The document entrypoint imported migration, summary, court and document queue
+services before checking admission. Import profiling retained that transitive
+work, including storage/provider dependencies. Profile01 has an invalid short
+diagnostic auth secret and is not a valid CLI acceptance. Valid-secret profile02
+also timed out under the original 30-second bound during imports. Both remain
+retained. No historical host-latency cause is inferred from these observations.
+
+The narrow correction imports those services only in admitted execution
+branches, following the existing court-worker pattern. Parser, real Settings,
+protocol/admission checks, work limits, recovery, migrations and receipts are
+unchanged. A read-only mounted-file profile03 on the old image exits0 and emits
+the exact disabled zero-work receipt with networking disabled, under the same
+30-second limit. Its module import accounts for 5.64 seconds. This is focused
+runtime proof only, not a fresh candidate image, complete regression or release.
+
+Evidence is retained under `portfolio-export-worker` in
+`docker31-supervisor`, `docker-full-31` and `worker-startup31-profile-01..03`.
+Fresh-process disabled/invalid/enabled regressions and all related worker tests,
+then complete fresh-image Docker/current CI, normal canonical-main merge,
+guarded exact-SHA production deployment, whole live QA/original IP18 15-second
+export, post-QA private cadences and both actual Excel publications remain
+required. App/MacBook/read-through0008 work and external consent/legal/MFA holds
+remain excluded. The older sections below are historical checkpoints.
+
 ## Current Verdict
 
 **NO-GO.** #527 is **Not fixed** on the serving production release

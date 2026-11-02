@@ -7,18 +7,6 @@ import time
 from dataclasses import dataclass
 
 from caseops_api.core.settings import get_settings, is_non_local_env
-from caseops_api.db.migrations import run_migrations
-from caseops_api.services.case_tracking_summary import drain_update_summaries
-from caseops_api.services.court_sync_jobs import (
-    drain_matter_court_sync_jobs,
-    recover_stale_matter_court_sync_jobs,
-)
-from caseops_api.services.document_jobs import (
-    MAX_DOCUMENT_JOB_RECOVERY_BATCH,
-    drain_document_processing_jobs,
-    enqueue_scheduled_document_reprocessing,
-    recover_stale_document_processing_jobs,
-)
 
 DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION = 1
 
@@ -55,6 +43,17 @@ def run_worker_iteration(
     court_sync_stale_after_minutes: int,
     summary_batch_size: int = 5,
 ) -> WorkerRunSummary:
+    from caseops_api.services.case_tracking_summary import drain_update_summaries
+    from caseops_api.services.court_sync_jobs import (
+        drain_matter_court_sync_jobs,
+        recover_stale_matter_court_sync_jobs,
+    )
+    from caseops_api.services.document_jobs import (
+        drain_document_processing_jobs,
+        enqueue_scheduled_document_reprocessing,
+        recover_stale_document_processing_jobs,
+    )
+
     recovered_stale_jobs = recover_stale_document_processing_jobs(
         stale_after_minutes=stale_after_minutes
     )
@@ -218,11 +217,20 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     if settings.auto_migrate and not args.skip_migrations and not args.documents_only:
+        from caseops_api.db.migrations import run_migrations
+
         run_migrations()
 
     while True:
         document_outcomes: dict[str, int] = {}
         if args.documents_only:
+            # Disabled admission returns before loading any queue or provider services.
+            from caseops_api.services.document_jobs import (
+                MAX_DOCUMENT_JOB_RECOVERY_BATCH,
+                drain_document_processing_jobs,
+                recover_stale_document_processing_jobs,
+            )
+
             summary = WorkerRunSummary(
                 recovered_stale_jobs=recover_stale_document_processing_jobs(
                     stale_after_minutes=15,
@@ -235,6 +243,10 @@ def main(argv: list[str] | None = None) -> int:
                 recovered_stale_court_sync_jobs=0, processed_court_sync_jobs=0,
             )
         elif args.skip_maintenance:
+            from caseops_api.services.case_tracking_summary import drain_update_summaries
+            from caseops_api.services.court_sync_jobs import drain_matter_court_sync_jobs
+            from caseops_api.services.document_jobs import drain_document_processing_jobs
+
             summary = WorkerRunSummary(
                 recovered_stale_jobs=0,
                 queued_reprocessing_jobs=0,

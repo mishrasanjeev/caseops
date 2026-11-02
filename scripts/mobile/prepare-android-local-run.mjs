@@ -11,10 +11,10 @@ import { validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 import { validateSessionDeletePolicy } from '../../apps/mobile/e2e/session-admission.mjs';
+import { androidLocalProfile, validateUsbReverseOrigins } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const QA_ID = 'ai.caseops.mobile.dev.localacceptance';
-const SERIAL = 'emulator-5584';
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const encoded = (value) => `${JSON.stringify(value, null, 2)}\n`;
 function reference(value) {
@@ -53,7 +53,7 @@ function identity(left, right, keys, code) {
 function sameReference(actual, expected, code) { assert.deepEqual(reference(actual), expected, code); }
 
 function observedDevice(observation, request, build, buildRef) {
-  assert.equal(request.udid, SERIAL, 'DEDICATED_ANDROID_SERIAL_REQUIRED');
+  const profile = androidLocalProfile(request.udid, 'DEDICATED_ANDROID_SERIAL_REQUIRED', request.androidTransportMode);
   identity(observation, { schemaVersion: 1, kind: 'observed-android-local-device', observed: true,
     platform: 'android', udid: request.udid, state: 'device', bootCompleted: true,
     apiLevel: 36, architecture: 'arm64-v8a', appId: QA_ID },
@@ -64,8 +64,17 @@ function observedDevice(observation, request, build, buildRef) {
   nonempty(observation.versionName, 'OBSERVED_ANDROID_APP_VERSION_REQUIRED');
   assert.equal(observation.installedApkSha256, build.binaryHash, 'OBSERVED_INSTALLED_APK_MISMATCH');
   sameReference(observation.buildReceipt, buildRef, 'DEVICE_BUILD_REFERENCE_MISMATCH');
-  identity(observation, { adbPort: 5038, appiumUrl: 'http://127.0.0.1:4725', systemPort: 8202 },
+  identity(observation, profile,
     ['adbPort', 'appiumUrl', 'systemPort'], 'ISOLATED_ANDROID_TRANSPORT_REQUIRED');
+  if (profile.deviceKind === 'physical') {
+    identity(observation, { transportMode: 'usb-reverse', deviceKind: 'physical', shellUid: 2000 },
+      ['transportMode', 'deviceKind', 'shellUid'], 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.ok(/^usb:[A-Za-z0-9.:_-]{1,128}$/.test(observation.usbDevPath || ''), 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.ok(observation.kernelQemu === '' || observation.kernelQemu === '0', 'ACTUAL_PHYSICAL_ANDROID_USB_REQUIRED');
+    assert.equal(Object.hasOwn(observation, 'avdName'), false, 'PHYSICAL_ANDROID_CANNOT_CLAIM_AVD');
+  } else if (profile.requiresAvdName || Object.hasOwn(observation, 'avdName')) {
+    assert.equal(observation.avdName, profile.avdName, 'OBSERVED_ANDROID_AVD_MISMATCH');
+  }
   assert.ok(Array.isArray(observation.evidence) && observation.evidence.length > 0 && observation.evidence.length <= 16,
     'ACTUAL_ANDROID_DEVICE_EVIDENCE_REQUIRED');
   const paths = new Set();
@@ -74,6 +83,47 @@ function observedDevice(observation, request, build, buildRef) {
     verifiedFile(ref.path, ref.sha256);
   }
   return observation;
+}
+
+// A logged-out browser can retain non-secret workspace context and make one
+// rejected refresh attempt after /auth/me. This is a rejected browser probe,
+// separate from the exact successful login/MFA/native grant/token/logout spine.
+export function validateObservedAndroidAuthTraffic(requests, auth) {
+  assert.ok(Array.isArray(requests) && requests.length <= 500, 'BOUNDED_AUTH_OBSERVATION_REQUIRED');
+  validateAuthorizationTraffic(requests, auth, { single: true });
+  for (const [route, statuses] of [['/api/auth/login', [200]], ['/api/auth/mfa/step-up', [200]], ['/api/auth/native/logout', [200, 204]]]) {
+    const attempts = requests.filter((row) => row.method === 'POST' && row.route === route);
+    assert.ok(attempts.length === 1 && statuses.includes(attempts[0].status), 'OBSERVED_AUTH_MUTATION_NOT_ONCE_ACKNOWLEDGED');
+  }
+  const loginIndex = requests.findIndex(({ method, route }) => method === 'POST' && route === '/api/auth/login');
+  const refreshes = requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/refresh');
+  assert.ok(refreshes.length <= 1, 'SINGLE_REJECTED_PRELOGIN_BROWSER_REFRESH_REQUIRED');
+  const unauthorizedIdentity = requests.filter((row, index) => index < loginIndex && row.method === 'GET'
+    && row.route === '/api/auth/me' && row.status === 401);
+  assert.ok(unauthorizedIdentity.length <= 2, 'BOUNDED_LOGGED_OUT_BROWSER_IDENTITY_PROBES_REQUIRED');
+  for (const row of requests.filter(({ status }) => status === 401)) {
+    assert.ok(requests.indexOf(row) < loginIndex && row.browserHandoff === true && row.nativeMarker === true
+      && ((row.method === 'GET' && row.route === '/api/auth/me') || refreshes.includes(row)),
+    'UNEXPECTED_AUTH_OBSERVATION_401');
+  }
+  for (const row of refreshes) {
+    const index = requests.indexOf(row), preceding = requests.slice(0, index);
+    assert.ok(index < loginIndex && row.status === 401 && row.browserHandoff === true && row.nativeMarker === true,
+      'REJECTED_PRELOGIN_BROWSER_REFRESH_REQUIRED');
+    assert.ok(preceding.some((item) => unauthorizedIdentity.includes(item)), 'PRECEDING_LOGGED_OUT_BROWSER_IDENTITY_REQUIRED');
+    assert.ok(!preceding.some(({ method, route, status }) => method !== 'OPTIONS' && route.startsWith('/api/auth/')
+      && status >= 200 && status < 400), 'NO_AUTH_SUCCESS_BEFORE_REJECTED_REFRESH');
+  }
+  const mutations = new Set(['/api/auth/login', '/api/auth/mfa/step-up', '/api/auth/native/authorize', '/api/auth/native/token', '/api/auth/native/logout']);
+  assert.ok(requests.every((row) => ['GET', 'HEAD', 'OPTIONS'].includes(row.method)
+    || (row.method === 'POST' && (mutations.has(row.route) || refreshes.includes(row)))), 'UNEXPECTED_AUTH_OBSERVATION_MUTATION');
+  const spine = requests.filter((row) => row.method === 'POST' && !refreshes.includes(row)).map(({ route, status }) => ({ route, status }));
+  assert.deepEqual(spine, [{ route: '/api/auth/login', status: 200 },
+    ...(auth.mfaStage === 'consent' ? [{ route: '/api/auth/native/authorize', status: 403 }] : []),
+    { route: '/api/auth/mfa/step-up', status: 200 }, { route: '/api/auth/native/authorize', status: 200 },
+    { route: '/api/auth/native/token', status: 200 }, { route: '/api/auth/native/logout', status: spine.at(-1)?.status }],
+  'ORDERED_NORMAL_AUTH_OBSERVATION_REQUIRED');
+  return { rejectedPreLoginBrowserRefreshes: refreshes.length, loggedOutBrowserIdentityReads: unauthorizedIdentity.length };
 }
 
 function observedAuth(observation, refs, receipt, extension, device, recipe) {
@@ -100,20 +150,7 @@ function observedAuth(observation, refs, receipt, extension, device, recipe) {
   assert.deepEqual(after.requests.slice(0, before.requests.length), before.requests, 'AUTH_OBSERVATION_HISTORY_CHANGED');
   const requests = after.requests.slice(before.lastSequence);
   assert.ok(requests.every(({ status }) => Number.isInteger(status)), 'SETTLED_AUTH_OBSERVATION_REQUIRED');
-  validateAuthorizationTraffic(requests, auth, { single: true });
-  for (const [route, statuses] of [['/api/auth/login', [200]], ['/api/auth/mfa/step-up', [200]], ['/api/auth/native/logout', [200, 204]]]) {
-    const attempts = requests.filter((row) => row.method === 'POST' && row.route === route);
-    assert.ok(attempts.length === 1 && statuses.includes(attempts[0].status), 'OBSERVED_AUTH_MUTATION_NOT_ONCE_ACKNOWLEDGED');
-  }
-  const mutations = new Set(['/api/auth/login', '/api/auth/mfa/step-up', '/api/auth/native/authorize', '/api/auth/native/token', '/api/auth/native/logout']);
-  assert.ok(requests.every(({ method, route }) => ['GET', 'HEAD', 'OPTIONS'].includes(method)
-    || (method === 'POST' && mutations.has(route))), 'UNEXPECTED_AUTH_OBSERVATION_MUTATION');
-  const spine = requests.filter(({ method }) => method === 'POST').map(({ route, status }) => ({ route, status }));
-  assert.deepEqual(spine, [{ route: '/api/auth/login', status: 200 },
-    ...(observation.mfaStage === 'consent' ? [{ route: '/api/auth/native/authorize', status: 403 }] : []),
-    { route: '/api/auth/mfa/step-up', status: 200 }, { route: '/api/auth/native/authorize', status: 200 },
-    { route: '/api/auth/native/token', status: 200 }, { route: '/api/auth/native/logout', status: spine.at(-1)?.status }],
-  'ORDERED_NORMAL_AUTH_OBSERVATION_REQUIRED');
+  validateObservedAndroidAuthTraffic(requests, auth);
   return auth;
 }
 
@@ -149,6 +186,9 @@ export function createAndroidLocalRun(request) {
   }
   assert.equal(receipt.platform, 'android', 'ANDROID_DOCKER_RECEIPT_REQUIRED');
   assert.equal(extension.platform, 'android', 'ANDROID_EXTENSION_REQUIRED');
+  for (const value of [receipt, extension]) assert.equal(value.androidTransportMode, request.androidTransportMode,
+    'ANDROID_TRANSPORT_MODE_PROVENANCE_MISMATCH');
+  if (request.androidTransportMode === 'usb-reverse') validateUsbReverseOrigins(receipt.apiOrigin, receipt.webOrigin);
   assert.equal(extension.coreInventory, 'native-core-2026-10-25', 'DATED_EXTENSION_REQUIRED');
   assert.equal(extension.baseSeed?.sha256, refs.baseSeed.sha256, 'EXTENSION_BASE_SEED_HASH_MISMATCH');
   assert.equal(path.basename(refs.baseSeed.path), extension.baseSeed?.file, 'EXTENSION_BASE_SEED_FILE_MISMATCH');
@@ -253,7 +293,8 @@ export function createAndroidLocalRun(request) {
     buildReceipt: refs.buildReceipt, publicCa: refs.publicCa, gatewayRoutes: refs.gatewayRoutes, ownerControls: owner,
     appId: QA_ID, binaryVersion: device.versionName, binaryBuild: String(device.versionCode),
     device: { deviceName: device.deviceName, platformVersion: device.platformVersion, udid: device.udid },
-    androidTransport: { adbPort: device.adbPort, appiumUrl: device.appiumUrl, systemPort: device.systemPort },
+    androidTransport: { adbPort: device.adbPort, appiumUrl: device.appiumUrl, systemPort: device.systemPort,
+      ...(request.androidTransportMode === 'usb-reverse' ? { transportMode: 'usb-reverse' } : {}) },
     auth: Object.fromEntries(Object.entries(auth).filter(([key]) => key !== 'firefoxUi')),
     firefoxRecipe: refs.firefoxRecipe, expectations, provenance, outputFixture: outputs.outputFixture };
   noSecrets(plan); noSecrets(effectiveSeed);

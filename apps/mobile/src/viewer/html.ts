@@ -1,7 +1,7 @@
 import { pdfjsAssets, pdfjsVersion } from "./generated/pdfjs-assets.ts";
 import { decodeBase64 } from "./encoding.ts";
 import { VIEWER_LIMITS } from "./contracts.ts";
-import { rendererMain } from "./renderer-runtime.ts";
+import { rendererRuntimeSource } from "./generated/renderer-runtime-source.ts";
 
 export function createViewerHtml(id: string): string {
   if (!/^[a-f0-9]{32}$/.test(id) || pdfjsVersion !== "6.4.299")
@@ -34,6 +34,6 @@ html,body{margin:0;padding:0;background:#f7f8fa;color:#272934;font:16px/1.5 syst
 </style></head><body><p id="status" role="status">Opening private document</p><main id="content" hidden aria-label="Document page"><canvas id="page" role="img"></canvas><section id="page-text" aria-label="Embedded page text"></section></main>
 ${script(asset("legacy/build/pdf.worker.mjs"))}
 ${script(asset("legacy/build/pdf.mjs"))}
-${script(`(${rendererMain.toString()})(${config});`)}
+${script(`(${rendererRuntimeSource})(${config});`)}
 </body></html>`;
 }

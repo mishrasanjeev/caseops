@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { Keyboard, ScrollView, Text, View } from "react-native";
 import {
   NativeButton,
   NativeProgress,
@@ -8,6 +8,7 @@ import {
 import { NativeDatePicker } from "../../components/NativeDatePicker";
 import { Empty, RecordRow } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
+import { StableTextInput } from "../../components/StableTextInput";
 import { dateOnly, displayDay, localDay } from "../../domain/contracts";
 import { adjacentCalendarDay } from "../../domain/calendar-date";
 import type { MatterRef } from "../../domain/contracts";
@@ -50,6 +51,7 @@ export function CalendarScreen({
   const previousWeek = adjacentCalendarDay(day, -7);
   const nextWeek = adjacentCalendarDay(day, 7);
   const goToDate = () => {
+    Keyboard.dismiss();
     try {
       select(dateOnly(input));
     } catch {
@@ -135,7 +137,7 @@ export function CalendarScreen({
         </View>
       </View>
       <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
-      <TextInput
+      <StableTextInput
         testID="calendar-date-input"
         accessibilityLabel="Agenda date, YYYY-MM-DD"
         value={input}

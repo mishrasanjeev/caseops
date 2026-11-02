@@ -20,8 +20,15 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from caseops_api.core.settings import get_settings
+from caseops_api.db.models import AuditEvent, IpRuleVersion
+from caseops_api.db.session import get_session_factory
+from tests.ip_rule_governance_support import (
+    grant_ip_rule_governance_entitlement,
+    rule_payload_for_company,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_deadline_workflow import (
     _calendar_payload,
@@ -52,6 +59,7 @@ def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str, str]:
     """Owner (proposer), legal approver, an independent reviewer, and the owner token."""
 
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -72,6 +80,7 @@ def _governance_actors(client: TestClient) -> tuple[dict, dict, str, str, str]:
 def _propose(client: TestClient, headers: dict[str, str], **overrides) -> dict:
     payload = _rule_payload()
     payload.update(overrides)
+    payload = rule_payload_for_company(client, headers, payload)
     response = client.post("/api/ip/deadline-rules", headers=headers, json=payload)
     assert response.status_code == 201, response.text
     return response.json()
@@ -198,6 +207,27 @@ def test_uj47_exc03_overlapping_effective_ranges_conflict(client: TestClient) ->
     impact = client.get(
         f"/api/ip/deadline-rules/{second['id']}/impact", headers=legal_headers
     ).json()
+    # The preview names what activation would retire, so the activator sees it
+    # before confirming (Ram 2026-10-31 BUG-006), and a stale preview is
+    # refused rather than silently applied.
+    assert impact["superseded_versions"] == [first["version"]]
+    assert impact["company_policy_count"] == 1
+    first_impact = client.get(
+        f"/api/ip/deadline-rules/{first['id']}/impact", headers=legal_headers
+    ).json()
+    assert first_impact["superseded_versions"] == []
+    stale = _activate(
+        client,
+        legal_headers,
+        second["id"],
+        reviewer_id,
+        supersede_overlapping=True,
+        impact_acknowledged=True,
+        impact_reason="Reviewed the mid-year amendment supersession.",
+        impact_token="0" * 64,
+    )
+    assert stale.status_code == 409, stale.text
+    assert "preview again" in stale.json()["detail"]
     superseded = _activate(
         client,
         legal_headers,
@@ -225,6 +255,7 @@ def test_uj47_exc04_activation_preserves_confirmed_deadlines(client: TestClient)
     from tests.test_ip_deadline_workflow import _docket_for_matter, _responsibilities
 
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -400,6 +431,7 @@ def test_rulegov07_disable_alerts_record_owners(client: TestClient) -> None:
     from tests.test_ip_deadline_workflow import _docket_for_matter, _responsibilities
 
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -504,6 +536,7 @@ def test_rulegov06_confirmed_calculation_stays_reproducible(client: TestClient) 
     from tests.test_ip_deadline_workflow import _docket_for_matter, _responsibilities
 
     bootstrap = bootstrap_company(client)
+    grant_ip_rule_governance_entitlement(str(bootstrap["company"]["id"]))
     owner_token = str(bootstrap["access_token"])
     owner_headers = auth_headers(owner_token)
     legal_id, legal_token = _member(
@@ -629,21 +662,18 @@ def test_rulegov08_fee_rules_use_the_same_model_but_a_separate_domain(
     assert fee_body["rule_kind"] == "fee"
     assert fee_body["status"] == "candidate"
 
-    # Same propose/review/activate model, including two-actor independence.
-    assert _activate(client, owner_headers, fee_body["id"], reviewer_id).status_code == 409
-    activated = _activate(client, legal_headers, fee_body["id"], reviewer_id)
-    assert activated.status_code == 200, activated.text
-    assert activated.json()["status"] == "active"
-    assert activated.json()["fixtures_passed_at"] is not None
-
-    # A failed fee fixture blocks activation the same way a deadline fixture does.
-    bad = _fee_payload()
-    bad["key"] = "in-tm-renewal-fee-v2"
-    bad["fixtures"][0]["observed_outcome"] = 1
-    bad_rule = client.post("/api/ip/deadline-rules", headers=owner_headers, json=bad).json()
-    blocked = _activate(client, legal_headers, bad_rule["id"], reviewer_id)
-    assert blocked.status_code == 409
-    assert "fixture" in blocked.json()["detail"].lower()
+    # IPLF-027B A1: there is no server evaluator for fee fixtures, and a
+    # caller-supplied expected == observed pair proves nothing. Activation of
+    # an unsupported kind fails closed even with every independent approver
+    # present and "matching" fixture values.
+    unsupported = _activate(client, legal_headers, fee_body["id"], reviewer_id)
+    assert unsupported.status_code == 409, unsupported.text
+    assert unsupported.json()["code"] == "ip_rule_kind_unsupported"
+    assert unsupported.json()["rule_kind"] == "fee"
+    still_candidate = client.get(
+        f"/api/ip/deadline-rules/{fee_body['id']}/impact", headers=legal_headers
+    )
+    assert still_candidate.status_code == 200, still_candidate.text
 
     # Separate version domain: a fee rule can never drive a legal deadline.
     from tests.test_clients import _mk_matter
@@ -671,7 +701,25 @@ def test_rulegov08_fee_rules_use_the_same_model_but_a_separate_domain(
         },
     )
     assert misuse.status_code == 409
-    assert "not a deadline rule" in misuse.json()["detail"].lower()
+    assert misuse.json()["detail"] == "An active rule version is required."
+
+    with get_session_factory()() as session:
+        fee_row = session.get(IpRuleVersion, fee_body["id"])
+        assert fee_row is not None
+        assert fee_row.status == "candidate"
+        assert fee_row.fixtures_passed_at is None
+        assert fee_row.legal_approved_by_membership_id is None
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.action == "ip.rule_version.activated",
+                    AuditEvent.target_id == fee_body["id"],
+                )
+            )
+            == 0
+        )
 
 
 def test_company_policy_cannot_select_unapproved_rule(client: TestClient) -> None:
@@ -719,6 +767,45 @@ def test_company_policy_cannot_select_unapproved_rule(client: TestClient) -> Non
         },
     )
     assert stale.status_code == 409
+    assert stale.json()["code"] == "ip_rule_policy_version_conflict"
+    assert stale.json()["current_policy_version"] == 1
+
+    # Compare-and-swap: omitting the expected version asserts "no policy yet",
+    # so it can never blindly overwrite an existing selection.
+    blind = client.put(
+        "/api/ip/rule-policies",
+        headers=legal_headers,
+        json={"rule_version_id": candidate["id"], "auto_confirm_eligible": True},
+    )
+    assert blind.status_code == 409, blind.text
+    assert blind.json()["code"] == "ip_rule_policy_version_conflict"
+    assert blind.json()["field"] == "expected_policy_version"
+    current = client.get("/api/ip/rule-policies", headers=owner_headers).json()
+    assert [(row["version"], row["auto_confirm_eligible"]) for row in current] == [(1, False)]
+
+    swapped = client.put(
+        "/api/ip/rule-policies",
+        headers=legal_headers,
+        json={
+            "rule_version_id": candidate["id"],
+            "auto_confirm_eligible": True,
+            "expected_policy_version": 1,
+        },
+    )
+    assert swapped.status_code == 200, swapped.text
+    assert swapped.json()["version"] == 2
+    assert swapped.json()["auto_confirm_eligible"] is True
+    replayed = client.put(
+        "/api/ip/rule-policies",
+        headers=legal_headers,
+        json={
+            "rule_version_id": candidate["id"],
+            "auto_confirm_eligible": False,
+            "expected_policy_version": 1,
+        },
+    )
+    assert replayed.status_code == 409
+    assert replayed.json()["current_policy_version"] == 2
 
 
 def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
@@ -740,6 +827,8 @@ def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
         },
     )
     assert second.status_code == 200, second.text
+    # Entitled, so the 404 below proves ownership isolation, not a plan refusal.
+    grant_ip_rule_governance_entitlement(str(second.json()["company"]["id"]))
     other_headers = auth_headers(str(second.json()["access_token"]))
 
     leaked = client.put(
@@ -749,6 +838,56 @@ def test_rule_policy_selection_is_tenant_isolated(client: TestClient) -> None:
     )
     assert leaked.status_code == 404
     assert client.get("/api/ip/rule-policies", headers=other_headers).json() == []
+
+
+def _role_headers(client: TestClient, owner_token: str, *, role: str, email: str) -> dict[str, str]:
+    created = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": f"Rule {role}",
+            "email": email,
+            "password": "RulePolicy123!",
+            "role": role,
+        },
+    )
+    assert created.status_code == 200, created.text
+    login = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "RulePolicy123!", "company_slug": "aster-legal"},
+    )
+    assert login.status_code == 200, login.text
+    return auth_headers(str(login.json()["access_token"]))
+
+
+def test_rule_policy_list_is_readable_by_every_rule_activator(client: TestClient) -> None:
+    """RULE-GOV-04: whoever may select a policy (ip:rules_activate) can read it.
+
+    The selection is a compare-and-swap on the policy version, so an activator
+    who cannot read the current version could never make a valid selection.
+    Members without either governance capability stay refused.
+    """
+
+    owner_headers, legal_headers, _legal_id, reviewer_id, owner_token = _governance_actors(client)
+    rule = _propose(client, owner_headers)
+    assert _activate(client, legal_headers, rule["id"], reviewer_id).status_code == 200
+
+    partner_headers = _role_headers(
+        client, owner_token, role="partner", email="rule-partner@asterlegal.in"
+    )
+    member_headers = _role_headers(
+        client, owner_token, role="member", email="rule-member@asterlegal.in"
+    )
+
+    partner = client.get("/api/ip/rule-policies", headers=partner_headers)
+    assert partner.status_code == 200, partner.text
+    assert [row["active_rule_version_id"] for row in partner.json()] == [rule["id"]]
+    assert partner.json()[0]["version"] == 1
+
+    member = client.get("/api/ip/rule-policies", headers=member_headers)
+    assert member.status_code == 403
+    client.cookies.clear()
+    assert client.get("/api/ip/rule-policies").status_code == 401
 
 
 def test_shared_rule_key_governance_never_crosses_tenant_ownership(
@@ -787,6 +926,7 @@ def test_shared_rule_key_governance_never_crosses_tenant_ownership(
         },
     )
     assert second_bootstrap.status_code == 200, second_bootstrap.text
+    grant_ip_rule_governance_entitlement(str(second_bootstrap.json()["company"]["id"]))
     second_token = str(second_bootstrap.json()["access_token"])
     second_headers = auth_headers(second_token)
     _second_legal_id, second_legal_token = _member(
@@ -805,9 +945,13 @@ def test_shared_rule_key_governance_never_crosses_tenant_ownership(
     )
     second_legal_headers = auth_headers(second_legal_token)
 
-    # The stable rule-set key is shared catalog identity, but the candidate,
-    # active lifecycle, impact, and policy are owned by the proposing tenant.
+    # IPLF-027B A1: the same key creates a separate rule set owned by the second
+    # tenant, with its own version numbering; nothing about the first tenant's
+    # rule set is shared, visible, or a collision.
     second = _propose(client, second_headers)
+    assert second["rule_set_id"] != first["rule_set_id"]
+    assert second["key"] == first["key"]
+    assert second["version"] == 1
     second_impact = client.get(
         f"/api/ip/deadline-rules/{second['id']}/impact",
         headers=second_legal_headers,

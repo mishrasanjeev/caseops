@@ -1,4 +1,10 @@
+import { checkedClientMetadata } from "./client-version.ts";
+
 export type JsonFetch = (input: string, init: RequestInit) => Promise<Response>;
+export type NativeTransportAdmission = {
+  admit: (path: string, method: string) => void;
+  incompatible: (body: unknown) => void;
+};
 export type ExpoFetchFunction = (
   input: string,
   init: NonNullable<Parameters<typeof import("expo/fetch").fetch>[1]>,
@@ -194,16 +200,39 @@ export function checkedApiPath(path: string): string {
 
 export class JsonTransport {
   readonly origin: string;
+  private readonly client: Readonly<{ platform: unknown; version: unknown }>;
   constructor(
     origin: string,
     development: boolean,
     private readonly automated: boolean,
+    client: { platform: unknown; version: unknown },
     private readonly fetcher: JsonFetch = fetch,
     private readonly timeoutMs = 20_000,
+    private readonly admission?: NativeTransportAdmission,
   ) {
     this.origin = checkedOrigin(origin, development);
+    this.client = Object.freeze({ ...client });
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
       throw new Error("Invalid request deadline.");
+  }
+
+  private admit(path: string, method: string, dispatched = false) {
+    try {
+      this.admission?.admit(path, method);
+    } catch (error) {
+      if (
+        dispatched &&
+        !["GET", "HEAD", "OPTIONS"].includes(method) &&
+        error instanceof MobileApiError
+      )
+        throw new MobileApiError(
+          error.message,
+          error.status,
+          error.code,
+          "unknown",
+        );
+      throw error;
+    }
   }
 
   async requestBytes(
@@ -212,6 +241,8 @@ export class JsonTransport {
     accessToken: string,
   ): Promise<BytesResponse> {
     checkedBytesRequest(path, options);
+    const client = checkedClientMetadata(this.client);
+    this.admit(path, "GET");
     if (!accessToken)
       throw new MobileApiError(
         "Sign in to continue.",
@@ -239,6 +270,7 @@ export class JsonTransport {
         "Cache-Control": "no-store",
         Pragma: "no-cache",
         "X-CaseOps-Client": "native",
+        "X-CaseOps-Client-Version": client.version,
       });
       if (this.automated)
         headers.set("X-CaseOps-Automated-Test", "no-paid-providers");
@@ -267,6 +299,7 @@ export class JsonTransport {
           "unsafe_redirect",
         );
       if (!response.ok) {
+        if (response.status === 426) this.admission?.incompatible(null);
         // Never parse an unbounded JSON/HTML error body on this private path.
         throw new MobileApiError(
           response.status === 403
@@ -276,6 +309,7 @@ export class JsonTransport {
           "private_bytes_rejected",
         );
       }
+      this.admit(path, "GET", true);
       if (response.status !== (rangeProbe ? 206 : 200))
         throw new MobileApiError(
           "The server returned an unsupported private byte response.",
@@ -425,6 +459,7 @@ export class JsonTransport {
       }
       if (controller.signal.aborted || Date.now() >= deadlineAt)
         throw abortedRead();
+      this.admit(path, "GET", true);
       completed = true;
       return {
         bytes: output,
@@ -470,15 +505,22 @@ export class JsonTransport {
     accessToken?: string,
   ): Promise<T> {
     checkedApiPath(path);
+    const client = checkedClientMetadata(this.client);
     const method = (init.method || "GET").toUpperCase();
+    this.admit(path, method);
     const mutation = !["GET", "HEAD", "OPTIONS"].includes(method);
     const headers = new Headers(init.headers);
-    if (headers.has("Cookie") || headers.has("Authorization")) {
+    if (
+      headers.has("Cookie") ||
+      headers.has("Authorization") ||
+      headers.has("X-CaseOps-Client-Version")
+    ) {
       throw new Error("The session owns authentication headers.");
     }
     headers.set("Accept", "application/json");
     headers.set("Cache-Control", "no-store");
     headers.set("X-CaseOps-Client", "native");
+    headers.set("X-CaseOps-Client-Version", client.version);
     if (this.automated)
       headers.set("X-CaseOps-Automated-Test", "no-paid-providers");
     if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
@@ -512,6 +554,8 @@ export class JsonTransport {
           mutation ? "unknown" : "rejected",
         );
       }
+      if (response.status === 426) this.admission?.incompatible(null);
+      else this.admit(path, method, true);
       if (response.status === 204) return undefined as T;
       let body: unknown;
       try {
@@ -535,6 +579,14 @@ export class JsonTransport {
         );
       }
       if (!response.ok) {
+        if (response.status === 426) {
+          this.admission?.incompatible(body);
+          throw new MobileApiError(
+            "The service requires an app compatibility check. Check again before continuing.",
+            426,
+            "native_client_update_required",
+          );
+        }
         const problem =
           body && typeof body === "object"
             ? (body as Record<string, unknown>)
@@ -553,6 +605,7 @@ export class JsonTransport {
           typeof problem.code === "string" ? problem.code : "request_rejected",
         );
       }
+      this.admit(path, method, true);
       return body as T;
     } catch (error) {
       if (error instanceof MobileApiError) throw error;

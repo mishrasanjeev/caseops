@@ -126,6 +126,54 @@ async function waitPage(page: Page, expected = 1) {
     { timeout: 10_000 },
   );
 }
+
+test("native-viewer renderer: document bridge renders, foreign messages cannot purge, own-window navigation works", async () => {
+  const f = await setup();
+  try {
+    const bytes = actualPdf();
+    assert.ok(bytes.length <= VIEWER_LIMITS.chunkBytes);
+    const messages = [
+      { type: "begin", kind: "pdf", mime: "application/pdf", length: bytes.length, ttl: 14_000, page: 1, zoom: 1 },
+      { type: "chunk", sequence: 0, data: encodeBase64(bytes) },
+      { type: "end" },
+    ].map(message => JSON.stringify({ ...message, id }));
+    await f.page.evaluate(values => {
+      for (const data of values) document.dispatchEvent(new MessageEvent("message", { data }));
+    }, messages);
+    await waitPage(f.page);
+    const eventsBefore = await f.page.evaluate(() => (window as any).__events.length);
+    const diagnostics = await f.page.evaluate(data => {
+      const state = () => ({ hidden: document.hidden, textLength: document.getElementById("page-text")!.textContent!.length });
+      const observed: unknown[] = [state()];
+      const first = new MessageEvent("message", { data, origin: "https://untrusted.invalid", source: null });
+      observed.push({ origin: first.origin, self: first.source === window, null: first.source === null });
+      window.dispatchEvent(first);
+      observed.push(state());
+      const frame = document.createElement("iframe");
+      document.body.append(frame);
+      if (!frame.contentWindow) throw new Error("Foreign-window control unavailable");
+      const second = new MessageEvent("message", { data, origin: window.location.origin, source: frame.contentWindow });
+      observed.push({ origin: second.origin, self: second.source === window, null: second.source === null });
+      window.dispatchEvent(second);
+      observed.push(state());
+      frame.remove();
+      observed.push(state());
+      return observed;
+    }, JSON.stringify({ id, type: "purge" }));
+    assert.equal(await f.page.evaluate(() => (window as any).__events.length), eventsBefore);
+    assert.match(await f.page.locator("#page-text").innerText(), /Native viewer page one/, JSON.stringify(diagnostics));
+    await f.page.evaluate(data => {
+      window.dispatchEvent(new MessageEvent("message", { data, origin: window.location.origin, source: window }));
+    }, JSON.stringify({ id, type: "navigate", page: 2, zoom: 1 }));
+    await waitPage(f.page, 2);
+    assert.match(await f.page.locator("#page-text").innerText(), /Native viewer page two/);
+    await f.page.evaluate(data => document.dispatchEvent(new MessageEvent("message", { data })), JSON.stringify({ id, type: "purge" }));
+    assert.equal(await f.page.locator("#page-text").textContent(), "");
+    assert.deepEqual(f.requests, []);
+  } finally {
+    await f.context.close();
+  }
+});
 test("native-viewer renderer: actual two-page PDF pixels, text, navigation, zoom and inert PDF actions", async () => {
   const f = await setup();
   try {

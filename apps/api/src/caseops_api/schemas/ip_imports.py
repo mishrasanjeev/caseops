@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,8 @@ class IpImportParticularPayload(TrademarkParticularPayload):
 
     classes: list[IpImportClassScope] = Field(default_factory=list, max_length=45)
     parties: list[TrademarkParty] = Field(default_factory=list, max_length=30)
+
+    incomplete_class_rows_allowed: ClassVar[bool] = True
 
 
 class IpImportDocketCreateRequest(IpDocketCreateRequest):

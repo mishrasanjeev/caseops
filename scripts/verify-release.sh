@@ -109,7 +109,7 @@ url_check() {
   local body_file
   body_file="$(mktemp)"
   local status
-  status="$(curl -sS -L -o "$body_file" -w '%{http_code}' "$url" || true)"
+  status="$(curl -sS -L --header 'X-CaseOps-Automated-Test:no-paid-providers' -o "$body_file" -w '%{http_code}' "$url" || true)"
   local body
   body="$(tr '\r\n' '  ' < "$body_file" | cut -c1-180)"
   rm -f "$body_file"
@@ -125,7 +125,7 @@ build_check() {
   local body_file
   body_file="$(mktemp)"
   local status
-  status="$(curl -sS -L -o "$body_file" -w '%{http_code}' "$BUILD_INFO_URL" || true)"
+  status="$(curl -sS -L --header 'X-CaseOps-Automated-Test:no-paid-providers' -o "$body_file" -w '%{http_code}' "$BUILD_INFO_URL" || true)"
   local body
   body="$(cat "$body_file")"
   rm -f "$body_file"

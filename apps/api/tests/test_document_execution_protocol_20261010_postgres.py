@@ -19,6 +19,7 @@ from alembic.config import Config
 from sqlalchemy import MetaData, Table, create_engine, event, inspect, select, text
 from sqlalchemy.exc import DBAPIError, InvalidRequestError, ProgrammingError
 from sqlalchemy.orm import Load, Session, joinedload, registry, relationship, sessionmaker
+from sqlalchemy.sql.selectable import CompoundSelect, Select, SelectStatementGrouping
 
 from alembic import command
 from caseops_api.core.security import hash_password
@@ -28,6 +29,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     ContractActivity,
     DocumentProcessingJob,
+    IpDocument,
     MatterActivity,
     PrivateProjectionEvent,
     User,
@@ -72,6 +74,21 @@ def test_legacy_boundary_reports_early_future_outcome(outcome):
         _wait_for_legacy_boundary(entered, future, timeout=0)
 
 
+def _historical_select_descriptions(statement):
+    if isinstance(statement, Select):
+        return tuple(statement.column_descriptions)
+    if isinstance(statement, SelectStatementGrouping):
+        return _historical_select_descriptions(statement.element)
+    if isinstance(statement, CompoundSelect):
+        assert statement.selects, "Empty historical identity compound SELECT"
+        return tuple(
+            description
+            for branch in statement.selects
+            for description in _historical_select_descriptions(branch)
+        )
+    raise AssertionError(f"Unsupported historical identity SELECT: {type(statement).__name__}")
+
+
 @contextmanager
 def _historical_identity_columns(engine):
     columns = frozenset(column["name"] for column in inspect(engine).get_columns("users"))
@@ -79,16 +96,32 @@ def _historical_identity_columns(engine):
         prop.key for prop in inspect(User).column_attrs if prop.columns[0].name not in columns
     )
     assert "sessions_valid_after" not in columns
+    # IP document retirement (20261101_0001) postdates this database too.
+    document_columns = frozenset(
+        column["name"] for column in inspect(engine).get_columns("ip_documents")
+    )
+    document_absent = tuple(
+        prop.key
+        for prop in inspect(IpDocument).column_attrs
+        if prop.columns[0].name not in document_columns
+    )
+    assert "retired_at" in document_absent
 
     def historical_reads(state):
         if not state.is_select or state.session.get_bind() is not engine:
             return
         options = []
-        for description in state.statement.column_descriptions:
+        for description in _historical_select_descriptions(state.statement):
             entity = description.get("entity")
             if entity is None or description.get("expr") is not entity:
                 continue
             mapper = inspect(entity).mapper
+            if mapper.class_ is IpDocument:
+                loader = Load(entity)
+                for key in document_absent:
+                    loader = loader.defer(getattr(IpDocument, key), raiseload=True)
+                options.append(loader)
+                continue
             if mapper.class_ is User:
                 loader, target = Load(entity), entity
             elif mapper.class_ is CompanyMembership:
@@ -108,6 +141,10 @@ def _historical_identity_columns(engine):
                 loader = loader.defer(getattr(target, key), raiseload=True)
             options.append(loader)
         if options:
+            # Entity deferral cannot be assumed to propagate across compound arms.
+            assert isinstance(state.statement, Select), (
+                "Historical identity entity loading requires a plain Select"
+            )
             state.statement = state.statement.options(*options)
 
     # Freeze only this historical database's read dependency column set. An

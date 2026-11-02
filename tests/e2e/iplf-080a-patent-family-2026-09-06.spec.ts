@@ -8,6 +8,7 @@ import {
   bootstrapPatentTenant, enablePatentWorkspace,
   signInPatentTenant,
 } from "./support/patent-acceptance";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -22,8 +23,7 @@ for (const width of [393, 768, 1280]) {
       headers, data: { name: `Patent journey client ${run}`, client_type: "corporate" },
     });
     expect(client.status(), await client.text()).toBe(200);
-    const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-    expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+    await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/app/ip");
@@ -73,6 +73,8 @@ for (const width of [393, 768, 1280]) {
     });
     await page.getByLabel("Title", { exact: true }).fill("Inventor original source");
     await page.getByLabel("Invention", { exact: true }).fill("Substrate");
+    // Classification is an explicit choice from the server-listed entries.
+    await page.getByLabel("Classification", { exact: true }).selectOption("evidence");
     await expect(page.getByLabel("Confidentiality", { exact: true })).toHaveValue("restricted");
     await page.getByRole("button", { name: "Preview controlled name" }).click();
     await expect(page.getByText("Controlled name preview", { exact: true })).toBeVisible();

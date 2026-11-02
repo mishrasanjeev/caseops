@@ -7,6 +7,7 @@ import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPatentControlsFit } from "./support/patent-layout";
 import { bootstrapPatentTenant, enablePatentWorkspace, signInPatentTenant } from "./support/patent-acceptance";
 import { createPatentApplicationWithEvidence } from "./support/prod-api-response-evidence";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -31,8 +32,7 @@ for (const width of [393, 768, 1280]) {
       families.push(await response.json());
     }
     const [family, parentFamily] = families;
-    const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-    expect(taxonomy.status(), await taxonomy.text()).toBe(200);
+    await expectProvisionedDocumentTaxonomy(page.request, apiBaseUrl, headers);
     const bytes = Buffer.from(`Synthetic filed parent and priority evidence, including a sourced correction and withdrawal. ${run} `.repeat(30));
     const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, { headers, multipart: {
       metadata_json: JSON.stringify({ taxonomy_key: "evidence", title: "Filed priority source", confidentiality: "restricted",

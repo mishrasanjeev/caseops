@@ -517,6 +517,12 @@ def _source(
     version = session.scalar(version_stmt.with_for_update() if write else version_stmt)
     if document is None or version is None:
         raise _error("specialist_source_missing", "Source document version not found.", 404)
+    # A pinned source can never be retired; a retired document is never pinned.
+    if write and document.retired_at is not None:
+        raise _error(
+            "specialist_source_retired_document",
+            "This evidence document was retired. Select a current document.",
+        )
     links = session.scalars(
         select(IpDocumentLink)
         .where(

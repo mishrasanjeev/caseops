@@ -78,6 +78,8 @@ test("native-viewer integration: explicit local test-file inventory remains reco
     "contracts.test.ts",
     "controller.test.ts",
     "integration-contract.test.ts",
+    "pdf-stream.test.ts",
+    "renderer-readiness.test.ts",
     "renderer.test.ts",
     "security.test.ts",
   ]);

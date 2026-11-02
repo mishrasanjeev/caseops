@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 // Browser-only local UI contract. API mocks do not prove native authentication.
 const state = 'b'.repeat(64);
@@ -63,4 +64,37 @@ test('MOB-WEB-03 anonymous handoff preserves the exact bounded login return', as
   await page.waitForURL(url => url.pathname === '/sign-in');
   expect(new URL(page.url()).searchParams.get('next')).toBe(`/native/sign-in?${query}`);
   await expect(page.getByRole('button', { name: 'Connect app' })).toHaveCount(0);
+});
+
+test('MOB-WEB-04 unmatched HTTPS callback scrubs one-use query material without authentication or exchange', async ({ page, baseURL }) => {
+  const code = 'synthetic-callback-code-'.repeat(3);
+  const callbackState = 'synthetic-callback-state-'.repeat(3);
+  const callbackPath = '/native/oauth/callback';
+  const target = `${callbackPath}?${new URLSearchParams({ code, state: callbackState, access_token: 'synthetic-unused-token' })}`;
+  const requests: { url: string; method: string; navigation: boolean }[] = [];
+  page.on('request', request => requests.push({ url: request.url(), method: request.method(), navigation: request.isNavigationRequest() }));
+  const response = await page.goto(target);
+  expect(response?.status()).toBe(200);
+  await page.waitForURL(url => url.href === new URL(callbackPath, baseURL!).href);
+  await expect(page.getByText('The app did not receive this sign-in. Return to CaseOps and start sign-in again.', { exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  const current = new URL(page.url());
+  expect(current.pathname).toBe(callbackPath); expect(current.search).toBe(''); expect(current.hash).toBe('');
+  expect(response!.headers()['cache-control']).toBe('no-store');
+  expect(response!.headers()['referrer-policy']).toBe('no-referrer');
+  expect(response!.headers()['x-robots-tag']).toBe('noindex, nofollow');
+  const fixedScript = 'history.replaceState(null,"","/native/oauth/callback");';
+  const scriptHash = createHash('sha256').update(fixedScript).digest('base64');
+  expect(response!.headers()['content-security-policy']).toBe(
+    `default-src 'none'; script-src 'sha256-${scriptHash}'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+  );
+  for (const content of [await response!.text(), await page.content()]) {
+    expect(content).not.toContain(code); expect(content).not.toContain(callbackState);
+    expect(content).not.toContain('synthetic-unused-token');
+  }
+  expect(requests.filter(request => new URL(request.url).pathname.startsWith('/api/'))).toEqual([]);
+  expect(requests.filter(request => !['GET', 'HEAD', 'OPTIONS'].includes(request.method))).toEqual([]);
+  const secretRequests = requests.filter(request => [code, callbackState, 'synthetic-unused-token'].some(value => request.url.includes(value)));
+  expect(secretRequests).toEqual([{ url: new URL(target, baseURL!).href, method: 'GET', navigation: true }]);
+  await expect(page.locator('a,form,iframe')).toHaveCount(0);
 });

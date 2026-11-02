@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from caseops_api.api.routes import (
     access_reviews,
+    account_privacy,
     admin,
     ai,
     ai_feedback,
@@ -30,6 +31,7 @@ from caseops_api.api.routes import (
     intelligent_reviews,
     ip_foreign_associates,
     ip_international,
+    ip_nice_classes,
     ip_operations,
     ip_recordals,
     ip_registry,
@@ -39,7 +41,9 @@ from caseops_api.api.routes import (
     machine_readiness,
     mailbox,
     matter_billing,
+    matter_readthrough,
     matter_tags,
+    matter_work_queue,
     matters,
     me,
     meta,
@@ -51,9 +55,11 @@ from caseops_api.api.routes import (
     platform_console,
     portal,
     portal_ip,
+    portfolio_export_worker,
     private_retrieval,
     product_guide,
     provider_operations,
+    recipient_inbox,
     recommendations,
     source_actions,
     statutes,
@@ -64,11 +70,27 @@ from caseops_api.api.routes import (
 
 def register_api_routes(application: FastAPI) -> None:
     application.include_router(
+        matter_work_queue.router, prefix="/api/matter-work-queue", tags=["work"]
+    )
+    application.include_router(
+        matter_readthrough.router, prefix="/api/matter-readthrough", tags=["matter-reads"]
+    )
+    application.include_router(
+        account_privacy.router, prefix="/api/account", tags=["account-privacy"]
+    )
+    application.include_router(
+        recipient_inbox.router, prefix="/api/recipient-inbox", tags=["notifications"]
+    )
+    application.include_router(
         access_reviews.router, prefix="/api/access-reviews", tags=["access-reviews"]
     )
     """Register each feature directly, without cloning the entire API twice."""
     application.include_router(health.router, prefix="/api", tags=["health"])
     application.include_router(meta.router, prefix="/api", tags=["meta"])
+    application.include_router(
+        portfolio_export_worker.router, prefix="/api/internal/portfolio-exports",
+        tags=["portfolio-export-worker"],
+    )
     application.include_router(
         machine_readiness.router,
         prefix="/api/internal/machine-readiness",
@@ -89,6 +111,9 @@ def register_api_routes(application: FastAPI) -> None:
     )
     application.include_router(ip_international.router, prefix="/api/ip", tags=["ip-international"])
     application.include_router(ip_specialist.router, prefix="/api/ip", tags=["ip-specialist"])
+    application.include_router(
+        ip_nice_classes.router, prefix="/api/ip", tags=["ip-nice-classes"]
+    )
     application.include_router(ip_operations.router, prefix="/api/ip", tags=["ip-operations"])
     application.include_router(ip_recordals.router, prefix="/api/ip", tags=["ip-recordals"])
     application.include_router(ip_registry.router, prefix="/api/ip", tags=["ip-registry"])

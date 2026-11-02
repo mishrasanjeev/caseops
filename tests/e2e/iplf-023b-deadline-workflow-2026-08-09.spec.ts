@@ -21,7 +21,7 @@ function grantIpEntitlement(companyId: string): void {
     "from caseops_api.db.models import BillingSubscription",
     "from caseops_api.db.session import get_session_factory",
     "session = get_session_factory()()",
-    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'], status='manual_active', segment='law_firm', source='iplf_023b_playwright', externally_billable=False, entitlement_overrides_json={'ip_workspace': True}))",
+    "session.add(BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'], status='manual_active', segment='law_firm', source='iplf_023b_playwright', externally_billable=False, entitlement_overrides_json={'ip_workspace': True, 'ip_rule_governance': True}))",
     "session.commit()",
     "session.close()",
   ].join("; ");
@@ -385,8 +385,8 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   const deadlineWorkspace = page.getByTestId("ip-deadline-workspace");
   await expect(deadlineWorkspace).toContainText("Calculations are proposals");
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/unowned/)).toBeVisible();
-  await expect(deadlineWorkspace.getByText("2026-08-18 Â· candidate Â· v1")).toBeVisible();
+  await expect(deadlineWorkspace.getByText(/No responsible lawyer/)).toBeVisible();
+  await expect(deadlineWorkspace.getByText("2026-08-18 · candidate · v1")).toBeVisible();
   await expect(
     deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
   ).toHaveAttribute("href", "https://official.example/ip-india/tm-rules");
@@ -411,7 +411,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
 
   await deadlineWorkspace.getByRole("button", { name: "Confirm legal deadline" }).click();
   await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/confirmed Â· v2/)).toBeVisible();
+  await expect(deadlineWorkspace.getByText(/confirmed · v2/)).toBeVisible();
 
   const confirmedWorkspace = await api.get(
     `${apiBaseUrl}/api/ip/dockets/${seeded.docketId}/deadline-workspace`,
@@ -485,13 +485,13 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
     .fill("Verified the official filing receipt and legal completion evidence.");
   await refreshed.getByRole("button", { name: "Complete with legal evidence" }).click();
   await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(refreshed.getByText(/completed Â· v3/)).toBeVisible();
+  await expect(refreshed.getByText(/completed · v3/)).toBeVisible();
 
   const governance = page.getByTestId("ip-deadline-governance");
   for (const name of [
     "Propose calendar version",
     "Propose rule and fixture",
-    "Preview impact and emergency-disable",
+    "Preview impact",
   ]) {
     const control = governance.getByRole("button", { name });
     await expect(control).toBeVisible();

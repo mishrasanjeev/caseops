@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-31",
+  "scope": "Ten exact historical false positives from scheduled Security run 41193137288; no current-path, rule-wide or future-origin exception.",
+  "findings": [
+    {
+      "fingerprint": "f7d2d92206b78f3aed31c2af5bf37e459de9a1f7:apps/web/lib/vitest-host-pool.ts:generic-api-key:15",
+      "kind": "reviewed_file_checksum",
+      "blob_sha256": "4627f9709fa3381ba372d70964bc7d78304c989a524f93b0ac9b19c6bcc8fb5e",
+      "span_sha256": "571a3a818d58fb5c9897e4594e97bb563dc31d4c602d68db8f122f0e8413de5a"
+    },
+    {
+      "fingerprint": "df4b299a660e9ab00655054f7f4caf1b28a1f340:scripts/mobile/host-platform-trust.py:generic-api-key:81",
+      "kind": "certifi_bundle_checksum",
+      "blob_sha256": "0d8480735232acaefb09fd82693bf41a9d3fc243c57ede89d904673d48f95fa7",
+      "span_sha256": "0c3ed116e3a6d25ea71ba6336dabfa79c49fcdea1bc629a17ec6ce0b09637fe4"
+    },
+    {
+      "fingerprint": "a52e43caa57d1253271f581b347841e855112a29:apps/mobile/e2e/v1-workflows-fixture.mjs:generic-api-key:225",
+      "kind": "synthetic_receipt_kind",
+      "blob_sha256": "ad46255e72dbe27125f2e6ea69ea03c93cee390ede36cae329fd1b12cfb6ea07",
+      "span_sha256": "b4fa24bbd7c17e0be213bea4f9d6fe0f3fdbbe1a83b79f639d8ff0c04eec38d6"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:36",
+      "kind": "apk_public_key_digest",
+      "algorithm": "SHA-256",
+      "blob_sha256": "20d5fb7d4d1ad68de8a9e8e2fd15f3359c248466245ec6c589d1ce677a72350f",
+      "span_sha256": "d00f58706ee970aa5bc7268ba1a0146ab7707de76a09ca69bb19a9b359d1af71"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:37",
+      "kind": "apk_public_key_digest",
+      "algorithm": "SHA-1",
+      "blob_sha256": "20d5fb7d4d1ad68de8a9e8e2fd15f3359c248466245ec6c589d1ce677a72350f",
+      "span_sha256": "f45e8bba92099f478ca005fa2afa5a578ec2b424d4371d209c61dc8a88e5521d"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/android-native-proof.test.mjs:generic-api-key:38",
+      "kind": "apk_public_key_digest",
+      "algorithm": "MD5",
+      "blob_sha256": "20d5fb7d4d1ad68de8a9e8e2fd15f3359c248466245ec6c589d1ce677a72350f",
+      "span_sha256": "6b5ba4627d6a58f9fba527746694ec0d2f18da22627c440262228dbbd9de5e28"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:30",
+      "kind": "apk_public_key_digest",
+      "algorithm": "SHA-256",
+      "blob_sha256": "a16ffac360284d03e861ebbe28b318dd50a6dfc69fae8661d1b175ba330985ff",
+      "span_sha256": "d00f58706ee970aa5bc7268ba1a0146ab7707de76a09ca69bb19a9b359d1af71"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:31",
+      "kind": "apk_public_key_digest",
+      "algorithm": "SHA-1",
+      "blob_sha256": "a16ffac360284d03e861ebbe28b318dd50a6dfc69fae8661d1b175ba330985ff",
+      "span_sha256": "f45e8bba92099f478ca005fa2afa5a578ec2b424d4371d209c61dc8a88e5521d"
+    },
+    {
+      "fingerprint": "e8c3049b7150219073718689d7106d4a82df7c5a:scripts/mobile/build-android-local-acceptance.test.mjs:generic-api-key:32",
+      "kind": "apk_public_key_digest",
+      "algorithm": "MD5",
+      "blob_sha256": "a16ffac360284d03e861ebbe28b318dd50a6dfc69fae8661d1b175ba330985ff",
+      "span_sha256": "6b5ba4627d6a58f9fba527746694ec0d2f18da22627c440262228dbbd9de5e28"
+    },
+    {
+      "fingerprint": "438c79f776373ff31eba881e933ab07b9900231f:scripts/mobile/tooling.test.mjs:generic-api-key:528",
+      "kind": "rfc6238_public_test_vector",
+      "blob_sha256": "21516fcf8333c934764977befea83da291d09559bc69b6d6e63d3e8cfaaa3c56",
+      "span_sha256": "92e61d715b87e88b3152d737e72f08862cd37b51b80871373ff6b18c5cd0a60e"
+    }
+  ]
+}

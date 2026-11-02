@@ -18,8 +18,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
+from tests.emulator_mail_ownership import guarded_emulator_monkeypatch
+
 HARNESS = Path(__file__).resolve().parents[3] / "tests/e2e/support/oauth"
 WEB = "http://127.0.0.1:3100"
+
+
+@pytest.fixture
+def monkeypatch():
+    yield from guarded_emulator_monkeypatch()
 
 
 @pytest.fixture

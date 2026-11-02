@@ -44,6 +44,7 @@ test("retains only opaque origin and original lifecycle while picker is open", a
   const pending = f.coordinator.choose(intent);
   assert.deepEqual(f.coordinator.snapshot(identity, "epoch-1"), {
     intent,
+    revision: 1,
     selection: null,
   });
   f.resolve(asset);
@@ -95,12 +96,54 @@ test("logout discards a late picker result and never queues upload", async () =>
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
   assert.deepEqual(f.cleaned, [asset]);
 });
-test("cancel leaves no navigation or selected-file state", async () => {
+test("cancel keeps only the opaque navigation intent and no selected file", async () => {
+  // Android remounts after its system picker; the user returns to the same
+  // Matter Files screen, but nothing is selected, staged or uploadable.
   const f = fixture();
   const pending = f.coordinator.choose(intent);
   f.resolve(null);
   await pending;
+  assert.deepEqual(f.coordinator.snapshot(identity, "epoch-1"), {
+    intent,
+    revision: 1,
+    selection: null,
+  });
+  assert.equal(f.coordinator.selectionState.hasSelection, false);
+  assert.deepEqual(f.cleaned, []);
+  f.coordinator.clear();
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+});
+test("the return lease outlives the pick until settle, and never a later clear", async () => {
+  const f = fixture();
+  assert.equal(f.coordinator.leased, false);
+  const pending = f.coordinator.choose(intent);
+  assert.equal(f.coordinator.leased, true);
+  f.resolve(asset);
+  await pending;
+  // Result delivered before the app is active again: still leased, so the
+  // routine compatibility recheck on return must not discard it.
+  assert.equal(f.coordinator.picking, false);
+  assert.equal(f.coordinator.leased, true);
+  f.coordinator.settle();
+  assert.equal(f.coordinator.leased, false);
+  assert.deepEqual(
+    f.coordinator.snapshot(identity, "epoch-1")?.selection?.asset,
+    asset,
+  );
+  // Settling ends only the lease; a later privacy clear still purges it.
+  f.coordinator.clear();
+  assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+  assert.deepEqual(f.cleaned, [asset]);
+});
+test("a clear during the return lease ends it and discards the result", async () => {
+  const f = fixture();
+  const pending = f.coordinator.choose(intent);
+  f.resolve(asset);
+  await pending;
+  f.coordinator.clear();
+  assert.equal(f.coordinator.leased, false);
+  assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
+  assert.deepEqual(f.cleaned, [asset]);
 });
 test("does not launch a second OS picker even after cancellation", async () => {
   const f = fixture();
@@ -131,8 +174,13 @@ test("a cancelled picker rejection cannot publish an error into another login", 
 test("late imported-file cleanup failure is surfaced after logout instead of silently retained", async () => {
   let resolve!: (value: MatterFileAsset) => void;
   const coordinator = createFilePickerCoordinator(
-    () => new Promise((done) => { resolve = done; }),
-    () => { throw new TempCleanupError(); },
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+    () => {
+      throw new TempCleanupError();
+    },
     () => {},
   );
   const pending = coordinator.choose(intent);
@@ -145,11 +193,100 @@ test("late imported-file cleanup failure is surfaced after logout instead of sil
 
 test("failed selected-file cleanup still publishes cleared private selection", async () => {
   let changed = 0;
-  const coordinator = createFilePickerCoordinator(async () => asset,
-    () => { throw new TempCleanupError(); }, () => { changed++; });
+  const coordinator = createFilePickerCoordinator(
+    async () => asset,
+    () => {
+      throw new TempCleanupError();
+    },
+    () => {
+      changed++;
+    },
+  );
   await coordinator.choose(intent);
   const before = changed;
   assert.throws(() => coordinator.clear(), TempCleanupError);
   assert.equal(changed, before + 1);
   assert.equal(coordinator.snapshot(identity, "epoch-1"), null);
+});
+
+test("picker lease is held before the first clear publication can reenter another command", async () => {
+  let coordinator: ReturnType<typeof createFilePickerCoordinator>;
+  let first = true,
+    calls = 0;
+  const rejected: Promise<void>[] = [];
+  coordinator = createFilePickerCoordinator(
+    async () => {
+      calls++;
+      return asset;
+    },
+    () => {},
+    () => {
+      if (!first) return;
+      first = false;
+      assert.equal(coordinator.selectionState.picking, true);
+      rejected.push(
+        assert.rejects(coordinator.choose(intent), /Finish the current/),
+      );
+    },
+  );
+  await coordinator.choose(intent);
+  await Promise.all(rejected);
+  assert.equal(calls, 1);
+  assert.deepEqual(coordinator.selectionState, {
+    picking: false,
+    revision: 1,
+    hasSelection: true,
+  });
+});
+
+test("synchronous privacy invalidation during clear publication cannot be reacquired by the pending command", async () => {
+  let coordinator: ReturnType<typeof createFilePickerCoordinator>;
+  let first = true,
+    calls = 0;
+  coordinator = createFilePickerCoordinator(
+    async () => {
+      calls++;
+      return asset;
+    },
+    () => {},
+    () => {
+      if (!first) return;
+      first = false;
+      coordinator.clear();
+    },
+  );
+  await coordinator.choose(intent);
+  assert.equal(calls, 0);
+  assert.equal(coordinator.snapshot(identity, "epoch-1"), null);
+  assert.deepEqual(coordinator.selectionState, {
+    picking: false,
+    revision: 2,
+    hasSelection: false,
+  });
+});
+
+test("unknown capture source refuses before cleanup, publication or SDK dispatch", async () => {
+  let calls = 0;
+  const coordinator = createFilePickerCoordinator(
+    async () => {
+      calls++;
+      return asset;
+    },
+    () => {
+      calls++;
+    },
+    () => {
+      calls++;
+    },
+  );
+  await assert.rejects(
+    coordinator.choose(intent, "library" as any),
+    /available file source/,
+  );
+  assert.equal(calls, 0);
+  assert.deepEqual(coordinator.selectionState, {
+    picking: false,
+    revision: 0,
+    hasSelection: false,
+  });
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { absent, click, dispatchNativeClick, findQuery, home, input, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { absent, androidBehindTabBar, click, dispatchNativeClick, findQuery, home, input, IOS_FIRST_KEY_SETTLE_MS, IOS_KEYBOARD_READY_MS, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { freshNoteAbsent, scenarios, selectMatterActivity, selectMatterDraft, verifyIosCalendarRow } from '../../apps/mobile/e2e/journeys.mjs';
 
 function element(id, { displayed = true, accessible = 'false', label = 'CaseOps', value = label } = {}) {
@@ -194,6 +194,8 @@ function homeDouble(platform, { active = true, headingVisible = false, rawCount 
       if (query === selector(platform, 'id', 'screen-calendar')) return Array(rawCount).fill(marker);
       if (query === 'xpath://XCUIElementTypeStaticText[@name="screen-calendar"]') return Array(baseCount).fill({ elementId: baseId });
       if (query === 'xpath://XCUIElementTypeStaticText[@name="screen-calendar"]/ancestor::XCUIElementTypeScrollView') return Array(ancestorCount).fill(scroll);
+      // Android's tab-bar occlusion check; this fixture renders no bar.
+      if (platform === 'android' && query === selector(platform, 'id', 'tab-today')) return [];
       assert.fail('UNRELATED_VISIBLE_SCROLL_CANNOT_PROVE_HOME');
     },
     getElementRect: async (id) => { assert.equal(id, 'owned-home-scroll'); return frame; },
@@ -246,6 +248,73 @@ test('Android home retains its visible-heading and original Back proof without i
   assert.ok(fake.queries.every((query) => !query.startsWith('xpath:')));
 });
 
+test('Android home waits through a Back transition that briefly shows neither the list nor another Back', async () => {
+  // Observed in run-06 NATIVE-08: Matter detail -> Back -> (transition) -> Matters list.
+  let backClicks = 0, polls = 0, transition = false;
+  const shown = (id) => [{ isDisplayed: async () => true, click: async () => { if (id === 'back') { backClicks++; transition = true; } } }];
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    $$: async (query) => {
+      if (query === selector('android', 'id', 'tab-matters')) return shown('tab');
+      if (query === selector('android', 'id', 'screen-matters')) return transition && ++polls > 3 ? shown('screen') : [];
+      if (query === selector('android', 'id', 'back')) return transition ? [] : shown('back');
+      assert.fail(`UNEXPECTED_QUERY ${query}`);
+    },
+  });
+  await home({ platform: 'android', driver }, 'matters');
+  assert.equal(backClicks, 1);
+  assert.ok(polls > 3);
+});
+
+test('Android home still fails with a typed state error when neither the list nor Back ever settles', async () => {
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    $$: async (query) => query === selector('android', 'id', 'tab-matters')
+      ? [{ isDisplayed: async () => true, click: async () => {} }] : [],
+  });
+  await assert.rejects(() => home({ platform: 'android', driver }, 'matters'), /NATIVE_HOME_STATE_NOT_READY/);
+});
+
+function tabBarDouble({ rowY, rowHeight = 60, swipesToLift = 1 } = {}) {
+  let swipes = 0;
+  const bar = { elementId: 'tab-today', isDisplayed: async () => true, getAttribute: async () => 'tab-today', click: async () => {} };
+  const row = { elementId: 'row', isDisplayed: async () => true, getAttribute: async () => 'files-hash-x', click: async () => {} };
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    getWindowRect: async () => ({ x: 0, y: 0, width: 1080, height: 2424 }),
+    performActions: async () => { swipes++; }, releaseActions: async () => {},
+    getElementRect: async (id) => id === 'tab-today' ? { x: 0, y: 2172, width: 270, height: 189 }
+      : { x: 53, y: swipes >= swipesToLift ? 1500 : rowY, width: 975, height: rowHeight },
+    $$: async (query) => query === selector('android', 'id', 'tab-today') ? [bar]
+      : query === selector('android', 'id', 'files-hash-x') ? [row] : [],
+  });
+  return { context: { platform: 'android', driver }, swipes: () => swipes, row };
+}
+
+test('Android treats a match centered behind the tab bar as not yet visible and sweeps it into view', async () => {
+  // Observed in files-15 FILES-01: tapping "Source details" behind the bar opened Calendar.
+  const behind = tabBarDouble({ rowY: 2150 });
+  assert.equal(await androidBehindTabBar(behind.context, behind.row), true);
+  const found = await findQuery(behind.context, selector('android', 'id', 'files-hash-x'), { scroll: true });
+  assert.equal(found.elementId, 'row');
+  assert.ok(behind.swipes() >= 1);
+  const clear = tabBarDouble({ rowY: 1500 });
+  assert.equal(await androidBehindTabBar(clear.context, clear.row), false);
+  await findQuery(clear.context, selector('android', 'id', 'files-hash-x'), { scroll: true });
+  assert.equal(clear.swipes(), 0);
+  // A tab itself, iOS, or a route without the bar is never treated as occluded.
+  assert.equal(await androidBehindTabBar(behind.context, { elementId: 'tab-today', getAttribute: async () => 'tab-today' }), false);
+  assert.equal(await androidBehindTabBar({ ...behind.context, platform: 'ios' }, behind.row), false);
+  const stuck = tabBarDouble({ rowY: 2150, swipesToLift: 99 });
+  await assert.rejects(() => findQuery(stuck.context, selector('android', 'id', 'files-hash-x')), /NATIVE_CONTROL_NOT_VISIBLE/);
+});
+
 test('input forwards optional bounded scroll discovery while preserving its default lookup budget and exact value', async () => {
   for (const scroll of [false, true]) {
     let moved = !scroll;
@@ -262,6 +331,50 @@ test('input forwards optional bounded scroll discovery while preserving its defa
     assert.equal(gestures.length, scroll ? 1 : 0);
     assert.ok(waits.every(({ timeout, interval }) => timeout === (scroll ? 1500 : 10000) && interval === 150));
   }
+});
+
+function iosInputDouble({ keyboard = true, accepted = (typed) => typed } = {}) {
+  const calls = [], waits = [];
+  let typed = '';
+  const field = { elementId: 'unit-field', isDisplayed: async () => true,
+    clearValue: async () => { calls.push('clear'); typed = ''; },
+    addValue: async (value) => { calls.push(`add:${value}`); typed += value; },
+    getAttribute: async (name) => { assert.equal(name, 'value'); return accepted(typed); } };
+  const driver = {
+    waitUntil: async (callback, options) => { waits.push(options);
+      if (!await callback()) throw new Error(options.timeoutMsg); },
+    $$: async (query) => query === '~matter-search' ? [field]
+      : query === '-ios predicate string:type == "XCUIElementTypeKeyboard"' && keyboard
+        ? [{ isDisplayed: async () => true }] : [],
+    elementClick: async (id) => { assert.equal(id, 'unit-field'); calls.push('focus'); },
+    pause: async (ms) => { calls.push(`pause:${ms}`); },
+  };
+  return { context: { platform: 'ios', driver, record: () => {} }, calls, waits };
+}
+
+test('iOS input focuses, waits for the keyboard, settles after the first key and proves the exact text', async () => {
+  const fake = iosInputDouble();
+  await input(fake.context, 'id', 'matter-search', 'MOBILE-LOCAL-001');
+  assert.deepEqual(fake.calls, ['focus', 'clear', 'add:M', `pause:${IOS_FIRST_KEY_SETTLE_MS}`, 'add:OBILE-LOCAL-001']);
+  assert.equal(IOS_FIRST_KEY_SETTLE_MS, 1000);
+  assert.ok(fake.waits.some(({ timeout, timeoutMsg }) => timeout === IOS_KEYBOARD_READY_MS && timeoutMsg === 'NATIVE_KEYBOARD_NOT_READY'));
+  const single = iosInputDouble();
+  await input(single.context, 'id', 'matter-search', 'x');
+  assert.deepEqual(single.calls, ['focus', 'clear', 'add:x', `pause:${IOS_FIRST_KEY_SETTLE_MS}`]);
+  const cleared = iosInputDouble({ accepted: () => 'Placeholder' });
+  await input(cleared.context, 'id', 'matter-search', '');
+  assert.deepEqual(cleared.calls, ['focus', 'clear']);
+});
+
+test('iOS input refuses dropped keystrokes and an absent keyboard instead of acting on a wrong value', async () => {
+  const dropped = iosInputDouble({ accepted: (typed) => typed.length > 1 ? 'M-LOCAL-001' : typed });
+  await assert.rejects(input(dropped.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_INPUT_VALUE_MISMATCH/);
+  const noKeyboard = iosInputDouble({ keyboard: false });
+  await assert.rejects(input(noKeyboard.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_KEYBOARD_NOT_READY/);
+  assert.deepEqual(noKeyboard.calls, ['focus']);
+  const firstKey = iosInputDouble({ accepted: () => '' });
+  await assert.rejects(input(firstKey.context, 'id', 'matter-search', 'MOBILE-LOCAL-001'), /NATIVE_INPUT_FIRST_KEY_NOT_ACCEPTED/);
+  assert.deepEqual(firstKey.calls, ['focus', 'clear', 'add:M']);
 });
 
 const workLabel = 'Seeded task, MAT-001 · Seeded matter, task · 25 Oct 2026 · open';
@@ -450,16 +563,20 @@ test('both Calendar journeys bind their first date entry to the actual stable in
       waitUntil: async (callback, options) => { waits.push(options); assert.ok(await callback()); },
       $$: async (query) => {
         queries.push(query);
-        if (query === selector(platform, 'id', 'calendar-date-input')) return [{ ...shown,
-          setValue: async (value) => { values.push(value); throw stop; } }];
+        if (query === selector(platform, 'id', 'calendar-date-input')) return [{ ...shown, elementId: 'unit-date',
+          setValue: async (value) => { values.push(value); throw stop; },
+          clearValue: async () => {}, addValue: async (value) => { values.push(value); throw stop; } }];
         if ([selector(platform, 'id', 'tab-calendar'), selector(platform, 'id', 'screen-calendar')].includes(query)) return [shown];
+        if (platform === 'ios' && query === '-ios predicate string:type == "XCUIElementTypeKeyboard"') return [shown];
         assert.fail('CALENDAR_ALIAS_OR_UNRELATED_CONTROL_QUERIED');
       },
     } };
     nativeProtocolDouble(context.driver);
     await assert.rejects(() => scenarios.find((scenario) => scenario.id === id).run(context), (error) => error === stop);
-    assert.deepEqual(values, ['2026-10-25']);
-    assert.equal(waits.at(-1).timeout, 1500, 'CALENDAR_INPUT_MUST_ADMIT_BOUNDED_SCROLL_DISCOVERY');
+    // iOS types the first character on its own before the rest (see input()).
+    assert.deepEqual(values, [platform === 'ios' ? '2' : '2026-10-25']);
+    assert.equal(waits.filter(({ timeoutMsg }) => timeoutMsg === 'NATIVE_CONTROL_NOT_VISIBLE').at(-1).timeout, 1500,
+      'CALENDAR_INPUT_MUST_ADMIT_BOUNDED_SCROLL_DISCOVERY');
     assert.equal(queries.includes(selector(platform, 'label', 'Agenda date, YYYY-MM-DD')), false);
   }
 });
@@ -598,11 +715,20 @@ test('iOS keyboard swipe uses the proven outer gutter and stays above its predic
   }
 });
 
+test('iOS swipe holds still before lifting so momentum cannot carry a short page past a row', async () => {
+  const fake = swipeDouble('ios', { count: 0 });
+  await swipe(fake.context);
+  assert.equal(IOS_SWIPE_SETTLE_MS, 300);
+  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pause', 'pointerUp']);
+  assert.deepEqual(fake.actions[0][0].actions[3], { type: 'pause', duration: 300 });
+});
+
 test('Android retains its original center swipe without any iOS geometry query', async () => {
   const fake = swipeDouble('android');
   await swipe(fake.context);
   assert.deepEqual(fake.actions[0][0].actions[0], { type: 'pointerMove', duration: 0, x: 201, y: 629 });
   assert.equal(fake.actions[0][0].actions[2].y, 245);
+  assert.deepEqual(fake.actions[0][0].actions.map(({ type }) => type), ['pointerMove', 'pointerDown', 'pointerMove', 'pointerUp']);
   assert.deepEqual(fake.queries, []);
 });
 

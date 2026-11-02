@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `2a1577fd03c5676be6c2567b2054db535e85aaa7752f4697fd7be44a46ebaa71`
-- SQL tables: `347`
-- SQL columns: `5469`
-- ORM indexes: `1793`
-- Alembic/raw index declarations: `1577`
-- Non-SQL data classes: `15`
+- Canonical map SHA-256: `97e3533a6e4b17c6a1d1366de87a175fae2ae75cd4afbbe86660d0aa0dc0f527`
+- SQL tables: `360`
+- SQL columns: `5778`
+- ORM indexes: `1821`
+- Alembic/raw index declarations: `1598`
+- Non-SQL data classes: `16`
 
 ## Boundary
 
@@ -23,6 +23,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | --- | --- | ---: | --- |
 | `access_review_campaigns` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `access_review_decisions` | `tenant_operational_record` | 9 | `registry_fail_closed` |
+| `account_deletion_requests` | `security_identity_control` | 9 | `registry_fail_closed` |
 | `account_setup_tokens` | `security_identity_control` | 10 | `registry_fail_closed` |
 | `affidavit_intelligence_runs` | `tenant_operational_record` | 15 | `registry_fail_closed` |
 | `affidavit_questions` | `tenant_operational_record` | 19 | `registry_fail_closed` |
@@ -108,6 +109,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `contract_playbook_rules` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `contract_term_suggestions` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `contracts` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `counsel_read_page_dirty` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
+| `counsel_read_page_members` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
+| `counsel_read_pages` | `tenant_restricted_legal_content` | 33 | `registry_fail_closed` |
 | `courts` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `custom_roles` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `data_retention_policies` | `tenant_operational_record` | 9 | `registry_fail_closed` |
@@ -160,7 +164,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_document_taxonomy_aliases` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `ip_document_taxonomy_entries` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_document_versions` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
-| `ip_documents` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_documents` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `ip_evidence_candidates` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_filing_transactions` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `ip_foreign_associate_instructions` | `tenant_restricted_legal_content` | 45 | `registry_fail_closed` |
@@ -184,7 +188,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_patent_proceeding_details` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `ip_patent_proceeding_events` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_patent_prosecution_events` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
-| `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `ip_portfolio_renewal_occurrences` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_portfolio_renewal_series` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
@@ -198,7 +202,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_relationships` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
 | `ip_renewal_terms` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_responsibility_assignments` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
-| `ip_rule_sets` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_rule_sets` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `ip_rule_versions` | `tenant_restricted_legal_content` | 22 | `registry_fail_closed` |
 | `ip_specialist_obligation_events` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `ip_specialist_obligation_links` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
@@ -262,7 +266,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_court_sync_jobs` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_court_sync_runs` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `matter_deadlines` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `matter_decision_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_file_qa_entries` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
+| `matter_hearing_pack_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_hearings` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `matter_intake_requests` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `matter_invoice_exports` | `billing_provider_evidence` | 10 | `registry_fail_closed` |
@@ -272,13 +278,20 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_next_hearing_history` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_next_hearing_suggestions` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_notes` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
+| `matter_option_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_outside_counsel_assignments` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
+| `matter_pack_item_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_portal_grants` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `matter_proceeding_signals` | `tenant_restricted_legal_content` | 22 | `registry_fail_closed` |
+| `matter_readthrough_dirty` | `tenant_operational_record` | 3 | `registry_fail_closed` |
+| `matter_recommendation_read_pages` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `matter_statute_references` | `public_or_licensed_legal_reference` | 8 | `registry_fail_closed` |
 | `matter_strategy_entries` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `matter_tag_assignments` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `matter_tags` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
+| `matter_task_queue_dirty` | `tenant_operational_record` | 5 | `registry_fail_closed` |
+| `matter_task_queue_groups` | `tenant_operational_record` | 5 | `registry_fail_closed` |
+| `matter_task_queue_pages` | `tenant_restricted_legal_content` | 186 | `registry_fail_closed` |
 | `matter_tasks` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_time_entries` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matters` | `tenant_restricted_legal_content` | 53 | `registry_fail_closed` |
@@ -373,6 +386,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 
 | ID | Kind | Disposition handler |
 | --- | --- | --- |
+| `portfolio-export-dispatch-envelope` | `queue_outbox_dead_letter` | `registry_fail_closed` |
 | `public-enquiry-reference-notification` | `provider_held_object` | `registry_fail_closed` |
 | `platform-console-account-link-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `document-object-prefix-and-version` | `object_prefix_version` | `registry_fail_closed` |

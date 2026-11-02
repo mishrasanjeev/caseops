@@ -26,6 +26,8 @@ vi.mock("@/lib/native-authorization", async (original) => ({
 vi.mock("@/components/marketing/Logo", () => ({
   Logo: () => <span>CaseOps</span>,
 }));
+const LOCAL_POLICY = { mode: "local", redirectUri: "caseops://oauth/callback" } as const;
+const HTTPS_POLICY = { mode: "https", redirectUri: "https://native.invalid/native/oauth/callback", configSha256: "a".repeat(64) } as const;
 const identity = {
   user: {
     id: "person-one",
@@ -62,7 +64,7 @@ describe("native browser handoff consent", () => {
       redirect_uri: "caseops://oauth/callback",
       expires_in: 60,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     const open = await screen.findByRole("button", { name: "Open CaseOps" });
     expect(mocks.open).not.toHaveBeenCalled();
@@ -80,6 +82,7 @@ describe("native browser handoff consent", () => {
     fireEvent.click(open);
     expect(mocks.open).toHaveBeenCalledExactlyOnceWith(
       `caseops://oauth/callback?code=${"c".repeat(43)}&state=${"b".repeat(64)}`,
+      LOCAL_POLICY,
     );
     expect(mocks.api).toHaveBeenCalledTimes(2);
   });
@@ -93,7 +96,7 @@ describe("native browser handoff consent", () => {
         redirect_uri: "caseops://oauth/callback",
         expires_in,
       });
-      render(<NativeSignIn />);
+      render(<NativeSignIn policy={LOCAL_POLICY} />);
       fireEvent.click(
         await screen.findByRole("button", { name: "Connect app" }),
       );
@@ -115,7 +118,7 @@ describe("native browser handoff consent", () => {
       redirect_uri: "caseops://oauth/callback",
       expires_in: 15,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -147,7 +150,7 @@ describe("native browser handoff consent", () => {
           finish = resolve;
         }),
     );
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -181,13 +184,13 @@ describe("native browser handoff consent", () => {
           }),
       )
       .mockResolvedValue(identity);
-    const view = render(<NativeSignIn />);
+    const view = render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     mocks.query = query.replace(
       "state=" + "b".repeat(64),
       "state=" + "d".repeat(64),
     );
-    view.rerender(<NativeSignIn />);
+    view.rerender(<NativeSignIn policy={LOCAL_POLICY} />);
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Connect app" })).toBeEnabled(),
     );
@@ -215,14 +218,14 @@ describe("native browser handoff consent", () => {
         expires_in: 60,
       })
       .mockResolvedValue(identity);
-    const view = render(<NativeSignIn />);
+    const view = render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     await screen.findByRole("button", { name: "Open CaseOps" });
     mocks.query = query.replace(
       "state=" + "b".repeat(64),
       "state=" + "d".repeat(64),
     );
-    view.rerender(<NativeSignIn />);
+    view.rerender(<NativeSignIn policy={LOCAL_POLICY} />);
     expect(
       screen.queryByRole("button", { name: "Open CaseOps" }),
     ).not.toBeInTheDocument();
@@ -237,7 +240,7 @@ describe("native browser handoff consent", () => {
       redirect_uri: "caseops://oauth/callback",
       expires_in: 60,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     await screen.findByRole("button", { name: "Open CaseOps" });
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
@@ -260,7 +263,7 @@ describe("native browser handoff consent", () => {
       redirect_uri: "caseops://oauth/callback",
       expires_in: 60,
     });
-    const view = render(<NativeSignIn />);
+    const view = render(<NativeSignIn policy={LOCAL_POLICY} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -288,7 +291,7 @@ describe("native browser handoff consent", () => {
       redirect_uri: "caseops://oauth/callback",
       expires_in: 60,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     await screen.findByRole("button", { name: "Open CaseOps" });
     fireEvent(window, new Event("pagehide"));
@@ -318,7 +321,7 @@ describe("native browser handoff consent", () => {
       status: "verified",
       expires_at: "2026-10-25T12:00:00Z",
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     const field = await screen.findByLabelText("Six-digit code");
     expect(
@@ -346,7 +349,7 @@ describe("native browser handoff consent", () => {
       detail: "Access denied.",
       data: null,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Access denied");
     expect(screen.queryByLabelText("Six-digit code")).not.toBeInTheDocument();
@@ -368,7 +371,7 @@ describe("native browser handoff consent", () => {
           reject = failed;
         }),
     );
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
@@ -410,7 +413,7 @@ describe("native browser handoff consent", () => {
       status: "verified",
       expires_at: "2026-10-25T12:00:00Z",
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
@@ -445,7 +448,7 @@ describe("native browser handoff consent", () => {
           finish = done;
         }),
     );
-    const view = render(<NativeSignIn />);
+    const view = render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
@@ -457,7 +460,7 @@ describe("native browser handoff consent", () => {
       platform: "android",
       redirect_uri: "caseops://oauth/callback",
     }).toString();
-    view.rerender(<NativeSignIn />);
+    view.rerender(<NativeSignIn policy={LOCAL_POLICY} />);
     expect(
       await screen.findByRole("button", { name: "Connect app" }),
     ).toBeVisible();
@@ -486,7 +489,7 @@ describe("native browser handoff consent", () => {
       detail: "Sign in again.",
       data: null,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
@@ -505,7 +508,7 @@ describe("native browser handoff consent", () => {
 
   it("rejects malformed input before requesting or exposing the browser identity", async () => {
     mocks.query += "&redirect_uri=https://attacker.test";
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "invalid or incomplete",
     );
@@ -517,7 +520,7 @@ describe("native browser handoff consent", () => {
 
   it("names the actual person and workspace and does not authorize on page load", async () => {
     mocks.api.mockResolvedValue(identity);
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     expect(await screen.findByText("person@example.test")).toBeVisible();
     expect(screen.getByText("Example Legal / fixture-legal")).toBeVisible();
     expect(mocks.api.mock.calls.map((call) => call[0])).toEqual([
@@ -533,7 +536,7 @@ describe("native browser handoff consent", () => {
       detail: "Sign in.",
       data: null,
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     const link = await screen.findByRole("link", { name: "Sign in securely" });
     expect(link).toHaveAttribute(
       "href",
@@ -550,7 +553,7 @@ describe("native browser handoff consent", () => {
       state: "b".repeat(64),
       redirect_uri: "https://attacker.test",
     });
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "could not be completed",
@@ -574,7 +577,7 @@ describe("native browser handoff consent", () => {
           fail = reject;
         }),
     );
-    render(<NativeSignIn />);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
     const button = await screen.findByRole("button", { name: "Connect app" });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -595,4 +598,93 @@ describe("native browser handoff consent", () => {
       ),
     );
   });
+
+  it("uses the configured HTTPS callback with the same four-field authorize DTO and one explicit opening gesture", async () => {
+    mocks.query = new URLSearchParams({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "ios", redirect_uri: HTTPS_POLICY.redirectUri }).toString();
+    const code = "r".repeat(43);
+    mocks.api.mockResolvedValueOnce(identity).mockResolvedValueOnce({ code, state: "b".repeat(64), redirect_uri: HTTPS_POLICY.redirectUri, expires_in: 60 });
+    render(<NativeSignIn policy={HTTPS_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    const open = await screen.findByRole("button", { name: "Open CaseOps" });
+    expect(mocks.api.mock.calls[1]).toEqual(["/api/auth/native/authorize", { method: "POST", body: {
+      code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "ios", redirect_uri: HTTPS_POLICY.redirectUri,
+    } }]);
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(document.body.innerHTML).not.toContain(code);
+    // The original state remains in the existing same-origin sign-in return
+    // link. The newly issued code and grant callback must stay in memory.
+    expect(document.body.innerHTML).not.toContain(`${HTTPS_POLICY.redirectUri}?code=`);
+    expect(document.querySelector(`a[href^="${HTTPS_POLICY.redirectUri}"]`)).toBeNull();
+    fireEvent.click(open); fireEvent.click(open);
+    expect(mocks.open).toHaveBeenCalledExactlyOnceWith(`${HTTPS_POLICY.redirectUri}?code=${code}&state=${"b".repeat(64)}`, HTTPS_POLICY);
+    expect(mocks.api).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([undefined, { mode: "disabled" } as const])("does not request or expose browser identity when native policy is absent or disabled %#", async (policy) => {
+    mocks.api.mockResolvedValue(identity);
+    render(<NativeSignIn policy={policy} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid or incomplete");
+    expect(mocks.api).not.toHaveBeenCalled(); expect(mocks.open).not.toHaveBeenCalled();
+    expect(screen.queryByText(identity.user.email)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sign in securely" })).not.toBeInTheDocument();
+  });
+
+  it("refuses a custom-scheme request under HTTPS policy before session or grant reads", async () => {
+    mocks.api.mockResolvedValue(identity);
+    render(<NativeSignIn policy={HTTPS_POLICY} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid or incomplete");
+    expect(mocks.api).not.toHaveBeenCalled(); expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("never converts a drifted HTTPS grant into a local callback or reflects the short-lived code", async () => {
+    mocks.query = new URLSearchParams({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "android", redirect_uri: HTTPS_POLICY.redirectUri }).toString();
+    const code = "q".repeat(43);
+    mocks.api.mockResolvedValueOnce(identity).mockResolvedValueOnce({ code, state: "b".repeat(64), redirect_uri: LOCAL_POLICY.redirectUri, expires_in: 60 });
+    render(<NativeSignIn policy={HTTPS_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be completed");
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain(code); expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+  });
+
+  it("discards a prepared HTTPS grant when the exact configuration hash changes even if the query and redirect stay the same", async () => {
+    mocks.query = new URLSearchParams({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "ios", redirect_uri: HTTPS_POLICY.redirectUri }).toString();
+    mocks.api.mockResolvedValueOnce(identity).mockResolvedValueOnce({ code: "c".repeat(43), state: "b".repeat(64), redirect_uri: HTTPS_POLICY.redirectUri, expires_in: 60 }).mockResolvedValue(identity);
+    const view = render(<NativeSignIn policy={HTTPS_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    await screen.findByRole("button", { name: "Open CaseOps" });
+    view.rerender(<NativeSignIn policy={{ ...HTTPS_POLICY, configSha256: "d".repeat(64) }} />);
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Connect app" })).toBeEnabled();
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/me")).toHaveLength(2);
+  });
+
+  it("does not adopt an in-flight grant from an earlier configuration hash after the policy changes", async () => {
+    mocks.query = new URLSearchParams({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "ios", redirect_uri: HTTPS_POLICY.redirectUri }).toString();
+    let finish!: (value: unknown) => void;
+    mocks.api.mockResolvedValueOnce(identity).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(identity);
+    const view = render(<NativeSignIn policy={HTTPS_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    view.rerender(<NativeSignIn policy={{ ...HTTPS_POLICY, configSha256: "e".repeat(64) }} />);
+    await screen.findByRole("button", { name: "Connect app" });
+    await act(async () => finish({ code: "s".repeat(43), state: "b".repeat(64), redirect_uri: HTTPS_POLICY.redirectUri, expires_in: 60 }));
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+  });
+
+  it("keeps the anonymous HTTPS sign-in return path exact without leaking policy metadata into it", async () => {
+    mocks.query = new URLSearchParams({ code_challenge: "a".repeat(43), state: "b".repeat(64), platform: "android", redirect_uri: HTTPS_POLICY.redirectUri }).toString();
+    mocks.api.mockRejectedValue({ name: "ApiError", status: 401, detail: "Sign in.", data: null });
+    render(<NativeSignIn policy={HTTPS_POLICY} />);
+    const link = await screen.findByRole("link", { name: "Sign in securely" });
+    expect(link).toHaveAttribute("href", `/sign-in?next=${encodeURIComponent(`/native/sign-in?${mocks.query}`)}`);
+    expect(link.getAttribute("href")).not.toContain(HTTPS_POLICY.configSha256);
+    expect(mocks.api.mock.calls.map(([route]) => route)).toEqual(["/api/auth/me"]);
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
 });

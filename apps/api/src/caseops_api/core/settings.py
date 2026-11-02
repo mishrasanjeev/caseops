@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     native_access_ttl_seconds: int = Field(default=300, ge=30, le=600)
     native_code_ttl_seconds: int = Field(default=60, ge=15, le=120)
     native_session_ttl_days: int = Field(default=30, ge=1, le=30)
+    # Unset defaults preserve clients deployed before the compatibility protocol.
+    native_minimum_android_version: str | None = Field(default=None, max_length=29)
+    native_minimum_ios_version: str | None = Field(default=None, max_length=29)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     # EG-002 (2026-04-23): default still True for local/dev so the
     # docker-compose stack and pytest fixtures keep their current
@@ -138,6 +141,15 @@ class Settings(BaseSettings):
     document_storage_gcs_bucket: str | None = Field(default=None)
     document_storage_gcs_prefix: str = Field(default="documents")
     gcp_project_id: str | None = Field(default=None)
+    portfolio_export_dispatch_mode: Literal["local_background", "cloud_tasks"] = "local_background"
+    portfolio_export_task_region: str = Field(
+        default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$",
+    )
+    portfolio_export_task_queue: str = Field(
+        default="caseops-portfolio-exports", pattern=r"^[a-z][a-z0-9-]{0,62}$",
+    )
+    portfolio_export_task_url: str = "https://api.caseops.ai/api/internal/portfolio-exports/run"
+    portfolio_export_worker_secret: str | None = Field(default=None, min_length=32)
     document_processing_dispatch_mode: Literal["local_background", "cloud_run_job"] = (
         "local_background"
     )
@@ -425,12 +437,14 @@ class Settings(BaseSettings):
     ai_route_rate_limit_per_minute: int = Field(default=30, ge=1)
 
     llm_provider: str = Field(default="mock")
-    # October continues unchanged by owner instruction. The shared money gate
-    # starts only in an explicitly configured period; missing reconciliation
-    # then blocks transport rather than inventing a zero opening balance.
-    ai_money_budget_enabled: bool = Field(default=True)
+    # Off by owner decision on 2026-11-01: OpenAI and Voyage are prepaid
+    # accounts whose monthly spend cannot be reconciled, and an unreconciled
+    # month refused every paid AI action in production. When an operator
+    # enables it, the gate starts only in the configured period and missing
+    # reconciliation blocks transport rather than inventing a zero balance.
+    ai_money_budget_enabled: bool = Field(default=False)
     ai_money_budget_start_month: str = Field(
-        default="2026-11", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
+        default="2026-12", pattern=r"^\d{4}-(0[1-9]|1[0-2])$"
     )
     # Fallback model when a purpose-specific one is not set. Per-purpose
     # routing lets operators use an OpenAI reasoning model for legal drafting
@@ -570,6 +584,17 @@ class Settings(BaseSettings):
             return bool(self.api_docs_enabled)
         return not is_non_local_env(self.env)
 
+    @field_validator("native_minimum_android_version", "native_minimum_ios_version", mode="before")
+    @classmethod
+    def _validate_native_client_floor(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        from caseops_api.core.native_client_versions import version_parts
+        if type(value) is not str:
+            raise ValueError("Client version must contain three numeric components.")
+        version_parts(value)
+        return value
+
     @field_validator("activity_report_recipient_email")
     @classmethod
     def _validate_activity_report_recipients(cls, value: str) -> str:
@@ -617,6 +642,19 @@ class Settings(BaseSettings):
                 "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET must be distinct from "
                 "CASEOPS_AUTH_SECRET.",
             )
+        return self
+
+    @model_validator(mode="after")
+    def _separate_portfolio_export_secret(self) -> "Settings":
+        secret = self.portfolio_export_worker_secret
+        if secret and any(
+            hmac.compare_digest(secret.encode(), existing.encode())
+            for existing in (self.auth_secret, self.machine_readiness_evidence_secret)
+            if existing
+        ):
+            raise ValueError("Portfolio export worker authentication requires a dedicated key.")
+        if self.portfolio_export_task_url != "https://api.caseops.ai/api/internal/portfolio-exports/run":
+            raise ValueError("Portfolio export tasks require the canonical HTTPS worker URL.")
         return self
 
     @model_validator(mode="after")

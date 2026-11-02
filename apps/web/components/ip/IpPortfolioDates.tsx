@@ -217,8 +217,8 @@ export function IpPortfolioRenewalTracker({ category, query = null, dateFilters 
       {listing.isPending ? <div aria-label="Loading deadline tracker" role="status"><Skeleton className="h-48 w-full" /></div>
         : listing.isError ? <QueryErrorState error={listing.error} title="Could not load the deadline tracker" onRetry={() => listing.refetch()} />
           : rows.length === 0 ? <EmptyState title="No matching renewal records" description="No authorized trademark records match this renewal category." />
-            : <div className="relative min-w-0 overflow-x-auto border-y border-[var(--color-line)]">
-              <table className="w-full min-w-[1000px] table-fixed text-left text-sm">
+            : <div className="@container relative min-w-0 overflow-x-auto border-y border-[var(--color-line)]" data-testid="ip-renewal-tracker-rows">
+              <table className="w-full table-fixed text-left text-sm @min-[1000px]:min-w-[1000px] @max-[1000px]:stacked-table">
                 <caption className="sr-only">Persisted trademark renewal dates and reminder delivery</caption>
                 <thead className="bg-[var(--color-bg-2)] text-xs text-[var(--color-mute)]"><tr>
                   <th scope="col" className="w-56 px-3 py-3">Trademark</th>
@@ -230,18 +230,18 @@ export function IpPortfolioRenewalTracker({ category, query = null, dateFilters 
                   <th scope="col" className="w-16 px-3 py-3"><span className="sr-only">Actions</span></th>
                 </tr></thead>
                 <tbody className="divide-y divide-[var(--color-line)]">{rows.map((row) => <tr key={row.docket_id} className="align-top">
-                  <td className="break-words px-3 py-3"><Link href={`/app/ip?docket=${encodeURIComponent(row.docket_id)}`} className="font-semibold text-[var(--color-brand-700)] hover:underline">{row.docket_title}</Link>
+                  <td data-label="Trademark" className="break-words px-3 py-3"><Link href={`/app/ip?docket=${encodeURIComponent(row.docket_id)}`} className="font-semibold text-[var(--color-brand-700)] hover:underline">{row.docket_title}</Link>
                     <div className="mt-1 text-xs text-[var(--color-mute)]">{row.application_numbers.join(", ") || "Application number not set"}</div>
                     <div className="text-xs text-[var(--color-mute)]">Classes: {row.nice_classes.join(", ") || "Not set"}</div>
                   </td>
-                  <td className="px-3 py-3"><PortfolioDateValue value={row.source_application_on} state={row.source_application_state} /></td>
-                  <td className="px-3 py-3"><PortfolioDateValue value={row.source_renewal_due_on} state={row.source_renewal_state} /></td>
-                  <td className="px-3 py-3"><PortfolioDateValue value={row.reminder_start_on} /></td>
-                  <td className="px-3 py-3"><Timestamp value={row.next_reminder_at} timezone={row.timezone} />
+                  <td data-label="Application Date" className="px-3 py-3"><PortfolioDateValue value={row.source_application_on} state={row.source_application_state} /></td>
+                  <td data-label="Renewal Due Date" className="px-3 py-3"><PortfolioDateValue value={row.source_renewal_due_on} state={row.source_renewal_state} /></td>
+                  <td data-label="Reminder Start Date" className="px-3 py-3"><PortfolioDateValue value={row.reminder_start_on} /></td>
+                  <td data-label="Next reminder" className="px-3 py-3"><Timestamp value={row.next_reminder_at} timezone={row.timezone} />
                     <p className="mt-1 break-words text-xs text-[var(--color-mute)]">{row.timezone} · {row.delivery_time} · {row.cadence_days === 1 ? "Daily" : `Every ${row.cadence_days} days`}</p>
                   </td>
-                  <td className="px-3 py-3"><ReminderState row={row} /></td>
-                  <td className="px-3 py-3"><PortfolioDateEditButton row={row} onEdit={onEdit} disabled={!row.docket_operational} /></td>
+                  <td data-label="Reminder status" className="px-3 py-3"><ReminderState row={row} /></td>
+                  <td data-label="Actions" className="px-3 py-3"><PortfolioDateEditButton row={row} onEdit={onEdit} disabled={!row.docket_operational} /></td>
                 </tr>)}</tbody>
               </table>
             </div>}

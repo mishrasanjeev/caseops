@@ -49,7 +49,13 @@ def parse_identity(payload: object, *, expected_service: str) -> ReleaseIdentity
 
 
 def fetch_identity(url: str, *, expected_service: str) -> ReleaseIdentity:
-    request = Request(url, headers={"Accept": "application/json"})
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "X-CaseOps-Automated-Test": "no-paid-providers",
+        },
+    )
     with urlopen(  # noqa: S310 - fixed operator URLs
         request, timeout=FETCH_TIMEOUT_SECONDS
     ) as response:

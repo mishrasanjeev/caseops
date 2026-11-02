@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { NATIVE_CALLBACK_PATH } from './lib/native-callback-headers';
 
 // CSP is generated in proxy.ts because script nonces must be
 // per-request. This file keeps static browser-hardening headers that
@@ -32,6 +33,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: NATIVE_CALLBACK_PATH,
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
       },
     ];
   },

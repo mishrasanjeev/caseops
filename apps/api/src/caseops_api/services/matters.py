@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
+import json
 import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
-from typing import BinaryIO, NamedTuple
+from typing import Any, BinaryIO, NamedTuple
 from uuid import uuid4
 from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, lazyload, raiseload, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -28,6 +30,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
+    InvoiceStatus,
     IpDocketRecord,
     Matter,
     MatterActivity,
@@ -57,7 +60,6 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
     MatterTimeEntry,
-    MembershipRole,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     Team,
@@ -81,6 +83,7 @@ from caseops_api.schemas.matters import (
     MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
+    MatterCountBucket,
     MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
@@ -98,6 +101,7 @@ from caseops_api.schemas.matters import (
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
+    MatterPortfolioHealthResponse,
     MatterRecord,
     MatterTaskCreateRequest,
     MatterTaskRecord,
@@ -217,6 +221,8 @@ MATTER_MUTATION_CAPABILITIES: dict[str, str] = {
     "request_matter_attachment_processing": "documents:manage",
     "create_time_entry": "time_entries:write",
     "create_matter_invoice": "invoices:issue",
+    "issue_matter_invoice_draft": "invoices:issue",
+    "void_matter_invoice_draft": "invoices:void",
 }
 NOTICE_TEXT_FIELDS = {
     "notice_source",
@@ -688,6 +694,12 @@ def _task_record_with_source(
     source_label: str | None = None,
 ) -> MatterTaskRecord:
     return MatterTaskRecord(
+        immutable_lifecycle_history=bool(
+            task.cancelled_by_matter_disposal
+            or task.neutralized_by_ip_lifecycle_event_id is not None
+            or task.neutralized_by_ip_lifecycle_version is not None
+            or task.neutralized_at is not None
+        ),
         id=task.id,
         matter_id=task.matter_id,
         created_by_membership_id=task.created_by_membership_id,
@@ -711,13 +723,49 @@ def _task_record_with_source(
         source_ref_id=source_ref_id,
         source_label=source_label,
         completed_at=task.completed_at,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
+        cancelled_by_matter_disposal=task.cancelled_by_matter_disposal,
+        created_at=_utc_datetime(task.created_at),
+        updated_at=_utc_datetime(task.updated_at),
     )
+
+
+def _hearing_content_version(hearing: MatterHearing) -> str:
+    """Fingerprint the current persisted state; exact state ABA is not a history change."""
+    def canonical(value):
+        if isinstance(value, datetime):
+            return _utc_datetime(value).isoformat(timespec="microseconds")
+        if isinstance(value, (date, time)):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {key: canonical(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [canonical(item) for item in value]
+        return value
+
+    # Bind company/id and every mapped scalar, including fields not exposed by the
+    # compact read DTO. HMAC prevents the token becoming an oracle for hidden data.
+    state = {
+        column.key: canonical(getattr(hearing, column.key))
+        for column in MatterHearing.__table__.columns
+    }
+    payload = json.dumps(
+        {"purpose": "matter-hearing-content-state-v1", "state": state},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False,
+    ).encode("utf-8")
+    return "mhv1:" + hmac.new(
+        get_settings().auth_secret.encode("utf-8"), payload, hashlib.sha256,
+    ).hexdigest()
 
 
 def _hearing_record(hearing: MatterHearing) -> MatterHearingRecord:
     return MatterHearingRecord(
+        immutable_lifecycle_history=bool(
+            hearing.cancelled_by_matter_disposal
+            or hearing.neutralized_by_ip_lifecycle_event_id is not None
+            or hearing.neutralized_by_ip_lifecycle_version is not None
+            or hearing.neutralized_at is not None
+        ),
+        record_version=_hearing_content_version(hearing),
         id=hearing.id,
         matter_id=hearing.matter_id,
         hearing_on=hearing.hearing_on,
@@ -731,6 +779,7 @@ def _hearing_record(hearing: MatterHearing) -> MatterHearingRecord:
         purpose=hearing.purpose,
         status=hearing.status,
         outcome_note=hearing.outcome_note,
+        cancelled_by_matter_disposal=hearing.cancelled_by_matter_disposal,
         created_at=hearing.created_at,
     )
 
@@ -1125,13 +1174,6 @@ def _invoice_record(invoice: MatterInvoice) -> InvoiceRecord:
     )
 
 
-def _raise_billing_permission_error() -> None:
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only owners and admins can create invoices.",
-    )
-
-
 def _raise_processing_permission_error() -> None:
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -1447,6 +1489,7 @@ def _lock_matter_assignment_fence(
     required_capability: str,
     team_ids_to_lock: set[str | None] | None = None,
     commit_access_denial: bool = True,
+    load_locked_children: bool = True,
 ) -> tuple[Matter, dict[str, CompanyMembership], list[IpDocketRecord]]:
     """Lock principals, Matter, and active linked dockets in canonical order."""
 
@@ -1491,6 +1534,7 @@ def _lock_matter_assignment_fence(
         matter_id=matter_id,
         lock_for_update=True,
         commit_access_denial=commit_access_denial,
+        load_locked_children=load_locked_children,
     )
     current_roles = _matter_role_snapshot_from_model(matter)
     if current_roles != matter_roles:
@@ -1823,6 +1867,7 @@ def _get_matter_model(
     lock_for_share: bool = False,
     commit_access_denial: bool = True,
     load_locked_children: bool = True,
+    refresh_existing: bool = False,
 ) -> Matter:
     if lock_for_update and lock_for_share:
         raise ValueError("Matter lock cannot be both exclusive and shared.")
@@ -1839,6 +1884,7 @@ def _get_matter_model(
             select(Matter)
             .options(*(_matter_loader_options() if load_locked_children else ()))
             .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+            .execution_options(populate_existing=refresh_existing)
         )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
@@ -2226,6 +2272,8 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
             detail="min_claim_amount_minor cannot exceed max_claim_amount_minor.",
         )
 
+    if filters.id:
+        stmt = stmt.where(Matter.id == filters.id.strip())
     if filters.q:
         needle = f"%{filters.q.strip()}%"
         stmt = stmt.where(
@@ -2441,6 +2489,83 @@ def get_matter_dashboard_summary(
     )
 
 
+PORTFOLIO_IDLE_DAYS = 30
+
+
+def get_matter_portfolio_health(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    idle_limit: int = 10,
+) -> MatterPortfolioHealthResponse:
+    """Counts over every visible Matter (B4-ADJ-03).
+
+    The portfolio page computed these from one page of at most 200 Matters,
+    so a larger book showed wrong totals and buckets with no sign of a cap.
+    """
+
+    effective_today = today or date.today()
+    week_out = effective_today + timedelta(days=7)
+    idle_page_size = max(1, min(idle_limit, 50))
+    scope = (
+        Matter.company_id == context.company.id,
+        visible_matters_filter(session, context=context),
+    )
+    operational_filter = Matter.status.notin_((MatterStatus.DISPOSED.value, "closed"))
+
+    def buckets(column: Any) -> list[MatterCountBucket]:
+        rows = session.execute(
+            select(column, func.count(Matter.id)).where(*scope).group_by(column)
+        ).all()
+        return sorted(
+            (MatterCountBucket(key=key, count=count) for key, count in rows),
+            key=lambda bucket: (-bucket.count, bucket.key or ""),
+        )
+
+    status_counts = buckets(Matter.status)
+    by_status = {bucket.key: bucket.count for bucket in status_counts}
+    hearings_next_7_days_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            *scope,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+            Matter.next_hearing_on <= week_out,
+        )
+    ) or 0
+    idle_before = datetime.now(UTC) - timedelta(days=PORTFOLIO_IDLE_DAYS)
+    idle_filter = (Matter.status == MatterStatus.ACTIVE.value, Matter.updated_at < idle_before)
+    idle_active_count = session.scalar(
+        select(func.count(Matter.id)).where(*scope, *idle_filter)
+    ) or 0
+    idle_active_matters = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*scope, *idle_filter)
+            .order_by(Matter.updated_at.asc(), Matter.id.asc())
+            .limit(idle_page_size)
+        )
+    )
+    return MatterPortfolioHealthResponse(
+        company_id=context.company.id,
+        total_visible_count=sum(by_status.values()),
+        active_matters_count=by_status.get(MatterStatus.ACTIVE.value, 0),
+        intake_matters_count=by_status.get(MatterStatus.INTAKE.value, 0),
+        hearings_next_7_days_count=hearings_next_7_days_count,
+        status_counts=status_counts,
+        forum_level_counts=buckets(Matter.forum_level),
+        practice_area_counts=buckets(Matter.practice_area),
+        idle_after_days=PORTFOLIO_IDLE_DAYS,
+        idle_active_count=idle_active_count,
+        idle_active_matters=[_matter_record(matter) for matter in idle_active_matters],
+        idle_active_limit=idle_page_size,
+    )
+
+
 def list_matter_hearing_portfolio(
     session: Session,
     *,
@@ -2490,9 +2615,12 @@ def list_matter_hearing_follow_up(
     context: SessionContext,
     today: date | None = None,
     limit: int = 200,
+    offset: int = 0,
+    queue: str | None = None,
 ) -> MatterHearingFollowUpResponse:
     effective_today = today or date.today()
     page_size = max(1, min(limit, 500))
+    offset = max(0, offset)
     visible_filter = visible_matters_filter(session, context=context)
     active_filters = [
         Matter.company_id == context.company.id,
@@ -2504,30 +2632,40 @@ def list_matter_hearing_follow_up(
 
     overdue_count = session.scalar(select(func.count(Matter.id)).where(*overdue_filters)) or 0
     missing_count = session.scalar(select(func.count(Matter.id)).where(*missing_filters)) or 0
-    overdue = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    overdue: list[Matter] = []
+    if queue in (None, "overdue"):
+        overdue = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*overdue_filters)
+                .order_by(
+                    Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc()
+                )
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*overdue_filters)
-            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
-            .limit(page_size)
         )
-    )
-    missing = list(
-        session.scalars(
-            select(Matter)
-            .options(
-                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
-                selectinload(Matter.court_orders),
+    missing: list[Matter] = []
+    if queue in (None, "missing_date"):
+        missing = list(
+            session.scalars(
+                select(Matter)
+                .options(
+                    selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                    selectinload(Matter.court_orders),
+                )
+                .where(*missing_filters)
+                .order_by(Matter.created_at.desc(), Matter.id.desc())
+                .offset(offset)
+                .limit(page_size)
             )
-            .where(*missing_filters)
-            .order_by(Matter.updated_at.desc(), Matter.id.desc())
-            .limit(page_size)
         )
-    )
+    overdue_more = queue in (None, "overdue") and overdue_count > offset + len(overdue)
+    missing_more = queue in (None, "missing_date") and missing_count > offset + len(missing)
     return MatterHearingFollowUpResponse(
         company_id=context.company.id,
         overdue_matters=[_matter_record(matter) for matter in overdue],
@@ -2535,7 +2673,8 @@ def list_matter_hearing_follow_up(
         overdue_count=overdue_count,
         missing_date_count=missing_count,
         limit=page_size,
-        truncated=overdue_count > len(overdue) or missing_count > len(missing),
+        offset=offset,
+        truncated=overdue_more or missing_more,
     )
 
 
@@ -2691,7 +2830,21 @@ def update_matter(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
         team_ids_to_lock={matter_roles.team_id, resulting_team_id},
         commit_access_denial=commit_access_denial,
+        load_locked_children=False,
     )
+    # Metadata responses do not need the workspace graph under the tenant lock.
+    matter = session.scalar(
+        select(Matter)
+        .options(
+            raiseload("*"),
+            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+            selectinload(Matter.court_orders),
+        )
+        .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+        .execution_options(populate_existing=True)
+    )
+    if matter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     if (
         team_access_changing
         and _linked_docket_role_snapshot(
@@ -3089,8 +3242,25 @@ def update_matter(
             metadata={"before": forum_before, "after": forum_after},
         )
     if commit:
+        # Reload the response graph without replaying the workspace's eager loaders.
+        response_matter_id = matter.id
+        response_company_id = context.company.id
         session.commit()
-        session.refresh(matter)
+        matter = session.scalar(
+            select(Matter)
+            .options(
+                raiseload("*"),
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(
+                Matter.id == response_matter_id,
+                Matter.company_id == response_company_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if matter is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     else:
         session.flush()
     return _matter_record(matter)
@@ -3412,11 +3582,14 @@ def transition_matter_lifecycle_status(
         context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["transition_matter_lifecycle_status"],
     )
+    # Operational children are neutralized below; workspace history is not
+    # needed while the tenant, actor and lifecycle locks are held.
     matter = _get_matter_model(
         session,
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     current_status = _status_value(matter.status)
     expected_status = _status_value(payload.expected_from_status)
@@ -3612,13 +3785,23 @@ def get_matter_workspace(
     context: SessionContext,
     matter_id: str,
 ) -> MatterWorkspaceResponse:
-    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    # Refresh retained reads without discarding the caller's unflushed work.
+    refresh_existing = False
+    if not session.new and not session.dirty and not session.deleted:
+        refresh_existing = True
+    matter = _get_matter_model(
+        session,
+        context=context,
+        matter_id=matter_id,
+        refresh_existing=refresh_existing,
+    )
     memberships = list(
         session.scalars(
             select(CompanyMembership)
             .options(joinedload(CompanyMembership.user))
             .where(CompanyMembership.company_id == context.company.id)
             .order_by(CompanyMembership.created_at.asc())
+            .execution_options(populate_existing=refresh_existing)
         )
     )
     available_assignees = [
@@ -3714,6 +3897,39 @@ def create_matter_note(
     return _note_record(refreshed_note)
 
 
+def _assert_observed_work_lifecycle(
+    *, context: SessionContext, matter: Matter, expected_version: int | None,
+) -> None:
+    """Call only after the existing assignment fence has locked the parent."""
+    if context.native_session_id is not None and expected_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_matter_lifecycle_required",
+                "message": "Reload the matter and include expected_lifecycle_version.",
+            },
+        )
+    if expected_version is not None and expected_version != matter.lifecycle_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_lifecycle_changed",
+                "message": "The matter lifecycle changed. Reload before saving work.",
+            },
+        )
+
+
+def _assert_native_work_patch(context: SessionContext, updates: dict) -> None:
+    if context.native_session_id is not None and not updates:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_work_changes_required",
+                "message": "Include at least one changed work field.",
+            },
+        )
+
+
 def create_matter_task(
     session: Session,
     *,
@@ -3742,6 +3958,9 @@ def create_matter_task(
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="create a task")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=payload.expected_lifecycle_version,
+    )
     owner_membership_id: str | None = None
     owner_name: str | None = None
     if payload.owner_membership_id:
@@ -3888,6 +4107,10 @@ def update_matter_task(
     payload: MatterTaskUpdateRequest,
 ) -> MatterTaskRecord:
     requested_updates = payload.model_dump(exclude_unset=True)
+    # Control fields are never data fields and must never reach setattr below.
+    expected_lifecycle_version = requested_updates.pop("expected_lifecycle_version", None)
+    expected_updated_at = requested_updates.pop("expected_updated_at", None)
+    _assert_native_work_patch(context, requested_updates)
     candidate = _discover_matter_task_mutation_snapshot(
         session,
         company_id=context.company.id,
@@ -3918,6 +4141,9 @@ def update_matter_task(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_task"],
     )
     _assert_matter_not_disposed(matter, operation="update a task")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=expected_lifecycle_version,
+    )
     task = session.scalar(
         select(MatterTask)
         .options(
@@ -3930,6 +4156,24 @@ def update_matter_task(
     )
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter task not found.")
+    if context.native_session_id is not None and expected_updated_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_task_version_required",
+                "message": "Reload the task and include expected_updated_at.",
+            },
+        )
+    if expected_updated_at is not None and (
+        _utc_datetime(task.updated_at) != _utc_datetime(expected_updated_at)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_task_changed",
+                "message": "The task changed. Reload before saving.",
+            },
+        )
     assert task.matter_id is not None
     current_task_snapshot = _matter_task_mutation_snapshot_from_values(
         matter_id=task.matter_id,
@@ -4088,6 +4332,9 @@ def update_matter_hearing(
     post-hearing loop survives a distracted user. Other status changes
     are recorded as activity but do not create tasks."""
     requested_hearing_updates = payload.model_dump(exclude_unset=True)
+    expected_lifecycle_version = requested_hearing_updates.pop("expected_lifecycle_version", None)
+    expected_record_version = requested_hearing_updates.pop("expected_record_version", None)
+    _assert_native_work_patch(context, requested_hearing_updates)
     matter_roles = _discover_matter_role_snapshot(
         session,
         company_id=context.company.id,
@@ -4114,6 +4361,9 @@ def update_matter_hearing(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_hearing"],
     )
     _assert_matter_not_disposed(matter, operation="update a hearing")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=expected_lifecycle_version,
+    )
     hearing = session.scalar(
         select(MatterHearing)
         .where(MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id)
@@ -4122,6 +4372,24 @@ def update_matter_hearing(
     )
     if hearing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
+    if context.native_session_id is not None and expected_record_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "native_hearing_version_required",
+                "message": "Reload the hearing and include expected_record_version.",
+            },
+        )
+    if expected_record_version is not None and not hmac.compare_digest(
+        expected_record_version, _hearing_content_version(hearing),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_hearing_changed",
+                "message": "The hearing changed. Reload before saving.",
+            },
+        )
 
     assert hearing.matter_id is not None
     current_hearing_roles = _hearing_role_snapshot_from_values(
@@ -5046,6 +5314,9 @@ def create_matter_hearing(
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_hearing"],
     )
     _assert_matter_not_disposed(matter, operation="create a hearing")
+    _assert_observed_work_lifecycle(
+        context=context, matter=matter, expected_version=payload.expected_lifecycle_version,
+    )
     recipients = [
         _active_locked_assignment_membership(
             locked_memberships,
@@ -5934,6 +6205,7 @@ def update_matter_attachment_metadata(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        load_locked_children=False,
     )
     _assert_matter_not_disposed(matter, operation="update attachment metadata")
     attachment = session.scalar(
@@ -5941,11 +6213,13 @@ def update_matter_attachment_metadata(
         .options(
             joinedload(MatterAttachment.uploaded_by_membership).joinedload(CompanyMembership.user),
             joinedload(MatterAttachment.linked_court_order),
+            lazyload(MatterAttachment.chunks),
         )
         .where(
             MatterAttachment.id == attachment_id,
             MatterAttachment.matter_id == matter.id,
         )
+        .execution_options(populate_existing=True)
     )
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
@@ -6766,8 +7040,16 @@ def get_matter_invoice_pdf(
     matter_id: str,
     invoice_id: str,
 ) -> tuple[bytes, str, str]:
-    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
-        _raise_billing_permission_error()
+    from caseops_api.services.capabilities import membership_has_capability
+
+    # BUG-016: the billing page offers the PDF to every holder of
+    # invoices:issue (owner, admin and partner by default), the same predicate
+    # as the route dependency; an owner/admin-only check here refused partners.
+    if not membership_has_capability(session, context.membership, "invoices:issue"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Downloading an invoice PDF needs permission to create invoices.",
+        )
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
     invoice = session.scalar(
         select(MatterInvoice)
@@ -6784,3 +7066,167 @@ def get_matter_invoice_pdf(
     if invoice is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
     return render_invoice_pdf(session, context=context, invoice=invoice)
+
+
+def _locked_matter_invoice(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    invoice_id: str,
+) -> MatterInvoice:
+    invoice = session.scalar(
+        select(MatterInvoice)
+        .options(selectinload(MatterInvoice.line_items))
+        .where(
+            MatterInvoice.id == invoice_id,
+            MatterInvoice.matter_id == matter.id,
+            MatterInvoice.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
+    return invoice
+
+
+def _refreshed_invoice_record(session: Session, invoice_id: str) -> InvoiceRecord:
+    refreshed = session.scalar(
+        select(MatterInvoice)
+        .options(
+            joinedload(MatterInvoice.issued_by_membership).joinedload(CompanyMembership.user),
+            selectinload(MatterInvoice.line_items),
+        )
+        .where(MatterInvoice.id == invoice_id)
+    )
+    assert refreshed is not None
+    return _invoice_record(refreshed)
+
+
+def issue_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Issue a draft matter invoice.
+
+    BUG-016: the New invoice dialog creates drafts and a draft PDF is not
+    payable, but the only draft-to-issued path was a payment link, which a firm
+    without payment collection cannot create. Issuing is final here: the
+    invoice can no longer be voided in CaseOps and its PDF prints as the
+    firm's invoice.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["issue_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    _assert_matter_not_disposed(matter, operation="issue an invoice")
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a draft invoice can be issued.",
+        )
+    invoice.status = InvoiceStatus.ISSUED
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_issued",
+        title="Invoice issued",
+        detail=(
+            f"{invoice.invoice_number} issued with total {invoice.total_amount_minor} minor units."
+        ),
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.issued",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "total_amount_minor": invoice.total_amount_minor,
+            "balance_due_minor": invoice.balance_due_minor,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)
+
+
+def void_matter_invoice_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> InvoiceRecord:
+    """Void a draft matter invoice and release its time entries.
+
+    BUG-016: a draft created by mistake had no way out of the matter's billing
+    list. Only a draft with no recorded payment can be voided here; an issued
+    invoice is a tax document and needs a credit note instead. A void invoice
+    has nothing to collect, so its balance is zeroed and every balance sum
+    (billing KPIs, matter brief, outside-counsel totals) drops it.
+    """
+    _lock_matter_mutation_actor(
+        session,
+        context=context,
+        required_capability=MATTER_MUTATION_CAPABILITIES["void_matter_invoice_draft"],
+    )
+    matter = _get_matter_model(
+        session, context=context, matter_id=matter_id, lock_for_update=True
+    )
+    invoice = _locked_matter_invoice(
+        session, context=context, matter=matter, invoice_id=invoice_id
+    )
+    if invoice.status != InvoiceStatus.DRAFT or invoice.amount_received_minor > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only a draft invoice with no recorded payment can be voided. "
+                "An issued invoice needs a credit note."
+            ),
+        )
+    released = 0
+    for line in invoice.line_items:
+        if line.time_entry_id is not None:
+            line.time_entry_id = None
+            released += 1
+    previous_balance_minor = invoice.balance_due_minor
+    invoice.status = InvoiceStatus.VOID
+    invoice.balance_due_minor = 0
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="invoice_voided",
+        title="Draft invoice voided",
+        detail=f"{invoice.invoice_number} voided; {released} time entries released.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.voided",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "previous_status": InvoiceStatus.DRAFT.value,
+            "previous_balance_due_minor": previous_balance_minor,
+            "released_time_entries": released,
+        },
+    )
+    session.commit()
+    return _refreshed_invoice_record(session, invoice.id)

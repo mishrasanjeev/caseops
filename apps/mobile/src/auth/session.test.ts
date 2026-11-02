@@ -78,14 +78,20 @@ test("malformed revalidation cannot replace trusted identity or capabilities", a
     const { store, current } = memoryStore();
     let revoked = 0;
     const session = new NativeSession(
-      new JsonTransport("https://caseops.ai", false, true, async (url) => {
-        if (url.endsWith("/token")) return Response.json(fixture);
-        if (url.endsWith("/logout")) {
-          revoked++;
-          return new Response(null, { status: 204 });
-        }
-        return Response.json({ ...fixture, ...partial });
-      }),
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token")) return Response.json(fixture);
+          if (url.endsWith("/logout")) {
+            revoked++;
+            return new Response(null, { status: 204 });
+          }
+          return Response.json({ ...fixture, ...partial });
+        },
+      ),
       store,
     );
     await session.exchange(exchange);
@@ -102,8 +108,12 @@ test("malformed revalidation cannot replace trusted identity or capabilities", a
 test("an identity snapshot cannot mutate the session's authority", async () => {
   const { store } = memoryStore();
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async () =>
-      Response.json(fixture),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async () => Response.json(fixture),
     ),
     store,
   );
@@ -125,6 +135,7 @@ test("only rotating refresh/session identity are stored; access stays in memory"
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async () => Response.json(fixture),
   );
   const session = new NativeSession(transport, store);
@@ -154,6 +165,7 @@ test("expired access triggers one single-flight refresh before concurrent reads"
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       if (url.endsWith("/refresh")) {
@@ -195,6 +207,7 @@ test("app restart refreshes without a still-valid access credential", async () =
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       assert.ok(url.endsWith("/refresh"));
       assert.equal(new Headers(init.headers).has("Authorization"), false);
@@ -213,6 +226,7 @@ test("401 clears private identity and refresh without replaying the request", as
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       calls++;
@@ -243,6 +257,7 @@ test("an unknown mutation is not refreshed or resubmitted", async () => {
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       saves++;
@@ -269,6 +284,7 @@ test("secure-storage failure revokes the freshly issued device and keeps no iden
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/logout")) {
         revoked = true;
@@ -289,6 +305,7 @@ test("logout purges locally even if server revocation is unavailable, without fa
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       throw new Error("offline");
@@ -309,6 +326,7 @@ test("logout wins a concurrent late token exchange and revokes the orphan grant"
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/token")) {
         await new Promise<void>((resolve) => {
@@ -333,8 +351,12 @@ test("logout wins a concurrent late token exchange and revokes the orphan grant"
 test("logout still clears retained credentials when secure-store read throws and reports uncertain revocation truthfully", async () => {
   const { store, current } = memoryStore();
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async () =>
-      Response.json(fixture),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async () => Response.json(fixture),
     ),
     store,
   );
@@ -387,6 +409,7 @@ test("sessionKey is nonsecret, viewer-safe, changes for sign-in/logout and stays
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/logout")) return new Response(null, { status: 204 });
       if (url.endsWith("/refresh"))
@@ -431,10 +454,16 @@ test("private bytes preflight rejects invalid paths/caps and cancellation withou
     return null;
   };
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async () => {
-      calls++;
-      return bytesResponse();
-    }),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async () => {
+        calls++;
+        return bytesResponse();
+      },
+    ),
     store,
   );
   await assert.rejects(session.requestBytes("/api/auth/me", { maxBytes: 1 }));
@@ -453,18 +482,24 @@ test("private bytes preflight rejects invalid paths/caps and cancellation withou
 test("session private bytes preserve exact metadata and do not expose credentials or invent access", async () => {
   const { store } = memoryStore();
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async (url, init) => {
-      if (url.endsWith("/token")) return Response.json(fixture);
-      assert.equal(
-        new Headers(init.headers).get("Authorization"),
-        "Bearer fixture-access",
-      );
-      assert.equal(
-        new Headers(init.headers).get("X-CaseOps-Automated-Test"),
-        "no-paid-providers",
-      );
-      return bytesResponse();
-    }),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async (url, init) => {
+        if (url.endsWith("/token")) return Response.json(fixture);
+        assert.equal(
+          new Headers(init.headers).get("Authorization"),
+          "Bearer fixture-access",
+        );
+        assert.equal(
+          new Headers(init.headers).get("X-CaseOps-Automated-Test"),
+          "no-paid-providers",
+        );
+        return bytesResponse();
+      },
+    ),
     store,
   );
   await session.exchange(exchange);
@@ -488,18 +523,24 @@ test("source 401 clears local session/keychain; source 403 remains fail-closed w
       calls = 0,
       cancelled = 0;
     const session = new NativeSession(
-      new JsonTransport("https://caseops.ai", false, true, async (url) => {
-        if (url.endsWith("/token")) return Response.json(fixture);
-        calls++;
-        return new Response(
-          new ReadableStream({
-            cancel() {
-              cancelled++;
-            },
-          }),
-          { status },
-        );
-      }),
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token")) return Response.json(fixture);
+          calls++;
+          return new Response(
+            new ReadableStream({
+              cancel() {
+                cancelled++;
+              },
+            }),
+            { status },
+          );
+        },
+      ),
       store,
       Date.now,
       () => invalidated++,
@@ -531,28 +572,34 @@ test("logout during a private stream cancels the body immediately and zeros alre
   const chunk = new Uint8Array([3, 4]);
   let cancelled = 0;
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async (url) => {
-      if (url.endsWith("/token")) return Response.json(fixture);
-      if (url.endsWith("/logout")) return new Response(null, { status: 204 });
-      return new Response(
-        new ReadableStream(
-          {
-            start(controller) {
-              controller.enqueue(chunk);
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async (url) => {
+        if (url.endsWith("/token")) return Response.json(fixture);
+        if (url.endsWith("/logout")) return new Response(null, { status: 204 });
+        return new Response(
+          new ReadableStream(
+            {
+              start(controller) {
+                controller.enqueue(chunk);
+              },
+              pull() {
+                reading.resolve();
+                return new Promise<void>(() => {});
+              },
+              cancel() {
+                cancelled++;
+              },
             },
-            pull() {
-              reading.resolve();
-              return new Promise<void>(() => {});
-            },
-            cancel() {
-              cancelled++;
-            },
-          },
-          { highWaterMark: 0 },
-        ),
-        { headers: { "Content-Type": "application/pdf" } },
-      );
-    }),
+            { highWaterMark: 0 },
+          ),
+          { headers: { "Content-Type": "application/pdf" } },
+        );
+      },
+    ),
     store,
   );
   await session.exchange(exchange);
@@ -576,6 +623,7 @@ test("logout after stream EOF but before session return zeros the assembled resu
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       if (url.endsWith("/logout")) return new Response(null, { status: 204 });
@@ -607,6 +655,7 @@ test("expiry is rechecked after streaming and expired-session output is zeroed b
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url) =>
       url.endsWith("/token") ? Response.json(fixture) : bytesResponse(),
   );
@@ -640,6 +689,7 @@ test("JSON and byte preflights share one rotating refresh without changing sessi
     "https://caseops.ai",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       if (url.endsWith("/token")) return Response.json(fixture);
       if (url.endsWith("/refresh")) {
@@ -682,20 +732,26 @@ test("viewer cancellation interrupts its refresh wait without replay or cancelli
     downloads = 0,
     refreshes = 0;
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async (url) => {
-      if (url.endsWith("/token")) return Response.json(fixture);
-      if (url.endsWith("/refresh")) {
-        refreshes++;
-        refreshing.resolve();
-        await release.promise;
-        return Response.json(fixture);
-      }
-      if (url.includes("/download")) {
-        downloads++;
-        return bytesResponse();
-      }
-      return Response.json({ ok: true });
-    }),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async (url) => {
+        if (url.endsWith("/token")) return Response.json(fixture);
+        if (url.endsWith("/refresh")) {
+          refreshes++;
+          refreshing.resolve();
+          await release.promise;
+          return Response.json(fixture);
+        }
+        if (url.includes("/download")) {
+          downloads++;
+          return bytesResponse();
+        }
+        return Response.json({ ok: true });
+      },
+    ),
     store,
     () => now,
   );
@@ -726,14 +782,20 @@ test("late JSON 401 from an older generation cannot clear a newer sign-in or its
   const old = deferred<Response>();
   let signIns = 0;
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async (url) => {
-      if (url.endsWith("/token"))
-        return Response.json({
-          ...fixture,
-          refresh_token: `fixture-refresh-${++signIns}`,
-        });
-      return old.promise;
-    }),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async (url) => {
+        if (url.endsWith("/token"))
+          return Response.json({
+            ...fixture,
+            refresh_token: `fixture-refresh-${++signIns}`,
+          });
+        return old.promise;
+      },
+    ),
     store,
   );
   await session.exchange(exchange);
@@ -759,13 +821,19 @@ test("sign-out still attempts server revocation after clear failure and never cl
   const { store, current } = memoryStore();
   let revoked = 0;
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async (url) => {
-      if (url.endsWith("/logout")) {
-        revoked++;
-        return new Response(null, { status: 204 });
-      }
-      return Response.json(fixture);
-    }),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async (url) => {
+        if (url.endsWith("/logout")) {
+          revoked++;
+          return new Response(null, { status: 204 });
+        }
+        return Response.json(fixture);
+      },
+    ),
     store,
   );
   await session.exchange(exchange);
@@ -784,8 +852,12 @@ test("sign-out still attempts server revocation after clear failure and never cl
 test("read and notification failures cannot bypass sign-out's best-effort secure-store clear", async () => {
   const { store, current } = memoryStore();
   const session = new NativeSession(
-    new JsonTransport("https://caseops.ai", false, true, async () =>
-      Response.json(fixture),
+    new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      { platform: "ios", version: "0.1.0" },
+      async () => Response.json(fixture),
     ),
     store,
     Date.now,

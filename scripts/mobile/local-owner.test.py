@@ -66,13 +66,16 @@ class OwnerImportTests(unittest.TestCase):
         self.session.__enter__ = Mock(return_value=self.session)
         self.session.__exit__ = Mock(return_value=False)
         self.session.scalar.side_effect = self.scalar
-        self.session.scalars.side_effect = lambda query: self.note_query(query)
+        self.session.scalars.side_effect = self.note_query
         self.factory = Mock(return_value=Mock(return_value=self.session))
         self.context = Mock(side_effect=self.session_context)
         self.transition = Mock(side_effect=self.dispose)
         self.remove = Mock(side_effect=self.revoke)
         self.can_access = Mock(side_effect=lambda *_args, **_kwargs: self.access)
-        self.schema = Mock(side_effect=lambda **values: SimpleNamespace(**values))
+        def schema_values(**values):
+            return SimpleNamespace(**values)
+
+        self.schema = Mock(side_effect=schema_values)
         self.mappers = Mock()
         self.company_model = type("Company", (), {"id": Column()})
         self.member_model = type("CompanyMembership", (), {"id": Column(), "company_id": Column()})

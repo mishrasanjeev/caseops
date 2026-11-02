@@ -13,7 +13,8 @@ from caseops_api.core.automated_test_context import (
     reset_automated_test_request,
     set_automated_test_request,
 )
-from caseops_api.services import document_jobs
+from caseops_api.db import migrations
+from caseops_api.services import case_tracking_summary, court_sync_jobs, document_jobs
 from caseops_api.workers import document_processor as worker
 
 
@@ -35,13 +36,18 @@ def forbid_worker_database_work(monkeypatch):
     def forbidden(*_args, **_kwargs):
         pytest.fail("Disabled or invalid admission performed database or sibling work")
 
-    for name in (
-        "run_migrations", "run_worker_iteration", "drain_matter_court_sync_jobs",
-        "recover_stale_matter_court_sync_jobs", "enqueue_scheduled_document_reprocessing",
-        "drain_update_summaries", "recover_stale_document_processing_jobs",
-        "drain_document_processing_jobs",
+    for module, names in (
+        (migrations, ("run_migrations",)),
+        (worker, ("run_worker_iteration",)),
+        (court_sync_jobs, ("drain_matter_court_sync_jobs", "recover_stale_matter_court_sync_jobs")),
+        (case_tracking_summary, ("drain_update_summaries",)),
+        (document_jobs, (
+            "enqueue_scheduled_document_reprocessing", "recover_stale_document_processing_jobs",
+            "drain_document_processing_jobs",
+        )),
     ):
-        monkeypatch.setattr(worker, name, forbidden)
+        for name in names:
+            monkeypatch.setattr(module, name, forbidden)
     event.listen(Engine, "before_cursor_execute", forbidden)
     try:
         yield
@@ -59,18 +65,23 @@ def test_documents_only_recovers_and_drains_only_documents(
     if env == "production":
         document_worker_settings.document_worker_admission_protocol_version = 1
         document_worker_settings.document_worker_admission_enabled = True
-    for name in ("run_migrations", "run_worker_iteration", "drain_matter_court_sync_jobs",
-                 "recover_stale_matter_court_sync_jobs", "enqueue_scheduled_document_reprocessing",
-                 "drain_update_summaries"):
-        monkeypatch.setattr(worker, name, lambda **_: pytest.fail("Sibling work was invoked"))
-    monkeypatch.setattr(worker, "recover_stale_document_processing_jobs",
+    for module, names in (
+        (migrations, ("run_migrations",)),
+        (worker, ("run_worker_iteration",)),
+        (court_sync_jobs, ("drain_matter_court_sync_jobs", "recover_stale_matter_court_sync_jobs")),
+        (document_jobs, ("enqueue_scheduled_document_reprocessing",)),
+        (case_tracking_summary, ("drain_update_summaries",)),
+    ):
+        for name in names:
+            monkeypatch.setattr(module, name, lambda **_: pytest.fail("Sibling work was invoked"))
+    monkeypatch.setattr(document_jobs, "recover_stale_document_processing_jobs",
                         lambda **kw: calls.append(("recover", kw)) or 1)
     def drain(**kwargs):
         calls.append(("drain", kwargs))
         kwargs["outcomes"].update({"completed": 1, "failed": 1})
         return 2
 
-    monkeypatch.setattr(worker, "drain_document_processing_jobs", drain)
+    monkeypatch.setattr(document_jobs, "drain_document_processing_jobs", drain)
     args = ["--documents-only", "--once", "--batch-size", "5"]
     if skip_migrations:
         args.append("--skip-migrations")
@@ -186,9 +197,8 @@ def test_documents_only_caps_real_recovery_without_reducing_drain(
     document_worker_settings.env = env
     document_worker_settings.document_worker_admission_protocol_version = 1
     document_worker_settings.document_worker_admission_enabled = True
-    assert worker.recover_stale_document_processing_jobs is (
-        document_jobs.recover_stale_document_processing_jobs
-    )
+    recovery = Mock(wraps=document_jobs.recover_stale_document_processing_jobs)
+    monkeypatch.setattr(document_jobs, "recover_stale_document_processing_jobs", recovery)
     assert document_jobs.MAX_DOCUMENT_JOB_RECOVERY_BATCH == 5
     session = Mock(spec=Session)
     session.scalars.return_value = []
@@ -198,12 +208,15 @@ def test_documents_only_caps_real_recovery_without_reducing_drain(
     def forbidden(*_args, **_kwargs):
         pytest.fail("Documents-only invoked migrations, sibling work or a database transport")
 
-    for name in (
-        "run_migrations", "run_worker_iteration", "drain_matter_court_sync_jobs",
-        "recover_stale_matter_court_sync_jobs", "enqueue_scheduled_document_reprocessing",
-        "drain_update_summaries",
+    for module, names in (
+        (migrations, ("run_migrations",)),
+        (worker, ("run_worker_iteration",)),
+        (court_sync_jobs, ("drain_matter_court_sync_jobs", "recover_stale_matter_court_sync_jobs")),
+        (document_jobs, ("enqueue_scheduled_document_reprocessing",)),
+        (case_tracking_summary, ("drain_update_summaries",)),
     ):
-        monkeypatch.setattr(worker, name, forbidden)
+        for name in names:
+            monkeypatch.setattr(module, name, forbidden)
     drain_calls = []
 
     def drain(*, limit, outcomes):
@@ -211,7 +224,7 @@ def test_documents_only_caps_real_recovery_without_reducing_drain(
         drain_calls.append((limit, dict(outcomes)))
         return 0
 
-    monkeypatch.setattr(worker, "drain_document_processing_jobs", drain)
+    monkeypatch.setattr(document_jobs, "drain_document_processing_jobs", drain)
     event.listen(Engine, "before_cursor_execute", forbidden)
     try:
         assert worker.main([
@@ -220,6 +233,7 @@ def test_documents_only_caps_real_recovery_without_reducing_drain(
     finally:
         event.remove(Engine, "before_cursor_execute", forbidden)
 
+    recovery.assert_called_once_with(stale_after_minutes=15, limit=min(batch_size, 5))
     session_factory.assert_called_once_with()
     session.scalars.assert_called_once()
     session.close.assert_called_once_with()

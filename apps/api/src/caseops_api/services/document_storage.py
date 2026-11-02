@@ -319,7 +319,10 @@ def persist_workspace_attachment(
     namespace: str = "matters",
     before_store: Callable[[int], None] | None = None,
     validate_temp_file: Callable[[Path], None] | None = None,
+    storage_timeout_seconds: float | None = None,
 ) -> StoredDocument:
+    if storage_timeout_seconds is not None and not 0 < storage_timeout_seconds <= 60:
+        raise ValueError("Storage timeout must be positive and at most 60 seconds.")
     safe_company_id = _safe_storage_segment(company_id, "company id")
     safe_namespace = _safe_storage_segment(namespace, "storage namespace")
     safe_workspace_id = _safe_storage_segment(workspace_id, "workspace id")
@@ -363,7 +366,12 @@ def persist_workspace_attachment(
         else:
             bucket = _gcs_client().bucket(_gcs_bucket_name())
             blob = bucket.blob(_gcs_blob_name(storage_key))
-            blob.upload_from_filename(str(temp_path))
+            if storage_timeout_seconds is None:
+                blob.upload_from_filename(str(temp_path))
+            else:
+                blob.upload_from_filename(
+                    str(temp_path), timeout=storage_timeout_seconds, retry=None,
+                )
     finally:
         _cleanup_temp_file(temp_path, root)
 

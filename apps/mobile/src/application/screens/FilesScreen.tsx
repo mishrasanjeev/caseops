@@ -26,6 +26,7 @@ import {
 import { uploadByteLimit, validateAsset } from "../../files/staging";
 import { viewerFormat, attachmentViewerSource } from "../../viewer/contracts";
 import type { ViewerSource } from "../../viewer/contracts";
+import type { FileSelectionState } from "../../domain/file-picker";
 
 export type FilesScreenProps = {
   request: AuthorizedRequest;
@@ -36,6 +37,10 @@ export type FilesScreenProps = {
   capabilities: readonly string[];
   selectedFile: MatterFileSelection | null;
   onChooseFile: (expectedLifecycleVersion: number) => void;
+  onCapturePhoto: (expectedLifecycleVersion: number) => void;
+  selectingFile: boolean;
+  selectionRevision: number;
+  readFileSelection: () => FileSelectionState;
   onClearSelectedFile: () => void;
   onOpenFile: (source: ViewerSource) => void;
   guard: RefObject<LeaveGuard | null>;
@@ -66,12 +71,18 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     capabilities,
     selectedFile,
     onChooseFile,
+    onCapturePhoto,
+    selectingFile,
+    selectionRevision,
+    readFileSelection,
     onClearSelectedFile,
   } = props;
   const requestRef = useRef(request);
   requestRef.current = request;
   const capabilitiesRef = useRef(capabilities);
   capabilitiesRef.current = capabilities;
+  const selectionRef = useRef(readFileSelection);
+  selectionRef.current = readFileSelection;
   const scope = useMemo(
     () => ({ companyId, userId, sessionKey, matterId }),
     [companyId, userId, sessionKey, matterId],
@@ -95,7 +106,11 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     controller.getSnapshot,
     controller.getSnapshot,
   );
-  const interactions = useMemo(() => createFilesInteractionActions(controller), [controller]);
+  const interactions = useMemo(
+    () =>
+      createFilesInteractionActions(controller, () => selectionRef.current()),
+    [controller],
+  );
   const [visible, setVisible] = useState(25);
   const [privacyClosed, setPrivacyClosed] = useState(false);
   useEffect(() => {
@@ -126,12 +141,19 @@ function ScopedFilesScreen(props: FilesScreenProps) {
       const state = controller.getSnapshot().upload.state;
       const pending = state === "preparing" || state === "uploading";
       const outcomeUnknown = state === "unknown";
-      if (pending) {
+      const selected = interactions.selectionState();
+      if (
+        !selected ||
+        selected.revision !== selectionRevision ||
+        !interactions.canLeave(selected.revision)
+      ) {
         Alert.alert(
-          "Upload in progress",
-          "Wait for the upload outcome, or use Stop waiting before leaving.",
+          pending ? "Upload in progress" : "File action in progress",
+          pending
+            ? "Wait for the upload outcome, or use Stop waiting before leaving."
+            : "Finish or cancel the current file action before leaving.",
         );
-      } else if (outcomeUnknown || selectedFile) {
+      } else if (outcomeUnknown || selected.hasSelection) {
         Alert.alert(
           outcomeUnknown ? "Upload outcome unknown" : "Discard file selection?",
           outcomeUnknown
@@ -139,15 +161,21 @@ function ScopedFilesScreen(props: FilesScreenProps) {
             : "The selected file has not been uploaded.",
           [
             { text: "Stay", style: "cancel" },
-            { text: "Leave Files", style: "destructive", onPress: leave },
+            {
+              text: "Leave Files",
+              style: "destructive",
+              onPress: () => {
+                interactions.leave(leave, selected.revision);
+              },
+            },
           ],
         );
-      } else leave();
+      } else interactions.leave(leave, selected.revision);
     };
     return () => {
       props.guard.current = null;
     };
-  }, [controller, selectedFile, props.guard]);
+  }, [controller, interactions, selectionRevision, props.guard]);
   const workspace =
     snapshot.view.state === "ready" ? snapshot.view.workspace : null;
   const scopedSelection =
@@ -183,10 +211,15 @@ function ScopedFilesScreen(props: FilesScreenProps) {
       onClearSelectedFile();
     }
   };
-  const clearSelection = () => interactions.clear(clearSelectionOwned);
+  const clearSelection = () =>
+    interactions.clear(clearSelectionOwned, selectionRevision);
   const upload = async () => {
     if (!scopedSelection) return;
-    await interactions.upload(scopedSelection, clearSelectionOwned);
+    await interactions.upload(
+      scopedSelection,
+      clearSelectionOwned,
+      selectionRevision,
+    );
   };
 
   if (privacyClosed || snapshot.view.state === "inactive")
@@ -234,6 +267,165 @@ function ScopedFilesScreen(props: FilesScreenProps) {
             The server does not expose a separate malware-scan receipt. Text
             processing status is not a clean-scan result.
           </Text>
+          {restriction ? (
+            <Text testID="files-upload-restricted" style={styles.muted}>
+              {restriction}
+            </Text>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <Text style={styles.label}>
+                Current upload limit:{" "}
+                {formatBytes(uploadByteLimit(workspace.storage))}
+              </Text>
+              {scopedSelection ? (
+                <View
+                  testID="files-selection"
+                  style={{ gap: 8, paddingBottom: 8 }}
+                >
+                  <Text style={styles.body}>{scopedSelection.asset.name}</Text>
+                  <Text style={styles.label}>
+                    {scopedSelection.asset.size === undefined
+                      ? "Size will be checked before upload"
+                      : formatBytes(scopedSelection.asset.size)}
+                  </Text>
+                  <Text style={styles.muted}>
+                    Upload to {workspace.matter.matter_code}
+                  </Text>
+                  <NativeButton
+                    testID="files-upload"
+                    label="Upload file"
+                    disabled={
+                      busy ||
+                      selectingFile ||
+                      unknown ||
+                      !!selectionError ||
+                      snapshot.cleanupFailed
+                    }
+                    onPress={() => {
+                      void upload();
+                    }}
+                  />
+                </View>
+              ) : null}
+              {selectedFile ? (
+                <NativeButton
+                  testID="files-selection-clear"
+                  label="Clear selection"
+                  secondary
+                  disabled={busy || selectingFile}
+                  onPress={clearSelection}
+                />
+              ) : null}
+              {selectionError ? (
+                <Text
+                  testID="files-selection-error"
+                  accessibilityRole="alert"
+                  style={styles.body}
+                >
+                  {selectionError}
+                </Text>
+              ) : null}
+              <NativeButton
+                testID="files-choose"
+                label={selectedFile ? "Choose another file" : "Choose file"}
+                secondary={!!selectedFile}
+                disabled={
+                  busy || selectingFile || unknown || snapshot.cleanupFailed
+                }
+                onPress={() =>
+                  interactions.choose(() => {
+                    controller.clearOutcome();
+                    onChooseFile(workspace.matter.lifecycle_version);
+                  }, selectionRevision)
+                }
+              />
+              <Text testID="files-camera-privacy" style={styles.muted}>
+                Take a photo, then choose whether to upload it. Photos may
+                include details such as capture location. Those details are kept
+                when you upload. Camera access is optional; Choose file remains
+                available.
+              </Text>
+              <NativeButton
+                testID="files-camera"
+                label={
+                  selectingFile ? "Finishing file selection" : "Take photo"
+                }
+                secondary
+                disabled={
+                  busy || selectingFile || unknown || snapshot.cleanupFailed
+                }
+                onPress={() =>
+                  interactions.choose(() => {
+                    controller.clearOutcome();
+                    onCapturePhoto(workspace.matter.lifecycle_version);
+                  }, selectionRevision)
+                }
+              />
+            </View>
+          )}
+        </>
+      ) : null}
+      {snapshot.upload.state !== "idle" ? (
+        <View
+          testID={`files-upload-${snapshot.upload.state}`}
+          accessibilityLiveRegion="polite"
+          style={{ gap: 8 }}
+        >
+          {busy ? <NativeProgress /> : null}
+          <Text
+            accessibilityRole={
+              snapshot.upload.state === "rejected" || unknown ? "alert" : "text"
+            }
+            style={styles.body}
+          >
+            {snapshot.upload.message}
+          </Text>
+          {snapshot.upload.preparationStep ? (
+            <View
+              collapsable={false}
+              testID={`files-preparation-failure-${snapshot.upload.preparationStep}`}
+              style={{ width: 1, height: 1 }}
+            />
+          ) : null}
+          {busy ? (
+            <NativeButton
+              testID="files-upload-cancel"
+              label={
+                snapshot.upload.state === "uploading"
+                  ? "Stop waiting for upload"
+                  : "Cancel upload"
+              }
+              secondary
+              onPress={controller.cancel}
+            />
+          ) : null}
+        </View>
+      ) : null}
+      {snapshot.cleanupFailed ? (
+        <Text
+          testID="files-cleanup-error"
+          accessibilityRole="alert"
+          style={styles.body}
+        >
+          Temporary-file removal could not be confirmed. Further uploads are
+          blocked. Sign out and restart CaseOps to run cleanup.
+        </Text>
+      ) : null}
+      <NativeButton
+        testID="files-reload"
+        label="Reload files"
+        secondary
+        disabled={busy}
+        onPress={() => {
+          setVisible(25);
+          void controller.reload();
+        }}
+      />
+      {workspace ? (
+        <>
+          <Text accessibilityRole="header" style={styles.heading}>
+            Attached files
+          </Text>
           {workspace.attachments.length === 0 ? (
             <View testID="files-empty" style={{ paddingVertical: 16, gap: 8 }}>
               <Text style={styles.heading}>No files attached</Text>
@@ -270,126 +462,8 @@ function ScopedFilesScreen(props: FilesScreenProps) {
               ) : null}
             </View>
           )}
-          {restriction ? (
-            <Text testID="files-upload-restricted" style={styles.muted}>
-              {restriction}
-            </Text>
-          ) : (
-            <View style={{ gap: 12 }}>
-              <Text style={styles.label}>
-                Current upload limit:{" "}
-                {formatBytes(uploadByteLimit(workspace.storage))}
-              </Text>
-              {scopedSelection ? (
-                <View testID="files-selection" style={{ gap: 8 }}>
-                  <Text style={styles.body}>{scopedSelection.asset.name}</Text>
-                  <Text style={styles.label}>
-                    {scopedSelection.asset.size === undefined
-                      ? "Size will be checked before upload"
-                      : formatBytes(scopedSelection.asset.size)}
-                  </Text>
-                  <Text style={styles.muted}>
-                    Upload to {workspace.matter.matter_code}
-                  </Text>
-                  <NativeButton
-                    testID="files-upload"
-                    label="Upload file"
-                    disabled={
-                      busy ||
-                      unknown ||
-                      !!selectionError ||
-                      snapshot.cleanupFailed
-                    }
-                    onPress={() => {
-                      void upload();
-                    }}
-                  />
-                </View>
-              ) : null}
-              {selectedFile ? (
-                <NativeButton
-                  testID="files-selection-clear"
-                  label="Clear selection"
-                  secondary
-                  disabled={busy}
-                  onPress={clearSelection}
-                />
-              ) : null}
-              {selectionError ? (
-                <Text
-                  testID="files-selection-error"
-                  accessibilityRole="alert"
-                  style={styles.body}
-                >
-                  {selectionError}
-                </Text>
-              ) : null}
-              <NativeButton
-                testID="files-choose"
-                label={selectedFile ? "Choose another file" : "Choose file"}
-                secondary={!!selectedFile}
-                disabled={busy || unknown || snapshot.cleanupFailed}
-                onPress={() => interactions.choose(() => {
-                  controller.clearOutcome();
-                  onChooseFile(workspace.matter.lifecycle_version);
-                })}
-              />
-            </View>
-          )}
         </>
       ) : null}
-      {snapshot.upload.state !== "idle" ? (
-        <View
-          testID={`files-upload-${snapshot.upload.state}`}
-          accessibilityLiveRegion="polite"
-          style={{ gap: 8 }}
-        >
-          {busy ? <NativeProgress /> : null}
-          <Text
-            accessibilityRole={
-              snapshot.upload.state === "rejected" || unknown ? "alert" : "text"
-            }
-            style={styles.body}
-          >
-            {snapshot.upload.message}
-          </Text>
-          {snapshot.upload.preparationStep ? (
-            <View collapsable={false} testID={`files-preparation-failure-${snapshot.upload.preparationStep}`} style={{ width: 1, height: 1 }} />
-          ) : null}
-          {busy ? (
-            <NativeButton
-              testID="files-upload-cancel"
-              label={
-                snapshot.upload.state === "uploading"
-                  ? "Stop waiting for upload"
-                  : "Cancel upload"
-              }
-              secondary
-              onPress={controller.cancel}
-            />
-          ) : null}
-        </View>
-      ) : null}
-      {snapshot.cleanupFailed ? (
-        <Text
-          testID="files-cleanup-error"
-          accessibilityRole="alert"
-          style={styles.body}
-        >
-          Temporary-file removal could not be confirmed. Further uploads are
-          blocked. Sign out and restart CaseOps to run cleanup.
-        </Text>
-      ) : null}
-      <NativeButton
-        testID="files-reload"
-        label="Reload files"
-        secondary
-        disabled={busy}
-        onPress={() => {
-          setVisible(25);
-          void controller.reload();
-        }}
-      />
     </View>
   );
 }

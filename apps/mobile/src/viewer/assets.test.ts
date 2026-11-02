@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { pdfjsAssets, pdfjsVersion } from "./generated/pdfjs-assets.ts";
 import {
   buildAssets,
+  checkAssets,
   INTEGRITY,
   unpack,
   VERSION,
@@ -68,6 +69,7 @@ test("native-viewer assets: byte-identical regeneration and fail-closed altered 
     ),
   );
   const outputs = buildAssets(files);
+  assert.equal(typeof outputs["renderer-runtime-source.ts"], "string");
   for (const [name, value] of Object.entries(outputs))
     assert.equal(
       value,
@@ -90,5 +92,57 @@ test("native-viewer assets: byte-identical regeneration and fail-closed altered 
   assert.throws(
     () => unpack(Buffer.from("not the pinned archive")),
     /integrity/,
+  );
+});
+
+test("native-viewer assets: static runtime normalizes line endings and check rejects changed canonical renderer code", async () => {
+  const files = new Map(
+    Object.entries(pdfjsAssets).map(([path, base64]) => [
+      path,
+      Buffer.from(base64, "base64"),
+    ]),
+  );
+  files.set(
+    "package.json",
+    Buffer.from(
+      JSON.stringify({
+        name: "pdfjs-dist",
+        version: VERSION,
+        license: "Apache-2.0",
+      }),
+    ),
+  );
+  const source = await readFile(
+    new URL("./renderer-runtime.ts", import.meta.url),
+    "utf8",
+  );
+  const baseline = buildAssets(files);
+  assert.deepEqual(
+    buildAssets(files, source.replace(/\r?\n/g, "\r\n")),
+    baseline,
+  );
+  const changed = source.replace(
+    "Private document cleared",
+    "Changed canonical renderer stale-output control",
+  );
+  assert.notEqual(changed, source);
+  const rebuilt = buildAssets(files, changed);
+  assert.notEqual(
+    rebuilt["renderer-runtime-source.ts"],
+    baseline["renderer-runtime-source.ts"],
+  );
+  for (const name of ["pdfjs-assets.ts", "manifest.json", "LICENSES.txt"] as const)
+    assert.equal(rebuilt[name], baseline[name]);
+  await assert.rejects(
+    checkAssets(rebuilt),
+    /Stale public asset: renderer-runtime-source\.ts/,
+  );
+  assert.throws(
+    () => buildAssets(files, "export const rendererMain = 1;"),
+    (error: unknown) =>
+      !!error &&
+      typeof error === "object" &&
+      "status" in error &&
+      error.status === 1,
   );
 });

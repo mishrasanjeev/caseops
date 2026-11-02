@@ -1,5 +1,6 @@
 import { array, ContractError, dateOnly, object, string } from "./contracts.ts";
 import type { AuthorizedRequest } from "./repository.ts";
+import { createContractObligationsRepository } from "./contract-obligations.ts";
 
 export const SOURCE_PAGE_SIZE = 25;
 export type SourceKind = "contract" | "ip_docket";
@@ -126,7 +127,7 @@ export type ContractSource = {
   created_at: string;
   updated_at: string;
 };
-// Projections of schemas/contracts.py ContractRecord from the bounded list.
+// Projection of schemas/contracts.py ContractRecord from bounded reads.
 export function decodeContractSource(
   value: unknown,
   companyId: string,
@@ -203,6 +204,58 @@ export function formatSourceValue(
   integer(minor);
   // The read contract does not supply a currency exponent. Preserve exact units.
   return `${currency} ${minor.toString()} minor ${minor === 1 ? "unit" : "units"}`;
+}
+
+// The exact-ID summary is generic: Calendar dockets can be patents, designs,
+// trademarks or another server record type. It contains no inferred dates.
+export type IpDocketSource = {
+  kind: "ip_docket";
+  id: string;
+  company_id: string;
+  matter_id: string | null;
+  record_type: string;
+  title: string;
+  primary_identifier: string | null;
+  status: string;
+  is_active: true;
+  lifecycle_version: number;
+  access_policy_version: number;
+  current_version: number;
+  updated_at: string;
+};
+export function decodeIpDocketSource(
+  value: unknown,
+  companyId: string,
+  expectedId: string,
+): IpDocketSource {
+  const row = object(value, "IP docket summary");
+  const id = identity(row.id);
+  if (
+    id !== identity(expectedId) ||
+    identity(row.company_id) !== identity(companyId) ||
+    row.is_active !== true
+  )
+    throw new ContractError("IP docket source identity or lifecycle");
+  return {
+    kind: "ip_docket",
+    id,
+    company_id: companyId,
+    matter_id: nullable(row.matter_id, identity),
+    record_type: identity(row.record_type, "IP record type"),
+    title: text(row.title),
+    primary_identifier: nullable(row.primary_identifier, text),
+    status: identity(row.status, "IP status"),
+    is_active: true,
+    lifecycle_version: integer(row.lifecycle_version),
+    access_policy_version: integer(row.access_policy_version),
+    current_version: integer(row.current_version, 1),
+    updated_at: (() => {
+      const value = timestamp(row.updated_at);
+      if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(value))
+        throw new ContractError("IP summary UTC timestamp");
+      return value;
+    })(),
+  };
 }
 
 export type SourceDateState =
@@ -389,34 +442,8 @@ export type SourceUnavailable = {
 };
 export type SourceAvailability = { state: "available" } | SourceUnavailable;
 export const SOURCE_GAPS = {
-  contractModule: {
-    state: "unavailable",
-    reason: "contract_module_availability_missing",
-    message:
-      "Contract availability could not be confirmed for this workspace. Contract selection is unavailable.",
-  },
-  contractDetail: {
-    state: "unavailable",
-    reason: "bounded_contract_detail_missing",
-    message:
-      "This contract cannot be loaded safely from this link. Return to the originating view.",
-  },
-  contractMoved: {
-    state: "unavailable",
-    reason: "contract_source_not_on_page",
-    message:
-      "This contract is no longer on its original page or is no longer visible. Return to the originating view.",
-  },
-  contractObligations:
-    "Obligations and responsible-person names are unavailable in this source view. No obligations are inferred from these dates.",
   counsel:
     "Counsel assignments and budgets are unavailable in this source view.",
-  ipDetail: {
-    state: "unavailable",
-    reason: "bounded_ip_detail_missing",
-    message:
-      "This IP source cannot be loaded from this link. Open the trademark portfolio and select the application.",
-  },
   ipMoved: {
     state: "unavailable",
     reason: "ip_source_not_on_page",
@@ -520,7 +547,10 @@ export type ContractSourceLocator = {
 };
 export type SourceLocator = IpSourceLocator | ContractSourceLocator;
 export type SourceDetail =
-  | { state: "ready"; record: ContractSource | IpPortfolioSource }
+  | {
+      state: "ready";
+      record: ContractSource | IpPortfolioSource | IpDocketSource;
+    }
   | SourceUnavailable;
 export function createSourceRecordsRepository(
   request: AuthorizedRequest,
@@ -574,16 +604,18 @@ export function createSourceRecordsRepository(
   };
   return {
     companyId,
+    obligations: createContractObligationsRepository(request, companyId).load,
     // No role/creator-capability guesses and no billing read with side effects.
     availability: async (
       signal?: AbortSignal,
     ): Promise<SourceModuleAvailability> => ({
-      contract: { ...SOURCE_GAPS.contractModule },
+      // Contract reads are authorized by CurrentContext, not creator roles or
+      // a guessed billing entitlement. Each actual request can still refuse.
+      contract: { state: "available" },
       ip_docket: await ipAvailability(signal),
     }),
     ipPage,
-    // CurrentContext authorizes these existing contract reads. This does not
-    // constitute a new module entitlement or enable the record-type selector.
+    // Existing read routes retain their server-owned authorization.
     contracts,
     detail: async (
       source: SourceRef,
@@ -591,26 +623,41 @@ export function createSourceRecordsRepository(
       signal?: AbortSignal,
     ): Promise<SourceDetail> => {
       const ref = decodeSourceRef(source);
-      if (!locator)
-        return {
-          ...(ref.kind === "contract"
-            ? SOURCE_GAPS.contractDetail
-            : SOURCE_GAPS.ipDetail),
-        };
-      if (locator.kind !== ref.kind)
-        throw new ContractError("cross-type source locator");
-      continuation(locator.cursor);
+      if (locator) {
+        if (locator.kind !== ref.kind)
+          throw new ContractError("cross-type source locator");
+        continuation(locator.cursor);
+      }
       if (ref.kind === "contract") {
         if (
-          locator.kind !== "contract" ||
-          identity(locator.contractId) !== ref.id
+          locator &&
+          (locator.kind !== "contract" ||
+            identity(locator.contractId) !== ref.id)
         )
           throw new ContractError("contract locator identity");
-        const page = await contracts(locator.cursor, signal);
-        const record = page.contracts.find((item) => item.id === ref.id);
-        return record
-          ? { state: "ready", record }
-          : { ...SOURCE_GAPS.contractMoved };
+        return {
+          state: "ready",
+          record: decodeContractSource(
+            await get(`/api/contracts/${encodeURIComponent(ref.id)}`, signal),
+            companyId,
+            ref.id,
+          ),
+        };
+      }
+      if (!locator) {
+        const gate = await ipAvailability(signal);
+        if (gate.state !== "available") return gate;
+        return {
+          state: "ready",
+          record: decodeIpDocketSource(
+            await get(
+              `/api/ip/dockets/${encodeURIComponent(ref.id)}/summary`,
+              signal,
+            ),
+            companyId,
+            ref.id,
+          ),
+        };
       }
       if (locator.kind !== "ip_docket")
         throw new ContractError("cross-type source locator");

@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { createHash, X509Certificate } from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
 import http from 'node:http';
+import https from 'node:https';
+import fs from 'node:fs';
+import tls from 'node:tls';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEADER, reconcileInventory, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
-import { prepareFirefox, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
+import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
@@ -24,6 +27,10 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { localCertificates } from './host-node-trust-fixture.mjs';
+import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, prepareIosHomeDirectories, iosSimulatorInputEnvironment, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
+import { captureAndroidEmptyMavenRepository, bindAndroidEmptyMavenRepository, ANDROID_EMPTY_MAVEN_ENV } from './android-host-launch.mjs';
 
 const installedHash = 'a'.repeat(64);
 const installedPath = '/data/app/~~owned==/ai.caseops.mobile.dev-test==/base.apk';
@@ -303,6 +310,33 @@ test('gateway cannot start with a wildcard or external upstream', () => {
   assert.throws(() => createGateway({ upstream: 'http://127.0.0.1', routes: ['GET /api/*'], runId: 'unit' }));
 });
 
+test('gateway rejects absolute and authority-like targets before any upstream request', async (t) => {
+  let trustedCalls = 0, otherCalls = 0;
+  const trusted = http.createServer((_request, response) => { trustedCalls++; response.end('{"ok":true}'); });
+  const other = http.createServer((_request, response) => { otherCalls++; response.end('{}'); });
+  t.after(() => trusted.close());
+  t.after(() => other.close());
+  const gateway = createGateway({ upstream: await listen(trusted), routes: ['GET /api/build'], runId: 'target-unit' });
+  t.after(() => gateway.close());
+  const origin = new URL(await listen(gateway));
+  const otherOrigin = await listen(other);
+  const raw = (target) => new Promise((resolve, reject) => {
+    const request = http.request({ hostname: origin.hostname, port: origin.port, path: target,
+      headers: { [MARKER_HEADER]: MARKER }, timeout: 2000 }, response => {
+      response.resume(); response.on('end', () => resolve(response.statusCode));
+    });
+    request.on('error', reject); request.on('timeout', () => request.destroy(new Error('Synthetic request deadline'))); request.end();
+  });
+  for (const target of [`${otherOrigin}/api/build`, `//${new URL(otherOrigin).host}/api/build`, '/\\other.invalid/api/build']) {
+    assert.equal(await raw(target), 403);
+  }
+  assert.equal(trustedCalls, 0);
+  assert.equal(otherCalls, 0);
+  assert.equal(await raw('/api/build?value=%2F'), 200);
+  assert.equal(trustedCalls, 1);
+  assert.equal(otherCalls, 0);
+});
+
 // Deterministic harness doubles only; these are not Android/iOS acceptance.
 function matterDriver(platform, initialDepth, backAvailable = true) {
   let depth = initialDepth;
@@ -475,6 +509,14 @@ test('signed-out resume rejects refresh, token exchange, authorization or any ot
   signedOutResumeTraffic([{ method: 'GET', route: '/api/build', status: 200 }]);
   for (const route of ['/api/auth/native/refresh', '/api/auth/native/token', '/api/auth/native/authorize', '/api/auth/login', '/api/auth/me']) {
     for (const status of [null, 200, 401]) assert.throws(() => signedOutResumeTraffic([{ method: 'POST', route, status }]), /SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION/);
+  }
+  // Only the exact public compatibility GET is admitted (see traffic.mjs); any other method or
+  // a lookalike route under the auth namespace remains an auth attempt.
+  signedOutResumeTraffic([{ method: 'GET', route: '/api/auth/native/compatibility', status: 200 }]);
+  for (const request of [{ method: 'POST', route: '/api/auth/native/compatibility', status: 200 },
+    { method: 'GET', route: '/api/auth/native/compatibility/extra', status: 200 },
+    { method: 'GET', route: '/api/auth/native/sessions', status: 200 }]) {
+    assert.throws(() => signedOutResumeTraffic([{ method: 'GET', route: '/api/auth/native/compatibility', status: 200 }, request]), /SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION/);
   }
 });
 
@@ -654,7 +696,7 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
         return [];
       }
       if (query === 'a[href^="/sign-in?next="]' && stage === 'landing') return [element('link')];
-      if (['#company-slug', '#email', '#password'].includes(query) && stage === 'login') return Array.from({ length: query === '#password' && duplicatePassword ? 2 : 1 }, () => element(query));
+      if (['#company-slug', 'form[aria-label="Sign in"] #company-slug', '#email', '#password'].includes(query) && stage === 'login') return Array.from({ length: query === '#password' && duplicatePassword ? 2 : 1 }, () => element(query === 'form[aria-label="Sign in"] #company-slug' ? '#company-slug' : query));
       if (query === 'form[aria-label="Sign in"] button[type="submit"]' && stage === 'login') return [element('submit')];
       if (query === '#mfa-code' && stage === 'mfa') return [element('#mfa-code')];
       if (query === 'form[aria-label="MFA challenge"] button[type="submit"]' && stage === 'mfa') return [element('mfa-submit')];
@@ -1109,11 +1151,12 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [] } = {}) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {} } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
   locators.fullBrowser = { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' };
+  Object.assign(locators, entryLocators);
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
@@ -1351,6 +1394,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
   let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
+  // Field text as the browser reports it; options.autofill models Firefox prefill.
+  const typed = { ...(options.autofill || {}) }, fields = new Map();
+  let fieldSequence = 0;
   const fixture = { appId: 'ai.caseops.mobile.dev.localacceptance', principalLabel: 'Unit Person', workspaceLabel: 'Unit Workspace',
     auth: { ...auth, mode: 'native-firefox', webOrigin: 'https://10.0.2.2:3443', companySlug: 'unit', emailEnv: 'CASEOPS_MOBILE_UNIT_EMAIL', passwordEnv: 'CASEOPS_MOBILE_UNIT_PASSWORD' } };
   const driver = {
@@ -1361,6 +1407,11 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
+      // Pending Firefox preparation is observed one click per poll, so it
+      // takes the simulated clock below rather than a single poll.
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && fullBrowser) {
+        return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
+      }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
       const wait = { key: undefined, timeout, start };
       waits.push(wait);
@@ -1371,6 +1422,15 @@ function firefoxDouble(t, foreign = false, options = {}) {
         if (clock - start >= timeout) throw new Error(settings.timeoutMsg || 'UNIT_WAIT_UNSATISFIED');
         clock += Math.min(interval, timeout - (clock - start));
       }
+    },
+    execute: async (command, args) => {
+      assert.equal(command, 'mobile: replaceElementValue', 'UNIT_FIREFOX_REPLACE_ONLY');
+      const key = fields.get(args?.elementId);
+      assert.ok(key, 'UNIT_RESOLVED_FIELD_ID_REQUIRED');
+      writes.push([key, args.text]);
+      if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(args.text);
+      // A replace that does not take keeps the earlier (autofilled) text.
+      if (!options.replaceIgnored) typed[key] = args.text;
     },
     getWindowRect: async () => ({ width: 400, height: 800 }),
     performActions: async () => {
@@ -1400,8 +1460,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'fullBrowser' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : key === 'urlOpen' ? (fullBrowser || options.customTabUrlShared) && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : ['urlValue', 'urlClose'].includes(key) ? editing
-        : key === 'signInLink' ? stage === 'landing' && !editing
+        : key === 'signInLink' ? stage === 'landing' && !editing && clock >= (options.entryDelayMs ?? 0)
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
+          && (key === 'companySlug' || !options.lowerFieldsNeedScroll || swipes.length > 0)
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
           && clock - connectedAt >= (options.connectDelayMs ?? 0)
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
@@ -1414,9 +1475,11 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0)
           && Number(key.slice('prepare-'.length)) <= preparationShown : false;
       if (!shown) return [];
-      return [{ isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
-        setValue: async (value) => { writes.push([key, value]); if (key === 'mfaCode') consentCodeEntered = /^\d{6}$/.test(value); },
+      const elementId = `unit-firefox-${++fieldSequence}`;
+      fields.set(elementId, key);
+      return [{ elementId, isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
         getText: async () => {
+          if (Object.hasOwn(typed, key)) return typed[key];
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
             if (verified && options.changedAfterMfa) target.searchParams.set('state', 'c'.repeat(64));
@@ -1428,7 +1491,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         },
         click: async () => {
           clicks.push(key);
-          if (key === 'sign-in') stage = 'landing';
+          if (key === 'sign-in') stage = options.directForm ? 'login' : 'landing';
           if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
@@ -1513,6 +1576,142 @@ test('Firefox preparation retains stale and lost dispatch failures without refet
     assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
     assert.equal(fake.elapsed(), 0);
   }
+});
+
+test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { entryDelayMs: 4011 });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.clicks.filter(key => key === 'signInLink').length, 1);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+  assert.equal(fake.swipes.length, 0);
+  assert.deepEqual(fake.writes.slice(0, 3).map(([key]) => key), ['companySlug', 'email', 'password']);
+  assert.ok(fake.elapsed() >= 4011 && fake.elapsed() <= 20000);
+});
+
+test('Firefox replaces autofilled login fields atomically and reads back each non-secret value', async t => {
+  browserEnvironment(t);
+  // Observed on emulator-5584: a stale operator email survived setValue's clear
+  // and the member email was appended, so the form refused the identity.
+  const fake = firefoxDouble(t, false, { autofill: { companySlug: 'other', email: 'operator@example.invalid', password: 'stale' } });
+  await browserLogin(fake.context);
+  assert.deepEqual(fake.writes.slice(0, 3), [['companySlug', 'unit'], ['email', 'unit@example.invalid'], ['password', 'unit-only-password']]);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+});
+
+test('Firefox refuses to submit when a replaced field does not read back exactly', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { autofill: { companySlug: 'unit', email: 'operator@example.invalid' }, replaceIgnored: true, chromeDelayMs: 0 });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await assert.rejects(browserLogin(fake.context), /FIREFOX_FIELD_VALUE_MISMATCH/);
+  assert.equal(fake.clicks.includes('submit'), false);
+  assert.deepEqual(fake.writes.map(([key]) => key), ['companySlug', 'email']);
+  assert.ok(!JSON.stringify(fake.records).includes('unit-only-password'));
+});
+
+const firefoxEntryClockMocks = new WeakMap();
+function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure } = {}) {
+  const recipe = validateFirefoxRecipe(firefoxRecipe(t, { entryLocators: { useAnotherAccount: { kind: 'label', value: 'Use another account' } } }));
+  let clock = 0, polling = false, wrapperClicks = 0, swallowed = 0;
+  const attempts = [], acknowledged = [], queries = [], waits = [], records = [];
+  const driver = {
+    getCurrentPackage: async () => recipe.packageName,
+    $$: async query => {
+      if (readFailure) throw readFailure;
+      const key = Object.keys(recipe.locators).find(name => query === selector('android', recipe.locators[name].kind, recipe.locators[name].value));
+      queries.push(key);
+      const count = state({ key, clock, acknowledged, attempts }) ?? 0;
+      return Array.from({ length: typeof count === 'number' ? count : 1 }, (_, index) => ({ elementId: `${key}-original-${index}`,
+        isDisplayed: async () => true, isEnabled: async () => count !== 'disabled',
+        click: async () => { wrapperClicks++; assert.fail('ENTRY_ELEMENT_CLICK_MUST_NOT_BE_CALLED'); } }));
+    },
+    elementClick: async id => {
+      assert.equal(polling, false, 'ENTRY_CLICK_MUST_BE_OUTSIDE_POLL'); attempts.push({ id, clock, queries: queries.length });
+      if (!dispatchFailure || lostAcknowledgement) acknowledged.push({ id, clock });
+      if (dispatchFailure) throw dispatchFailure;
+    },
+    waitUntil: async (callback, settings) => {
+      const start = clock; waits.push({ start, ...settings });
+      for (;;) {
+        polling = true;
+        try { if (await callback()) return; } catch { swallowed++; }
+        finally { polling = false; }
+        if (clock - start >= settings.timeout) throw Error(settings.timeoutMsg);
+        clock += Math.min(settings.interval, settings.timeout - (clock - start));
+      }
+    },
+  };
+  firefoxEntryClockMocks.get(t)?.mock.restore();
+  firefoxEntryClockMocks.set(t, t.mock.method(Date, 'now', () => clock));
+  return { recipe, context: { driver, platform: 'android', record: event => records.push(event) }, attempts, acknowledged, queries, waits,
+    elapsed: () => clock, wrapperClicks: () => wrapperClicks, swallowed: () => swallowed, records };
+}
+
+test('Firefox direct form anchor retains normal lower-field scrolling without an entry navigation', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { directForm: true, lowerFieldsNeedScroll: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.clicks.filter(key => key === 'signInLink').length, 0);
+  assert.equal(fake.swipes.length, 1);
+  assert.deepEqual(fake.writes.slice(0, 3).map(([key]) => key), ['companySlug', 'email', 'password']);
+  assert.equal(fake.clicks.filter(key => key === 'submit').length, 1);
+});
+
+test('Firefox acknowledged entry lingering while the form loads waits without a second dispatch', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => !acknowledged.length ? Number(key === 'useAnotherAccount')
+    : Number(clock < 4500 ? key === 'useAnotherAccount' : key === 'companySlug'));
+  await resolveFirefoxEntry(fake.context, fake.recipe);
+  assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
+  assert.equal(fake.elapsed(), 4500); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.swallowed(), 0);
+  assert.ok(fake.waits[1].timeout <= 20000);
+});
+
+test('Firefox unknown or disabled entry states exhaust one 20 second bound without credentials or gestures', async t => {
+  for (const state of [() => 0, ({ key }) => key === 'useAnotherAccount' ? 'disabled' : 0]) {
+    const fake = firefoxEntryDouble(t, state);
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /FIREFOX_ENTRY_NOT_READY/);
+    assert.equal(fake.elapsed(), 20000); assert.equal(fake.attempts.length, 0); assert.equal(fake.wrapperClicks(), 0);
+  }
+});
+
+test('Firefox entry ambiguity and read transport failures remain terminal rather than waitUntil-swallowed', async t => {
+  for (const state of [({ key }) => key === 'companySlug' ? 2 : 0,
+    ({ key }) => Number(['useAnotherAccount', 'signInLink'].includes(key)),
+    ({ key }) => Number(['companySlug', 'useAnotherAccount'].includes(key))]) {
+    const fake = firefoxEntryDouble(t, state);
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS/);
+    assert.equal(fake.elapsed(), 0); assert.equal(fake.attempts.length, 0); assert.equal(fake.swallowed(), 0);
+  }
+  const failure = Error('UNIT_ENTRY_TRANSPORT_CLOSED'), fake = firefoxEntryDouble(t, () => 0, { readFailure: failure });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), error => error === failure);
+  assert.equal(fake.elapsed(), 0); assert.equal(fake.swallowed(), 0); assert.equal(fake.attempts.length, 0);
+});
+
+test('Firefox entry stale and lost acknowledgements dispatch original ID once without refetch or wrapper replay', async t => {
+  for (const lostAcknowledgement of [false, true]) {
+    const failure = Error(lostAcknowledgement ? 'UNIT_ENTRY_ACK_UNKNOWN' : 'UNIT_ENTRY_STALE');
+    const fake = firefoxEntryDouble(t, ({ key }) => Number(key === 'useAnotherAccount'), { dispatchFailure: failure, lostAcknowledgement });
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), error => error === failure);
+    assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
+    assert.equal(fake.queries.length, fake.attempts[0].queries); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.elapsed(), 0);
+    assert.equal(fake.acknowledged.length, lostAcknowledgement ? 1 : 0);
+  }
+});
+
+test('Firefox optional transitions share the original deadline instead of starting another 20 seconds', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+    if (clock < 12000) return 0;
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (clock < 18000) return Number(key === 'useAnotherAccount');
+    if (acknowledged.length === 1) return Number(key === 'signInLink');
+    return Number(key === 'signInLink');
+  });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /FIREFOX_ENTRY_NOT_READY/);
+  assert.equal(fake.elapsed(), 20000); assert.equal(fake.attempts.length, 2);
+  assert.deepEqual(fake.attempts.map(row => row.id), ['useAnotherAccount-original-0', 'signInLink-original-0']);
+  assert.ok(fake.waits[1].timeout <= 8000 && fake.waits[2].timeout <= 2000); assert.equal(fake.wrapperClicks(), 0);
 });
 
 test('actual Android Firefox wrapper dispatches resolved submit, consent, MFA and app-open IDs once after stale/lost acknowledgements', async t => {
@@ -2522,4 +2721,3162 @@ test('already enabled signed-out control admits browser auth exactly once withou
   assert.equal(actual.elapsedVirtualMs, 0);
   assert.deepEqual(actual.clicks.map(row => row.id), ['sign-in']);
   assert.deepEqual(actual.browserAdmissions, [0]);
+});
+
+// These tests are local transport/source contracts, not native SDK acceptance.
+const trustHelper = fileURLToPath(new URL('./host-node-trust.mjs', import.meta.url));
+const trustFixture = fileURLToPath(new URL('./host-node-trust-fixture.mjs', import.meta.url));
+const neutralTrustEnv = () => {
+  const result = { ...process.env };
+  for (const key of Object.keys(result)) if (/^(NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_TLS_REJECT_UNAUTHORIZED|OPENSSL_CONF|OPENSSL_CONF_INCLUDE|SSL_CERT_FILE|SSL_CERT_DIR|CASEOPS_HOST_NODE_TRUST_POLICY_FILE|CASEOPS_HOST_NODE_TRUST_POLICY_SHA256)$/i.test(key)) delete result[key];
+  return result;
+};
+const trustRoot = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-scoped-node-trust-')));
+async function trustChild(args, environment) {
+  const child = spawn(process.execPath, args, { env: environment, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let stdout = '', stderr = '', exceeded = false;
+  const consume = name => value => { if (stdout.length + stderr.length + value.length > 32768) { exceeded = true; child.kill(); } else if (name === 'stdout') stdout += value; else stderr += value; };
+  child.stdout.on('data', consume('stdout')); child.stderr.on('data', consume('stderr'));
+  const timer = setTimeout(() => child.kill(), 12000);
+  try { const [code, signal] = await once(child, 'close'); return { code, signal, stdout, stderr, exceeded, pid: child.pid }; }
+  finally { clearTimeout(timer); }
+}
+let tlsMaterials;
+const materials = () => tlsMaterials ??= localCertificates();
+function qaTrust(root) {
+  const cert = materials().trusted.cert, file = path.join(root, 'isolated-ca.pem');
+  fs.writeFileSync(file, cert, { mode: 0o600, flag: 'wx' });
+  const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: new X509Certificate(cert).fingerprint256.replaceAll(':', '').toLowerCase() };
+  return { reference, prepared: prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }) };
+}
+async function localTls(material, callback) {
+  let requests = 0;
+  const server = https.createServer({ key: material.privateKey, cert: material.cert }, (request, response) => {
+    assert.equal(request.headers['x-caseops-automated-test'], 'no-paid-providers'); requests++; response.end('local-only');
+  });
+  const sockets = new Set(); server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try { return await callback(`https://127.0.0.1:${server.address().port}/`, () => requests); }
+  finally { for (const socket of sockets) socket.destroy(); await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+}
+
+test('host trust removes only the exact compromised DER and accepts the exact already-clean set', () => {
+  const roots = reviewHostNodeRoots();
+  assert.equal(roots.outputCount, 144); assert.equal(roots.removedCount, 1); assert.equal(roots.fingerprints.includes(DENIED_HOST_CA), false);
+  const cleaned = roots.pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
+  const again = reviewHostNodeRoots(cleaned);
+  assert.equal(again.removedCount, 0); assert.equal(again.outputSetSha256, roots.outputSetSha256);
+  assert.equal(again.pem, roots.pem);
+});
+test('host trust refuses duplicates, omitted unaffected roots, changed roots and unreviewed runtimes', () => {
+  for (const values of [[...tls.rootCertificates, tls.rootCertificates[0]], tls.rootCertificates.slice(1), ['invalid', ...tls.rootCertificates.slice(1)]]) {
+    assert.throws(() => reviewHostNodeRoots(values), /HOST_TRUST_/);
+  }
+  assert.throws(() => reviewHostNodeRoots(tls.rootCertificates, '24.15.1'), /HOST_TRUST_NODE_OR_ROOTS_UNREVIEWED/);
+});
+test('host trust preparation is exclusive, private and does not mutate the process environment or TLS defaults', () => {
+  const root = trustRoot(), before = { ...process.env }, defaultBefore = tls.getCACertificates('default');
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    assert.equal(prepared.effectiveDefaultVerified, false); assert.equal(prepared.globalTrustChanges, 0);
+    assert.equal(prepared.descriptor.runtimeSource.helper.sha256, createHash('sha256').update(fs.readFileSync(trustHelper)).digest('hex'));
+    assert.ok(prepared.environment.NODE_OPTIONS.length < 24000);
+    assert.equal(fs.readdirSync(prepared.descriptor.emptyDirectory).length, 0);
+    if (process.platform !== 'win32') for (const name of ['policy.json', 'roots.pem']) assert.equal(fs.statSync(path.join(root, 'policy', name)).mode & 0o777, 0o600);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), /EEXIST/);
+    assert.equal(Object.keys(process.env).length === Object.keys(before).length && Object.keys(before).every(key => process.env[key] === before[key]), true); assert.deepEqual(tls.getCACertificates('default'), defaultBefore);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('actual inherited bootstrap activates the exact Node24 default store before the entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const result = await trustChild([trustHelper, 'verify'], { ...neutralTrustEnv(), ...prepared.environment });
+    assert.equal(result.code, 0, result.stderr); assert.equal(result.signal, null); assert.equal(result.exceeded, false);
+    const report = JSON.parse(result.stdout); assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 144);
+    assert.equal(report.expectedDefaultSetSha256, prepared.descriptor.outputSetSha256); assert.equal(report.globalTrustChanges, 0);
+    const standalone = { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_HOST_NODE_BOOTSTRAP_TEST: '1' };
+    // A separate Node test controller must not inherit the parent's internal reporter context.
+    delete standalone.NODE_TEST_CONTEXT;
+    const forwarded = await trustChild(['--test', '--test-reporter=tap', trustFixture], standalone);
+    assert.equal(forwarded.code, 0, forwarded.stderr || forwarded.stdout); assert.match(forwarded.stdout, /# tests 1\n/); assert.match(forwarded.stdout, /# pass 1\n/); assert.match(forwarded.stdout, /# fail 0\n/);
+    if (process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE) {
+      const records = observerOuterRecords(process.pid).filter(row => row.event === 'child-spawned' && row.pid === forwarded.pid);
+      assert.equal(records.length, 1); assert.equal(records[0].nestedDriver?.role, 'source-audited-nested-intrinsic-driver');
+      assert.equal(records[0].nestedDriver.scriptCompleteClaim, false); assert.equal(records[0].nestedDriver.workerWitnessRequired, true);
+      assert.deepEqual(records[0].nestedDriver.argv, [process.execPath, '--test', '--test-reporter=tap', trustFixture]);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('native-QA default HTTPS and fetch preserve certificate and hostname rejection', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root), env = { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) };
+    for (const [name, expected] of [['trusted', 'local-only'], ['untrusted', 'DEPTH_ZERO_SELF_SIGNED_CERT'], ['wrongHost', 'ERR_TLS_CERT_ALTNAME_INVALID']]) {
+      await localTls(materials()[name], async (origin, requests) => {
+        const result = await trustChild([trustFixture, 'probe', origin], env);
+        assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+        assert.deepEqual(report.output, [expected, expected]); assert.equal(report.expectedDefaultCount, 145); assert.equal(report.defaultEnumerationVerified, true);
+        assert.equal(requests(), name === 'trusted' ? 2 : 0);
+      });
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('normal Worker and subprocess inherit the activated fixture-bound default clients', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root);
+    await localTls(materials().trusted, async (origin, requests) => {
+      const result = await trustChild([trustFixture, 'descendants', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
+      assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+      assert.deepEqual(Object.keys(report).sort(), ['direct', 'subprocess', 'worker']);
+      for (const value of Object.values(report)) { assert.equal(value.defaultEnumerationVerified, true); assert.equal(value.expectedDefaultCount, 145); assert.deepEqual(value.output, ['local-only', 'local-only']); }
+      assert.equal(requests(), 6);
+    });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('base role never admits an isolated QA CA and explicit QA requires its exact public reference', () => {
+  const root = trustRoot();
+  try {
+    const { reference } = qaTrust(root);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'base'), fixtureCA: reference, environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_ROLE/);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'missing'), role: 'native-qa', environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_ROLE/);
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'wrong'), role: 'native-qa', fixtureCA: { ...reference, sha256: '0'.repeat(64) }, environment: neutralTrustEnv() }), /HOST_TRUST_FIXTURE_CHANGED/);
+    assert.equal(fs.existsSync(path.join(root, 'base')), false); assert.equal(fs.existsSync(path.join(root, 'missing')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('competing trust, npm bypasses, additive CA and CLI overrides refuse before the entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), base = { ...neutralTrustEnv(), ...prepared.environment };
+    for (const override of [{ NODE_USE_SYSTEM_CA: '0' }, { OPENSSL_CONF: 'unexpected' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' }, { NODE_EXTRA_CA_CERTS: prepared.descriptor.bundle.path }, { npm_config_strict_ssl: 'false' }, { npm_config_ca: 'unexpected' }, { npm_config_cafile: prepared.descriptor.bundle.path }, { npm_config_node_options: '--use-bundled-ca' }, { NODE_OPTIONS: '--use-openssl-ca' }]) {
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...base, ...override });
+      // Without the mandatory bootstrap Node itself can run; the explicit guard must refuse.
+      if (override.NODE_OPTIONS) {
+        const guarded = await trustChild([trustHelper, 'verify'], { ...base, ...override }); assert.notEqual(guarded.code, 0);
+      } else { assert.notEqual(result.code, 0); assert.equal(result.stdout.includes('ENTRY_RAN'), false); }
+    }
+    for (const flag of ['--use-bundled-ca', '--no-use-openssl-ca', '--tls-min-v1.0', '--tls-cipher-list=DEFAULT@SECLEVEL=0']) {
+      const result = await trustChild([flag, '-e', "console.log('ENTRY_RAN')"], base); assert.notEqual(result.code, 0); assert.equal(result.stdout.includes('ENTRY_RAN'), false);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('changed policy/bundle and nonempty root directory refuse before the actual entry', async () => {
+  const root = trustRoot();
+  try {
+    for (const variant of ['policy', 'bundle', 'empty']) {
+      const prepared = prepareHostNodeTrust({ directory: path.join(root, variant), environment: neutralTrustEnv() });
+      if (variant === 'policy') fs.appendFileSync(prepared.policyRef.path, '\n');
+      else if (variant === 'bundle') fs.appendFileSync(prepared.descriptor.bundle.path, '\n');
+      else fs.writeFileSync(path.join(prepared.descriptor.emptyDirectory, 'unadmitted.pem'), 'public synthetic');
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr.includes('BEGIN CERTIFICATE'), false);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('changed checked helper or bootstrap source refuses before any entry code', async () => {
+  const root = trustRoot();
+  try {
+    for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) {
+      const copy = path.join(root, name === 'host-node-trust.mjs' ? 'helper' : 'bootstrap'); fs.mkdirSync(copy, { mode: 0o700 });
+      for (const source of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'tooling.json']) fs.copyFileSync(path.join(path.dirname(trustHelper), source), path.join(copy, source));
+      const outer = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8').match(/\$prepare = @'\n([\s\S]+?)\n'@/);
+      assert.ok(outer);
+      const setup = await trustChild(['--input-type=module', '-e', outer[1], copy, path.join(copy, 'policy')], neutralTrustEnv());
+      assert.equal(setup.code, 0, setup.stderr); const prepared = JSON.parse(setup.stdout).prepared;
+      fs.appendFileSync(path.join(copy, name), '\nconsole.log("UNADMITTED_CODE");\n');
+      const result = await trustChild(['-e', "console.log('ENTRY_RAN')"], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, '');
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('public fixture descriptor failures close the actual FD before any policy output', () => {
+  for (const variant of ['read', 'stat', 'growth', 'replacement', 'parent-symlink']) {
+    const root = trustRoot(), parent = path.join(root, 'source'); fs.mkdirSync(parent, { mode: 0o700 });
+    const cert = materials().trusted.cert, file = path.join(parent, 'ca.pem'); fs.writeFileSync(file, cert, { mode: 0o600 });
+    const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: new X509Certificate(cert).fingerprint256.replaceAll(':', '').toLowerCase() };
+    const original = { open: fs.openSync, stat: fs.fstatSync, read: fs.readSync, close: fs.closeSync }; let fd, closed = false, injected = false;
+    fs.openSync = (name, ...args) => { const opened = original.open(name, ...args); if (name === file && fd === undefined) fd = opened; return opened; };
+    fs.fstatSync = (value, ...args) => { if (value === fd && variant === 'stat') throw new Error('SYNTHETIC_STAT_FAILURE'); return original.stat(value, ...args); };
+    fs.readSync = (value, ...args) => {
+      if (value === fd && !injected) {
+        injected = true;
+        if (variant === 'read') throw new Error('SYNTHETIC_READ_FAILURE');
+        if (variant === 'growth') fs.appendFileSync(file, 'x'.repeat(1024));
+        if (variant === 'replacement') { fs.renameSync(file, file + '.held'); fs.writeFileSync(file, cert, { mode: 0o600 }); }
+        if (variant === 'parent-symlink') { fs.renameSync(parent, parent + '.held'); fs.symlinkSync(parent + '.held', parent, process.platform === 'win32' ? 'junction' : 'dir'); }
+      }
+      return original.read(value, ...args);
+    };
+    fs.closeSync = value => { if (value === fd) closed = true; return original.close(value); };
+    try {
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }));
+      assert.equal(closed, true); assert.throws(() => original.stat(fd), { code: 'EBADF' }); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    } finally { Object.assign(fs, { openSync: original.open, fstatSync: original.stat, readSync: original.read, closeSync: original.close }); fs.rmSync(root, { recursive: true, force: true }); }
+  }
+});
+test('host trust exclusive writer refuses zero progress and leaves no falsely completed policy', () => {
+  const root = trustRoot(), original = fs.writeSync; let writes = 0;
+  fs.writeSync = () => { writes++; return 0; };
+  try {
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), /HOST_TRUST_WRITE_PROGRESS/);
+    assert.equal(writes, 1); assert.equal(fs.existsSync(path.join(root, 'policy', 'policy.json')), false);
+  } finally { fs.writeSync = original; fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('zero, oversize, hardlinked, shared-write and symlink CA inputs refuse before reading policy secrets or creating output', () => {
+  for (const variant of ['zero', 'oversize', 'hardlink', 'shared-write', 'symlink']) {
+    const root = trustRoot(), file = path.join(root, 'ca.pem');
+    try {
+      const cert = materials().trusted.cert;
+      fs.writeFileSync(file, variant === 'zero' ? '' : variant === 'oversize' ? Buffer.alloc(65537) : cert, { mode: 0o600 });
+      if (variant === 'hardlink') fs.linkSync(file, file + '.alias');
+      if (variant === 'shared-write' && process.platform !== 'win32') fs.chmodSync(file, 0o666);
+      if (variant === 'shared-write' && process.platform === 'win32') { fs.unlinkSync(file); fs.mkdirSync(file); }
+      if (variant === 'symlink') { fs.renameSync(file, file + '.original'); if (process.platform === 'win32') { fs.mkdirSync(file + '.directory'); fs.symlinkSync(file + '.directory', file, 'junction'); } else fs.symlinkSync(file + '.original', file); }
+      const reference = { path: file, sha256: createHash('sha256').update(cert).digest('hex'), certificateSha256: createHash('sha256').update(new X509Certificate(cert).raw).digest('hex') };
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), role: 'native-qa', fixtureCA: reference, environment: neutralTrustEnv() }));
+      assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  }
+});
+test('provisioning pins exact accepted Node/npm and clean official Appium driver releases', () => {
+  const pins = JSON.parse(fs.readFileSync(new URL('./tooling.json', import.meta.url), 'utf8'));
+  assert.equal(pins.node, '24.15.0'); assert.equal(pins.npm, '11.12.1');
+  assert.equal(pins.appium, '3.9.0'); assert.equal(pins.xcuitest, '12.22.2'); assert.equal(pins.uiautomator2, '8.7.3'); assert.equal(pins.webdriverio, '10.1.0');
+  for (const [name, expected] of Object.entries(pins.hostNodeTrust)) {
+    assert.match(expected, /^[a-f0-9]{64}$/);
+    const source = fs.readFileSync(new URL(name === 'helperSha256' ? './host-node-trust.mjs' : './host-node-trust-start.mjs', import.meta.url));
+    assert.equal(createHash('sha256').update(source).digest('hex'), expected);
+  }
+});
+test('the actual provisioner outer executes only pinned held helper bytes before npm', async () => {
+  const root = trustRoot(), script = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8');
+  const match = script.match(/\$prepare = @'\n([\s\S]+?)\n'@/); assert.ok(match);
+  assert.ok(script.indexOf("Invoke-OwnedNode 'trust-prepare'") < script.indexOf("Invoke-OwnedNode 'npm-version'"));
+  assert.ok(script.indexOf("Invoke-OwnedNode 'trust-verify'") < script.indexOf("Invoke-OwnedNode 'core-install'"));
+  assert.doesNotMatch(script, /Invoke-WebRequest|\$env:APPIUM_HOME\s*=/);
+  try {
+    const valid = await trustChild(['--input-type=module', '-e', match[1], path.dirname(trustHelper), path.join(root, 'valid')], neutralTrustEnv());
+    assert.equal(valid.code, 0, valid.stderr); const q = JSON.parse(valid.stdout);
+    assert.equal(q.prepared.descriptor.nodeVersion, '24.15.0'); assert.equal(q.pins.appium, '3.9.0');
+    const source = path.join(root, 'source'); fs.mkdirSync(source, { mode: 0o700 });
+    for (const name of ['tooling.json', 'host-node-trust.mjs', 'host-node-trust-start.mjs']) fs.copyFileSync(path.join(path.dirname(trustHelper), name), path.join(source, name));
+    fs.appendFileSync(path.join(source, 'host-node-trust.mjs'), '\nconsole.log("UNADMITTED_SOURCE_EXECUTED");\n');
+    const invalid = await trustChild(['--input-type=module', '-e', match[1], source, path.join(root, 'invalid')], neutralTrustEnv());
+    assert.notEqual(invalid.code, 0); assert.equal(invalid.stdout, ''); assert.equal(invalid.stderr.trim(), 'HOST_TRUST_PREPARATION_REFUSED');
+    assert.equal(fs.existsSync(path.join(root, 'invalid')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('Windows provisioner cleanup statically requires a started exact child and current parent identity', () => {
+  const source = fs.readFileSync(new URL('./setup-open-source-tooling.ps1', import.meta.url), 'utf8');
+  assert.match(source, /\$started = \$false/);
+  assert.match(source, /if \(-not \$process\.Start\(\)\) \{ throw[^\n]+\}\n\s+\$started = \$true/);
+  assert.ok(source.indexOf('$childIdentity = Get-ProcessSnapshot $process.Id') < source.indexOf('$process.StandardOutput.BaseStream'));
+  const cleanup = source.slice(source.indexOf('    finally {'), source.indexOf('    # Successful native tools'));
+  assert.match(cleanup, /if \(\$started\)\s*\{[\s\S]+if \(-not \$process\.HasExited\)/);
+  assert.match(cleanup, /Test-ExactSnapshot \$childIdentity \$freshChild/);
+  assert.match(cleanup, /Test-ExactSnapshot \$parentIdentity \$freshParent/);
+  assert.match(cleanup, /\$freshChild\[1\] -eq \[string\]\$PID/);
+  assert.match(cleanup, /StartTime\.ToUniversalTime\(\)\.ToString\('o'\) -eq \$created/);
+  assert.match(source, /\$row\.CreationDate\.ToUniversalTime\(\)\.ToString\('o'\)/);
+  assert.match(source, /\[string\]\$row\.CommandLine/); assert.match(source, /\$row\.ExecutablePath/);
+  assert.doesNotMatch(cleanup, /\.Kill\(\$true\)|Stop-Process|\$failure\s*=/);
+  assert.match(cleanup, /\$cleanupFailure = 'Owned cleanup identity unavailable; no further signal/);
+});
+test('compiled OpenSSL root paths refuse through the production build guard, with controlled build fixtures distinguished', () => {
+  assert.deepEqual(reviewHostNodeBuildConfiguration(), { compiledSystemCaPathEmpty: true });
+  assert.deepEqual(reviewHostNodeBuildConfiguration({ openssl_system_ca_path: '' }), { compiledSystemCaPathEmpty: true });
+  for (const value of ['/etc/ssl/cert.pem', 'C:/unreviewed/store.pem', false, 0, null]) {
+    assert.throws(() => reviewHostNodeBuildConfiguration({ openssl_system_ca_path: value }), /HOST_TRUST_COMPILED_CA_PATH_UNREVIEWED/);
+  }
+});
+test('a forged hash-correct public policy cannot turn the approved bootstrap into arbitrary helper execution', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const malicious = path.join(root, 'source'); fs.mkdirSync(malicious, { mode: 0o700 });
+    const file = path.join(malicious, 'host-node-trust.mjs'), body = Buffer.from('console.log("UNADMITTED_HELPER_EXECUTED");export function activateHostNodeTrust(){}\n');
+    fs.writeFileSync(file, body, { mode: 0o600, flag: 'wx' });
+    const changed = { ...prepared.descriptor, runtimeSource: { ...prepared.descriptor.runtimeSource, helper: { path: file, sha256: createHash('sha256').update(body).digest('hex'), sizeBytes: body.length } } };
+    const policy = Buffer.from(JSON.stringify(changed)); fs.writeFileSync(prepared.policyRef.path, policy);
+    const result = await trustChild(['-e', 'console.log("ENTRY_RAN")'], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: createHash('sha256').update(policy).digest('hex') });
+    assert.notEqual(result.code, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr.trim(), 'HOST_TRUST_BOOTSTRAP_REFUSED');
+    const bootstrap = fs.readFileSync(new URL('./host-node-trust-start.mjs', import.meta.url), 'utf8');
+    const pinned = bootstrap.match(/const APPROVED_HELPER_SHA256 = '([a-f0-9]{64})'/); assert.ok(pinned);
+    assert.equal(pinned[1], prepared.descriptor.runtimeSource.helper.sha256);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('unknown and modified import URIs refuse before preload or application entry', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const bootstrap = fs.readFileSync(new URL('./host-node-trust-start.mjs', import.meta.url));
+    const unknown = Buffer.from('console.log("UNADMITTED_PRELOAD");\n');
+    const modified = Buffer.concat([bootstrap, unknown]);
+    for (const body of [unknown, modified]) {
+      const option = '--import=data:text/javascript;base64,' + body.toString('base64');
+      const result = await trustChild([option, '-e', 'console.log("ENTRY_RAN")'], { ...neutralTrustEnv(), ...prepared.environment });
+      assert.notEqual(result.code, 0); assert.equal(result.stdout, '');
+      assert.equal(result.stderr.includes('UNADMITTED_PRELOAD'), false);
+      assert.equal(result.stderr.includes('HOST_TRUST_CLI_OVERRIDE_REFUSED'), true);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand } from './host-node-trust-ci.mjs';
+const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
+const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
+const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
+function ciTrustFiles(callback) {
+  const root = trustRoot(), file = path.join(root, 'commands');
+  fs.writeFileSync(file, 'EARLIER=retained', { flag: 'wx', mode: 0o600 });
+  fs.mkdirSync(path.join(root, 'workspace'), { mode: 0o700 });
+  try { return callback({ root, file }); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+test('CI trust output append preserves prior bytes and writes only nine exact single-line outputs', () => ciTrustFiles(({ root, file }) => {
+  const result = appendCITrustOutputs(file, root, ciTrustValues);
+  const expected = 'EARLIER=retained\n' + ciTrustKeys.map(key => key + '=' + ciTrustValues[key] + '\n').join('');
+  assert.equal(fs.readFileSync(file, 'utf8'), expected);
+  assert.deepEqual(result, { appendedKeys: 9, previousBytes: 16, finalBytes: Buffer.byteLength(expected) });
+}));
+test('CI trust output refuses extra keys and multiline output injection before any write', () => ciTrustFiles(({ root, file }) => {
+  const original = fs.readFileSync(file);
+  for (const value of [{ ...ciTrustValues, PATH: 'unreviewed' }, { ...ciTrustValues, NODE_OPTIONS: 'one\nUNREVIEWED=two' }, { ...ciTrustValues, SSL_CERT_FILE: 'one\rtwo' }]) {
+    assert.throws(() => appendCITrustOutputs(file, root, value));
+    assert.deepEqual(fs.readFileSync(file), original);
+  }
+}));
+test('CI trust output refuses an out-of-runner file without modifying it', () => ciTrustFiles(({ root }) => {
+  const outside = trustRoot(), file = path.join(outside, 'commands'); fs.writeFileSync(file, 'unchanged', { mode: 0o600 });
+  try { assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_RUNNER_SCOPE/); assert.equal(fs.readFileSync(file, 'utf8'), 'unchanged'); }
+  finally { fs.rmSync(outside, { recursive: true, force: true }); }
+}));
+test('CI trust output refuses hardlinked and oversized command files before mutation', () => ciTrustFiles(({ root, file }) => {
+  const alias = path.join(root, 'alias'); fs.linkSync(file, alias);
+  assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_FILE/);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'EARLIER=retained'); fs.unlinkSync(alias);
+  fs.writeFileSync(file, Buffer.alloc(1048577, 0x61));
+  assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_FILE/);
+  assert.equal(fs.statSync(file).size, 1048577);
+}));
+test('CI trust output closes its retained descriptor and rejects a replacement pathname after write', () => ciTrustFiles(({ root, file }) => {
+  const originalOpen = fs.openSync, originalWrite = fs.writeSync, selected = new Set(); let changed = false;
+  fs.openSync = (name, ...args) => { const fd = originalOpen(name, ...args); if (name === file) selected.add(fd); return fd; };
+  fs.writeSync = (fd, ...args) => {
+    const count = originalWrite(fd, ...args);
+    if (selected.has(fd) && !changed) { changed = true; fs.renameSync(file, path.join(root, 'retained-original')); fs.writeFileSync(file, 'replacement', { mode: 0o600, flag: 'wx' }); }
+    return count;
+  };
+  try { assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED/); }
+  finally { fs.openSync = originalOpen; fs.writeSync = originalWrite; }
+  assert.equal(changed, true); assert.equal(fs.readFileSync(file, 'utf8'), 'replacement');
+  for (const fd of selected) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+}));
+test('CI trust preparation requires explicit GitHub CI and never edits the global environment file', () => ciTrustFiles(({ root, file }) => {
+  const global = path.join(root, 'global-env'); fs.writeFileSync(global, 'PYTHON_SCOPE=preserved', { mode: 0o600 });
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: path.join(root, 'workspace'), GITHUB_OUTPUT: file, GITHUB_ENV: global };
+  for (const key of ['CI', 'GITHUB_ACTIONS']) assert.throws(() => prepareCIHostNodeTrust({ ...environment, [key]: 'false' }));
+  const projectConfig = path.join(root, 'workspace', '.npmrc'); fs.writeFileSync(projectConfig, 'cafile=unreviewed-public-fixture\n', { mode: 0o600 });
+  assert.throws(() => prepareCIHostNodeTrust(environment), /CI_TRUST_PROJECT_NPMRC_UNREVIEWED/); fs.unlinkSync(projectConfig);
+  const result = prepareCIHostNodeTrust(environment);
+  assert.equal(result.nodeVersion, process.versions.node); assert.equal(result.appendedKeys, 9);
+  assert.equal(fs.readFileSync(global, 'utf8'), 'PYTHON_SCOPE=preserved');
+  const rows = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1);
+  assert.deepEqual(rows.map(row => row.slice(0, row.indexOf('='))), ciTrustKeys);
+}));
+test('CI trust output activates the actual Node child before its entry and leaves its parent environment unchanged', () => ciTrustFiles(({ root, file }) => {
+  const before = Object.fromEntries(ciTrustKeys.map(key => [key, process.env[key]]));
+  prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: path.join(root, 'workspace'), GITHUB_OUTPUT: file });
+  const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+  const text = execFileSync(process.execPath, [trustHelper, 'verify'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, maxBuffer: 16384, encoding: 'utf8' });
+  const proof = JSON.parse(text); assert.equal(proof.selectedStoreVerified, true); assert.equal(proof.nodeVersion, process.versions.node);
+  assert.ok(ciTrustKeys.every(key => process.env[key] === before[key]), 'CI_PARENT_ENVIRONMENT_UNCHANGED');
+}));
+test('CI preparation rejects a project config inserted during policy creation before issuing command outputs', () => ciTrustFiles(({ root, file }) => {
+  const workspace = path.join(root, 'workspace'), config = path.join(workspace, '.npmrc');
+  const original = fs.mkdtempSync; let inserted = false;
+  fs.mkdtempSync = (...args) => {
+    const created = original(...args);
+    if (String(args[0]).startsWith(path.join(root, 'caseops-node-trust-'))) {
+      fs.writeFileSync(config, 'cafile=unreviewed-public-fixture\n', { mode: 0o600, flag: 'wx' }); inserted = true;
+    }
+    return created;
+  };
+  try {
+    assert.throws(() => prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file }), /CI_TRUST_PROJECT_(?:NPMRC_UNREVIEWED|CHANGED)/);
+  } finally { fs.mkdtempSync = original; }
+  assert.equal(inserted, true); assert.equal(fs.readFileSync(file, 'utf8'), 'EARLIER=retained');
+}));
+test('CI preparation refuses to complete when a project config appears during the output append', () => ciTrustFiles(({ root, file }) => {
+  const workspace = path.join(root, 'workspace'), originalOpen = fs.openSync, originalWrite = fs.writeSync;
+  let commandFD, inserted = false;
+  fs.openSync = (name, ...args) => { const fd = originalOpen(name, ...args); if (name === file) commandFD = fd; return fd; };
+  fs.writeSync = (fd, ...args) => {
+    const count = originalWrite(fd, ...args);
+    if (fd === commandFD && !inserted) { fs.writeFileSync(path.join(workspace, '.npmrc'), 'cafile=unreviewed-public-fixture\n', { mode: 0o600, flag: 'wx' }); inserted = true; }
+    return count;
+  };
+  try {
+    assert.throws(() => prepareCIHostNodeTrust({ ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file }), /CI_TRUST_PROJECT_(?:NPMRC_UNREVIEWED|CHANGED)/);
+  } finally { fs.openSync = originalOpen; fs.writeSync = originalWrite; }
+  assert.equal(inserted, true); assert.ok(fs.readFileSync(file, 'utf8').length > 16, 'retain written output separately from failed completion');
+  assert.throws(() => fs.fstatSync(commandFD), { code: 'EBADF' });
+}));
+test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
+  let setupCount = 0, commandCount = 0;
+  for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
+    const workflow = ciTrustYaml.load(readFileSync(new URL('../../.github/workflows/' + name, import.meta.url), 'utf8'));
+    assert.ok(ciTrustKeys.every(key => !Object.hasOwn(workflow.env ?? {}, key)));
+    for (const job of Object.values(workflow.jobs)) {
+      assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
+      let setup, trust;
+      for (const step of job.steps ?? []) {
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
+        const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
+        if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
+        for (const key of ciTrustKeys) {
+          if (isNode) assert.equal(step.env?.[key], '${{ steps.node_trust.outputs.' + key + ' }}');
+          else assert.equal(Object.hasOwn(step.env ?? {}, key), false, 'Non-Node step must keep its own runtime environment');
+        }
+      }
+    }
+  }
+  assert.equal(setupCount, 15); assert.equal(commandCount, 111);
+  const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
+  for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
+  assert.equal(action.runs.steps[0].id, 'prepare');
+});
+
+
+test('actual Next page-data Worker preserves inherited default HTTPS and fetch verification', async () => {
+  const root = trustRoot();
+  try {
+    const { reference, prepared } = qaTrust(root);
+    for (const [name, expected] of [['trusted', 'local-only'], ['untrusted', 'DEPTH_ZERO_SELF_SIGNED_CERT'], ['wrongHost', 'ERR_TLS_CERT_ALTNAME_INVALID']]) {
+      await localTls(materials()[name], async (origin, requests) => {
+        const result = await trustChild([trustFixture, 'next-worker', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
+        assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
+        assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 145);
+        assert.deepEqual(report.output, [expected, expected]); assert.equal(requests(), name === 'trusted' ? 2 : 0);
+      });
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('reviewed source-map inheritance keeps every extra preload and proxy override closed', async () => {
+  const root = trustRoot();
+  try {
+    const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
+    const base = { ...neutralTrustEnv(), ...prepared.environment }, allowed = base.NODE_OPTIONS + ' --enable-source-maps';
+    assert.ok(Buffer.byteLength(allowed) <= 8191, 'BOOTSTRAP_OPTIONS_MUST_REMAIN_WITHIN_WINDOWS_CMD_ENV_BOUND');
+    const positive = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed });
+    assert.equal(positive.code, 0, positive.stderr); assert.equal(JSON.parse(positive.stdout).expectedDefaultCount, 144);
+    for (const options of [allowed + ' --enable-source-maps', allowed + ' --import=data:text/javascript,console.log(%22UNADMITTED_PRELOAD_EXECUTED%22)', allowed + ' --use-env-proxy', allowed + ' --use-openssl-ca', '--enable-source-maps ' + base.NODE_OPTIONS]) {
+      const result = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: options });
+      assert.notEqual(result.code, 0); assert.doesNotMatch(result.stdout, /UNADMITTED_PRELOAD_EXECUTED/);
+    }
+    for (const key of ['NODE_USE_ENV_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY']) {
+      const result = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed, [key]: 'unreviewed' });
+      assert.notEqual(result.code, 0); assert.match(result.stderr, /HOST_TRUST_OVERRIDE_REFUSED/);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Windows ACL proof keeps current-owner and foreign-writer failures distinct and strict', () => {
+  assert.deepEqual(reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: true }), { ownerMatches: true, writeScopeSafe: true });
+  assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: false, writeScopeSafe: true }), /HOST_TRUST_CURRENT_OWNER_REQUIRED/);
+  for (const value of [false, 'true', 1, null]) assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: value }), /HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED/);
+  assert.throws(() => reviewHostNodeWindowsAclProof({ ownerMatches: true, writeScopeSafe: true, arbitrary: true }), /HOST_TRUST_SCHEMA/);
+});
+
+test('all Windows owner queries refuse an arbitrary token-default group with implied DACL authority', () => {
+  const expected = "($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')))";
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'host-node-trust-ci.mjs']) {
+    const source = fs.readFileSync(new URL(name, import.meta.url), 'utf8');
+    const literal = source.match(/const code = ("[^\n]+");/);
+    assert.ok(literal, name); const query = JSON.parse(literal[1]);
+    const condition = query.match(/(?:\$ok=|ownerMatches=)(\([^;]+\));/);
+    assert.ok(condition, name); assert.equal(condition[1], expected, name);
+    // These literal identities are independent of the OS query. This source
+    // contract does not claim that Windows ACLs were exercised on another OS.
+    const trustedDefaultOwners = [...condition[1].matchAll(/'(S-[0-9-]+)'/g)].map(row => row[1]);
+    assert.deepEqual(trustedDefaultOwners, ['S-1-5-18', 'S-1-5-32-544']);
+    for (const [user, tokenOwner, owner, permitted] of [
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-21-9999', false],
+      ['S-1-5-21-1000', 'S-1-5-32-544', 'S-1-5-21-9999', false],
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-21-1000', true],
+      ['S-1-5-21-1000', 'S-1-5-32-544', 'S-1-5-32-544', true],
+      ['S-1-5-21-1000', 'S-1-5-18', 'S-1-5-18', true],
+      ['S-1-5-21-1000', 'S-1-5-21-9999', 'S-1-5-32-544', false],
+    ]) assert.equal(owner === user || owner === tokenOwner && trustedDefaultOwners.includes(owner), permitted, name);
+  }
+});
+
+test('Windows ownership refusal precedes descriptor bytes and closes every opened source', () => {
+  // This is an actual filesystem/constructor composition with injected Windows
+  // OS proof responses. It is not an actual Windows ACL acceptance claim on Mac.
+  const require = ciTrustCreateRequire(import.meta.url), cp = require('node:child_process');
+  const originalSpawn = cp.spawnSync, originalUid = Object.getOwnPropertyDescriptor(process, 'getuid'), originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const originalSystemRoot = process.env.SystemRoot, originalOpen = fs.openSync, originalRead = fs.readSync;
+  const root = trustRoot();
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    const completed = 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n';
+    for (const [code, baseResult] of [
+      ['HOST_TRUST_CURRENT_OWNER_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: false, writeScopeSafe: true }) }],
+      ['HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', { status: 0, stdout: JSON.stringify({ ownerMatches: true, writeScopeSafe: false }) }],
+      ['HOST_TRUST_WINDOWS_ACL_PROTOCOL', { status: 0, stdout: 'malformed' }],
+      ...['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'].map((phase, index) => [
+        'HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase,
+        { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: completed.split('\n').slice(0, index).join('\n') + (index ? '\n' : '') },
+      ]),
+    ]) {
+      const result = { stderr: completed, ...baseResult };
+      const fds = []; let reads = 0, commands = 0;
+      fs.openSync = (...args) => { const fd = originalOpen(...args); fds.push(fd); return fd; };
+      fs.readSync = (...args) => { reads++; return originalRead(...args); };
+      cp.spawnSync = (executable, args, options) => { commands++; assert.equal(executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe')); assert.match(args.at(-1), /\$t=\$i\.Owner\.Value/); assert.equal(options.env.CASEOPS_TRUST_ACL_KIND, 'file'); assert.equal(options.timeout, 5000); return result; };
+      syncBuiltinESMExports();
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'never-created'), environment: neutralTrustEnv() }), new RegExp(code));
+      assert.equal(commands, 1); assert.equal(reads, 0); assert.ok(fds.length > 0); for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    }
+  } finally {
+    fs.openSync = originalOpen; fs.readSync = originalRead; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
+    Object.defineProperty(process, 'getuid', originalUid); Object.defineProperty(process, 'platform', originalPlatform);
+    if (originalSystemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = originalSystemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CI preparation diagnostics reflect only reviewed fixed labels and no raw error data', () => {
+  assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_WINDOWS_ACL_TIMEOUT')), 'HOST_TRUST_WINDOWS_ACL_TIMEOUT');
+  assert.equal(ciTrustFailureCode(new Error('CI_TRUST_COMMAND_OWNER\nPRIVATE_OWNER_VALUE')), 'CI_TRUST_COMMAND_OWNER');
+  for (const value of [new Error('PRIVATE_PASSWORD'), new Error('https://private.invalid/owner'), { message: { private: true } }, null]) assert.equal(ciTrustFailureCode(value), 'CI_TRUST_PREPARATION_REFUSED');
+  for (const phase of ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ', 'UNCLASSIFIED']) assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase)), 'HOST_TRUST_WINDOWS_ACL_TIMEOUT_' + phase);
+});
+
+test('Windows ACL queries use only direct Framework metadata APIs with unchanged owner and complete ACE scope', () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs', 'host-node-trust-ci.mjs']) {
+    const source = fs.readFileSync(new URL(name, import.meta.url), 'utf8'), match = source.match(/const code = ("[^\n]+");/);
+    assert.ok(match, name); const query = JSON.parse(match[1]);
+    assert.match(query, /\[IO\.File\]::GetAccessControl\(\$env:CASEOPS_TRUST_ACL_PATH,\$s\)/);
+    assert.match(query, /\$s=\[Security\.AccessControl\.AccessControlSections\]'Access,Owner'/);
+    assert.ok(query.includes('$a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])'));
+    assert.ok(query.includes("$r.AccessControlType -eq 'Allow'")); assert.ok(query.includes('-band 852310'));
+    assert.ok(query.includes("@($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')"));
+    assert.doesNotMatch(query, /\b(?:Get-Acl|Import-Module|ConvertTo-Json|Get-Content|Invoke-Expression|Start-Process)\b/i);
+    for (let index = 0; index < 4; index++) assert.equal(query.split("WriteLine('COPS_ACL" + index + "')").length, 2);
+    assert.ok(query.includes("catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}"));
+    if (name === 'host-node-trust.mjs') assert.match(query, /\[IO\.Directory\]::GetAccessControl\(\$env:CASEOPS_TRUST_ACL_PATH,\$s\)/);
+    else assert.doesNotMatch(query, /\[IO\.Directory\]/);
+  }
+});
+
+test('Windows ACL milestone decoder accepts ordered fixed prefixes and never reflects an arbitrary diagnostic', () => {
+  const markers = ['COPS_ACL0', 'COPS_ACL1', 'COPS_ACL2', 'COPS_ACL3'];
+  for (const [index, expected] of ['NO_MARKER', 'SCRIPT_ENTERED', 'ACL_READ', 'IDENTITY_READ', 'RULES_READ'].entries())
+    assert.equal(reviewHostNodeWindowsAclPhase(markers.slice(0, index).join('\r\n') + (index ? '\r\n' : '')), expected);
+  for (const invalid of ['PRIVATE_OWNER_SID', 'COPS_ACL1\n', 'COPS_ACL0\nCOPS_ACL0\n', 'COPS_ACL0\nCOPS_ACL_FAIL\n', 'COPS_ACL0\nPRIVATE_PATH\n', 'x'.repeat(4097)]) assert.equal(reviewHostNodeWindowsAclPhase(invalid), 'UNCLASSIFIED');
+});
+
+test('CI Windows ACL completion markers are mandatory before writing even when SAFE was returned', () => ciTrustFiles(({ root, file }) => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  const bytes = fs.readFileSync(file), completed = 'COPS_ACL0\r\nCOPS_ACL1\r\nCOPS_ACL2\r\nCOPS_ACL3\r\n'; let calls = 0;
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    for (const stderr of ['', 'COPS_ACL0\n', completed + 'PRIVATE_PATH\n']) {
+      cp.spawnSync = (executable, args, options) => { calls++; assert.equal(options.timeout, 4000); assert.doesNotMatch(args.at(-1), /Get-Acl|ConvertTo-Json/); return { status: 0, stdout: 'SAFE', stderr }; }; syncBuiltinESMExports();
+      assert.throws(() => appendCITrustOutputs(file, root, ciTrustValues), /CI_TRUST_COMMAND_OWNER/); assert.deepEqual(fs.readFileSync(file), bytes);
+    }
+    cp.spawnSync = () => { calls++; return { status: 0, stdout: 'SAFE', stderr: completed }; }; syncBuiltinESMExports();
+    assert.equal(appendCITrustOutputs(file, root, ciTrustValues).appendedKeys, 9); assert.equal(calls, 4);
+  } finally {
+    cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+  }
+}));
+// iOS host launch tests are constructor/source contracts, not a native build.
+function iosProjectionFixture() {
+  const base = '/SYNTHETIC/owned-ios-host';
+  const paths = Object.fromEntries(['home', 'empty', 'bin', 'cache', 'pods', 'repos', 'temporary', 'build', 'runtime'].map(k => [k, base + '/' + k]));
+  const policy = { paths, podHome: '/SYNTHETIC/Cellar/pods/libexec', rubyGems: '/SYNTHETIC/Cellar/ruby/lib/ruby/gems/4.0.0', deadlineEpochMs: Date.now() + 60000,
+    tools: { node: { path: '/SYNTHETIC/node24' }, ruby: { path: '/SYNTHETIC/ruby4' }, curl: { path: '/usr/bin/curl' }, git: { path: '/SYNTHETIC/git' } },
+    shims: { node: { path: paths.bin + '/node' } }, bundle: { path: base + '/ruby188.pem', sha256: '1'.repeat(64), sizeBytes: 100 }, fixtureCA: null,
+    nodeNpm: { user: { path: base + '/npm-user.npmrc' }, global: { path: base + '/npm-global.npmrc' }, parent: paths.runtime + '/npm' },
+    source: { 'ios-host-pods.rb': { sha256: IOS_PODS_SOURCE_SHA256 } } };
+  const environment = { NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: base + '/node144.pem', SSL_CERT_DIR: base + '/node-empty',
+    CASEOPS_HOST_NODE_TRUST_POLICY_FILE: base + '/node.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: '2'.repeat(64) };
+  const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
+    podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
+  const npmRoot = policy.nodeNpm.parent + '/caseops-npm-ABC123';
+  admitted.npmRuntime = { root: npmRoot, files: 2149, inventory: { entries: 2600, observations: 7800 },
+    environment: { CASEOPS_PINNED_NPM_NODE: policy.tools.node.path, CASEOPS_PINNED_NPM_ROOT: npmRoot,
+      CASEOPS_PINNED_NPM_ENTRY: npmRoot + '/caseops-entry.mjs', CASEOPS_PINNED_NPM_BOOTSTRAP: 'SYNTHETIC-REVIEWED-NPM-BOOTSTRAP',
+      CASEOPS_PINNED_NPM_CLI_SHA256: '4'.repeat(64), CASEOPS_PINNED_NPX_CLI_SHA256: '5'.repeat(64), CASEOPS_PINNED_NPM_DEADLINE: String(policy.deadlineEpochMs),
+      CASEOPS_PINNED_NPM_CLI: npmRoot + '/package/bin/npm-cli.js', CASEOPS_PINNED_NPX_CLI: npmRoot + '/package/bin/npx-cli.js', PATH: npmRoot + '/bin' } };
+  const ref = { path: base + '/policy.json', sha256: '3'.repeat(64), sizeBytes: 100 };
+  return { policy, admitted, ref, environment };
+}
+function curlDownloaderArgs(output = '/SYNTHETIC/owned-ios-host/cache/package.tgz') {
+  return ['-f', '-L', '-o', output, 'https://packages.contract-fixture.org/file.tgz', '--create-dirs', '--netrc-optional', '--retry', '2'];
+}
+test('iOS Node and Pods constructors use separate stores and owned HOME without global environment mutation', () => {
+  const f = iosProjectionFixture(), input = { EXPO_PUBLIC_API_ORIGIN: 'https://api.contract-fixture.org' }, before = { ...input };
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], input);
+  const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install', '--deployment', '--no-repo-update'], input);
+  assert.equal(node.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/node144.pem');
+  assert.equal(node.environment.NPM_CONFIG_USERCONFIG, f.policy.nodeNpm.user.path); assert.equal(node.environment.NPM_CONFIG_STRICT_SSL, 'true');
+  assert.equal(pod.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/ruby188.pem');
+  assert.equal(pod.environment.NODE_OPTIONS, undefined); assert.equal(pod.environment.NODE_EXTRA_CA_CERTS, undefined);
+  assert.equal(pod.environment.NPM_CONFIG_USERCONFIG, undefined);
+  assert.equal(pod.environment.HOME, '/SYNTHETIC/owned-ios-host/home'); assert.equal(pod.environment.GEM_PATH, '/SYNTHETIC/Cellar/pods/libexec:/SYNTHETIC/Cellar/ruby/lib/ruby/gems/4.0.0');
+  assert.equal(pod.executable, '/SYNTHETIC/ruby4'); assert.deepEqual(pod.args, ['-', 'install', '--deployment', '--no-repo-update']);
+  assert.equal(pod.input.toString(), '# SYNTHETIC CONTRACT SOURCE\nCaseopsIosPods.run\n'); pod.input.fill(0);
+  assert.equal(pod.environment.NODE_BINARY, '/SYNTHETIC/owned-ios-host/bin/node'); assert.deepEqual(input, before);
+});
+test('iOS neutral Xcode and offline tools receive no Node or Ruby CA environment', () => {
+  const f = iosProjectionFixture(), result = iosHostCommandProjection(f.admitted, f.ref, 'xcodebuild', ['build'], { ...f.environment, HOME: f.policy.paths.home });
+  for (const key of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'GEM_PATH']) assert.equal(result.environment[key], undefined, key);
+  assert.equal(result.environment.NODE_BINARY, f.policy.paths.bin + '/node');
+  assert.equal(result.environment.LANG, 'en_US.UTF-8'); assert.equal(result.environment.LC_ALL, 'en_US.UTF-8');
+});
+test('iOS CoreFoundation home is owned across every role and foreign overrides refuse', () => {
+  const roles = [['node', []], ['npm', ['--version']], ['ruby', ['-v']], ['pod', []], ['git', ['--version']],
+    ['curl', curlDownloaderArgs()], ['xcodebuild', ['build']], ['neutral', []]];
+  for (const [role, args] of roles) {
+    const f = iosProjectionFixture(), incoming = { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs - 1000) };
+    const actual = iosHostCommandProjection(f.admitted, f.ref, role, args, incoming);
+    assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home, role);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.XDG_CONFIG_HOME, f.policy.paths.home);
+    const matched = iosProjectionFixture(), supplied = { ...incoming, CFFIXED_USER_HOME: matched.policy.paths.home };
+    assert.equal(iosHostCommandProjection(matched.admitted, matched.ref, role, args, supplied).environment.CFFIXED_USER_HOME, matched.policy.paths.home);
+    assert.equal(supplied.CFFIXED_USER_HOME, matched.policy.paths.home);
+    for (const value of ['/SYNTHETIC/operator-home', '', false, f.policy.paths.home + '/..']) {
+      const foreign = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(foreign.admitted, foreign.ref, role, args, { CFFIXED_USER_HOME: value }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+  }
+});
+test('iOS simulator entry preserves optional CoreFoundation input for policy validation', () => {
+  const f = iosProjectionFixture(), supplied = { CFFIXED_USER_HOME: '/SYNTHETIC/operator-home',
+    SIMULATOR_UDID: 'SYNTHETIC', UNREVIEWED_OWNER_FIELD: 'SYNTHETIC' }, before = { ...supplied };
+  const incoming = iosSimulatorInputEnvironment(supplied);
+  assert.equal(incoming.CFFIXED_USER_HOME, supplied.CFFIXED_USER_HOME);
+  assert.equal(incoming.UNREVIEWED_OWNER_FIELD, undefined); assert.deepEqual(supplied, before);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'neutral', [], incoming), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  assert.deepEqual(neutralIosEnvironment({ CFFIXED_USER_HOME: 'SYNTHETIC' }, { buildNames: ['CFFIXED_USER_HOME'] }), {});
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  assert.equal(names.includes('CFFIXED_USER_HOME'), false);
+});
+test('iOS home preparation creates only private real directories and refuses protected roots or aliases', t => {
+  const root = trustRoot(), protectedRoot = trustRoot();
+  t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(protectedRoot, { recursive: true, force: true }); });
+  const home = path.join(root, 'home'); fs.mkdirSync(home, { mode: 0o700 });
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => prepareIosHomeDirectories(root, home), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    assert.deepEqual(fs.readdirSync(home), []); return;
+  }
+  assert.throws(() => prepareIosHomeDirectories(root, protectedRoot), /IOS_HOST_HOME_BINDING/);
+  assert.deepEqual(fs.readdirSync(protectedRoot), []);
+  const rows = prepareIosHomeDirectories(root, home);
+  const expected = ['Library', 'Library/Caches', 'Library/Caches/ReactNative', 'Library/Caches/org.swift.swiftpm',
+    'Library/org.swift.swiftpm', 'Library/org.swift.swiftpm/configuration', 'Library/org.swift.swiftpm/security'];
+  assert.deepEqual(rows.map(row => path.relative(home, row.path)), expected.map(name => name.split('/').join(path.sep)));
+  for (const row of rows) {
+    const metadata = fs.lstatSync(row.path); assert.equal(metadata.isDirectory(), true); assert.equal(metadata.isSymbolicLink(), false);
+    assert.equal(metadata.uid, process.getuid()); assert.equal(metadata.mode & 0o777, 0o700); assert.equal(fs.realpathSync(row.path), row.path);
+  }
+  assert.throws(() => prepareIosHomeDirectories(root, home), /IOS_HOST_FRESH_HOME_DIRECTORY/);
+  const second = path.join(root, 'second'); fs.mkdirSync(second, { mode: 0o700 });
+  const secondHome = path.join(second, 'home'); fs.mkdirSync(secondHome, { mode: 0o700 });
+  fs.symlinkSync(protectedRoot, path.join(secondHome, 'Library'), 'dir');
+  assert.throws(() => prepareIosHomeDirectories(second, secondHome), /IOS_HOST_FRESH_HOME_DIRECTORY/);
+  assert.deepEqual(fs.readdirSync(protectedRoot), []);
+  fs.unlinkSync(path.join(secondHome, 'Library')); fs.chmodSync(secondHome, 0o500);
+  assert.throws(() => prepareIosHomeDirectories(second, secondHome), /IOS_HOST_HOME_DIRECTORY_MODE/);
+  assert.deepEqual(fs.readdirSync(secondHome), []); fs.chmodSync(secondHome, 0o700);
+});
+test('iOS simulator shell binds the admitted HOME as one Xcode build setting', { skip: process.platform === 'win32' }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-xcode-home-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'private HOME=with space'), run = path.join(root, 'output');
+  fs.mkdirSync(home, { mode: 0o700 }); fs.mkdirSync(run, { mode: 0o700 });
+  const receipt = path.join(root, 'argv.json'), executable = path.join(root, 'capture-xcode');
+  // Exercise the actual shell argument boundary. This capture is not Xcode or
+  // native-build acceptance; the separate real-Xcode phase probe supplies that.
+  fs.writeFileSync(executable, '#!/bin/bash\nexec "$CASEOPS_TEST_NODE" --input-type=module -e \'import fs from "node:fs"; fs.writeFileSync(process.env.CASEOPS_ARGV_RECEIPT, JSON.stringify({args:process.argv.slice(1),home:process.env.HOME,cfHome:process.env.CFFIXED_USER_HOME}), {mode:0o600});\' -- "$@"\n', { mode: 0o700 });
+  const source = fs.readFileSync(new URL('./ios-simulator-build.sh', import.meta.url), 'utf8');
+  const start = source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace'), end = source.indexOf('\napp=', start);
+  assert.ok(start >= 0 && end > start); assert.equal(source.indexOf('"$CASEOPS_IOS_HOST_XCODEBUILD" -workspace', start + 1), -1);
+  execFileSync('/bin/bash', ['-c', 'set -euo pipefail\n' + source.slice(start, end)], { cwd: root, timeout: 10000,
+    env: { PATH: '/usr/bin:/bin', HOME: home, CFFIXED_USER_HOME: home, run, SIMULATOR_UDID: 'SYNTHETIC-SIMULATOR',
+      CASEOPS_IOS_HOST_XCODEBUILD: executable, CASEOPS_TEST_NODE: process.execPath, CASEOPS_ARGV_RECEIPT: receipt } });
+  const actual = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  assert.equal(actual.home, home); assert.deepEqual(actual.args.filter(arg => arg.startsWith('HOME=')), ['HOME=' + home]);
+  assert.equal(actual.cfHome, home);
+  assert.deepEqual(actual.args.filter(arg => arg.startsWith('CFFIXED_USER_HOME=')), ['CFFIXED_USER_HOME=' + home]);
+  const guardStart = source.indexOf(': "${CFFIXED_USER_HOME:'), guardEnd = source.indexOf('\nrepo=', guardStart);
+  assert.ok(guardStart >= 0 && guardEnd > guardStart);
+  assert.throws(() => execFileSync('/bin/bash', ['-c', 'set -euo pipefail\n' + source.slice(guardStart, guardEnd)],
+    { env: { HOME: home, CFFIXED_USER_HOME: '/SYNTHETIC/operator-home' }, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }), error => error.status === 1 && /IOS_HOST_CF_HOME_MISMATCH/.test(String(error.stderr)));
+  const f = iosProjectionFixture(); f.policy.paths.home = home;
+  assert.equal(iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: actual.args.find(arg => arg.startsWith('HOME=')).slice(5) }).environment.HOME, home);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { HOME: '/SYNTHETIC/operator-home' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+});
+const capturedXcodeBundleMetadata = Object.freeze({
+  BUNDLE_CONTENTS_FOLDER_PATH_deep: 'Contents/', BUNDLE_EXECUTABLE_FOLDER_NAME_deep: 'MacOS',
+  BUNDLE_EXTENSIONS_FOLDER_PATH: 'Extensions', BUNDLE_FORMAT: 'shallow',
+  BUNDLE_FRAMEWORKS_FOLDER_PATH: 'Frameworks', BUNDLE_PLUGINS_FOLDER_PATH: 'PlugIns',
+  BUNDLE_PRIVATE_HEADERS_FOLDER_PATH: 'PrivateHeaders', BUNDLE_PUBLIC_HEADERS_FOLDER_PATH: 'Headers',
+});
+test('iOS actual Xcode bundle metadata is admitted and discarded before Node or Pods execution', () => {
+  for (const role of ['node', 'pod', 'neutral']) {
+    const f = iosProjectionFixture(), incoming = { ...capturedXcodeBundleMetadata, HOME: f.policy.paths.home };
+    const before = { ...incoming }, actual = iosHostCommandProjection(f.admitted, f.ref, role, [], incoming);
+    for (const key of Object.keys(capturedXcodeBundleMetadata)) assert.equal(actual.environment[key], undefined, key);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.deepEqual(incoming, before);
+  }
+});
+test('iOS Xcode metadata exceptions cannot admit Bundler configuration or changed metadata', () => {
+  for (const role of ['node', 'pod', 'neutral']) {
+    for (const key of Object.keys(capturedXcodeBundleMetadata)) {
+      const f = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], { ...capturedXcodeBundleMetadata, [key]: '../UNREVIEWED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+    for (const key of ['BUNDLE_GEMFILE', 'BUNDLE_PATH', 'BUNDLE_WITH', 'BUNDLE_WITHOUT', 'BUNDLE_APP_CONFIG', 'BUNDLE_USER_HOME', 'BUNDLE_UNKNOWN']) {
+      const f = iosProjectionFixture();
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], { ...capturedXcodeBundleMetadata, [key]: 'Frameworks' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+    }
+  }
+});
+test('iOS cross-role rebind permits only the exact admitted previous recipe and rejects foreign overrides', () => {
+  for (const field of ['SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'GEM_HOME', 'HOME', 'RUBYOPT', 'HTTPS_PROXY', 'OPENSSL_CONF']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], { [field]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  assert.throws(() => neutralIosEnvironment({ PRIVATE_OPERATOR_TOKEN: 'SYNTHETIC_ONLY' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const name of ['CASEOPS_MOBILE_PASSWORD', 'CASEOPS_MOBILE_EMAIL', 'CASEOPS_STORE_BUILD_PRIVATE_KEY', 'CODE_SIGN_PASSWORD'])
+    assert.throws(() => neutralIosEnvironment({ [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { GIT_CONFIG_GLOBAL: '/operator/config' }), /IOS_HOST_OWNER_GIT_CONFIG_REFUSED/);
+});
+test('iOS actual Podfile flags survive the Pods to Node autolinking constructor with scoped trust and deadline', () => {
+  const args = ['--no-warnings', '--eval', "require('expo/bin/autolinking')", 'expo-modules-autolinking', 'resolve', '--platform', 'apple', '--json'];
+  for (let bits = 0; bits < 16; bits++) {
+    const f = iosProjectionFixture(), deadline = String(Date.now() + 5000);
+    f.policy.fixtureCA = { path: f.policy.paths.home + '/public-fixture.pem', sha256: '4'.repeat(64), certificateSha256: '5'.repeat(64) };
+    f.environment.NODE_EXTRA_CA_CERTS = f.policy.fixtureCA.path;
+    const flags = { EXPO_USE_PRECOMPILED_MODULES: String(bits & 1), EX_DEV_CLIENT_NETWORK_INSPECTOR: bits & 2 ? 'true' : 'false',
+      RCT_USE_PREBUILT_RNCORE: String((bits >> 2) & 1), RCT_USE_RN_DEP: String((bits >> 3) & 1) };
+    const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: deadline });
+    const inherited = { ...pod.environment, ...flags }, before = { ...inherited };
+    const node = iosHostCommandProjection(f.admitted, f.ref, 'node', args, inherited);
+    assert.deepEqual(node.args, args); assert.equal(node.executable, f.policy.tools.node.path);
+    for (const [name, value] of Object.entries(flags)) assert.equal(node.environment[name], value, name);
+    assert.equal(node.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+    assert.equal(node.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.equal(node.environment.SSL_CERT_DIR, f.environment.SSL_CERT_DIR);
+    assert.equal(node.environment.NODE_EXTRA_CA_CERTS, f.policy.fixtureCA.path);
+    assert.equal(node.environment.CASEOPS_HOST_NODE_TRUST_POLICY_FILE, f.environment.CASEOPS_HOST_NODE_TRUST_POLICY_FILE);
+    assert.equal(node.environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256, f.environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256);
+    assert.equal(node.environment.CASEOPS_IOS_HOST_OUTER_DEADLINE, deadline); assert.deepEqual(inherited, before);
+    // CocoaPods downloaders and build helpers inherit the same public switches.
+    for (const role of ['ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral']) {
+      const childFixture = iosProjectionFixture(); childFixture.policy.fixtureCA = f.policy.fixtureCA;
+      childFixture.environment.NODE_EXTRA_CA_CERTS = f.policy.fixtureCA.path;
+      const childArgs = role === 'curl' ? curlDownloaderArgs() : role === 'git' ? ['--version'] : [];
+      const child = iosHostCommandProjection(childFixture.admitted, childFixture.ref, role, childArgs, inherited);
+      for (const [name, value] of Object.entries(flags)) assert.equal(child.environment[name], value, role + ':' + name);
+      child.input?.fill(0);
+    }
+    pod.input.fill(0);
+  }
+});
+test('iOS Podfile flags reject other values names and trust overrides before child dispatch', () => {
+  const valid = { EXPO_USE_PRECOMPILED_MODULES: '1', EX_DEV_CLIENT_NETWORK_INSPECTOR: 'true', RCT_USE_PREBUILT_RNCORE: '1', RCT_USE_RN_DEP: '1' };
+  for (const name of Object.keys(valid)) {
+    for (const value of ['', '2', '-1', 'TRUE', 'yes', '1 ', '0\n', 'SYNTHETIC_UNADMITTED']) {
+      const f = iosProjectionFixture(); f.admitted.nodeBuildNames = [name];
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: value }), /IOS_HOST_POD_BUILD_VALUE/);
+    }
+    const f = iosProjectionFixture();
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: name === 'EX_DEV_CLIENT_NETWORK_INSPECTOR' ? '1' : 'true' }), /IOS_HOST_POD_BUILD_VALUE/);
+    for (const value of [false, 1, null, {}, 'bad\0value']) assert.throws(() => neutralIosEnvironment({ [name]: value }), /IOS_HOST_ENVIRONMENT/);
+  }
+  for (const name of ['RCT_UNREVIEWED_FLAG', 'EXPO_USE_UNREVIEWED_MODULES', 'EX_DEV_CLIENT_UNREVIEWED', 'ex_dev_client_network_inspector']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: '1' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const name of ['NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'HTTPS_PROXY', 'RUBYOPT', 'HOME']) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+});
+// IOS-ENV-03..06: J20/M22 source contracts, not native acceptance.
+function iosRnProjectionFixture() {
+  const f = iosProjectionFixture(), root = path.resolve('/SYNTHETIC/reviewed-rn-source');
+  const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios'), rn = path.join(mobile, 'node_modules/react-native');
+  f.policy.helper = { path: path.join(root, 'scripts/mobile/ios-host-launch.mjs') };
+  f.policy.paths.projectPods = path.join(ios, 'Pods');
+  f.admitted.podBuildPaths = { sourceRoot: root, values: { APP_PATH: [ios + path.sep + '..'],
+    REACT_NATIVE_PATH: [rn, f.policy.paths.projectPods + path.sep + path.relative(f.policy.paths.projectPods, rn)] } };
+  return f;
+}
+test('IOS-ENV-03 RN source flags and paths survive Pods to every composed constructor with unchanged trust', () => {
+  for (let bits = 0; bits < 64; bits++) {
+    const f = iosRnProjectionFixture(), deadline = String(Date.now() + 5000);
+    const flags = { RCT_SKIP_CODEGEN: String(bits & 1), RCT_REMOVE_LEGACY_ARCH: String((bits >> 1) & 1),
+      RCT_REMOVE_LEGACY_MODULE_INTEROP: String((bits >> 2) & 1), RCT_REMOVE_LEGACY_COMPONENT_INTEROP: String((bits >> 3) & 1),
+      RCT_HERMES_V1_ENABLED: String((bits >> 4) & 1), RCT_FABRIC_ENABLED: '1', RCT_AGGREGATE_PRIVACY_FILES: String((bits >> 5) & 1), RCT_NEW_ARCH_ENABLED: '1' };
+    const paths = Object.fromEntries(Object.entries(f.admitted.podBuildPaths.values).map(([name, values]) => [name, values[0]]));
+    const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: deadline });
+    const inherited = { ...pod.environment, ...flags, ...paths }, before = { ...inherited };
+    for (const role of ['node', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral']) {
+      const child = iosRnProjectionFixture(), args = role === 'node' ? ['./../node_modules/react-native/scripts/generate-codegen-artifacts.js', '-p', paths.APP_PATH, '-o', '/SYNTHETIC/reviewed-rn-source/apps/mobile/ios', '-t', 'ios'] : role === 'curl' ? curlDownloaderArgs() : role === 'git' ? ['--version'] : [];
+      const result = iosHostCommandProjection(child.admitted, child.ref, role, args, inherited);
+      for (const [name, value] of Object.entries({ ...flags, ...paths })) assert.equal(result.environment[name], value, role + ':' + name);
+      assert.equal(result.environment.CASEOPS_IOS_HOST_OUTER_DEADLINE, deadline);
+      if (role === 'node') { assert.deepEqual(result.args, args); assert.equal(result.environment.SSL_CERT_FILE, child.environment.SSL_CERT_FILE); assert.equal(result.environment.NODE_OPTIONS, child.environment.NODE_OPTIONS); assert.equal(result.environment.NPM_CONFIG_STRICT_SSL, 'true'); }
+      else assert.equal(result.environment.NODE_OPTIONS, undefined);
+      result.input?.fill(0); result.bundle?.fill(0);
+    }
+    assert.deepEqual(inherited, before); pod.input.fill(0);
+  }
+});
+test('IOS-ENV-04 RN finite values and case aliases cannot bypass declared build names or trust fences', () => {
+  const flags = ['RCT_SKIP_CODEGEN', 'RCT_REMOVE_LEGACY_ARCH', 'RCT_REMOVE_LEGACY_MODULE_INTEROP', 'RCT_REMOVE_LEGACY_COMPONENT_INTEROP', 'RCT_HERMES_V1_ENABLED', 'RCT_FABRIC_ENABLED', 'RCT_AGGREGATE_PRIVACY_FILES', 'RCT_NEW_ARCH_ENABLED'];
+  for (const name of flags) {
+    for (const value of ['', '2', '-1', 'true', 'TRUE', '1 ', '0\n', 'SYNTHETIC_UNADMITTED']) {
+      const f = iosRnProjectionFixture(); f.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name]: value }), /IOS_HOST_POD_BUILD_VALUE/);
+    }
+    for (const value of [false, 1, null, {}, 'bad\0value']) assert.throws(() => neutralIosEnvironment({ [name]: value }), /IOS_HOST_ENVIRONMENT/);
+    const f = iosRnProjectionFixture(), alias = name.toLowerCase(); f.admitted.nodeBuildNames = [alias]; assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [alias]: '1' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const name of ['RCT_FABRIC_ENABLED', 'RCT_NEW_ARCH_ENABLED']) { const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name]: '0' }), /IOS_HOST_POD_BUILD_VALUE/); }
+  for (const name of ['RCT_UNREVIEWED_FLAG', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'HTTPS_PROXY', 'RUBYOPT']) { const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { RCT_NEW_ARCH_ENABLED: '1', [name]: 'SYNTHETIC_UNADMITTED' }), /IOS_HOST_(?:UNREVIEWED_ENVIRONMENT|CROSS_ROLE_OVERRIDE)/); }
+});
+test('IOS-ENV-05 SDK path values require reviewed policy root even when Xcode declares their names', () => {
+  const f = iosRnProjectionFixture(), root = path.resolve('/SYNTHETIC/reviewed-rn-source');
+  for (const name of ['APP_PATH', 'REACT_NATIVE_PATH']) {
+    for (const value of ['/FOREIGN/source', root.toLowerCase() + '/apps/mobile', root + '/apps/mobile/ios/../../../private', '$' + '{PODS_ROOT}/../../node_modules/react-native', f.admitted.podBuildPaths.values[name][0] + '/']) {
+      const c = iosRnProjectionFixture(); c.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(c.admitted, c.ref, 'node', [], { [name]: value }), /IOS_HOST_POD_SOURCE_PATH/);
+    }
+    const c = iosRnProjectionFixture(), alias = name.toLowerCase(); c.admitted.nodeBuildNames = [alias]; assert.throws(() => iosHostCommandProjection(c.admitted, c.ref, 'node', [], { [alias]: f.admitted.podBuildPaths.values[name][0] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+    const missing = iosProjectionFixture(); missing.admitted.nodeBuildNames = [name]; assert.throws(() => iosHostCommandProjection(missing.admitted, missing.ref, 'node', [], { [name]: f.admitted.podBuildPaths.values[name][0] }), /IOS_HOST_POD_SOURCE_PATH/);
+  }
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { APP_PATH: root + '/apps/mobile' }), /IOS_HOST_POD_SOURCE_PATH/);
+  const xcode = iosHostCommandProjection(f.admitted, f.ref, 'node', [], { REACT_NATIVE_PATH: f.admitted.podBuildPaths.values.REACT_NATIVE_PATH[1] }); assert.equal(xcode.environment.REACT_NATIVE_PATH, f.admitted.podBuildPaths.values.REACT_NATIVE_PATH[1]);
+});
+test('IOS-ENV-06 actual path review rejects symlinks and changed helper before composed command projection', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => reviewIosPodBuildPaths({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const mobile = path.join(root, 'apps/mobile'), ios = path.join(mobile, 'ios'), rn = path.join(mobile, 'node_modules/react-native'); const sourceFolder = path.join(root, 'scripts/mobile');
+  for (const folder of [sourceFolder, ios, rn]) fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const helperFile = path.join(sourceFolder, 'ios-host-launch.mjs'), source = fs.readFileSync(new URL('./ios-host-launch.mjs', import.meta.url)); fs.writeFileSync(helperFile, source, { mode: 0o600 }); const helper = referenceIosHostInput(helperFile, Date.now() + 20000, 131072);
+  const f = iosProjectionFixture(); f.policy.helper = helper; f.policy.paths.projectPods = path.join(ios, 'Pods'); f.admitted.podBuildPaths = reviewIosPodBuildPaths(f.policy); assert.equal(fs.existsSync(f.policy.paths.projectPods), false);
+  assert.deepEqual(f.admitted.podBuildPaths.values.APP_PATH, [ios + path.sep + '..']); assert.deepEqual(f.admitted.podBuildPaths.values.REACT_NATIVE_PATH, [rn]);
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], { APP_PATH: ios + path.sep + '..', REACT_NATIVE_PATH: rn }); assert.equal(node.environment.REACT_NATIVE_PATH, rn); assert.equal(node.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  fs.mkdirSync(f.policy.paths.projectPods, { mode: 0o700 }); const withPods = reviewIosPodBuildPaths(f.policy); assert.equal(withPods.values.REACT_NATIVE_PATH[1], f.policy.paths.projectPods + path.sep + path.relative(f.policy.paths.projectPods, rn)); assert.equal(fs.realpathSync(withPods.values.REACT_NATIVE_PATH[1]), rn);
+  for (const folder of [ios, rn]) { fs.renameSync(folder, folder + '-retained'); fs.symlinkSync(folder + '-retained', folder, 'dir'); assert.throws(() => reviewIosPodBuildPaths(f.policy), /IOS_HOST_DIRECTORY/); fs.unlinkSync(folder); fs.renameSync(folder + '-retained', folder); }
+  const changed = Buffer.from(source); changed[0] ^= 1; fs.writeFileSync(helperFile, changed); assert.throws(() => reviewIosPodBuildPaths(f.policy), /IOS_HOST_HASH_CHANGED/); fs.writeFileSync(helperFile, source); assert.equal(reviewIosPodBuildPaths(f.policy).sourceRoot, root);
+});
+
+// IOS-ARGV-01..02: exact SDK code operands, not native acceptance.
+test('IOS-ARGV-01 Node code operands preserve exact LF CRLF bytes and composed argv with unchanged trust', () => {
+  const program = "require.resolve(\n    \"react-native\",\n    {paths: [process.argv[1]]},\n    )";
+  for (const flag of ['-p', '--print', '-e', '--eval']) for (const code of [program, program.replaceAll('\n', '\r\n')]) {
+    const args = [flag, code, '/SYNTHETIC/reviewed-rn-source/third-party-podspecs'], before = [...args];
+    assert.equal(validateIosHostArguments('node', args), args);
+    const f = iosRnProjectionFixture(), command = iosHostCommandProjection(f.admitted, f.ref, 'node', args, f.environment);
+    assert.deepEqual(command.args, before); assert.deepEqual(args, before); assert.equal(command.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(command.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.equal(command.environment.NPM_CONFIG_STRICT_SSL, 'true');
+  }
+  const literalTail = ['-p', program, '--', '--eval']; assert.equal(validateIosHostArguments('node', literalTail), literalTail);
+  const byteBoundary = ['-e', ' '.repeat(8191) + '1']; assert.equal(validateIosHostArguments('node', byteBoundary), byteBoundary);
+  const unicodeBoundary = ['--eval', 'é'.repeat(4096)]; assert.equal(validateIosHostArguments('node', unicodeBoundary), unicodeBoundary);
+  const aggregateBoundary = Array.from({ length: 256 }, () => 'x'.repeat(8192)); assert.equal(validateIosHostArguments('node', aggregateBoundary), aggregateBoundary);
+});
+test('IOS-ARGV-02 CRLF paths flags env ambiguous code and original byte bounds refuse before policy reads', async t => {
+  const cases = [
+    ['node', ['-p']], ['node', ['-e', '']], ['node', ['-p', '--eval']], ['node', ['-p', '1', '-e', '2']], ['node', ['--eval', '1', '--print', '2']],
+    ['node', ['--print\n', '1']], ['node', ['--eval\r', '1']], ['node', ['/SYNTHETIC/script\n.js']], ['node', ['-p', '1', '/SYNTHETIC/path\r\n']], ['node', ['/SYNTHETIC/codegen.js', '-p', 'source\npath']],
+    ['node', ['--PRINT', '1\n']], ['node', ['-pe', '1\n']], ['node', ['-e', '1\0']], ['node', ['-e', 'x'.repeat(8193)]], ['node', ['-p', '😀'.repeat(2049)]], ['node', Array(257).fill('x')], ['node', ['-e', null]],
+    ...['npm', 'ruby', 'pod', 'curl', 'git', 'xcodebuild', 'neutral'].map(role => [role, ['-e', '1\n']]),
+  ];
+  let reads = 0; const opened = t.mock.method(fs, 'openSync', () => { reads++; throw Error('POLICY_READ_REACHED'); });
+  for (const [role, args] of cases) {
+    const before = [...args]; assert.throws(() => validateIosHostArguments(role, args), /IOS_HOST_COMMAND_DOMAIN/);
+    const promise = composeIosHostCommand({}, role, args); assert.ok(promise instanceof Promise); await assert.rejects(promise, /IOS_HOST_COMMAND_DOMAIN/); assert.deepEqual(args, before);
+  }
+  assert.equal(reads, 0); opened.mock.restore();
+  for (const [name, code] of [['RCT_SKIP_CODEGEN', 'IOS_HOST_POD_BUILD_VALUE'], ['APP_PATH', 'IOS_HOST_POD_SOURCE_PATH'], ['NODE_OPTIONS', 'IOS_HOST_CROSS_ROLE_OVERRIDE']]) {
+    const f = iosRnProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.environment, [name]: 'value\n' }), new RegExp(code));
+  }
+});
+
+test('CocoaPods curl constructor preserves exact payload and headers while using held CA FD and required marker', () => {
+  const f = iosProjectionFixture(), input = [...curlDownloaderArgs(), "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'", '-H', 'If-None-Match: SYNTHETIC-ETAG'];
+  const result = iosHostCommandProjection(f.admitted, f.ref, 'curl', input, {});
+  assert.deepEqual(result.args.slice(0, 7), ['--disable', '--cacert', '/dev/fd/3', '--proto', '=https', '--proto-redir', '=https']);
+  assert.deepEqual(result.args.slice(7, 7 + input.length), input);
+  assert.deepEqual(result.args.slice(-2), ['-H', 'X-CaseOps-Automated-Test: no-paid-providers']);
+  assert.equal(result.environment.CURL_SSL_BACKEND, 'secure-transport'); assert.equal(result.environment.SSL_CERT_FILE, undefined);
+  assert.equal(result.environment.CURL_HOME, '/SYNTHETIC/owned-ios-host/home'); assert.equal(result.bundle.toString(), 'SYNTHETIC-PUBLIC-CA');
+  result.bundle.fill(0);
+});
+test('CocoaPods curl allowlist rejects abbreviations next config proxy and later trust escapes', () => {
+  for (const option of ['--next', '--config', '-K', '--cacert', '--ca-native', '--capath', '--proxy', '-k', '--insecure', '--url', '--head', '--max-time'])
+    assert.throws(() => validatePodsCurlArguments([...curlDownloaderArgs(), option, 'SYNTHETIC']), /IOS_HOST_CURL_OPTION_REFUSED/);
+  for (const option of ['--fail', '--location']) { const args = curlDownloaderArgs(); args[0] = option; assert.throws(() => validatePodsCurlArguments(args), /IOS_HOST_EXACT_DOWNLOADER_FORM/); }
+});
+test('CocoaPods curl authority rejects non HTTPS credential URLs fragments foreign output and malformed headers', () => {
+  for (const url of ['http://packages.contract-fixture.org/a', 'https://user:pass@packages.contract-fixture.org/a', 'https://packages.contract-fixture.org/a#']) {
+    const args = curlDownloaderArgs(); args[4] = url; assert.throws(() => validatePodsCurlArguments(args), /IOS_HOST_HTTPS_DOWNLOAD/);
+  }
+  for (const header of ['X-A: bad\r\nInjected: yes', 'X-CaseOps-Automated-Test: 1']) assert.throws(() => validatePodsCurlArguments([...curlDownloaderArgs(), '-H', header]), /IOS_HOST_/);
+  const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'curl', curlDownloaderArgs('/SYNTHETIC/owner/file'), {}), /IOS_HOST_CURL_OWNED_OUTPUT/);
+});
+test('iOS public input reader retains exact held bytes and closes its real descriptor', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const file = path.join(base, 'input'), bytes = Buffer.from('PUBLIC SYNTHETIC INPUT'); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  const original = fs.openSync; let fd;
+  fs.openSync = (...args) => { const result = original(...args); if (args[0] === file) fd = result; return result; };
+  try { const actual = readIosHostInput(ref); assert.deepEqual(actual.bytes, bytes); actual.bytes.fill(0); } finally { fs.openSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public input reader refuses actual growth before returning and closes the held FD', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd, once = false;
+  fs.readSync = (value, ...args) => { fd = value; if (!once) { once = true; fs.appendFileSync(file, 'GROWTH'); } return original(value, ...args); };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_INPUT_CHANGED/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public input catches late parent rename to same-leaf symlink and closes FD', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const dir = path.join(base, 'owned'); fs.mkdirSync(dir, { mode: 0o700 }); const file = path.join(dir, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd, once = false;
+  fs.readSync = (value, ...args) => { fd = value; const result = original(value, ...args); if (!once) { once = true; fs.renameSync(dir, dir + '-moved'); fs.symlinkSync(dir + '-moved', dir, process.platform === 'win32' ? 'junction' : 'dir'); } return result; };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_INPUT_CHANGED/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS input read failure zero size oversize hardlink and wrong hash refuse without leaked descriptors', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => readIosHostInput({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, original = fs.readSync; let fd;
+  fs.readSync = value => { fd = value; throw new Error('SYNTHETIC_IO_REFUSAL'); };
+  try { assert.throws(() => readIosHostInput(ref), /SYNTHETIC_IO_REFUSAL/); } finally { fs.readSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+  assert.throws(() => readIosHostInput({ ...ref, sizeBytes: 0 }), /IOS_HOST_REFERENCE/);
+  assert.throws(() => readIosHostInput(ref, { maxBytes: 5 }), /IOS_HOST_REFERENCE/);
+  assert.throws(() => readIosHostInput({ ...ref, sha256: '0'.repeat(64) }), /IOS_HOST_HASH_CHANGED/);
+  fs.linkSync(file, file + '-linked'); assert.throws(() => readIosHostInput(ref), /IOS_HOST_FILE_IDENTITY/);
+});
+function iosReferenceFixture(t) {
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => referenceIosHostInput('/SYNTHETIC/input', Date.now() + 1000), /IOS_HOST_POSIX_OWNER_REQUIRED/); return null;
+  }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'source'); fs.mkdirSync(dir, { mode: 0o700 });
+  const file = path.join(dir, 'input'); fs.writeFileSync(file, 'PUBLIC', { flag: 'wx', mode: 0o600 });
+  return { root, dir, file };
+}
+test('iOS public reference opens before pathname metadata and verifies both bounded observations', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, lstat = fs.lstatSync, read = fs.readSync, events = [], descriptors = [], buffers = []; let consumed = 0;
+  fs.openSync = (...args) => { if (args[0] === f.file) events.push('open'); const fd = open(...args); if (args[0] === f.file) descriptors.push(fd); return fd; };
+  fs.lstatSync = (...args) => { if (args[0] === f.file) events.push('lstat'); return lstat(...args); };
+  fs.readSync = (...args) => { buffers.push(args[1]); const n = read(...args); consumed += n; return n; };
+  let ref;
+  try { ref = referenceIosHostInput(f.file, Date.now() + 20000, 6); }
+  finally { fs.openSync = open; fs.lstatSync = lstat; fs.readSync = read; }
+  assert.equal(events[0], 'open'); assert.equal(descriptors.length, 2); assert.equal(consumed, 12);
+  assert.deepEqual(ref, { path: f.file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 });
+  for (const buffer of buffers) assert.equal(buffer.every(b => b === 0), true);
+  for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS public reference refuses descriptor extent before reading and closes its FD', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, read = fs.readSync; let descriptor, reads = 0;
+  fs.openSync = (...args) => { const fd = open(...args); if (args[0] === f.file) descriptor = fd; return fd; };
+  fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000, 5), /IOS_HOST_FILE_IDENTITY/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+  for (const max of [0, NaN, 1.5, 256 * 1024 * 1024 + 1]) assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000, max), /IOS_HOST_REFERENCE/);
+});
+test('iOS public reference refuses an actual regular to FIFO swap without blocking or reading', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const open = fs.openSync, read = fs.readSync; let descriptor, replaced = false, reads = 0;
+  fs.openSync = (...args) => {
+    if (args[0] === f.file && !replaced) {
+      assert.ok((args[1] & fs.constants.O_NONBLOCK) !== 0, 'REFERENCE_NONBLOCK_REQUIRED');
+      fs.renameSync(f.file, f.file + '.retained');
+      execFileSync('/usr/bin/mkfifo', [f.file], { env: { PATH: '/usr/bin:/bin' }, timeout: 1000, maxBuffer: 1024 }); replaced = true;
+    }
+    const fd = open(...args); if (args[0] === f.file) descriptor = fd; return fd;
+  };
+  fs.readSync = (...args) => { reads++; return read(...args); };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_FILE_IDENTITY/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.equal(replaced, true); assert.equal(fs.lstatSync(f.file).isFIFO(), true); assert.equal(fs.existsSync(f.file + '.retained'), true);
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference refuses growth within its fixed read extent and wipes its buffer', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync; let descriptor, buffer, consumed = 0, grew = false;
+  fs.readSync = (...args) => { descriptor = args[0]; buffer = args[1]; if (!grew) { grew = true; fs.appendFileSync(f.file, 'GROWTH'); } const n = read(...args); consumed += n; return n; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_INPUT_CHANGED/); }
+  finally { fs.readSync = read; }
+  assert.equal(consumed, 7); assert.equal(buffer.length, 7); assert.equal(buffer.every(b => b === 0), true);
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference retains the read error identity and closes and wipes on refusal', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync, expected = new Error('SYNTHETIC_REFERENCE_READ_REFUSAL'); let descriptor, buffer;
+  fs.readSync = (...args) => { descriptor = args[0]; buffer = args[1]; throw expected; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), error => error === expected); }
+  finally { fs.readSync = read; }
+  assert.equal(buffer.every(b => b === 0), true); assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS public reference rejects a replaced parent namespace after its descriptor read', t => {
+  const f = iosReferenceFixture(t); if (!f) return;
+  const read = fs.readSync; let descriptor, replaced = false;
+  fs.readSync = (...args) => { descriptor = args[0]; const n = read(...args); if (!replaced) { replaced = true; fs.renameSync(f.dir, f.dir + '.retained'); fs.symlinkSync(f.dir + '.retained', f.dir); } return n; };
+  try { assert.throws(() => referenceIosHostInput(f.file, Date.now() + 20000), /IOS_HOST_INPUT_CHANGED|IOS_HOST_NAMESPACE/); }
+  finally { fs.readSync = read; }
+  assert.equal(replaced, true); assert.equal(fs.lstatSync(f.dir).isSymbolicLink(), true);
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+test('iOS selected Pods preload and build body retain exact approved bytes and independent guard contracts', () => {
+  const bytes = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url)); assert.equal(createHash('sha256').update(bytes).digest('hex'), IOS_PODS_SOURCE_SHA256);
+  const source = bytes.toString(); assert.match(source, /ssl_verifypeer => true/); assert.match(source, /ssl_verifyhost => 2/); assert.match(source, /'X-CaseOps-Automated-Test' => MARKER/);
+  assert.match(source, /:cainfo => @policy.fetch\('bundle'\)/); assert.match(source, /options.merge\(expected\)/); assert.match(source, /:netrc\] == :optional/);
+  const shell = fs.readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8'); assert.match(shell, /IOS_HOST_REVIEWED_ENTRY/); assert.doesNotMatch(shell, /pod install|prebuild|xcodebuild/);
+});
+test('iOS simulator launch is unarmed before any policy read or synthetic transport entry', async () => {
+  let calls = 0;
+  await assert.rejects(runIosSimulatorBuild({ path: '/NEVER_READ', sha256: '0'.repeat(64), sizeBytes: 1 }, {}, { transport: () => { calls++; } }), /IOS_HOST_SIMULATOR_NOT_ARMED/);
+  assert.equal(calls, 0);
+});
+function iosDescriptorFixture(t) {
+  if (typeof process.getuid !== 'function') return { role: 'curl', bundle: Buffer.from('SYNTHETIC'), policy: { paths: {} } };
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  for (const p of ['home', 'temporary']) fs.mkdirSync(path.join(base, p), { mode: 0o700 });
+  return { role: 'curl', bundle: Buffer.from('PUBLIC SYNTHETIC CA BYTES'), policy: { paths: { home: path.join(base, 'home'), temporary: path.join(base, 'temporary') } }, homeObservation: reviewIosHostHome(path.join(base, 'home')) };
+}
+test('iOS CA transport passes a real same regular FD with exact retained bytes and closes its owned copy', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), actual = Buffer.alloc(command.bundle.length + 1);
+  const n = fs.readSync(transport.fd, actual, 0, actual.length, 0); assert.equal(n, command.bundle.length); assert.deepEqual(actual.subarray(0, n), command.bundle);
+  assert.equal(fs.fstatSync(transport.fd).isFile(), true); transport.finish(); assert.equal(fs.existsSync(transport.file), false);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS CA transport refuses zero progress with FD closure and no false completed descriptor', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const original = fs.writeSync; let fd;
+  fs.writeSync = value => { fd = value; return 0; };
+  try { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_WRITE_PROGRESS/); } finally { fs.writeSync = original; }
+  assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS CA transport detects actual parent rename to same-inode alias and preserves foreign namespace', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), dir = command.policy.paths.temporary;
+  fs.renameSync(dir, dir + '-moved'); fs.symlinkSync(dir + '-moved', dir, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED|IOS_HOST_TRANSPORT_NAMESPACE_CHANGED|IOS_HOST_NAMESPACE/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.existsSync(path.join(dir + '-moved', path.basename(transport.file))), true); command.bundle.fill(0);
+});
+test('iOS CA transport refuses a netrc insertion or removed-late insertion using the owned HOME frame', t => {
+  const command = iosDescriptorFixture(t);
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), file = path.join(command.policy.paths.home, '.netrc'); fs.writeFileSync(file, 'SYNTHETIC ONLY', { mode: 0o600 });
+  assert.throws(() => reviewIosHostHome(command.policy.paths.home), /IOS_HOST_OWNER_CONFIG_REFUSED/); fs.unlinkSync(file);
+  assert.throws(() => transport.finish(), /IOS_HOST_HOME_CHANGED/); assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); command.bundle.fill(0);
+});
+test('iOS public input refuses a controlled foreign-owner metadata frame before any body read', t => {
+  if (typeof process.getuid !== 'function') { assert.equal(process.platform, 'win32'); return; }
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true })); const file = path.join(base, 'input'); fs.writeFileSync(file, 'PUBLIC', { mode: 0o600 });
+  const ref = { path: file, sha256: createHash('sha256').update('PUBLIC').digest('hex'), sizeBytes: 6 }, actualStat = fs.fstatSync, actualRead = fs.readSync; let reads = 0, fd;
+  fs.fstatSync = (value, options) => { fd = value; const real = actualStat(value, options); return new Proxy(real, { get(target, key) { return key === 'uid' ? target.uid + 1n : typeof target[key] === 'function' ? target[key].bind(target) : target[key]; } }); };
+  fs.readSync = (...args) => { reads++; return actualRead(...args); };
+  try { assert.throws(() => readIosHostInput(ref), /IOS_HOST_FILE_IDENTITY/); } finally { fs.fstatSync = actualStat; fs.readSync = actualRead; }
+  assert.equal(reads, 0); assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+});
+test('iOS Git shim permits exact local source inventory reads and refuses all transport or option escapes', () => {
+  for (const args of [['--version'], ['check-ignore', '-z', '--stdin'], ['rev-parse', 'HEAD'], ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'apps/mobile', 'scripts/mobile/ios-host-pods.rb'], ['status', '--porcelain', '--untracked-files=all', '--', 'apps/mobile']])
+    assert.deepEqual(validateIosReadonlyGitArguments(args), ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...args]);
+  for (const args of [['clone', 'https://public.contract-fixture.org/repo'], ['fetch'], ['-c', 'http.sslVerify=false', 'status'], ['status', '--porcelain', '--untracked-files=all', '--', '../outside'], ['rev-parse', 'HEAD', '--show-toplevel']])
+    assert.throws(() => validateIosReadonlyGitArguments(args), /IOS_HOST_GIT_TLS_UNPROVEN/);
+});
+test('real source inventory pathspecs retain the256 bound separately from the16-argument Git mutation bound', () => {
+  const f = iosProjectionFixture(), paths = Array.from({ length: 32 }, (_, i) => 'scripts/mobile/source-' + i + '.mjs');
+  for (const prefix of [['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--'], ['status', '--porcelain', '--untracked-files=all', '--']]) {
+    const args = [...prefix, ...paths], row = projectIosGitArguments(args, f.policy.paths);
+    assert.equal(row.family, 'local-source-inventory'); assert.deepEqual(row.args.slice(-args.length), args);
+  }
+  assert.throws(() => projectIosGitArguments(['clone', ...Array(16).fill('public')], f.policy.paths), /IOS_HOST_GIT_MUTATION_ARGUMENT_BOUND/);
+  assert.throws(() => projectIosGitArguments(Array(257).fill('public'), f.policy.paths), /IOS_HOST_GIT_ARGUMENTS/);
+  assert.throws(() => validateIosReadonlyGitArguments(['check-ignore', '-z', '--stdin', '--no-index']), /IOS_HOST_GIT_TLS_UNPROVEN/);
+});
+test('iOS build entry pins the complete actual helper bytes and executes only its retained buffer', () => {
+  const file = fileURLToPath(new URL('./ios-host-launch.mjs', import.meta.url)), bytes = fs.readFileSync(file), ref = { path: file, sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  const expected = renderIosHostBuildEntry(ref), actual = fs.readFileSync(new URL('./build-ios-simulator-acceptance.sh', import.meta.url), 'utf8');
+  assert.equal(actual, expected); assert.match(actual, /fs\.openSync\(file/); assert.match(actual, /O_NONBLOCK/); assert.match(actual, /sha256/); assert.match(actual, /await import/); assert.match(actual, /data:text\/javascript;base64,/);
+  assert.doesNotMatch(actual, /exec "\$CASEOPS_IOS_HOST_NODE" "\$repo\/scripts/);
+});
+test('iOS retained entry refuses a same-sized replaced helper before any sentinel execution', t => {
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const helper = fs.readFileSync(new URL('./ios-host-launch.mjs', import.meta.url)), root = path.join(base, 'source'), folder = path.join(root, 'scripts/mobile'); fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const sentinel = path.join(base, 'UNADMITTED_HELPER'), file = path.join(folder, 'ios-host-launch.mjs'), entry = path.join(folder, 'build-ios-simulator-acceptance.sh');
+  let fake = `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(sentinel)},'SYNTHETIC');export async function iosHostCli(){return 0};`;
+  fake = fake.padEnd(helper.length, ' '); assert.equal(Buffer.byteLength(fake), helper.length); fs.writeFileSync(file, fake, { mode: 0o600 });
+  fs.writeFileSync(entry, renderIosHostBuildEntry({ path: file, sha256: createHash('sha256').update(helper).digest('hex'), sizeBytes: helper.length }), { mode: 0o700 });
+  if (process.platform === 'win32') { assert.equal(fs.existsSync(sentinel), false); return; }
+  const child = spawnSyncForIosEntry(entry, { PATH: '/usr/bin:/bin', CASEOPS_IOS_HOST_NODE: process.execPath, CASEOPS_IOS_HOST_POLICY_FILE: '/NEVER_READ', CASEOPS_IOS_HOST_POLICY_SHA256: '0'.repeat(64), CASEOPS_IOS_HOST_POLICY_SIZE: '1', CASEOPS_IOS_SIMULATOR_BUILD_GO: 'EXPLICIT_REVIEWED_LOCAL_SIMULATOR_BUILD' });
+  assert.equal(child.status, 1); assert.equal(fs.existsSync(sentinel), false);
+  if (process.platform === 'darwin') assert.match(child.stderr, /IOS_HOST_SHIM_SOURCE_REFUSED/); else assert.match(child.stderr, /actual Mac/);
+});
+function spawnSyncForIosEntry(file, env) {
+  try { const stdout = execFileSync('/bin/bash', [file], { env, timeout: 5000, maxBuffer: 8192, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); return { status: 0, stdout, stderr: '' }; }
+  catch (error) { return { status: error.status, stdout: String(error.stdout || ''), stderr: String(error.stderr || '') }; }
+}
+test('iOS Node build names are pinned to actual retained phase evidence without owner or TLS override fields', () => {
+  const raw = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), spec = JSON.parse(raw);
+  assert.equal(createHash('sha256').update(raw).digest('hex'), '9d01580fa8fb54bac9cbc7362465a38a06000cc4751429188f946160752ad93d');
+  assert.equal(spec.provenance.namesEvidenceSha256, '6670f54a23ed98e6c33ec02e43339bb56e5fa4abebc3a7dc7850fea51319f257');
+  assert.equal(spec.provenance.sdkVersion, '27.1'); assert.equal(spec.provenance.simulatorRuntime, '27.0'); assert.equal(spec.names.length, 618); assert.equal(new Set(spec.names).size, 618);
+  assert.equal(spec.provenance.baseNameCount, 586); assert.equal(spec.provenance.supplements[0].addedNames.length, 23);
+  assert.equal(spec.provenance.supplements[0].namesEvidenceSha256, '2fbd819e92ad6aa263f809eece3b8d85a20b42ca9b59302126a7f57328e94128');
+  assert.equal(spec.provenance.supplements.length, 3);
+  assert.deepEqual(spec.provenance.supplements[1].addedNames, ['GCC_WARN_INHIBIT_ALL_WARNINGS']);
+  assert.equal(spec.provenance.supplements[1].namesEvidenceSha256, '38211a5c76fde352d9afcb96037cf02cd2d9ebc0fc6646ac7119657cd283d4a6');
+  assert.deepEqual(spec.provenance.supplements[2].addedNames, ['ENABLE_BITCODE', 'ENABLE_MODULE_VERIFIER', 'GCC_PREFIX_HEADER',
+    'MACOSX_DEPLOYMENT_TARGET', 'MODULEMAP_FILE', 'OTHER_LIBTOOLFLAGS', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'SWIFT_INSTALL_OBJC_HEADER']);
+  assert.equal(spec.provenance.supplements[2].namesEvidenceSha256, '38915dd36a4ac6cf51d13a0a351faab1518bfb4101164d567946b465cda7932d');
+  assert.match(spec.provenance.supplements[2].evidenceKind, /source-declared.*not observed exports or native success/);
+  assert.equal(spec.names.includes('LD_RUNPATH_SEARCH_PATHS'), true); assert.equal(spec.names.includes('BUILT_PRODUCTS_DIR'), true);
+  for (const key of ['HOME', 'USER', 'UID', 'GROUP', 'GID', 'PATH', 'NODE_OPTIONS', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'HTTPS_PROXY']) assert.equal(spec.names.includes(key), false, key);
+});
+const retainedRnDepsBuildNames = [
+  'ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME', 'CLANG_ANALYZER_NONNULL', 'CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION',
+  'CLANG_ENABLE_OBJC_WEAK', 'CLANG_WARN_DOCUMENTATION_COMMENTS', 'CLANG_WARN_UNGUARDED_AVAILABILITY',
+  'LINK_FILE_LIST_normal_arm64', 'LINK_FILE_LIST_normal_x86_64',
+  'LM_AUX_CONST_METADATA_LIST_PATH_normal_arm64', 'LM_AUX_CONST_METADATA_LIST_PATH_normal_x86_64',
+  'MTL_FAST_MATH', 'OBJECT_FILE_DIR_normal', 'PODS_DEVELOPMENT_LANGUAGE', 'PODS_TARGET_SRCROOT',
+  'SDK_DIR_iphonesimulator', 'SDK_DIR_iphonesimulator27_1', 'SWIFT_COMPILATION_MODE', 'SWIFT_EMIT_MODULE_INTERFACE',
+  'SWIFT_OPTIMIZATION_LEVEL', 'SWIFT_RESPONSE_FILE_PATH_normal_arm64', 'SWIFT_RESPONSE_FILE_PATH_normal_x86_64', 'arch', 'variant',
+];
+function currentProcessMetadata() {
+  return { UID: String(process.getuid?.() ?? -1), GID: String(process.getgid?.() ?? -1), USER: os.userInfo().username, GROUP: 'unit_group' };
+}
+test('iOS retained RNDeps build names stay Node-only and current process metadata is discarded', () => {
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const supplied = Object.fromEntries(retainedRnDepsBuildNames.map(name => [name, 'SYNTHETIC_' + name]));
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  for (const name of retainedRnDepsBuildNames) assert.equal(actual.environment[name], supplied[name], name);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'pod', [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const role of ['node', 'pod', 'neutral']) {
+    const p = iosProjectionFixture(), owner = currentProcessMetadata(), before = { ...owner };
+    if (typeof process.getuid !== 'function' || typeof process.getgid !== 'function') {
+      assert.throws(() => iosHostCommandProjection(p.admitted, p.ref, role, [], owner), /IOS_HOST_PROCESS_METADATA/); continue;
+    }
+    const result = iosHostCommandProjection(p.admitted, p.ref, role, [], owner);
+    for (const key of ['UID', 'GID', 'USER', 'GROUP']) assert.equal(result.environment[key], undefined, key);
+    assert.deepEqual(owner, before);
+  }
+});
+function iosSdkScriptFixture() {
+  const f = iosRnProjectionFixture(), bytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url));
+  f.admitted.nodeBuildNames = JSON.parse(bytes).names;
+  f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  return f;
+}
+function iosCodegenShellValues(f) {
+  const mobile = path.join(f.admitted.podBuildPaths.sourceRoot, 'apps/mobile'), ios = path.join(mobile, 'ios');
+  const podfile = path.join(ios, 'Pods') + path.sep + '..';
+  const rn = podfile + path.sep + '..' + path.sep + 'node_modules' + path.sep + 'react-native';
+  return { RCT_SCRIPT_RN_DIR: rn, RCT_SCRIPT_APP_PATH: podfile + path.sep + '..', RCT_SCRIPT_OUTPUT_DIR: podfile,
+    RCT_SCRIPT_TYPE: 'withCodegenDiscovery', SCRIPT_PHASES_SCRIPT: rn + '/scripts/react_native_pods_utils/script_phases.sh',
+    WITH_ENVIRONMENT: rn + '/scripts/xcode/with-environment.sh' };
+}
+function iosBundleShellValues(f) {
+  const mobile = path.join(f.admitted.podBuildPaths.sourceRoot, 'apps/mobile');
+  return { PROJECT_ROOT: path.join(mobile, 'ios') + path.sep + '..', ENTRY_FILE: path.join(mobile, 'index.ts'),
+    CLI_PATH: path.join(mobile, 'node_modules/expo/node_modules/@expo/cli/build/src/index.js'),
+    BUNDLE_COMMAND: 'export:embed', NODE_ARGS: '' };
+}
+test('iOS Codegen shell cohort keeps its owned output and discards shell selectors for Node', () => {
+  const f = iosSdkScriptFixture();
+  // The retained real Xcode export is PODFILE_DIR=$(SRCROOT)/.. with SRCROOT
+  // ending in ios/Pods. Keep this independent raw operand, including its '..'.
+  const expectedOutput = path.resolve('/SYNTHETIC/reviewed-rn-source') + path.sep + ['apps', 'mobile', 'ios', 'Pods', '..'].join(path.sep);
+  const rawRn = expectedOutput + path.sep + ['..', 'node_modules', 'react-native'].join(path.sep);
+  const incoming = { RCT_SCRIPT_RN_DIR: rawRn, RCT_SCRIPT_APP_PATH: expectedOutput + path.sep + '..', RCT_SCRIPT_OUTPUT_DIR: expectedOutput,
+    RCT_SCRIPT_TYPE: 'withCodegenDiscovery', SCRIPT_PHASES_SCRIPT: rawRn + '/scripts/react_native_pods_utils/script_phases.sh',
+    WITH_ENVIRONMENT: rawRn + '/scripts/xcode/with-environment.sh' }, before = { ...incoming };
+  assert.deepEqual(incoming, iosCodegenShellValues(f));
+  const args = ['scripts/generate-codegen-artifacts.js', '--path', incoming.RCT_SCRIPT_APP_PATH, '--outputPath', incoming.RCT_SCRIPT_OUTPUT_DIR, '--targetPlatform', 'ios'];
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, incoming);
+  assert.equal(actual.environment.RCT_SCRIPT_OUTPUT_DIR, expectedOutput);
+  for (const key of Object.keys(incoming).filter(key => key !== 'RCT_SCRIPT_OUTPUT_DIR')) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.deepEqual(actual.args, args); assert.deepEqual(incoming, before);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  // Observe the projected output in a real child, using the runner's real trust
+  // environment rather than turning synthetic policy references into authority.
+  const observedChildOutput = execFileSync(process.execPath, ['-e', 'process.stdout.write(process.env.RCT_SCRIPT_OUTPUT_DIR)'],
+    { env: { ...process.env, RCT_SCRIPT_OUTPUT_DIR: actual.environment.RCT_SCRIPT_OUTPUT_DIR }, encoding: 'utf8', timeout: 5000 });
+  assert.equal(observedChildOutput, expectedOutput);
+});
+test('iOS Codegen shell cohort rejects partial foreign and cross-role contexts within existing bounds', () => {
+  for (const key of Object.keys(iosCodegenShellValues(iosSdkScriptFixture()))) {
+    const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f), missing = { ...valid }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_NODE_SCRIPT_COHORT/);
+    for (const value of ['/FOREIGN/source', valid[key] + '/', valid[key].toLowerCase() === valid[key] ? 'FOREIGN' : valid[key].toLowerCase()])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), /IOS_HOST_NODE_SCRIPT_VALUE/);
+    for (const value of [false, null, 1, {}, 'bad\0value', 'x'.repeat(32769)])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), /IOS_HOST_ENVIRONMENT/);
+    const alias = key.toLowerCase(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [alias]: valid[key] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const f = iosSdkScriptFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], iosCodegenShellValues(f)), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  for (const mutate of [f => { delete f.admitted.nodeBuildNames; }, f => { f.admitted.nodeBuildNames = f.admitted.nodeBuildNames.slice(1); },
+    f => { f.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); }, f => { delete f.admitted.podBuildPaths; }]) {
+    const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f); mutate(f); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], valid), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  const f = iosSdkScriptFixture(), valid = iosCodegenShellValues(f);
+  const oldCanonicalCohort = Object.fromEntries(Object.entries(valid).map(([key, value]) =>
+    [key, key === 'RCT_SCRIPT_TYPE' ? value : path.normalize(value)]));
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], oldCanonicalCohort), /IOS_HOST_NODE_SCRIPT_VALUE/);
+  const large = { ...valid, ...Object.fromEntries(['CONFIGURATION', 'ARCHS', 'BUILT_PRODUCTS_DIR', 'LD_RUNPATH_SEARCH_PATHS', 'TARGET_NAME', 'PROJECT_NAME', 'SDKROOT', 'PRODUCT_NAME'].map(key => [key, 'x'.repeat(32768)])) };
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], large), /IOS_HOST_ENVIRONMENT_BOUND/);
+  for (const key of ['HOME', 'CFFIXED_USER_HOME', 'NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'BUNDLE_GEMFILE'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  for (const key of ['RCT_SCRIPT_UNKNOWN', 'SCRIPT_PHASES_SCRIPT_UNKNOWN', 'RN_DIR'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+// IOS-CODEGEN-01..05: retained M9 Generate Specs exports, not native acceptance.
+// The authoritative public capture is retained outside source:
+// ios-m9-codegen-env-actual-block-02/capture.json, actualNineValues; raw private
+// environment capture is neither imported nor needed by these controls.
+const retainedCodegenScalars = Object.freeze({ AppIdentifierPrefix: 'FAKETEAMID.', CLANG_ENABLE_MODULE_DEBUGGING: 'NO',
+  EXECUTABLE_EXTENSION: 'a', EXECUTABLE_PREFIX: 'lib', EXECUTABLE_SUFFIX: '.a', REZ_EXECUTABLE: 'YES',
+  SWIFT_COMPILE_FOR_STATIC_LINKING: 'YES', TeamIdentifierPrefix: 'FAKETEAMID.' });
+function iosCodegenMetadataFixture(f = iosSdkScriptFixture()) {
+  f.policy.role = 'native-qa';
+  const derived = path.join(f.policy.paths.build, 'DerivedData/Build/Intermediates.noindex/Pods.build/Release-iphonesimulator/ReactCodegen.build/DerivedSources');
+  const incoming = { ...iosCodegenShellValues(f), CODE_SIGN_IDENTITY: '-', CONFIGURATION: 'Release', PLATFORM_NAME: 'iphonesimulator',
+    EFFECTIVE_PLATFORM_NAME: '-iphonesimulator', TARGET_NAME: 'ReactCodegen', SCRIPT_OUTPUT_FILE_COUNT: '1', DERIVED_FILE_DIR: derived,
+    ...retainedCodegenScalars, SCRIPT_OUTPUT_FILE_0: path.join(derived, 'react-codegen.log') };
+  return { ...f, incoming, keys: [...Object.keys(retainedCodegenScalars), 'SCRIPT_OUTPUT_FILE_0'] };
+}
+test('IOS-CODEGEN-01 retained M9 metadata is validated and discarded before a real Node child', () => {
+  const f = iosCodegenMetadataFixture(), before = { ...f.incoming }, args = ['scripts/generate-codegen-artifacts.js', '--path', f.incoming.RCT_SCRIPT_APP_PATH,
+    '--outputPath', f.incoming.RCT_SCRIPT_OUTPUT_DIR, '--targetPlatform', 'ios'];
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, f.incoming);
+  assert.deepEqual(actual.args, args); assert.deepEqual(f.incoming, before);
+  for (const key of f.keys) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.equal(actual.environment.RCT_SCRIPT_OUTPUT_DIR, f.incoming.RCT_SCRIPT_OUTPUT_DIR);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  const childEnvironment = { ...process.env, RCT_SCRIPT_OUTPUT_DIR: actual.environment.RCT_SCRIPT_OUTPUT_DIR };
+  for (const key of f.keys) { delete childEnvironment[key]; if (Object.hasOwn(actual.environment, key)) childEnvironment[key] = actual.environment[key]; }
+  const observed = JSON.parse(execFileSync(process.execPath, ['-e', 'const keys=' + JSON.stringify(f.keys) + ';process.stdout.write(JSON.stringify({retained:keys.filter(k=>Object.hasOwn(process.env,k)),output:process.env.RCT_SCRIPT_OUTPUT_DIR}))'],
+    { env: childEnvironment, encoding: 'utf8', timeout: 5000, maxBuffer: 4096 }));
+  assert.deepEqual(observed, { retained: [], output: f.incoming.RCT_SCRIPT_OUTPUT_DIR });
+});
+test('IOS-CODEGEN-02 partial changed typed or aliased M9 metadata refuses even through a generic build-name grant', () => {
+  for (const key of iosCodegenMetadataFixture().keys) {
+    const f = iosCodegenMetadataFixture(), missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_CODEGEN_METADATA_COHORT/);
+    for (const value of ['FOREIGN', f.incoming[key] + ' ', false, null, 1, {}, 'bad\0value', 'x'.repeat(32769)])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: value }), /IOS_HOST_(?:CODEGEN_METADATA_VALUE|ENVIRONMENT)/);
+    const alias = key === key.toUpperCase() ? key.toLowerCase() : key.toUpperCase();
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [alias]: f.incoming[key] }), /IOS_HOST_CODEGEN_METADATA_NAME/);
+    assert.throws(() => neutralIosEnvironment({ [key]: f.incoming[key] }, { buildNames: [key] }), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  }
+});
+test('IOS-CODEGEN-03 output is the exact policy-owned Generate Specs log in a one-output Release Simulator context', () => {
+  const f = iosCodegenMetadataFixture();
+  for (const value of ['/FOREIGN/react-codegen.log', f.incoming.SCRIPT_OUTPUT_FILE_0 + '/..', f.incoming.SCRIPT_OUTPUT_FILE_0.replace('/build/', '/build-sibling/'),
+    f.incoming.SCRIPT_OUTPUT_FILE_0.replace('/DerivedSources/', '/DerivedSources/../DerivedSources/'), f.incoming.SCRIPT_OUTPUT_FILE_0.replace('react-codegen.log', 'other.log')])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, SCRIPT_OUTPUT_FILE_0: value }), /IOS_HOST_CODEGEN_METADATA_VALUE/);
+  for (const [key, value] of [['DERIVED_FILE_DIR', '/FOREIGN/DerivedSources'], ['SCRIPT_OUTPUT_FILE_COUNT', '2'], ['CONFIGURATION', 'Debug'],
+    ['CODE_SIGN_IDENTITY', 'Apple Distribution'], ['PLATFORM_NAME', 'iphoneos'], ['EFFECTIVE_PLATFORM_NAME', '-iphoneos'], ['TARGET_NAME', 'CaseOps']])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: value }), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  for (const key of ['DERIVED_FILE_DIR', 'SCRIPT_OUTPUT_FILE_COUNT', 'CODE_SIGN_IDENTITY', 'TARGET_NAME']) {
+    const missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_CODEGEN_METADATA_CONTEXT/);
+  }
+});
+test('IOS-CODEGEN-04 M9 metadata never grants another role source cohort TLS loader or SDK path authority', () => {
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const f = iosCodegenMetadataFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], f.incoming), /IOS_HOST_NODE_SCRIPT_CONTEXT/);
+  }
+  for (const mutate of [f => { f.policy.role = 'base'; }, f => { delete f.admitted.nodeBuildNames; },
+    f => { f.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); }, f => { delete f.admitted.podBuildPaths; }]) {
+    const f = iosCodegenMetadataFixture(); mutate(f); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], f.incoming), /IOS_HOST_(?:CODEGEN_METADATA_CONTEXT|NODE_SCRIPT_CONTEXT)/);
+  }
+  for (const key of Object.keys(iosCodegenShellValues(iosSdkScriptFixture()))) {
+    const f = iosCodegenMetadataFixture(), missing = { ...f.incoming }; delete missing[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], missing), /IOS_HOST_NODE_SCRIPT_COHORT/);
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: '/FOREIGN/source' }), /IOS_HOST_NODE_SCRIPT_VALUE/);
+  }
+  for (const key of ['NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'DYLD_INSERT_LIBRARIES', 'LD_PRELOAD']) {
+    const f = iosCodegenMetadataFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  const f = iosCodegenMetadataFixture(), names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  assert.equal(names.length, 618); for (const key of f.keys) assert.equal(names.includes(key), false, key);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...f.incoming, SCRIPT_OUTPUT_FILE_1: f.incoming.SCRIPT_OUTPUT_FILE_0 }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+test('IOS-CODEGEN-05 original SDK shell retains log redirects and exact CLI output across the offline Node boundary', t => {
+  const root = fs.realpathSync(trustRoot()); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source'), mobile = path.join(sourceRoot, 'apps/mobile'), pods = path.join(mobile, 'ios/Pods');
+  fs.mkdirSync(pods, { recursive: true, mode: 0o700 }); fs.mkdirSync(path.join(mobile, 'node_modules/react-native'), { recursive: true, mode: 0o700 });
+  const f = iosSdkScriptFixture(); f.policy.helper.path = path.join(sourceRoot, 'scripts/mobile/ios-host-launch.mjs');
+  f.admitted.podBuildPaths.sourceRoot = sourceRoot; f.policy.paths.build = path.join(root, 'build');
+  const supplied = iosCodegenMetadataFixture(f); fs.mkdirSync(supplied.incoming.DERIVED_FILE_DIR, { recursive: true, mode: 0o700 });
+  const packageRoot = path.resolve(fileURLToPath(new URL('../../apps/mobile/node_modules/react-native', import.meta.url)));
+  const shellBytes = fs.readFileSync(path.join(packageRoot, 'scripts/react_native_pods_utils/script_phases.sh'));
+  const shell = path.join(root, 'sdk-script-phases.sh'), fixtureFile = path.join(root, 'fixture.json'), journal = path.join(root, 'boundary.jsonl');
+  fs.writeFileSync(shell, shellBytes, { mode: 0o600, flag: 'wx' });
+  fs.writeFileSync(fixtureFile, JSON.stringify({ admitted: f.admitted, ref: f.ref, incoming: supplied.incoming, keys: supplied.keys }), { mode: 0o600, flag: 'wx' });
+  const adapter = path.join(root, 'offline-node.mjs'), entry = path.join(root, 'node');
+  fs.writeFileSync(adapter, `import fs from 'node:fs';import assert from 'node:assert/strict';import{execFileSync}from'node:child_process';
+import{iosHostCommandProjection}from${JSON.stringify(new URL('./ios-host-launch.mjs', import.meta.url).href)};
+const f=JSON.parse(fs.readFileSync(${JSON.stringify(fixtureFile)},'utf8')),args=process.argv.slice(2);
+const incoming=Object.fromEntries(Object.keys(f.incoming).map(k=>[k,process.env[k]]));
+const projected=iosHostCommandProjection(f.admitted,f.ref,'node',args,incoming);
+assert.deepEqual(projected.args,args);for(const k of f.keys)assert.equal(Object.hasOwn(projected.environment,k),false);
+const env={...process.env,RCT_SCRIPT_OUTPUT_DIR:projected.environment.RCT_SCRIPT_OUTPUT_DIR};for(const k of f.keys)delete env[k];
+const resolve=['--print',"require('path').dirname(require.resolve('@react-native/codegen/package.json'))"];
+if(JSON.stringify(args)===JSON.stringify(resolve)){process.stdout.write(execFileSync(process.execPath,args,{cwd:${JSON.stringify(packageRoot)},env,encoding:'utf8',timeout:5000,maxBuffer:4096}));}
+else{assert.deepEqual(args,['scripts/generate-codegen-artifacts.js','--path',f.incoming.RCT_SCRIPT_APP_PATH,'--outputPath',f.incoming.RCT_SCRIPT_OUTPUT_DIR,'--targetPlatform','ios']);
+ const observed=JSON.parse(execFileSync(process.execPath,['-e','process.stdout.write(JSON.stringify({keys:'+JSON.stringify(f.keys)+'.filter(k=>Object.hasOwn(process.env,k)),output:process.env.RCT_SCRIPT_OUTPUT_DIR}))'],{env,encoding:'utf8',timeout:5000,maxBuffer:4096}));
+ assert.deepEqual(observed,{keys:[],output:f.incoming.RCT_SCRIPT_OUTPUT_DIR});}
+fs.appendFileSync(${JSON.stringify(journal)},JSON.stringify({args,output:projected.environment.RCT_SCRIPT_OUTPUT_DIR})+'\\n',{mode:0o600});
+`, { mode: 0o600, flag: 'wx' });
+  fs.writeFileSync(entry, '#!/bin/sh\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(adapter) + ' "$@"\n', { mode: 0o700, flag: 'wx' });
+  // The owned offline dispatcher executes real Node and the actual resolver;
+  // it validates the real generation argv without running SDK generation.
+  execFileSync('/bin/bash', [shell], { env: { ...process.env, ...supplied.incoming, NODE_BINARY: entry }, encoding: 'utf8', timeout: 15000, maxBuffer: 16384 });
+  const events = fs.readFileSync(journal, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(events.length, 2); assert.equal(events[1].args[4], supplied.incoming.RCT_SCRIPT_OUTPUT_DIR);
+  const log = fs.readFileSync(supplied.incoming.SCRIPT_OUTPUT_FILE_0, 'utf8');
+  assert.match(log, /Generating codegen artifacts/); assert.match(log, /Done\./);
+  assert.deepEqual(fs.readFileSync(shell), shellBytes);
+});
+test('iOS Release bundle shell prefixes retain only exact source-derived Node values', () => {
+  for (const size of [1, 2, 4, 5]) {
+    const f = iosSdkScriptFixture(), values = iosBundleShellValues(f), incoming = Object.fromEntries(Object.entries(values).slice(0, size));
+    const before = { ...incoming }, args = ['--print', "require.resolve('react-native/package.json')"];
+    const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', args, incoming);
+    for (const [key, value] of Object.entries(incoming)) assert.equal(actual.environment[key], value, key);
+    assert.deepEqual(actual.args, args); assert.deepEqual(incoming, before);
+    assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS); assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+    assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home);
+  }
+});
+test('iOS Release bundle shell values reject partial foreign and option-bearing contexts', () => {
+  const f = iosSdkScriptFixture(), valid = iosBundleShellValues(f), keys = Object.keys(valid);
+  for (const incoming of [{ ENTRY_FILE: valid.ENTRY_FILE }, Object.fromEntries(Object.entries(valid).slice(0, 3)),
+    { ...valid, ...iosCodegenShellValues(f) }])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], incoming), /IOS_HOST_NODE_SCRIPT_COHORT/);
+  for (const key of keys) {
+    for (const value of ['/FOREIGN/source', valid[key] + ' ', key === 'NODE_ARGS' ? '--inspect' : valid[key] + '/'])
+      assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: value }), key === 'BUNDLE_COMMAND' ? /IOS_HOST_CROSS_ROLE_OVERRIDE/ : /IOS_HOST_NODE_SCRIPT_VALUE/);
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key.toLowerCase()]: valid[key] }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const other = iosSdkScriptFixture(); assert.throws(() => iosHostCommandProjection(other.admitted, other.ref, role, [], valid), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, NODE_ARGS: 'bad\0value' }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, CLI_PATH: 'x'.repeat(32769) }), /IOS_HOST_ENVIRONMENT/);
+  for (const key of ['NODE_OPTIONS', 'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'BUNDLE_WITH', 'BUNDLE_GEMFILE'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...valid, [key]: 'FOREIGN' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+});
+test('iOS Xcode engine metadata is discarded only for verified Node builds', () => {
+  const keys = ['IDEBuildOperationMaxNumberOfConcurrentCompileTasks', 'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID',
+    'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations'];
+  const namesBytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), names = JSON.parse(namesBytes).names;
+  assert.equal(names.length, 618);
+  const fixture = () => {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = [...names];
+    f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(namesBytes).digest('hex'), sizeBytes: namesBytes.length };
+    return f;
+  };
+  const supplied = Object.fromEntries(keys.map(key => [key, 'SYNTHETIC_METADATA'])), before = { ...supplied };
+  const f = fixture(), actual = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], supplied);
+  for (const key of keys) assert.equal(Object.hasOwn(actual.environment, key), false, key);
+  assert.equal(actual.executable, f.policy.tools.node.path); assert.deepEqual(actual.args, ['--print', '1']);
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  assert.equal(actual.environment.SSL_CERT_DIR, f.environment.SSL_CERT_DIR);
+  assert.equal(actual.environment.HOME, f.policy.paths.home); assert.equal(actual.environment.CFFIXED_USER_HOME, f.policy.paths.home);
+  assert.deepEqual(supplied, before);
+  for (const role of ['npm', 'ruby', 'pod', 'git', 'curl', 'xcodebuild', 'neutral']) {
+    const other = fixture();
+    assert.throws(() => iosHostCommandProjection(other.admitted, other.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/, role);
+  }
+  for (const mutate of [
+    p => { delete p.admitted.nodeBuildNames; },
+    p => { p.admitted.nodeBuildNames = names.slice(1); },
+    p => { p.admitted.nodeBuildNames = [...names, ...keys]; },
+    p => { delete p.policy.source['ios-node-build-env.json']; },
+    p => { p.policy.source['ios-node-build-env.json'].sha256 = '0'.repeat(64); },
+  ]) {
+    const missing = fixture(); mutate(missing);
+    assert.throws(() => iosHostCommandProjection(missing.admitted, missing.ref, 'node', [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+});
+test('iOS Xcode engine metadata preserves bounds and foreign override refusals', () => {
+  const keys = ['IDEBuildOperationMaxNumberOfConcurrentCompileTasks', 'LLBUILD_BUILD_ID', 'LLBUILD_LANE_ID',
+    'LLBUILD_TASK_ID', 'UsePerConfigurationBuildLocations'];
+  const namesBytes = fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url)), names = JSON.parse(namesBytes).names;
+  const project = input => {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    f.policy.source['ios-node-build-env.json'] = { sha256: createHash('sha256').update(namesBytes).digest('hex'), sizeBytes: namesBytes.length };
+    return iosHostCommandProjection(f.admitted, f.ref, 'node', [], input);
+  };
+  for (const key of keys) {
+    assert.equal(Object.hasOwn(project({ [key]: 'x'.repeat(32768) }).environment, key), false);
+    for (const value of [false, null, 1, {}, 'bad\0value', 'x'.repeat(32769), 'é'.repeat(16385)])
+      assert.throws(() => project({ [key]: value }), /IOS_HOST_ENVIRONMENT/, key);
+    for (const variant of [key.toLowerCase(), key.toUpperCase(), key + '_UNKNOWN'])
+      if (variant !== key) assert.throws(() => project({ [variant]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/, variant);
+  }
+  const large = Object.fromEntries([...keys, 'CONFIGURATION', 'ARCHS', 'BUILT_PRODUCTS_DIR', 'LD_RUNPATH_SEARCH_PATHS']
+    .map(key => [key, 'x'.repeat(32768)]));
+  assert.throws(() => project(large), /IOS_HOST_ENVIRONMENT_BOUND/);
+  for (const key of ['LLBUILD_UNKNOWN', 'PRIVATE_OPERATOR_TOKEN'])
+    assert.throws(() => project({ [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['HOME', 'CFFIXED_USER_HOME', 'NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+    'NODE_EXTRA_CA_CERTS', 'HTTPS_PROXY', 'BUNDLE_GEMFILE'])
+    assert.throws(() => project({ LLBUILD_TASK_ID: 'SYNTHETIC', [key]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/, key);
+});
+test('iOS Hermes warning metadata reaches only the reviewed Node build environment', () => {
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const supplied = { GCC_WARN_INHIBIT_ALL_WARNINGS: 'YES' }, before = { ...supplied };
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  assert.equal(actual.environment.GCC_WARN_INHIBIT_ALL_WARNINGS, 'YES');
+  assert.equal(actual.environment.NODE_OPTIONS, f.environment.NODE_OPTIONS);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE);
+  assert.equal(actual.environment.HOME, f.policy.paths.home); assert.deepEqual(supplied, before);
+  for (const role of ['pod', 'neutral', 'xcodebuild'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['GCC_WARN_INHIBIT_ALL_WARNINGS_UNREVIEWED', 'PRIVATE_OPERATOR_TOKEN'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const key of ['HOME', 'NODE_OPTIONS', 'HTTPS_PROXY', 'BUNDLE_GEMFILE', 'BUNDLE_UNKNOWN'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, [key]: 'UNADMITTED' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  for (const value of [false, 'bad\0value', 'x'.repeat(32769)])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { GCC_WARN_INHIBIT_ALL_WARNINGS: value }), /IOS_HOST_ENVIRONMENT/);
+});
+test('iOS declared Node-script build fields remain finite Node-only metadata', () => {
+  const declaredNames = ['MODULEMAP_FILE', 'OTHER_LIBTOOLFLAGS', 'ENABLE_MODULE_VERIFIER', 'GCC_PREFIX_HEADER',
+    'SWIFT_INSTALL_OBJC_HEADER', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'MACOSX_DEPLOYMENT_TARGET', 'ENABLE_BITCODE'];
+  const supplied = Object.fromEntries(declaredNames.map(name => [name, 'SYNTHETIC_' + name])), before = { ...supplied };
+  const f = iosProjectionFixture();
+  f.admitted.nodeBuildNames = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  const actual = iosHostCommandProjection(f.admitted, f.ref, 'node', [], supplied);
+  for (const name of declaredNames) assert.equal(actual.environment[name], supplied[name], name);
+  assert.equal(actual.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.deepEqual(supplied, before);
+  for (const role of ['pod', 'neutral', 'xcodebuild'])
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, role, [], supplied), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  for (const name of declaredNames)
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [name + '_UNREVIEWED']: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, MODULEMAP_FILE: 'bad\0path' }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { ...supplied, OTHER_LIBTOOLFLAGS: 'x'.repeat(32769) }), /IOS_HOST_ENVIRONMENT/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], Object.fromEntries(declaredNames.map(name => [name, 'x'.repeat(32768)]))), /IOS_HOST_ENVIRONMENT_BOUND/);
+});
+test('iOS process metadata and observed build names cannot admit foreign identities or owner overrides', () => {
+  for (const key of ['UID', 'GID', 'USER', 'GROUP']) {
+    const f = iosProjectionFixture(), incomplete = currentProcessMetadata(); delete incomplete[key];
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], incomplete), /IOS_HOST_PROCESS_METADATA/);
+    const wrong = { ...currentProcessMetadata(), [key]: key === 'GROUP' ? '../foreign' : 'FOREIGN' };
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], wrong), /IOS_HOST_PROCESS_METADATA/);
+  }
+  const names = JSON.parse(fs.readFileSync(new URL('./ios-node-build-env.json', import.meta.url))).names;
+  for (const key of [...retainedRnDepsBuildNames.map(name => name + '_UNREVIEWED'), 'PRIVATE_OPERATOR_TOKEN', 'react_native_path']) {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+  }
+  for (const key of ['NPM_CONFIG_CACHE', 'BUNDLE_GEMFILE', 'HTTPS_PROXY', 'NODE_EXTRA_CA_CERTS']) {
+    const f = iosProjectionFixture(); f.admitted.nodeBuildNames = names;
+    assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+});
+test('iOS Node accepts only source-admitted typed derived build names while rebinding trust and preserving the parent', () => {
+  const f = iosProjectionFixture(); f.admitted.nodeBuildNames = ['BUILT_PRODUCTS_DIR', 'CONFIGURATION', 'LD_RUNPATH_SEARCH_PATHS'];
+  const supplied = { BUILT_PRODUCTS_DIR: '/SYNTHETIC/Release-iphonesimulator', CONFIGURATION: 'Release', LD_RUNPATH_SEARCH_PATHS: '@executable_path/Frameworks' }, before = { ...supplied };
+  const row = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], supplied);
+  assert.equal(row.environment.BUILT_PRODUCTS_DIR, supplied.BUILT_PRODUCTS_DIR); assert.equal(row.environment.CONFIGURATION, 'Release');
+  assert.equal(row.environment.SSL_CERT_FILE, f.environment.SSL_CERT_FILE); assert.deepEqual(supplied, before);
+  for (const key of ['DYLD_INSERT_LIBRARIES', 'LD_PRELOAD', 'HTTPS_PROXY']) assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { [key]: 'SYNTHETIC' }), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', [], { UNOBSERVED_OWNER_TOKEN: 'SYNTHETIC' }), /IOS_HOST_UNREVIEWED_ENVIRONMENT/);
+});
+test('iOS derived build values reject nonstrings NUL field extent and aggregate overflow before dispatch', () => {
+  for (const value of [false, 1, {}, 'bad\0value', 'x'.repeat(32769)]) assert.throws(() => neutralIosEnvironment({ CONFIGURATION: value }, { buildNames: ['CONFIGURATION'] }), /IOS_HOST_ENVIRONMENT/);
+  const names = Array.from({ length: 9 }, (_, i) => 'SOURCE_FIELD_' + i), values = Object.fromEntries(names.map(n => [n, 'x'.repeat(32768)]));
+  assert.throws(() => neutralIosEnvironment(values, { buildNames: names }), /IOS_HOST_ENVIRONMENT_BOUND/);
+});
+test('iOS generated CoreFoundation encoding metadata is typed current-user metadata and never forwarded', () => {
+  for (const value of ['foreign:0:0', '0xFFFFFFFF:0:0', '0:0', '0:../../owner:0']) assert.throws(() => neutralIosEnvironment({ __CF_USER_TEXT_ENCODING: value }), /IOS_HOST_MACOS_TEXT_ENCODING/);
+  if (typeof process.getuid === 'function') assert.deepEqual(neutralIosEnvironment({ __CF_USER_TEXT_ENCODING: '0x' + process.getuid().toString(16) + ':0x0:0x0' }), {});
+});
+test('iOS public preparation CLI rejects unknown fields before policy or tool admission', async t => {
+  const { iosHostCli } = await import('./ios-host-launch.mjs'), root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bytes = Buffer.from(JSON.stringify({ directory: path.join(root, 'NEVER_CREATED'), nodePolicy: null, rubyBundle: null, tools: null, unknownField: 'PUBLIC SYNTHETIC FIELD' })), file = path.join(root, 'input.json'); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  if (typeof process.getuid !== 'function') { await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_PREPARE_KEYS/);
+  assert.equal(fs.existsSync(path.join(root, 'NEVER_CREATED')), false);
+});
+test('actual RN archive redirect HEAD and SHA1 curl forms preserve arguments with exact marker and selected descriptor', () => {
+  const f = iosProjectionFixture(), url = 'https://packages.contract-fixture.org/rn.tgz', target = f.policy.paths.pods + '/ReactNativeCore-artifacts/reactnative-core.download';
+  const forms = [
+    ['-A', 'react-native-0.88.0', url, '-Lo', target],
+    ['-Ls', '-o', '/dev/null', '-w', '%{url_effective}', url],
+    ['-o', '/dev/null', '--silent', '-Iw', '%{http_code}', '-L', url],
+    ['-sL', url + '.sha1'],
+  ];
+  for (const args of forms) {
+    const row = iosHostCommandProjection(f.admitted, f.ref, 'curl', args, {});
+    assert.deepEqual(row.args.slice(7, -2), args); assert.deepEqual(row.args.slice(-2), ['-H', 'X-CaseOps-Automated-Test: no-paid-providers']);
+    assert.equal(row.args[2], '/dev/fd/3');
+    // Every projection owns its retained copy; restore the synthetic admitted buffer.
+    f.admitted.bundle = { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') }; row.bundle.fill(0);
+  }
+});
+test('RN curl variants reject arbitrary options URL authority and unrelated sidecars', () => {
+  const url = 'https://packages.contract-fixture.org/rn.tgz';
+  for (const args of [
+    ['-A', 'arbitrary-user-agent', url, '-Lo', '/owned/file'],
+    ['-A', 'react-native-0.88.0', url, '-Lo', '/owned/file', '--insecure'],
+    ['-Ls', '-o', '/dev/null', '-w', '%{url_effective}', url, '--next'],
+    ['-o', '/dev/null', '--silent', '-Iw', '%{http_code}', '-L', 'http://untrusted.invalid'],
+    ['-sL', url], ['-sL', 'https://user:pass@packages.contract-fixture.org/a.sha1'],
+  ]) assert.throws(() => validateIosCurlArguments(args), /IOS_HOST_/);
+});
+test('Git typed public downloader forms retain operands and bind every transport to selected CA and marker', () => {
+  const f = iosProjectionFixture(), repo = f.policy.paths.temporary + '/clone', url = 'https://packages.contract-fixture.org/repo.git';
+  for (const args of [['ls-remote', '--', url, 'main'], ['ls-remote', url, 'main'], ['clone', url, repo, '--template=', '--single-branch', '--depth', '1', '--branch', 'main'],
+    ['-C', repo, 'fetch', 'origin', '--progress'], ['-C', repo, 'pull', '--ff-only'], ['-C', repo, 'submodule', 'update', '--init', '--recursive']]) {
+    const row = projectIosGitArguments(args, f.policy.paths);
+    assert.equal(row.network, true); assert.deepEqual(row.args.slice(-args.length), args);
+    for (const setting of ['http.sslVerify=true', 'http.sslCAInfo=/dev/fd/3', 'http.sslCAPath=' + f.policy.paths.empty, 'http.extraHeader=X-CaseOps-Automated-Test: no-paid-providers', 'credential.helper=', 'protocol.allow=never', 'protocol.https.allow=always']) assert.ok(row.args.includes(setting), setting);
+  }
+  const git = iosHostCommandProjection(f.admitted, f.ref, 'git', ['ls-remote', '--', url], {});
+  assert.equal(git.executable, '/SYNTHETIC/git'); assert.equal(git.environment.NODE_OPTIONS, undefined); assert.ok(Buffer.isBuffer(git.bundle));
+  assert.equal(git.cwd, f.policy.paths.empty); assert.equal(git.environment.GIT_CEILING_DIRECTORIES, f.policy.paths.empty); git.bundle.fill(0);
+});
+test('Git constructor refuses credentials protocols arbitrary flags foreign targets and unreviewed revisions', () => {
+  const f = iosProjectionFixture(), repo = f.policy.paths.repos + '/public', url = 'https://packages.contract-fixture.org/repo.git';
+  for (const args of [['ls-remote', '--', 'ssh://packages.contract-fixture.org/repo'], ['ls-remote', '--', 'https://user:pass@packages.contract-fixture.org/repo'],
+    ['clone', url, '/SYNTHETIC/source-worktree', '--template='], ['clone', url, repo, '--template=/operator/template'], ['clone', url, repo, '--template=', '-c', 'http.sslVerify=false'],
+    ['-C', repo, 'config', 'credential.helper', 'UNADMITTED'], ['-C', repo, 'checkout', '--', '../outside'], ['-C', repo, 'reset', '--hard', '../main'],
+    ['-C', repo, 'fetch', 'file:///operator/source'], ['-c', 'http.sslVerify=false', 'ls-remote', url]]) assert.throws(() => projectIosGitArguments(args, f.policy.paths), /IOS_HOST_/);
+});
+function iosGitFilesystemFixture(t) {
+  const base = trustRoot(); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const paths = Object.fromEntries(['home', 'cache', 'temporary', 'pods', 'repos'].map(k => [k, path.join(base, k)]));
+  for (const p of Object.values(paths)) fs.mkdirSync(p, { mode: 0o700 });
+  const repository = path.join(paths.repos, 'public'); fs.mkdirSync(repository, { mode: 0o700 }); fs.mkdirSync(path.join(repository, '.git'), { mode: 0o700 });
+  const config = path.join(repository, '.git/config');
+  fs.writeFileSync(config, '[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote "origin"]\n\turl = https://packages.contract-fixture.org/public.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n', { mode: 0o600 });
+  return { paths, repository, config, command: { policy: { paths }, git: { repository, clone: false, family: 'fetch' } } };
+}
+test('Git real owned repository admission accepts canonical public config and refuses later symlink replacement', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), before = admitIosGitRepository(f.command);
+  assert.equal(before.repositoryIdentity.length, 5); assert.equal(before.root, f.paths.repos);
+  fs.renameSync(f.repository, f.repository + '-moved'); fs.symlinkSync(f.repository + '-moved', f.repository, 'dir');
+  assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_MUTATION_NAMESPACE/);
+});
+test('Git real config includes helper URL rewrites bypass flags and external object aliases refuse before a child', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), original = fs.readFileSync(f.config);
+  for (const row of ['[include]\n path = /operator/config', '[credential]\n helper = shell', '[http]\n sslVerify = false', '[url "https://unadmitted.invalid/"]\n insteadOf = https://packages.contract-fixture.org/']) {
+    fs.writeFileSync(f.config, Buffer.concat([original, Buffer.from(row + '\n')]));
+    assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_GIT_CONFIG/);
+  }
+  fs.writeFileSync(f.config, original); fs.writeFileSync(path.join(f.repository, '.git/commondir'), '/operator/repo');
+  assert.throws(() => admitIosGitRepository(f.command), /IOS_HOST_GIT_EXTERNAL_OBJECTS/);
+});
+test('Git new clone target must be empty owned and canonical without following an existing symlink', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), target = path.join(f.paths.temporary, 'new-clone'), command = { policy: { paths: f.paths }, git: { repository: target, clone: true, family: 'clone' } };
+  assert.equal(admitIosGitRepository(command).repositoryIdentity, null); fs.mkdirSync(target, { mode: 0o700 });
+  assert.equal(admitIosGitRepository(command).repositoryIdentity.length, 5); fs.writeFileSync(path.join(target, 'retained'), 'PUBLIC');
+  assert.throws(() => admitIosGitRepository(command), /IOS_HOST_GIT_NEW_TARGET/);
+});
+test('Git selected-file copy retains a real descriptor and refuses permission drift without removing changed evidence', t => {
+  const command = iosDescriptorFixture(t); command.role = 'git';
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command);
+  assert.equal(fs.fstatSync(transport.fd).mode & 0o777, 0o400);
+  fs.fchmodSync(transport.fd, 0o600);
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.existsSync(transport.file), true); command.bundle.fill(0);
+});
+test('Git selected-file final check refuses a same-leaf symlink substitution and closes the original held descriptor', t => {
+  const command = iosDescriptorFixture(t); command.role = 'git';
+  if (typeof process.getuid !== 'function') { assert.throws(() => openIosCurlTransport(command), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const transport = openIosCurlTransport(command), retained = transport.file + '-retained'; fs.renameSync(transport.file, retained); fs.symlinkSync(retained, transport.file);
+  assert.throws(() => transport.finish(), /IOS_HOST_TRANSPORT_CHANGED/);
+  assert.throws(() => fs.fstatSync(transport.fd), { code: 'EBADF' }); assert.equal(fs.lstatSync(transport.file).isSymbolicLink(), true); command.bundle.fill(0);
+});
+test('public local QA entry rejects store signing and nonmetadata Pod modes before any policy or transport read', async () => {
+  const ref = { path: '/NEVER_READ', sha256: '0'.repeat(64), sizeBytes: 1 }; let calls = 0;
+  for (const role of ['store', 'signing', 'xcodebuild']) await assert.rejects(runIosLocalQaCommand(ref, role, [], { transport: () => { calls++; } }), /IOS_HOST_LOCAL_QA_COMMAND/);
+  await assert.rejects(runIosLocalQaCommand(ref, 'pod', ['install'], { transport: () => { calls++; } }), /IOS_HOST_LOCAL_QA_METADATA_ONLY/);
+  assert.equal(calls, 0);
+});
+test('actual generated project Pods root is separately bound from CP_HOME with owned0755 parents and no broad checkout mutation', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => admitIosGitRepository({}), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosGitFilesystemFixture(t), source = path.join(f.paths.home, 'source'), projectPods = path.join(source, 'apps/mobile/ios/Pods');
+  fs.mkdirSync(projectPods, { recursive: true, mode: 0o755 });
+  const paths = { ...f.paths, projectPods }, command = { policy: { paths }, git: { repository: path.join(projectPods, 'PublicPod'), clone: true, family: 'clone' } };
+  const row = admitIosGitRepository(command); assert.equal(row.root, projectPods);
+  const parent = path.dirname(projectPods); fs.chmodSync(parent, 0o777);
+  assert.throws(() => admitIosGitRepository(command), /IOS_HOST_PROJECT_PODS_NAMESPACE/); fs.chmodSync(parent, 0o755);
+  const foreign = { ...command, git: { ...command.git, repository: path.join(source, 'unrelated') } };
+  assert.throws(() => admitIosGitRepository(foreign), /IOS_HOST_OWNED_MUTATION_PATH/);
+});
+test('iOS Node and npm metadata use the exact anonymous4 layer without leaking it to Ruby curl or Xcode', () => {
+  const f = iosProjectionFixture(), original = {};
+  const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], original);
+  assert.deepEqual(Object.fromEntries(Object.entries(node.environment).filter(([k]) => k.startsWith('NPM_CONFIG_'))), {
+    NPM_CONFIG_USERCONFIG: f.policy.nodeNpm.user.path, NPM_CONFIG_GLOBALCONFIG: f.policy.nodeNpm.global.path,
+    NPM_CONFIG_STRICT_SSL: 'true', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' });
+  const npm = iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) });
+  assert.equal(npm.executable, f.policy.tools.node.path); assert.equal(npm.args[0], '--input-type=module');
+  assert.deepEqual(npm.args.slice(-3), ['--', 'npm', '--version']);
+  assert.equal(npm.args[2], f.admitted.npmRuntime.environment.CASEOPS_PINNED_NPM_BOOTSTRAP);
+  assert.equal(npm.environment.CASEOPS_PINNED_NPM_CLI, f.admitted.npmRuntime.root + '/package/bin/npm-cli.js');
+  assert.equal(npm.environment.PATH.split(':')[0], f.admitted.npmRuntime.root + '/bin');
+  const absent = iosProjectionFixture(); delete absent.admitted.npmRuntime;
+  assert.throws(() => iosHostCommandProjection(absent.admitted, absent.ref, 'npm', ['--version'], {}), /IOS_HOST_NPM_ACTUAL_CONSTRUCTOR_REQUIRED/);
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'npm', ['publish'], {}), /IOS_HOST_NPM_METADATA_ONLY/);
+  for (const role of ['ruby', 'xcodebuild']) assert.equal(iosHostCommandProjection(f.admitted, f.ref, role, [], {}).environment.NPM_CONFIG_USERCONFIG, undefined);
+  assert.deepEqual(original, {});
+});
+test('iOS npm recipes reject lowercase conflicting registry CA proxy and credential overrides before payload', () => {
+  for (const environment of [{ npm_config_userconfig: '/operator/npmrc' }, { NPM_CONFIG_USERCONFIG: '/operator/npmrc' },
+    { NPM_CONFIG_GLOBALCONFIG: '/operator/npmrc' }, { NPM_CONFIG_REGISTRY: 'https://unadmitted.invalid/' }, { NPM_CONFIG_STRICT_SSL: 'false' },
+    { NPM_CONFIG_CAFILE: '/operator/extra.pem' }, { NPM_CONFIG_PROXY: 'http://127.0.0.1:1' }, { NPM_CONFIG__AUTH: 'SYNTHETIC_UNADMITTED' }]) {
+    const f = iosProjectionFixture(); assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'node', ['-v'], environment), /IOS_HOST_CROSS_ROLE_OVERRIDE/);
+  }
+});
+test('iOS project npmrc absence fence catches late file or symlink creation without reading either payload', t => {
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'apps/mobile'), { recursive: true, mode: 0o700 }); fs.mkdirSync(path.join(root, 'scripts/mobile'), { recursive: true, mode: 0o700 });
+  const p = { helper: { path: path.join(root, 'scripts/mobile/ios-host-launch.mjs') } };
+  assert.equal(reviewProjectNpm(p).length, 2);
+  const npmrc = path.join(root, 'apps/mobile/.npmrc'), target = path.join(root, 'UNREAD_CONFIG'); fs.writeFileSync(target, 'SYNTHETIC_UNREAD_PRIVATE_CONFIG');
+  const actual = fs.readSync; let reads = 0; fs.readSync = (...args) => { reads++; return actual(...args); };
+  try { fs.writeFileSync(npmrc, 'SYNTHETIC_UNREAD_PRIVATE_CONFIG'); assert.throws(() => reviewProjectNpm(p), /IOS_HOST_PROJECT_NPMRC_REFUSED/); fs.unlinkSync(npmrc);
+    fs.symlinkSync(target, npmrc); assert.throws(() => reviewProjectNpm(p), /IOS_HOST_PROJECT_NPMRC_REFUSED/); }
+  finally { fs.readSync = actual; }
+  assert.equal(reads, 0);
+});
+test('iOS public preparation CLI refuses malformed UTF8 without normalizing hashed input bytes', async t => {
+  const { iosHostCli } = await import('./ios-host-launch.mjs'), root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'input.json'), bytes = Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]); fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+  if (typeof process.getuid !== 'function') { await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  await assert.rejects(iosHostCli(['prepare', file, createHash('sha256').update(bytes).digest('hex'), String(bytes.length)]), { code: 'ERR_ENCODING_INVALID_ENCODED_DATA' });
+  assert.deepEqual(fs.readFileSync(file), bytes);
+});
+test('iOS retained Pods source uses existing bounded stdin instead of exceeding the unchanged argv contract', () => {
+  const f = iosProjectionFixture(); f.admitted.podsSource = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url));
+  const row = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install', '--deployment', '--no-repo-update'], {});
+  assert.ok(f.admitted.podsSource.length > 8192); assert.ok(row.args.every(value => value.length <= 8192));
+  assert.ok(row.input.length <= 1048576); assert.deepEqual(row.input, Buffer.concat([f.admitted.podsSource, Buffer.from('\nCaseopsIosPods.run\n')])); row.input.fill(0);
+});
+test('iOS role projection drops only the typed pinned-worker status descriptor marker', () => {
+  assert.deepEqual(neutralIosEnvironment({ CASEOPS_STORE_CHILD_STATUS_FD: '6' }), {});
+  for (const value of ['-1', '0', '2', '3.0', 'true', '2147483648', 'SYNTHETIC']) assert.throws(() => neutralIosEnvironment({ CASEOPS_STORE_CHILD_STATUS_FD: value }), /IOS_HOST_INTERNAL_STATUS_FD/);
+  const source = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url), 'utf8'); assert.doesNotMatch(source, /\$PROGRAM_NAME\s*=/);
+});
+
+test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
+  const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
+  assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1'"));
+  const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
+  const pin = createHash('sha256').update(input).digest('hex');
+  assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
+  const fast = helper.slice(helper.indexOf('const GIT_READONLY_BOOTSTRAP ='), helper.indexOf('export function renderIosHostBuildEntry'));
+  assert.match(fast, /exec\(compile\(bytes\(b\),ref\['path'\],'exec'\),scope\)/);
+  assert.match(fast, /case "\$\{1-\}" in --version\|rev-parse\|ls-files\|status\|check-ignore/);
+  assert.match(fast, /\/usr\/bin\/env -i PATH=\/usr\/bin:\/bin/);
+  assert.doesNotMatch(fast.slice(0, fast.indexOf('function shimBytes')), /nodeRecipe|NODE_OPTIONS|SSL_CERT_FILE/);
+  const snapshot = fs.readFileSync(new URL('source-snapshot.mjs', root), 'utf8');
+  assert.ok(snapshot.includes("'scripts/mobile/ios-git-readonly.py'"));
+  assert.ok(fs.readFileSync(new URL('../../.gitattributes', root), 'utf8').includes('scripts/mobile/ios-git-readonly.py text eol=lf'));
+});
+
+test('Windows owner refusal exposes only fixed existing-source classes before any payload read', () => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), originalSpawn = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot, open = fs.openSync, read = fs.readSync, root = trustRoot();
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    const rows = [
+      [{ ownerClass: 'ADMINISTRATORS', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_WRITE_SAFE'],
+      [{ ownerClass: 'SYSTEM', tokenOwnerClass: 'ADMINISTRATORS', writeScopeSafe: false }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_SYSTEM_TOKEN_ADMINISTRATORS_WRITE_UNSAFE'],
+      [{ ownerClass: 'TOKEN_OTHER', tokenOwnerClass: 'OTHER', writeScopeSafe: true }, 'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_TOKEN_OTHER_TOKEN_OTHER_WRITE_SAFE'],
+      [{ ownerClass: 'S-1-5-21-PRIVATE', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+      [{ ownerClass: 'OTHER', tokenOwnerClass: root, writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+      [{ ownerClass: 'CURRENT_USER', tokenOwnerClass: 'CURRENT_USER', writeScopeSafe: true }, 'HOST_TRUST_WINDOWS_ACL_PROTOCOL'],
+    ];
+    for (const [detail, expected] of rows) {
+      const fds = []; let reads = 0;
+      fs.openSync = (...args) => { const fd = open(...args); fds.push(fd); return fd; }; fs.readSync = (...args) => { reads++; return read(...args); };
+      cp.spawnSync = (_exe, _args, options) => {
+        assert.equal(options.timeout, 5000); assert.equal(path.basename(options.env.CASEOPS_TRUST_ACL_PATH), 'host-node-trust.mjs');
+        return { status: 0, stdout: JSON.stringify({ ownerMatches: false, ...detail }), stderr: 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n' };
+      }; syncBuiltinESMExports();
+      assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'uncreated'), environment: neutralTrustEnv() }), error => {
+        assert.equal(error.message, expected); assert.ok(!error.message.includes(root) && !error.message.includes('S-1-5-21-PRIVATE')); assert.equal(ciTrustFailureCode(error), expected); return true;
+      });
+      assert.equal(reads, 0); assert.equal(fs.existsSync(path.join(root, 'uncreated')), false); assert.ok(fds.length > 0);
+      for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    }
+  } finally {
+    fs.openSync = open; fs.readSync = read; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
+    Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Windows parent-directory owner refusal stays distinct from existing code and creates no policy objects', () => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot, open = fs.openSync, root = trustRoot(), fds = []; let sawCode = false, directories = 0;
+  try {
+    process.env.SystemRoot = root; Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    fs.openSync = (...args) => { const fd = open(...args); fds.push(fd); return fd; };
+    cp.spawnSync = (_exe, _args, options) => {
+      const directory = options.env.CASEOPS_TRUST_ACL_KIND === 'directory';
+      if (directory) { directories++; assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, root); } else sawCode = true;
+      return { status: 0, stdout: JSON.stringify(directory ? { ownerMatches: false, writeScopeSafe: true, ownerClass: 'SYSTEM', tokenOwnerClass: 'CURRENT_USER' } : { ownerMatches: true, writeScopeSafe: true }), stderr: 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n' };
+    }; syncBuiltinESMExports();
+    assert.throws(() => prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() }), { message: 'HOST_TRUST_CURRENT_OWNER_REQUIRED_PARENT_DIRECTORY_OWNER_SYSTEM_TOKEN_CURRENT_USER_WRITE_SAFE' });
+    assert.equal(sawCode, true); assert.equal(directories, 1); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
+    for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+  } finally {
+    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CI owner diagnostics reject arbitrary roles and private detail instead of reflecting it', () => {
+  for (const message of [
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_PRIVATE_PATH_OWNER_SYSTEM_TOKEN_CURRENT_USER_WRITE_SAFE',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_S-1-5-21-PRIVATE_TOKEN_CURRENT_USER_WRITE_SAFE',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_SYSTEM_TOKEN_OTHER_WRITE_SAFE_TRAILING',
+    'HOST_TRUST_CURRENT_OWNER_REQUIRED_SOURCE_HELPER_OWNER_CURRENT_USER_TOKEN_CURRENT_USER_WRITE_SAFE',
+  ]) assert.equal(ciTrustFailureCode(new Error(message)), 'CI_TRUST_PREPARATION_REFUSED');
+  assert.equal(ciTrustFailureCode(new Error('HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE\nPRIVATE_PATH')), 'HOST_TRUST_CURRENT_OWNER_REQUIRED_ROOTS_OUTPUT_OWNER_OTHER_TOKEN_OTHER_WRITE_UNSAFE');
+});
+
+function ciSourceCheck() {
+  const deadline = performance.now() + 30000, check = () => assert.ok(performance.now() < deadline);
+  Object.defineProperty(check, 'deadline', { value: deadline }); return check;
+}
+async function ciSourceFixture(callback) {
+  const root = trustRoot(), source = path.join(root, 'source'), parent = path.join(root, 'new-parent');
+  fs.mkdirSync(source, { mode: 0o700 }); fs.mkdirSync(parent, { mode: 0o700 });
+  for (const name of ['host-node-trust-ci.mjs', 'host-node-trust.mjs', 'host-node-trust-start.mjs']) fs.writeFileSync(path.join(source, name), fs.readFileSync(new URL(name, import.meta.url)), { flag: 'wx', mode: 0o600 });
+  try { const api = await import(pathToFileURL(path.join(source, 'host-node-trust-ci.mjs')).href); return await callback({ root, source, parent, api }); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+function ciSourceTrace() {
+  const open = fs.openSync, read = fs.readSync, write = fs.writeSync, descriptors = new Map(); let reads = 0, writes = 0;
+  fs.openSync = (name, ...args) => { const fd = open(name, ...args); descriptors.set(fd, String(name)); return fd; };
+  fs.readSync = (...args) => { reads++; return read(...args); }; fs.writeSync = (...args) => { writes++; return write(...args); };
+  return { descriptors, read, write, get reads() { return reads; }, get writes() { return writes; }, restore() { fs.openSync = open; fs.readSync = read; fs.writeSync = write; }, closed() { for (const fd of descriptors.keys()) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' }); } };
+}
+function ciSourceWindowsProofs(change) {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), spawn = cp.spawnSync;
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  let calls = 0;
+  Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' }); process.env.SystemRoot = '/owned-public-windows-system';
+  cp.spawnSync = (_exe, args, options) => {
+    calls++; assert.ok(options.timeout > 0 && options.timeout <= 5000 && Number.isInteger(options.timeout)); assert.equal(options.maxBuffer, 4096); assert.doesNotMatch(args.at(-1), /Get-Acl|ConvertTo-Json|ConvertFrom-Json|SetAccessControl|SetOwner/);
+    const rows = Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
+    change?.(rows, calls, options); return { status: 0, stdout: JSON.stringify(rows), stderr: '' };
+  }; syncBuiltinESMExports();
+  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
+}
+
+test('CI runtime copies retain exact reviewed Git blobs with independent readonly owned files', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const check = ciSourceCheck(), staged = api.stageCIHostNodeRuntimeSources(parent, check);
+  const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+  const identity = value => fields.map(key => value[key]);
+  const namedMatches = (named, descriptor) => {
+    for (const key of fields) {
+      if (key === 'dev' && process.platform === 'win32' && named.dev === 0n) continue;
+      assert.equal(named[key], descriptor[key]);
+    }
+  };
+  const namespace = file => {
+    check(); assert.ok(path.isAbsolute(file)); assert.equal(path.resolve(file), file); assert.equal(fs.realpathSync.native(file), file);
+    const rows = []; let directory = path.dirname(file);
+    while (true) {
+      check(); assert.ok(rows.length < 128);
+      const value = fs.lstatSync(directory, { bigint: true });
+      assert.ok(value.isDirectory() && !value.isSymbolicLink()); assert.equal(fs.realpathSync.native(directory), directory);
+      rows.push([directory, value.dev, value.ino, value.mode, value.uid, value.gid]);
+      if (path.dirname(directory) === directory) return rows;
+      directory = path.dirname(directory);
+    }
+  };
+  const read = (fd, expected) => {
+    const bytes = Buffer.alloc(Number(expected) + 1); let used = 0;
+    while (used < bytes.length) {
+      check(); const count = fs.readSync(fd, bytes, used, bytes.length - used, null);
+      if (!count) break;
+      used += count;
+    }
+    assert.equal(used, Number(expected)); return bytes.subarray(0, used);
+  };
+  try {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '1ec73b3c42d8b79d93775d56ffad383645c55ce8']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
+      const input = path.join(source, name), output = staged.sourceRefs[role].path;
+      const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+      let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
+      try {
+        inputFd = fs.openSync(input, flags); outputFd = fs.openSync(output, flags);
+        const inputOpened = fs.fstatSync(inputFd, { bigint: true }), outputOpened = fs.fstatSync(outputFd, { bigint: true });
+        for (const value of [inputOpened, outputOpened]) {
+          assert.ok(value.isFile()); assert.equal(value.nlink, 1n); assert.equal(value.size, expected);
+          if (typeof process.getuid === 'function') assert.equal(value.uid, BigInt(process.getuid()));
+        }
+        assert.notEqual(inputOpened.ino, outputOpened.ino); assert.equal(outputOpened.mode & 0o777n, 0o400n); assert.equal(inputOpened.mode & 0o777n, 0o600n);
+        const inputNamespace = namespace(input), outputNamespace = namespace(output);
+        const inputNamed = fs.lstatSync(input, { bigint: true }), outputNamed = fs.lstatSync(output, { bigint: true });
+        assert.ok(inputNamed.isFile() && !inputNamed.isSymbolicLink()); assert.ok(outputNamed.isFile() && !outputNamed.isSymbolicLink());
+        namedMatches(inputNamed, inputOpened); namedMatches(outputNamed, outputOpened);
+        const inputBytes = read(inputFd, expected), outputBytes = read(outputFd, expected);
+        assert.deepEqual(inputBytes, outputBytes); if (role === 'helper') assert.deepEqual(staged.retainedHelper, inputBytes);
+        assert.deepEqual(inputNamespace, namespace(input)); assert.deepEqual(outputNamespace, namespace(output));
+        assert.deepEqual(identity(inputOpened), identity(fs.fstatSync(inputFd, { bigint: true }))); assert.deepEqual(identity(outputOpened), identity(fs.fstatSync(outputFd, { bigint: true })));
+        assert.deepEqual(identity(inputNamed), identity(fs.lstatSync(input, { bigint: true }))); assert.deepEqual(identity(outputNamed), identity(fs.lstatSync(output, { bigint: true })));
+      } catch (error) { bodyFailed = true; originalFailure = error; }
+      finally {
+        for (const fd of [outputFd, inputFd]) if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch (error) { closeFailures.push(error); }
+        }
+      }
+      if (bodyFailed) throw originalFailure;
+      if (closeFailures.length) throw new AggregateError(closeFailures, 'CI source pair descriptor close failed');
+    }
+  } finally { staged.retainedHelper.fill(0); }
+}));
+
+test('CI observed Administrators source is admitted only as pinned public data while new objects stay strict', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(), trace = ciSourceTrace(); let staged;
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(proof.calls, 2); assert.ok(staged.provenance.every(row => row.originalAcl.runtimeOwner === false && row.originalAcl.reviewedAdminSource && row.copiedAcl.runtimeOwner)); }
+  finally { trace.restore(); proof.restore(); staged?.retainedHelper.fill(0); }
+  trace.closed();
+}));
+
+test('CI source data exception cannot admit a foreign new copy owner or unsafe ACL before payload', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[4].runtimeOwner = false; rows[4].reviewedAdminSource = true; }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_COPY/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); proof.restore(); }
+  trace.closed();
+}));
+
+test('CI source hardlink refuses before bytes and closes its original descriptor', async () => ciSourceFixture(async ({ root, source, parent, api }) => {
+  fs.linkSync(path.join(source, 'host-node-trust.mjs'), path.join(root, 'alias')); const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_INPUT/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source changed reviewed bytes never become copy payload and all four descriptors close', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'), bytes = fs.readFileSync(file); bytes[0] ^= 1; fs.writeFileSync(file, bytes);
+  const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES/); assert.equal(trace.writes, 0); assert.equal(trace.descriptors.size, 4); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source replacement during the first ACL observation gives zero payload reads', async () => ciSourceFixture(async ({ root, source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'); let changed = false;
+  const proof = ciSourceWindowsProofs((_rows, call) => { if (call === 1) { fs.renameSync(file, path.join(root, 'retained-original')); fs.copyFileSync(path.join(root, 'retained-original'), file); changed = true; } }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ/); assert.equal(changed, true); assert.equal(trace.reads, 0); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI source copy replacement changes no existing replacement mode and closes all descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const trace = ciSourceTrace(); let replacement, changed = false;
+  fs.writeSync = (fd, ...args) => {
+    const n = trace.write(fd, ...args), name = trace.descriptors.get(fd);
+    if (!changed && name?.endsWith('runtime-source/host-node-trust.mjs')) { changed = true; fs.renameSync(name, path.join(root, 'retained-created-copy')); fs.writeFileSync(name, 'existing replacement', { flag: 'wx', mode: 0o600 }); replacement = name; }
+    return n;
+  };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED/); assert.equal(changed, true); assert.equal(fs.readFileSync(replacement, 'utf8'), 'existing replacement'); assert.equal(fs.statSync(replacement).mode & 0o777, 0o600); }
+  finally { trace.restore(); } trace.closed();
+}));
+
+test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const trace = ciSourceTrace(); let staged;
+  fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29741); }
+  finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
+  const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
+  finally { refused.restore(); } refused.closed();
+}));
+
+test('CI source late ACL drift is refused after owned-copy writes', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((rows, call, options) => { if (call === 2) { rows[0].aclSha256 = 'b'.repeat(64); } }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_ACL_CHANGED/); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI explicit Windows preparation imports copied bytes and scopes child policy while Unix stays original', async () => {
+  const root = trustRoot(), file = path.join(root, 'commands'), workspace = path.join(root, 'workspace'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(file, 'EARLIER=retained', { flag: 'wx', mode: 0o600 });
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: file };
+  try {
+    const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
+    const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+    const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18');
+    const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
+    const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
+    const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+    assert.equal(JSON.parse(fs.readFileSync(rows.CASEOPS_HOST_NODE_TRUST_POLICY_FILE)).runtimeSource.helper.path, trustHelper);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('CI source late extra namespace entry is independently refused with unchanged ACL proof', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((_rows, call, options) => { if (call === 2) fs.writeFileSync(path.join(path.dirname(options.env.CASEOPS_SOURCE_4), 'late'), 'new', { flag: 'wx', mode: 0o600 }); }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_COMPLETE_NAMES/); assert.equal(proof.calls, 2); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+
+test('CI pinned input exception rejects foreign input owner missing user and unsafe copied writer before payload', async () => {
+  for (const change of [rows => { rows[0].reviewedAdminSource = false; }, rows => { rows[0].tokenUserPresent = false; }, rows => { rows[5].writeScopeSafe = false; }]) {
+    await ciSourceFixture(async ({ parent, api }) => {
+      const proof = ciSourceWindowsProofs(change), trace = ciSourceTrace();
+      try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_(?:OWNER_HELPER_INPUT|ACL_PROTOCOL)/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+      finally { trace.restore(); proof.restore(); } trace.closed();
+    });
+  }
+});
+
+test('CI source closed deadline refuses before creating runtime namespace or opening payload', async () => ciSourceFixture(async ({ parent, api }) => {
+  const check = () => assert.fail('expired callback must not run'); Object.defineProperty(check, 'deadline', { value: performance.now() - 1 });
+  const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, check), /CI_TRUST_RUNTIME_SOURCE_DEADLINE/); assert.equal(trace.descriptors.size, 0); assert.equal(fs.existsSync(path.join(parent, 'runtime-source')), false); }
+  finally { trace.restore(); }
+}));
+
+test('CI source parent alias refuses before source payload and never changes existing target', async () => ciSourceFixture(async ({ root, parent, api }) => {
+  const alias = path.join(root, 'alias'); fs.symlinkSync(parent, alias, 'dir'); const trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(alias, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_NAMESPACE/); assert.equal(trace.reads, 0); assert.equal(fs.existsSync(path.join(parent, 'runtime-source')), false); }
+  finally { trace.restore(); }
+}));
+
+test('CI Windows entry executes only copied bytes when exact public inputs have nonexclusive writer observations', async () => ciSourceFixture(async ({ root, source }) => {
+  const workspace = path.join(root, 'workspace'), commands = path.join(root, 'commands'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(commands, '', { flag: 'wx', mode: 0o600 });
+  const script = `import fs from 'node:fs'; import { createRequire, registerHooks, syncBuiltinESMExports } from 'node:module'; import { pathToFileURL } from 'node:url';
+    const root=process.env.OWNED_FIXTURE_ROOT, source=process.env.OWNED_FIXTURE_SOURCE; let originalLoads=0, batches=0;
+    registerHooks({load(url,context,next){if(url===pathToFileURL(source+'/host-node-trust.mjs').href){originalLoads++;throw Error('ORIGINAL_H_FILE_IMPORT_REFUSED')}return next(url,context)}});
+    Object.defineProperty(process,'platform',{value:'win32'}); Object.defineProperty(process,'getuid',{value:undefined}); process.env.SystemRoot='/owned-public-windows-system';
+    const cp=createRequire(import.meta.url)('node:child_process'); cp.spawnSync=(_exe,args,options)=>{
+      if(options.env.CASEOPS_PARENT_CREATED_PATH){const p=options.env.CASEOPS_PARENT_CREATED_PATH;fs.mkdirSync(p,{mode:0o700});const f=fs.lstatSync(p,{bigint:true});return{status:0,stdout:JSON.stringify({created:true,ownerCurrent:true,protected:true,writersExact:true,ino:String(f.ino),volume:String(f.dev),birthtimeNs:String(f.birthtimeNs)}),stderr:[0,1,2,3,4].map(n=>'COPS_PARENT'+n).join(String.fromCharCode(10))+String.fromCharCode(10)}};
+      if(options.env.CASEOPS_SOURCE_0){batches++;return {status:0,stdout:JSON.stringify(Array.from({length:6},(_,i)=>({runtimeOwner:i>=2,reviewedAdminSource:i<2,writeScopeSafe:i>=2,tokenUserPresent:true,aclSha256:'a'.repeat(64)}))),stderr:''}};
+      if(args.at(-1).includes("[Console]::Out.Write('SAFE')"))return{status:0,stdout:'SAFE',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
+      return{status:0,stdout:'{"ownerMatches":true,"writeScopeSafe":true}',stderr:'COPS_ACL0\\nCOPS_ACL1\\nCOPS_ACL2\\nCOPS_ACL3\\n'.replaceAll('\\\\n','\\n')};
+    }; syncBuiltinESMExports();
+    const api=await import(pathToFileURL(source+'/host-node-trust-ci.mjs')); const result=await api.prepareCIHostNodeTrustWindows();
+    console.log(JSON.stringify({originalLoads,batches,roots:result.approvedRoots,copies:result.runtimeSourceCopies.length,keys:result.appendedKeys}));`;
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: commands, OWNED_FIXTURE_ROOT: root, OWNED_FIXTURE_SOURCE: source };
+  const output = execFileSync(process.execPath, ['--input-type=module', '--eval', script], { env: environment, timeout: 30000, encoding: 'utf8', maxBuffer: 16384 });
+  assert.deepEqual(JSON.parse(output), { originalLoads: 0, batches: 2, roots: 144, copies: 2, keys: 9 });
+}));
+
+
+test('CI source cleanup retains original failure and attempts all four descriptor closures', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const file = path.join(source, 'host-node-trust.mjs'), bytes = fs.readFileSync(file); bytes[0] ^= 1; fs.writeFileSync(file, bytes);
+  const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, closed = [], diagnostics = []; let first = true;
+  process.stderr.write = value => { diagnostics.push(value); return true; };
+  fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw new Error('synthetic close acknowledgement failure'); } };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), error => error.message === 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES'); assert.equal(closed.length, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+  finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+}));
+
+
+async function ciOriginalFaultAndCloseFailure(original) {
+  return ciSourceFixture(async ({ parent, api }) => {
+    const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, closed = [], diagnostics = []; let first = true, caught = false;
+    fs.writeSync = () => { throw original; }; fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw new Error('synthetic close acknowledgement failure'); } };
+    process.stderr.write = value => { diagnostics.push(value); return true; };
+    try { try { api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); } catch (error) { caught = true; assert.equal(error, original); } assert.equal(caught, true); assert.equal(closed.length, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+    finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+  });
+}
+test('CI source cleanup preserves a frozen original Error identity and reports only the fixed close refusal', async () => {
+  const original = Object.freeze(new Error('synthetic retained body failure')); await ciOriginalFaultAndCloseFailure(original); assert.equal(Object.hasOwn(original, 'runtimeSourceCleanupError'), false);
+});
+test('CI source cleanup preserves falsy and primitive original throws while every descriptor closes', async () => {
+  for (const original of [undefined, null, false, 0, 'synthetic primitive fault']) await ciOriginalFaultAndCloseFailure(original);
+});
+test('CI source successful body with a close failure returns no retained source and never retries the close', async () => ciSourceFixture(async ({ parent, api }) => {
+  const trace = ciSourceTrace(), close = fs.closeSync, stderr = process.stderr.write, diagnostics = [], closed = []; let first = true;
+  fs.closeSync = fd => { closed.push(fd); close(fd); if (first) { first = false; throw undefined; } }; process.stderr.write = value => { diagnostics.push(value); return true; };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_CLOSE' }); assert.equal(closed.length, 4); assert.equal(new Set(closed).size, 4); assert.deepEqual(diagnostics, ['CI_TRUST_RUNTIME_SOURCE_CLOSE\n']); }
+  finally { process.stderr.write = stderr; fs.closeSync = close; trace.restore(); } trace.closed();
+}));
+
+const ciAclProtocolRoles = ['HELPER_INPUT', 'BOOTSTRAP_INPUT', 'PARENT_DIRECTORY', 'RUNTIME_DIRECTORY', 'HELPER_COPY', 'BOOTSTRAP_COPY'];
+const ciAclProtocolRows = () => Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
+test('CI six-object ACL decoder preserves the exact valid response and does not promote source ownership', () => {
+  const rows = ciAclProtocolRows(), parsed = reviewCIHostSourceAclOutput(JSON.stringify(rows)); assert.deepEqual(parsed, rows);
+  assert.equal(parsed[0].runtimeOwner, false); assert.equal(parsed[0].reviewedAdminSource, true); assert.ok(parsed.slice(2).every(row => row.runtimeOwner));
+});
+test('CI ACL protocol diagnostics distinguish bounded output and array shapes without reflecting raw values', () => {
+  for (const [value, reason] of [[undefined, 'JSON_TYPE'], ['', 'JSON_EMPTY'], ['  \r\n', 'JSON_EMPTY'], ['x'.repeat(4097), 'JSON_SIZE'], ['界'.repeat(1400), 'JSON_SIZE'], ['S-1-5-21-SYNTHETIC_PRIVATE_PATH', 'JSON_INVALID'], ['\ufeff[]', 'JSON_INVALID'], ['null', 'ARRAY_TYPE'], ['{}', 'ARRAY_TYPE'], ['[]', 'ARRAY_COUNT'], [JSON.stringify(ciAclProtocolRows().slice(0, 5)), 'ARRAY_COUNT'], [JSON.stringify([...ciAclProtocolRows(), {}]), 'ARRAY_COUNT']]) {
+    const expected = 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_OUTPUT_' + reason;
+    assert.throws(() => reviewCIHostSourceAclOutput(value), error => { assert.equal(error.message, expected); assert.equal(ciTrustFailureCode(error), expected); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+  }
+});
+test('CI ACL decoder identifies only the fixed object role and failing field class for every row', () => {
+  const changes = [
+    [row => null, 'ROW_TYPE'], [row => [], 'ROW_TYPE'], [row => 'SYNTHETIC_PRIVATE', 'ROW_TYPE'],
+    [row => ({ ...row, SYNTHETIC_PRIVATE: 'S-1-5-21-SYNTHETIC' }), 'FIELDS'],
+    [row => ({ ...row, runtimeOwner: 'SYNTHETIC_PRIVATE' }), 'OWNER_TYPE'],
+    [row => ({ ...row, reviewedAdminSource: 1 }), 'ADMIN_TYPE'],
+    [row => ({ ...row, writeScopeSafe: 'true' }), 'WRITE_TYPE'], [row => ({ ...row, writeScopeSafe: false }), 'WRITE_UNSAFE'],
+    [row => ({ ...row, tokenUserPresent: 'SYNTHETIC_PRIVATE' }), 'USER_TYPE'], [row => ({ ...row, tokenUserPresent: false }), 'USER_MISSING'],
+    [row => ({ ...row, aclSha256: null }), 'HASH_TYPE'], [row => ({ ...row, aclSha256: 'SYNTHETIC_PRIVATE' }), 'HASH_FORMAT'],
+  ];
+  for (let index = 0; index < 6; index++) for (const [change, reason] of changes) {
+    const rows = ciAclProtocolRows(); rows[index] = change(rows[index]); const expected = 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_' + reason;
+    assert.throws(() => reviewCIHostSourceAclOutput(JSON.stringify(rows)), error => { assert.equal(error.message, expected); assert.equal(ciTrustFailureCode(error), expected); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+  }
+});
+test('CI actual staged-source strict runtime writers and every token-user refusal read zero payload', async () => {
+  for (let index = 0; index < 6; index++) for (const [key, reason] of (index < 2 ? [['tokenUserPresent', 'USER_MISSING']] : [['writeScopeSafe', 'WRITE_UNSAFE'], ['tokenUserPresent', 'USER_MISSING']])) await ciSourceFixture(async ({ parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[index][key] = false; }), trace = ciSourceTrace();
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_' + reason }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(proof.calls, 1); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});
+test('CI late malformed ACL hash refuses the staged result and purges all retained source buffers', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs((rows, call) => { if (call === 2) rows[5].aclSha256 = 'SYNTHETIC_PRIVATE'; }), trace = ciSourceTrace(), buffers = new Set();
+  fs.readSync = (...args) => { buffers.add(args[1]); return trace.read(...args); };
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_BOOTSTRAP_COPY_HASH_FORMAT' }); assert.equal(proof.calls, 2); assert.ok(buffers.size >= 4); assert.ok([...buffers].every(buffer => buffer.every(value => value === 0))); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+test('CI ACL protocol diagnostics reject forged roles reasons and appended private detail', () => {
+  for (const value of ['CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_SYNTHETIC_PRIVATE_WRITE_UNSAFE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_SYNTHETIC_PRIVATE', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_HASH_FORMAT_S-1-5-21-SYNTHETIC', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_OUTPUT_JSON_INVALID'.repeat(5)]) assert.equal(ciTrustFailureCode(new Error(value)), 'CI_TRUST_PREPARATION_REFUSED');
+  assert.equal(ciTrustFailureCode(new Error('CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE\nSYNTHETIC_PRIVATE')), 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_COPY_WRITE_UNSAFE');
+});
+
+
+async function ciFreshParentFixture(callback, setup = null) {
+  const root = trustRoot(), workspace = path.join(root, 'workspace'), output = path.join(root, 'commands'); fs.mkdirSync(workspace, { mode: 0o700 }); fs.writeFileSync(output, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 });
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), originalSpawn = cp.spawnSync, uid = Object.getOwnPropertyDescriptor(process, 'getuid'), platform = Object.getOwnPropertyDescriptor(process, 'platform'), systemRoot = process.env.SystemRoot;
+  const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: output, CASEOPS_PARENT_CREATED_PATH: path.join(root, 'UNADMITTED') }, calls = [];
+  Object.defineProperty(process, 'getuid', { configurable: true, value: undefined }); Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' }); process.env.SystemRoot = '/owned-public-windows-system';
+  const parentResult = parent => {
+    assert.equal(fs.existsSync(parent), false, 'native creation must receive an absent leaf'); fs.mkdirSync(parent, { mode: 0o700 }); const state = fs.lstatSync(parent, { bigint: true });
+    return { status: 0, stdout: JSON.stringify({ created: true, ownerCurrent: true, protected: true, writersExact: true, ino: String(state.ino), volume: String(state.dev), birthtimeNs: String(state.birthtimeNs) }), stderr: [0, 1, 2, 3, 4].map(n => 'COPS_PARENT' + n).join('\n') + '\n' };
+  };
+  cp.spawnSync = (_exe, args, options) => {
+    if (options.env.CASEOPS_PARENT_CREATED_PATH) { calls.push({ kind: 'setup', args, options }); return setup ? setup(options, args.at(-1), () => parentResult(options.env.CASEOPS_PARENT_CREATED_PATH)) : parentResult(options.env.CASEOPS_PARENT_CREATED_PATH); }
+    if (options.env.CASEOPS_SOURCE_0) { calls.push({ kind: 'source', args, options }); return { status: 0, stdout: JSON.stringify(ciAclProtocolRows().map(row => ({ ...row, runtimeOwner: true, reviewedAdminSource: false }))), stderr: '' }; }
+    calls.push({ kind: 'strict-owner', args, options });
+    const stderr = [0, 1, 2, 3].map(n => 'COPS_ACL' + n).join('\n') + '\n';
+    return args.at(-1).includes("[Console]::Out.Write('SAFE')") ? { status: 0, stdout: 'SAFE', stderr } : { status: 0, stdout: '{"ownerMatches":true,"writeScopeSafe":true}', stderr };
+  }; syncBuiltinESMExports();
+  try { return await callback({ root, workspace, output, environment, calls }); }
+  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
+}
+test('CI fresh-parent setup precedes every staged child and payload without using an environment-selected path', async () => {
+  let observed = false;
+  await ciFreshParentFixture(async ({ environment, calls }) => {
+    const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(observed, true); assert.equal(calls[0].kind, 'setup'); assert.equal(calls.filter(row => row.kind === 'setup').length, 1); assert.equal(calls.filter(row => row.kind === 'source').length, 2);
+    assert.deepEqual(result.privateParentSetup, { kind: 'windows-protected-new-parent', owner: 'current-user', writers: ['current-user', 'system', 'administrators'], protected: true, identityBound: true, childrenCreatedAfterSetup: true, creation: 'exclusive-native-security-descriptor' });
+  }, (options, code, create) => {
+    const parent = options.env.CASEOPS_PARENT_CREATED_PATH; assert.equal(fs.existsSync(parent), false); const success = create(); observed = true; assert.match(path.basename(parent), /^caseops-node-trust-[a-f0-9-]{36}$/); assert.ok(!parent.endsWith('UNADMITTED'));
+    const iterator = fs.opendirSync(parent, { bufferSize: 1 }); try { assert.equal(iterator.readSync(), null); } finally { iterator.closeSync(); }
+    assert.ok(Number.isInteger(options.timeout) && options.timeout > 0 && options.timeout <= 5000); assert.equal(options.maxBuffer, 4096); assert.deepEqual(Object.keys(options.env).sort(), ['CASEOPS_PARENT_CREATED_PATH', 'SystemRoot', 'WINDIR']);
+    assert.doesNotMatch(code, /Get-Acl|Set-Acl|Add-Type|ConvertTo-Json|New-Object/); assert.match(code, /SetAccessRuleProtection\(\$true,\$false\)/); assert.match(code, /SetOwner\(\$u\)/); assert.doesNotMatch(code, /SetAccessControl|SetSecurityInfo|Directory\]::CreateDirectory/); assert.match(code, /if\(!\$native::CreateDirectoryW\(\$p,\$sa\)\)\{throw 'EXCLUSIVE_CREATION_REQUIRED'\}/); assert.match(code, /GetSecurityInfo\(\$handle,1,5/); assert.match(code, /CloseHandle\(\$handle\)/); return success;
+  });
+});
+test('CI fresh-parent failed empty unknown or timed-out setup never admits source payload or policy output', async () => {
+  for (const [failure, reason] of [[{ status: 0, stdout: '', stderr: '' }, 'PROTOCOL_NO_MARKER'], [{ status: 0, stdout: 'SYNTHETIC_PRIVATE', stderr: '' }, 'PROTOCOL_NO_MARKER'], [{ status: 1, stdout: '', stderr: 'COPS_PARENT_REFUSED\n' }, 'REFUSED_NO_MARKER'], [{ status: null, stdout: '', stderr: '', error: { code: 'ETIMEDOUT' } }, 'TIMEOUT_NO_MARKER']]) await ciFreshParentFixture(async ({ environment, output, calls }) => {
+    const trace = ciSourceTrace();
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_PRIVATE_PARENT_SETUP_' + reason }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(calls.length, 1); assert.equal(calls[0].kind, 'setup'); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n'); }
+    finally { trace.restore(); } trace.closed();
+  }, () => failure);
+});
+test('CI private-parent exclusive creation refuses a collision without touching an existing directory or its contents', async () => {
+  const crypto = ciTrustCreateRequire(import.meta.url)('node:crypto'), random = crypto.randomUUID, fixed = '01234567-89ab-cdef-0123-456789abcdef';
+  try {
+    crypto.randomUUID = () => fixed; syncBuiltinESMExports();
+    await ciFreshParentFixture(async ({ root, environment, calls }) => {
+      const existing = path.join(root, 'caseops-node-trust-' + fixed); fs.mkdirSync(existing, { mode: 0o700 }); const file = path.join(existing, 'retained'), data = 'SYNTHETIC_EXISTING_CONTENT'; fs.writeFileSync(file, data, { flag: 'wx', mode: 0o600 }); const before = fs.lstatSync(existing, { bigint: true });
+      await assert.rejects(prepareCIHostNodeTrustWindows(environment), { code: 'EEXIST' }); assert.equal(calls.length, 0); assert.equal(fs.readFileSync(file, 'utf8'), data); const after = fs.lstatSync(existing, { bigint: true });
+      for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]);
+    });
+  } finally { crypto.randomUUID = random; syncBuiltinESMExports(); }
+});
+test('CI changed or aliased fresh parent refuses after setup acknowledgement and before any staged source', async () => {
+  for (const alias of [false, true]) await ciFreshParentFixture(async ({ root, environment, calls }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_CHANGED/); assert.equal(trace.reads, 0); assert.equal(calls.length, 1); }
+    finally { trace.restore(); } trace.closed();
+  }, (options, _code, create) => {
+    const success = create(), parent = options.env.CASEOPS_PARENT_CREATED_PATH, saved = parent + '-retained'; fs.renameSync(parent, saved); if (alias) fs.symlinkSync(saved, parent, 'dir'); else fs.mkdirSync(parent, { mode: 0o700 }); return success;
+  });
+});
+test('CI late fresh-parent entry is refused rather than accepted as an empty setup success', async () => ciFreshParentFixture(async ({ environment, calls }) => {
+  const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_CHANGED|CI_TRUST_PRIVATE_PARENT_NOT_EMPTY/); assert.equal(trace.reads, 0); assert.equal(calls.length, 1); }
+  finally { trace.restore(); } trace.closed();
+}, (options, _code, create) => { const success = create(); fs.writeFileSync(path.join(options.env.CASEOPS_PARENT_CREATED_PATH, 'late'), 'owned synthetic entry', { flag: 'wx', mode: 0o600 }); return success; }));
+test('CI atomic-parent readback binds inode birth type and namespace before unchanged full-frame admission', async () => {
+  const lstat = fs.lstatSync; let parent = null;
+  fs.lstatSync = (name, ...args) => { const state = lstat(name, ...args); return String(name) === parent && args[0]?.bigint ? new Proxy(state, { get(value, key) { return key === 'ctimeNs' ? value.ctimeNs + 100n : Reflect.get(value, key); } }) : state; };
+  try { await ciFreshParentFixture(async ({ environment }) => { const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.privateParentSetup.identityBound, true); }, (options, _code, create) => { parent = options.env.CASEOPS_PARENT_CREATED_PATH; return create(); }); }
+  finally { fs.lstatSync = lstat; }
+});
+test('CI parent-setup refusals retain only fixed diagnostics and never reflect subprocess details', async () => ciFreshParentFixture(async ({ environment }) => {
+  await assert.rejects(prepareCIHostNodeTrustWindows(environment), error => { assert.equal(ciTrustFailureCode(error), 'CI_TRUST_PRIVATE_PARENT_SETUP_REFUSED_UNCLASSIFIED'); assert.ok(!error.message.includes('SYNTHETIC_PRIVATE')); return true; });
+}, () => ({ status: 1, stdout: 'S-1-5-21-SYNTHETIC_PRIVATE', stderr: '/SYNTHETIC_PRIVATE/PATH', error: { message: 'SYNTHETIC_PRIVATE' } })));
+
+
+test('CI atomic creation collision after absence admission never changes the existing directory or stages bytes', async () => {
+  let trace, fixtureReads = 0, fixtureWrites = 0;
+  await ciFreshParentFixture(async ({ environment, calls }) => {
+    trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_PRIVATE_PARENT_SETUP_REFUSED_STAGE_1' }); assert.equal(trace.reads, fixtureReads); assert.equal(trace.writes, fixtureWrites); assert.equal(calls.length, 1); }
+    finally { trace.restore(); } trace.closed();
+  }, (options, code) => {
+    const parent = options.env.CASEOPS_PARENT_CREATED_PATH; assert.equal(fs.existsSync(parent), false); fs.mkdirSync(parent, { mode: 0o755 }); const retained = path.join(parent, 'existing'); fs.writeFileSync(retained, 'SYNTHETIC_EXISTING', { flag: 'wx', mode: 0o600 }); const before = fs.lstatSync(parent, { bigint: true });
+    assert.doesNotMatch(code, /SetAccessControl|SetSecurityInfo/); assert.ok(code.indexOf("throw 'EXCLUSIVE_CREATION_REQUIRED'") < code.indexOf('$handle=$native::CreateFileW'));
+    const after = fs.lstatSync(parent, { bigint: true }); for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]); assert.equal(fs.readFileSync(retained, 'utf8'), 'SYNTHETIC_EXISTING');
+    fixtureReads = trace.reads; fixtureWrites = trace.writes;
+    return { status: 1, stdout: '', stderr: 'COPS_PARENT0\nCOPS_PARENT1\nCOPS_PARENT_REFUSED\n' };
+  });
+});
+
+test('CI atomic handle identity and qualified Windows volume bind before any source byte read', async () => {
+  for (const [key, value] of [['ino', '0'], ['ino', '18446744073709551616'], ['volume', '4294967296'], ['volume', '1'], ['birthtimeNs', '1']]) await ciFreshParentFixture(async ({ environment }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4|CI_TRUST_PRIVATE_PARENT_CHANGED/); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); } trace.closed();
+  }, (_options, _code, create) => { const result = create(), row = JSON.parse(result.stdout); row[key] = value; return { ...result, stdout: JSON.stringify(row) }; });
+});
+test('CI atomic readback rejects false protection owner writers creation and malformed protocol without reflecting output', async () => {
+  for (const change of [row => ({ ...row, created: false }), row => ({ ...row, ownerCurrent: false }), row => ({ ...row, protected: false }), row => ({ ...row, writersExact: false }), row => ({ ...row, unknown: 'SYNTHETIC_PRIVATE' }), row => ({ ...row, ino: 1 }), () => []]) await ciFreshParentFixture(async ({ environment }) => {
+    const trace = ciSourceTrace(); try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), error => error.message === 'CI_TRUST_PRIVATE_PARENT_SETUP_PROTOCOL_STAGE_4' && !error.message.includes('SYNTHETIC_PRIVATE')); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); } trace.closed();
+  }, (_options, _code, create) => { const result = create(); return { ...result, stdout: JSON.stringify(change(JSON.parse(result.stdout))) }; });
+});
+
+
+const ciCommandMarkers = 'COPS_ACL0\nCOPS_ACL1\nCOPS_ACL2\nCOPS_ACL3\n';
+const ciCommandFalse = (change = {}) => ({ status: 0, stderr: ciCommandMarkers, stdout: JSON.stringify({ ownerMatches: false, writeScopeSafe: true, ownerClass: 'ADMINISTRATORS', tokenOwnerClass: 'CURRENT_USER', ...change }) });
+test('CI command-owner decoder retains SAFE and the exact three internal object roles', () => {
+  for (const role of ['GITHUB_OUTPUT', 'NPM_USER_CONFIG', 'NPM_GLOBAL_CONFIG']) assert.deepEqual(reviewCICommandOwnerResult({ status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }, role), { ownerMatches: true, writeScopeSafe: true });
+  assert.throws(() => reviewCICommandOwnerResult({ status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }, 'SYNTHETIC_PRIVATE'), { message: 'CI_TRUST_COMMAND_OWNER_PROTOCOL' });
+});
+test('CI command-owner decoder separates bounded timeout command and protocol phases without reflecting output', () => {
+  for (const [result, expected] of [[{ error: { code: 'ETIMEDOUT', message: 'SYNTHETIC_PRIVATE' }, status: null, stdout: '', stderr: 'COPS_ACL0\nCOPS_ACL1\n' }, 'TIMEOUT_ACL_READ'], [{ status: 1, stdout: 'SYNTHETIC_PRIVATE', stderr: 'COPS_ACL0\nCOPS_ACL_FAIL\n' }, 'COMMAND_FAILED_SCRIPT_ENTERED'], [{ status: 0, stdout: 'SAFE', stderr: 'COPS_ACL0\n' }, 'PROTOCOL_SCRIPT_ENTERED'], [{ status: 0, stdout: 'SYNTHETIC_PRIVATE', stderr: ciCommandMarkers }, 'PROTOCOL_RULES_READ'], [{ status: 0, stdout: 'SAFE', stderr: 'SYNTHETIC_PRIVATE' }, 'PROTOCOL_UNCLASSIFIED']]) {
+    const message = 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_' + expected; assert.throws(() => reviewCICommandOwnerResult(result, 'GITHUB_OUTPUT'), error => error.message === message && ciTrustFailureCode(error) === message && !error.message.includes('SYNTHETIC_PRIVATE'));
+  }
+});
+test('CI command-owner negative classifications remain refusal and reject malformed or forged predicate fields', () => {
+  for (const [change, suffix] of [[{}, 'OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE'], [{ ownerMatches: true, writeScopeSafe: false, ownerClass: 'CURRENT_USER' }, 'OWNER_CURRENT_USER_TOKEN_CURRENT_USER_MATCH_YES_WRITE_UNSAFE'], [{ ownerClass: 'OTHER', tokenOwnerClass: 'OTHER', writeScopeSafe: false }, 'OWNER_OTHER_TOKEN_OTHER_MATCH_NO_WRITE_UNSAFE']]) {
+    const message = 'CI_TRUST_COMMAND_OWNER_NPM_USER_CONFIG_' + suffix; assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(change), 'NPM_USER_CONFIG'), error => error.message === message && ciTrustFailureCode(error) === message);
+  }
+  for (const change of [{ ownerMatches: true }, { ownerMatches: 0 }, { writeScopeSafe: 1 }, { ownerClass: 'S-1-5-21-SYNTHETIC_PRIVATE' }, { tokenOwnerClass: 'SYNTHETIC_PRIVATE' }, { unknown: 'SYNTHETIC_PRIVATE' }]) assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(change), 'NPM_GLOBAL_CONFIG'), { message: 'CI_TRUST_COMMAND_OWNER_NPM_GLOBAL_CONFIG_PROTOCOL_RULES_READ' });
+  for (const text of ['CI_TRUST_COMMAND_OWNER_PRIVATE_TIMEOUT_NO_MARKER', 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_PRIVATE_TOKEN_OTHER_MATCH_NO_WRITE_SAFE', 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_TIMEOUT_NO_MARKER' + 'SYNTHETIC_PRIVATE']) assert.equal(ciTrustFailureCode(new Error(text)), 'CI_TRUST_PREPARATION_REFUSED');
+});
+test('actual retained command-file append identifies GITHUB_OUTPUT refusal before bytes and closes its descriptor', async () => ciFreshParentFixture(async ({ root, output }) => {
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, trace = ciSourceTrace(); let observed = 0;
+  cp.spawnSync = (_exe, args, options) => { observed++; assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096); assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, output); assert.doesNotMatch(args.at(-1), /Get-Acl|SetAccessControl|SetOwner|Add-Type/); return ciCommandFalse(); }; syncBuiltinESMExports();
+  try { assert.throws(() => appendCITrustOutputs(output, root, Object.fromEntries(ciTrustKeys.map(key => [key, key === 'NPM_CONFIG_STRICT_SSL' ? 'true' : 'synthetic-public']))), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); assert.equal(observed, 1); }
+  finally { cp.spawnSync = original; syncBuiltinESMExports(); trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n');
+}));
+async function ciCommandConfigRefusal(name, role) {
+  await ciFreshParentFixture(async ({ environment, output }) => {
+    const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync, trace = ciSourceTrace(); let observed = null;
+    cp.spawnSync = (exe, args, options) => { if (options.env.CASEOPS_TRUST_ACL_PATH?.endsWith('/' + name)) { observed = options.env.CASEOPS_TRUST_ACL_PATH; return ciCommandFalse(); } return original(exe, args, options); }; syncBuiltinESMExports();
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_COMMAND_OWNER_' + role + '_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' }); }
+    finally { cp.spawnSync = original; syncBuiltinESMExports(); trace.restore(); } trace.closed();
+    assert.ok(observed); assert.equal(fs.lstatSync(observed).size, 0); assert.equal(fs.readFileSync(output, 'utf8'), 'EARLIER=retained\n');
+    if (name === 'user.npmrc') assert.equal(fs.existsSync(path.join(path.dirname(observed), 'global.npmrc')), false);
+    else assert.equal(fs.readFileSync(path.join(path.dirname(observed), 'user.npmrc'), 'utf8'), '; CaseOps isolated public npm configuration.\n');
+  });
+}
+test('actual Windows-entry composition distinguishes new NPM_USER_CONFIG before its first write', () => ciCommandConfigRefusal('user.npmrc', 'NPM_USER_CONFIG'));
+test('actual Windows-entry composition distinguishes new NPM_GLOBAL_CONFIG and retains earlier anonymous config', () => ciCommandConfigRefusal('global.npmrc', 'NPM_GLOBAL_CONFIG'));
+
+
+test('CI exact reviewed public inputs retain nonexclusive ACL observations while only strict copied bytes execute', async () => ciSourceFixture(async ({ source, parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(); let staged;
+  try {
+    staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(proof.calls, 2); assert.equal(staged.provenance.length, 2);
+    for (const row of staged.provenance) { assert.equal(row.originalAcl.writeScopeSafe, false); assert.equal(row.originalWriteScope, 'nonexclusive-public-input-data'); assert.equal(row.inputAuthority, 'literal-sha256-gitblob-extent-retained-bytes'); assert.equal(row.copiedAcl.writeScopeSafe, true); assert.equal(row.copiedAcl.runtimeOwner, true); const original = fs.readFileSync(path.join(source, row.name)); assert.equal(createHash('sha256').update(original).digest('hex'), row.originalSha256); assert.equal(createHash('sha256').update(fs.readFileSync(row.copied.path)).digest('hex'), row.originalSha256); if (row.name === 'host-node-trust.mjs') assert.deepEqual(staged.retainedHelper, original); }
+  } finally { trace.restore(); proof.restore(); staged?.retainedHelper.fill(0); } trace.closed();
+}));
+test('CI public-input admission token cannot be forged through the exported strict decoder', () => {
+  const rows = ciAclProtocolRows(); rows[0].writeScopeSafe = false;
+  for (const attempted of [undefined, true, 1, 'literal-reviewed-public-input-data', {}, { reviewed: true }, Symbol('literal-reviewed-public-input-data')]) assert.throws(() => reviewCIHostSourceAclOutput(JSON.stringify(rows), attempted), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_HELPER_INPUT_WRITE_UNSAFE' });
+});
+test('CI nonexclusive public inputs still require the original reviewed owner admission before all payload reads', async () => ciSourceFixture(async ({ parent, api }) => {
+  const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[0].runtimeOwner = false; rows[0].reviewedAdminSource = false; }), trace = ciSourceTrace();
+  try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_OWNER_HELPER_INPUT' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+  finally { trace.restore(); proof.restore(); } trace.closed();
+}));
+test('CI corrupt nonexclusive helper or bootstrap inputs cannot write either staging payload', async () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) await ciSourceFixture(async ({ source, parent, api }) => {
+    const file = path.join(source, name), data = fs.readFileSync(file); data[0] ^= 1; fs.writeFileSync(file, data);
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(), buffers = new Set();
+    fs.readSync = (...args) => { buffers.add(args[1]); return trace.read(...args); };
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES' }); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed(); assert.ok([...buffers].every(buffer => buffer.every(value => value === 0)));
+  });
+});
+test('CI both input full frames reconcile after immutable byte verification before the first staging write', async () => {
+  for (const name of ['host-node-trust.mjs', 'host-node-trust-start.mjs']) await ciSourceFixture(async ({ source, parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; }), trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync; let changed = false, stagingWrites = 0;
+    fs.readSync = (fd, ...args) => { const n = read(fd, ...args); if (!changed && n === 0 && trace.descriptors.get(fd) === path.join(source, 'host-node-trust-start.mjs')) { changed = true; fs.appendFileSync(path.join(source, name), ' '); } return n; };
+    fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd)?.includes('/runtime-source/')) stagingWrites++; return write(fd, ...args); };
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE' }); assert.equal(changed, true); assert.equal(stagingWrites, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});
+test('CI public-data writer admission never extends to parent runtime directory or either copied executable', async () => {
+  for (let index = 2; index < 6; index++) await ciSourceFixture(async ({ parent, api }) => {
+    const proof = ciSourceWindowsProofs(rows => { rows[0].writeScopeSafe = false; rows[1].writeScopeSafe = false; rows[index].writeScopeSafe = false; }), trace = ciSourceTrace();
+    try { assert.throws(() => api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()), { message: 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL_' + ciAclProtocolRoles[index] + '_WRITE_UNSAFE' }); assert.equal(trace.reads, 0); assert.equal(trace.writes, 0); }
+    finally { trace.restore(); proof.restore(); } trace.closed();
+  });
+});
+
+
+const ciRunnerOutputName = 'set_output_01234567-89ab-cdef-0123-456789abcdef';
+async function ciNativeRunnerFixture(callback, { name = ciRunnerOutputName, nested = false, alias = false, proof = () => ciCommandFalse() } = {}) {
+  await ciFreshParentFixture(async f => {
+    const directory = path.join(f.root, '_runner_file_commands'); fs.mkdirSync(directory, { mode: 0o700 });
+    if (alias) { const retained = path.join(f.root, 'retained-runner-directory'); fs.renameSync(directory, retained); fs.symlinkSync(retained, directory, 'dir'); }
+    const destination = nested ? path.join(directory, 'nested') : directory; if (nested) fs.mkdirSync(destination, { mode: 0o700 });
+    const command = path.join(destination, name); fs.writeFileSync(command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); f.environment.GITHUB_OUTPUT = command;
+    const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), original = cp.spawnSync; let calls = 0;
+    cp.spawnSync = (exe, args, options) => { if (options.env.CASEOPS_TRUST_ACL_PATH === command) { calls++; return proof({ ...f, directory, command }, args, options); } return original(exe, args, options); }; syncBuiltinESMExports();
+    try { await callback({ ...f, directory, command, get commandCalls() { return calls; } }); }
+    finally { cp.spawnSync = original; syncBuiltinESMExports(); }
+  });
+}
+function ciHardeningRefusal(environment) {
+  let failure;
+  try { hardenCITrustRunnerCommand(environment); } catch (error) { failure = error; }
+  return failure;
+}
+test('CI-COMMAND-01 native command hardening keeps bytes and independently rechecks strict ownership before the original append', async () => {
+  let hardening = 0, owners = 0;
+  await ciNativeRunnerFixture(async ({ environment, root, command }) => {
+    environment.SystemRoot = process.env.SystemRoot;
+    const result = hardenCITrustRunnerCommand(environment);
+    assert.deepEqual(result, { commandFileHardened: true, previousBytes: 17, contentsPreserved: true, ownerMatches: true, writeScopeSafe: true });
+    assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    assert.equal(hardening, 1); assert.equal(owners, 1);
+    const appended = appendCITrustOutputs(command, root, ciTrustValues);
+    assert.equal(appended.appendedKeys, 9); assert.equal(appended.previousBytes, 17);
+    assert.equal(owners, 2); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n' + ciTrustKeys.map(key => key + '=' + ciTrustValues[key] + '\n').join(''));
+  }, { proof: ({ command }, args, options) => {
+    assert.equal(options.env.CASEOPS_TRUST_ACL_PATH, command);
+    const code = args.at(-1);
+    if (!code.includes("[Console]::Out.Write('SECURED')")) { owners++; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers }; }
+    hardening++;
+    assert.deepEqual(Object.keys(options.env).sort(), ['CASEOPS_COMMAND_BIRTH', 'CASEOPS_COMMAND_INO', 'CASEOPS_COMMAND_LENGTH', 'CASEOPS_COMMAND_MTIME', 'CASEOPS_COMMAND_SHA256', 'CASEOPS_COMMAND_VOLUME', 'CASEOPS_TRUST_ACL_PATH', 'SystemRoot']);
+    const state = fs.statSync(command, { bigint: true });
+    assert.deepEqual(Object.fromEntries(['INO', 'VOLUME', 'BIRTH', 'MTIME', 'LENGTH'].map(key => [key, options.env['CASEOPS_COMMAND_' + key]])), { INO: String(state.ino), VOLUME: String(state.dev), BIRTH: String(state.birthtimeNs), MTIME: String(state.mtimeNs), LENGTH: '17' });
+    assert.equal(options.env.CASEOPS_COMMAND_SHA256, createHash('sha256').update('EARLIER=retained\n').digest('base64'));
+    assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096);
+    assert.match(code, /\[IO\.FileMode\]::Open,\$rights,\[IO\.FileShare\]::Read/);
+    assert.match(code, /\$f\.SetAccessControl\(\$a\)/); assert.match(code, /\$f\.GetAccessControl\(\)/);
+    assert.doesNotMatch(code, /\$f\.GetAccessControl\(\[/);
+    assert.match(code, /GetFileInformationByHandle\(\$f\.SafeFileHandle\.DangerousGetHandle\(\),\$info\)/);
+    assert.ok(code.indexOf('$first=Identity') < code.indexOf('$f.SetAccessControl($a)'));
+    assert.ok(code.indexOf('$before -cne $env:CASEOPS_COMMAND_SHA256') < code.indexOf('$f.SetAccessControl($a)'));
+    assert.match(code, /Check;\$last=Identity/); assert.match(code, /ToUInt32\(\$b,40\) -ne 1/);
+    assert.match(code, /SetAccessRuleProtection\(\$true,\$false\)/); assert.match(code, /SetOwner\(\$u\)/);
+    assert.match(code, /\$f\.Length -gt 1048576/); assert.match(code, /\(Digest\) -ne \$before/);
+    assert.match(code, /\$rules\.Count -ne 3/); assert.match(code, /FreeHGlobal\(\$info\)/); assert.match(code, /if\(\$null -ne \$f\)\{\$f\.Dispose\(\)\}/);
+    assert.doesNotMatch(code, /Set-Acl|\[IO\.File\]::SetAccessControl|WriteAll|CreateNew|GITHUB_ENV|Add-Type|Start-Process/);
+    return { status: 0, stdout: 'SECURED', stderr: '' };
+  } });
+});
+test('CI-COMMAND-02 hardening refuses missing context foreign command names aliases hardlinks and oversize before dispatch', async () => {
+  for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async f => {
+    f.environment.SystemRoot = process.env.SystemRoot;
+    const failure = ciHardeningRefusal(f.environment);
+    assert.match(failure?.message ?? '', /CI_TRUST_COMMAND_HARDEN_CONTEXT|CI_TRUST_CANONICAL_PATH/);
+    assert.equal(f.commandCalls, 0); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, options);
+  await ciNativeRunnerFixture(async f => {
+    const environment = { ...f.environment, SystemRoot: process.env.SystemRoot };
+    for (const change of [{ CI: 'false' }, { GITHUB_ACTIONS: 'false' }, { SystemRoot: '' }, { SystemRoot: path.join(f.root, 'unadmitted-system') }]) {
+      const failure = ciHardeningRefusal({ ...environment, ...change });
+      assert.equal(failure?.message, 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
+    }
+    fs.linkSync(f.command, path.join(f.root, 'command-alias'));
+    const linked = ciHardeningRefusal(environment);
+    assert.equal(linked?.message, 'CI_TRUST_COMMAND_FILE'); assert.equal(f.commandCalls, 0);
+    fs.unlinkSync(path.join(f.root, 'command-alias')); fs.writeFileSync(f.command, Buffer.alloc(1048577));
+    const oversized = ciHardeningRefusal(environment);
+    assert.equal(oversized?.message, 'CI_TRUST_COMMAND_FILE'); assert.equal(f.commandCalls, 0);
+  });
+});
+test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
+  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
+    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => failure });
+  await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE');
+    assert.equal(f.commandCalls, 2); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: (_f, args) => args.at(-1).includes("[Console]::Out.Write('SECURED')") ? { status: 0, stdout: 'SECURED', stderr: '' } : ciCommandFalse({ writeScopeSafe: false }) });
+});
+test('CI-COMMAND-04 hardening rejects same-byte pathname replacement and changed bytes through the retained descriptor', async () => {
+  for (const replacement of [false, true]) await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace();
+    try { const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot }); assert.match(refused?.message ?? '', /CI_TRUST_(?:NAMED_DESCRIPTOR|COMMAND_HARDEN)_CHANGED/); assert.equal(f.commandCalls, 1); }
+    finally { trace.restore(); } trace.closed();
+    assert.equal(fs.readFileSync(f.command, 'utf8'), replacement ? 'EARLIER=retained\n' : 'CHANGED=retained\n');
+    if (replacement) assert.equal(fs.readFileSync(path.join(f.directory, 'retained-command'), 'utf8'), 'EARLIER=retained\n');
+  }, { proof: (f) => { if (replacement) { fs.renameSync(f.command, path.join(f.directory, 'retained-command')); fs.writeFileSync(f.command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); } else fs.writeFileSync(f.command, 'CHANGED=retained\n'); return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
+test('CI native runner output admits only its observed safe Administrators owner and preserves distinct authority', async () => ciNativeRunnerFixture(async ({ environment, command }) => {
+  const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.commandFileAuthority, 'native-runner-command-safe-administrators-owner'); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
+  const rows = fs.readFileSync(command, 'utf8').split('\n'); assert.equal(rows.shift(), 'EARLIER=retained'); assert.equal(rows.pop(), ''); assert.deepEqual(rows.map(row => row.slice(0, row.indexOf('='))), ciTrustKeys);
+  assert.ok(result.runtimeSourceCopies.every(row => row.copiedAcl.runtimeOwner && row.copiedAcl.writeScopeSafe));
+}));
+test('CI exported append and result decoder cannot forge native runner command authority', async () => ciNativeRunnerFixture(async ({ root, environment, command }) => {
+  const trace = ciSourceTrace();
+  try {
+    for (const context of [undefined, {}, { token: Symbol('native-ci-preparation'), file: command, root, environment }]) assert.throws(() => appendCITrustOutputs(command, root, ciTrustValues, context), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' });
+    for (const token of [undefined, true, {}, Symbol('native-runner-output-command')]) assert.throws(() => reviewCICommandOwnerResult(ciCommandFalse(), 'GITHUB_OUTPUT', token), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE' });
+    assert.equal(trace.reads, 0); assert.equal(trace.writes, 0);
+  } finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+}));
+test('CI native runner class refuses unrelated command prefixes malformed UUID nested paths and parent aliases', async () => {
+  for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { name: 'set_output_01234567-89ab-cdef-0123-456789abcdef-extra' }, { name: 'set_output_0123456789abcdef0123456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async ({ environment, command }) => {
+    await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE|CI_TRUST_CANONICAL_PATH/); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, options);
+});
+test('CI native runner class cannot admit another owner token or any unsafe writer and keeps timeout refusal', async () => {
+  for (const [result, expected] of [[ciCommandFalse({ ownerClass: 'OTHER' }), 'OWNER_OTHER_TOKEN_CURRENT_USER_MATCH_NO_WRITE_SAFE'], [ciCommandFalse({ tokenOwnerClass: 'OTHER' }), 'OWNER_ADMINISTRATORS_TOKEN_OTHER_MATCH_NO_WRITE_SAFE'], [ciCommandFalse({ writeScopeSafe: false }), 'OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE'], [{ status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: 'COPS_ACL0\n' }, 'TIMEOUT_SCRIPT_ENTERED']]) await ciNativeRunnerFixture(async ({ environment, command }) => {
+    await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_' + expected }); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => result });
+});
+test('CI native runner held command-file replacement during ACL read refuses before appending any bytes', async () => {
+  let commandWrites = 0, injectedWrites = 0, trace;
+  await ciNativeRunnerFixture(async ({ environment, command, directory }) => {
+    trace = ciSourceTrace(); const write = fs.writeSync; fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === command) commandWrites++; return write(fd, ...args); };
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), /CI_TRUST_NAMED_DESCRIPTOR_CHANGED|CI_TRUST_RUNNER_COMMAND_CHANGED/); assert.equal(commandWrites, injectedWrites); }
+    finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'REPLACEMENT=retained\n'); assert.equal(fs.readFileSync(path.join(directory, 'original-command'), 'utf8'), 'EARLIER=retained\n');
+  }, { proof: ({ command, directory }) => { fs.renameSync(command, path.join(directory, 'original-command')); fs.writeFileSync(command, 'REPLACEMENT=retained\n', { flag: 'wx', mode: 0o600 }); injectedWrites = commandWrites; return ciCommandFalse(); } });
+});
+test('CI native runner late directory insertion refuses with unchanged command bytes and closes descriptors', async () => {
+  let trace, commandWrites = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    trace = ciSourceTrace(); const write = fs.writeSync; fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === command) commandWrites++; return write(fd, ...args); };
+    try { await assert.rejects(prepareCIHostNodeTrustWindows(environment), { message: 'CI_TRUST_RUNNER_COMMAND_CHANGED' }); assert.equal(commandWrites, 0); }
+    finally { trace.restore(); } trace.closed(); assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: ({ directory }) => { fs.writeFileSync(path.join(directory, 'late'), 'owned synthetic entry', { flag: 'wx', mode: 0o600 }); return ciCommandFalse(); } });
+});
+
+test('CI runner final callback refuses a same-inode edit after verified payload readback', async t => {
+  await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace(), read = fs.readSync, write = fs.writeSync, native = fs.realpathSync.native, lstat = fs.lstatSync;
+    // Qualified capability simulation: only this owned command leaf's named
+    // Windows dev field is zero; real inode/type/owner and other frames stay.
+    fs.lstatSync = (file, ...args) => { const state = lstat(file, ...args); return file === f.command && args[0]?.bigint ? new Proxy(state, { get(value, key) { return key === 'dev' ? 0n : Reflect.get(value, key); } }) : state; };
+    let written = false, readback = false, changed = false, observedError, verifiedEditedByte; const original = fs.lstatSync(f.command, { bigint: true }), inode = original.ino;
+    fs.writeSync = (fd, ...args) => { if (trace.descriptors.get(fd) === f.command) written = true; return write(fd, ...args); };
+    fs.readSync = (fd, ...args) => { const count = read(fd, ...args); if (written && count === 0 && trace.descriptors.get(fd) === f.command) readback = true; return count; };
+    fs.realpathSync.native = (file, ...args) => { const result = native(file, ...args); if (!changed && readback && file === f.command) { changed = true; const matches = [...trace.descriptors].filter(([, name]) => name === file); assert.equal(matches.length, 1); const fd = matches[0][0]; assert.equal(fs.fstatSync(fd, { bigint: true }).ino, inode); trace.write(fd, Buffer.from('X'), 0, 1, 0);
+      const frame = value => ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'].map(key => value[key]), end = performance.now() + 5000;
+      const namespace = () => { const rows = []; for (let parent = path.dirname(file);;) { assert.ok(performance.now() < end && rows.length < 64); const state = fs.lstatSync(parent, { bigint: true }); assert.ok(state.isDirectory() && !state.isSymbolicLink()); rows.push([parent, ...['dev', 'ino', 'uid', 'gid', 'mode'].map(key => state[key])]); if (parent === path.dirname(parent)) return rows; parent = path.dirname(parent); } }; const parents = namespace();
+      const edited = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true }); assert.ok(edited.isFile() && edited.nlink === 1n && edited.uid === original.uid && edited.ino === inode && edited.size > 0n && edited.size <= 1048576n); assert.ok(named.isFile() && !named.isSymbolicLink()); for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs']) if (!(process.platform === 'win32' && key === 'dev' && named.dev === 0n)) assert.equal(edited[key], named[key]);
+      const bytes = Buffer.alloc(Number(edited.size) + 1); let length = 0;
+      try { while (length < bytes.length) { assert.ok(performance.now() < end); const width = trace.read(fd, bytes, length, bytes.length - length, length); if (!width) break; length += width; } assert.equal(BigInt(length), edited.size); assert.deepEqual(frame(fs.fstatSync(fd, { bigint: true })), frame(edited)); assert.deepEqual(frame(fs.lstatSync(file, { bigint: true })), frame(named)); assert.deepEqual(namespace(), parents); verifiedEditedByte = bytes[0]; }
+      finally { bytes.fill(0); } } return result; };
+    try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
+    finally { fs.realpathSync.native = native; fs.lstatSync = lstat; trace.restore(); } trace.closed();
+    const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
+    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', verifiedEditedByte, namedDevZeroSimulation: true }));
+    assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(verifiedEditedByte, 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
+  });
+});
+
+// Optional source-gate observer contracts. These never authorize native actions.
+import { createObserverSink, selectCompactInvocation, nativeActionEntry, SOURCE_GATE_WORKER_PATHS, reviewNestedDriverEvidence, reviewCapturedBasePolicy } from './source-gate-observer.mjs';
+const observerNow = () => new Date().getTime();
+const observerRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const observerNames = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+const observerHash = value => createHash('sha256').update(value).digest('hex');
+const observerFrame = value => observerNames.map(key => String(value[key]));
+function observerRead(file, maximum = 65536) {
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  try {
+    const first = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
+    assert.equal(first.isFile() && named.isFile() && !named.isSymbolicLink() && first.nlink === 1n, true);
+    assert.equal(first.uid, BigInt(process.getuid())); assert.ok(first.size > 0n && first.size <= BigInt(maximum));
+    assert.deepEqual(observerFrame(first), observerFrame(named)); assert.equal(fs.realpathSync(file), file);
+    const bytes = Buffer.alloc(Number(first.size) + 1); let count = 0;
+    while (count < bytes.length) { const n = fs.readSync(fd, bytes, count, Math.min(65536, bytes.length - count), null); if (!n) break; count += n; }
+    assert.equal(count, Number(first.size)); assert.deepEqual(observerFrame(first), observerFrame(fs.fstatSync(fd, { bigint: true })));
+    assert.deepEqual(observerFrame(named), observerFrame(fs.lstatSync(file, { bigint: true })));
+    return Buffer.from(bytes.subarray(0, count));
+  } finally { fs.closeSync(fd); }
+}
+const observerRef = (file, max) => { const bytes = observerRead(file, max); return { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length }; };
+let observerBinary;
+const observerBinaryRef = () => observerBinary ??= observerRef(process.execPath, 134217728);
+function observerSave(file, value) {
+  const bytes = Buffer.from(JSON.stringify(value) + '\n'); fs.writeFileSync(file, bytes, { mode: 0o600, flag: 'wx' });
+  return { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length };
+}
+async function withObserverFixture(callback) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-observer-contract-')));
+  fs.chmodSync(root, 0o700);
+  try {
+    for (const name of ['home', 'tmp', 'mode', 'output', 'coverage']) fs.mkdirSync(path.join(root, name), { mode: 0o700 });
+    const base = { PATH: `${path.dirname(process.execPath)}${path.delimiter}/usr/bin${path.delimiter}/bin`, HOME: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
+    const H = observerRef(path.join(observerRoot, 'scripts/mobile/host-node-trust.mjs'));
+    const B = observerRef(path.join(observerRoot, 'scripts/mobile/host-node-trust-start.mjs'));
+    const A = observerRef(path.join(observerRoot, 'scripts/mobile/source-gate-observer.mjs'));
+    const observerTrust = await import('data:text/javascript;base64,' + observerRead(H.path).toString('base64'));
+    const prepared = observerTrust.prepareHostNodeTrust({ directory: path.join(root, 'policy'), sourceRefs: { helper: H, bootstrap: B }, environment: base });
+    const selection = { schemaVersion: 1, kind: 'caseops-source-gate-selection', workerCwd: observerRoot,
+      workerTargets: [observerRef(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs'))], expoConfigTarget: null, nestedDriver: null };
+    const stat = fs.lstatSync(path.join(root, 'output'), { bigint: true });
+    const manifest = { schemaVersion: 1, kind: 'caseops-source-gate-observer', role: 'source-gate-only', runId: 'c'.repeat(32),
+      source: { repo: observerRoot, sha: 'a'.repeat(40), tree: 'b'.repeat(40) }, phase: 'node33', primaryNode: observerBinaryRef(),
+      knownFallbackNodes: [], recorder: A, selection: null, output: { path: path.join(root, 'output'), identity: observerNames.slice(0, 5).map(key => String(stat[key])) }, deadlineEpochMs: observerNow() + 60000 };
+    const inheritedCoverage = process.env.NODE_V8_COVERAGE;
+    const outerMode = process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE && process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256
+      ? { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE,
+        CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256 } : null;
+    let invocation = 0;
+    const run = async ({ args = ['-e', 'console.log("ENTRY_RAN")'], change = () => {}, environment = {}, mode = true, context = false, useOuterMode = false } = {}) => {
+      const current = JSON.parse(JSON.stringify(manifest)), selected = JSON.parse(JSON.stringify(selection));
+      const dir = path.join(root, `mode-${++invocation}`); fs.mkdirSync(dir, { mode: 0o700 });
+      const selectedFile = path.join(dir, 'selection.json'); change(current, selected, dir);
+      current.selection = observerSave(selectedFile, selected);
+      if (environment.selectionBytes) { fs.writeFileSync(selectedFile, environment.selectionBytes); current.selection.sha256 = observerHash(environment.selectionBytes); current.selection.sizeBytes = environment.selectionBytes.length; }
+      const descriptor = observerSave(path.join(dir, 'manifest.json'), current);
+      if (environment.manifestBytes) { const raw = typeof environment.manifestBytes === 'function' ? environment.manifestBytes(current) : environment.manifestBytes; fs.writeFileSync(descriptor.path, raw); descriptor.sha256 = observerHash(raw); }
+      const env = { ...base, ...prepared.environment, NODE_V8_COVERAGE: inheritedCoverage ?? path.join(root, 'coverage'),
+        ...(useOuterMode && outerMode ? outerMode : mode ? { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: descriptor.path, CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: descriptor.sha256 } : {}),
+        ...(context ? { NODE_TEST_CONTEXT: 'child-v8' } : {}), ...environment };
+      delete env.selectionBytes; delete env.manifestBytes;
+      return await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, args, { cwd: observerRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = Buffer.alloc(0), stderr = Buffer.alloc(0), overflow = false;
+        const consume = stream => data => { if (stdout.length + stderr.length + data.length > 1048576) { overflow = true; child.kill(); } else if (stream === 'out') stdout = Buffer.concat([stdout, data]); else stderr = Buffer.concat([stderr, data]); };
+        child.stdout.on('data', consume('out')); child.stderr.on('data', consume('err'));
+        const timer = setTimeout(() => child.kill(), 10000);
+        child.once('error', error => { clearTimeout(timer); reject(error); });
+        child.once('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr, overflow, descriptor, current, pid: child.pid, coverageDirectory: inheritedCoverage ?? path.join(root, 'coverage'), outerMode: useOuterMode ? outerMode : null }); });
+      });
+    };
+    return await callback({ root, base, prepared, A, B, H, manifest, selection, run, observerTrust });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+function observerFiles(directory) {
+  const files = [], seen = new Set(), opened = fs.opendirSync(directory), end = performance.now() + 5000;
+  try { while (true) {
+    assert.ok(performance.now() < end); const entry = opened.readSync(); if (!entry) break;
+    assert.ok(files.length < 128 && !seen.has(entry.name)); seen.add(entry.name); files.push(entry.name);
+  } } finally { opened.closeSync(); }
+  return files;
+}
+function observerOuterRecords(pid) {
+  const file = process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE, raw = observerRead(file, 16384);
+  assert.equal(observerHash(raw), process.env.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256);
+  const directory = JSON.parse(raw).output.path, files = observerFiles(directory).filter(name => name.startsWith(`compact-${pid}-0-`));
+  assert.equal(files.length, 1);
+  return observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+}
+function observerRefused(result) {
+  assert.equal(result.code, 1); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+  assert.equal(result.stdout.length, 0); assert.match(result.stderr.toString(), /^(?:SOURCE_GATE|HOST_TRUST)_[A-Z_]+\n$/);
+}
+function observerSinkFixture(callback) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-observer-sink-'))); fs.chmodSync(root, 0o700);
+  const directory = path.join(root, 'output'); fs.mkdirSync(directory, { mode: 0o700 });
+  const stat = fs.lstatSync(directory, { bigint: true }), output = { path: directory, identity: observerNames.slice(0, 5).map(key => String(stat[key])) };
+  const io = Object.fromEntries(['openSync', 'closeSync', 'readSync', 'writeSync', 'fstatSync', 'lstatSync', 'realpathSync'].map(key => [key, fs[key].bind(fs)]));
+  try { return callback({ root, output, io }); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
+test('source observer import is inert and the worker allowlist is literal and unique', () => {
+  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 36); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 36);
+  for (const added of ['scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
+    assert.equal(SOURCE_GATE_WORKER_PATHS.filter(name => name === added).length, 1);
+  assert.ok(SOURCE_GATE_WORKER_PATHS.every(name => !name.includes('..') && name.endsWith('.test.mjs')));
+});
+test('source observer absent mode preserves BASE144 and creates no compact witness', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ mode: false, args: ['-e', 'console.log(require("node:tls").getCACertificates("default").length)'] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stdout.toString(), '144\n'); assert.equal(result.stderr.length, 0);
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer unselected eval retains detailed fallback and zero Session output', async () => {
+  await withObserverFixture(async ({ root, A, run }) => {
+    const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+    const result = await run({ args: ['-e', `import(${JSON.stringify(uri)}).then(m=>console.log(JSON.stringify(m.sourceGateObserverStatus())))`] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    assert.equal(JSON.parse(result.stdout).mode, 'unchanged-detailed-fallback'); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    assert.ok(observerFiles(result.coverageDirectory).some(name => name.startsWith(`coverage-${result.pid}-`) && name.endsWith('.json')));
+  });
+});
+for (const [name, environment] of [
+  ['missing SHA', { CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: undefined }],
+  ['unknown reserved key', { CASEOPS_SOURCE_GATE_OBSERVER_OTHER: '1' }],
+  ['case-folded reserved key', { caseops_source_gate_observer_manifest_file: '/unadmitted' }],
+]) test(`source observer refuses ${name} before the application`, async () => {
+  await withObserverFixture(async ({ run }) => observerRefused(await run({ environment })));
+});
+for (const [name, change] of [
+  ['non-source role', m => { m.role = 'native-qa'; }],
+  ['expired descriptor', m => { m.deadlineEpochMs = observerNow() - 1; }],
+  ['extended deadline', m => { m.deadlineEpochMs = observerNow() + 600000; }],
+  ['unknown descriptor key', m => { m.extra = true; }],
+  ['recorder digest redirect', m => { m.recorder.sha256 = '0'.repeat(64); }],
+  ['recorder extent redirect', m => { m.recorder.sizeBytes++; }],
+  ['duplicate target', (_m, s) => { s.workerTargets.push(s.workerTargets[0]); }],
+  ['unreviewed target', (_m, s) => { s.workerTargets[0].path = path.join(observerRoot, 'scripts/mobile/host-node-trust.mjs'); }],
+  ['unreviewed working directory', (_m, s) => { s.workerCwd = path.dirname(observerRoot); }],
+]) test(`source observer refuses ${name} with no application or compact output`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    observerRefused(await run({ change })); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer refuses noncanonical duplicate-key JSON and oversized selection before application', async () => {
+  await withObserverFixture(async ({ root, run, manifest }) => {
+    const duplicate = current => Buffer.from(JSON.stringify(current).replace('"schemaVersion":1', '"schemaVersion":1,"schemaVersion":1') + '\n');
+    observerRefused(await run({ environment: { manifestBytes: duplicate } }));
+    observerRefused(await run({ environment: { selectionBytes: Buffer.alloc(65537, 32) } }));
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer forged hash-correct recorder never executes its sentinel', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const foreign = path.join(root, 'source'); fs.mkdirSync(foreign, { mode: 0o700 });
+    fs.mkdirSync(path.join(foreign, 'scripts'), { mode: 0o700 }); fs.mkdirSync(path.join(foreign, 'scripts/mobile'), { mode: 0o700 });
+    const file = path.join(foreign, 'scripts/mobile/source-gate-observer.mjs'), sentinel = path.join(root, 'SENTINEL');
+    const bytes = Buffer.from(`import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(sentinel)},'executed');export function activateSourceGateObserver(){}\n`);
+    fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+    const result = await run({ change: m => { m.source.repo = foreign; m.recorder = { path: file, sha256: observerHash(bytes), sizeBytes: bytes.length }; } });
+    observerRefused(result); assert.equal(fs.existsSync(sentinel), false);
+  });
+});
+for (const [name, args] of [
+  ['core', ['scripts/mobile/run-native.mjs', 'ios']], ['iOS Files', ['scripts/mobile/run-ios-files.mjs']],
+  ['Android Files', ['scripts/mobile/run-android-files.mjs']], ['V1', ['scripts/mobile/run-v1-workflows.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['queue/privacy', ['scripts/mobile/run-queue-privacy.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['client extensions', ['scripts/mobile/run-client-extensions.mjs', 'ios', '--request', '/NEVER_READ_PRIVATE_REQUEST']],
+  ['store execution', ['scripts/mobile/run-store-packaging.mjs', '--execute', '/NEVER_READ_PRIVATE_REQUEST']],
+]) test(`source observer valid mode refuses ${name} before its actual entry`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ args: [path.join(observerRoot, args[0]), ...args.slice(1)] }); observerRefused(result);
+    assert.equal(result.stderr.toString(), 'SOURCE_GATE_OBSERVER_NATIVE_REFUSED\n'); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+  });
+});
+test('source observer native recipe rejects the pair and pure inventory forms remain non-native', () => {
+  assert.throws(() => neutralIosEnvironment({ CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE: '/not-read', CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256: 'a'.repeat(64) }), /IOS_HOST_/);
+  for (const args of [['scripts/mobile/run-native.mjs', '--collect'], ['scripts/mobile/run-v1-workflows.mjs', '--collect'], ['scripts/mobile/run-store-packaging.mjs', '--plan']])
+    assert.equal(nativeActionEntry(observerRoot, [process.execPath, path.join(observerRoot, args[0]), ...args.slice(1)]), false);
+});
+test('source observer exact selector keeps Node22, Worker, unknown argv and changed source in rich fallback', () => {
+  const ref = { path: '/approved/test.mjs', sha256: 'a'.repeat(64), sizeBytes: 3 };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [ref], startupFlags: ['--use-openssl-ca'], expoConfigTarget: null };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: ['--use-openssl-ca'], argv: ['/node24', ref.path], cwd: '/approved', testContext: 'child-v8', entryReference: ref };
+  assert.equal(selectCompactInvocation(actual, admitted).mode, 'compact');
+  for (const delta of [{ isMainThread: false }, { executable: '/node22', nodeVersion: '22.14.0' }, { argv: ['/node24', ref.path, 'extra'] }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { execArgv: ['--inspect'] }])
+    assert.deepEqual(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
+});
+test('source observer sink uses its one FD, exact partial writes and same-FD readback', t => observerSinkFixture(({ output, io }) => {
+  const clock = t.mock.method(Date, 'now', () => 0);
+  try { assert.equal(Date.now(), 0); assert.ok(observerNow() > 1000000000000);
+  let opens = 0, closes = 0; const originalOpen = io.openSync, originalClose = io.closeSync, originalWrite = io.writeSync;
+  io.openSync = (...args) => { opens++; return originalOpen(...args); }; io.closeSync = fd => { closes++; return originalClose(fd); };
+  io.writeSync = (fd, bytes, offset, length, position) => originalWrite(fd, bytes, offset, Math.min(7, length), position);
+  const sink = createObserverSink(output, observerNow() + 5000, io); sink.emit({ event: 'unit', value: 'partial'.repeat(8) }); sink.close();
+  const bytes = fs.readFileSync(sink.file); assert.equal(JSON.parse(bytes).value, 'partial'.repeat(8)); assert.equal(bytes.length, sink.bytes); assert.equal(sink.readbackBytes, sink.bytes);
+  assert.equal(opens, 1); assert.equal(closes, 1);
+  } finally { clock.mock.restore(); }
+}));
+for (const [name, kind] of [['zero write', 'zero'], ['partial then EIO', 'partial'], ['readback failure', 'read']])
+  test(`source observer sink closes after ${name} and preserves its actual successful extent`, () => observerSinkFixture(({ output, io }) => {
+    let closes = 0, writes = 0; const close = io.closeSync, write = io.writeSync;
+    io.closeSync = fd => { closes++; return close(fd); };
+    if (kind === 'read') io.readSync = () => { throw Object.assign(new Error('synthetic read error'), { code: 'EIO' }); };
+    else io.writeSync = (fd, bytes, offset, length, position) => { if (kind === 'zero') return 0; if (writes++) throw Object.assign(new Error('synthetic write error'), { code: 'EIO' }); return write(fd, bytes, offset, Math.min(5, length), position); };
+    const sink = createObserverSink(output, observerNow() + 5000, io); let failure;
+    try { sink.emit({ event: 'unit' }); } catch (error) { failure = error; } finally { sink.close(); }
+    assert.ok(failure); assert.equal(closes, 1); assert.equal(fs.statSync(sink.file).size, sink.bytes);
+    assert.equal(sink.bytes, kind === 'zero' ? 0 : kind === 'partial' ? 5 : Buffer.byteLength('{"ordinal":0,"event":"unit"}\n'));
+  }));
+test('source observer sink refuses late parent rename to a symlink to the same leaf inode', () => observerSinkFixture(({ root, output, io }) => {
+  const sink = createObserverSink(output, observerNow() + 5000, io), moved = path.join(root, 'moved');
+  fs.renameSync(output.path, moved); fs.symlinkSync(moved, output.path, 'dir');
+  try { assert.throws(() => sink.emit({ event: 'unit' }), /SOURCE_GATE_/); assert.equal(sink.bytes, 0); }
+  finally { sink.close(); }
+}));
+test('source observer real selected worker retains exact engine hashes and the unfiltered native exit diagnostic', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const result = await run({ args: [path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')], context: true, useOuterMode: true });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    assert.equal(result.stderr.toString(), 'Failed to get \'result\' from coverage profile response:\n{"id":4,"error":{"code":-32000,"message":"Precise coverage has not been started."}}\n');
+    let directory = path.join(root, 'output');
+    if (result.outerMode) {
+      const raw = observerRead(result.outerMode.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_FILE, 16384);
+      assert.equal(observerHash(raw), result.outerMode.CASEOPS_SOURCE_GATE_OBSERVER_MANIFEST_SHA256);
+      directory = JSON.parse(raw).output.path;
+    }
+    const files = observerFiles(directory).filter(name => name.startsWith(`compact-${result.pid}-0-`)); assert.equal(files.length, 1);
+    const rows = observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(rows[0].event, 'header'); assert.equal(rows[0].selection, 'exact-declared-test-worker');
+    assert.ok(rows.some(row => row.event === 'live')); assert.ok(rows.some(row => row.event === 'detailed-coverage-stopped'));
+    const entry = pathToFileURL(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')).href;
+    const script = rows.find(row => row.event === 'script' && row.url === entry); assert.ok(script);
+    assert.equal(script.engineSha256, observerHash(fs.readFileSync(new URL(entry))));
+    assert.ok(rows.some(row => row.event === 'exit-marker' && row.code === 0)); assert.ok(fs.statSync(path.join(directory, files[0])).size < 2097152);
+    assert.deepEqual(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)), []);
+  });
+});
+for (const [label, extra, compactCount] of [
+  ['captured Node24 defaults', [], 1],
+  ['changed stack trace default', ['--stack-trace-limit=11'], 0],
+]) test(`source observer actual intrinsic CLI ${label} preserves all evidence cases`, async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    // Exercise Node's real controller-to-worker argv serialization. A synthetic
+    // NODE_TEST_CONTEXT with direct entry execution does not reproduce it.
+    const result = await run({ args: [...extra, '--test', '--test-reporter=tap', path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')] });
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    const output = result.stdout.toString();
+    for (const [name, value] of [['tests', 12], ['pass', 12], ['fail', 0], ['cancelled', 0], ['skipped', 0], ['todo', 0]])
+      assert.match(output, new RegExp(`^# ${name} ${value}$`, 'm'));
+    const directory = path.join(root, 'output'), files = observerFiles(directory);
+    assert.equal(files.length, compactCount);
+    if (compactCount) {
+      const rows = observerRead(path.join(directory, files[0]), 2097152).toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+      assert.equal(rows[0].event, 'header'); assert.equal(rows[0].selection, 'exact-declared-test-worker');
+      assert.ok(rows.some(row => row.event === 'live'));
+      assert.ok(rows.some(row => row.event === 'exit-marker' && row.code === 0));
+      const entry = pathToFileURL(path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')).href;
+      assert.equal(rows.find(row => row.event === 'script' && row.url === entry)?.engineSha256,
+        observerHash(fs.readFileSync(new URL(entry))));
+    } else {
+      assert.ok(observerFiles(result.coverageDirectory).some(name => name.startsWith('coverage-')));
+    }
+  });
+});
+test('source observer inherited normal ESM Worker remains rich without a Session or exit diagnostic', async () => {
+  await withObserverFixture(async ({ root, A, run }) => {
+    const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+    const worker = `import{parentPort}from'node:worker_threads';import tls from'node:tls';const m=await import(${JSON.stringify(uri)});parentPort.postMessage({status:m.sourceGateObserverStatus(),roots:tls.getCACertificates('default').length})`;
+    const code = `const{Worker}=require('node:worker_threads');const w=new Worker(new URL(${JSON.stringify('data:text/javascript;base64,')}+Buffer.from(${JSON.stringify(worker)}).toString('base64')));w.once('message',r=>console.log(JSON.stringify(r)));w.once('exit',c=>{if(c)process.exitCode=c})`;
+    const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    const report = JSON.parse(result.stdout); assert.equal(report.roots, 144, JSON.stringify(report)); assert.equal(report.status.reason, 'worker-thread');
+    assert.equal(report.status.sessionAllowed, false); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
+  });
+});
+test('source observer async and synchronous unselected children retain their exact output and detailed fallback', async () => {
+  await withObserverFixture(async ({ root, run }) => {
+    const code = `const{spawn,spawnSync}=require('node:child_process');const args=['-e','console.log(require("node:tls").getCACertificates("default").length)'];const c=spawn(process.execPath,args,{stdio:['ignore','pipe','pipe']});let o='',e='';c.stdout.on('data',b=>o+=b);c.stderr.on('data',b=>e+=b);c.once('close',n=>{const s=spawnSync(process.execPath,args,{encoding:'utf8'});console.log(JSON.stringify({async:{code:n,stdout:o,stderr:e,pid:c.pid},sync:{code:s.status,stdout:s.stdout,stderr:s.stderr,pid:s.pid}}))})`;
+    const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
+    const report = JSON.parse(result.stdout); for (const value of Object.values(report)) { const { pid, ...output } = value; assert.ok(Number.isSafeInteger(pid) && pid > 0); assert.deepEqual(output, { code: 0, stdout: '144\n', stderr: '' }); }
+    assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []); for (const pid of [result.pid, report.async.pid, report.sync.pid]) assert.equal(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${pid}-`)).length, 1);
+  });
+});
+test('source observer Expo selector requires the exact pinned public or introspect argv and current ref', () => {
+  const ref = { path: '/approved/apps/mobile/node_modules/expo/bin/cli', sha256: 'a'.repeat(64), sizeBytes: 43 };
+  const target = { entry: ref, cwd: '/approved/apps/mobile', argvSuffixes: [['config', '--type', 'public', '--json'], ['config', '--type', 'introspect', '--json']] };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [], startupFlags: [], expoConfigTarget: target };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: [], argv: ['/node24', ref.path, ...target.argvSuffixes[0]], cwd: target.cwd, entryReference: ref };
+  assert.equal(selectCompactInvocation(actual, admitted).reason, 'exact-pinned-expo-config');
+  assert.equal(selectCompactInvocation({ ...actual, argv: ['/node24', ref.path, ...target.argvSuffixes[1]] }, admitted).mode, 'compact');
+  for (const delta of [{ argv: [...actual.argv, '--unsafe'] }, { cwd: '/approved' }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { argv: ['/node24', ref.path, 'start'] }])
+    assert.equal(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
+});
+function observerNestedEvidence() {
+  const ref = path => ({ path, sha256: 'a'.repeat(64), sizeBytes: 10 });
+  const rule = { constructorSource: ref('/owned/Q/scripts/mobile/tooling.test.mjs'), fixture: ref('/owned/Q/scripts/mobile/host-node-trust-fixture.mjs'), cwd: '/owned/Q' };
+  const environment = { HOME: '/owned/home', NODE_OPTIONS: 'held-B', SSL_CERT_FILE: '/owned/roots.pem', SSL_CERT_DIR: '/owned/empty',
+    CASEOPS_HOST_NODE_TRUST_POLICY_FILE: '/owned/policy.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: 'b'.repeat(64) };
+  const start = { file: '/node24', args: ['/node24', '--test', '--test-reporter=tap', rule.fixture.path], cwd: rule.cwd,
+    options: { detached: false, windowsHide: true, windowsVerbatimArguments: false },
+    stdio: [{ type: 'ignore' }, { type: 'pipe', readable: false, writable: true }, { type: 'pipe', readable: false, writable: true }],
+    envPairs: Object.entries({ ...environment, CASEOPS_HOST_NODE_BOOTSTRAP_TEST: '1' }).map(([k, v]) => `${k}=${v}`) };
+  return { actual: { start, end: JSON.parse(JSON.stringify(start)), pid: 123, parentEntryReference: rule.constructorSource },
+    manifest: { primaryNode: { path: '/node24' } }, selection: { nestedDriver: rule }, context: {
+      initialEnvironment: { ...environment, NODE_TEST_CONTEXT: 'child-v8' }, nodeEnvironmentKeys: ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'],
+      bootstrapReference: ref('/owned/B.mjs'), reviewNestedEnvironment: () => ({ scopedPolicyVerified: true, childEffectiveDefaultClaim: false, expectedDefaultCount: 144, policyRef: ref('/owned/policy.json') }) } };
+}
+test('source observer nested evidence keeps the intrinsic role distinct from a worker witness', () => {
+  const { actual, manifest, selection, context } = observerNestedEvidence(), result = reviewNestedDriverEvidence(actual, manifest, selection, context);
+  assert.equal(result.scriptCompleteClaim, false); assert.equal(result.workerWitnessRequired, true); assert.deepEqual(result.argv, actual.start.args);
+  assert.deepEqual(result.environment.NODE_OPTIONS.exactHeldBootstrap, context.bootstrapReference);
+});
+for (const [name, change] of [
+  ['missing PID', a => { a.pid = undefined; }], ['wrong constructor source', a => { a.parentEntryReference.sha256 = 'c'.repeat(64); }],
+  ['changed snapshot', a => { a.end.cwd = '/changed'; }], ['wrong cwd', a => { a.start.cwd = a.end.cwd = '/changed'; }],
+  ['detached group', a => { a.start.options.detached = a.end.options.detached = true; }],
+  ['custom reporter', a => { a.start.args[2] = a.end.args[2] = '--test-reporter=custom'; }],
+  ['unknown environment', a => { a.start.envPairs.push('UNKNOWN_PRIVATE=unretained'); a.end.envPairs.push('UNKNOWN_PRIVATE=unretained'); }],
+  ['duplicate environment', a => { a.start.envPairs.push(a.start.envPairs[0]); a.end.envPairs.push(a.end.envPairs[0]); }],
+  ['missing curated environment', a => { a.start.envPairs.shift(); a.end.envPairs.shift(); }],
+]) test(`source observer nested evidence refuses ${name} without transferring a workload claim`, () => {
+  const { actual, manifest, selection, context } = observerNestedEvidence();
+  actual.parentEntryReference = { ...actual.parentEntryReference }; change(actual);
+  assert.throws(() => reviewNestedDriverEvidence(actual, manifest, selection, context), /SOURCE_GATE_NESTED_/);
+});
+for (const [label, emptyExecArgv] of [['default', false], ['explicit empty execArgv', true]])
+  test(`source observer classic CJS eval Worker ${label} preserves pre-existing startup and no observer Session`, async () => {
+    await withObserverFixture(async ({ root, A, run }) => {
+      const uri = 'data:text/javascript;base64,' + observerRead(A.path).toString('base64');
+      const worker = `import(${JSON.stringify(uri)}).then(m=>require('node:worker_threads').parentPort.postMessage({status:m.sourceGateObserverStatus(),roots:require('node:tls').getCACertificates('default').length}))`;
+      const code = `const{Worker}=require('node:worker_threads');const w=new Worker(${JSON.stringify(worker)},{eval:true${emptyExecArgv ? ',execArgv:[]' : ''}});w.once('message',r=>console.log(JSON.stringify({mainRoots:require('node:tls').getCACertificates('default').length,worker:r})));w.once('exit',c=>{if(c)process.exitCode=c})`;
+      const baseline = await run({ args: ['-e', code], mode: false }), observed = await run({ args: ['-e', code] });
+      for (const result of [baseline, observed]) {
+        assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.stderr.length, 0);
+        // This enumeration is a constructor fact, not an HTTPS or TLS-clean verdict.
+        assert.deepEqual(JSON.parse(result.stdout), { mainRoots: 144, worker: { status: { mode: 'not-activated' }, roots: 0 } });
+        assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
+      }
+      assert.deepEqual(JSON.parse(observed.stdout), JSON.parse(baseline.stdout)); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
+    });
+  });
+async function observerChildPolicy(callback) {
+  return await withObserverFixture(async fixture => {
+    const child = fixture.observerTrust.prepareHostNodeTrust({ directory: path.join(fixture.root, 'child-policy'), environment: fixture.base, sourceRefs: { helper: fixture.H, bootstrap: fixture.B } });
+    const environment = { ...child.environment }, descriptor = JSON.parse(fs.readFileSync(child.policyRef.path));
+    const commit = () => { const raw = Buffer.from(JSON.stringify(descriptor, null, 2) + '\n'); fs.writeFileSync(child.policyRef.path, raw); environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 = observerHash(raw); };
+    const context = { parentPolicy: fixture.prepared.descriptor, parentReport: { defaultEnumerationVerified: true, expectedDefaultCount: 144 },
+      sourceRepo: observerRoot, bootstrapBytes: observerRead(fixture.B.path), deadlineEpochMs: observerNow() + 5000 };
+    // This helper supplies an explicit parent-admission double. The runtime B
+    // must obtain that admission from H's actual CURRENT process; this unit is
+    // a real-FS public-policy contract, not another process's TLS proof.
+    return callback({ ...fixture, child, environment, descriptor, commit, context });
+  });
+}
+test('source observer captured child BASE policy matches the retained approved PEM and never claims its TLS default', async () => {
+  await observerChildPolicy(({ environment, context, child }) => {
+    const result = reviewCapturedBasePolicy(environment, context);
+    assert.equal(result.scopedPolicyVerified, true); assert.equal(result.childEffectiveDefaultClaim, false);
+    assert.equal(result.policyRef.path, child.policyRef.path); assert.equal(result.parentApprovedBundleSha256, context.parentPolicy.bundle.sha256);
+  });
+});
+for (const [name, change] of [
+  ['root fields', f => { f.descriptor.outputSetSha256 = '0'.repeat(64); f.commit(); }],
+  ['helper source path', f => { f.descriptor.runtimeSource.helper.path = path.join(f.root, 'foreign-helper.mjs'); f.commit(); }],
+  ['bootstrap source hash', f => { f.descriptor.runtimeSource.bootstrap.sha256 = '0'.repeat(64); f.commit(); }],
+  ['policy extra field', f => { f.descriptor.unknown = true; f.commit(); }],
+  ['native-QA role', f => { f.descriptor.role = 'native-qa'; f.commit(); }],
+  ['bundle bytes', f => { const b = Buffer.from('different public bundle\n'); fs.writeFileSync(f.descriptor.bundle.path, b); f.descriptor.bundle.sha256 = observerHash(b); f.descriptor.bundle.sizeBytes = b.length; f.commit(); }],
+  ['Node options', f => { f.environment.NODE_OPTIONS += ' --require=unreviewed'; }],
+  ['additional CA', f => { f.environment.NODE_EXTRA_CA_CERTS = '/not-read'; }],
+  ['proxy', f => { f.environment.HTTPS_PROXY = 'https://not-read.invalid'; }],
+  ['case-folded tuple', f => { f.environment.ssl_cert_file = f.environment.SSL_CERT_FILE; }],
+  ['nonempty private directory', f => { fs.writeFileSync(f.descriptor.emptyDirectory + '/late', 'x', { flag: 'wx', mode: 0o600 }); }],
+]) test(`source observer captured child policy refuses changed ${name}`, async () => {
+  await observerChildPolicy(fixture => { change(fixture); assert.throws(() => reviewCapturedBasePolicy(fixture.environment, fixture.context), /SOURCE_GATE_/); });
+});
+
+import { rebuildHostNodeBootstrap, readBootstrapGeneratorInput } from './rebuild-host-node-bootstrap.mjs';
+test('source observer bootstrap generator preserves exact tokens and AST within the original Windows bound', t => {
+  const folder = path.dirname(trustHelper), input = readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.source.mjs'));
+  const actual = readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.mjs'));
+  const declared = JSON.parse(readBootstrapGeneratorInput(path.join(folder, 'host-node-trust-start.provenance.json')));
+  const pins = JSON.parse(fs.readFileSync(path.join(folder, 'tooling.json'))).sourceGateObserver;
+  assert.deepEqual(Object.keys(pins).sort(), ['bootstrapReadable', 'generator', 'provenance', 'recorder']);
+  for (const ref of Object.values(pins)) {
+    const raw = observerRead(path.join(folder, ref.file), 65536);
+    assert.equal(raw.length, ref.sizeBytes); assert.equal(observerHash(raw), ref.sha256);
+  }
+  const recorder = observerRead(path.join(folder, 'source-gate-observer.mjs'), 65536);
+  const checkRecorderBinding = bytes => {
+    const text = bytes.toString('utf8');
+    assert.equal(/const A_SHA\s*=\s*'([a-f0-9]{64})'/.exec(text)?.[1], observerHash(recorder));
+    assert.equal(Number(/const A_SIZE\s*=\s*(\d+)/.exec(text)?.[1]), recorder.length);
+  };
+  checkRecorderBinding(input); checkRecorderBinding(actual);
+  assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace(observerHash(recorder), '0'.repeat(64)))), { code: 'ERR_ASSERTION' });
+  assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace('const A_SIZE = ' + recorder.length, 'const A_SIZE = 0'))), { code: 'ERR_ASSERTION' });
+  const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
+  assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
+  assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);
+  assert.throws(() => rebuildHostNodeBootstrap(Buffer.alloc(16385)), /BOOTSTRAP_GENERATOR_INPUT/);
+  assert.throws(() => rebuildHostNodeBootstrap(Buffer.from([0xff])), /encoded data|UTF-8/);
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const alias = path.join(root, 'alias'); fs.symlinkSync(path.join(folder, 'host-node-trust-start.source.mjs'), alias);
+  assert.throws(() => readBootstrapGeneratorInput(alias), /BOOTSTRAP_GENERATOR_PATH/);
+  const file = path.join(root, 'input'); fs.writeFileSync(file, input, { flag: 'wx', mode: 0o600 });
+  const open = fs.openSync, read = fs.readSync; let descriptor;
+  fs.openSync = (...args) => { descriptor = open(...args); return descriptor; };
+  fs.readSync = () => { throw new Error('SYNTHETIC_GENERATOR_READ'); };
+  try { assert.throws(() => readBootstrapGeneratorInput(file), /SYNTHETIC_GENERATOR_READ/); }
+  finally { fs.openSync = open; fs.readSync = read; }
+  assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+});
+
+
+// IOS-RUBY-01..02 are source/transport projection contracts; actual Ruby TLS is a separate component.
+test('IOS-RUBY-01 durable Ruby transport inventory is complete and independent of Node execution', () => {
+  const source = fs.readFileSync(new URL('./ios-host-pods.test.rb', import.meta.url), 'utf8');
+  const match = source.match(/CASE_IDS = %w\[\n([\s\S]+?)\n\]\.freeze/); assert.ok(match);
+  const actual = match[1].trim().split(/\s+/), expected = ["OPENURI-01-default-real-tls","OPENURI-02-unknown-direct-store","OPENURI-03-custom-ca-file","OPENURI-04-custom-ca-directory","OPENURI-05-unsafe-verify","OPENURI-06-unsafe-version","OPENURI-07-proxy","OPENURI-08-http","OPENURI-09-real-hostname-mismatch","OPENURI-10-real-unknown-ca","OPENURI-11-nested-success-restoration","OPENURI-12-nested-rejection-restoration","OPENURI-13-http-error-restoration","OPENURI-14-explicit-retry-marker","OPENURI-15-redirect-marker","OPENURI-16-fiber-isolation","OPENURI-17-thread-isolation","OPENURI-18-stale-receipt","OPENURI-19-direct-net-http","OPENURI-20-marker-override","OPENURI-21-http-identity","OPENURI-22-explicit-peer","OPENURI-23-client-auth-refused","OPENURI-24-error-identity","OPENURI-25-return-identity"];
+  assert.deepEqual(actual, expected); assert.equal(new Set(actual).size, 25);
+  assert.match(source, /ARGV == \['--list'\]/); assert.match(source, /CASE_IDS\.zip\(cases\)/);
+  assert.match(source, /reports\.length == CASE_IDS\.length \* 3/);
+});
+test('IOS-RUBY-02 actual retained Ruby policy bytes reach bounded pod stdin and stale policy pins refuse', () => {
+  const bytes = fs.readFileSync(new URL('./ios-host-pods.rb', import.meta.url)), before = Buffer.from(bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), IOS_PODS_SOURCE_SHA256); assert.ok(bytes.length > 8192 && bytes.length <= 32768);
+  const f = iosProjectionFixture(); f.admitted.podsSource = bytes; f.policy.source['ios-host-pods.rb'].sha256 = IOS_PODS_SOURCE_SHA256;
+  const command = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install'], f.environment);
+  assert.deepEqual(command.args, ['-', 'install']); assert.deepEqual(command.input, Buffer.concat([before, Buffer.from('\nCaseopsIosPods.run\n')]));
+  assert.deepEqual(bytes, before); const policy = JSON.parse(command.environment.CASEOPS_IOS_PODS_TLS_POLICY);
+  assert.deepEqual(policy.bundle, f.policy.bundle); assert.equal(f.policy.fixtureCA, null); assert.equal(policy.fixtureSha256, null); assert.equal(command.environment.NODE_OPTIONS, undefined); command.input.fill(0);
+  const stale = iosProjectionFixture(); stale.admitted.podsSource = Buffer.from(before); stale.policy.source['ios-host-pods.rb'].sha256 = '0'.repeat(64);
+  assert.throws(() => iosHostCommandProjection(stale.admitted, stale.ref, 'pod', ['install'], stale.environment), /IOS_HOST_PODS_SOURCE_UNREVIEWED/);
+  bytes.fill(0); before.fill(0); stale.admitted.podsSource.fill(0);
+});
+
+
+test('ANDROID-CDN-01 keeps eight repositories and admits only the official artifact CDN as ninth authority', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const repositories = source.split('final Set<String> repositoryBases = [')[1]?.split('] as Set')[0];
+  assert.ok(repositories);
+  assert.deepEqual([...repositories.matchAll(/'([^']+)'/g)].map((match) => match[1]), [
+    'https://repo.maven.apache.org/maven2',
+    'https://repo1.maven.org/maven2',
+    'https://dl.google.com/dl/android/maven2',
+    'https://maven.google.com',
+    'https://plugins.gradle.org/m2',
+    'https://repo.reactnative.dev/maven2',
+    'https://central.sonatype.com/repository/maven-snapshots',
+    'https://www.jitpack.io',
+  ]);
+  const redirects = source.split('final Set<String> reviewedRedirectBases = ')[1]?.split('\n')[0];
+  assert.equal(redirects, "Collections.singleton('https://plugins-artifacts.gradle.org')");
+  for (const fragment of ['configuredBases.size() <= 9', 'exactScopes.size() <= 9', 'originalScopes.size() <= 9']) {
+    assert.equal(source.split(fragment).length - 1, 1);
+  }
+});
+
+test('ANDROID-CDN-02 preserves every original URI, marker, TLS, factory and Download fence byte', () => {
+  let restored = restoreAndroidEmptyAuthLocalResource(restoreAndroidEmptyMavenRepository(fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8')));
+  const replacements = [
+    ['configuredBases.size() <= 9', 'configuredBases.size() <= 10'],
+    ['exactScopes.size() <= 9', 'exactScopes.size() <= 8'],
+    ['originalScopes.size() <= 9', 'originalScopes.size() <= 8'],
+    ["final Set<String> reviewedRedirectBases = Collections.singleton('https://plugins-artifacts.gradle.org')", 'final Set<String> reviewedRedirectBases = [] as Set'],
+  ];
+  for (const [before, after] of replacements) {
+    assert.equal(restored.split(before).length - 1, 1);
+    restored = restored.replace(before, after);
+  }
+  assert.equal(createHash('sha256').update(restored).digest('hex'), '482d2c658f9a0c34c7b351b41f3583edc8bfae0935649e12d2bbbf506dc65694');
+});
+
+const iosArchiveFixtureRows = Object.freeze([["apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8",1317476],["apps/mobile/node_modules/expo/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","290797137e75ad1edb793ab3019577a0295a4d0196c3684a1737a2d0c2999f92",1265246],["apps/mobile/node_modules/expo-file-system/prebuilds/output/debug/xcframeworks/ExpoFileSystem.tar.gz","3b10e581b292a4550fa940b2d0bcfe2c5274f1a88e974c0af2386ad26fda3f2e",4431085],["apps/mobile/node_modules/expo-file-system/prebuilds/output/release/xcframeworks/ExpoFileSystem.tar.gz","ff79f423af91eafd8b8a3607d2d64b3bed9d3f6098035d3fbd9c94fe910a6766",3235468],["apps/mobile/node_modules/expo-font/prebuilds/output/debug/xcframeworks/ExpoFont.tar.gz","86f51373e8e401513ba873f48f2ae00c1a9cb8df57d5a894842bc940b9eb9639",1229343],["apps/mobile/node_modules/expo-font/prebuilds/output/release/xcframeworks/ExpoFont.tar.gz","b1cdfbaeefca5dfe219743dbce305924158b91569cc3ecf8d5ece0445a2d601a",1173496],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesCore.tar.gz","bc3dcb318b342ca373b5149e64989b7e40decd848da6f4931ff817e37d6df639",16127814],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/debug/xcframeworks/ExpoModulesWorklets.tar.gz","581e17eaf29bfbdb1d7e07b5832cc4314bfe89aeddfe9d2fced19ec2b00daff0",1030869],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesCore.tar.gz","e67a98002c67327a13bba00f645a192799327e57276ce3b1d625e09937bf036c",14239057],["apps/mobile/node_modules/expo-modules-core/prebuilds/output/release/xcframeworks/ExpoModulesWorklets.tar.gz","12f3c6a36d914b1a72e5dd516f541aa71a6fc0feeb770de4f6967a778670d646",975452]]);
+function iosArchiveUnitArgs(relative, output = '/reviewed/temporary/file.tgz') {
+  return ['-f', '-L', '-o', output, pathToFileURL('/reviewed/source/' + relative).href,
+    '--create-dirs', '--netrc-optional', '--retry', '2', "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'"];
+}
+test('IOS-ARCHIVE-01 finite official SDK archive catalog preserves the exact CocoaPods argument array', () => {
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => validateIosLocalArchiveArguments([], '/reviewed/source'), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    return;
+  }
+  assert.equal(iosArchiveFixtureRows.length, 10); const seen = new Set();
+  for (const [relative, digest, size] of iosArchiveFixtureRows) {
+    const args = iosArchiveUnitArgs(relative), before = [...args];
+    const actual = validateIosLocalArchiveArguments(args, '/reviewed/source');
+    assert.deepEqual(args, before); assert.deepEqual(actual.args, before);
+    assert.notEqual(actual.args, args); assert.equal(actual.archive.path, relative);
+    assert.equal(actual.archive.sha256, digest); assert.equal(actual.archive.sizeBytes, size);
+    assert.ok(Object.isFrozen(actual.archive)); seen.add(actual.archive.path);
+  }
+  assert.equal(seen.size, 10);
+});
+test('IOS-ARCHIVE-02 file URI aliases and unreviewed curl options refuse before any source read', () => {
+  const good = iosArchiveUnitArgs(iosArchiveFixtureRows[0][0]);
+  if (typeof process.getuid !== 'function') {
+    assert.throws(() => validateIosLocalArchiveArguments(good, '/reviewed/source'), /IOS_HOST_POSIX_OWNER_REQUIRED/);
+    return;
+  }
+  for (const change of [args => { args[4] = args[4].replace('file:///', 'file://localhost/'); },
+    args => { args[4] = args[4].replace('file:///', 'file://foreign/'); },
+    args => { args[4] = args[4].replace('/prebuilds/', '/%70rebuilds/'); },
+    args => { args[4] = args[4].replace('/debug/', '/other/../debug/'); },
+    args => { args[4] += '?query=1'; }, args => { args[4] += '#fragment'; },
+    args => { args[4] = args[4].replace('ExpoFont.tar.gz', 'Unknown.tar.gz'); },
+    args => { args[1] = '--location'; }, args => { args.push('-H', 'Authorization: SYNTHETIC'); },
+    args => { args[3] += '\n'; }]) {
+    const args = [...good]; change(args);
+    assert.throws(() => validateIosLocalArchiveArguments(args, '/reviewed/source'), /IOS_HOST_LOCAL_ARCHIVE_/);
+  }
+  assert.throws(() => validateIosCurlArguments(good), /IOS_HOST_HTTPS_DOWNLOAD/);
+});
+test('IOS-ARCHIVE-03 a JSON-shaped local-transfer receipt cannot authorize a command projection', () => {
+  const f = iosProjectionFixture(); f.admitted.localArchive = { args: ['-f'], bytes: Buffer.from('SYNTHETIC'), consumed: false };
+  assert.throws(() => iosHostCommandProjection(f.admitted, f.ref, 'curl', ['-f'], f.environment), /IOS_HOST_LOCAL_ARCHIVE_RECEIPT/);
+  f.admitted.localArchive.bytes.fill(0);
+});
+test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every local-transfer case and phase', () => {
+  const source = fs.readFileSync(new URL('./fixtures/ios-local-archive/runner.mjs', import.meta.url), 'utf8');
+  const match = source.match(/archiveControlCases = Object\.freeze\((\[[^\n]+\])\);/);
+  assert.ok(match); const actual = JSON.parse(match[1]);
+  assert.deepEqual(actual, ["ARCHIVE-01-absent-and-empty-targets","ARCHIVE-02-original-filesystem-archive","ARCHIVE-03-unsafe-uri-and-argv","ARCHIVE-04-changed-manifest-and-archive","ARCHIVE-05-source-replacement-keeps-reviewed-bytes","ARCHIVE-06-target-link-content-and-replacement","ARCHIVE-07-original-write-error-identity","ARCHIVE-08-https-path-and-marker-unchanged"]); assert.equal(new Set(actual).size, 8);
+  assert.match(source, /m\.iosHostCli\(\['curl',\.\.\.args\]\)/);
+  assert.match(source, /phases:24/); assert.match(source, /actualChildren:0,httpRequests:0/);
+  assert.match(source, /assert\.equal\(r\.error,sentinel\)/);
+  assert.match(source, /assert\.equal\(sourceOpens,1\)/);
+});
+
+function restoreAndroidEmptyMavenRepository(source) {
+  const begin = '// BEGIN CASEOPS EXACT EMPTY MAVEN REPOSITORY\n', end = '// END CASEOPS EXACT EMPTY MAVEN REPOSITORY\n\n';
+  assert.equal(source.split(begin).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_BEGIN');
+  assert.equal(source.split(end).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_END');
+  const first = source.indexOf(begin), last = source.indexOf(end) + end.length, layer = source.slice(first, last);
+  assert.ok(last > first); assert.equal(Buffer.byteLength(layer), 5262);
+  assert.equal(createHash('sha256').update(layer).digest('hex'), 'e28e56f10790b257ab03f83e5e32447070a3329f5f20c0c4f61c7e48c63e177b', 'EXACT_REVIEWED_EMPTY_MAVEN_LAYER');
+  source = source.slice(0, first) + source.slice(last);
+  for (const line of ['import groovy.json.JsonSlurper\n', 'import java.nio.file.Files\n', 'import java.nio.file.Path\n', 'import java.nio.file.Paths\n', 'import java.nio.file.LinkOption\n', 'import java.nio.file.NoSuchFileException\n']) {
+    assert.equal(source.split(line).length - 1, 1, 'EXACT_EMPTY_MAVEN_IMPORT'); source = source.replace(line, '');
+  }
+  const checked = "if (!localRoots.any { inside(local, it) } && !CaseOpsEmptyMavenRepository.admits(local, System.getenv(), System.getProperties()))";
+  assert.equal(source.split(checked).length - 1, 1, 'EXACT_EMPTY_MAVEN_SCOPE_BRANCH');
+  return source.replace(checked, 'if (!localRoots.any { inside(local, it) })');
+}
+function restoreAndroidEmptyAuthLocalResource(source) {
+  source = restoreAndroidBoundJavaEnvironment(source);
+  const replacements = [
+  [
+    "// Gradle eagerly creates protocol connectors while reading a bundled jar resource.\n// An unmarked connector may be constructed but can never perform any IO.\nfinal class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {\n    private static GradleException blocked() { new GradleException('ANDROID_UNMARKED_HTTP_CONNECTOR_USE') }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAndMetadataAction<T> action) { throw blocked() }\n    @Override public <T> T withContent(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate, org.gradle.internal.resource.ExternalResource.ContentAction<T> action) { throw blocked() }\n    @Override org.gradle.internal.resource.metadata.ExternalResourceMetaData getMetaData(org.gradle.internal.resource.ExternalResourceName location, boolean revalidate) { throw blocked() }\n    @Override List<String> list(org.gradle.internal.resource.ExternalResourceName parent) { throw blocked() }\n    @Override void upload(org.gradle.internal.resource.ReadableContent resource, org.gradle.internal.resource.ExternalResourceName destination) { throw blocked() }\n}\n",
+    ""
+  ],
+  [
+    "    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) {\n        if (original != null && original.authentications != null && original.authentications.empty) return new CaseOpsBlockedUnmarkedHttpConnector()\n        return delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy))\n    }",
+    "    @Override ExternalResourceConnector createResourceConnector(ResourceConnectorSpecification original) { delegate.createResourceConnector(new CaseOpsMarkedConnectorSpecification(original, policy)) }"
+  ]
+];
+  for (const [before, after] of replacements) {
+    assert.equal(source.split(before).length - 1, 1);
+    source = source.replace(before, after);
+  }
+  return source;
+}
+
+test('ANDROID-LOCAL-RESOURCE-01 empty-auth constructor has no HTTP delegate and every IO entry remains blocked', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const restored = restoreAndroidEmptyAuthLocalResource(restoreAndroidEmptyMavenRepository(source));
+  assert.equal(createHash('sha256').update(restored).digest('hex'), 'd39b669c685898fabd3ba96f4ff9da7c19713783209e8df6ae4bb1a8261674c7');
+  const blocked = source.split('final class CaseOpsBlockedUnmarkedHttpConnector implements ExternalResourceConnector {')[1]?.split('final class CaseOpsMarkedHttpConnectorFactory')[0];
+  assert.ok(blocked); assert.equal((blocked.match(/throw blocked\(\)/g) || []).length, 5);
+  for (const method of ['ContentAndMetadataAction<T>', 'ContentAction<T>', 'getMetaData(', 'list(', 'upload(']) assert.ok(blocked.includes(method));
+  assert.ok(!blocked.includes('delegate') && !blocked.includes('createResourceConnector('));
+  assert.equal(source.split("originals.size() == 1, 'ANDROID_CONNECTOR_AUTH_COUNT'").length - 1, 1);
+  assert.equal(source.split("credentials.value == markerValue, 'ANDROID_CONNECTOR_FIXED_MARKER'").length - 1, 1);
+});
+
+function restoreAndroidBoundJavaEnvironment(source) {
+  const exact = "// Fixed, value-free observation from the actual Gradle process. The owning\n// consumer independently binds this PID and loaded helper bytes/source receipt.\nfinal List<String> boundJavaPropertyKeys = ['javax.net.ssl.trustStore', 'javax.net.ssl.trustStoreType', 'javax.net.ssl.trustStorePassword', 'java.io.tmpdir', 'user.home']\nfinal Map<String,String> boundJavaProperties = boundJavaPropertyKeys.collectEntries { key -> [(key):System.getProperty(key)] }\nif (boundJavaProperties.any { key,value -> value == null || value.isEmpty() || value.find(/[\\s\"'\\\\]/) != null }\n    || boundJavaProperties['javax.net.ssl.trustStoreType'] != 'PKCS12'\n    || boundJavaProperties['javax.net.ssl.trustStorePassword'] != 'changeit'\n    || boundJavaProperties['java.io.tmpdir'] != System.getenv('TMPDIR')\n    || boundJavaProperties['user.home'] != System.getenv('HOME')) {\n    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_PROPERTIES')\n}\nfinal String boundJavaOptions = boundJavaPropertyKeys.collect { key -> '-D' + key + '=' + boundJavaProperties[key] }.join(' ')\nif (System.getenv('JAVA_TOOL_OPTIONS') != boundJavaOptions\n    || ['JDK_JAVA_OPTIONS', '_JAVA_OPTIONS'].any { key -> def value = System.getenv(key); value != null && !value.isEmpty() }) {\n    throw new GradleException('ANDROID_GRADLE_PARENT_JAVA_ENV_MISMATCH')\n}\nlogger.lifecycle('CASEOPS_GRADLE_PARENT_JAVA_ENV ' + JsonOutput.toJson([kind:'caseops-gradle-parent-java-env-v1',schemaVersion:1,processPid:ProcessHandle.current().pid(),sourceRoot:sourceRoot.canonicalPath,helperRelativePath:'scripts/mobile/android-no-paid.gradle',boundJavaRecipeVerified:true,otherJvmEnvironmentAbsent:true]))\n\n";
+  assert.equal(source.split(exact).length - 1, 1, 'EXACT_BOUND_JAVA_ENVIRONMENT_FENCE');
+  return source.replace(exact, '');
+}
+
+test('ANDROID-PRIVATE-TMP-01 actual daemon predicate requires exact bound JAVA5 and preserves every existing transport byte', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  const restored = restoreAndroidBoundJavaEnvironment(restoreAndroidEmptyMavenRepository(source));
+  assert.equal(createHash('sha256').update(restored).digest('hex'), '40a112edff53b11c9004c76721284d398480b23a92b3de1eb542d088965b9eee');
+  assert.ok(!source.includes('allThreeAbsentOrEmpty'));
+  const host = fs.readFileSync(new URL('./android-host-launch.mjs', import.meta.url), 'utf8');
+  assert.equal(host.split("return [...args, '-Pkotlin.daemon.jvmargs=' + policy.javaOptions];").length - 1, 1);
+  assert.equal(host.split("assert.equal(environment.JAVA_TOOL_OPTIONS, policy.javaOptions, 'ANDROID_HOST_BOUND_JAVA_OPTIONS');").length - 1, 1);
+  assert.ok(host.includes("privateJavaTmp.path + ' -Duser.home=' + privateJavaHome"));
+});
+
+
+function iosVerifiedCopy(source, destination, maxBytes) {
+  const end = Date.now() + 20000, ref = referenceIosHostInput(source, end, maxBytes), input = readIosHostInput(ref, { end, maxBytes });
+  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+  try { fs.writeFileSync(destination, input.bytes, { flag: 'wx', mode: 0o600 }); }
+  finally { input.bytes.fill(0); }
+  return { ...ref, path: destination };
+}
+function iosNpmConstructorFixture(t) {
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'source'), scope = path.join(root, 'policy');
+  fs.mkdirSync(scope, { mode: 0o700 });
+  const f = iosProjectionFixture(), paths = Object.fromEntries(Object.keys(f.policy.paths).map(k => [k, path.join(scope, k)]));
+  for (const dir of Object.values(paths)) fs.mkdirSync(dir, { mode: 0o700 });
+  const refs = {};
+  for (const [name, relative, max] of [['tooling', 'scripts/mobile/npm-tooling.mjs', 65536], ['registry', 'scripts/mobile/npm-registry.mjs', 65536],
+    ['archive', 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', 8388608]])
+    refs[name] = iosVerifiedCopy(fileURLToPath(new URL('../../' + relative, import.meta.url)), path.join(source, relative), max);
+  const helper = iosVerifiedCopy(fileURLToPath(new URL('./ios-host-launch.mjs', import.meta.url)), path.join(source, 'scripts/mobile/ios-host-launch.mjs'), 131072);
+  const nodeNpm = { parent: path.join(paths.runtime, 'npm'), ...refs }; fs.mkdirSync(nodeNpm.parent, { mode: 0o700 });
+  for (const name of ['user', 'global']) {
+    const file = path.join(scope, 'npm-' + name + '.npmrc');
+    fs.writeFileSync(file, '# CaseOps isolated public package requests; no owner configuration.\n', { flag: 'wx', mode: 0o600 });
+    nodeNpm[name] = referenceIosHostInput(file, Date.now() + 20000, 4096);
+  }
+  Object.assign(f.policy, { paths, helper, nodeNpm }); f.policy.tools.node.path = process.execPath;
+  f.admitted.node.environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'].includes(key)));
+  return { ...f, root, source };
+}
+test('iOS npm version uses the actual held public constructor and deregisters its scoped import hook on success and failure', async t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => referenceIosHostInput('unowned'), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const f = iosNpmConstructorFixture(t), moduleApi = ciTrustCreateRequire(import.meta.url)('node:module'), original = moduleApi.registerHooks;
+  let registered = 0, deregistered = 0;
+  moduleApi.registerHooks = hooks => { registered++; const token = original(hooks); return { deregister() { deregistered++; return token.deregister(); } }; }; syncBuiltinESMExports();
+  try {
+    const held = readIosHostInput(f.policy.helper, { maxBytes: 131072 }); let m;
+    try { m = await import('data:text/javascript;base64,' + held.bytes.toString('base64')); } finally { held.bytes.fill(0); }
+    f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2600, observations: 7800, bytesRead: 31910612 });
+    assert.equal(registered, 1); assert.equal(deregistered, 1);
+    const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
+    fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');
+    fs.writeFileSync(path.join(hostile, 'npm'), '#!/bin/sh\necho GLOBAL > "' + sentinel + '"\nexit 99\n', { flag: 'wx', mode: 0o700 });
+    assert.equal(command.executable, process.execPath);
+    assert.equal(command.environment.CASEOPS_PINNED_NPM_CLI, path.join(f.admitted.npmRuntime.root, 'package/bin/npm-cli.js'));
+    const deadline = Number(command.environment.CASEOPS_PINNED_NPM_DEADLINE);
+    assert.ok(Number.isSafeInteger(deadline) && deadline > Date.now() && deadline <= f.policy.deadlineEpochMs, 'IOS_NPM_ACTUAL_EXECUTION_DEADLINE');
+    const actual = execFileSync(command.executable, command.args, { env: { ...command.environment, PATH: hostile }, timeout: 20000, encoding: 'utf8', maxBuffer: 1048576 });
+    assert.equal(actual.trim(), '11.12.1'); assert.equal(fs.existsSync(sentinel), false);
+    assert.throws(() => m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], {}), /IOS_HOST_OWNED_OUTER_REQUIRED/);
+    assert.deepEqual(await import('node:path'), await import('node:path'));
+    const access = fs.accessSync;
+    try { fs.accessSync = (file, mode) => { if (file.startsWith(f.policy.nodeNpm.parent + path.sep) && file.endsWith('/bin/npm') && mode === fs.constants.X_OK) throw Object.assign(new Error('CONTROL_EACCES'), { code: 'EACCES' }); return access(file, mode); };
+      await assert.rejects(m.prepareIosNpmRuntime(f.policy), /NPM_TOOLING_EXECUTABLE_SHIM_REQUIRED/);
+    } finally { fs.accessSync = access; }
+    assert.equal(registered, 2); assert.equal(deregistered, 2);
+    const before = fs.readdirSync(f.policy.nodeNpm.parent);
+    await assert.rejects(m.prepareIosNpmRuntime({ ...f.policy, nodeNpm: { ...f.policy.nodeNpm, cli: { path: '/unadmitted/global/npm-cli.js' } } }), /IOS_HOST_NPM_FIELDS/);
+    const source = f.policy.nodeNpm.tooling.path, bytes = fs.readFileSync(source);
+    try { fs.writeFileSync(source, Buffer.concat([bytes, Buffer.from('\n')])); await assert.rejects(m.prepareIosNpmRuntime(f.policy), /IOS_HOST_FILE_IDENTITY/); }
+    finally { fs.writeFileSync(source, bytes); }
+    const archive = f.policy.nodeNpm.archive.path, archiveBytes = fs.readFileSync(archive);
+    try { const changed = Buffer.from(archiveBytes); changed[0] ^= 1; fs.writeFileSync(archive, changed); await assert.rejects(m.prepareIosNpmRuntime(f.policy), /NPM_TOOLING_ARCHIVE_DIGEST/); }
+    finally { fs.writeFileSync(archive, archiveBytes); archiveBytes.fill(0); }
+    assert.deepEqual(fs.readdirSync(f.policy.nodeNpm.parent), before);
+    assert.equal(registered, 3); assert.equal(deregistered, 3);
+  } finally { moduleApi.registerHooks = original; syncBuiltinESMExports(); }
+});
+test('iOS local archive admission accepts the current full lock and refuses stale lock before archive payload', t => {
+  if (typeof process.getuid !== 'function') { assert.throws(() => referenceIosHostInput('unowned'), /IOS_HOST_POSIX_OWNER_REQUIRED/); return; }
+  const root = trustRoot(); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const helper = path.join(root, 'scripts/mobile/ios-host-launch.mjs'), temporary = path.join(root, 'temporary'), relative = iosArchiveFixtureRows[0][0];
+  for (const name of ['apps/mobile/package-lock.json', 'apps/mobile/node_modules/expo-modules-autolinking/scripts/ios/precompiled_modules.rb',
+    'apps/mobile/node_modules/expo/node_modules/expo-font/package.json', relative])
+    iosVerifiedCopy(fileURLToPath(new URL('../../' + name, import.meta.url)), path.join(root, name), name === relative ? 2097152 : 1048576);
+  fs.mkdirSync(path.dirname(helper), { recursive: true, mode: 0o700 });
+  const output = path.join(temporary, 'd20300101-1-owned', 'file.tgz'); fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 });
+  const args = ['-f', '-L', '-o', output, pathToFileURL(path.join(root, relative)).href, '--create-dirs', '--netrc-optional', '--retry', '2', "-A 'CocoaPods/1.17.0 cocoapods-downloader/2.1'"];
+  const p = { helper: { path: helper }, paths: { temporary } }, accepted = reviewIosLocalArchive(p, args);
+  assert.equal(accepted.expectedSha256, '49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8');
+  assert.equal(createHash('sha256').update(accepted.bytes).digest('hex'), accepted.expectedSha256); accepted.bytes.fill(0);
+  const lock = path.join(root, 'apps/mobile/package-lock.json'), bytes = fs.readFileSync(lock), open = fs.openSync; let archiveOpens = 0;
+  try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
+    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);
+  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+  assert.equal(archiveOpens, 0); assert.equal(fs.existsSync(output), false);
+});
+
+test('Android Maven fallback captures a fresh owned home and keeps only its absent exact repository', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-empty-maven-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    if (typeof process.getuid !== 'function') {
+      assert.throws(() => captureAndroidEmptyMavenRepository(home, {}), /ANDROID_HOST_OWNED_DIRECTORY/); return;
+    }
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'a'.repeat(64);
+    assert.equal(captured.path, path.join(home, '.m2', 'repository')); assert.equal(captured.preparedEmpty, true);
+    assert.notEqual(captured.operatorHome, home);
+    fs.writeFileSync(path.join(home, 'owned-runtime-state'), 'synthetic runtime state', { mode: 0o600 });
+    const bound = bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), witness = JSON.parse(bound[ANDROID_EMPTY_MAVEN_ENV]);
+    assert.equal(witness.policySha256, digest); assert.equal(witness.home.path, home); assert.equal(witness.path, path.join(home, '.m2', 'repository'));
+    assert.throws(() => captureAndroidEmptyMavenRepository(home, {}), /ANDROID_HOST_MAVEN_HOME_NOT_FRESH_EMPTY/);
+    fs.mkdirSync(path.join(home, '.m2'), { mode: 0o700 });
+    fs.writeFileSync(path.join(home, '.m2', 'settings.xml'), '<settings>synthetic-secret-must-not-be-read</settings>', { mode: 0o600 });
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_DIRECTORY_MUST_BE_ABSENT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Android Maven fallback rejects operator home, inherited aliases and forged role identities', () => {
+  assert.throws(() => captureAndroidEmptyMavenRepository(path.resolve(os.userInfo().homedir), {}), /ANDROID_HOST_OPERATOR_MAVEN_HOME/);
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-maven-denials-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    for (const key of ['M2_HOME', 'm2_home', 'MAVEN_HOME', 'maven_user_home', 'MAVEN_OPTS', ANDROID_EMPTY_MAVEN_ENV, ANDROID_EMPTY_MAVEN_ENV.toLowerCase(), 'caseops_android_host_policy_sha256']) {
+      assert.throws(() => captureAndroidEmptyMavenRepository(home, { [key]: '' }), /ANDROID_HOST_MAVEN_OVERRIDE/);
+    }
+    if (typeof process.getuid !== 'function') return;
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'b'.repeat(64);
+    for (const index of [0, 1, 2, 3, 4]) {
+      const forged = structuredClone(captured); forged.home.identity[index] = String(BigInt(forged.home.identity[index]) + 1n);
+      assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, forged, digest), /ANDROID_HOST_MAVEN_HOME_IDENTITY/);
+    }
+    const foreign = structuredClone(captured); foreign.operatorHome = root;
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, foreign, digest), /ANDROID_HOST_MAVEN_OPERATOR_IDENTITY/);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, 'unverified'), /ANDROID_HOST_EMPTY_MAVEN_BINDING/);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home, mAvEn_HoMe: root }, captured, digest), /ANDROID_HOST_MAVEN_OVERRIDE/);
+    const sibling = structuredClone(captured); sibling.path = path.join(home, '.m2', 'other-repository');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, sibling, digest), /ANDROID_HOST_MAVEN_EXACT_REPOSITORY/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Android Maven fallback retains namespace identity and feeds both actual Gradle entry points', () => {
+  const helper = fs.readFileSync(new URL('./android-host-launch.mjs', import.meta.url), 'utf8'), marker = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  assert.ok(helper.includes('return bindAndroidEmptyMavenRepository(roleEnvironment, policy.privateMavenRepository, policyReference.sha256, end)'));
+  assert.ok(helper.includes('gradle-verification.jsonl\'), end, policyReference)'));
+  assert.ok(helper.includes('gradleEnvironment(policy, logFile, end, policyReference)'));
+  assert.ok(marker.includes("final List<File> localRoots = [new File(sourceRoot, 'apps/mobile/node_modules').canonicalFile, gradleHome]"));
+  assert.ok(marker.includes('!CaseOpsEmptyMavenRepository.admits(local, System.getenv(), System.getProperties())'));
+  assert.ok(marker.includes("['javax.net.ssl.trustStore', 'javax.net.ssl.trustStoreType', 'javax.net.ssl.trustStorePassword', 'java.io.tmpdir', 'user.home']"));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-maven-namespace-'))), home = path.join(root, 'home');
+  fs.mkdirSync(home, { mode: 0o700 });
+  try {
+    if (typeof process.getuid !== 'function') return;
+    const captured = captureAndroidEmptyMavenRepository(home, {}), digest = 'c'.repeat(64);
+    const changedNamespace = structuredClone(captured); changedNamespace.home.namespace[0][2] = String(BigInt(changedNamespace.home.namespace[0][2]) + 1n);
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, changedNamespace, digest), /ANDROID_HOST_MAVEN_NAMESPACE_CHANGED/);
+    fs.symlinkSync(root, path.join(home, '.m2'), 'dir');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_DIRECTORY_MUST_BE_ABSENT/);
+    fs.unlinkSync(path.join(home, '.m2')); fs.renameSync(home, path.join(root, 'previous-home')); fs.mkdirSync(home, { mode: 0o700 });
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_MAVEN_HOME_IDENTITY/);
+    fs.rmdirSync(home); fs.symlinkSync(path.join(root, 'previous-home'), home, 'dir');
+    assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_OWNED_DIRECTORY/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

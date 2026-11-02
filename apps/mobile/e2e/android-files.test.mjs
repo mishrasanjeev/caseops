@@ -5,15 +5,15 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, chooseAndroidFile,
-  collectAndroidFiles, rapidActivateAndroidUpload, validateAndroidFileAsset, validateAndroidFilesContext,
-  validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceAnchor, validateAndroidSourceSeed,
+  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, validateAndroidFileAsset, validateAndroidFilesContext,
+  validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
 import { gatewayBaseline } from './traffic.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const APP = 'ai.caseops.mobile.dev.localacceptance', matterId = '11111111-2222-4333-8444-555555555555';
-function fixture(t) {
+function fixture(t, packageName = 'com.android.documentsui') {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'caseops-android-files-unit-'));
   t.after(() => rmSync(directory, { recursive: true, force: true })); let serial = 0;
   const evidence = (name, value) => { const file = path.join(directory, `${name}-${serial++}.json`), bytes = Buffer.from(JSON.stringify(value)); writeFileSync(file, bytes); return { path: file, sha256: sha(bytes) }; };
@@ -31,19 +31,20 @@ function fixture(t) {
   const buildReceipt = evidence('build', { kind: 'explicit-unit-fixture-not-native-execution' });
   const manifestEvidence = evidence('manifest', { schemaVersion: 1, kind: 'android-files-synthetic-fixtures', platform: 'android', syntheticDataOnly: true, assets: Object.values(uploads) });
   const folderName = 'CaseOpsFiles-unit-files-run';
-  const picker = { schemaVersion: 1, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName: 'com.android.documentsui',
-    folderName, buildReceipt, manifestEvidence, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: 'com.android.documentsui:id/roots_list' },
+  const providerEvidence = evidence('provider-staging', { kind: 'explicit-synthetic-v2-provider-stage' });
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: providerEvidence, observed: true, platform: 'android', udid: 'emulator-5584', appId: APP, packageName,
+    folderName, buildReceipt, manifestEvidence, controls: { roots: { kind: 'label', value: 'Show roots' }, rootList: { kind: 'id', value: `${packageName}:id/roots_list` },
       downloads: { kind: 'text', value: 'Downloads' }, folder: { kind: 'text', value: folderName }, fileTitleId: 'android:id/title', cancel: 'android-back' },
-    assets: Object.values(uploads).map(asset => ({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, observedProviderHash: asset.sha256, pickerName: asset.filename })) };
+    assets: Object.values(uploads).map(asset => ({ filename: asset.filename, sha256: asset.sha256, sizeBytes: asset.sizeBytes, transferSha256: asset.sha256, pickerName: asset.filename })) };
   const context = { platform: 'android', source, filesState: { uploads: {} }, gatewayBaseline: { runId: 'unit-run' },
-    assets: { uploads, manifestEvidence }, provider: { folderName, evidence: evidence('picker', picker) },
+    assets: { uploads, manifestEvidence, providerEvidence }, provider: { folderName, evidence: evidence('picker', picker) },
     driver: { $$: async () => [], elementClick: async () => assert.fail('NO_ACTUAL_NATIVE_DEVICE_IN_UNIT') },
     fixture: { appId: APP, udid: 'emulator-5584', environment: 'docker-integration', syntheticDataOnly: true, coreInventory: 'native-core-2026-10-25',
       backendSha: 'a'.repeat(40), webSha: 'a'.repeat(40), binarySourceSha: 'a'.repeat(40), apiOrigin: 'https://10.0.2.2:8453',
       gatewayUrl: 'https://127.0.0.1:8453', gatewayRunId: 'unit-run', companyId: seed.companyId, membershipId: seed.membershipId,
       matter: { id: matterId }, seedEvidence: evidence('seed', seed), buildReceipt } };
-  const rawPrivacy = delta => evidence('raw-privacy', { schemaVersion: 1, kind: 'android-files-privacy-snapshot', observed: true,
-    platform: 'android', udid: context.fixture.udid, appId: APP, ownedAppScopeOnly: true, complete: true, providerOriginalsPreserved: true,
+  const rawPrivacy = delta => evidence('raw-privacy', { schemaVersion: 2, kind: 'android-files-privacy-snapshot', observed: true,
+    platform: 'android', udid: context.fixture.udid, appId: APP, ownedAppScopeOnly: true, complete: true, providerOriginalsPreserved: null, providerMetadataPreserved: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight',
     counts: { ownedStagingFiles: 0, privateAssetMatchCount: 0 }, ...delta });
   return { context, source, seed, uploads, picker, evidence, rawPrivacy };
 }
@@ -107,21 +108,30 @@ test('observed Android picker binds exact selected device, app, build, manifest,
   }
 });
 
-function pickerDouble(context, asset, cancel = false) {
-  let state = 'app'; const commands = [], callbacks = new Map();
+function pickerDouble(context, asset, cancel = false, { headerBelowFold = false } = {}) {
+  let state = 'app', headerShown = !headerBelowFold; const commands = [], callbacks = new Map();
+  const packageName = JSON.parse(readFileSync(context.provider.evidence.path)).packageName;
   const element = (id, text = '', next) => {
     callbacks.set(id, () => { commands.push(id); if (next) state = next; });
     return { elementId: id, isDisplayed: async () => true, isEnabled: async () => true, getText: async () => text,
       click: async () => assert.fail('WRAPPED_NATIVE_CLICK_FORBIDDEN') };
   };
   const driver = { elementClick: async id => { assert.ok(callbacks.has(id)); callbacks.get(id)(); },
-    getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : 'com.android.documentsui',
+    getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : packageName,
     pressKeyCode: async code => { assert.equal(code, 4); assert.equal(cancel, true); commands.push('android-back'); state = 'app'; },
     waitUntil: async (predicate, options) => { if (!await predicate()) throw new Error(options.timeoutMsg); },
+    getWindowRect: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performActions: async ([pointer]) => {
+      const [start, , end] = pointer.actions; commands.push(end.y > start.y ? 'sweep-up' : 'sweep-down');
+      if (end.y > start.y && (state === 'app' || state === 'selected')) headerShown = true;
+    },
+    releaseActions: async () => {},
     $$: async query => {
+      if (query === 'id=files-matter-code' && !headerShown) return [];
       if (query === 'id=files-choose') return [element('choose', '', 'picker')];
+      if (query === 'id=files-selection-clear' && state === 'selected') return [element('clear-selection', '', 'app')];
       if (query === '~Show roots' && state === 'picker') return [element('roots', '', 'roots')];
-      if (query === 'id=com.android.documentsui:id/roots_list' && state === 'roots') return [{ isDisplayed: async () => true,
+      if (query === `id=${packageName}:id/roots_list` && state === 'roots') return [{ isDisplayed: async () => true,
         $$: async value => { assert.equal(value, selector('android', 'text', 'Downloads')); return [element('downloads', '', 'downloads')]; } }];
       if (query === selector('android', 'text', context.provider.folderName) && state === 'downloads') return [element('folder', '', 'folder')];
       if (query === `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(asset?.filename)})` && state === 'folder') return [element('chosen-file', asset.filename, 'selected')];
@@ -130,12 +140,84 @@ function pickerDouble(context, asset, cancel = false) {
     } };
   context.driver = driver; return { driver, commands, state: () => state };
 }
+function repeatSelectionFixture(t) {
+  const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt);
+  const before = { runId: f.context.fixture.gatewayRunId, lastSequence: 0, requests: [] };
+  const ledger = { ...before, lastSequence: 1, markerRejected: 0, routeRejected: 0, overflow: false,
+    requests: [{ sequence: 1, method: 'GET', route: `/api/matters/${matterId}/workspace`, status: 200, nativeMarker: true }] };
+  f.context.gatewayBaseline = gatewayBaseline({ ...ledger, lastSequence: 0, requests: [] }, { gatewayRunId: ledger.runId });
+  const fetch = globalThis.fetch; t.after(() => { globalThis.fetch = fetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify(ledger), { status: 200 });
+  const boundaries = [];
+  f.context.observeFilesystem = async boundary => { boundaries.push({ boundary, commands: [...fake.commands] }); return f.evidence('repeat-privacy', {
+    schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false,
+    providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() }); };
+  return { ...f, fake, before, ledger, boundaries };
+}
+test('repeat selection composes two real picker command paths and clears each owned selection before returning', async t => {
+  const f = repeatSelectionFixture(t); await repeatAndroidFileSelection(f.context, f.before);
+  assert.deepEqual(f.fake.commands, ['choose','roots','downloads','folder','chosen-file','clear-selection','choose','roots','downloads','folder','chosen-file','clear-selection']);
+  assert.equal(f.fake.state(), 'app'); assert.deepEqual(f.boundaries.map(row => row.boundary), ['selection-clear-first','selection-clear']);
+  assert.equal(f.boundaries[0].commands.filter(value => value === 'choose').length, 1); assert.ok(f.ledger.requests.every(row => row.method === 'GET'));
+});
+test('lost first Android clear acknowledgement is retained without a second choose clear or cleanup claim', async t => {
+  const f = repeatSelectionFixture(t), click = f.context.driver.elementClick, lost = Error('SYNTHETIC_CLEAR_ACK_UNKNOWN'); let clears = 0;
+  f.context.driver.elementClick = async id => { await click(id); if (id === 'clear-selection') { clears++; throw lost; } };
+  await assert.rejects(repeatAndroidFileSelection(f.context, f.before), error => error === lost);
+  assert.equal(clears, 1); assert.equal(f.fake.commands.filter(value => value === 'choose').length, 1); assert.deepEqual(f.boundaries, []);
+});
 test('actual Android picker wrapper uses only observed Downloads/folder/file controls or one explicit Back cancellation', async t => {
-  for (const cancel of [false, true]) {
-    const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt, cancel);
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) for (const cancel of [false, true]) {
+    const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt, cancel);
     await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
     assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file']);
     assert.equal(fake.state(), cancel ? 'app' : 'selected');
+  }
+});
+
+test('returned Files header below the fold is found by the bounded upward sweep, never a second picker action', async t => {
+  // Observed on emulator-5584: choose was reached by scrolling and the
+  // returned screen kept that position, so an unscrolled header lookup failed.
+  for (const cancel of [false, true]) {
+    const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt, cancel, { headerBelowFold: true });
+    await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
+    assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back', 'sweep-up'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file', 'sweep-up']);
+    assert.equal(fake.state(), cancel ? 'app' : 'selected');
+  }
+});
+
+test('Google DocumentsUI evidence retains its exact package and resource namespace without an AOSP alias', t => {
+  const f = fixture(t, 'com.google.android.documentsui');
+  const observed = validateAndroidPicker(f.context, f.uploads.txt);
+  assert.equal(observed.packageName, 'com.google.android.documentsui');
+  assert.deepEqual(observed.controls.rootList, { kind: 'id', value: 'com.google.android.documentsui:id/roots_list' });
+  assert.notEqual(observed.controls.rootList.value, 'com.android.documentsui:id/roots_list');
+});
+
+test('unknown picker packages and cross-package root namespaces reject before any native click or lookup', async t => {
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) {
+    const f = fixture(t, packageName), otherPackage = packageName === 'com.android.documentsui' ? 'com.google.android.documentsui' : 'com.android.documentsui';
+    const changes = [
+      { patch: { controls: { ...f.picker.controls, rootList: { kind: 'id', value: `${otherPackage}:id/roots_list` } } }, reason: /ANDROID_FILES_OBSERVED_PICKER_CONTROLS_REQUIRED/ },
+      { patch: { packageName: 'other.documentsui', controls: { ...f.picker.controls, rootList: { kind: 'id', value: 'other.documentsui:id/roots_list' } } }, reason: /ANDROID_FILES_SYSTEM_PICKER_PACKAGE_REQUIRED/ },
+    ];
+    for (const { patch, reason } of changes) {
+      const commands = [];
+      const context = { ...f.context, provider: { ...f.context.provider, evidence: f.evidence('wrong-package', { ...f.picker, ...patch }) },
+        driver: { elementClick: async () => commands.push('click'), $$: async () => { commands.push('lookup'); return []; } } };
+      await assert.rejects(chooseAndroidFile(context, f.uploads.txt), reason);
+      assert.deepEqual(commands, []);
+    }
+  }
+});
+
+test('observed picker package cannot substitute another reviewed system package after opening', async t => {
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) {
+    const f = fixture(t, packageName), fake = pickerDouble(f.context, f.uploads.txt);
+    fake.driver.getCurrentPackage = async () => packageName === 'com.android.documentsui' ? 'com.google.android.documentsui' : 'com.android.documentsui';
+    await assert.rejects(chooseAndroidFile(f.context, f.uploads.txt), /ANDROID_FILES_PICKER_PACKAGE_REQUIRED/);
+    assert.deepEqual(fake.commands, ['choose']);
   }
 });
 
@@ -170,8 +252,8 @@ test('rapid TXT activation is one measured native protocol dispatch with two tap
 
 test('normalized privacy facts must equal complete raw evidence and cannot hide one retained byte or staging file', t => {
   const f = fixture(t), boundary = 'selection-clear';
-  const receipt = { schemaVersion: 1, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP, boundary,
-    ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() };
+  const receipt = { schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid, appId: APP, boundary,
+    ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() };
   validateAndroidPrivacyReceipt(f.context, boundary, receipt);
   for (const patch of [{ udid: 'other' }, { boundary: 'other' }, { stagedFileCount: 1 }, { privateByteMatchCount: 1 },
     { rawEvidence: f.rawPrivacy({ complete: false }) }, { rawEvidence: f.rawPrivacy({ counts: { ownedStagingFiles: 0, privateAssetMatchCount: 1 } }) }])
@@ -191,8 +273,8 @@ test('signed-out final case requires earlier logout, restarts only the app and p
     terminateApp: async id => { assert.equal(id, APP); calls.push('terminate'); }, activateApp: async id => { assert.equal(id, APP); calls.push('activate'); },
     switchContext: async value => assert.equal(value, 'NATIVE_APP'), waitUntil: async predicate => assert.ok(await predicate()),
     $$: async query => ['id=signed-out', 'id=sign-in'].includes(query) ? [{ isDisplayed: async () => true }] : [] };
-  f.context.observeFilesystem = async boundary => f.evidence('privacy', { schemaVersion: 1, observed: true, platform: 'android', udid: f.context.fixture.udid,
-    appId: APP, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() });
+  f.context.observeFilesystem = async boundary => f.evidence('privacy', { schemaVersion: 2, observed: true, platform: 'android', udid: f.context.fixture.udid,
+    appId: APP, boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0, rawEvidence: f.rawPrivacy() });
   await androidFilesScenarios.at(-1).run(f.context); assert.deepEqual(calls, ['terminate', 'activate']); assert.deepEqual(ledger.requests, []);
   f.context.filesState.logoutAcknowledged = false;
   await assert.rejects(androidFilesScenarios.at(-1).run(f.context), /ANDROID_FILES_PRIOR_LOGOUT_REQUIRED/);

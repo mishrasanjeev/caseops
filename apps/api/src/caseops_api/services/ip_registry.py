@@ -45,7 +45,10 @@ from caseops_api.schemas.ip_registry import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.domain_outbox import enqueue_domain_event
-from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
+from caseops_api.services.ip_identifier_rules import (
+    normalize_ip_identifier,
+    validate_identifier_owner,
+)
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import _docket_or_404, _lock_ip_writer_context
 from caseops_api.services.matter_access import visible_ip_dockets_filter
@@ -194,6 +197,24 @@ def _risk(field_path: str) -> tuple[str, list[str], str]:
     )
 
 
+def _target_not_in_docket(field: str, noun: str) -> HTTPException:
+    # Another docket's record, another tenant's or a missing id all answer the
+    # same way, so the refusal reveals nothing about records outside the docket.
+    return HTTPException(
+        status_code=422,
+        detail=[
+            {
+                "loc": ["body", field],
+                "msg": (
+                    f"{noun} is not a record of this docket. Choose an application "
+                    "or proceeding listed for this docket."
+                ),
+                "type": "registry_target_not_in_docket",
+            }
+        ],
+    )
+
+
 def _target_state(
     session: Session,
     *,
@@ -247,7 +268,7 @@ def _target_state(
             )
         )
         if target is None:
-            raise HTTPException(status_code=404, detail="Trademark application not found.")
+            raise _target_not_in_docket("application_id", "This application")
         state.update(
             {
                 "office": target.office,
@@ -264,7 +285,7 @@ def _target_state(
             )
         )
         if target is None:
-            raise HTTPException(status_code=404, detail="IP proceeding not found.")
+            raise _target_not_in_docket("proceeding_id", "This proceeding")
         state.update(
             {
                 "office": target.office,
@@ -321,6 +342,27 @@ def create_registry_link(
     adapter = provider_adapter_definition(payload.provider_key)
     if adapter is None or adapter.domain != "ip_office_registry":
         raise HTTPException(status_code=422, detail="Choose a registered IP-office adapter.")
+    try:
+        validate_identifier_owner(
+            identifier_kind=payload.identifier_kind,
+            application_id=payload.application_id,
+            proceeding_id=payload.proceeding_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "identifier_kind"],
+                    "msg": (
+                        "Application and registration numbers belong to an application; "
+                        "opposition, rectification, cancellation, non-use, appeal and court "
+                        "numbers belong to a proceeding."
+                    ),
+                    "type": "registry_identifier_kind_mismatch",
+                }
+            ],
+        ) from exc
     normalized = normalize_ip_identifier(payload.raw_identifier)
     existing = session.scalar(
         select(IpRegistryLink).where(

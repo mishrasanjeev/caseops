@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import UTC, datetime, timedelta
 from functools import cache
 from itertools import pairwise
 from pathlib import Path
@@ -25,6 +27,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def _read_repo_text(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def _main_refresh_ordinal(phase: str) -> int:
+    phases = [
+        shlex.split(line)[1]
+        for line in _read_repo_text("scripts/deploy-prod.sh").splitlines()
+        if line.startswith("assert_current_main ")
+    ]
+    assert phases.count(phase) == 1, f"Missing or duplicated main fence: {phase}"
+    return phases.index(phase) + 1
 
 
 def test_shell_scripts_are_checked_out_with_lf_line_endings() -> None:
@@ -86,6 +98,7 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
     app_path.write_text(
         """async def app(scope, receive, send):
     assert scope[\"type\"] == \"http\"
+    assert (b\"x-caseops-automated-test\", b\"no-paid-providers\") in scope[\"headers\"]
     await send({
         \"type\": \"http.response.start\",
         \"status\": 200,
@@ -128,7 +141,9 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
                 with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
                     client.settimeout(2)
                     client.sendall(
-                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n"
+                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                        b"X-CaseOps-Automated-Test: no-paid-providers\r\n"
+                        b"Connection: keep-alive\r\n\r\n"
                     )
                     while chunk := client.recv(4096):
                         response += chunk
@@ -692,9 +707,12 @@ def test_web_image_uses_committed_workspace_lockfile() -> None:
     gcloudignore = _read_repo_text(".gcloudignore")
 
     assert "COPY package.json package-lock.json ./" in dockerfile
-    assert "RUN npm ci --no-audit --no-fund" in dockerfile
+    assert (
+        "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund"
+        in dockerfile
+    )
     assert "npm install" not in dockerfile
-    assert "npm prune --omit=dev" in dockerfile
+    assert "npm-tooling.mjs prune --omit=dev" in dockerfile
     assert "context: ." in compose
     assert "dockerfile: apps/web/Dockerfile" in compose
     assert "apps/web/Dockerfile" in cloudbuild
@@ -909,7 +927,7 @@ def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
     workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
     shards = workflow["jobs"]["postgres-validation-shards"]
-    assert shards["strategy"]["matrix"] == {"total_shards": [16], "shard": list(range(1, 17))}
+    assert shards["strategy"]["matrix"] == {"total_shards": [32], "shard": list(range(1, 33))}
     total = shards["strategy"]["matrix"]["total_shards"][0]
     assert shards["strategy"]["max-parallel"] == 4
     assert shards["name"] == (
@@ -1012,10 +1030,26 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     image = _read_repo_text("apps/api/Dockerfile")
 
     assert "COPY pyproject.toml uv.lock README.md ./" in image
+    # Installed integrity checks require independent single-link files on Linux
+    # as well as macOS, rather than UV's shared-cache hardlink default.
+    assert "    UV_LINK_MODE=copy \\" in image
+    assert image.index("UV_LINK_MODE=copy") < image.index("RUN pip install")
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image
-    assert "uv pip install --system --requirements /tmp/requirements.lock" in image
+    # Keep the frozen artifact URLs/hashes instead of resolving names again
+    # through large live Simple indexes. The local archive path is lock-relative.
+    dependencies = image[image.index("RUN uv export"):image.index("Tokenizer.from_pretrained")]
+    assert "--offline" in dependencies
+    assert "--format pylock.toml" in dependencies
+    assert "--no-hashes" not in dependencies
+    assert "--output-file /app/pylock.toml" in dependencies
+    assert "uv pip install --system --requirements /app/pylock.toml" in dependencies
+    assert "rm /app/pylock.toml" in dependencies
+    # The unchanged graph contains a source distribution whose build system
+    # still needs its normal isolated admission; do not invent binary-only closure.
+    assert "--no-index" not in dependencies
+    assert "--only-binary" not in dependencies
     assert "uv pip install --system --no-deps ." in image
     assert image.index("--frozen") < image.index("COPY src ./src")
     assert image.index("Tokenizer.from_pretrained") < image.index("COPY src ./src")
@@ -1087,10 +1121,22 @@ def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
     assert "caseops-migrate-job contract drift" in script
 
 
+_GOVERNANCE_STATE_FILE = "deploy/ip-rule-governance-state.json"
+
+
 def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
 
-    assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" in script
+    # The flag comes only from the checked-in release state, never a literal.
+    assert f"IP_RULE_GOVERNANCE_STATE_FILE={_GOVERNANCE_STATE_FILE}" in script
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" not in script
+    assert "|${IP_RULE_GOVERNANCE_ENV}|" in script
+    assert '"${IP_RULE_GOVERNANCE_REMOVE_FLAGS[@]}"' in script
+    state = json.loads(_read_repo_text(_GOVERNANCE_STATE_FILE))
+    assert set(state) == {
+        "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
+    }
+    assert state["schema_version"] == 1
     assert ("MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret") in script
     assert (
         'CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
@@ -1163,6 +1209,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
     required = _web_external_unit_dependencies(REPO_ROOT)
     assert {
         "tests/fixtures/statutes/structured-schedule-api.json",
+        "tests/fixtures/node-default-tls-probe.cjs",
         "tests/e2e/support/prod-failure-diagnostics.ts",
         "tests/e2e/support/bounded-network-evidence.ts",
         "tests/e2e/support/prod-api-response-evidence.ts",
@@ -1192,12 +1239,16 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
     references = re.compile(
         r"\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)[\"'](\.[^\"']+)[\"']",
     )
+    fixture_urls = re.compile(
+        r"\bnew\s+URL\(\s*[\"'](\.[^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)",
+    )
     while pending:
         importer = pending.pop()
         if importer in visited:
             continue
         visited.add(importer)
-        for reference in references.findall(importer.read_text(encoding="utf-8")):
+        source = importer.read_text(encoding="utf-8")
+        for reference in [*references.findall(source), *fixture_urls.findall(source)]:
             base = (importer.parent / reference).resolve()
             assert base.is_relative_to(root.resolve()), "Fixture import escapes repository"
             candidates = [base, *(Path(str(base) + suffix) for suffix in (".ts", ".tsx", ".json")),
@@ -1207,13 +1258,13 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
             if dependency.is_relative_to(web.resolve()):
                 continue
             required.add(dependency.relative_to(root.resolve()).as_posix())
-            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs"}:
+            if dependency.suffix in {".ts", ".tsx", ".js", ".mjs", ".cjs"}:
                 pending.append(dependency)
     return required
 
 
 def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
-    assert "FROM node:22.14.0-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
     builder, runner = dockerfile.split("FROM trusted-base AS runner", 1)
     builder = builder.split("FROM deps AS builder", 1)[1]
     lines = set(builder.splitlines())
@@ -1232,13 +1283,103 @@ def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str])
         f"COPY {path} /app/{path}" for path in required
     } for line in lines), "Do not copy the whole test tree"
     assert "/app/tests" not in runner and "COPY tests/" not in runner
+    _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+def _web_npm_tooling_inputs(root: Path) -> set[str]:
+    helper = "scripts/mobile/npm-tooling.mjs"
+    source = (root / helper).read_text(encoding="utf-8")
+    assert "from './npm-registry.mjs'" in source
+    artifact = re.findall(r"relative: '([^']+)'", source)
+    assert artifact == [
+        "apps/mobile/vendor/npm-11.12.1-caseops-security/"
+        "npm-11.12.1-caseops-security.tgz"
+    ]
+    required = {helper, "scripts/mobile/npm-registry.mjs", artifact[0]}
+    assert all((root / path).is_file() for path in required), "Missing pinned npm source input"
+    return required
+
+
+def _assert_web_npm_tooling_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
+    tooling = dockerfile.split("FROM trusted-base AS builder-tooling", 1)[1].split(
+        "FROM builder-tooling AS deps", 1)[0]
+    assert (
+        "COPY scripts/mobile/npm-tooling.mjs scripts/mobile/npm-registry.mjs "
+        "/opt/caseops/scripts/mobile/" in tooling
+    )
+    artifact = next(path for path in required if path.endswith(".tgz"))
+    assert f"COPY {artifact} /opt/caseops/{artifact}" in tooling, "Missing pinned npm archive COPY"
+    patterns = set(ignore.splitlines())
+    parents = {parent.as_posix() + "/" for path in required for parent in Path(path).parents
+               if parent != Path(".")}
+    assert {
+        f"!{path}" for path in required | parents
+    } <= patterns, "Missing pinned npm context input"
+    actual = {line[1:] for line in patterns if line.startswith(("!scripts/", "!apps/mobile/"))}
+    assert actual == {
+        path for path in required | parents if path.startswith(("scripts/", "apps/mobile/"))
+    }, "Npm context must admit only its exact source closure"
+    runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
+    assert all(
+        value not in runner for value in (
+            "builder-tooling", "COPY scripts/", "COPY apps/mobile/",
+            "/opt/caseops/scripts/mobile",
+        )
+    ), "Npm tooling must remain builder only"
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("path", [
+    "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+])
+def test_web_npm_tooling_closure_rejects_each_omission(boundary: str, path: str) -> None:
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(path, "missing-tooling-input")
+    else:
+        ignore = ignore.replace(f"!{path}\n", "")
+    with pytest.raises(AssertionError):
+        _assert_web_npm_tooling_inputs(dockerfile, ignore, _web_npm_tooling_inputs(REPO_ROOT))
+
+
+@pytest.mark.parametrize("ignore_path", [".dockerignore", ".gcloudignore"])
+def test_web_npm_tooling_closure_rejects_broad_sibling_admission(ignore_path: str) -> None:
+    with pytest.raises(AssertionError, match="exact source closure"):
+        _assert_web_npm_tooling_inputs(
+            _read_repo_text("apps/web/Dockerfile"),
+            _read_repo_text(ignore_path) + "\n!scripts/mobile/**\n",
+            _web_npm_tooling_inputs(REPO_ROOT),
+        )
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
+    path = "tests/fixtures/node-default-tls-probe.cjs"
+    required = _web_external_unit_dependencies(REPO_ROOT)
+    assert path in required
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(f"COPY {path} /app/{path}", "")
+        message = f"Missing builder input: {re.escape(path)}"
+    else:
+        ignore = ignore.replace(f"!{path}", "")
+        message = f"Missing context input: {re.escape(path)}"
+    with pytest.raises(AssertionError, match=message):
+        _assert_web_builder_inputs(dockerfile, ignore, required)
 
 
 def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
     files = {
         "apps/web/lib/fixture.test.ts": 'import { value } from "../../../tests/e2e/support/first";',
         "tests/e2e/support/first.ts": 'export { value } from "./second";',
-        "tests/e2e/support/second.ts": 'import("./third"); require("./fourth");',
+        "tests/e2e/support/second.ts": (
+            'import("./third"); require("./fourth"); '
+            'new URL("./native.cjs", import.meta.url);'
+        ),
+        "tests/e2e/support/native.cjs": 'require("./leaf.json");',
         "tests/e2e/support/third.ts": 'import "./leaf.json";',
         "tests/e2e/support/fourth.ts": 'import { value } from "./first";',
         "tests/e2e/support/leaf.json": '{}',
@@ -1314,7 +1455,10 @@ def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
     assert {"**/*.ts", "**/*.tsx"} <= set(config["include"])
     assert config["exclude"] == ["node_modules"]
     assert "ignoreBuildErrors" not in _read_repo_text("apps/web/next.config.ts")
-    assert "RUN npm run build" in _read_repo_text("apps/web/Dockerfile")
+    assert (
+        "RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build"
+        in _read_repo_text("apps/web/Dockerfile")
+    )
 
 
 def _assert_ci_web_builder_gate(workflow: dict) -> None:
@@ -1485,6 +1629,9 @@ def test_api_startup_dependency_removal_is_rerunnable(
     snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
         "# Prepare only on canonical main", 1
     )[0]
+    consumers = [line.strip().removesuffix("\\").strip()
+                 for line in script.splitlines() if "API_DEPENDENCY_FLAGS[@]" in line]
+    assert len(consumers) == 1
     fake = tmp_path / "gcloud"
     _write_fake_executable(
         fake, "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
@@ -1494,7 +1641,7 @@ def test_api_startup_dependency_removal_is_rerunnable(
     result = subprocess.run(
         [_find_working_bash(), "-c", "set -euo pipefail\nREGION=local\nPROJECT=offline\n"
          "API_DEPENDENCY_FLAGS=()" + snippet
-         + '\nprintf "<%s>" "${API_DEPENDENCY_FLAGS[@]}"'],
+         + '\nprintf "<%s>" ' + consumers[0]],
         env=env, capture_output=True, text=True, timeout=5, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -2016,13 +2163,26 @@ def _run_deploy_with_fakes(
     artifact_describe_failures: int = 0,
     rate_identity_mode: str = "ok",
     document_worker_mode: str = "ok",
+    portfolio_export_mode: str = "ok",
     backup_mode: str = "ok",
     security_mode: str = "ok",
     security_post_build_mode: str = "ok",
+    governance_state: dict[str, object] | None = None,
+    committed_files: tuple[str, ...] = (),
+    a1_migration: bool = True,
+    live_governance_flag: str = "false",
+    live_governance_expiry: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     gcloud_log = tmp_path / "gcloud.log"
+    # The release reads the state from its own commit; by default that is the
+    # checked-in file. The live service starts from the given governance values.
+    (tmp_path / "live-governance-flag").write_text(live_governance_flag, encoding="utf-8")
+    if live_governance_expiry is not None:
+        (tmp_path / "live-governance-expiry").write_text(
+            live_governance_expiry, encoding="utf-8"
+        )
     security_payloads = tmp_path / "security-payloads.json"
     security_payloads.write_text(json.dumps(_security_gate_payloads()), encoding="utf-8")
 
@@ -2074,6 +2234,35 @@ if [[ "$1" == "rev-parse" ]]; then
   printf '%s\n' "abcdef1234567890abcdef1234567890abcdef12"
   exit 0
 fi
+if [[ "$1" == "show" && \
+  "$2" == "abcdef1234567890abcdef1234567890abcdef12:deploy/ip-rule-governance-state.json" ]]; then
+  printf '%s\n' "${FAKE_GOVERNANCE_STATE}"
+  exit 0
+fi
+if [[ "$1 $2" == "cat-file -t" && "$3" == abcdef1234567890abcdef1234567890abcdef12:* ]]; then
+  while IFS= read -r committed; do
+    if [[ -n "${committed}" && "${committed}" == "${3#*:}" ]]; then
+      printf '%s\n' blob
+      exit 0
+    fi
+  done <<< "${FAKE_COMMITTED_FILES}"
+  printf '%s\n' "fatal: path is not in the fake release commit" >&2
+  exit 128
+fi
+if [[ "$1" == "grep" ]]; then
+  # Search the real checked-out commit, so the release pattern is proven
+  # against the real A1 migration rather than a fixture shaped to match it.
+  [[ "${FAKE_A1_MIGRATION}" == "present" ]] || exit 1
+  arguments=()
+  for argument in "$@"; do
+    if [[ "${argument}" == "abcdef1234567890abcdef1234567890abcdef12" ]]; then
+      arguments+=(HEAD)
+    else
+      arguments+=("${argument}")
+    fi
+  done
+  exec "${FAKE_REAL_GIT}" "${arguments[@]}"
+fi
 exit 91
 """,
     )
@@ -2089,6 +2278,33 @@ for argument in "$@"; do
   fi
 done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "$*" == "run deploy caseops-api "* ]]; then
+  # Apply the api container's governance edits as gcloud does: removals of
+  # present keys first (absent keys are ignored), then updates.
+  container=""
+  previous=""
+  updates=""
+  for argument in "$@"; do
+    if [[ "${previous}" == "--container" ]]; then
+      container="${argument}"
+    elif [[ "${container}" == "api" && "${previous}" == "--remove-env-vars" && \
+      ",${argument}," == *",CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT,"* ]]; then
+      rm -f -- "${FAKE_LIVE_GOVERNANCE_EXPIRY}"
+    elif [[ "${container}" == "api" && "${previous}" == "--update-env-vars" ]]; then
+      updates="${argument#^|^}"
+    fi
+    previous="${argument}"
+  done
+  IFS='|' read -ra assignments <<< "${updates}"
+  for assignment in "${assignments[@]}"; do
+    case "${assignment}" in
+      CASEOPS_IP_RULE_GOVERNANCE_ENABLED=*)
+        printf '%s' "${assignment#*=}" > "${FAKE_LIVE_GOVERNANCE_FLAG}" ;;
+      CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=*)
+        printf '%s' "${assignment#*=}" > "${FAKE_LIVE_GOVERNANCE_EXPIRY}" ;;
+    esac
+  done
+fi
 if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
   "${FAKE_INDEX_HEALTH_MODE}" == "fail" ]]; then
   exit 56
@@ -2162,7 +2378,12 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_TRAFFIC_REVISION='caseops-api-test'
   FAKE_TRAFFIC_LATEST='true'
   FAKE_OBSERVED_GENERATION='2'
-  FAKE_GOVERNANCE_FLAG='false'
+  FAKE_GOVERNANCE_FLAG=$(cat "${FAKE_LIVE_GOVERNANCE_FLAG}")
+  FAKE_GOVERNANCE_EXPIRY_ROW=''
+  if [[ -f "${FAKE_LIVE_GOVERNANCE_EXPIRY}" ]]; then
+    FAKE_GOVERNANCE_EXPIRY_ROW='{"name":"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT","value":"'
+    FAKE_GOVERNANCE_EXPIRY_ROW+="$(cat "${FAKE_LIVE_GOVERNANCE_EXPIRY}")"'"},'
+  fi
   FAKE_MACHINE_SECRET='caseops-machine-readiness-evidence-secret'
   FAKE_LLM_PROVIDER='openai'
   FAKE_LLM_SECRET='caseops-openai-api-key'
@@ -2194,6 +2415,11 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_OBSERVED_GENERATION='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-enabled" ]]; then
     FAKE_GOVERNANCE_FLAG='true'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-disabled" ]]; then
+    FAKE_GOVERNANCE_FLAG='false'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "governance-expiry-stale" ]]; then
+    FAKE_GOVERNANCE_EXPIRY_ROW='{"name":"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT",'
+    FAKE_GOVERNANCE_EXPIRY_ROW+='"value":"2026-11-30T00:00:00Z"},'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "capacity-drift" ]]; then
     FAKE_SERVICE_MIN='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "secret-drift" ]]; then
@@ -2277,7 +2503,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
-    "${FAKE_GOVERNANCE_FLAG}" '"},' \
+    "${FAKE_GOVERNANCE_FLAG}" '"},' "${FAKE_GOVERNANCE_EXPIRY_ROW}" \
     '{"name":"CASEOPS_LLM_PROVIDER","value":"' "${FAKE_LLM_PROVIDER}" '"},' \
     '{"name":"CASEOPS_LLM_MODEL","value":"gpt-5.1"},' \
     '{"name":"CASEOPS_LLM_MODEL_RECOMMENDATIONS","value":"gpt-5-mini"},' \
@@ -2474,6 +2700,20 @@ if [[ "${1:-}" == "scripts/document_worker_release.py" ]]; then
   printf '%s\\n' '{"schema_version":1,"admission_disabled":true}'
   exit 0
 fi
+if [[ "${1:-}" == "scripts/portfolio_export_release.py" ]]; then
+  printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+  [[ "$#" == "8" && "${3:-}" == "--expected-sha" && \
+     "${4:-}" == "abcdef1234567890abcdef1234567890abcdef12" && \
+     "${5:-}" == "--project" && "${6:-}" == "perfect-period-305406" && \
+     "${7:-}" == "--region" && "${8:-}" == "asia-south1" ]] || exit 97
+  [[ "${2:-}" == "provision" || "${2:-}" == "verify" ]] || exit 97
+  if [[ "${FAKE_PORTFOLIO_EXPORT_MODE}" == "${2:-}" ]]; then
+    printf '%s\\n' 'Portfolio export release failed closed.' >&2
+    exit 61
+  fi
+  printf '%s\\n' '{"dedicated_worker_key_verified":true}'
+  exit 0
+fi
 if [[ "${1:-}" == "scripts/pre_migration_backup.py" ]]; then
   printf '%s\\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   if [[ "${FAKE_BACKUP_MODE:-ok}" != "ok" ]]; then
@@ -2658,9 +2898,20 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_PYTHON_CRLF": "true" if python_crlf else "false",
             "FAKE_DOCUMENT_WORKER_MODE": document_worker_mode,
+            "FAKE_PORTFOLIO_EXPORT_MODE": portfolio_export_mode,
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
+            "FAKE_GOVERNANCE_STATE": (
+                _read_repo_text(_GOVERNANCE_STATE_FILE)
+                if governance_state is None
+                else json.dumps(governance_state)
+            ),
+            "FAKE_COMMITTED_FILES": "\n".join(committed_files),
+            "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
+            "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
+            "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
+            "FAKE_LIVE_GOVERNANCE_EXPIRY": _bash_path(tmp_path / "live-governance-expiry"),
         }
     )
     if a0_mode is not None:
@@ -2919,9 +3170,89 @@ def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: 
     ):
         assert replacing_flag not in arguments
     assert (
-        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
+        'CMD ["sh", "-c", "exec uvicorn caseops_api.main:app --no-proxy-headers --host 0.0.0.0 '
         '--port ${PORT} --app-dir src"]'
     ) in _read_repo_text("apps/api/Dockerfile")
+
+
+def test_portfolio_queue_provision_and_exact_readback_bracket_routing(tmp_path, monkeypatch):
+    result = _run_deploy_with_fakes(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    provision = next(index for index, call in enumerate(calls)
+                     if call.startswith("scripts/portfolio_export_release.py provision "))
+    verify = next(index for index, call in enumerate(calls)
+                  if call.startswith("scripts/portfolio_export_release.py verify "))
+    api = next(index for index, call in enumerate(calls)
+               if call.startswith("run deploy caseops-api "))
+    web = next(index for index, call in enumerate(calls)
+               if call.startswith("run deploy caseops-web "))
+    qa = next(index for index, call in enumerate(calls)
+              if call.startswith("run jobs execute caseops-ip-qa-bootstrap "))
+    assert provision < api < web < verify < qa
+    assert sum("scripts/portfolio_export_release.py provision " in call for call in calls) == 1
+    assert sum("scripts/portfolio_export_release.py verify " in call for call in calls) == 1
+    assert (
+        "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=caseops-portfolio-export-worker-secret:latest"
+    ) in calls[api]
+    assert "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE=cloud_tasks" in calls[api]
+    assert "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE=caseops-portfolio-exports" in calls[api]
+    arguments = shlex.split(calls[api])
+    raw_env = arguments[arguments.index("--update-env-vars") + 1]
+    assert raw_env.startswith("^|^")
+    pairs = [value.split("=", 1) for value in raw_env[3:].split("|")]
+    assert len(pairs) == len({name for name, _value in pairs})
+    environment = dict(pairs)
+    assert {
+        name: environment[name] for name in (
+            "CASEOPS_RELEASE_SHA", "CASEOPS_GCP_PROJECT_ID",
+            "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE", "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE",
+            "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION",
+        )
+    } == {
+        "CASEOPS_RELEASE_SHA": "abcdef1234567890abcdef1234567890abcdef12",
+        "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+        "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE": "cloud_tasks",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE": "caseops-portfolio-exports",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION": "asia-south1",
+    }
+    bindings = arguments[arguments.index("--update-secrets") + 1].split(",")
+    rows = [{"name": name, "value": value} for name, value in pairs]
+    for binding in bindings:
+        name, resource = binding.split("=", 1)
+        secret, version = resource.rsplit(":", 1)
+        rows.append({"name": name, "valueFrom": {"secretKeyRef": {
+            "name": secret, "key": version,
+        }}})
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "portfolio_export_deploy_coupling", REPO_ROOT / "scripts/portfolio_export_release.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    release = module.Release(environment["CASEOPS_RELEASE_SHA"])
+    release._check_env(rows)
+    for required in (
+        "CASEOPS_RELEASE_SHA", "CASEOPS_GCP_PROJECT_ID",
+        "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE", "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION", "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET",
+    ):
+        with pytest.raises(module.Error):
+            release._check_env([row for row in rows if row["name"] != required])
+
+
+@pytest.mark.parametrize("mode", ["provision", "verify"])
+def test_portfolio_queue_failure_never_bootstraps_or_dispatches_qa(tmp_path, mode):
+    result = _run_deploy_with_fakes(tmp_path, portfolio_export_mode=mode)
+    assert result.returncode != 0 and "Portfolio export release failed closed" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(f"portfolio_export_release.py {mode} " in call for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("workflow run prod-verify.yml" in call for call in calls)
+    if mode == "provision":
+        assert not any(call.startswith("run deploy caseops-api ") for call in calls)
+    else:
+        assert any(call.startswith("run deploy caseops-web ") for call in calls)
 
 
 @pytest.mark.parametrize("mode", ["prepare", "verify"])
@@ -3181,21 +3512,23 @@ def test_failed_qa_queue_observation_never_bootstraps_or_dispatches(tmp_path: Pa
     assert "gh workflow run prod-verify.yml" not in calls
 
 
-@pytest.mark.parametrize("fetches,required,phase", [
-    (11, "scheduler_inventory.py resume", "pre-QA document-quiescence gate"),
-    (12, "document_worker_release.py quiesce-qa", "post-QA document-quiescence gate"),
-    (13, "run jobs execute caseops-ip-qa-bootstrap", "post-QA bootstrap gate"),
-    (14, "run jobs execute caseops-ip-qa-bootstrap", "pre-QA dispatch gate"),
+@pytest.mark.parametrize("required,phase", [
+    ("scheduler_inventory.py resume", "pre-QA document-quiescence gate"),
+    ("document_worker_release.py quiesce-qa", "post-QA document-quiescence gate"),
+    ("run jobs execute caseops-ip-qa-bootstrap", "post-QA bootstrap gate"),
+    ("run jobs execute caseops-ip-qa-bootstrap", "pre-QA dispatch gate"),
 ])
 def test_main_drift_around_qa_queue_and_bootstrap_cannot_certify(
-    tmp_path: Path, fetches: int, required: str, phase: str,
+    tmp_path: Path, required: str, phase: str,
 ) -> None:
-    result = _run_deploy_with_fakes(tmp_path, "abcdef1", main_drift_after_fetches=fetches)
+    result = _run_deploy_with_fakes(
+        tmp_path, "abcdef1", main_drift_after_fetches=_main_refresh_ordinal(phase),
+    )
     assert result.returncode != 0
     assert f"main advanced during release at {phase}" in result.stdout
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
     assert required in calls
-    if fetches <= 12:
+    if phase in {"pre-QA document-quiescence gate", "post-QA document-quiescence gate"}:
         assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
     assert "gh workflow run prod-verify.yml" not in calls
 
@@ -3242,59 +3575,60 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
 
 
 @pytest.mark.parametrize(
-    ("drift_after_fetches", "required_call", "forbidden_call", "phase"),
+    ("required_call", "forbidden_call", "phase"),
     [
-        (1, None, None, "release preflight"),
+        (None, None, "release preflight"),
         (
-            2,
             "builds submit",
             "run jobs update caseops-migrate-job",
             "post-build pre-migration gate",
         ),
         (
-            3,
             "scheduler_inventory.py quiesce",
             "pre_migration_backup.py",
             "pre-backup mutation gate",
         ),
         (
-            4,
             "pre_migration_backup.py",
             "run jobs update caseops-migrate-job",
             "post-backup pre-migration gate",
         ),
         (
-            5,
             "run jobs update caseops-ip-qa-bootstrap",
             "run deploy caseops-api",
             "final pre-route gate",
         ),
         (
-            6,
             "run jobs update caseops-ip-qa-bootstrap",
             "reconcile_rate_identity_edge.py prepare",
             "before-purpose-edge-reconciliation",
         ),
         (
-            7,
             "reconcile_rate_identity_edge.py prepare",
             "run deploy caseops-api",
             "after-purpose-edge-reconciliation",
         ),
         (
-            8,
+            "reconcile_rate_identity_edge.py prepare",
+            "portfolio_export_release.py provision",
+            "before-portfolio-export-queue",
+        ),
+        (
+            "portfolio_export_release.py provision",
+            "run deploy caseops-api",
+            "after-portfolio-export-queue",
+        ),
+        (
             "run deploy caseops-web",
             "reconcile_rate_identity_edge.py verify",
             "before-effective-purpose-edge-proof",
         ),
         (
-            9,
-            "run deploy caseops-web",
+            "portfolio_export_release.py verify",
             "run jobs execute caseops-ip-qa-bootstrap",
             "post-route pre-certification gate",
         ),
         (
-            10,
             "run deploy caseops-web",
             "document_worker_release.py activate",
             "pre-provider-scheduler-resume gate",
@@ -3303,7 +3637,6 @@ def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
 )
 def test_deploy_prod_fails_closed_when_main_advances_during_release(
     tmp_path: Path,
-    drift_after_fetches: int,
     required_call: str | None,
     forbidden_call: str | None,
     phase: str,
@@ -3311,7 +3644,7 @@ def test_deploy_prod_fails_closed_when_main_advances_during_release(
     result = _run_deploy_with_fakes(
         tmp_path,
         "abcdef1",
-        main_drift_after_fetches=drift_after_fetches,
+        main_drift_after_fetches=_main_refresh_ordinal(phase),
     )
 
     assert result.returncode != 0
@@ -3719,12 +4052,195 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
     assert "=== deploy-prod.sh — DONE" not in result.stdout
 
 
+_GOVERNANCE_EVIDENCE = "docs/ip-implementation/evidence/m2/IPLF-027B/a2-enable-offline.json"
+
+
+def _utc_in(days: float) -> str:
+    return (datetime.now(UTC) + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _enabled_governance_state(**overrides: object) -> dict[str, object]:
+    state: dict[str, object] = {
+        "schema_version": 1,
+        "enabled": True,
+        "rollout_expires_at": _utc_in(30),
+        "approved_by": "Release Owner",
+        "evidence": _GOVERNANCE_EVIDENCE,
+    }
+    state.update(overrides)
+    return state
+
+
+def _api_deploy_call(tmp_path: Path) -> str:
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    (deploy,) = [call for call in calls if call.startswith("run deploy caseops-api ")]
+    return deploy.split(" --container ")[1]
+
+
+def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
+    tmp_path: Path,
+) -> None:
+    # The live service still carries an earlier A2 configuration.
+    result = _run_deploy_with_fakes(
+        tmp_path, live_governance_flag="true", live_governance_expiry=_utc_in(10)
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    api = _api_deploy_call(tmp_path)
+    assert "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|" in api
+    assert " --remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT " in api
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=" not in api
+    assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "false"
+    assert not (tmp_path / "live-governance-expiry").exists()
+    assert "rule governance explicitly false" in result.stdout
+    assert "DONE abcdef1" in result.stdout
+
+
+def test_deploy_prod_disabled_readback_rejects_a_lingering_expiry(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path, traffic_mode="governance-expiry-stale")
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert result.stderr.strip() == (
+        "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT remains while rule governance is disabled"
+    )
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "run jobs execute caseops-ip-qa-bootstrap" not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
+
+
+@pytest.mark.parametrize(
+    ("state", "committed", "a1_migration", "expected_error"),
+    [
+        (
+            _enabled_governance_state(), (), True,
+            f"evidence {_GOVERNANCE_EVIDENCE} is not a committed file",
+        ),
+        (
+            _enabled_governance_state(), (_GOVERNANCE_EVIDENCE,), False,
+            "without A1 migration 20261031_0002 in apps/api/alembic/versions",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at=_utc_in(-1)),
+            (_GOVERNANCE_EVIDENCE,), True, "has passed",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at=_utc_in(181)),
+            (_GOVERNANCE_EVIDENCE,), True, "is more than 180 days away",
+        ),
+        (
+            _enabled_governance_state(rollout_expires_at="2026-12-31T18:30:00+00:00"),
+            (_GOVERNANCE_EVIDENCE,), True, "must be a UTC timestamp",
+        ),
+        (
+            {**_enabled_governance_state(), "note": "extra"},
+            (_GOVERNANCE_EVIDENCE,), True, "must be an object with exactly the keys",
+        ),
+        (
+            _enabled_governance_state(approved_by=" "),
+            (_GOVERNANCE_EVIDENCE,), True, "approved_by must name the approving owner",
+        ),
+        (
+            _enabled_governance_state(evidence="../outside.json"),
+            ("../outside.json",), True, "evidence must be a repository-relative file path",
+        ),
+        (
+            _enabled_governance_state(enabled="true"),
+            (_GOVERNANCE_EVIDENCE,), True, "enabled must be true or false",
+        ),
+        (
+            _enabled_governance_state(enabled=False),
+            (_GOVERNANCE_EVIDENCE,), True, "must be null while disabled",
+        ),
+    ],
+    ids=[
+        "evidence-not-committed", "a1-migration-missing", "expired", "beyond-180-days",
+        "offset-timestamp", "extra-key", "blank-approver", "evidence-outside-repo",
+        "string-enabled", "disabled-with-expiry",
+    ],
+)
+def test_deploy_prod_refuses_invalid_governance_state_before_any_cloud_call(
+    tmp_path: Path,
+    state: dict[str, object],
+    committed: tuple[str, ...],
+    a1_migration: bool,
+    expected_error: str,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        governance_state=state,
+        committed_files=committed,
+        a1_migration=a1_migration,
+    )
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert expected_error in result.stdout + result.stderr
+    assert "ERROR:" in result.stdout
+    assert not (tmp_path / "gcloud.log").exists(), "no gh, gcloud or curl call may run"
+
+
+def test_deploy_prod_enabled_state_sets_flag_and_expiry_and_reads_both_back(
+    tmp_path: Path,
+) -> None:
+    state = _enabled_governance_state()
+    result = _run_deploy_with_fakes(
+        tmp_path, governance_state=state, committed_files=(_GOVERNANCE_EVIDENCE,)
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    api = _api_deploy_call(tmp_path)
+    assert (
+        "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=true|"
+        f"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT={state['rollout_expires_at']}|"
+    ) in api
+    assert "--remove-env-vars" not in api
+    assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "true"
+    assert (tmp_path / "live-governance-expiry").read_text(encoding="utf-8") == (
+        state["rollout_expires_at"]
+    )
+    assert f"enabled=true until {state['rollout_expires_at']}" in result.stdout
+    assert "rule governance explicitly true" in result.stdout
+    assert "DONE abcdef1" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("traffic_mode", "expected_error"),
+    [
+        ("flag-disabled", "CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly true"),
+        (
+            "governance-expiry-stale",
+            "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT does not match the checked-in "
+            "rollout expiry",
+        ),
+    ],
+)
+def test_deploy_prod_enabled_readback_requires_the_exact_state(
+    tmp_path: Path, traffic_mode: str, expected_error: str
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        traffic_mode=traffic_mode,
+        governance_state=_enabled_governance_state(),
+        committed_files=(_GOVERNANCE_EVIDENCE,),
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "TRAFFIC/REVISION DRIFT" in result.stdout
+    assert result.stderr.strip() == expected_error
+    assert "DONE abcdef1" not in result.stdout
+
+
 @pytest.mark.parametrize(
     ("case", "mutation_path", "mutation", "reject"),
     [
         ("clean", None, None, False),
         ("security-helper", "scripts/release_security_gate.py", "modify", True),
         ("security-policy", ".github/workflows/security.yml", "modify", True),
+        ("npm-helper", "scripts/mobile/npm-tooling.mjs", "modify", True),
+        ("npm-registry", "scripts/mobile/npm-registry.mjs", "modify", True),
+        ("npm-archive",
+         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+         "modify", True),
         ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
         ("registry", "license-policy/reviewed-packages.json", "modify", True),
         ("upstream", "license-policy/upstream/fake-package/LICENSE.txt", "modify", True),
@@ -3732,6 +4248,7 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
          "modify", True),
         ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
          "modify", True),
+        ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs", "modify", True),
         ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
         ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
         ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
@@ -3789,6 +4306,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("upstream", "license-policy/upstream/fake-package/LICENSE.txt"),
             ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
             ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
+            ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs"),
             ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
             ("network", "tests/e2e/support/bounded-network-evidence.ts"),
             ("api", "tests/e2e/support/prod-api-response-evidence.ts"),
@@ -3798,6 +4316,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("public-release-identity", "tests/e2e/support/public-release-identity.ts"),
         ]),
     }
+    initial_paths.update(_web_npm_tooling_inputs(REPO_ROOT))
     for relative in initial_paths:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)

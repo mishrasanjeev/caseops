@@ -140,7 +140,7 @@ test("Today retains exact parent identities, date and undated work without inven
   assert.equal(today.streams[0].items[0].matter.id, "matter-test");
   assert.equal(today.streams[0].items[0].due_on, "2026-10-25");
   assert.equal(today.streams[1].items[0].due_on, null);
-  assert.equal(today.streams[0].total, null);
+  assert.equal(today.streams[0].returnedCount, null);
   assert.equal(today.streams[0].truncated, null);
   assert.equal("scope" in today, false);
 });
@@ -158,9 +158,18 @@ test("Today counts cannot silently contradict the returned inventory", () => {
     deadlines_next_7d: false,
   };
   const today = decodeToday(
-    todayFixture({ stream_counts: metadata, stream_truncated: truncated }),
+    todayFixture({
+      tasks_due_or_overdue: Array.from({ length: 3 }, (_, index) => ({
+        id: `returned-task-${index}`,
+        matter: matterFixture(),
+        title: "Returned task",
+        due_on: null,
+      })),
+      stream_counts: metadata,
+      stream_truncated: truncated,
+    }),
   );
-  assert.equal(today.streams[1].total, 3);
+  assert.equal(today.streams[1].returnedCount, 3);
   assert.equal(today.streams[1].truncated, true);
   assert.throws(
     () =>

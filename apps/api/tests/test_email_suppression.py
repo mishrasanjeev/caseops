@@ -100,7 +100,7 @@ def _make_matter_with_hearing(
     matter = _mk_matter(client, owner_token, "Sup-1")
     matter_id = matter["id"]
     hearing = _mk_hearing_via_api(
-        client, owner_token, matter_id, days_ahead=7
+        client, owner_token, matter_id, days_ahead=7, channels=["email"]
     )
     hearing_id = hearing["id"]
     factory = get_session_factory()

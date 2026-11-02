@@ -37,6 +37,7 @@ def _get(url: str, *, timeout: float) -> tuple[int, bytes, str]:
         headers={
             "Accept": "application/json,text/html,text/plain,*/*",
             "User-Agent": "caseops-prod-billing-safe-smoke/1.0",
+            "X-CaseOps-Automated-Test": "no-paid-providers",
         },
     )
     try:

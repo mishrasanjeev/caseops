@@ -90,31 +90,38 @@ def _select_recipient_ids(
         )
     assigned_ids = set(ids)
     _check_participant_bound(assigned_ids)
-    admin_ids = set(
-        session.scalars(
-            select(CompanyMembership.id)
+    statement = (
+        select(CompanyMembership.id, CompanyMembership.role, CompanyMembership.is_active)
+        .where(
+            CompanyMembership.company_id == matter.company_id,
+            CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
+        )
+        .limit(_MAX_PARTICIPANTS + 1)
+    )
+    if assigned_ids:
+        admins = statement.subquery()
+        assigned = (
+            select(CompanyMembership.id, CompanyMembership.role, CompanyMembership.is_active)
             .where(
                 CompanyMembership.company_id == matter.company_id,
-                CompanyMembership.role.in_([MembershipRole.OWNER, MembershipRole.ADMIN]),
+                CompanyMembership.id.in_(sorted(assigned_ids)),
             )
-            .limit(_MAX_PARTICIPANTS + 1)
+            .subquery()
         )
-    )
+        statement = select(admins).union_all(select(assigned))
+    # Charge both bounded arms, including overlapping admin/assigned rows.
+    rows = session.execute(statement).all()
+    admin_ids = {
+        member_id
+        for member_id, role, _active in rows
+        if role in (MembershipRole.OWNER, MembershipRole.ADMIN)
+    }
     review_ids = assigned_ids or admin_ids
     failure_ids = assigned_ids | admin_ids
     _check_participant_bound(failure_ids)
     if not failure_ids:
         return (), ()
-    active_ids = set(
-        session.scalars(
-            select(CompanyMembership.id)
-            .where(
-                CompanyMembership.id.in_(sorted(failure_ids)),
-                CompanyMembership.company_id == matter.company_id,
-                CompanyMembership.is_active.is_(True),
-            )
-        )
-    )
+    active_ids = {member_id for member_id, _role, is_active in rows if is_active}
     return tuple(sorted(review_ids & active_ids)), tuple(sorted(failure_ids & active_ids))
 
 
@@ -461,6 +468,20 @@ def _notification_context(
     return _participant_fence(
         session, matter=matter, actor_membership_id=actor_membership_id
     ).context
+
+
+def captured_compliance_notification_recipients(
+    session: Session,
+    *,
+    matter: Matter,
+    actor_membership_id: str | None,
+    include_admins: bool = False,
+) -> tuple[SessionContext | None, list[CompanyMembership]]:
+    fence = _participant_fence(session, matter=matter, actor_membership_id=actor_membership_id)
+    if fence.context is None:
+        return None, []
+    ids = fence.selection.failure_ids if include_admins else fence.selection.review_ids
+    return fence.context, [fence.memberships[member_id] for member_id in ids]
 
 
 def _recipient_memberships(

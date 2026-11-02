@@ -46,7 +46,10 @@ def _base_url() -> str:
 
 
 def _headers() -> dict[str, str]:
-    headers = {"Accept": "application/json,text/csv,*/*"}
+    headers = {
+        "Accept": "application/json,text/csv,*/*",
+        "X-CaseOps-Automated-Test": "no-paid-providers",
+    }
     token = os.environ.get("CASEOPS_SMOKE_BEARER_TOKEN")
     cookie = os.environ.get("CASEOPS_SMOKE_COOKIE")
     if token:

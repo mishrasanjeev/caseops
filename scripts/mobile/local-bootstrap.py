@@ -12,21 +12,64 @@ import secrets
 import re
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import time
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CACHE = Path.home() / ".cache/caseops-mobile/local-docker-20261025"
 PLATFORMS = ("android", "ios")
 DEVICE_OUTPUT_LIMIT = 65536
 MARKER = {"X-CaseOps-Automated-Test": "no-paid-providers"}
+CORE_SCREEN_READS = frozenset({"GET /api/auth/native/sessions", "GET /api/account/deletion-requests",
+                               "GET /api/matter-work-queue"})
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
-             "tests/fixtures/statutes/structured-schedule-api.json", "license-policy", "docs/security"]
+             "tests/fixtures/statutes/structured-schedule-api.json",
+             "tests/fixtures/node-default-tls-probe.cjs", ".dockerignore", ".gcloudignore",
+             "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+             "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz", "license-policy", "docs/security"]
 
+
+def _load_local_transport():
+    import hashlib as _hashlib
+    import os as _os
+    import stat as _stat
+    _path = Path(__file__).absolute().with_name("local-transport.py")
+    _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    _frame = lambda value: tuple(getattr(value, key) for key in _keys)
+    assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
+    def _namespace():
+        rows = []
+        for parent in _path.parents:
+            value = parent.lstat()
+            assert len(rows) < 128 and _stat.S_ISDIR(value.st_mode) and not _stat.S_ISLNK(value.st_mode), "Local transport source namespace required"
+            rows.append((str(parent), *(getattr(value, key) for key in _keys[:5])))
+        return rows
+    _parents = _namespace()
+    _named = _path.lstat()
+    _fd = _os.open(_path, _os.O_RDONLY | getattr(_os, "O_NOFOLLOW", 0) | getattr(_os, "O_NONBLOCK", 0) | getattr(_os, "O_BINARY", 0))
+    try:
+        _first = _os.fstat(_fd)
+        assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        _data = bytearray()
+        while len(_data) <= _first.st_size:
+            _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
+            if not _part:
+                break
+            _data.extend(_part)
+        _raw = bytes(_data)
+        assert len(_raw) == _first.st_size and _hashlib.sha256(_raw).hexdigest() == "95180cd961891d9056d2a4d491e9239c6f49d4de2562c35e6d48610d767dd6ae" and _frame(_first) == _frame(_os.fstat(_fd)) and _frame(_named) == _frame(_path.lstat()) and _parents == _namespace(), "Local transport source changed"
+    finally:
+        _os.close(_fd)
+    _scope = {"__name__": "caseops_local_transport", "__file__": str(_path)}
+    exec(compile(_raw, str(_path), "exec"), _scope)
+    return _scope
+
+_LOCAL_TRANSPORT = _load_local_transport()
 
 def checked_port(value):
     if isinstance(value, str):
@@ -36,23 +79,11 @@ def checked_port(value):
     return value
 
 
-def validated_config(config, requested_platform=None):
-    assert isinstance(config, dict), "Fixture config object required"
-    platform = config.get("CASEOPS_MOBILE_PLATFORM", "android")
-    assert platform in PLATFORMS, "Unsupported fixture platform"
-    if requested_platform is not None:
-        assert requested_platform in PLATFORMS and requested_platform == platform, "Fixture platform mismatch"
-    api_port = checked_port(config.get("CASEOPS_MOBILE_API_PORT", 8443))
-    web_port = checked_port(config.get("CASEOPS_MOBILE_WEB_PORT", 3443))
-    assert api_port != web_port, "API and web ports must differ"
-    host = "127.0.0.1" if platform == "ios" else "10.0.2.2"
-    expected = {"CASEOPS_MOBILE_PLATFORM": platform,
-                "CASEOPS_MOBILE_API_PORT": str(api_port), "CASEOPS_MOBILE_WEB_PORT": str(web_port),
-                "CASEOPS_MOBILE_API_ORIGIN": f"https://{host}:{api_port}",
-                "CASEOPS_MOBILE_WEB_ORIGIN": f"https://{host}:{web_port}"}
-    for key in ("CASEOPS_MOBILE_API_ORIGIN", "CASEOPS_MOBILE_WEB_ORIGIN"):
-        assert key not in config or config[key] == expected[key], "Fixture origin differs from platform policy"
-    return {**config, **expected}
+def validated_config(config, requested_platform=None, requested_mode=None):
+    value = _LOCAL_TRANSPORT['policy'](config, requested_platform, requested_mode)
+    return {**config, 'CASEOPS_MOBILE_PLATFORM': value['platform'],
+            'CASEOPS_MOBILE_API_PORT': value['apiPort'], 'CASEOPS_MOBILE_WEB_PORT': value['webPort'],
+            'CASEOPS_MOBILE_API_ORIGIN': value['apiOrigin'], 'CASEOPS_MOBILE_WEB_ORIGIN': value['webOrigin']}
 
 
 def normalized_locale(value):
@@ -76,11 +107,12 @@ def device_output(command):
     return value
 
 
-def observe_device_locale(platform, udid):
+def observe_device_locale(platform, udid, *, android_transport_mode=None):
     assert platform in PLATFORMS, "Unsupported fixture platform"
     assert isinstance(udid, str), "Select one explicit device UDID"
     commands = []
     if platform == "ios":
+        assert android_transport_mode is None, "Android locale transport is Android only"
         assert sys.platform == "darwin", "Simulator locale observation requires the actual Mac host"
         assert re.fullmatch(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}", udid), "Explicit Simulator UUID required"
         command = ["xcrun", "simctl", "list", "devices", "available", "--json"]
@@ -118,9 +150,15 @@ def observe_device_locale(platform, udid):
         assert sdk.is_absolute(), "Android SDK path must be absolute"
         adb = sdk / "platform-tools" / ("adb.exe" if sys.platform == "win32" else "adb")
         assert adb.is_file() and os.access(adb, os.X_OK), "Executable Android SDK adb required"
+        assert android_transport_mode in (None, 'emulator', 'usb-reverse'), 'Unsupported Android locale transport'
+        adb_arguments = [str(adb)]
+        if android_transport_mode == 'usb-reverse':
+            assert os.environ.get('ADB_SERVER_SOCKET') == 'tcp:127.0.0.1:5042', 'Owned USB-reverse ADB socket required'
+            assert os.environ.get('ANDROID_ADB_SERVER_PORT') in (None, '5042'), 'Owned USB-reverse ADB port required'
+            adb_arguments += ['-P', '5042']
         observations = {}
         for key in ("persist.sys.locale", "ro.product.locale"):
-            command = [str(adb), "-s", udid, "shell", "getprop", key]
+            command = [*adb_arguments, "-s", udid, "shell", "getprop", key]
             commands.append(command)
             observations[key] = device_output(command)
         locale = normalized_locale(observations["persist.sys.locale"] or observations["ro.product.locale"])
@@ -130,7 +168,48 @@ def observe_device_locale(platform, udid):
             "commandsWereReadOnly": True, "renderedNativeLabelsNotYetCertified": True}
 
 
+def private_metadata_equal(first, second, *, named_path=False, windows=False):
+    assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
+    fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    return all(getattr(first, key) == getattr(second, key) for key in fields
+               if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
+
+
 def write_new(path, value):
+    if path.name in ("credentials.json", "compose-secrets.json", "supplied-credentials.json") or re.fullmatch(
+            r"core-credentials-[a-f0-9]{12}\.json", path.name):
+        content = (json.dumps(value, indent=2) + "\n").encode("utf-8")
+        assert os.name == "nt" or hasattr(os, "O_NOFOLLOW"), "No-follow private file support required"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o600)
+        try:
+            opened = os.fstat(descriptor)
+            assert stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1, "Single-link private fixture required"
+            if os.name != "nt":
+                assert opened.st_uid == os.getuid(), "Owned private fixture required"
+                os.fchmod(descriptor, 0o600)
+                opened = os.fstat(descriptor)
+                assert stat.S_IMODE(opened.st_mode) == 0o600, "Private fixture mode must be 0600"
+            # Windows retains the existing protected cache ACL route. POSIX
+            # mode assertions here do not substitute for that separate policy.
+            named = path.lstat()
+            assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode), "Regular private fixture path required"
+            assert private_metadata_equal(opened, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed"
+            remaining = memoryview(content)
+            while remaining:
+                count = os.write(descriptor, remaining)
+                assert 0 < count <= len(remaining), "Private fixture write incomplete"
+                remaining = remaining[count:]
+            os.fsync(descriptor)
+            final, named = os.fstat(descriptor), path.lstat()
+            assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode), "Regular private fixture path required"
+            assert private_metadata_equal(final, named, named_path=True, windows=os.name == "nt"), "Private fixture path changed during write"
+            assert (final.st_dev, final.st_ino, final.st_uid, final.st_gid, final.st_mode, final.st_nlink) == (
+                opened.st_dev, opened.st_ino, opened.st_uid, opened.st_gid, opened.st_mode, opened.st_nlink), "Private fixture identity changed"
+            assert final.st_size == len(content), "Private fixture write incomplete"
+        finally:
+            os.close(descriptor)
+        return
     with path.open("x", encoding="utf-8") as target:
         json.dump(value, target, indent=2)
         target.write("\n")
@@ -219,7 +298,9 @@ def bind_owner(cache, config, stamp):
 
 def extend_fixture(cache, config, args, stamp):
     config = validated_config(config, getattr(args, "platform", "android"))
-    observation = observe_device_locale(config["CASEOPS_MOBILE_PLATFORM"], args.udid)
+    mode = _LOCAL_TRANSPORT['policy'](config)['mode']
+    observation = (observe_device_locale(config['CASEOPS_MOBILE_PLATFORM'], args.udid, android_transport_mode=mode)
+                   if mode == 'usb-reverse' else observe_device_locale(config['CASEOPS_MOBILE_PLATFORM'], args.udid))
     locale = observation["locale"]
     iteration = secrets.token_hex(6)
     base = json.loads((cache / "seed.json").read_text(encoding="utf-8"))
@@ -233,6 +314,7 @@ def extend_fixture(cache, config, args, stamp):
     name = f"extend-input-{iteration}.json"
     write_new(cache / name, {"iteration": iteration, "locale": locale, "dateLabels": labels,
                             "platform": config["CASEOPS_MOBILE_PLATFORM"],
+                            **_LOCAL_TRANSPORT["fields"](config),
                             "apiOrigin": config["CASEOPS_MOBILE_API_ORIGIN"],
                             "webOrigin": config["CASEOPS_MOBILE_WEB_ORIGIN"],
                             "localeEvidence": {"path": str(locale_file), "sha256": hashlib.sha256(locale_file.read_bytes()).hexdigest()}})
@@ -242,7 +324,9 @@ def extend_fixture(cache, config, args, stamp):
     body = json.loads(extended.read_text(encoding="utf-8"))
     routes_path = cache / "gateway-routes.json"
     previous = json.loads(routes_path.read_text(encoding="utf-8"))
-    routes = set(previous["routes"]) | {"GET /api/auth/native/sessions"}
+    # The current native Account and Work screens read these on every open, so
+    # Core needs them admitted; their mutations stay with Queue/Privacy.
+    routes = set(previous["routes"]) | CORE_SCREEN_READS
     for kind in ("lifecycleMatter", "accessMatter"):
         mid = body[kind]["id"]
         routes |= {f"GET /api/matters/{mid}", f"GET /api/matters/{mid}/workspace", f"POST /api/matters/{mid}/notes"}
@@ -276,10 +360,11 @@ def compose(cache, config):
     command = ["docker", "compose", "-f", str(REPO / "compose.mobile-local.yml")]
     platform = config["CASEOPS_MOBILE_PLATFORM"]
     scanner_platform = ios_scanner_platform()
-    if platform == "ios" or scanner_platform:
+    loopback_app = platform == 'ios' or _LOCAL_TRANSPORT['policy'](config)['mode'] == 'usb-reverse'
+    if loopback_app or scanner_platform:
         # Keep canonical image pins and inherited TLS/CORS/network fences intact.
         override = {"services": {service: {"environment": {"CASEOPS_PUBLIC_APP_URL": config["CASEOPS_MOBILE_WEB_ORIGIN"]}}
-                                 for service in ("api", "migrate")} if platform == "ios" else {}}
+                                 for service in ("api", "migrate")} if loopback_app else {}}
         if scanner_platform:
             override["services"]["scanner"] = {"platform": scanner_platform}
         content = json.dumps(override, sort_keys=True)
@@ -297,9 +382,10 @@ def port_free(port):
         probe.bind(("127.0.0.1", port))
 
 
-def https_json(url, cache, marked=True):
+def https_json(url, cache):
     context = ssl.create_default_context(cafile=str(cache / "tls/ca.crt"))
-    with urlopen(Request(url, headers=MARKER if marked else {}), context=context, timeout=15) as response:
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    with urlopen(Request(url, headers=MARKER), context=context, timeout=15) as response:
         return json.load(response)
 
 
@@ -328,6 +414,7 @@ def build_web(cache, config, log):
 
 def tls_probe(cache, config, *, negative_controls=True):
     context = ssl.create_default_context(cafile=str(cache / "tls/ca.crt"))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     hostnames = []
     port = int(config["CASEOPS_MOBILE_API_PORT"])
     for hostname in ("127.0.0.1", "10.0.2.2", "localhost"):
@@ -335,9 +422,11 @@ def tls_probe(cache, config, *, negative_controls=True):
             with context.wrap_socket(connection, server_hostname=hostname) as secured:
                 hostnames.append({"name": hostname, "verified": True, "protocol": secured.version()})
     unknown_rejected = False
+    unknown_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    unknown_context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
-            with ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).wrap_socket(connection, server_hostname="localhost"):
+            with unknown_context.wrap_socket(connection, server_hostname="localhost"):
                 pass
     except ssl.SSLCertVerificationError:
         unknown_rejected = True
@@ -399,7 +488,7 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
             except OSError:
                 time.sleep(0.5)
     assert status["implementationSha256"] == gateway_hash, "Gateway runtime source mismatch"
-    web = https_json(f"https://127.0.0.1:{config['CASEOPS_MOBILE_WEB_PORT']}/api/release-identity", cache, False)
+    web = https_json(f"https://127.0.0.1:{config['CASEOPS_MOBILE_WEB_PORT']}/api/release-identity", cache)
     assert web["release_sha"] == config["CASEOPS_MOBILE_WEB_SHA"]
     assert web["revision"] == config["CASEOPS_MOBILE_WEB_REVISION"]
     ids = run(command + ["ps", "-aq"], env=env).splitlines()
@@ -416,6 +505,7 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
             assert body["NetworkSettings"]["Networks"].keys() == {f"{config['CASEOPS_MOBILE_PROJECT']}_default"}
     receipt = {"environment": "docker-integration", "syntheticDataOnly": True,
                "platform": config["CASEOPS_MOBILE_PLATFORM"],
+               **_LOCAL_TRANSPORT["fields"](config),
                "project": config["CASEOPS_MOBILE_PROJECT"], "backendSha": build["release_sha"], "backendRevision": build["revision"],
                "webIdentity": web, "source": source_identity(source),
                "gatewayUrl": f"https://127.0.0.1:{config['CASEOPS_MOBILE_API_PORT']}",
@@ -434,7 +524,7 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
     receipt["fixtureSourceHashes"] = {path.relative_to(REPO).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                       for path in sorted((REPO / "scripts/mobile").glob("local-*")) if path.is_file()}
     receipt["composeSha256"] = hashlib.sha256((REPO / "compose.mobile-local.yml").read_bytes()).hexdigest()
-    if config["CASEOPS_MOBILE_PLATFORM"] == "ios":
+    if config['CASEOPS_MOBILE_PLATFORM'] == 'ios' or _LOCAL_TRANSPORT['policy'](config)['mode'] == 'usb-reverse':
         compose_files = [Path(command[index + 1]) for index, value in enumerate(command) if value == "-f"]
         assert len(compose_files) == 2 and compose_files[0] == REPO / "compose.mobile-local.yml", "Exact iOS Compose inputs required"
         override = compose_files[1]
@@ -460,7 +550,7 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
 def main(args):
     cache = args.cache.resolve()
     if args.action != "up":
-        config = validated_config(json.loads((cache / "config.json").read_text()), getattr(args, "platform", "android"))
+        config = validated_config(json.loads((cache / "config.json").read_text()), getattr(args, "platform", "android"), getattr(args, "android_transport_mode", None))
         command, env = compose(cache, config)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3)
         if args.action == "extend":
@@ -510,7 +600,7 @@ def main(args):
             config["CASEOPS_MOBILE_WEB_SHA"] = source["web"]["head"] if not source["web"]["dirty"] else "unavailable"
             config["CASEOPS_MOBILE_WEB_REVISION"] = f"{config['CASEOPS_MOBILE_PROJECT']}-web-{source['web']['fingerprint'][:12]}"
             write_new(cache / f"source-resume-{stamp}.json", source)
-            command, env = compose(cache, config)
+            compose(cache, config)
             build_web(cache, config, cache / f"build-web-{stamp}.log")
             assert source == {"api": snapshot(API_PATHS), "web": snapshot(WEB_PATHS)}, "Build source changed"
             (cache / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -538,7 +628,9 @@ def main(args):
     assert not cache.is_relative_to(REPO), "Secrets must remain outside Git"
     platform_config = validated_config({"CASEOPS_MOBILE_PLATFORM": getattr(args, "platform", "android"),
                                        "CASEOPS_MOBILE_API_PORT": args.api_port,
-                                       "CASEOPS_MOBILE_WEB_PORT": args.web_port})
+                                       "CASEOPS_MOBILE_WEB_PORT": args.web_port,
+                                       **({"CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE": args.android_transport_mode}
+                                          if getattr(args, "android_transport_mode", None) is not None else {})})
     port_free(args.api_port)
     port_free(args.web_port)
     project = "caseops-mobile-" + datetime.now(UTC).strftime("%Y%m%d") + "-" + secrets.token_hex(4)
@@ -582,7 +674,7 @@ def main(args):
                       "platform": config["CASEOPS_MOBILE_PLATFORM"],
                       "apiOrigin": config["CASEOPS_MOBILE_API_ORIGIN"],
                       "webOrigin": config["CASEOPS_MOBILE_WEB_ORIGIN"]}), flush=True)
-    command, env = compose(cache, config)
+    compose(cache, config)
     build_web(cache, config, cache / "build-web.log")
     after = {"api": snapshot(API_PATHS), "web": snapshot(WEB_PATHS)}
     write_new(cache / "source-after.json", after)
@@ -602,6 +694,8 @@ def argument_parser():
     parser.add_argument("--udid")
     parser.add_argument("--platform", choices=PLATFORMS, default="android",
                         help="Fixture platform (default: android); must match the saved cache")
+    parser.add_argument("--android-transport-mode", choices=("emulator", "usb-reverse"), default=None,
+                        help="Explicit Android backend route; absent retains emulator origin policy")
     return parser
 
 
@@ -609,5 +703,5 @@ if __name__ == "__main__":
     try:
         main(argument_parser().parse_args())
     except Exception as error:
-        print(f"Fixture incomplete: {type(error).__name__}: {error}", file=sys.stderr)
+        print(f"Fixture incomplete: {type(error).__name__}; values redacted", file=sys.stderr)
         sys.exit(1)

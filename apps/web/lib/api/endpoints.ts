@@ -20,6 +20,7 @@ import {
   type CalendarEventKind,
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
+  type CalendarSummaryResponse,
   type CalendarSyncStatusResponse,
   type CalendarProviderEventCandidateListResponse,
   type CalendarProviderEventCandidateRecord,
@@ -44,6 +45,7 @@ import {
   type DraftType,
   type IpPleadingTemplateList,
   type IpDraftValidationReport,
+  type IpNiceClassCatalogue,
   type EmailRenderResponse,
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
@@ -67,6 +69,7 @@ import {
   type MatterBillingRate,
   type MatterComplianceListResponse,
   type MatterDashboardSummary,
+  type MatterPortfolioHealth,
   type MatterFileQAAnswerMode,
   type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
@@ -168,6 +171,7 @@ import {
   calendarConnectionStartResponse,
   calendarEventListResponse,
   calendarEventSyncResponse,
+  calendarSummaryResponse,
   calendarSyncStatusResponse,
   calendarProviderEventCandidateListResponse,
   calendarProviderEventCandidateRecord,
@@ -188,6 +192,7 @@ import {
   draftList,
   ipPleadingTemplateList,
   ipDraftValidationReport,
+  ipNiceClassCatalogue,
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
@@ -205,6 +210,7 @@ import {
   matterBillingRate,
   matterComplianceListResponse,
   matterDashboardSummary,
+  matterPortfolioHealth,
   matterHearingFollowUp,
   matterHearingPortfolio,
   matterFileQAExportNoteResponse,
@@ -450,6 +456,8 @@ export async function updatePlatformForumAlias(
 }
 
 export type MatterListParams = {
+  /** One Matter by id through the wall-scoped list: absent when hidden, never audited as a denial. */
+  id?: string;
   limit?: number;
   cursor?: string | null;
   q?: string;
@@ -552,6 +560,7 @@ function appendMatterListParam(
 
 export async function listMatters(params?: MatterListParams): Promise<MattersList> {
   const qs = new URLSearchParams();
+  appendMatterListParam(qs, "id", params?.id);
   appendMatterListParam(qs, "limit", params?.limit);
   appendMatterListParam(qs, "cursor", params?.cursor);
   appendMatterListParam(qs, "q", params?.q);
@@ -678,6 +687,11 @@ export async function fetchMatterDashboardSummary(params?: {
   return matterDashboardSummary.parse(data);
 }
 
+export async function fetchMatterPortfolioHealth(): Promise<MatterPortfolioHealth> {
+  const data = await apiRequest<unknown>("/api/matters/portfolio-health");
+  return matterPortfolioHealth.parse(data);
+}
+
 export async function fetchMatterHearingPortfolio(params?: {
   date?: string;
   limit?: number;
@@ -694,9 +708,15 @@ export async function fetchMatterHearingPortfolio(params?: {
 
 export async function fetchMatterHearingFollowUp(params?: {
   limit?: number;
+  /** Rows to skip in each returned queue. */
+  offset?: number;
+  /** Read one queue's rows only; both counts are always returned. */
+  queue?: "overdue" | "missing_date";
 }): Promise<MatterHearingFollowUp> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.queue) qs.set("queue", params.queue);
   const path = qs.toString()
     ? `/api/matters/hearing-follow-up?${qs.toString()}`
     : "/api/matters/hearing-follow-up";
@@ -6913,6 +6933,28 @@ export async function downloadMatterInvoicePdf(input: {
   );
 }
 
+/** Issues a draft matter invoice; anything but a draft is refused (409). */
+export async function issueMatterInvoiceDraft(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  return apiRequest<MatterInvoiceRecord>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/issue`,
+    { method: "POST" },
+  );
+}
+
+/** Voids a draft matter invoice; issued invoices are refused (409, credit note). */
+export async function voidMatterInvoiceDraft(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  return apiRequest<MatterInvoiceRecord>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/void`,
+    { method: "POST" },
+  );
+}
+
 export type CauseListPreviewInput = {
   date?: string | null;
   date_from?: string | null;
@@ -7203,6 +7245,18 @@ export async function fetchCalendarEvents(input: {
     `/api/calendar/events?${params.toString()}`,
   );
   return calendarEventListResponse.parse(data);
+}
+
+/** Per-day open-item counts for up to one year (the Year view). */
+export async function fetchCalendarSummary(input: {
+  from: string; // ISO yyyy-mm-dd
+  to: string;   // ISO yyyy-mm-dd
+}): Promise<CalendarSummaryResponse> {
+  const params = new URLSearchParams({ from: input.from, to: input.to });
+  const data = await apiRequest<unknown>(
+    `/api/calendar/summary?${params.toString()}`,
+  );
+  return calendarSummaryResponse.parse(data);
 }
 
 // Phase B / J12 / M11 — communications log endpoints.
@@ -8849,7 +8903,8 @@ export type IpTrademarkParticularVersion = {
   form_version: string;
   mark_kind: string;
   representation_json: Record<string, unknown>;
-  classes_json: Array<{ class_number: number; specification: string }>;
+  // nice_edition is absent on rows recorded before the Nice catalogue (BUG-002).
+  classes_json: Array<{ class_number: number; specification: string; nice_edition?: string }>;
   use_priority_json: Record<string, unknown> | null;
   parties_json: Array<{ role: string; name: string }>;
   agent_json: Record<string, unknown> | null;
@@ -9002,6 +9057,10 @@ export type IpPortfolioRow = IpPortfolioDatesRecord & {
   source_renewal_alert_at?: string | null;
   source_renewal_alert_status?: string | null;
   source_renewal_alert_body?: string | null;
+  /** Status a portfolio import declared (unverified); `filing_phase` is the legal phase. */
+  source_declared_status?: string | null;
+  /** The import source's own Status wording; shown when it says more than the phase. */
+  source_status_text?: string | null;
   application_id: string;
   matter_id: string | null;
   asset_id: string | null;
@@ -9505,12 +9564,26 @@ export type IpJournalPublication = {
   source_retrieved_at: string | null;
   parser_version: string;
   attribution_json: Record<string, unknown>;
+  /** What the operator captured with the entry (extract, saved-page reference, notes). */
+  raw_evidence_json: Record<string, unknown>;
   source_fingerprint: string;
   supersedes_publication_id: string | null;
   correction_reason: string | null;
   ingestion_delay_hours: number;
   created_at: string;
 };
+
+/** Manual capture of an official journal entry; at least one of extract or reference. */
+export type IpJournalCapturedEvidence = {
+  capture_method: "manual";
+  extract_text?: string;
+  evidence_reference?: string;
+  notes?: string;
+};
+
+export type IpJournalPublicationScope =
+  | { scope_kind: "full" }
+  | { scope_kind: "partial"; published_classes: number[] };
 
 export type IpWatchDisposition =
   | "new"
@@ -9587,12 +9660,40 @@ export type IpWatchHandoff = {
   created_at: string;
 };
 
+/**
+ * One page (`limit` rows from `offset`) of each watch list. Every `*_total`
+ * counts the whole visible list, so a reader states "N of M" and asks for the
+ * next offset instead of silently stopping at the page.
+ */
 export type IpWatchWorkspace = {
+  limit: number;
+  offset: number;
   profiles: IpWatchProfile[];
+  profile_total: number;
+  /** Visible profiles that are not running. */
+  paused_profile_total: number;
+  /** Hits on every visible profile in scope, newest first. */
   hits: IpWatchHit[];
+  hit_total: number;
+  /** The profiles these hits were compared with when they are on another page. */
+  hit_profiles: IpWatchProfile[];
+  /** Hit-linked entries plus this page of recorded entries, hits or not. */
   publications: IpJournalPublication[];
+  publication_total: number;
+  /** The most recent `ingestion_run_limit` runs of `ingestion_run_total`. */
   ingestion_runs: IpJournalIngestionRun[];
+  ingestion_run_total: number;
+  ingestion_run_limit: number;
   handoffs: IpWatchHandoff[];
+  /** Visible profiles a capture is compared with, firm-wide; 0 means intake cannot run. */
+  intake_profile_count: number;
+};
+
+export type IpJournalIngestResult = {
+  run: IpJournalIngestionRun;
+  publications: IpJournalPublication[];
+  hits: IpWatchHit[];
+  idempotent_replay: boolean;
 };
 
 export type IpTrackedCaseReference = {
@@ -10121,6 +10222,8 @@ export type IpOppositionOpponentWorkflow = {
     | "confirm_reply_evidence_deadline"
     | "record_reply_evidence_decision"
     | "await_hearing_or_later_stage";
+  /** Readiness gaps that refuse a deadline proposal now (the proposer's own predicate). */
+  deadline_proposal_gaps: string[];
 };
 
 export type IpOppositionSharedWorkflow = {
@@ -10144,6 +10247,22 @@ export type IpOppositionSharedWorkflow = {
     purpose: string;
     status: string;
   }>;
+  /** Choices built from the write validators' own predicates. */
+  appeal_proceedings: Array<{
+    id: string;
+    office: string;
+    stage: string;
+    appeal_identifiers: string[];
+  }>;
+  related_applications: Array<{
+    id: string;
+    application_number: string | null;
+    office: string;
+    filing_phase: string;
+  }>;
+  disposition_trigger_events: IpDocketEvent[];
+  /** Hearing statuses each hearing-bound record accepts, from the validators' table. */
+  hearing_statuses_by_action?: Record<string, string[]>;
   next_required_action:
     | "complete_role_workflow"
     | "record_evidence_package"
@@ -10274,10 +10393,16 @@ export type IpRecordal = {
   updated_at: string;
 };
 
+/** A row of GET /api/ip/recordals: the recordal plus its docket's title. */
+export type IpRecordalListItem = IpRecordal & { docket_title: string };
+
 export type IpRecordalWorkspace = {
   recordal: IpRecordal;
   docket: IpDocket;
+  /** Current instruments this docket can cite (the transaction picker). */
   documents: IpDocument[];
+  /** What this recordal cites, current or retired, for its own history labels. */
+  cited_documents: IpDocument[];
   registry_workspaces: IpRegistryWorkspace[];
   deadline_workspace: IpDeadlineWorkspace;
   transactions: IpDocketEvent[];
@@ -10541,20 +10666,23 @@ export type IpCostReconciliationReport = {
   checksum_sha256: string;
 };
 
+export type IpFeatureBlockedReason =
+  | "unknown_feature"
+  | "missing_capability"
+  | "missing_entitlement"
+  | "rollout_disabled"
+  | "rollout_expired"
+  | "workspace_not_configured"
+  | "tenant_disabled"
+  | "readiness_test_failed"
+  | "incident_kill_switch";
+
 export type IpFeatureReadiness = {
   feature_id: string;
   available: boolean;
-  reason:
-    | "available"
-    | "unknown_feature"
-    | "missing_capability"
-    | "missing_entitlement"
-    | "rollout_disabled"
-    | "rollout_expired"
-    | "workspace_not_configured"
-    | "tenant_disabled"
-    | "readiness_test_failed"
-    | "incident_kill_switch";
+  reason: IpFeatureBlockedReason | "available";
+  /** Every failing gate, in server order; `reason` is its first entry. */
+  blocked_reasons?: IpFeatureBlockedReason[];
   owner: string;
   required_capabilities: string[];
   missing_capabilities: string[];
@@ -10609,12 +10737,20 @@ export type IpWorkspaceTestResult = {
   performed_at: string;
 };
 
+export type IpDocumentTaxonomyReadiness = {
+  taxonomy_version: string;
+  total_entry_count: number;
+  active_entry_count: number;
+  ready: boolean;
+};
+
 export type IpWorkspaceConfigurationStatus = {
   configuration: IpWorkspaceConfiguration | null;
   tests: IpWorkspaceTestResult[];
   ready_for_manual_docketing: boolean;
   enablement_blockers: string[];
   provider_adapters: ProviderAdapterContractRecord[];
+  document_taxonomy?: IpDocumentTaxonomyReadiness;
 };
 
 export type IpWorkspaceReadiness = {
@@ -10624,6 +10760,39 @@ export type IpWorkspaceReadiness = {
   configuration_status?: IpWorkspaceConfigurationStatus;
   features: IpFeatureReadiness[];
   domains?: import("@/lib/ip/domain-catalog").IpDomainCapability[];
+};
+
+/** Why the current viewer cannot take a governance action (server order). */
+export type IpGovernanceBlockReason =
+  | "not_candidate"
+  | "rule_kind_unsupported"
+  | "rollout_disabled"
+  | "rollout_expired"
+  | "missing_entitlement"
+  | "missing_capability"
+  | "proposer_unavailable"
+  | "proposer_cannot_self_approve"
+  | "no_qualified_reviewer"
+  | "no_other_approver"
+  | "fixtures_not_passing"
+  | "fixture_calendar_not_active"
+  | "fixture_calendar_jurisdiction_mismatch";
+
+export type IpGovernanceActionDecision = {
+  available: boolean;
+  code: "available" | IpGovernanceBlockReason;
+  reasons: IpGovernanceBlockReason[];
+  required_capability: string;
+  entitlement_key: string;
+  /** Null for working calendars, which are outside the rollout fence. */
+  rollout_flag: string | null;
+};
+
+export type IpDeadlineGovernanceProjection = {
+  calendar_proposal: IpGovernanceActionDecision;
+  calendar_activation: IpGovernanceActionDecision;
+  rule_proposal: IpGovernanceActionDecision;
+  rule_activation: IpGovernanceActionDecision;
 };
 
 export type IpDeadlineRuleVersion = {
@@ -10654,6 +10823,13 @@ export type IpDeadlineRuleVersion = {
   activated_at: string | null;
   disabled_at: string | null;
   created_at: string;
+  proposed_by_membership_id: string | null;
+  /** Viewer-scoped: the activation validator would accept this viewer now. */
+  can_activate: boolean;
+  activation_blocked_reason: IpGovernanceBlockReason | null;
+  activation_blocked_reasons: IpGovernanceBlockReason[];
+  /** Reviewers the activation validator accepts with this viewer as legal approver. */
+  eligible_reviewer_membership_ids: string[];
 };
 
 export type IpWorkingCalendarVersion = {
@@ -10678,6 +10854,12 @@ export type IpWorkingCalendarVersion = {
   approver_label_snapshot: string | null;
   approved_at: string | null;
   created_at: string;
+  proposed_by_membership_id: string | null;
+  can_activate: boolean;
+  activation_blocked_reason: IpGovernanceBlockReason | null;
+  activation_blocked_reasons: IpGovernanceBlockReason[];
+  /** The viewer proposed this candidate and may still withdraw it. */
+  can_withdraw: boolean;
 };
 
 export type IpLegalDeadline = {
@@ -10736,6 +10918,7 @@ export type IpDeadlineException = {
     | "uncertain"
     | "source_stale"
     | "rule_disabled"
+    | "rule_retired"
   >;
   critical: boolean;
   result_on: string | null;
@@ -10744,12 +10927,31 @@ export type IpDeadlineException = {
 
 export type IpDeadlineWorkspace = {
   eligible_rule_version_ids: string[];
+  /** Members deadline confirmation accepts on this docket (stable Matter and IP-record access). */
+  eligible_responsible_membership_ids: string[];
   docket_id: string;
   rules: IpDeadlineRuleVersion[];
   calendars: IpWorkingCalendarVersion[];
   deadlines: IpLegalDeadline[];
   exceptions: IpDeadlineException[];
   automation_state: "explicit_confirmation_only";
+  governance: IpDeadlineGovernanceProjection;
+};
+
+export type IpCompanyRulePolicy = {
+  id: string;
+  rule_set_id: string;
+  rule_set_key: string;
+  rule_kind: IpDeadlineRuleVersion["rule_kind"];
+  active_rule_version_id: string;
+  active_rule_version: number;
+  active_rule_status: IpDeadlineRuleVersion["status"];
+  auto_confirm_eligible: boolean;
+  auto_confirm_suspended_reason: string | null;
+  internal_target_policy: Record<string, unknown>;
+  version: number;
+  updater_label_snapshot: string;
+  updated_at: string;
 };
 
 export type IpDeadlineImpact = {
@@ -10844,6 +11046,50 @@ export type IpDocument = {
     created_by_membership_id: string;
     created_at: string;
   }>;
+  /** Set once the document is retired: kept for history, never offered as evidence. */
+  retirement?: IpDocumentRetirement | null;
+  /**
+   * History only: "retired", or "closed_record" when the document is listed
+   * only because its record is closed. Either way it offers no state change,
+   * new version or bulk selection; a closed record's document can still be retired.
+   */
+  read_only_reason?: "retired" | "closed_record" | null;
+};
+
+export type IpDocumentRetirement = {
+  retired_at: string;
+  retired_by_name: string;
+  reason: string;
+};
+
+export type IpDocumentRetirementBlocker = {
+  kind:
+    | "recordal"
+    | "foreign_associate_instruction"
+    | "docket_event"
+    | "title_interest"
+    | "renewal_certificate"
+    | "portal_publication"
+    | "source_evidence";
+  /** "restricted" when the record sits on a docket the viewer cannot open. */
+  record_id: string;
+  label: string;
+  status: string | null;
+  docket_id: string | null;
+  docket_title: string | null;
+  resolution: string;
+  href: string | null;
+};
+
+export type IpDocumentRetirementPreview = {
+  document_id: string;
+  title: string;
+  current_version: number;
+  already_retired: boolean;
+  may_retire: boolean;
+  permission_reason: string | null;
+  blockers: IpDocumentRetirementBlocker[];
+  retirable: boolean;
 };
 
 export type IpDocumentUploadResult = {
@@ -10917,25 +11163,56 @@ export type IpDocumentAliasImportResult = {
   }>;
 };
 
-export async function fetchIpDocuments(): Promise<{ items: IpDocument[]; total: number }> {
-  return apiRequest("/api/ip/documents");
+export async function fetchIpDocuments(
+  options: { includeHistory?: boolean } = {},
+): Promise<{ items: IpDocument[]; total: number }> {
+  return apiRequest(options.includeHistory ? "/api/ip/documents?include_history=true" : "/api/ip/documents");
 }
 
 export async function fetchIpDocument(documentId: string): Promise<IpDocument> {
   return apiRequest(`/api/ip/documents/${encodeURIComponent(documentId)}`);
 }
 
+/**
+ * The docket's current documents: linked to the docket or to one of its events
+ * or deadlines (what the recordal, Madrid and foreign-associate validators
+ * accept). Retired documents appear only with includeHistory.
+ */
 export async function fetchIpDocumentsForDocket(
   docketId: string,
+  options: { includeHistory?: boolean } = {},
 ): Promise<{ items: IpDocument[]; total: number }> {
-  return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}`);
+  const history = options.includeHistory ? "&include_history=true" : "";
+  return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}${history}`);
 }
 
-export async function fetchIpDocumentTaxonomy(): Promise<{
+export async function fetchIpDocumentRetirement(documentId: string): Promise<IpDocumentRetirementPreview> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(documentId)}/retirement`);
+}
+
+export async function retireIpDocument(input: {
+  documentId: string;
+  expectedCurrentVersion: number;
+  reason: string;
+}): Promise<IpDocument> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(input.documentId)}/retire`, {
+    method: "POST",
+    body: { expected_current_version: input.expectedCurrentVersion, reason: input.reason },
+  });
+}
+
+export type IpDocumentTaxonomy = {
   taxonomy_version: string;
   entries: Array<{ key: string; label: string; is_active: boolean; version: number }>;
-}> {
+};
+
+export async function fetchIpDocumentTaxonomy(): Promise<IpDocumentTaxonomy> {
   return apiRequest("/api/ip/document-taxonomy");
+}
+
+/** Loads the CaseOps standard classifications (ip:taxonomy_admin only). Idempotent. */
+export async function seedIpDocumentTaxonomy(): Promise<IpDocumentTaxonomy> {
+  return apiRequest("/api/ip/document-taxonomy/seed", { method: "POST" });
 }
 
 export async function previewIpDocumentName(input: {
@@ -11152,7 +11429,9 @@ export async function saveIpWorkspaceConfiguration(input: {
       timezone: input.timezone.trim(),
       holiday_calendar_key: input.holidayCalendarKey.trim(),
       working_day_policy: current?.working_day_policy_json ?? { working_weekdays: [0, 1, 2, 3, 4] },
-      document_taxonomy_version: current?.document_taxonomy_version ?? "ip-taxonomy-2026.1",
+      // The server owns the document taxonomy version for new configurations;
+      // an existing configuration keeps the value it already records.
+      ...(current ? { document_taxonomy_version: current.document_taxonomy_version } : {}),
       event_catalog_version: current?.event_catalog_version ?? "ip-events-v1",
       deadline_rule_versions: current?.deadline_rule_versions_json ?? { [jurisdiction]: "2026.1" },
       notification_channels: current?.notification_channels_json ?? ["in_app"],
@@ -11557,12 +11836,68 @@ export async function downloadBulkImportErrors(
   return response.blob();
 }
 
-export async function fetchIpDockets(): Promise<{
+export type IpDocketListPage = {
   dockets: IpDocket[];
   count: number;
   has_more: boolean;
-}> {
-  return apiRequest("/api/ip/dockets");
+  /** Keyset position of the next page; null on the last page. */
+  next_cursor?: string | null;
+  /** Visible dockets matching the query across every page. */
+  total_count?: number | null;
+};
+
+export type IpDocketListParams = {
+  /** Case-insensitive docket title, mark, or identifier. */
+  query?: string;
+  /** The previous page's `next_cursor`. */
+  cursor?: string | null;
+  /** Page size, 1-200 (server default 100). */
+  limit?: number;
+  /** Narrow the trademark record types listed; counts and pages follow. */
+  recordTypes?: readonly IpTrademarkDocketRecordType[];
+  signal?: AbortSignal;
+};
+
+export type IpTrademarkDocketRecordType =
+  | "trademark"
+  | "international_registration"
+  | "international_designation";
+
+/**
+ * One page of visible active trademark dockets, most recently updated first.
+ * With no argument (including as a bare React Query `queryFn`) this is the
+ * original first page of 100; pass `query` and `cursor` to search and page.
+ */
+export async function fetchIpDockets(params: IpDocketListParams = {}): Promise<IpDocketListPage> {
+  const search = new URLSearchParams();
+  const query = typeof params.query === "string" ? params.query.trim() : "";
+  if (query) search.set("query", query);
+  if (typeof params.cursor === "string" && params.cursor) search.set("cursor", params.cursor);
+  if (typeof params.limit === "number") search.set("limit", String(params.limit));
+  for (const recordType of params.recordTypes ?? []) search.append("record_type", recordType);
+  const suffix = search.toString();
+  return apiRequest(`/api/ip/dockets${suffix ? `?${suffix}` : ""}`, { signal: params.signal });
+}
+
+/**
+ * Every visible trademark docket, following the keyset cursor to the last
+ * page. For whole-portfolio checks (a relationship cycle can run through any
+ * docket); pickers page with IpDocketPicker instead.
+ */
+export async function fetchEveryIpDocket(options?: { signal?: AbortSignal }): Promise<IpDocket[]> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const rows = new Map<string, IpDocket>();
+    let total = 0;
+    let cursor: string | null = null;
+    do {
+      const page: IpDocketListPage = await fetchIpDockets({ cursor, limit: 200, signal: options?.signal });
+      total = page.total_count ?? total;
+      for (const docket of page.dockets) rows.set(docket.id, docket);
+      cursor = page.has_more ? page.next_cursor ?? null : null;
+    } while (cursor);
+    if (rows.size >= total) return [...rows.values()];
+  }
+  throw new Error("The docket list changed while it was loading. Try again to check every docket.");
 }
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
@@ -11703,12 +12038,52 @@ export type IpPortalClientInstruction = {
   updated_at: string;
 };
 
+type IpOffsetPage<TItem> = { items: TItem[]; total: number; limit: number; offset: number };
+
+/**
+ * Every row of an offset-paged IP list. These lists are read whole by the
+ * pages that show them, and one request of 100 silently dropped row 101
+ * onwards. The routes order newest change first, so a record updated while
+ * paging jumps to page one: it would be skipped and its neighbour read twice.
+ * Rows are keyed by id, and when fewer distinct rows arrive than the server
+ * counted the list is read once more; a second shortfall is an error, never a
+ * silent partial list. The result holds every row: limit is the row count and
+ * offset is 0.
+ */
+async function fetchAllIpOffsetPages<TItem extends { id: string }>(
+  path: string,
+  query: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<IpOffsetPage<TItem>> {
+  const pageSize = 100;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const rows = new Map<string, TItem>();
+    let total = 0;
+    for (let offset = 0; ; offset += pageSize) {
+      const params = new URLSearchParams(query);
+      params.set("limit", String(pageSize));
+      params.set("offset", String(offset));
+      const page = await apiRequest<IpOffsetPage<TItem>>(`${path}?${params.toString()}`, {
+        signal,
+      });
+      total = page.total;
+      for (const item of page.items) rows.set(item.id, item);
+      if (page.items.length < pageSize || offset + pageSize >= page.total) break;
+    }
+    if (rows.size >= total) {
+      const items = [...rows.values()];
+      return { items, total: items.length, limit: items.length, offset: 0 };
+    }
+  }
+  throw new Error("This list changed while it was loading. Try again to see every record.");
+}
+
 export async function fetchIpForeignAssociateInstructions(input?: {
   docketId?: string | null;
   status?: IpForeignAssociateStatus | null;
   outstandingResponse?: boolean | null;
   missingFilingEvidence?: boolean | null;
-}): Promise<{
+}, options?: { signal?: AbortSignal }): Promise<{
   items: IpForeignAssociateInstruction[];
   total: number;
   limit: number;
@@ -11723,7 +12098,7 @@ export async function fetchIpForeignAssociateInstructions(input?: {
   if (input?.missingFilingEvidence !== undefined && input.missingFilingEvidence !== null) {
     query.set("missing_filing_evidence", String(input.missingFilingEvidence));
   }
-  return apiRequest(`/api/ip/foreign-associate-instructions?${query.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/foreign-associate-instructions", query, options?.signal);
 }
 
 export async function fetchIpForeignAssociateWorkspace(
@@ -11738,6 +12113,85 @@ export async function fetchIpPortalClientInstructions(): Promise<{
   instructions: IpPortalClientInstruction[];
 }> {
   return apiRequest("/api/ip/portal/client-instructions");
+}
+
+export type IpForeignAssociateCreateBlocker = {
+  code:
+    | "no_panel_associate"
+    | "no_associate_for_jurisdiction"
+    | "no_assignment_for_matter"
+    | "no_active_estimate"
+    | "no_linked_documents";
+  field: "outside_counsel_id" | "assignment_id" | "estimate_cost_item_id" | "selected_document_refs";
+  message: string;
+  action_label?: string | null;
+  href?: string | null;
+};
+
+/** Everything POST /foreign-associate-instructions accepts for one docket
+ * (BUG-009/010/011/013), filtered by the create validator's own predicates. */
+export type IpForeignAssociateCreateOptions = {
+  docket_id: string;
+  docket_title: string;
+  lifecycle_version: number;
+  matter_id: string | null;
+  matter_title: string | null;
+  /** Canonical code (ISO 3166-1 alpha-2, or EM / WO / EP), a legacy
+   * instruction's stored free-text target unchanged, or null. */
+  target_jurisdiction: string | null;
+  jurisdictions: Array<{ code: string; name: string; associate_count: number }>;
+  panel_associate_count: number;
+  associates: Array<{
+    id: string;
+    name: string;
+    firm_city: string | null;
+    primary_contact_name: string | null;
+    primary_contact_email: string | null;
+    panel_status: string;
+    filing_jurisdictions: string[];
+  }>;
+  assignment_required: boolean;
+  assignments: Array<{
+    id: string;
+    counsel_id: string;
+    counsel_name: string;
+    role_summary: string | null;
+    status: string;
+    currency: string;
+    budget_amount_minor: number;
+    compatible_estimate_ids: string[];
+  }>;
+  unbudgeted_assignment_count: number;
+  estimates: Array<{
+    id: string;
+    description: string;
+    amount_minor: number | null;
+    amount_withheld: boolean;
+    currency: string;
+    evidence_reference: string;
+    created_at: string;
+  }>;
+  client_instructions: Array<{
+    id: string;
+    submitted_by: string;
+    instruction_kind: string;
+    instruction_version: number;
+    received_at: string;
+  }>;
+  documents: Array<{ id: string; title: string; is_privileged: boolean }>;
+  can_record_estimate: boolean;
+  /** outside_counsel:manage: may add panel counsel and Matter assignments. */
+  can_manage_counsel: boolean;
+  blockers: IpForeignAssociateCreateBlocker[];
+};
+
+export async function fetchIpForeignAssociateCreateOptions(input: {
+  docketId: string;
+  targetJurisdiction?: string | null;
+}): Promise<IpForeignAssociateCreateOptions> {
+  const query = new URLSearchParams({ docket_id: input.docketId });
+  if (input.targetJurisdiction) query.set("target_jurisdiction", input.targetJurisdiction);
+  return apiRequest(`/api/ip/foreign-associate-instructions/create-options?${query.toString()}`);
 }
 
 export async function createIpForeignAssociateInstruction(input: {
@@ -11887,18 +12341,42 @@ export async function fetchIpRecordals(input?: {
   docketId?: string | null;
   recordalType?: IpRecordalType | null;
   status?: IpRecordalStatus | null;
-}): Promise<{ items: IpRecordal[]; total: number; limit: number; offset: number }> {
+}, options?: { signal?: AbortSignal }): Promise<{
+  items: IpRecordalListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}> {
   const query = new URLSearchParams({ limit: "100", offset: "0" });
   if (input?.docketId) query.set("docket_id", input.docketId);
   if (input?.recordalType) query.set("recordal_type", input.recordalType);
   if (input?.status) query.set("status", input.status);
-  return apiRequest(`/api/ip/recordals?${query.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/recordals", query, options?.signal);
 }
 
 export async function fetchIpRecordalWorkspace(
   recordalId: string,
 ): Promise<IpRecordalWorkspace> {
   return apiRequest(`/api/ip/recordals/${encodeURIComponent(recordalId)}/workspace`);
+}
+
+/**
+ * Documents a recordal on this docket may cite, from the same predicate the
+ * create validator applies (linked to the docket or one of its events or
+ * deadlines, and readable by the viewer). `truncated` means more exist.
+ */
+export type IpRecordalInstrumentOptions = {
+  docket_id: string;
+  items: IpDocument[];
+  truncated: boolean;
+};
+
+export async function fetchIpRecordalInstruments(
+  docketId: string,
+  signal?: AbortSignal,
+): Promise<IpRecordalInstrumentOptions> {
+  const query = new URLSearchParams({ docket_id: docketId });
+  return apiRequest(`/api/ip/recordals/instruments?${query.toString()}`, { signal });
 }
 
 export async function createIpRecordal(input: {
@@ -11949,7 +12427,8 @@ export async function recordIpRecordalTransaction(input: {
   expectedVersion: number;
   expectedLifecycleVersion: number;
   transactionKind: IpRecordalTransactionKind;
-  effectiveAt: string;
+  /** Null records the transaction at the server's current time. */
+  effectiveAt: string | null;
   responsibleMembershipId: string;
   reason: string;
   sourceUrl?: string | null;
@@ -11995,13 +12474,18 @@ export async function recordIpRecordalTransaction(input: {
 export async function fetchMadridRecords(input?: {
   recordKind?: MadridRecord["record_kind"];
   parentRegistrationId?: string;
-}): Promise<{ items: MadridRecord[]; total: number; limit: number; offset: number }> {
+}, options?: { signal?: AbortSignal }): Promise<{
+  items: MadridRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}> {
   const params = new URLSearchParams({ limit: "100", offset: "0" });
   if (input?.recordKind) params.set("record_kind", input.recordKind);
   if (input?.parentRegistrationId) {
     params.set("parent_registration_id", input.parentRegistrationId);
   }
-  return apiRequest(`/api/ip/international-registrations?${params.toString()}`);
+  return fetchAllIpOffsetPages("/api/ip/international-registrations", params, options?.signal);
 }
 
 export async function createMadridRecord(input: {
@@ -12157,12 +12641,27 @@ export async function recordMadridAction(input: {
   );
 }
 
+export const IP_WATCH_PAGE_SIZE = 100;
+
 export async function fetchIpWatchWorkspace(
   docketId?: string | null,
+  page: { offset?: number; limit?: number } = {},
 ): Promise<IpWatchWorkspace> {
-  const params = new URLSearchParams({ limit: "250" });
+  const params = new URLSearchParams({
+    limit: String(page.limit ?? IP_WATCH_PAGE_SIZE),
+    offset: String(page.offset ?? 0),
+  });
   if (docketId) params.set("docket_id", docketId);
   return apiRequest(`/api/ip/watch?${params.toString()}`);
+}
+
+/** Recorded journal entries the viewer may see, searched on the server. */
+export async function searchIpJournalPublications(
+  query: string,
+): Promise<{ publications: IpJournalPublication[] }> {
+  const params = new URLSearchParams({ limit: "25" });
+  if (query.trim()) params.set("q", query.trim());
+  return apiRequest(`/api/ip/watch/publications?${params.toString()}`);
 }
 
 export async function createIpWatchProfile(input: {
@@ -12233,23 +12732,18 @@ export async function ingestIpJournal(input: {
     jurisdiction: string;
     class_numbers: number[];
     goods_services: Record<string, string[]>;
-    publication_scope: Record<string, unknown>;
+    publication_scope: IpJournalPublicationScope;
     source_url: string;
     source_page?: string | null;
     source_status: "available" | "unavailable" | "stale";
     source_retrieved_at?: string | null;
     parser_version: string;
     attribution: Record<string, unknown>;
-    raw_evidence: Record<string, unknown>;
+    raw_evidence: IpJournalCapturedEvidence;
     supersedes_publication_id?: string | null;
     correction_reason?: string | null;
   };
-}): Promise<{
-  run: IpJournalIngestionRun;
-  publications: IpJournalPublication[];
-  hits: IpWatchHit[];
-  idempotent_replay: boolean;
-}> {
+}): Promise<IpJournalIngestResult> {
   return apiRequest("/api/ip/watch/journal-ingestions", {
     method: "POST",
     body: {
@@ -12338,7 +12832,7 @@ export async function createIpRegistryLink(input: {
   proceedingId?: string | null;
   office: string;
   jurisdiction: string;
-  identifierKind: string;
+  identifierKind: IpIdentifier["identifier_kind"];
   rawIdentifier: string;
   sourceUrl: string;
   matchConfidence: number;
@@ -12664,6 +13158,39 @@ export async function acknowledgeIpRenewalInstruction(input: {
   );
 }
 
+/** Evidence the renewal transition validator accepts for this term, by its own rules. */
+export type IpRenewalReferenceEvent = {
+  id: string;
+  event_kind: string;
+  effective_at: string;
+  source_reference: string | null;
+  reason: string | null;
+};
+
+export type IpRenewalTransitionReferences = {
+  term_id: string;
+  filing_events: IpRenewalReferenceEvent[];
+  acceptance_events: IpRenewalReferenceEvent[];
+  certificate_documents: Array<{ id: string; title: string; current_version: number }>;
+  /** A next-term deadline is accepted only when trigger_event_id is the acceptance event used. */
+  next_term_deadlines: Array<{
+    id: string;
+    title: string;
+    result_on: string | null;
+    state: string;
+    trigger_event_id: string | null;
+  }>;
+};
+
+export async function fetchIpRenewalTransitionReferences(input: {
+  docketId: string;
+  termId: string;
+}): Promise<IpRenewalTransitionReferences> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/renewal-terms/${encodeURIComponent(input.termId)}/transition-references`,
+  );
+}
+
 export async function transitionIpRenewalTerm(input: {
   docketId: string;
   term: IpRenewalTerm;
@@ -12833,11 +13360,25 @@ export async function activateIpWorkingCalendar(input: {
   );
 }
 
+/** The proposer withdraws its own candidate calendar; it is retired, never deleted. */
+export async function withdrawIpWorkingCalendar(input: {
+  calendarVersionId: string;
+  reason: string;
+}): Promise<IpWorkingCalendarVersion> {
+  return apiRequest(
+    `/api/ip/working-calendars/${encodeURIComponent(input.calendarVersionId)}/withdraw`,
+    { method: "POST", body: { reason: input.reason } },
+  );
+}
+
 export async function proposeIpDeadlineRule(input: {
   key: string;
   jurisdiction: string;
   office: string;
   rightKind: string;
+  /** Opposition rules carry their exact scope; docket-level rules send null. */
+  proceedingKind?: string | null;
+  role?: string | null;
   stage: string;
   sourceRecordId: string;
   sourceReference: string;
@@ -12845,7 +13386,7 @@ export async function proposeIpDeadlineRule(input: {
   effectiveFrom: string;
   triggerKind: string;
   durationValue: number;
-  calendarMethod: "calendar_days" | "business_days";
+  calendarMethod: "calendar_days" | "business_days" | "month_anniversary";
   ruleCitation: string;
   fixtureCalculation: Record<string, unknown>;
   fixtureExpectedState: "candidate" | "provisional";
@@ -12859,8 +13400,8 @@ export async function proposeIpDeadlineRule(input: {
       jurisdiction: input.jurisdiction,
       office: input.office || null,
       right_kind: input.rightKind,
-      proceeding_kind: null,
-      role: null,
+      proceeding_kind: input.proceedingKind ?? null,
+      role: input.role ?? null,
       stage: input.stage,
       source_record_id: input.sourceRecordId,
       source_hash: input.sourceHash,
@@ -12872,7 +13413,7 @@ export async function proposeIpDeadlineRule(input: {
         deadline_kind: "legal_deadline",
         trigger_kind: input.triggerKind,
         duration_value: input.durationValue,
-        duration_unit: "days",
+        duration_unit: input.calendarMethod === "month_anniversary" ? "months" : "days",
         calendar_method: input.calendarMethod,
         direction: "after",
         include_base_date: false,
@@ -12894,16 +13435,20 @@ export async function proposeIpDeadlineRule(input: {
   });
 }
 
-export async function fetchIpDeadlineRuleImpact(
-  ruleVersionId: string,
-): Promise<{
+export type IpDeadlineRuleImpact = {
   rule_version_id: string;
   impact_token: string;
   company_policy_count: number;
   open_deadline_count: number;
   candidate_deadline_count: number;
   confirmed_deadlines_preserved: true;
-}> {
+  /** Active versions a candidate's activation retires; needs explicit supersession. */
+  superseded_versions: number[];
+};
+
+export async function fetchIpDeadlineRuleImpact(
+  ruleVersionId: string,
+): Promise<IpDeadlineRuleImpact> {
   return apiRequest(
     `/api/ip/deadline-rules/${encodeURIComponent(ruleVersionId)}/impact`,
   );
@@ -12914,6 +13459,10 @@ export async function activateIpDeadlineRule(input: {
   reviewerMembershipId: string;
   impactAcknowledged: boolean;
   impactReason: string;
+  /** From the impact preview the activator saw; required once the rule set has policies or open deadlines. */
+  impactToken?: string | null;
+  /** Retire the overlapping active versions the preview named. */
+  supersedeOverlapping?: boolean;
 }): Promise<IpDeadlineRuleVersion> {
   return apiRequest(
     `/api/ip/deadline-rules/${encodeURIComponent(input.ruleVersionId)}/activate`,
@@ -12923,12 +13472,35 @@ export async function activateIpDeadlineRule(input: {
         reviewer_membership_id: input.reviewerMembershipId,
         impact_acknowledged: input.impactAcknowledged,
         impact_reason: input.impactReason,
+        impact_token: input.impactToken ?? null,
+        supersede_overlapping: input.supersedeOverlapping ?? false,
         select_for_company: true,
         auto_confirm_eligible: false,
         internal_target_policy: {},
       },
     },
   );
+}
+
+export async function fetchIpRulePolicies(): Promise<IpCompanyRulePolicy[]> {
+  return apiRequest("/api/ip/rule-policies");
+}
+
+/** RULE-GOV-04 compare-and-swap: null `expectedPolicyVersion` asserts no policy exists yet. */
+export async function selectIpRulePolicy(input: {
+  ruleVersionId: string;
+  expectedPolicyVersion: number | null;
+  autoConfirmEligible: boolean;
+}): Promise<IpCompanyRulePolicy> {
+  return apiRequest("/api/ip/rule-policies", {
+    method: "PUT",
+    body: {
+      rule_version_id: input.ruleVersionId,
+      expected_policy_version: input.expectedPolicyVersion,
+      auto_confirm_eligible: input.autoConfirmEligible,
+      internal_target_policy: {},
+    },
+  });
 }
 
 export async function transitionIpDeadlineRule(input: {
@@ -13683,6 +14255,24 @@ export async function transitionIpOppositionStage(input: {
   );
 }
 
+/**
+ * The WIPO Nice class catalogue: the only source of selectable classes.
+ * Without `edition` the server returns the edition in force; with one it
+ * returns that held edition, for example the edition a class row recorded.
+ */
+export async function fetchIpNiceClasses(edition?: string): Promise<IpNiceClassCatalogue> {
+  const data = await apiRequest<unknown>(
+    edition ? `/api/ip/nice-classes?edition=${encodeURIComponent(edition)}` : "/api/ip/nice-classes",
+  );
+  return ipNiceClassCatalogue.parse(data);
+}
+
+/** The mark kinds TrademarkParticularPayload.mark_kind accepts. */
+export const TRADEMARK_MARK_KINDS = [
+  "word", "device", "composite", "label", "colour", "shape", "sound", "other",
+] as const;
+export type TrademarkMarkKind = (typeof TRADEMARK_MARK_KINDS)[number];
+
 export async function createManualTrademarkApplication(input: {
   title: string;
   matterId?: string | null;
@@ -13695,9 +14285,12 @@ export async function createManualTrademarkApplication(input: {
   applicationNumber?: string | null;
   identifierSource: string;
   identifierEffectiveFrom: string;
+  markKind: TrademarkMarkKind;
   markText: string;
-  classNumber: number;
-  specification: string;
+  /** One row per Nice class, validated against `niceEdition` (BUG-002). */
+  classes: Array<{ classNumber: number; specification: string }>;
+  /** Edition of the catalogue the classes were chosen from (GET /api/ip/nice-classes). */
+  niceEdition: string;
   applicantName: string;
   evidenceReference: string;
 }): Promise<{
@@ -13729,14 +14322,16 @@ export async function createManualTrademarkApplication(input: {
       particulars: {
         form_key: "TM-A",
         form_version: "2026.1",
-        mark_kind: "word",
+        mark_kind: input.markKind,
         representation: {
           text: input.markText,
           evidence_reference: input.evidenceReference,
         },
-        classes: [
-          { class_number: input.classNumber, specification: input.specification },
-        ],
+        classes: input.classes.map((row) => ({
+          class_number: row.classNumber,
+          specification: row.specification,
+          nice_edition: input.niceEdition,
+        })),
         use_priority: null,
         parties: [{ role: "applicant", name: input.applicantName }],
         agent: null,
@@ -14659,7 +15254,7 @@ export type IpCalendarReconciliationCandidate = {
 export async function fetchIpCalendarReconciliationCandidates(input?: {
   includeResolved?: boolean;
   limit?: number;
-}): Promise<{ candidates: IpCalendarReconciliationCandidate[] }> {
+}): Promise<{ candidates: IpCalendarReconciliationCandidate[]; total: number }> {
   const params = new URLSearchParams();
   if (input?.includeResolved) params.set("include_resolved", "true");
   if (input?.limit) params.set("limit", String(input.limit));

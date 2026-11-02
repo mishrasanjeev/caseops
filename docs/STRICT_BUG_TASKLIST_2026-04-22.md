@@ -1,5 +1,865 @@
 # Strict Bug Task List - 2026-04-22
 
+## QA30 — Native fixture host completion, November 1, 2026
+
+Verdict: **Partially fixed**. J20/M22/US-MOB-01..08. Existing V1 and queue/privacy
+producers lacked an executable Mac host bridge. The new bridges preserve normal
+API authentication, source/build/device admission, finite original budgets and
+uncertain-outcome refusal. Descriptor publication, retained worker execution,
+cloud/nonlocal refusal, deadline expiry and emulator/host-origin mapping have
+offline regression proof. Canonical private create/update remains backward
+compatible; no owned root or uncertain mutation is silently replaced/replayed.
+V1 Node70/Python101/inventory7 and Queue/Privacy+CX207 scoped checks pass.
+Full current-source83-case Android/iOS workflows remain unexecuted, so this is
+not native or production closure. Exact logs/hashes, actual historical artifacts
+and remaining boundaries are in [the checkpoint](mobile/NATIVE_COMPLETION_2026-11-01.md).
+
+The first public bridgefa8ef620 retained four actual Linux fixture-host failures.
+Portable real Python/owned-venv tests preserve production refusal. Appium peer
+review additionally reproduced omitted main-lock reconciliation and dot-dot-name
+runtime admission; both now have fixes and regressions. Combined282/282 Mac
+controls pass, with replacement hosted and native verification still required.
+
+## October 29 PostgreSQL Provenance Work #558
+
+Not fixed. The unchanged API reproduced
+CI shard22's820-work failure: the200-record page inspected20,400 provenance
+rows under both ordinary and adverse plans. Split its required import/audit
+EXISTS into independently correlated lookups, preserving exact tenant/source/
+docket proof and manual-date behavior. Original bounds remain unchanged;
+supplemental bitmap/proof-branch work and future per-shard full-plan retention
+are included. The first candidate still failed both provenance scale checks:
+20,400 versus820 and1,396 versus228 (2,741 including bitmap ownership). Its
+nineteen-case run completed12passes/two failures, interrupted retained-scale
+and leftfour cases unreached. No complete replacement or native pass is inferred.
+A second unverified candidate adds the full tenant/source/docket proof index
+and scalar point lookups; actual generic plans and eight cross-dialect migration
+cases join the unchanged original bounds in the replacement proof closure.
+That second candidate still failed the200-row path in allthreeprofiles, while
+the retained-width/date-category case passed. The later retained-scale call
+timed out before its post-fixture artifact, and sourcefacts remainedunreached.
+Candidate three's actual focused run failed all three profiles: 40,400 relation
+work and 41,000 owning proof work versus820. Allthreecasephases and the strict
+source/runtime/cleanup/output audits completed; the product remains Not fixed.
+Candidate four uses a tenant-fixed ordered tuple seek with exact policy outside
+the one-row barrier, retaining the unique import-row scalar without its redundant
+limit. Candidate four also failed all three actual profiles: 162,400 relation /
+163,000 proof work versus820; continuation812/815 stayed within820. Source,
+cleanup and typed output audits passed, with33ownedgroups closed. A diagnostic
+test change now captures the exact live case's index catalog and separately
+estimates index eligibility with transaction-local sort disabled. That is not
+a production planner change or a repair. The completed same-case diagnostic
+proved the new index present and eligible, with stale estimates choosing the
+old scan/sort at8.20 over the ordered index at8.29. Candidate six subsequently failed all three profiles; candidate seven remains
+unverified. Two new PostgreSQL/SQLite
+wrong-successor/foreign-source cases
+extend the required original27identities to29cases/87phases. Actual plans and
+the complete same-source replacement remain pending; no limits are increased.
+See [actual diagnosis, source scope and open verification](mobile/PG22_PROVENANCE_PLAN_REPAIR_2026-10-29.md).
+
+## October 29 iOS Autolinking Environment #558
+
+Partially fixed; actual Pods/native replay remains pending. Real A8 Expo
+prebuild succeeded, but CocoaPods-to-Node autolinking hit four unreviewed Expo
+switches. A read-only actual-constructor stop captured their names; the repaired
+host admits only their finite source-defined values, preserving all trust,
+owner and deadline fences. Focused2/2, tooling381/381 and the full33-module
+functional inventory1,264 passed/two existing Windows skips are complete, with
+zero failures/cancellations/todos and owned closure. No native pass is inferred.
+See [scoped evidence and remaining work](mobile/IOS_POD_ENVIRONMENT_REPAIR_2026-10-29.md).
+
+Current `108a2215` CI separately failed PostgreSQL shard22: the minimal portfolio
+export's provenance work exceeded its unchanged `4 * 201 + 16` bound. Retain
+116 passes/one failure and the complete uploaded artifact; the test wrote its
+EXPLAIN plans outside that artifact's paths, so its exact historical plan was
+not recovered. Reproduce the original query and retain default/adverse plans
+before accepting a bounded repair. No rerun, index assumption or raised budget
+closes this failure.
+
+## October 29 Native Source Observer #558
+
+Partially fixed; measured/native acceptance remains open. The retained 1,262-case
+measured run has eight failures and exceeds its raw-output limits. Actual Node24
+controller defaults were absent from the exact startup allowlist. An isolated
+real-CLI baseline/candidate/changed-flag reproduction passes; the repair retains
+unknown-flag fallback and native entry refusal. Reconcile every dependent source
+pin and regenerate the bootstrap with exact AST/byte proof. The complete updated
+functional inventory passes 1,262/1,264 with exactly two existing Windows skips,
+zero failures/cancellations/todos and owned closure. This is not replacement
+measured or native evidence. See
+[the scoped reproduction and remaining gates](mobile/SOURCE_OBSERVER_REPAIR_2026-10-29.md).
+
+## October 31 Ram Batch 4 (CaseOps_Bugs (4).xlsx)
+
+Source: Ram's 2026-10-30 workbook, 17 populated rows (BUG-001..BUG-016 and
+ENH-017), all reported on Chrome desktop in test-legal. Integration branch
+`codex/ram-bugs4-20261031` merges twelve lanes (`codex/bugs4-<lane>`) cut from
+01be7b86. Production verification has not run: the deploy is pending, and
+BUG-003..006 also need the IPLF-027B A1 release and the A2 governance enable.
+Every row below is therefore `Inconclusive - complete local proof; production
+verification as the reporting tester pending`. Local proof means the named
+non-`[prod-only]` Playwright tests passed on desktop and mobile against the
+lane build, plus the listed pytest/vitest; it is not a production verdict.
+`[prod-only]` tests and the control crawl's locally skipped routes have not
+executed anywhere yet. Merged-tree verification is also pending: no typecheck,
+vitest, backend suite or batch-4 Playwright result is recorded on the
+integration HEAD after the 2026-11-01 lane merges and the integration fixes
+2d053832 and d1a02940, and all four must run before release. Release
+dependencies: migrations `20261031_0001` (IP document taxonomy backfill,
+trigger `release_backfill`, which Ram's Classification depends on) and
+`20261031_0002` (IP rule-set company ownership, IPLF-027B A1) are not on main
+and must deploy from main. An independent review
+found blocking or major defects in every lane's first implementation, and a fix
+pass closed them before merge; the reasons are recorded in
+`docs/BUG_REOPEN_LEARNINGS_2026-10-31_RAM.md`. Production runs are signed in as
+Ram on test-legal through the batch-4 tester projects; a `[local-only]` test
+does not run there and is recorded as such, not as a pass.
+
+- BUG-001 New trademark does nothing. Status: Inconclusive - complete local
+  proof; production verification as the reporting tester pending. The panel
+  renders under the page header, scrolls into view and focuses Docket title;
+  the new docket is selected by server id. Evidence:
+  `tests/e2e/ram-2026-10-31-ip-create.spec.ts:216` and `:228` [mobile];
+  `test_ip_manual_docketing_without_plan_20261031.py` (ip:write, not a plan,
+  decides access); `IpTrademarkCreatePanel.test.tsx`. Commits
+  4d074179..f53b3131. The first review found two older specs still driving the
+  removed form (blocking); iplf-031b, ram-2026-08-01, iplf-040b/041/042/049 now
+  drive the new panel. Open: each production run leaves one stamped document
+  because IP documents have no retire path (B4-ADJ-07). That breaks the new
+  AGENTS.md fixture rule, so before release the owner must record a residue
+  exception or the upload half moves to `[local-only]`; triage probe docket
+  7ece82b7-f2fb-46db-bb09-2487ca1df185 remains for owner retirement.
+- BUG-002 Classification dropdown shows no classes. Status: Inconclusive -
+  complete local proof; production verification as the reporting tester
+  pending. (a) Nice class: a catalogue picker in create, opposition and
+  post-registration; each class row records its edition and stays readable
+  after the 2027-01-01 switch (`test_ip_nice_classes_20261031.py`,
+  `test_ip_trademark_class_rows_20261031.py`, `IpDocketClassScope.test.tsx`).
+  (b) Documents Classification comes from workspace provisioning, never from
+  the seed endpoint: `tests/e2e/ram-2026-10-31-fixture-honesty.spec.ts:117`,
+  `:131` [local-only] and `:176` [mobile]; guard
+  `apps/web/lib/e2e-document-taxonomy-seed-guard.test.ts`. The production
+  classified upload is `tests/e2e/ram-2026-10-31-ip-create.spec.ts:216` and
+  `:228` [mobile]: `uploadClassifiedDocument` (`:172-210`) asserts at least 14
+  active classifications, selects one and uploads through the UI with a 200
+  `created` outcome. For test-legal the entries come from the
+  `20261031_0001` backfill (`release_backfill`), proven by
+  `test_ip_document_taxonomy_defaults_migration_20261031.py`; the local
+  journeys used tenants provisioned at enablement. The first review rated
+  BUG-002 Partially fixed (bare class inputs on opposition and
+  post-registration, older specs on the removed form); fixed before merge.
+  Open: Ram's Classification depends on `20261031_0001` deploying from main,
+  and no browser journey ran against a backfilled tenant; the
+  provisioning-audit assertion (fixture-honesty `:131` and the `if (rt.local)`
+  count check at `:68`) runs locally only; opposition and post-registration
+  challenged scope carry no `nice_edition` (backend contract decision).
+- BUG-003 Governed rule dropdown empty; BUG-004 Working calendar dropdown
+  empty; BUG-005 Propose calendar version does nothing; BUG-006 Propose rule
+  does nothing. Status (each): Inconclusive - complete local proof; production
+  verification as the reporting tester pending. Pickers and proposal forms read
+  the server governance projection; activation previews impact and sends that
+  preview's token; v2 supersedes v1 only with an explicit tick; responsible and
+  backup pickers offer exactly `eligible_responsible_membership_ids`; a
+  proposer can withdraw a working calendar (POST
+  `/api/ip/working-calendars/{id}/withdraw`, audited). Evidence:
+  `tests/e2e/ram-2026-10-31-governance-ui.spec.ts:189`, `:250` [mobile],
+  `:282`, `:333` [mobile], `:357` [local-only three-person activation];
+  `test_ip_rule_governance.py`, `test_ip_rule_governance_projection.py`,
+  `test_ip_deadline_workflow.py`, `test_ip_opposition_opponent_workflow.py`,
+  `IpDeadlineGovernanceCard.test.tsx`, `PersonPicker.test.tsx`. Commits
+  758e349c..bad7af60. The first review rated BUG-003 and BUG-006 Partially
+  fixed (blocking: the client acknowledged the activation impact review on the
+  user's behalf; opponent Propose deadline dead-ended on a bare 409) and
+  BUG-004/005 Properly fixed locally; the fix pass closed the named defects.
+  Open: one skipped backend test in the lane suite was not investigated, and
+  the control crawl was not run for this lane; production is reachable only
+  after A2 sets
+  `deploy/ip-rule-governance-state.json` enabled; Ram alone can propose but
+  activation needs two other approvers, so production shows the pending or
+  `no_other_approver` state and the three-person journey is local only. Owner
+  decisions pending: dropping the pasted SHA-256 field, and working calendars
+  staying writable while the flag is off. The rule-needs-active-calendar check
+  is client-only (B4-ADJ-08). Production probe calendar
+  189148f7-0b1b-4b6a-9914-fbc30b877da2 / version 02517dd9-d5d4-4ffc-a903-abbacf89fbfa
+  awaits withdrawal.
+- BUG-007 Select Matter dropdown overlaps and cannot be searched. Status:
+  Inconclusive - complete local proof; production verification as the
+  reporting tester pending. `components/app/MatterPicker` (server search,
+  cursor paging, stated 50-row page) replaces the Radix list on the Access and
+  links tab, portal invite and research reviews; Enter searches instead of
+  submitting; a role change keeps the Matter and anchors the reason; a disposed
+  Matter in the Operational role is a 409, not a 500. Evidence:
+  `tests/e2e/ram-2026-10-31-matter-links.spec.ts:259`, `:318` [mobile], `:353`
+  [mobile][local-only portal invite]; `IpMatterLinksPanel.test.tsx`,
+  `research/reviews/page.test.tsx`, `admin/page.test.tsx`. Commits
+  e3d2b5b2..625fc520. Open: the portal-invite proof is local only because
+  Ram's portal:invite capability in test-legal is not established; the
+  invitation API itself bypasses ethical walls (B4-ADJ-01); MatterPicker cannot
+  fetch by id a Matter that a caller pre-fills from outside the loaded pages
+  (no current caller does).
+- BUG-008 Instrument dropdown shows only Select. Status: Inconclusive -
+  complete local proof; production verification as the reporting tester
+  pending. Instruments come from the validator's own predicate
+  (`docket_scoped_document_links` plus batched document access before the
+  bound), with in-form upload including the corrected deed and server-stamped
+  transaction time. Evidence: `tests/e2e/ram-2026-10-31-recordals.spec.ts:221`,
+  `:227` [mobile]; `test_ip_recordal_instruments_20261031.py` (walled colleague
+  404, co-linked deed 422, deadline-linked deed 201, truncation),
+  `test_ip_madrid_document_refs_20261031.py`. Commits be56d2d4..af759d9c.
+  Open: each production run retains one uploaded instrument on a retired docket
+  (B4-ADJ-07); the docket-scoped document list is direct-links only
+  (B4-ADJ-06). Note: the reported URL is `/app/ip/records`; the fix lives on
+  `/app/ip/recordals`, the post-registration recordal workflow.
+- BUG-009 Approved associate empty; BUG-010 Approved Matter assignment not
+  clickable; BUG-011 Accepted client instruction not clickable; BUG-013
+  Estimate empty. Status (each): Inconclusive - complete local proof;
+  production verification as the reporting tester pending. Options come from
+  GET `/api/ip/foreign-associate-instructions/create-options`, built on the
+  create validator's predicates and a canonical jurisdiction vocabulary
+  (Indian state/court codes such as SC and MH no longer resolve to countries);
+  blockers are role-aware and deep-link to the view that acts (`?view=access`,
+  Documents tab); Assign counsel takes a budget currency. Evidence:
+  `tests/e2e/ram-2026-10-31-foreign-associates.spec.ts:386`, `:391` [mobile]
+  (fresh Matterless record created through New trademark, every prerequisite
+  made through the form's links, instruction created then retired) and `:407`
+  [local-only BUG-010 GBP assignment]; `test_ip_foreign_associate_create_options_20261031.py`,
+  `test_ip_jurisdictions.py`, `foreign-associates/page.test.tsx`,
+  `outside-counsel/page.test.tsx`, `lib/ip/jurisdictions.test.ts`. Commits
+  abe3dd87..1edebe6a. The first review rated BUG-010 Partially fixed (blocking
+  wrong-view link); fixed in bcb7d287. Open: the counsel profile is retired by
+  API because no edit screen exists; no firm-side path records an offline
+  client instruction for foreign filings (owner scope); see B4-ADJ-14.
+- BUG-012 Registry legal record dropdown shows only Select Record. Status:
+  Inconclusive - complete local proof; production verification as the
+  reporting tester pending. Server-side `record_type=trademark` docket search,
+  no auto-selection, `?docket=` deep link that follows navigation, honest
+  application-less docket state, phone-width decision lists, field-anchored
+  409/404. Evidence: `tests/e2e/ram-2026-10-31-registry.spec.ts:320`, `:327`
+  [local-only application-less docket], `:349` [mobile];
+  `test_ip_registry_docket_eligibility_20261031.py`, `registry/page.test.tsx`,
+  `lib/ip/registry-evidence.test.ts`. Commits b13630f4..1be45481. Open:
+  imported registered marks still read Draft (B4-ADJ-11); `identifier_kind` is
+  not enum-validated and a cross-docket target is 404, not 422 (B4-ADJ-12);
+  wide tables (B4-ADJ-13); CourtReferences still auto-selects (B4-ADJ-21);
+  the lane has no base-commit reproduction: its vitest and Playwright
+  failures on the old code were reasoned, not run, which the bug protocol
+  requires; triage probe registry link 83b46b3c in test-legal awaits
+  retirement.
+- BUG-014 Journal intake list validation error. Status: Inconclusive - complete
+  local proof; production verification as the reporting tester pending.
+  Structured captured evidence with field-anchored 422s, `parseNiceClasses`,
+  canonical profile jurisdictions, server-side correction search, 409
+  `journal_entry_already_recorded` pointing at the visible entry, recorded
+  entries shown outside the capture gate, and one visibility predicate that
+  keeps unlinked entries behind the docket wall. Evidence:
+  `tests/e2e/ram-2026-10-31-watch.spec.ts:300`, `:307` [mobile]; iplf-052
+  replays the intake form's exact request; `test_ip_journal_watch.py`,
+  `watch/page.test.tsx`, `lib/ip/journal-capture.test.ts`, shared fixture
+  `apps/api/tests/fixtures/journal_capture_web_payloads.json`. Commits
+  b3243adb..333d02a2. The first implementation added a new ethical-wall leak
+  (unlinked entries visible tenant-wide) that review caught. Open: workspace
+  limit 250 without a total (B4-ADJ-05); the double-call CTE 500 is fixed for
+  watch only (B4-ADJ-10); "recorded by me" covers the last 500 capture runs;
+  no API changelog for the stricter contract; no automated journal source
+  exists, which the page now states; scheduler, entitlement and
+  device-similarity items (B4-ADJ-20).
+- BUG-015 Autonomous full-application testing request. Status: Inconclusive -
+  complete local proof; production verification as the reporting tester
+  pending. Mapped in the PRD to FT-099, the tester-tenant control crawl, and
+  answered with the crawl plus the Madrid/client-portal/renewals sweep: grants
+  are offered only when publish accepts them (`_grant_publication_block`), a
+  fee transaction needs an active cost, renewal progression offers evidence
+  selects instead of four ID inputs. Evidence:
+  `tests/e2e/ram-2026-10-31-control-crawl.spec.ts:152` (skips reported-record
+  routes locally at `:154`), `tests/e2e/ram-2026-10-31-madrid-portal.spec.ts:79`,
+  `:144` [mobile], `:162`, `:192` [local-only publish], `:269` [mobile], `:282`;
+  `test_portal_ip_shareable_documents_20261031.py`, `test_portal_ip.py`,
+  `test_ip_renewal_transition_references_20261031.py`. Commits
+  6144a8bd..65461d8f. Open by scope: the crawl checks controls on its route
+  list and stops at record selection on per-record forms, so it is not the
+  autonomous end-to-end QA the row asks for; no E2E drives renewal progression;
+  shareable-document list has no ethical-wall test; Madrid designation member
+  code and office are free text; Parent IR has no search beyond the latest 100;
+  possibly dead opposition selects (B4-ADJ-22); the spec fails
+  `tsc -p tsconfig.e2e.json` with TS2345 (B4-ADJ-24).
+- BUG-016 Invoice PDF unreadable. Status: Inconclusive - complete local proof;
+  production verification as the reporting tester pending. Root cause: fpdf2
+  `Table.row()` copied the title bar fill into every body cell (regression from
+  d57a2547, BUG-033) and a `set_y(-14)` footer forced a blank page. Fixed with
+  a neutral table graphics state, a footer hook, status-aware titles, in-product
+  Issue (invoices:issue) and owner-only Void (invoices:void) that zeroes the
+  balance and leaves KPIs and the brief, and profile editing of GST, rates,
+  terms and billing mode. Evidence:
+  `tests/e2e/ram-2026-10-31-invoice-pdf.spec.ts:394`, `:401` [mobile] (stamped
+  QA matter and invoice number, profile compared read-only before and after),
+  `:408`/`:416` [local-only issue], `:424`/`:432` [prod-only, the reported
+  INVR-2026-028 and INVR-2026-068 by server id];
+  `test_bug016_invoice_pdf_legibility.py` with the raster check across all
+  five PDF generators and the dark-on-dark negative control
+  `test_bug016_raster_check_flags_dark_text_on_a_dark_fill` (`:429`), the
+  contrast measurement living in `apps/api/tests/pdf_legibility.py`;
+  `[prod-only]` `:424`/`:432` have not executed anywhere yet;
+  `billing/page.test.tsx`,
+  `admin/matter-billing/page.test.tsx`; hari BUG-052/BUG-055 specs now parse
+  PDF content. Commits a61d68f3..bd9d8cd1. The first review rated it Partially
+  fixed (two blocking: void left totals in KPIs; no issue path). Open:
+  test-legal's default billing profile 255ae52a-dfb4-4ff5-bfe0-98c773190e0d
+  still carries spec-written GST off and 47-day terms; it is now correctable
+  in product but needs the tester or owner to correct it; the
+  `ram-2026-09-05-bugs.spec.ts` billing-profile save case is `[local-only]` and
+  runs in no canonical config; GST Rule 46 elements, per-line quantity/rate, a
+  Unicode font (rupee sign, Devanagari) and NEEDS_REVIEW approval, manual
+  payment and credit notes are not built.
+- ENH-017 Calendar Year view. Status: Inconclusive - complete local proof;
+  production verification as the reporting tester pending. Bounded
+  `/api/calendar/summary` sharing the month list predicates; Year tab with URL
+  state, legend, roving tab stop, per-quarter .ics named by range; phone Week
+  stacks and phone Month shows labelled counts; month step clamped. Evidence:
+  `tests/e2e/ram-2026-10-31-calendar-year.spec.ts:269`, `:273` [mobile 375px];
+  `test_calendar_year_summary.py`, `calendar/page.test.tsx`. Commits
+  20562025..92c9a21f. Open: Back uses `replaceState`; Year dots rely on colour
+  on touch screens; no PostgreSQL EXPLAIN or index on `hearing_on`/`due_on`;
+  tasks cannot be cancelled (product gap); the provider panels now render below
+  the grid at every width (owner awareness); `display_type` drift (B4-ADJ-04);
+  the phone header wraps Previous and the period label onto different rows;
+  calendar-copy previews show undecoded HTML entities (B4-ADJ-23).
+- Docket sweep (adjacent, Phase 1 audit): IP internal readers silently
+  truncated at the first page. Status: Inconclusive - complete local proof;
+  production verification as the reporting tester pending (the lane itself is
+  Partially fixed: B4-ADJ-05 remains). Control report, review, daily docket and
+  report preview read the visible population in one statement with chunked
+  serialization; linked documents and Madrid designations are complete with a
+  true total; calendar-copy reviews report a total; offset-list clients page
+  to exhaustion and reread on a mid-read change; the recordal relationship-cycle
+  check reads every docket (2d053832, found at integration). Evidence:
+  `tests/e2e/ram-2026-10-31-docket-sweep.spec.ts:84`, `:94` [mobile], which
+  exercise only the `total === 0` empty-state branch (`:61`) locally and almost
+  certainly in production, because calendar-copy reviews cannot be created
+  through the UI; the over-100 behaviour is proven only by vitest (100 of 137)
+  and the pytest population tests:
+  `test_ip_docket_full_population.py` (chunk 40, 154 dockets, mid-read update),
+  `test_ip_detail_lists_complete_20261101.py`, `lib/api/ip-offset-lists.test.ts`,
+  `lib/ip/docket-dropdowns.test.ts` (bare first-page docket reads are allowed
+  only in `app/app/ip/page.tsx`; the allowlist covers the whole file, so it
+  also hides the Documents Linked docket picker, B4-ADJ-18). Commits
+  6f0ecd7b..2952574f, 2d053832.
+- Integration fixes: e5262ef0 keeps self-addressed validator messages free of
+  the field prefix (lanes re-fixed the 422 double prefix; the integration
+  version is kept, `test_problem_details.py`); a duplicate TypeScript field
+  produced by a merge was removed; openapi-types.ts regenerated from the merged
+  schema.
+
+Adjacent defects found by the same audit. Each carries a bug verdict; the
+enterprise-ledger status is named where one exists:
+
+- B4-ADJ-01 Portal invitation ethical-wall bypass. Status: Not fixed
+  (enterprise gap EH-B4-01: Missing). POST
+  `/api/admin/portal/invitations` (`api/routes/portal.py:1000`,
+  `services/portal_auth.py:173`, Matter check at :237-248) validates only
+  `Matter.company_id`, with no Matter access or ethical-wall check, so a walled
+  admin with portal:invite can grant a client portal access to a walled Matter
+  by id. The picker is wall-scoped; the API is not. Also
+  `list_admin_ip_grants` shows walled docket titles to a walled manager.
+- B4-ADJ-02 Status: Not fixed. Raw internal-id inputs: `drive/page.tsx:222` and
+  `mailbox/page.tsx:267` ("Matter id for actions"),
+  `calendar/conflicts/page.tsx:64` ("Matter id for accept"),
+  `admin/notifications/page.tsx:318`, `matters/[id]/audit/page.tsx:158`,
+  `IpOppositionSharedWorkflow.tsx:417` ("Target record ID"),
+  `IpOppositionSpecializedPaths.tsx:304` ("Related application ID") and its
+  free-text rule versions at :310-318, `IpPostRegistrationWorkspace.tsx:616`
+  ("Rule version"); the client portal renders `JSON.stringify` of publication
+  rows (`app/portal/ip/[id]/page.tsx:51`).
+- B4-ADJ-03 Status: Not fixed (EH-B4-02). Matter lists capped at 100 and
+  filtered on the client:
+  `notices/page.tsx:233` feeding the unsearchable filter at :949,
+  `drafting/page.tsx:27` and `recommendations/page.tsx:27` (limit 200 against a
+  server cap of 100), `portfolio/page.tsx:42` (limit 500). Older Matters
+  silently disappear. Convert to MatterPicker or server search.
+- B4-ADJ-04 Status: Not fixed. Schema drift: web
+  `calendarEventRecord.display_type` is optional
+  (`apps/web/lib/api/schemas.ts:2234`) while the backend requires it.
+- B4-ADJ-05 Status: Not fixed (EH-B4-02). Watch workspace truncation:
+  `fetchIpWatchWorkspace` sends
+  `limit=250` (`apps/web/lib/api/endpoints.ts:12520`) and
+  `IpWatchWorkspaceResponse` (`schemas/ip_watch.py:463`) has no total or
+  has_more, so profiles and hits past the bound are dropped silently.
+- B4-ADJ-06 Status: Not fixed (EH-B4-03). Docket-scoped document list returns
+  direct docket links only
+  (`services/ip_document_workflow.py:390`, `event_ids=set()`), while recordal
+  and Madrid validators accept event- and deadline-linked documents. Consumers
+  needing a picker-equals-validator test before widening:
+  PatentApplicationWorkspace, PatentParties, PatentPriorities,
+  PatentProceedingsWorkspace, PatentProsecutionWorkspace, PatentFamilyWorkspace,
+  SpecialistWorkflows, SpecialistWorkspace, foreign-associates. Madrid
+  "Linked document" and PatentApplicationWorkspace "No source documents" have
+  no in-form upload.
+- B4-ADJ-07 Status: Not fixed (EH-B4-04: Missing). No document retirement
+  path: IP documents cannot be retired, so every production run of the
+  ip-create (`ram-2026-10-31-ip-create.spec.ts:216`, `:228`) and recordals
+  (`ram-2026-10-31-recordals.spec.ts:221`, `:227`) journeys retains one
+  stamped document. These batch-4 production runs break the new AGENTS.md
+  rule against production specs creating a record type the product cannot
+  retire. Release blocker: before release, either the owner records a residue
+  exception (record type, per-run count, cleanup owner) in this ledger, or the
+  upload half moves to `[local-only]`. Needs a product retire path in the
+  long run.
+- B4-ADJ-08 Status: Not fixed (EH-B4-03: Missing). A rule needing an active
+  working calendar is enforced only in the
+  browser (`IpDeadlineGovernanceCard.tsx:461`, :617, :630); the API accepts any
+  embedded calendar snapshot. `propose_deadline` and the opposition proposers
+  also do not check that rule/calendar jurisdiction and trigger kind match the
+  proceeding.
+- B4-ADJ-09 Status: Partially fixed (EH-B4-04). Production specs that change
+  shared tester configuration:
+  `support/notice-upload-access.ts:166`, :170, :280 (opt-in member mutation on
+  test-legal), `ram-2026-08-09-prod.spec.ts:153` (`dockets[0]`, not server
+  identity), and caseops-ip-qa mutations in 08-10-prod, 027b-a0, 062b, 064b,
+  065b, 066b. Fixed in this batch: the 09-02 AI-policy toggle (ca8b0e4d) and
+  the 09-05 billing-profile write.
+- B4-ADJ-10 Status: Partially fixed (EH-B4-05; watch only).
+  `visible_ip_dockets_filter` builds an anonymous
+  `.cte().prefix_with("MATERIALIZED")` (`services/record_access_policy.py:316`);
+  two calls in one statement can produce same-named CTEs and a 500 (probe: 596
+  of 600 compilations failed). Fixed for watch (eb421f4c); the root and its
+  other call sites are open.
+- B4-ADJ-11 Status: Not fixed. Portfolio import hard-codes
+  `filing_phase="draft"` for Registered
+  sources (`services/ip_imports.py:1353`); imported registered marks read Draft
+  and the first manual registry evidence queues a high-risk status change.
+- B4-ADJ-12 Status: Not fixed. `RegistryIdentity.identifier_kind` is free text
+  (`schemas/ip_registry.py:18`); a cross-docket registry target is 404, not the
+  proposed 422 `registry_target_not_in_docket`.
+- B4-ADJ-13 Status: Not fixed. Wide tables put row actions off-screen at
+  393px:
+  `ip/portfolio/page.tsx:937` (980px), `ip/watch/page.tsx:1317` (850px),
+  `ip/portfolio/imports/page.tsx:452` (900px).
+- B4-ADJ-14 Status: Not fixed. Foreign-associate siblings (the cost evidence
+  card that always sent `official_fee` was fixed by the ip-create lane: it now
+  offers a Category select, `app/app/ip/page.tsx:3605`, :3787); POST
+  `/api/ip/dockets/{id}/cost-items`
+  (`routes/ip_operations.py:3547`) does not enforce the ip_costs entitlement;
+  the portal client-instruction list requires ip:write while create accepts
+  ip:approve and caps at 200; `_require_client_authority` accepts renewal
+  instructions; an actual filing cost offered for Link invoice can fail
+  reconciliation.
+- B4-ADJ-15 Status: Inconclusive (not audited; EH-B4-02). Non-IP `limit=100`
+  defaults not audited: calendar_sync,
+  notification_delivery, provider_operations, provider_costs, saas_billing,
+  employees, hearing_reminders, matter_timeline. Unpaged `listClients` in
+  PatentFamilyWorkspace and SpecialistWorkspace.
+- B4-ADJ-16 Status: Not fixed. Shared e2e support:
+  `tests/e2e/support/ram-bugs4.ts`
+  `addLocalColleague` logs the colleague in on the caller's request context;
+  the governance spec works around it with an isolated context.
+- B4-ADJ-17 Status: Not fixed (EH-B4-04). Production test-record residue to
+  retire before or with the release: docket
+  7ece82b7-f2fb-46db-bb09-2487ca1df185, registry link 83b46b3c, probe calendar
+  189148f7-0b1b-4b6a-9914-fbc30b877da2, and the billing-profile policy in
+  BUG-016.
+- B4-ADJ-18 Status: Not fixed (EH-B4-02). The Documents "Linked docket" picker
+  on `/app/ip`, the BUG-002 upload surface, lists only the portfolio's first
+  page: `IpDocumentWorkspace.tsx:515-525` renders `dockets`, which
+  `app/app/ip/page.tsx:381` passes from `portfolioDockets` (`:231`), built on
+  the bare `queryFn: fetchIpDockets` at `:214-216`. It has no search and states
+  no cap; the "Showing the 100 most recently updated records" note at `:442`
+  belongs to the home list, not this picker. `docket-dropdowns.test.ts`
+  allowlists all of `page.tsx`, so the guard cannot catch it.
+- B4-ADJ-19 Status: Not fixed. The IP docket reminder-offsets parser
+  (`app/app/ip/page.tsx:1568-1571`) silently drops "48h" through a
+  `Number.isInteger` filter.
+- B4-ADJ-20 Status: Not fixed. Journal watch: the scheduler records
+  "succeeded 0/0" runs for manual profiles (`services/ip_watch.py:1606`);
+  the manual journal routes (`api/routes/ip_watch.py`) have no API entitlement
+  gate (triage option (b) kept manual intake available); intake has no manual
+  device-similarity assertion.
+- B4-ADJ-21 Status: Not fixed. Registry CourtReferences still auto-selects the
+  first proceeding and the first tracked case
+  (`app/app/ip/registry/page.tsx:1052-1053`).
+- B4-ADJ-22 Status: Inconclusive (not reproduced). Possibly dead opposition
+  selects with no empty-state explanation: `IpOppositionSharedWorkflow.tsx:357`
+  (Active deadline), :395 (Shared hearing), :419 (Opposition order event);
+  `IpOppositionSpecializedPaths.tsx:290` (Canonical hearing), :320 (Trigger
+  event). The applicant Governed rule and Working calendar selects the lane
+  also listed were replaced by the governance lane in the merged tree.
+- B4-ADJ-23 Status: Not fixed. Calendar-copy candidate `source_preview`
+  renders undecoded HTML entities (`app/app/calendar/page.tsx:923`).
+- B4-ADJ-24 Status: Not fixed. `tests/e2e/ram-2026-10-31-madrid-portal.spec.ts`
+  fails `npx tsc -p tsconfig.e2e.json` with TS2345 (a page `Response` passed to
+  `json()`, which expects an `APIResponse`), first at `:51-52`; Playwright runs it
+  without type-checking.
+
+## October 31 Historical Secret Findings: Partially Fixed
+
+Actual scheduled Security41193137288 rejected ten historical findings outside
+the green candidate PR-range scan. Independent immutable-source review proves
+public file/CA hashes, SDK public-key digest report fixtures, synthetic receipt
+labels and the RFC6238 public vector. The exact-origin correction and binding
+regression are candidate-only; real full-history scan and whole release remain
+unverified. No broad suppression, mobile change or credential activation.
+Docker37 passed76fixtures but rebooted during export, so remains incomplete.
+
+## October 31 Cold Worker Admission: Partially Fixed
+
+AB50 Docker31 failed its disabled document-worker 30-second startup check, with
+zero native/browser cases executed. Services loaded before admission. The narrow
+deferred-import correction passes one isolated, network-disabled mounted-file
+startup, not a fresh-image/full-regression or production verdict. Preserve the
+failure and complete final-source Docker/CI/live gates before closure. Details:
+`bugfix-document-worker-production-2026-10-10.md`, October 31 continuation.
+
+## October 31 Generic Disclosure Regression Still Open
+
+3987 CI41170834397 has four retained physical-work failures,605complete cases/
+601P4F/1815phases/0S in those selections. Range plus generic unknown LIMIT
+produces million-row work. All three exact unique-key predicates now live
+inside the per-key barrier; original strict bounds/409/negative journeys stay.
+Unverified replacement, not a fixed/deployed verdict. Require complete final
+Docker/CI/main/live/cadence and paired Excel results before promotion.
+
+## October 31 Later Disclosure Work: Partially Fixed, NO-GO
+
+9fd9 CI41169038267 PG1/PG4 each150P/1F of151: disclosure hydration reads10001
+tenant tuples and10148/10156 blocks, violating original `<10000`. Exact composite
+seek and strict100-row disclosure regression are implemented but unverified.
+Correct CI native-plan retention and prove missing-version successor rejection.
+See the dated lifecycle-admission report. Full final-head Docker/CI/main/live
+and actual paired Excel publication are still required; no app work is included.
+
+## October 31 Disjoint CI Candidate: Partially Fixed, NO-GO
+
+1985 CI41149650760 actually failed 14 notification cases and one family-work
+case plus two aggregates. API10 is 1417 identities/1311P/14F/92S; PG24 is
+150 identities/450 phases/149P/1F, with actual custom hydration 10033 rows >100.
+Original-head/synthetic-merge tree25ceee9 agrees. Independent Security/Advanced
+are green with17 CodeQL annotations (9warnings/8notices/0failure), not full CI.
+Strict161 audit/0skips and244P/732 phases remain component evidence.
+
+Email ordered RED48 is34P/14F; owner-lifetime replacement is107P/321 phases,
+including4PG races,39files verified; pure ownership8P/24. Corrected actual SQLA
+execution-map role is20P/60 phases/12verified files. Preserve initial7P/1fixtureF,
+the interrupted49-role38complete/34P/4F/11unverified, and all older failures.
+The frozen61 snapshot at03:44UTC is43P/0F/18unverified, not complete; later790s
+fresh setup is not a body failure. No setup-cause claim follows from host180s.
+
+Disjoint M2 adds only two unexecuted PG deleted-ID edge cases and a shared
+existing409/warm-identity check. Preserve original retarget/delete/revoke and
+all21PG cases; expected expanded63=23PG+20SQLite/API+20pure, original8scalar
+IDs retained within20. Versionless targets are explicit negative fault injection,
+not positive legal records; SQLite race parity remains unverified. Source M stays
+frozen. Map IPLF-032/UJ-02/NFT-005/J14/M14 and J19/M21/US-063 mail ownership;
+no product/native/App/Mac/0008 expansion. Details and retained setup/plan evidence
+are in bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+
+Docker28 remains3615P/2F;29 incomplete61/3619;30 incomplete18/3619;0browser,
+not640executed. Require newALL-CI green/full canonicalDocker31 before guarded
+main/deploy/exact-live QA, originalD29 15s, post-QA clean private maintenance,
+guarded resume/distinct natural cadence and both actual Excel updates. Originals
+remain interim08 (36fixed/7partial/1inconclusive); onlyD29 may promote after prod.
+MainB994 is not a new-source serving API/web; no deploy occurred. External legal,
+old-calendar/unknown-Matter, provider and owner-MFA holds remain. Older sections
+below are retained history, not later-source acceptance.
+
+## October 31 Remaining Admission Failures: Partially Fixed
+
+Security continuation:75FA's pyasn1 audit and imperative test-assert CodeQL
+failures are repaired in the candidate without exclusions. Whole161-package
+strict audit is clean; complete244-case offline compatibility replay passes
+732phases/0skips. Preserve its first243P/1fixture-comparisonF and Docker29's
+owned interruption (61complete of3619intended,184phases,no session finish,
+0browser). Neither is full regression. Fresh final-head Docker/hosted/live
+proof is still mandatory; the dated lifecycle-admission brief retains details.
+
+Full998A Docker28 naturally completed3615P/2F/0S across3617cases/10851phases,
+with0browser execution. The two exact admission failures and their lock traces
+remain retained, not waived by hosted55success/2skipped checks. Valid REDs prove
+owned hook retention and12 unnecessary lifecycle history loads under real
+authority locks. Narrow runtime/ownership repairs pass191/573 focused, including
+all122 original races and independent persistence. Historical delay/GC causation
+remains Inconclusive. See bugfix-lifecycle-admission-and-race-ownership-2026-10-31.md.
+No original deadline/security/lifecycle/provider fence was relaxed. No deployed
+Playwright proof yet: remain Partially fixed/NO-GO, with both workbooks interim08.
+
+## October 30 Consolidated CI And Import: Partially Fixed
+
+Latest complete component:135cases/405phases,132P/3physicalF/0S. The original
+observer/multi-order/finalizer/successful1,000-row/workspace assertions pass;
+fresh/stale/analyzed plans expose broad history scans despite correct scalar
+facts. Keep every failed plan and original budget. Correlated scalar candidate
+seeks,52 semantic cases including NULL receipts, and CI nested plan retention
+need full replacement proof. Workbooks are interim08, not certification. Do not
+read historical unexecuted claims below as the current state.
+
+Retained-claim resume repeatedly read every pending docket. Valid SQLite/PG
+RED2/6phases proves1,000scalar reads, correct409/unchanged history and no ORM
+hydration. Scalar batched facts preserve exact provenance/ordered rejection and
+fresh actual row recovery. IP48 and ownership27 pass in interrupted93/321
+green02, not complete release. Historical UNION9/18 passes are incomplete;
+original callback interruption and worker-status fixes plus three physical
+plans remain unexecuted. Preserve D060's complete12failedchecks and Docker27's
+three failures. Unknown historical worker/latency causes stay Inconclusive.
+See bugfix-import-preflight-and-ci-observers-2026-10-30.md. Require complete
+new Docker/current CI/CodeQL/main/live/D29/cadence and actual paired workbooks
+before closing#561/#564/IP15-018. MacBook/native and external holds stay open.
+
+## October 30 Compliance Continuation
+
+Attachment/workspace corrections: **Partially fixed**, not deployed. Exact
+baseline readers reproduce stale orders/assignee eligibility; clean-entry
+refresh preserves pending work and caller transactions. All39new cases pass
+inside the failed351-case run. Recorder ownership and notification-decision
+roles pass15/45phases. GREEN03 completes392/1176phases with384P/8failures,
+all eight caused by the recorder misclassifying structured recipient UNIONs;
+all26SQLite/PostgreSQL parity cases and original concurrency variants passed.
+Corrected GREEN05 passes41profile plus5original variants:46/138phases,0F/0S,
+source unchanged. The historical inbound-peer cause remains **Inconclusive**;
+neither focused acceptance nor old hosted green closes production claims.
+Keep the complete Docker26 and GREEN02 failures, including the latter's
+call/teardown duplicate JUnit diagnosis. Require full PostgreSQL/Docker/current
+CI/main/deploy/production replay and original15second51-row export before
+closing#561/#564/IP15-018 or promoting either workbook. The dated compliance
+work brief records exact scope and external holds. App belongs to the MacBook.
+
+## October 30 Scanner Fixture: Partially Fixed Pending New Gates
+
+E968 Security's one-of75error is an actual unacknowledged Docker-create timeout,
+not a secret leak or scanner fence failure. The positive known-create fixture
+now separates bounded setup from its unchanged <=1s real attached transport,
+and asserts exact error identity, acknowledged ID and real absence. Product,
+cleanup and all negative deadline/unknown-ack controls are unchanged. Full local
+Linux Docker replacement75P/0S/0F and source equality pass; old failed log and
+prebuild-interrupted Docker25 remain retained. See the dated scanner fixture
+brief. New full Docker/hosted gates and exact production release remain open.
+
+## October 30 Private Invalidation: Partially Fixed, Not Deployed
+
+Docker24 EB10 has a real6.7003345s five-second private invalidation failure;
+439P/1F child02 and interrupted child03 are not full acceptance. Passive timing
+records4.7826358s GC overlap, not allocation provenance or a server-wait cause.
+Atomic Core updates now consume narrow metadata in bounded Row batches and
+synchronize returned resident IDs with savepoint rollback tracking. No predicate,
+source closure, GC policy or original bound changes. Complete fresh10-module
+replacement passes275cases/825phases/0S/0F,167retained files verified; large
+invalidation1.8983929s. Earlier fixture/setup errors remain retained, not product
+proofs. See bugfix-private-invalidation-allocations-2026-10-30.md. Whole Docker,
+new committed CI/main/live/D29/cadence and both actual workbooks remain required.
+External legal/provider/consent/MFA and MacBook holds are not closed.
+
+## October 29 Shared Writer CI: Partially Fixed, Not Deployed
+
+Complete540E CI40897543335 is38successful/3failed/2skipped jobs. Two call-phase
+source-inspection tests still examined the public inline writer; the third
+failure is their prerequisite aggregate. Security8/8 and Advanced3/3 pass;
+five independent reviewed annotations remain explicit, not zero findings.
+Both unchanged security predicates now inspect the shared canonical writer.
+A full-definition AST oracle additionally pins the public synchronous signature,
+defaults, decorators and exact writer/serializer forwarding. No product code,
+capability, lock order or transaction boundary changed in this correction.
+
+Fresh affected-module Docker-PG run passes50cases/150phases with no skips or
+failures,13retained files verified. The earlier pre-test connection failure
+and its stopped owned database remain retained as infrastructure failure.
+After static review identified a body-only guard gap, the stronger definition
+guard passes both original CI identities again:2cases/6phases,6retained files.
+Require new committed full CI/Docker and actual production replay; no workbook
+promotion, external legal/provider/consent/MFA hold or automatic closure follows.
+
+## October 29 Web Fixture Preflight: Partially Fixed
+
+Docker21 on82C8 stopped before images/main native/browser execution:18process
+cases16P/2F. The isolated driver probe exceeded the unchanged10s deadline and
+owned oversized-line cleanup hit EBUSY. Both complete TAP failures, source
+snapshots and failed scratch bytes are retained; no historical timing cause
+or lock holder is established. Later driver observations do not erase them.
+Awaited native bounded filesystem removal now propagates exhausted errors and
+keeps one application child. New control plus all original cases passes the
+complete76-case role (19process/51SQLite/6controller),0skip/retry/failure, three
+owned phase trees reaped, source equality and pinned Node22.14 typecheck.
+Main regression, new committed CI, guarded release and exact-live acceptance
+remain pending. No product/oracle/driver/timeout or shared native tool changed.
+
+## October 29 Bulk DTO: Partially Fixed, Not Deployed
+
+IPLF-032/UJ-02/NFT-005: Docker20's fresh resume148.586s and stale-empty initial
+commit143.540s violate unchanged90s bounds before export measurement. Its one
+complete group is437P/2F/1317phases, not whole acceptance;3070native/640browser
+cases were unexecuted after guarded interruption. No host/GC/planner cause is
+established. A separate deterministic RED proves27discarded rich queries for
+three imported rows, with all public/transaction/partial-success controls passed.
+Shared writer/public serializer separation now passes all46selected cases/
+138phases/0S, including the three original201-row cases and original export
+and provenance modules. Bulk rich queries0/public9;37retained files verify.
+Keep profile02's SQL-capture failure and process/journal mismatch preserved as
+INCOMPLETE. Fresh full Docker/CI/current-main/production and unchanged15second
+desktop/mobile CSV proof are still required. No external hold is promoted.
+
+## October 29 Precommit Metadata: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: Docker19's actual matter-first upload
+Company timeout remains retained; three complete groups1313P/1F do not certify
+the gate. PML-01..06 proves first-transaction graph work14->3 while preserving
+current values, tenant/assignment/lifecycle/ACL locks, no-op/caller transaction
+and later full workspace. Complete new6 plus unchanged response16/upload32/
+writer122/finalizer30 pass206/206/618phases without skip/retry or deadline change.
+All177retained files verify; supervisor1was a separate long-path verifier error,
+not an erased result. Prior failed/incomplete attempts remain open evidence.
+Require fresh whole-source Docker/CI and exact-serving browser/private cadence;
+no workbook verdict, legal/provider/consent/MFA/reopening hold is promoted here.
+
+## October 29 Provenance Seek: Partially Fixed, Not Deployed
+
+IPLF-030B/037, UJ-04, IP15-018, NFT-005: actual13D CI PostgreSQL20 retains
+144P/1F,145cases/435phases. The only assertion is81600recorded provenance
+visits against820; the aggregate failure is the expected shard guard. No
+browser job ran. Adding the full index and retiring one prefix did not prevent
+the alternative company-only scan. Local fresh/stale RED reproduces the same
+bound with successful setup/teardown and an analyzed passing control.
+
+An ordered five-key candidate plus outside exact match preserves every source,
+tenant/action/type/row/docket predicate and the unchanged Python oracle. No
+index drop, planner setting, production ANALYZE or raised limit is introduced.
+Full new5/parity4/export8 component passes17/17 with51phases, including SQLite,
+null/missing/duplicate/mixed proofs and all original export cases. Six actual
+plan receipts reconcile; fresh/stale/analyzed and the failed journey use400
+visits below820. Do not mark Properly fixed until the complete new Docker/CI
+and production browser workflow pass on the exact serving source. The original
+15second,51-row CSV contract and all external/legal holds remain authoritative.
+
+## October 29 Matter Response: Inconclusive Pending Release
+
+J04/M03/US-007..009/FT-011..015/NFT-005: BFF's complete Docker17 is3482P/1F,
+not acceptance. The only failed call is the metadata-IP finalizer overlap's
+writer.result(timeout=5); eventual commit/return does not satisfy that oracle.
+The original closed fixture and all10449phases/3483identities are retained.
+No browser cases ran. Historical Docker16 invitation evidence remains separate.
+
+MRH-01..16 adds deterministic response-query and full DTO/freshness/tenant/
+transaction regressions. The valid RED observes13queries; narrow reload GREEN
+observes3 and passes all46selected cases/138phases, including the complete,
+byte-identical30-case original finalizer file with unchanged timing and security
+assertions. Component verdict only: production remains unverified. No timeout,
+GC policy, lock, schema field or lifecycle protection is weakened. No existing
+legal/provider/MFA/old-calendar/unknown-reopen hold is closed. See the dated
+response-hydration brief; require fresh canonical Docker, CI and exact-live proof.
+
+## October 29 Invitation Race: Inconclusive
+
+PRA-10..12 / J14/M14: Docker16 on `36a56e77` has one preserved accept-first
+invitation/removal rendezvous failure. Six complete native groups contain
+2,612 passes and one failure; the remaining groups and browser inventory did
+not run. Both original orderings later passed a passive, independently migrated
+PostgreSQL diagnostic. That does not establish the historical cause or a fix.
+
+The replacement retains joined actor outcomes in both phase sections and
+JUnit, with bounded timing of the unchanged real stages. It also covers the
+adjacent first-invite, reinvite and revocation-reader races. No hash cache,
+deadline extension, barrier relocation, service change or assertion waiver is
+introduced. The 31 support cases and both affected native files (27 cases)
+pass, including nine identical actual call-section/JUnit payloads. Complete
+replacement acceptance and fresh hosted checks remain required.
+Issues #561/#564 and IP15-018 remain open pending exact-release production
+verification, including the original 15-second, 51-row export outcome.
+
+## October 28 Fresh-Statistics Export And Plan Evidence
+
+Still open. PR567/6cc CI40578349238 has one actual failure among3443 PG
+cases: fresh-statistics provenance work exceeds228 visits. All17 additive
+index migration cases and the analyzed variant pass; these do not close it.
+Default-server PostgreSQL17.11 reproduces69854/69854/67218 visits with the
+new index present. The selected company/action index filters1316 unrelated
+rows per candidate. Keep complete failed plans, phases and the original bound.
+Correlated scalar probes are a candidate, not proof of bounded scans.
+Four intended cross-database parity cases cover each source/audit predicate,
+duplicate matches, malformed JSON and manual overrides with the unchanged
+reader oracle. Two expected old-source unit failures prove plans were outside
+CI's direct native-JSONL upload glob. Correct retention without changing the
+work/latency/SQL-size bounds. Docker11 is stopped and incomplete; no merge,
+production routing or new acceptance is claimed. PRD EXW-PV01..05 apply.
+
+942 confirms scalar LIMIT is insufficient (69960/69960/67269 visits). Its
+complete349-case non-PG run has348P/1F; retained actual exception identifies
+Windows rename from242 to265 path characters. An unchanged short-root case
+passes; this does not make the failed full selection green. Full replacement
+uses a short owned basetemp. The cold catalogue experiment independently
+supports removal of the redundant migration-only company/action prefix,
+after validating the full-key replacement, with a new reversible0002 rather
+than rewriting0001. Original EXISTS semantics stay; shared audit readers,
+restart/cancel/rollback and complete real work bounds remain required.
+EXW-PV06/07 extend this still-open boundary.942 CI was parent-cancelled after
+the actual local failure; Security/CodeQL/review success is not release proof.
+
+## October 27 Export Release Projection Stop
+
+Dependabot65 separately reports GHSA-xcq7-p3pf-p88h in the optional
+OpenTelemetry API1.41.0 lock. The upstream first patch is1.45.1; align its SDK,
+exporter and instrumentation0.66b1 dependencies rather than upgrading only
+the incompatible API pin. Raise the optional manifest floors and regenerate
+only that dependency closure. Keep the unrelated package graph fixed. Regress
+manifest/lock floors and the actual patched parser's literal comma split with
+large space/tab inputs, plus valid context preservation. Default installs may
+honestly skip the optional parser; the all-extras CI run must execute it. No
+provider, telemetry activation or audit waiver is involved.
+
+CI40467206921/api7 failed one callback future-timestamp expectation after the
+request crossed a second: the header made at now+301 was valid at actual
+skew300. Complete native journal/JUnit and controlled two-clock reproduction
+are retained. The original test rejects at301 and reaches its worker sentinel
+at300; this is a test-clock race, not proof of authentication bypass. Freeze
+only the route clock in this test, preserve the production300-second rule and
+all seven unauthorized mutations, and cover exact inside/outside boundaries
+plus deterministic elapsed-second transitions. The complete callback module
+passes 42 cases; its one PostgreSQL case is explicitly skipped without the
+database URL and still requires the canonical Docker gate. Docker05 is
+incomplete before stack/product tests; its npm install subsequently completed
+naturally. CI's complete 35-job result has this sole failed test shard, its
+dependent aggregate failure and skipped downstream browser/staging jobs.
+
+Follow-up local frontend02 completed1906 cases:1905 passed/one failed, no skips.
+The intake invalid-code case was still showing the initial loading skeleton
+before its first button assertion. A separate controlled diagnostic reproduces
+that exact state with a successful query and one undelivered observer update;
+it is fixture-delivery evidence, not an established production intake defect.
+The unchanged seven-case intake module now explicitly delivers that boundary
+inside act, preserves its invalid-code/no-API-call assertions, clears its client
+and restores the scheduler in finally. No deadline or production code changed.
+Full replacement frontend coverage remains required with unmodified thresholds.
+Docker04 was deliberately interrupted before source editing; its retained
+incremental PG journal has no session completion and is NOT acceptance.
+
+PR565 merged as d1099288b7e61224aa06088437c7a4b207bb43b9 with accepted
+Docker tree db59d73f0a3a5875ded6e8055cd6b99186883c1e. Local acceptance is
+3425 PostgreSQL passes,1906 frontend passes and630 browser passes/10 skips.
+The canonical deploy stopped before routing at the new queue helper's runtime
+identity fence. Actual gcloud JSON projection omitted `spec.containers`
+because its repeated traversal lacked `[]`; the fake supplied absent fields.
+Cloud Tasks was still disabled and no dedicated worker secret existed in the
+read-only diagnosis. The old serving f49 remains uncertified after QA40323857026.
+
+Preserved RED: both pre-route and post-route constructor cases fail with the
+same runtime-identity error after making the fake honor repeated projection.
+Repair name/image/env traversal, retain all runtime/sidecar/ACL/main fences,
+audit adjacent projections and replay the full offline deployment rehearsal.
+Do not waive the guard or count the stopped attempt as production acceptance.
+Issue561 and independent564 remain open until complete replacement release
+evidence. The dated SEO log records today's incomplete GSC retry separately.
+
+## October 26 Verification Marker #561
+
+Partially fixed at the local verification-client boundary; production closure
+pending. Original source sends Accept without the mandatory no-paid marker.
+Retained actual request-construction/certificate/retry/CLI RED:5failed/4passed;
+complete repaired module9passed. Local startup/Docker/cold diagnostic RED:5
+missing-marker assertions, followed by complete5passed. No fixture error is
+counted as a product reproduction. Adjacent independent verification clients
+are included without weakening authentication, TLS, deadlines or provider fences.
+Required final gates and stableVR561-01..05: bugfix-verification-markers-2026-10-26.md.
+
+Serving29865557and its successful exact QA40256221597 supersede older pending
+Batch3 checkpoints below:399passed/18explicit skips,zero failures/retries,
+including all51datedIP/Calendar writes and49public cases. That is the earlier
+release's evidence, not this new candidate's regression result. The interrupted
+native Files0/2 evidence remains failed; its separate recovery is active and
+the prior Android23/23receipt is not promoted to its newer HEAD.
+
 ## October 25 Native Browser Launch
 
 Actual full-inventory attempts reached successful MFA and authorization but did
@@ -232,7 +1092,7 @@ exact-serving production checks. Current verdict: Inconclusive, not deployed.
 
 C24's required Security39506605978 fails nine Pillow12.3.0 findings; its
 Docker15/CI results remain incomplete and cannot certify a replacement.
-Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.4
+Pillow13, the labelled FastEmbed compatibility rebuild and shipped uv0.13.5
 need complete fresh audits and actual image/inference regressions. No
 workbook item is upgraded from source changes or a resolver-only success.
 
@@ -3475,3 +4335,345 @@ remains Inconclusive; no backend legal-safety predicate is weakened.
   fresh Docker/CI, the real production builder and exact-serving Playwright.
   Full R22 evidence remains retained, not reassigned to the corrected revision.
   See `docs/bugfix-renewal-cte-identity-2026-10-21.md` for the failed release.
+
+October28 installer follow-up: uv0.13.4 already has clean120 roots, but its
+separate0.103.14 verifier is affected. The current uv0.13.5 pin uses0.103.16
+without replacing Requests/HTTPX roots; Linux image acceptance stays pending.
+
+
+## October 29 exact-case planner-cost diagnosis and tenant-band candidate
+
+The expected-failing diagnostic on clean 8e78eaef retained the actual same-case
+index catalog: the six-column source-proof index is valid, ready, expression-free,
+full and eligible, with standard text operator classes and ordering. Audit table
+estimates remained -1 rows / 0 pages. All three actual profiles still failed at
+162,400 relation / 163,000 provenance work versus the unchanged 820 bound. The
+ordinary old index plus sort cost 8.20 at PlanRows=1; the separate sort-disabled
+estimate chose the new covering index at 8.29. That estimate did not execute
+the query or prove bounded work. No production planner setting is introduced.
+
+The original run remains failed. Its source/runtime, known owned-container
+absence and command closures are separate passed components. A separately
+timed post-run strict paired output audit retained every one of the 33 full
+cleanup records and passed in 0.1993 seconds; it does not repair the original
+clock or acceptance. Hash-bound evidence is retained in the task cache under
+pg05-index-catalog-diagnostic-06/actual-diagnostic-receipt.json.
+
+Candidate six (subsequently failed as recorded below) used a full six-key lower tuple bound and an
+upper bound on company before the ordered single-candidate limit. Together
+they select only the trusted tenant without an equality whose stale estimate
+collapses the row count; complete exact policy stays outside the barrier.
+The two cross-dialect semantic cases now establish three real tenants, sort
+them by database order, select the middle owner and reject both lower and
+higher foreign audit candidates. Wrong successors, foreign import ownership,
+prebuilt-statement freshness and independent direct/page/staged dates remain
+required. The original 29 identities / 87 phases and all 820/228, two-body,
+64 KiB, query-count and timeout limits remain unchanged. Verdict: Not fixed
+until actual ordinary, adverse, generic and full same-source workflows pass.
+
+
+## October 29 additive type-leading candidate (private, unverified)
+
+The six-key tenant-band candidate also failed all ordinary, adverse and generic
+profiles: 162,400 relation / 163,000 provenance work versus820. Its old company
+index used derived company lower/upper conditions plus an Incremental Sort;
+all 811 tenant audit rows were still inspected per candidate. The sort-disabled
+estimate retained that incremental sort, so it did not establish a new-index
+choice. The original failed run, all33closures and a separate strict paired
+post-run audit remain preserved; no failure is reclassified as acceptance.
+
+Actual catalogs also contain the legacy target_id index. A target-first rewrite
+would therefore still permit a target-prefix incremental sort over foreign
+same-target history. Candidate07 instead adds revision20261029_0002 with a
+full type-leading (target_type,target_id,company_id,ip_docket_id,action,id) index.
+Revision0001 and its company-leading index remain unchanged. The query uses
+full lower and three-column prefix upper ROW bounds before its one-candidate
+limit, then retains the complete exact policy outside. No production planner
+setting, ANALYZE waiver, old-index removal or larger work limit is introduced.
+
+The intended complete inventory is38cases/114phases: all original29 identities,
+eight new cross-dialect migration cases and one PostgreSQL history-work case.
+The new roundtrip starts at named0001, includes a real interrupted concurrent
+build/recovery on PostgreSQL, and proves downgrade preserves the old index,
+raw rows, catalog and revision. Current-head0002 health and conflicting-name
+downgrade refusal remain distinct from that historical boundary.
+
+The work case seeds25,728 foreign same-target audit rows across both tenant
+sides, plus12,864 owned NULL-docket and12,864 NULL-target rows and type/source
+neighbors. Positive and missing-owned-proof phases each retain every actual
+default/adverse/generic plan, original820relation/proof/materialized limits,
+64KiB SQL, two-body and query-count assertions. NULL SQL comparison behavior
+and B-tree work must be observed; no nullable key is assumed safe by sorting.
+The two existing dialect semantics cases additionally retain before/after
+prefix neighbors, actual selected-candidate identities, independent direct/page/
+staged dates, and NULL/missing source JSON controls. Any unreached later phase
+remains unverified. Six separate419+30component windows report aggregate time
+separately. Verdict remains Not fixed until those actual workflows pass.
+
+
+### 2026-10-29 — Source07 focused provenance result and fixture correction
+
+The committed source07 `3b6130a5` passed the original PostgreSQL minimal-page case under default, adverse and actual generic prepared plans: date-query relation work 400 and attributable proof work 800 remained within the unchanged 820 bound; continuation work was 2/4. All five plans per profile, source/runtime stability, known container absence and all 33 owned process closures are retained. This is a scoped original-case pass, not complete release acceptance.
+
+The independent stress case failed before history staging or query acceptance: its second fixed company bootstrap returned 409 instead of 200. Positive/missing-proof phases and their plans were unreached. Both new semantic dialect cases shared that fixture defect and remain unverified. The test-only actor helper now accepts the existing normal-API unique bootstrap for these three multi-actor cases while preserving original callers, cookie clearing, authentication, complete workspace configuration and acknowledgements. The iOS shell companion is regenerated to bind the current helper bytes. Neither correction changes product SQL, indexes, work bounds or the full 38-case/114-phase inventory. Replacement focused/full verification and both native platforms remain pending.
+
+Evidence: `X/pg07-typed-prefix-verification-08/actual-focused-results.json` SHA256 `8ee4aa2920e85571d77ca733ca1197f1d00a6fa98f55c29df1c918039f77a20e`. The stress run and its separate audit01 stale-count refusal are preserved; audit02 reconciles all 34 actual contiguous dispatch/closure pairs under the original audit limits.
+
+
+### 2026-10-29 — Source08 physical-work gap and reverse-prefix candidate09
+
+Source08 `9505e0ea` completed the corrected stress case (99.090964s; one case, three passed phases, 16 marked HTTP requests), retaining all five plans for each default/adverse/generic profile in both positive and missing-proof phases. Positive Audit access used 1000 shared-hit blocks, while missing-proof access used 244302 despite zero returned/removed Audit rows. The original row-work checks passed (400/800 and 200/200 against 820); that pass does not establish bounded internal index work. Source/runtime/output and all 33 actual owned process groups closed cleanly.
+
+Candidate09 is a minimal unverified reverse seek: one upper comparison over the five complete identity fields, all six index keys descending, LIMIT 1, no lower prefix and no ID sentinel; a source-NULL gate avoids an invalid comparison bound. Complete exact policy and ImportRow primary-key ownership remain outside that barrier. Existing wrong-successor policy denials stay covered, with selected wrong predecessors, lower/higher tenants, nullable histories and duplicate proof IDs added to the same cross-dialect cases. No model, migration or index changes are proposed.
+
+The independent physical oracle counts inclusive Audit relation buffer accesses once, without multiplying counters by loops or charging bitmap children twice. Its fixed 201-seek contract is 16*201+64=3280 accesses: a conservative six-level descent plus metadata/VM, leaf/heap boundaries and slack per seek, with fixed overhead. It is a bounded-fixture contract, not a universal index-height guarantee or a value fitted to the failed measurement. The retained positive1000 baseline must pass and missing244302 baseline must fail. Original820/228 row-work, SQL/body/count/deadline bounds remain unchanged. All38caseIDs/114phases, migration journeys and native acceptance remain pending until actual complete replacement evidence.
+
+Evidence: `X/pg08-fixture-verification-09/actual-stress-results.json` SHA256 `a148175da44fe66b83da264ebd3d943aaf3abadd579ef9fa13d63476a82f0bcc`. Successful fixture teardown normally drops the case database; no cold volume reopening or retained-data claim was made.
+
+
+### 2026-10-29 — Candidate09 Result-node failure and CASE-bound candidate10
+
+Both source09 `e819b84d` focused runs failed their unchanged supplemental820 work assertion in all three retained positive profiles. The reverse typed IndexOnlyScan was actualBackward and bounded at the relation/physical layer (relation400; MIN600 and stress1000 buffer accesses). The separate source-NULL predicate introduced an attributable Result One-TimeFilter node, adding200 work and raising the complete proof count to1000. That node remains charged; no observer, assertion or bound is relaxed. Stress missing-owned-proof remained unreached. Both source/runtime/cleanup/known-absence checks and separate complete output audits passed (MIN33, stress34 actual command groups).
+
+Candidate10 moves only that existing source-NULL condition into a CASE expression in the first upper-row value. Valid sources retain the identical five-field reverse bound. Missing sources produce a NULL first key, retaining the no-candidate contract without a separate constant WHERE filter. All complete outside-policy, ImportRow primary-key, date, predecessor/successor, foreign-tenant, nullable and duplicate-ID checks remain unchanged. The compile contract now pins the one CASE guard, exact NULL refusal and sole upper comparison. Original820/228 row-work,3280 physical-work,64KiB/two-body/query-count/deadline bounds and all38caseIDs/114phases are unchanged. Actual replacement focused/full and native verification remain unexecuted.
+
+Evidence: `X/pg09-reverse-prefix-verification-10/actual-focused-failure.json` SHA256 `8684f1d0e327f75d4e1861af54e18af8b82915e74c1328046c29d34793d5b250`; fullplans `ab8c0094a546f517532c67e5bdc736b257259e495f19f508a438ecbca9cf3c37`. No unchanged retry or historical failure reclassification.
+
+
+### 2026-10-29 — Complete attempted38 inventory: observer failure and capacity refusal
+
+The complete frozen source7033 replacement attempted all six admitted components, with at most two active. Thirty cases executed:29passed and one compile-only observer failed;89passed/1failed phase reports account for90of114planned phases. The eight new0002migration cases and their24phases were unreached because Docker refused network creation after all predefined address pools were allocated. No database or pytest body began for that component; it is infrastructure-incomplete, not eight migration failures or a green prefix. Aggregate observed537s is separate from each unchanged419+30window. Every component completed source/runtime postflight and strict owned command/output closure.
+
+The sole executed failure was test_five_stage_names_preserve_pg_materialization_acl_and_current_source: its raw substring count found13 occurrences, including repeated ip_materialized_proof_seek aliases, while the preceding actual typed graph still contained exactly six unique nested CTEs. The corrected oracle retains six, requiring six PostgreSQL TextClause MATERIALIZED prefixes and six rendered AS MATERIALIZED declarations; an alias-only decoy contributes three substrings but zero declarations. All stage, ACL/source, actor/tenant parameter, warm read, category/date, postcommit and count assertions remain unchanged. No production query, model, migration or limit changes are involved.
+
+Source7033 actualfocused plans retain the repaired missing-proof physical work1045 versus prior244302, within fixed3280, and all original row-work bounds. Both dialect semantic cases passed within the attempted inventory. Exact-owned network capacity recovery is separately planned for seven receipt-bound closed networks; no broad prune, data-volume removal, foreign/live-network cleanup or unchanged replay is authorized by this observer correction. A fresh coherent complete38/114 run and native Android/iOS acceptance remain pending.
+
+Evidence: `X/pg10-case-upper-verification-11/full38-unarmed/actual-attempt-results.json` SHA256 `7aa737576880b7e8f3e2d92bf14ad3976b156137b10db89b07e678b8a23fc285`; all original reports and unreached phases are retained.
+
+
+### QA12: interrupted typed-index catalog fixture, 2026-10-29
+
+The complete source-bound run on `4bc5c7dc` executed all 38 cases and all 114 setup/call/teardown reports: 37 cases passed and one failed (113 passed phases, one failed phase). The original failed result remains at `pg11-materialized-observer-verification-12/full38-unarmed/actual-attempt-results.json` (SHA256 `98e80df89a38f2cc90ba2eebab647239796eabdf6a54d328798db9f708c46c34`). All six source/runtime postflights, owned process groups, container absence checks and later complete output audits closed. The aggregate observed 497 seconds is separate from each original 419-second body plus 30-second cleanup bound.
+
+The PostgreSQL typed-index roundtrip stopped while recording its deliberately canceled concurrent index build: the ordinary catalog helper correctly rejected `ix_audit_events_typed_source_proof_seek` as invalid/unready. The repair continuation, restart, downgrade and reupgrade in that failed case remain unverified. The historical intermediate catalog/individual flags were not persisted before that assertion; a new exact expected descriptor is prospective proof, not a historical observation.
+
+The proposed fixture uses a separate interrupted-index catalog observer with one exact key, complete six-column PostgreSQL index definition and explicit flags `(false,false,true,false,false,false)`. The ordinary `schema_catalog(engine)` remains healthy-only. Every other index must remain healthy, the expected interrupted index must exist, and the complete intermediate catalog must equal the parent plus that one index. The real fixture first proves the default helper rejects its actual invalid index. All existing repair, full-health, identity, row preservation, downgrade and reupgrade assertions remain required.
+
+Independent observer regressions cover the exact snapshot/default rejection and wrong name, definition, flags, a healthy target, a missing target, an extra invalid index and an invalid descriptor. Eight private source controls passed with zero database/network calls. The complete adjacent unit inventory is 13 cases (the original five real SQLite DDL cases plus eight observer controls); the affected migration inventory remains eight. Neither private controls nor a future scoped eight-case pass make the failed complete-38 run green. Full native Android/iOS build and device acceptance remain open.
+
+
+### C23 — offline deployment loopback marker source repair
+
+Verdict: **Inconclusive**; the complete affected deployment rehearsal and platform release acceptance remain pending. On clean source e58130f870bfe332a04d5c79099164cc490b9373, source review found that test_uvicorn_connection_close_is_advertised_and_body_completes sent its raw loopback GET without the required X-CaseOps-Automated-Test: no-paid-providers marker. This was a verification protocol deviation against an invocation-owned temporary ASGI application, not evidence of a product or billable provider request. No actual HTTP constructor was dispatched during this source preparation.
+
+The narrow candidate adds the marker to the existing request literal, so every existing retry carries it, and makes that actual temporary ASGI app assert the received header before responding. Method, Host, Connection behavior, exact caseops-ok body, readiness/read/cleanup deadlines and the complete 102 base-function inventory are preserved. AST comparison proves the other101 test functions and all other module statements unchanged. Six offline controls passed, including the exact request, the synthetic app marked response, and missing/wrong marker refusal before any response. These controls do not replace the complete offline rehearsal. The first malformed inline Python control invocation failed at syntax parsing before controls and remains retained separately.
+
+Evidence: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/web-node-security-20261029-01/source-draft-01/offline-deploy-marker-proposal-01/source-controls-result-02.json SHA256 6e272f8b178e3becbfb42cfe3bd957493c195da08be949f4900514283fc84ca3 (1331bytes); writer-preflight.json SHA256972d0f654367f3fdcbdfa582ee68619cfa7a13387cd4fec902f0456b5eb8ab1c. Original failed pure invocation is in source-proposal.json SHA256242decbb79dc7d7d8f82c819ac3dd9c5532b09bc04e40172c15c53db643956ef. Full frontend coverage, deployment/upload/image gates and Android/iOS native/store acceptance remain open.
+
+
+### C23 — complete253-file frontend coverage PASS on published source
+
+Clean published source e7dc77ab6275713b3a7d74c2de63079ec1e5b7d6 / tree8ea9733519deda2eaa7c8170079edc2c25566cf5 completed the actual full253-file frontend coverage gate with all2057 collected and executed cases passed, zero failed/skipped/todo, and exact collection-to-body identities. The configured HostTrustedForks pool, maxWorkers2 and15000ms test timeout remained active. Real Node22.23.4 and the prior accepted native PowerShell7.6.9/OpenSSL3.2.1 paths were rechecked, including the actual nonzero PowerShell exit control. Coverage passed the unchanged34/32/25 floors: lines66.65%, statements63.35%, branches58.01% (functions49.29%, without an added function floor).
+
+The credential-free1008-file stage transferred verified held buffers through exclusive writes. Five public script/data dependencies were added after the retained first run exposed2050passed/2missing-source failures/5unreached suite cases; every original253 test source and assertion stayed unchanged. That failed run remains failed. Source/runtime and installed305manifest identities reconciled before/after, complete output paired, exact Vite cache restored, and every owned process group closed. Global17484entries/701022559bytes remained below original20k/1GiB. Canonical243.7927seconds; Root observed actual exit0 at21:09:02UTC after21:04:21UTC start, within original900seconds. The child could not poll the parent-owned process namespace and reported that limitation without retry; the final outer exit evidence is Root-owned.
+
+Evidence: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/web-node-security-20261029-01/source-draft-01/full-frontend-coverage-02/root-actual-exit-acceptance.json SHA25654aacfeb98e10c0bf3c21844515654f178541adc4246e5ca651115b03f41c214 (5120bytes), result2e9d520b4c90332b1d8f88dadae8d3bf156b9b82a2750b50ca5f87ed7e98884d, coverage1138723d0ccc817e429fb93981fdde9129e2b3f7d44db4f8fc8a64b3f610377a. This is complete scoped frontend acceptance on those selected sources/runtime inputs; current API lint, whole deployment rehearsal, shipping-image HTTPS/fetch and Android/iOS native/store acceptance remain separate open gates.
+
+
+### QA14 — current CI lint repair and scoped verification, 2026-10-30
+
+The published e7dc77ab source's API ruff job 123723579134 failed with 25 findings: 21 overlong lines and four import-order findings across five test files. The complete original CI log and the independently reproduced local 25-finding result remain retained. The repair only orders those imports and wraps the named lines. Adjacent literal concatenation preserves the exact loopback GET, TypeScript fixture input and 4429-byte provenance catalog SQL (SHA256 bb0c67e810178605398fd5df78caed49170fdbb5aee8b26a4bef1cffb15ffc24). Pure Python AST comparison proves every non-import statement, decorator, test and literal unchanged; the complete imported-name/alias footprint is identical. Actual pinned Ruff0.13.0 full src/tests check now exits0 with zero findings; no lint exclusion, line-length change or assertion relaxation was introduced. Full replacement CI remains required for the next published revision.
+
+The source-identical9595 scoped migration replacement passed all21 cases/63 phases: the complete13-case catalog module and8-case migration component. Its actual PostgreSQL intermediate catalog preserves11330 parent objects and observes exactly the typed index's interrupted flags false,false,true,false,false,false, followed by healthy true,true,true,false,false,false. The actual default catalog refusal, repair, restart, downgrade and re-upgrade ran. Receipt pg13-api21-source-rebind-14/actual-scoped21-results.json SHA2569b36c681bc69e8a5a7712c25d9c21cc287f2f0cc90051d4bbe7384ebec53d613. The earlier full38 run remains37passed/1failed; this scoped pass does not relabel that whole run.
+
+Independent current-e7dc Linux CI passes the entire139-case licence coverage module plus host and pruned-musl policy, and the five native Cloud Build upload-context tests with actual gcloud568.0.0 and seven scratch Docker exports. Exact44-member upload artifact SHA25634e31f00b6857e2b63c59964ae8c39f110c5543447333aebd363b3d80358392a was retained and independently reconciled. The synthetic context bytes do not prove shipped notice bytes, and these context tests do not include Docker filesystem headroom receipts. They do not establish Mac SDK, shipping-image or device acceptance. Local SDK591 acquisition was unnecessary and was not performed.
+
+The new API formatting proof is retained at /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ruff-e7dc-source-formatting-01/actual-ast-equivalence.json; complete original CI log at web-node-security-20261029-01/source-draft-01/ci-api-ruff-inspection-01/complete-job-log.json SHA25622ffd9fdf9166b9169445e184137616e0f344b394290cc6c1f3613b84c65c0d4. Native source advancement has identified live checkout-bound API/gateway readers; no checkout mutation may race those readers. Final measured source, deployment rehearsal, current shipping images and actual Android/iOS binaries with83cases/249phases perOS remain open.
+
+
+### QA15 — PostgreSQL artifact contract repair and complete deployment rehearsal, 2026-10-30
+
+Published b1148a4b372f72c3719fa16b9a37c0d4dc2f00a8 failed API shard5 job123741319289 at the workflow artifact-path assertion in test_postgres_sharding.py. Complete XML and journal reconcile all1594 collected identities:1506passed,1failed,87explicit PostgreSQL-URL skips,4695phase reports and terminal exit1. Checkout merge f76be27728456322400b355a79033115310882f0 has the same a5b44c93dee2381d292de1a0870246d2885e31d9 tree as b114. This original failed shard remains failed. The workflow correctly retains its per-shard query-plan directory; the independent test expected only the previous five paths. The repair appends that exact -query-plans/ directory to the six-path equality. The other13 test functions and all other module statements are AST-identical; every deadline, shard count, forbidden side effect and existing artifact assertion remains. Complete14-function/82-case module verification is pending.
+
+The same ordinary Linux CI run completed the entire102-function/287-case deployment hardening module:287setup,287call and287teardown reports passed, zero failure/skip/xfail. Exact module identities and per-function counts match the independent static catalog, including the received no-paid loopback marker regression. This closes the ordinary complete deployment rehearsal on that source. It does not claim private pre-cleanup fixture-filesystem acceptance; the proposed private two-component287 diagnostic was never executed and is no longer needed. All87 PostgreSQL skips are accounted separately and do not become passes.
+
+Evidence: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/web-node-security-20261029-01/source-draft-01/ci-api-shard5-inspection-01/exact-case-reconciliation.json SHA256a259b1a685bdc943513a23bb358e9b44edcd1f9291ff0063d43066b8abb253f2 (51672bytes); exact4-member artifact /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ci-b114-api-shard-5.zip SHA2560ace935875d23437cbb6ecdcfe1a3c3411a06e65b899f9254c4398a8097ada99 (2353752bytes). Source controls SHA2560da5990c2385e62cb3f029aa1e2006eae6d4146412c473e4baa080bce2222976. Full replacement CI, shipping images, final measured-source integration and Android/iOS native/store acceptance remain open.
+
+### QA16 — current-head migration refusal oracle, 2026-10-30
+
+Verdict: **Inconclusive** pending replacement execution. Published b1148a4b failed API shard8 job123741319193 with1000passed,1failed and261explicit skips. The sole failure expected the historical Matter restore guard when downgrading current head20261029_0002 to20261027_0007 on SQLite. The newer seek-index migration correctly refuses that non-immediate SQLite destination before DDL with `SQLite seek index downgrade requires exact immediate parent.` PostgreSQL reaches the historical Matter guard within its rollback transaction. No production migration or guard changes are needed.
+
+The current-head test now pins reviewed head20261029_0002 and requires the exact dialect-specific refusal literal. The separate complete named0007→0008 journey and every retained-row, classification, full-catalog, artifact-hash, revision and serving-read assertion remain unchanged. Pure AST controls prove every other module statement and all other current-head statements unchanged. Full API Ruff0.13.0 passes. The complete affected inventory is4cases/12phases across SQLite and PostgreSQL; neither pure controls nor an eventual SQLite-only pass establish all4cases. Original failed CI and the initial incorrectly indexed pure AST control remain retained.
+
+Evidence: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ci-api8-current-head-refusal-repair-01/source-controls.json SHA2560e1689f781ab2fd0b8a00986edaf33fb1f9227f196dc63fa12a787c2191ee6f4 (772bytes); complete original CI log web-node-security-20261029-01/source-draft-01/ci-api-shard8-inspection-01/full-job-log.json SHA256465528f7fbfbca3533e9b3b4a523f7476e4d093e819657d6ae0947e380932b17. All32 PostgreSQL CI shards passed on b1148a4b; the failed overall CI remains failed. Final shipping-image and independent83-case Android/iOS acceptance remain open.
+
+### QA17 — focused replacement verification, 2026-10-30
+
+Clean source f621ebfd885a4c8169fd00e0e863d02c0ff4e346/tree4c1dac3024b2570c316a4ab78ea4fcb93321ef62 passed the complete82-case PostgreSQL sharding contract module:82registration/body identities and246setup/call/teardown reports passed with no skipped or failed case. Canonical61.2268seconds; actual outer exit0 observed22:24:06UTC after22:22:59start, within300seconds. Full source/output pairs and all7owned groups closed;18254entries/563544216bytes stayed below20k/1GiB. Receipt web-node-security-20261029-01/source-draft-01/postgres-sharding82-verification-01/actual-outer-exit-acceptance.json SHA25625584bd43c922229bd1a575abf7d261039207932c6abc56349dd6feaf69afacc (1807bytes). A bootstrap placeholder refused before any controller/application execution and is retained separately.
+
+The affected migration module collected all4dialect cases, then executed both complete SQLite journeys with6passed phases. The historical named0007→0008 journey and current-head refusal both passed; PostgreSQL2cases were deliberately not executed in this scoped component. Canonical75.2153seconds; actual exit0 observed22:26:06UTC after22:24:50start. Source/output pairs and every owned group closed;18255entries/755978717bytes stayed within original limits. Receipt web-node-security-20261029-01/source-draft-01/sqlite-current-head2-verification-01/actual-outer-exit-acceptance.json SHA25659b751436ededff0388c7c725ef8fcafbc4bbe6946fcde7ef4cfe803d47fa9bc (2442bytes). Disk results intentionally remain provisional until the independent output audit and actual outer exit; these acceptance receipts supply that closure. Full current4-case dialect acceptance, replacement CI and native83cases perOS remain pending.
+
+
+## QA18 — React Native Pod-to-child environment admission (October 30, 2026)
+
+J20/M22 and native release remain partial/NO-GO. The user story is to prepare a standalone iOS app so the complete document/workflow acceptance inventory can execute. The e7dc engineering attempt passed Expo prebuild and the first autolink, then failed at the deeper React Native dependency/core/codegen boundary with IOS_HOST_UNREVIEWED_ENVIRONMENT. Its source fingerprint is 17193d7051a33f04a8d536bdae1de243a5837978f4c7182d82491e607367c2ea; source/runtime postflight and known foreground group closures passed. Pods completion, Ruby TLS, Xcode, Simulator trust and all83 native cases remain unverified.
+
+The bounded diagnostic executed the exact six generated-Podfile and twelve pinned RN ENV-assignment statements in admitted Ruby, then used the unchanged I62 constructor. It proved ten rejected names: two source paths and eight flags. APP_PATH was the generated raw ios/.. form; REACT_NATIVE_PATH was canonical. It retained only fixed key names and enum/path booleans. No complete Podfile, SDK cleanup, download, codegen, Q mutation or provider action ran. Attempt01 failed before Ruby because multiline diagnostic argv violated the unchanged command-domain fence; it remains incomplete. The corrected diagnostic used a separately scoped private policy; the old expired policy and failed native attempt were not renewed or relabeled.
+
+The repair preserves the earlier four switches and adds only the eight finite SDK flags. Hermes0 is a source-proven early generated-Podfile option; Fabric and New Architecture accept only1. The two paths require a lazily reviewed policy source root, actual owned canonical source/ios/RN directories, unchanged helper bytes and unchanged namespace. Foreign roots, aliases, symlinks and changed source refuse. The adjacent Xcode586-name inventory includes REACT_NATIVE_PATH; the second exact physical-relative spelling is admitted only after owned non-symlink Pods exists. No arbitrary path normalization or build-name bypass is allowed. The canonical shell pins the new helper bytes.
+
+IOS-ENV-03 covers64 valid layouts across all seven composed roles; IOS-ENV-04 covers finite-value/case/build-name/trust negatives; IOS-ENV-05 covers exact path/foreign-root/alias refusals; IOS-ENV-06 composes real POSIX source/directory review with command projection and rejects symlink or changed-helper fixtures. Windows exercises the explicit POSIX refusal; this does not claim Windows iOS execution. The impacted complete subset passed44/44 and the complete tooling module passed385/385 with zero failures, skips, cancellations or todos on accepted Node24/BASE144. The prior381 module cases are retained; four new source-contract cases were added. CI and the independent build-config/source-observer inventories already select the same33 modules, including tooling; module/native83 inventories do not change. Final whole-inventory reconciliation after the separate permanent observer integration remains required.
+
+Raw functional checks: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ios-rn-source-policy-repair-qa18-01/checks.json SHA256 34aa69836d06a3e3717e75d1e9a76e712c5e29c9a2258d6a95aa3db4422f7ff4. Original failed native receipt: 4d6fe9e980ddea2665c7eddac3fe6852154a3b7343048630f9cc786b42defabd; diagnostic02 result: 475a92e4877bdfbb3776fe21f8f53c79ad994bfea7239d5f0ffa5955a85641fd. These are scoped source/functional proofs, not complete source-observer or native acceptance. Q remains e7dc until a separately admitted complete source advance; actual repaired Pods/Xcode/device replay and independent Android acceptance are still required.
+
+## QA19 — Preserve typed Node code operands through CocoaPods (October 30, 2026)
+
+Status: source/functional repair verified; native/store release remains **NO-GO**. PRD J20/M22; regression IDs **IOS-ARGV-01** and **IOS-ARGV-02**. The original QA18 native prefix on local8dc02f3 (fingerprint dbfe98ce9517827acbfc664fa12f03a3e0e3c06bed0d90c8691c034db5e6a8ea) passed autolinking, React Native Codegen and the two checked core-artifact downloads, then failed ReactNativeDependencies.podspec after its Node resolver command was rejected. Retain that failed prefix cdfcf346565e30b83a6ecc81a87443dfbf805e0af9f237b7da0220611307800c and its complete source/owned cleanup proof; neither Codegen completion nor downloaded archives are Pods/Xcode/device acceptance.
+
+Actual source-pinned Ruby production of the resolver argv confirmed a line-feed inside the Node `-p` code operand. Unchanged I63 rejected IOS_HOST_COMMAND_DOMAIN before any policy read or SDK Node dispatch; diagnostic 26d67524dca7e3900471652cab8ca99fa3a2bb1a3771349b061bcc44f9ee2f09 retained the exact argv hash and three closed owned phases. The podspec swallowed that rejection and entered its unrelated fallback, producing the missing node_modules/package.json error. Existing React Native package metadata was valid; no SDK file, package metadata or dependency was modified.
+
+The host now admits CR/LF only in the typed CODE operand immediately after the first Node option -p/--print/-e/--eval. Original argument bytes and Promise behavior are preserved; non-code paths/flags, every other executable role, environment checks, NUL rejection, 8192-byte per-argument and 256-argument/2-MiB maximum bounds remain. Ambiguous code options before -- refuse; literal arguments after -- retain their prior meaning. Canonical shell entry was rendered from the new helper and hash.
+
+Actual focused **46/46** and complete tooling **387/387** passed with zero failure/skip/cancellation/todo; both JavaScript syntax checks and shell syntax passed. Preserve the first focused45P/1F 7a1f1044327bae5f2fb58a47377d73f2cb7f75566f08e96deb1005aee4ffcd49: the new test initially expected a generic environment error instead of the unchanged typed rejection; only that new oracle was corrected. The exact Ruby-produced SDK program then passed the new validator unchanged and resolved the existing React Native index.js through actual Node24.15.0 with exit0, no SDK import/network/fake metadata (9064be377e19eed2d00230b8da80708e9e475813ff4875e9f93d6bf6116358d4).
+
+Checks: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ios-rn-argv-repair-qa19-01/checks.json SHA256 eccd50f79e1a2522bdbc5d77c1407106ac7b8b83e8104d6b6a2f1b846a549b41. These are functional/source-pin proofs, not complete source-observer or native acceptance. Two new case identities bring tooling385→387; the same33 source modules and native83-per-platform inventory remain. Root's pending permanent-eight tooling integration must retain all QA18/QA19 cases and independently reconcile Python/frontend/CI counts. Q remains engineering8dc until a separately admitted complete source advance; repaired Pods, full generated audit, Xcode and Android/iOS device acceptance remain pending.
+
+
+### QA20 — public notice browser inventory (2026-10-30)
+
+PR #558 source 5cd371a738793670c79bd92852ad7038df6331ec finished CI with 67 successful checks, one failed web E2E job and two skipped checks. The failed app inventory retained 621 passed, 17 explicitly skipped and two failed cases. Both desktop/mobile public-content notice journeys failed at their exact six-heading expectation; the page correctly rendered seven components after the pinned Node 22.23.4 notice was added. The existing component unit independently expects seven components and nine full notices.
+
+Reconcile only the two browser inventory literals (6→7 headings, 8→9 notices). Preserve every existing per-component licence/download byte assertion, keyboard, reload, viewport, metadata and zero-mutation check, their deadlines and zero retries. Source controls prove exactly those two whole-program AST literal changes. Original CI artifact 12941599717: SHA256 07e8537a928ea31c33a09dd57e235c95e3a7f9e1dd2859411c37e8c0ca39ae14, 54,647,687 bytes; independently reviewed 327 unique safe members and both exact failed contexts. Retain original failure receipt 11d0c5d21c7ee1a7294bc33b26a3c15f566fd1be5ed32bf81e64609051d8f10e and source controls 5f5bbad3e56bf82fee5d41602df231e1807948b180fee2c4aae4948456271058.
+
+Status: source repair only; complete replacement public-content/browser acceptance pending fresh CI. The remaining notice assertions in the two original failed cases were not reached. Native Android/iOS acceptance, store archives and publication remain pending; this source change does not certify them.
+
+
+### QA21 — Windows native runner command-file permissions (2026-10-30)
+
+Fresh PUBLIC3b18 mobile CI run40979836848/job123816849704 stopped before npm installation, installed-inventory capture and dependency audit: CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE. The original job log and failed/unverified boundaries are retained in /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ci-3b18-windows-command-owner-01/failure-receipt.json (SHA256 d87170ea77b5be3c39759c41b967f926ab4db989055adf6ac53a181a490c2f42). Linux installed-audit/mobile-source/Windows offline setup/browser handoff passes do not waive this Windows failure. No unchanged job rerun is used as a repair.
+
+The CLI now hardens only the current native set_output_UUID direct child of RUNNER_TEMP/_runner_file_commands. A bounded Windows FileStream excludes concurrent writes/deletes, preserves its bytes, applies a protected current-user/SYSTEM/Administrators ACL and current-user owner, then independently repeats the unchanged strict ownership check. The Node caller reconciles its retained descriptor, complete metadata except the explicitly changed ctime, original bytes and namespace. Exported append, npm configuration, all other paths, TLS verification and trust policy remain unchanged. The CLI retains its original shared30-second preparation deadline and original5-second append deadline; the new phase is separately bounded10seconds, with two at-most4-second native calls and the existing1MiB file/4096-byte pipe limits.
+
+CI-COMMAND-01..04 cover exact scope/constructor, independent owner/readback and original append, alias/hardlink/oversize/context refusals, timeout/unknown-output/unsafe postcondition and same-byte replacement or changed bytes, with descriptor closure. Final source controls a0e4efca94afadd0a4dc3669034b0e7151a1c91e5e13faaa5a883adcfc8f6e2c prove all original387 tooling test bodies/helpers and original CI ownership/append logic remain intact, apart from the explicitly shared original deadline. Final focused4 and full391 tooling cases pass with zero failure/skip/cancellation/todo, JavaScript syntax, actual PowerShell parse and diff checks pass; checks c48125e49c696f701c4ca591e4e3d06826fe261f784749261b9e0d751cd5f99f. These Mac contracts and parse checks are not actual Windows ACL or installed-audit acceptance. Four cases change tooling387→391; full measured source and independent registration counts must be reconciled.
+
+A prepublication review caught a nonexistent FileStream.GetAccessControl overload that mocked controls and parse-only syntax could not detect; retain 87f5e62026d99f49ced06945dbbc5071439cd158ad6e50a6030dd539fe403de5 and the draft program. The final program uses the documented parameterless handle method. Microsoft API sources: https://learn.microsoft.com/en-us/dotnet/api/system.io.filestream.getaccesscontrol?view=netframework-4.8.1 and https://learn.microsoft.com/en-us/dotnet/api/system.io.filestream.setaccesscontrol?view=netframework-4.8.1 . Fresh Windows CI remains required; complete native83-case acceptance per platform and store archives/publication remain pending.
+
+## QA20 — Compose OpenURI default stores with the retained Ruby trust policy (October 30, 2026)
+
+Status: source and actual Ruby/OpenURI/TLS regression component verified; native/store release remains **NO-GO**. PRD J20/M22; Ruby OPENURI-01..25 and source/projection IOS-RUBY-01/02. Preserve failed public3b18 native prefix 32fd3a5af7fa3840b6c7bfb1e13596d7ffb93c618699384744b3ac127e41a450 (fingerprint364a90b63ad8efe72641ef6f927062918c1219d85e0b0a8bcd12253c8c735be2): Codegen, ReactNativeDependencies and Hermes downloads/checksums passed, then CocoaPods CDN detection failed IOS_PODS_NET_HTTP_STORE_REFUSED. No Pods/Xcode/device completion is inferred.
+
+Actual source-pinned CocoaPods manager/OpenURI diagnostic a6392c74d87a308ea01444208e581d693286f5e973ba68d7138b59b0c051076d stopped before NetHTTP guard/connection. It proved a fresh non-nil store, distinct from both the policy-owned store and SSLContext default; ca_file/ca_path profiles were already acceptable and VERIFY_PEER was set. Source-pinned OpenURI87056fcf creates that store at331..343. No unknown store was admitted by the diagnostic and no HTTP request was sent.
+
+The host now gives the unchanged OpenURI method a fiber-local per-call receipt for the pinned default-CA HTTPS/no-proxy profile. Its exact source assignment, HTTP identity, host/port, store identity, fiber, policy-owned store and live scope must match. Incoming OpenURI stores are never used for TLS: the existing descriptor-verified policy store replaces them before connection. Unknown direct stores still refuse at START (assignment outside a profile is not a global setter fence); custom CA/unsafe verification/version options, proxy/client-auth and marker overrides remain refused. Peer/hostname checks, every existing root, source/namespace checks, request payload/auth/header behavior, original return/Error identity and60-second production maxima remain. Nested and exceptional paths restore their prior receipt; closed receipts cannot authorize reuse.
+
+New durable scripts/mobile/ios-host-pods.test.rb has an independently collected **25-case/75-phase** inventory. Actual accepted Ruby4.0.9 executed all75 phases successfully, including genuine loopback TLS, unknown CA and hostname rejection, nested success/rejection, fiber/thread separation, same-host wrong HTTP identity, same-HTTP closed receipt, client-auth refusal, original error/return identity, redirects and explicit retry. All17 received HTTPS GETs had the exact no-paid marker; both owned command groups, all TLS server threads and paired source/output inventories closed. No private key was written, no SDK or Q source changed and no external request ran. Acceptance /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ios-openuri-store-repair-qa20-01/actual-ruby25-acceptance.json SHA256 56b7e2c3d3900ec7432354a39b5bf53c6ba4717be8323408f9e3685d63a79ea2; actual result c2c29f71de152851056db8b94c34e84365941a827ef5cf436a4e024f0b817339.
+
+Ordinary Node CI does not execute this Ruby fixture. Its two independent inventory/retained-stdin projection contracts are handed to Root for merge with the concurrent Windows repairs; complete Node verification and final source reconciliation are owned by Root after all writers close. The new Ruby source must be explicit in isolated snapshots and canonical LF attributes. Actual Appium83-per-platform inventory is unchanged. Complete source adoption, actual CocoaPods CDN/Pods replacement, generated-ios/Pods/SPM audit, Xcode and Android/iOS acceptance remain pending; the original failed native run stays failed.
+
+## QA22 — Bind Windows ACL mutation to the original native handle (October 30, 2026)
+
+Status: corrected source and scoped functional regressions verified; complete native/store release remains **NO-GO**. J20/M22; CI-COMMAND-01..04, IOS-RUBY-01..02 and the separate PowerShell13-case field inventory. The unpublished QA21 draft was superseded after peer review found a pre-mutation pathname race: a post-setter metadata refusal could occur after changing a replacement file. Preserve unpublished-native-handle-race-finding.json SHA256 6932f3944ca41ecd724f57b2eb02a77b8b9b7cb1d80c279b03a84ba08c5fe003 and all earlier checks; they are not acceptance of this corrected source.
+
+Before any ACL setter the production PowerShell program now compares actual GetFileInformationByHandle volume, unsigned64-bit file identity, birth/write times, size, link count and regular/non-reparse attributes against the Node-held descriptor, plus its retained byte digest. It holds a FileShare.Read handle excluding writes/deletion, applies only the reviewed runner command ACL, then repeats native identity, byte and strict ownership proofs. Windows Node24.15.0 libuv maps its device and inode to those same volume/file-index fields. Original append/configuration/TLS guards and the shared30-second CLI/5-second append limits remain unchanged. Independent source controls1531a0ca702092819376dbecf6aa122957adfd836f526b46672bcc33d95cea41 reconstruct the entire original CI/tooling semantic AST after removing only the enumerated new code and six tests; every original387 test body/helper remains unchanged.
+
+The combined current source passed focused6 and full393 unique Node cases with zero failure/skip/cancellation/todo. Preserve the first combined392P/1F fixture error3f79583a85a1c42de96f893c4329380b10349738a1bfe8f0d1f65fe6147e59c2: IOS-RUBY-02 had dereferenced an intentionally null BASE fixtureCA; only that new oracle changed to assert the independently known null policy values. Actual PowerShell7.6.9 executed the exact production Identity validator against13 independent ABI fixtures, including high-bit64-bit identities and wrong-volume/time/link/type/size refusals; no native Windows API or ACL setter was executed on this Mac. Final checks0990c5a41e6e7c4321625b07ef44614fedd2a5a2f6eac0cc882ba3384a474a4d bind CI2ff409ea/64731B, tooling81408748/407135B and durable PSaa3f26cc/6441B. The Windows workflow will execute that fixture under both Windows PowerShell5.1 and pwsh; actual Windows hardening, installed dependency audit and freshCI remain required. New Ruby/PowerShell fixtures have explicit LF attributes; Ruby test source is an explicit isolated-snapshot input.
+
+Public3b18 CI has completed:64successful checks, three failures (the Windows installed audit, PostgreSQL shard9 and its aggregate), and three skips including Playwright/staging. Receipt5b5377f06e40ba6d63a2dd53d0566be9f6286e1a526803ccc8c257b3b5778ea4. The PostgreSQL writer timed out with actual SQLSTATE55P03 under its unchanged2-second limit; observer connection acquisition/cleanup inside that interval is under separately controlled regression review, and historical causation remains inconclusive. No unchanged CI rerun is authorized as repair evidence. The skipped browser suite did not verify the prior notice-count repair. Complete measured source adoption, fresh image security, actual APK/Simulator builds and83cases/249phases independently on each OS remain pending.
+
+## QA23 — Release the auth fence before observer cleanup (October 30, 2026)
+
+Status: PostgreSQL fixture repair verified on actual PostgreSQL17; complete CI/native/store release remains **NO-GO**. M01/J01, US-002 suspension/session provenance. Preserve public3b18 shard9 failure ef10881be3d5b0c90de6bd9231d0bc108e1912f792b9e4f17fae1a71642d4452:116passed/1failed, writer SQLSTATE55P03 after the unchanged2-second lock timeout. That historical interval cannot be assigned solely to connection acquisition versus observer rollback. Authentication locking/product behavior was not changed.
+
+Both affected tests now open/prove the actual observer connection before the auth fence and retain it until after auth rollback and writer completion. The three membership/user/cutoff and two adjacent membership/user layouts preserve their directed pg_blocking_pids oracle, exact2-second SQL timeout,1-second start/observer bounds,3-second future bound and post-mutation authorization denials. Five new coupled regressions call the actual original bodies, return the original Future unchanged and delay only the exact observed connection rollback. They record completion at cleanup entry and always remove scoped hooks.
+
+Actual private old-body counterfactuals failed all5calls with native55P03 at the exact original future-result line; the Future retained that same error object and cleanup entered before it finished. The repaired complete two-module inventory passed38cases/114phases with zero failure/skip/cancellation; all5 added calls proved the observer ready before the fence and the writer complete before observer cleanup. Root independently checked exact receipts, inventories and outcomes. Acceptance 95d48b47cc8e95945ddae2778e4a397322b95185a6916f043ad85ecced502017; source-bound summarybcab1d0fadd2e81e521bdd049bd73ce77851e0121e0a4a06ec2c7ec799235fce and outputauditf6b43a2f7910444355dc55f518b499a65d6b2334cc549011b0b9008899139d68. Actual component103.324s;18717source observations/674809550bytes under unchanged20k/1GiB. All65ownedcommand groups closed, exact new container/volume absence was verified, retained backend data/network remained untouched and the existing empty system bridge returned empty.
+
+Two earlier pre-body attempts remain failed: private HOME hid Colima profile; explicit documented COLIMA_HOME fixed the actual control. The retained internal network then exposed no actual published port, so the next fresh scope used the independently empty existing default bridge with zero→exactownedCID→zero fences and both requested/actual loopback-port proofs. Its copied old audit filename was also corrected; no old receipt was overwritten. No unchanged database race was rerun to obtain green. Both repaired files pass Ruff and exact38-case collection. Fresh complete hosted CI, current APK/Simulator artifacts and full platform inventories still remain.
+
+
+## QA24 — Admit the official Gradle Plugin Portal artifact redirect (October 30, 2026)
+
+Status: actual Gradle transport repair verified; normal application configuration, APK and device acceptance remain open. PRD J20/M22; ANDROID-CDN-01/02. The current-source normal configure02 reached the real JVM and failed ANDROID_REDIRECT_OUTSIDE_REVIEWED_BASES. One bounded marked, no-follow HEAD observed the Foojay1.0.0 POM redirect to HTTPS plugins-artifacts.gradle.org; the separately retained official mirroring documentation corroborates that host. No redirected POM GET or unmarked provider request was used for diagnosis.
+
+The production initializer preserves all eight repository literals and every existing URI, marker, private authentication-copy, original redirect-verifier, default TLS, hostname, class-origin and affected-Download fence byte. It adds only the immutable official CDN redirect root, explicitly admits nine exact authority/authentication scopes, and tightens configured URL count10 to9. Unknown authorities, malformed URLs, arbitrary ports and mixed credentials remain refused. Root independently reversed the four exact substitutions to the original482d2c65 source hash.
+
+The complete real eight-phase Gradle fixture passed, including received GET/HEAD markers, same/changing-authority redirects, nine-authority constructor controls,12 invalid URI refusals, unknown CA/wrong hostname refusal and four pre-resolution affected-component/plugin refusals. It observed28 marked HTTP requests,11753 served bytes and30 connections. All27 owned command groups closed/reaped, all recorded PIDs were independently absent twice, server threads/descriptors closed and exact listener ports were absent. Source/output pairs passed; external-bootstrap composition7063 entries/454025975 bytes remains within the original20k/1GiB limits. Acceptance: gradle-qa118-header-fixture-01/maven-only-official-cdn-10/root-composed-actual-exit-acceptance-01.json SHA2565b30e7a089fedd470fb2a95b8fb6496e331747b7f3ad5e59815a35ddd96befcb under the native-end-to-end-20261028-01 mobile cache. This is a synthetic transport component, not application dependency-graph, APK or device proof.
+
+The first new fixture failed before HTTP because its reachability fence retained an older source/tree. Preserve failed MF9 receipt5bfb12621a8fd08f2d8862edbd5d77129e6feb8112bc8261370aa97a7909e574. The replacement changed only its fresh namespace/derived pins, two source/tree literals and one explicit current before-dispatch source label. Root compared all24 code/template/runtime files, and32 composed producer/consumer controls passed; no unchanged failed race was rerun for green.
+
+The original configure02 also retained five declared Gradle cache/lock timestamp changes as a failed immutable-source postflight. The replacement keeps complete public-file identities strict, permits only declared owned single-link regular generated files and charges their current sizes with the same1500-entry/512MiB derived cap.21 source-derived metadata controls passed. This private controller repair does not retrospectively accept the failed run. Two durable Node regressions were appended with every original393 tooling byte intact; their combined full execution is pending the remaining native source writers.
+
+
+## QA25 — Keep Android device transport in one reviewed profile (October 30, 2026)
+
+Status: offline producer/session/Files integration verified; actual current APK/emulator acceptance remains pending. PRD J20/M22. The previous Mac test harness fixed every consumer to emulator5584/ADB5038/Appium4725/system8202 and CaseOps_Pixel9_API36_arm64. A fresh exact listener check still found foreign adb PID96519 on5038; it was never stopped, queried as a test transport or adopted. The independently owned16KiB image/AVD had instead observed emulator5580, privateADB5040 and CaseOps_PR558_16K_20261028_03. Those historical OS observations are not current app or Appium proof.
+
+A frozen helper now admits exactly two whole profiles. It preserves the original tuple and adds the selected owned tuple5580/5040/4727/8204/CaseOps_PR558_16K_20261028_03. The new Appium/system ports are prospective policy values, separately checked free before preparation; only actual later listeners, installed binary, fresh boot identity and returned session capabilities can prove them. The producer requires the new actual AVD name, every session/ADB constructor rejects mixed profiles and global5037, and Files attestation still independently checks actual AVD, boot UUID, package UID and owned app/provider roots. No numeric range or unknown-serial fallback was introduced.
+
+Both complete existing unit modules passed the same63 unique cases (56 retained and7 new), zero failures/skips/cancellations/todo. They compose the real producer, exported plan/session validation and Files controller against explicit synthetic device transports; mixed ports, serials, capability aliases and absent/foreign/old AVDs refuse at the proper boundary. Original test bodies remain byte-identical; fixture defaults use independent original literals. Three new profile cases were moved verbatim into the existing selected module, preserving the canonical33-module inventory; the standalone precursor test file is not added. Source and157-file staged source pairs, owned process closure and independent PID absence passed within1253 observations/301379709 bytes. Final source handoff android-transport-profile-proposal-01/source-handoff-final-02.json SHA256b3131f5b4082922a1e817f71914a576faef3aabefa4e8a999193b1eb84021816 is beneath the source-draft-01/android-current-source-build-plan-01 mobile cache. The new colocated helper is explicit in harness/source inventories and LF checkout policy.
+
+The earlier zero-Node private constructor refusal and three-module precursor pass remain separate. This result proves no actual ADB command, boot, Appium session, user workflow, APK or store acceptance.
+
+## QA26 — Retain evidence before the PostgreSQL job deadline (October 30, 2026)
+
+Publicbc834 CI ended47successful jobs, one timed-out PostgreSQL shard25, its failed aggregate and two skipped browser/staging jobs. GitHub explicitly reported the original12-minute job limit; the job produced no uploaded shard25 artifact and its log blob was unavailable. The exact117 identities were derived from the complete same-head3740-case collection in the successful shard9 artifact. All117 have prior successful exact-case timings totalling239.788seconds; that does not explain the timeout or prove load imbalance. No shard reroute, longer test/SQL/Future limit or unchanged CI retry is used as a claimed repair.
+
+The workflow retains its12-minute job budget, adds a9-minute pytest-step cutoff so the existing always-upload step can run, and enables stack-only60-second faulthandler diagnostics. All31passing current PostgreSQL shards had pytest durations below540seconds (maximum503). The complete existing82-case sharding-contract module passed with every prior assertion retained plus the exact new timeout/argument checks. This improves diagnostic retention; it does not establish the historical incident cause or a completed replacement hosted run.
+
+The first isolated117-case diagnostic was INTERRUPTED when its agent ended and the owned tool parent closed. It left a23-dot prefix, a pytest internal BrokenPipeError and no final command042 outcome, source summary or global audit. None is full-shard acceptance or a product regression. Exact admitted PostgreSQL CID73048ddef073895ef8daea32c501a629b4e09d2517e5d19190430faa196fed82 and its uniquely owned volume were subsequently stopped/removed and independently proved absent; all7retained resources and both networks stayed unchanged, and the system bridge returned empty. Two failed recovery scopes (a deprecated stop warning and stopped-endpoint projection) remain retained; stop was not replayed. Final recovery source pairing matched the original input snapshot, and the standalone four-scope output audit measured4574 observations/121672350bytes. A persistent owner through execution and cleanup is required for the complete replacement diagnostic. Original interrupted global counters and acceptance remain incomplete.
+
+
+## QA27 — Transfer only reviewed local Expo SDK archives (October 30, 2026)
+
+Verdict: **Inconclusive for native build and release acceptance**; the private actual host-CLI transfer component is verified. PRD J20/M22. User story: the iOS build operator can consume the exact locked Expo precompiled module bytes already installed on the workstation without admitting arbitrary file URLs, disabling TLS or changing the SDK. Tests IOS-ARCHIVE-01..04 and ARCHIVE-01..08; the native inventory remains all83 cases/249 phases per platform.
+
+Preserve actual bc834 Pods05 failure c4820a23edc9719453e48a595bb69be5975abd9881cb9c935baf7ba5bf295eff, source fingerprint604dd9eee9007c9f1cd8c3348518b6fe81235fdb3790f755159390c7ada27d2c. Expo prebuild, Codegen, React Native/Hermes downloads/checksums and actual CocoaPods CDN/trunk addition passed. Installing ExpoFileSystem58.0.13 then reached the real precompiled-module file URI and refused IOS_HOST_HTTPS_DOWNLOAD. That failed run remains failed/incomplete; its separately scoped complete physical-output diagnostic b8bd05082473ca3a5cc97c73ac820c874f9a85a331329a93f62ac62520fdf895 does not turn the original integrated resource closure into a pass. No Xcode/Appium run or Podfile.lock completion is inferred.
+
+The narrow host repair adds a finite local-transfer family separately from the unchanged ordinary HTTPS curl validator and transport. All10 catalog archives (45,025,306 bytes, four exact package identities) and package manifests match members of already-cached official locked npm tarballs; provenance958cf332e71cdfe620df14364687b9bc5f0cd83ac796372d42529aa2f0424f11. Existing package licenses/notices are unchanged and no dependency or installed SDK was patched. Admission binds the mobile lock, Expo producer source, manifest and exact archive through verified descriptors, rejects URI aliases/traversal/hosts/unknown archives and transfers the retained verified buffer. An absent destination uses EXCL; an existing destination must be empty, owned, regular and single-link. The same descriptor is used for write/readback, source/target replacement refuses, original Error identity survives, buffers are cleared and no curl child is spawned for this family.
+
+Actual accepted Node24.15.0 executed the durable private CLI fixture with **8 cases/24 phases passed**,13 real iosHostCli invocations,0 actual children and0 HTTP requests. Both positive archive families, existing-empty/absent destinations, source replacement before and during write, target symlink/hardlink/replacement, unsafe URI/arguments, changed archive/manifest, Error identity and unchanged HTTPS routing passed. All3 owned groups, paired source/runtime and complete output inventories closed; composed2786 entries/467,627,064 bytes remained below20k/1GiB, canonical7.7924s and observed external16.0099s below30+30. Acceptance /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/ios-local-sdk-archive-repair-01/actual-cli8-acceptance.json SHA256 7aa860ca7d300921886abc794ec7052fd18bae0e951b21155b9e743e0ef1975b.
+
+Retain private attempts01/02 as prebody/prejournal fixture refusals (missing canonical query worker; omitted policy extent), and03 as7P/1F where the replacement fixture's write-only open was miscounted as a source read. The replacement observer counts every read-capable open including O_RDWR/r+/w+, excludes only known write-only opens, preserves the exact-one-read assertion and exercises both replacement branches. No helper or work bound was relaxed to make these controls pass.
+
+Ordinary Node CI runs four portable catalog/projection/inventory regressions and explicitly proves the POSIX refusal on Windows; it does not certify the Mac-only transfer fixture. The new runner must be included in the actual test-source snapshot and canonical LF attributes. Root integrated the exact implementation, canonical shell and durable fixture, then the complete current399 tooling cases passed with zero failures/skips/cancellations/todo. All393 earlier actual case identities are retained plus the2 Android CDN and4 iOS archive cases; source hashes matched after execution and canonical shell render equality passed. Functional combined checks: native-followup-combined-399-01/checks.json SHA256395f8993690902f67512c2196c7cb744234966829e445bc8ad7d2cffc61a83aa. Clean source publication/adoption, complete measured source, fresh Pods replay, independent physical ios/Pods/SPM audits, Xcode build and every Android/iOS UI case remain required. Camera hardware, biometric hardware/signing and verified HTTPS domain boundaries remain separately unverified; no case is silently filtered or counted passed.
+
+
+### 2026-10-30 — PR #558 PostgreSQL step-timeout regression
+
+Status: source repair verified; replacement hosted CI remains required. On a26a4cd, PostgreSQL shard6 reported all117 cases passing in530.65seconds, but the newly added nine-minute Actions step timed out. The step took550.462seconds through its terminal summary, including launcher/teardown time outside pytest’s reported clock. Preserve that failed run (41014802180/job123928596357); it is not a product assertion failure or proof that the original12-minute job budget was exceeded.
+
+Remove only the added step timeout and its two explanatory comments. Keep the original12-minute job, complete32-shard inventory, all assertion/query/lock/Future budgets, and faulthandler_timeout=60. The regression oracle rejects the actual nine-minute workflow (one expected failure), and the complete corrected sharding module passes82 cases with zero errors/skips. Root independently matched both exact tested candidate buffers before integrating them.
+
+The complete a26 hosted run ended65successes, two failures (shard6 and its aggregate), and three skips, including the browser suite and staging. Shard25 passed on a26; the original bc834 timeout remains unexplained and retained. A local117-case shard25 execution also produced117passing JUnit cases and351 passing reports, but its wrapper failed by misreading the canonical reconciler journal return as a statuses map. Keep that wrapper failure separate from independent artifact reconciliation; no unchanged database rerun is authorized merely to obtain a green wrapper.
+
+Native acceptance is still open. Actual iOS prebuild and Pods completed on a26, while its complete-output audit refused the20000-entry bound. Android configure03 refused an old private role path before the client JVM ran. These are scoped preparation results; neither is a current APK, Simulator app, full83-case device inventory or store archive.
+
+## QA28 — Android USB transport and local Gradle resources (October 30, 2026)
+
+Status: **source repairs verified; native acceptance remains open**. PRD J20/M22, US-MOB-01..08. Preserve the complete83-case/249-phase inventory independently for Android and iOS.
+
+Actual Android configure04 failed when ktfmt0.22.0 read its bundled ktfmt-version.txt through Gradle's text-resource factory: Gradle eagerly constructed an empty-auth HTTP connector even for the local JAR resource. The repair returns a connector that refuses all five I/O entry points before constructing an HTTP delegate. The existing marked credentials, repository, TLS, redirect and Download guards remain unchanged. Actual MF11 passed every original eight transport phases, the unchanged official JAR resource read, five blocked-I/O controls and three malformed-auth refusals. This is configuration-component evidence, not a resolved application graph or APK.
+
+The connected OnePlus was authorized through a separately owned ADB server. Read-only observations found Android16/API36, ARM64,4096-byte pages, an empty qemu property and a canonical USB path. No app, package, settings or data mutation was performed. Keep those observations separate from application acceptance and the required16384-byte emulator proof.
+
+An explicit usb-reverse recipe binds ADB5042/Appium4729/system8206, distinct HTTPS127.0.0.1 API/web origins, the QA package and matching configuration, receipt, seed, binary and returned-session identities. Legacy emulator tuples and iOS defaults remain unchanged. Phone privacy observations use the exact QA package's run-as sandbox; they never enable root. Permission/I/O/ambiguous stat failures cannot become absent-copy evidence. Physical layout observations recheck getconf and boot identity and bind the current result to both retained receipts across V1, Queue/Privacy and ClientExtensions. Physical4K or16K workflows do not certify the separate16K emulator inventory.
+
+The pinned local-transport.py helper is in the actual five-file Android admission snapshot, producer/consumer closure and Files fingerprint, with canonical LF Git attributes. Actual snapshot imports, missing/changed-helper refusals and descriptor-verified buffer staging are covered. Preserve the earlier missing-input/serializer preparation failures and the incompatible five-field physical test fixture; the final real four-field producer/consumer composition supersedes them.
+
+The integrated27-path functional Node run passed719/719 with zero failures/skips/cancellations/todo and retained every original399 case exactly once. All12 owned groups and Git/source/runtime/output pairs closed. Acceptance: /Users/sanjeevkumar/.cache/caseops-mobile/native-end-to-end-20261028-01/native-usb-gradle-functional-719-01/actual-exit-acceptance.json SHA25664621d575e636fc8a64ca6cba8f18f68029b6150fbd285462664751c85c03210. Independent complete Python components passed110 producer cases and23 admission cases; source buffers match the integration. These are source/fixture checks, not Appium passes.
+
+Parent dc3d026b5f1eeb87c5279ec348b15b2fb24ba5b1 completed all five hosted workflows successfully:68checks passed, two intentionally skipped, zero failures, including all32 PostgreSQL shards and the browser suite. This supersedes the retained step-timeout regression for that revision; a new source revision needs its own CI.
+
+The original configure04 cache-bound refusal and backend04 VM-bind failure remain failed. Fresh source-bound backend fixtures, actual Android configuration/APK, Simulator app, full native inventories and physical camera/biometric/signed-link checks remain required. No store archive or release-ready claim is made.
+
+## QA29 — Isolate the SDK's empty Maven fallback (November 1, 2026)
+
+Verdict: **Inconclusive for native build and release acceptance**. J20/M22, US-MOB-01..08. Actual MODEL14 reached Gradle configuration and failed at `expo-dev-launcher`'s `mavenLocal()` declaration; APK compilation was unreached. The original URI was not logged. A separate pinned Gradle9.4.1 locator execution proved that the same fresh-HOME recipe selects its absent `.m2/repository`, with no Maven settings or overrides. This is mechanism evidence, not an observation of the original failed URI.
+
+The host role now captures a canonical, owned, empty0700 HOME, rejects the operating-system operator home and carries its identity and namespace in the verified role policy. Both Gradle entry points produce a bounded witness. The marker admits only that exact absent repository, rechecks the directory and namespace, and rejects settings, symlinks, overrides and foreign identities. Existing node_modules/Gradle roots, five JVM properties, HTTP marker, TLS, redirects and download guards remain unchanged.
+
+The complete tooling inventory passed422 unique cases with zero failures/errors/skips/cancellations/todo; every earlier419 case identity remains exactly once and in order. Receipt `android-empty-maven-full-tooling-root-02-acceptance.json`, SHA256175d956c47033633d199d84e1f1303d4f8880472efdbbbdca58a33c5a5b19a0d. Retain the preceding422 run's three failed historical byte projections. The correction removes only the new hash-pinned Maven layer in those three named projections; their original digest constants and required/forbidden assertions are unchanged.
+
+Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
+
+These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.

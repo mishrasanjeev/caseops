@@ -69,6 +69,7 @@ def _execute(base_url: str, token: str, rows: list[dict], timeout: float) -> lis
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {token}",
+                "X-CaseOps-Automated-Test": "no-paid-providers",
             },
         )
         try:

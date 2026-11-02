@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ScrollView, Text, TextInput } from "react-native";
+import { Keyboard, ScrollView, Text } from "react-native";
 import { NativeButton } from "../../components/NativeControls";
 import { Empty, RecordRow, ResourceView } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
+import { StableTextInput } from "../../components/StableTextInput";
 import { displayDay } from "../../domain/contracts";
 import type { MatterRef } from "../../domain/contracts";
 import type { Repository } from "../../domain/repository";
@@ -26,6 +27,13 @@ export function MattersScreen({
     (signal) => repository.matters(query, cursor, signal),
     active,
   );
+  const search = () => {
+    // Results render below the field; leave them visible after submitting.
+    Keyboard.dismiss();
+    setCursors([null]);
+    setQuery(input.trim());
+    page.reload();
+  };
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
@@ -41,7 +49,7 @@ export function MattersScreen({
       <Text style={styles.label}>
         Search permitted matter identifiers or title
       </Text>
-      <TextInput
+      <StableTextInput
         testID="matter-search"
         accessibilityLabel="Search matters"
         value={input}
@@ -50,21 +58,17 @@ export function MattersScreen({
         placeholder="Matter, case, filing or CNR"
         placeholderTextColor={colors.muted}
         returnKeyType="search"
-        onSubmitEditing={() => {
-          setCursors([null]);
-          setQuery(input.trim());
-          page.reload();
-        }}
+        // Identifiers are codes: shift and correction would rewrite them.
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        onSubmitEditing={search}
         style={styles.field}
       />
       <NativeButton
         label="Search"
         testID="matter-search-submit"
-        onPress={() => {
-          setCursors([null]);
-          setQuery(input.trim());
-          page.reload();
-        }}
+        onPress={search}
         secondary
       />
       <ResourceView resource={page.resource} reload={page.reload}>

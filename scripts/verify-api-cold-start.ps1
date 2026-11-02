@@ -125,7 +125,7 @@ try {
     Invoke-Docker @('start', $Scanner, $Api) | Out-Null
     # Internal networks deliberately have no published host route. Probe real
     # loopback HTTP inside the container, without adding an Internet-capable NIC.
-    $HealthProbe = 'import json,urllib.request; response=urllib.request.urlopen("http://127.0.0.1:8000/api/health",timeout=1); body=json.load(response); assert body["status"]=="ok"; print(json.dumps(body))'
+    $HealthProbe = 'import json,urllib.request; request=urllib.request.Request("http://127.0.0.1:8000/api/health",headers={"X-CaseOps-Automated-Test":"no-paid-providers"}); response=urllib.request.urlopen(request,timeout=1); body=json.load(response); assert body["status"]=="ok"; print(json.dumps(body))'
     $ProbeOutput = Invoke-Docker @('exec', $Api, 'python', '/tmp/cold-upload-http.py', 'wait-portfolio', $StartedEpoch)
     $ColdResult = $ProbeOutput | ConvertFrom-Json
     $ProbeOutput | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'cold-portfolio-http.json')

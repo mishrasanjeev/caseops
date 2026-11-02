@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from sqlalchemy import Integer, and_, case, cast, func, literal, select
+from sqlalchemy import Integer, and_, case, cast, func, literal, select, tuple_
 
 from caseops_api.db.models import (
     AuditEvent,
@@ -11,6 +11,10 @@ from caseops_api.db.models import (
     IpTrademarkParticularVersion,
 )
 from caseops_api.services.ip_coverage_read import _TERMINAL_DOCKET_STATUSES
+from caseops_api.services.ip_import_source_status import (
+    SOURCE_STATUS_ALIASES,
+    source_status_key,
+)
 from caseops_api.services.ip_portfolio_source import _imported_source_row
 
 
@@ -64,30 +68,70 @@ def current_dates(session, *, version, docket_id, imported_proven=None):
     return result
 
 
-def imported_proof_expression():
+def imported_proof_expression(*, company_id=None):
     source_id = IpTrademarkParticularVersion.representation_json["portfolio_import"][
         "source_row_id"
     ].as_string()
-    return (
+    tenant_id = IpDocketRecord.company_id if company_id is None else company_id
+    # The import ID is a primary key, so its scalar read already selects at
+    # most one row. Keep this a scalar rather than a hashable EXISTS.
+    source_row = (
         select(IpImportRow.id)
+        .where(IpImportRow.id == source_id, IpImportRow.company_id == tenant_id)
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .scalar_subquery()
+        .is_not(None)
+    )
+    seek_keys = (
+        AuditEvent.target_type,
+        AuditEvent.target_id,
+        AuditEvent.company_id,
+        AuditEvent.ip_docket_id,
+        AuditEvent.action,
+        AuditEvent.id,
+    )
+    # Position at the upper edge of the full five-field proof identity, then take
+    # one predecessor. Omitting the ID from the bound includes every duplicate
+    # proof ID without a UUID sentinel. A forward miss can walk a high NULL
+    # suffix; the reverse start stays below it. Reject every wrong predecessor
+    # through the complete identity policy outside the LIMIT.
+    candidate = (
+        select(
+            AuditEvent.id,
+            AuditEvent.company_id,
+            AuditEvent.target_id,
+            AuditEvent.ip_docket_id,
+            AuditEvent.action,
+            AuditEvent.target_type,
+        )
         .where(
-            func.length(source_id) == 36,
-            IpImportRow.id == source_id,
-            IpImportRow.company_id == IpDocketRecord.company_id,
-            select(AuditEvent.id)
-            .where(
-                AuditEvent.company_id == IpDocketRecord.company_id,
-                AuditEvent.action == "ip_docket.source_materialized",
-                AuditEvent.target_type == "ip_import_row",
-                AuditEvent.target_id == IpImportRow.id,
-                AuditEvent.ip_docket_id == IpDocketRecord.id,
-            )
-            .correlate(IpDocketRecord, IpImportRow)
-            .exists(),
+            tuple_(*seek_keys[:5]) <= tuple_(
+                case((source_id.is_not(None), "ip_import_row"), else_=None),
+                source_id,
+                tenant_id,
+                IpDocketRecord.id,
+                "ip_docket.source_materialized",
+            ),
         )
         .correlate(IpDocketRecord, IpTrademarkParticularVersion)
-        .exists()
+        .order_by(*(column.desc() for column in seek_keys))
+        .limit(1)
+        .subquery("ip_materialized_proof_seek")
     )
+    materialized = (
+        select(candidate.c.id)
+        .where(
+            candidate.c.company_id == tenant_id,
+            candidate.c.target_id == source_id,
+            candidate.c.ip_docket_id == IpDocketRecord.id,
+            candidate.c.action == "ip_docket.source_materialized",
+            candidate.c.target_type == "ip_import_row",
+        )
+        .correlate(IpDocketRecord, IpTrademarkParticularVersion)
+        .scalar_subquery()
+        .is_not(None)
+    )
+    return and_(func.length(source_id) == 36, source_row, materialized)
 
 
 def valid_iso_date_expression(raw):
@@ -150,7 +194,7 @@ def current_date_facts(candidates, *, company_id):
             IpDocketRecord.id.label("docket_id"),
             IpTrademarkParticularVersion.id.label("version_id"),
             IpTrademarkParticularVersion.representation_json.label("data"),
-            imported_proof_expression().label("import_proven"),
+            imported_proof_expression(company_id=company_id).label("import_proven"),
         )
         .select_from(IpDocketRecord)
         .join(scoped, scoped.c.docket_id == IpDocketRecord.id)
@@ -192,10 +236,23 @@ def current_date_facts(candidates, *, company_id):
 
 
 def page_date_details(session, *, company_id, docket_ids):
+    """The canonical ``current_dates`` record for each docket on a page."""
+
+    return page_source_details(session, company_id=company_id, docket_ids=docket_ids)[0]
+
+
+def page_source_details(session, *, company_id, docket_ids):
+    """One whole-proof read per page: canonical dates and declared source status.
+
+    The date record is exactly ``current_dates`` under the SQL proof. The
+    declared source Status (B4-ADJ-11) is not a date fact, so it is returned
+    beside the record, gated by the same proof, instead of inside it.
+    """
+
     if not docket_ids:
-        return {}
+        return {}, {}
     rows = session.execute(
-        select(IpTrademarkParticularVersion, imported_proof_expression())
+        select(IpTrademarkParticularVersion, imported_proof_expression(company_id=company_id))
         .join(
             IpDocketRecord,
             and_(
@@ -205,10 +262,35 @@ def page_date_details(session, *, company_id, docket_ids):
             ),
         )
         .where(IpDocketRecord.company_id == company_id, IpDocketRecord.id.in_(docket_ids))
-    )
-    return {
+    ).all()
+    dates = {
         version.docket_id: current_dates(
             session, version=version, docket_id=version.docket_id, imported_proven=proven
         )
         for version, proven in rows
     }
+    statuses = {version.docket_id: _declared_status(version, proven) for version, proven in rows}
+    return dates, statuses
+
+
+# Longest source Status wording shown back to the lawyer.
+SOURCE_STATUS_TEXT_MAX = 120
+
+
+def _declared_status(version, proven):
+    """The import's declared source status (B4-ADJ-11), unverified legal state.
+
+    ``source_status_text`` is the wording the source used; ``source_declared_status``
+    is its recognised key, or None when the wording is not recognised. Imports
+    made before the mapping kept only the wording, so the key is derived from it.
+    """
+
+    imported = (version.representation_json or {}).get("portfolio_import")
+    if not proven or not isinstance(imported, dict):
+        return {"source_declared_status": None, "source_status_text": None}
+    raw = imported.get("source_status")
+    text = " ".join(raw.split())[:SOURCE_STATUS_TEXT_MAX] if isinstance(raw, str) else ""
+    declared = imported.get("declared_status")
+    if declared not in set(SOURCE_STATUS_ALIASES.values()):
+        declared = source_status_key(text) if text else None
+    return {"source_declared_status": declared, "source_status_text": text or None}

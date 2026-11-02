@@ -976,7 +976,7 @@ def test_ip_assignment_writers_take_membership_fence_before_parent_locks() -> No
 
     contracts = [
         (
-            ip_operations.create_ip_docket,
+            ip_operations._create_ip_docket_record,
             "lock_company_memberships_for_assignment",
             "with_for_update",
         ),

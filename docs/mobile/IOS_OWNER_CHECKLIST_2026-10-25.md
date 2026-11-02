@@ -6,7 +6,22 @@ This is an owner action checklist, not a test receipt or closure of all forty
 MOB groups. Follow the [Mac runbook](../../scripts/mobile/MACBOOK_RUNBOOK.md);
 do not execute its gated steps before their blockers are resolved.
 
-## Evidence Boundary
+## Superseding 26 October status
+
+Latest source update: source-gates-12 verifies348 mobile tests;533 tooling cases/531 pass/two Windows-only skips;96 Python; selected API124 pass/five platform skips;2022 web tests with real coverage thresholds;8 actual built-browser cases and both builds/types. Guarded HTTPS production configuration is prepared, not signed/deployed/association-verified. Android753 APK/static16KiB and preserved API/web receipts are historical after this source update; final matching iOS/Android builds and40 cases each remain pending. Earlier dated counts/receipts below are retained history; STORE_RELEASE_2026-10-26.md has the current evidence map.
+
+
+The Windows-only25 October checklist and unchecked case table below are retained historical handoff material; their `NOT RUN` labels do not erase later actual Mac executions. Current evidence and release blockers are maintained in [STORE_RELEASE_2026-10-26.md](STORE_RELEASE_2026-10-26.md).
+
+An older signed Simulator app passed23/23 core cases. The later host-fixed8Tddh13c app completed the full17 Files inventory with15/17 calls passed and two genuine embedded-reader failures (FILES09 PDF page readiness, FILES10 image zoom acknowledgement), all51 phases/17 sessions retained. Its five uploads/source-byte admissions,13 privacy boundaries, six-cohort original preservation, zero private copies and final signed-out restart passed. Runtime `Function.toString()` under the actual pinned Hermes produced a bytecode placeholder; the generated static browser-script replacement is source/browser/Hermes-control verified and awaits a new canonical signed app and actual17 Files/fresh23 core replay. Android requires its own matching rebuilt23core/17Files/privacy execution; no platform export or older native pass substitutes for it.
+
+Latest integrated source gates:523 tooling collected/521 passed/two existing Windows-only skips; mobile346/346 plus TypeScript and asset check; Python96/96; selected API72 passed/one Windows curl.exe skip plus Ruff; web1979/1979 with build and both type-checks. Exact logs and the retained initial failures are under `pr558-release-20261026/canonical-final-10/`. Four high Expo/node-forge audit entries remain a release blocker. No store upload, release approval or current40-case native certification is recorded.
+
+A completed required hosted API shard11/13 on older published762980ab is failed:14 failures,876 passes,452 skips, including `tests/test_public_lead_notifications_20261021.py`. Incoming-main marker/transport expectations remain under investigation; local scoped passes are not replacement hosted acceptance. Preserve that failed head and require fresh canonical checks.
+
+For the next canonical run, use the current Mac runbook and actual immutable build/backend/owner/consent/MFA references. Preserve DB/uploads/keys/CA/routes and all historical cohorts, install the new QA app in place, use fresh core member/negative targets, and retain failed/unknown mutations without replay. Historical unsigned-build and inferred-consent instructions below must not override the current ad-hoc signature verification or observed no-alert/consent recipe.
+
+## Historical Evidence Boundary
 
 | Item                                | Evidence and limit                                                                                                |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -44,8 +59,8 @@ Preserve Mac's actual inventory and its two explicit Windows-only skips.
       Desktop prerequisites/terms. No silent license acceptance, global developer
       directory switch, new paid/cloud service or unrelated service shutdown.
 - [ ] Install with `apps/mobile`'s own `npm ci --include=dev` and lock; it is not
-      a root workspace. Keep Expo 58.0.19, RN 0.88.0, React 19.3.0 and `@expo/ui`
-      58.0.23. iOS controls are the real SwiftUI adapter, not Compose or DOM controls.
+      a root workspace. Keep Expo 58.0.21, RN 0.88.0, React 19.3.0 and `@expo/ui`
+      58.0.25. iOS controls are the real SwiftUI adapter, not Compose or DOM controls.
 - [ ] Verify WebView 14.0.1, PDF.js 6.4.299 asset hashes/notices and
       `prepare-viewer-assets.mjs --check`; run current type/component/tooling checks.
       Do not rewrite locks, repair dependencies automatically or fetch viewer CDNs.
@@ -142,7 +157,7 @@ performed; external commands in portability tests are mocks.
 - [ ] Install/launch only that reported `.app` on the selected Simulator. See
       genuine CaseOps/SwiftUI controls, not a development launcher. Verify unchanged
       `caseops://oauth/callback` goes to this QA app, not a second dev installation.
-- [ ] Owner-local Appium 3.8.0, WebdriverIO 10.1.0 and XCUITest 12.20.0 pass
+- [ ] Owner-local freshly audited Appium 3.9.0, WebdriverIO 10.1.0 and XCUITest 12.22.2 pass
       doctor and actual WDA/Xcode/runtime checks. No project lock edit, relaxed
       security, distribution signing or cloud Mac. Tool versions are not a pass.
 

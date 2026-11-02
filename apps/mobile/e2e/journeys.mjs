@@ -3,7 +3,7 @@ import { authenticate } from './browser-handoff.mjs';
 import { FixtureUnavailable, ownerControl, SEARCH_KINDS } from './fixture-contract.mjs';
 import { absent, backgroundAndResume, click, dispatchNativeClick, expectText, find, findQuery, home, input, read, restart, selector, swipe, visible } from './native-ui.mjs';
 import { localJson } from './support.mjs';
-import { validateTraffic } from './traffic.mjs';
+import { validateTraffic, withoutPublicCompatibilityReads } from './traffic.mjs';
 import { validateAuthorizationTraffic } from './mfa.mjs';
 import { configuredSessionDeleteAdmission, proveCurrentSessionDeletion } from './session-admission.mjs';
 
@@ -202,7 +202,8 @@ export function noNotePostRetried(requests) {
 }
 
 export function signedOutResumeTraffic(requests) {
-  assert.equal(requests.filter((request) => request.route.startsWith('/api/auth/')).length, 0, 'SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION');
+  assert.equal(withoutPublicCompatibilityReads(requests).filter((request) => request.route.startsWith('/api/auth/')).length, 0,
+    'SIGNED_OUT_RESUME_ATTEMPTED_AUTHENTICATION');
 }
 
 export const scenarios = [
@@ -299,9 +300,13 @@ export const scenarios = [
   { id: 'NATIVE-12', run: async (context) => {
     const before = await traffic(context), { task, draft } = context.fixture.work;
     await home(context, 'work');
-    await dispatchNativeClick(context, await row(context, task), 'id', `today-item-${task.kind}-${task.id}`);
+    // Work's default Task queue lists server-paged tasks; a task opens its own
+    // fresh detail, and Open Matter then loads that task's source workspace.
+    const queued = `queue-task-${task.id}`;
+    await dispatchNativeClick(context, await find(context, 'id', queued, { scroll: true }), 'id', queued);
+    assert.equal(await read(context, 'id', 'queue-task-title'), task.title, 'WORK_WRONG_TASK');
+    await click(context, 'id', 'queue-open-matter', { scroll: true });
     assert.equal(await read(context, 'id', 'matter-code'), task.matter.identityLabel, 'WORK_WRONG_SOURCE');
-    await expectText(context, task.title);
     if (draft.entry === 'reviews') {
       await home(context, 'work');
       await click(context, 'text', 'Reviews');

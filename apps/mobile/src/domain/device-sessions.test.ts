@@ -421,6 +421,7 @@ test("MOB-04/05 real NativeSession/JsonTransport integration purges current auth
     "https://caseops.invalid",
     false,
     true,
+    { platform: "ios", version: "0.1.0" },
     async (url, init) => {
       calls.push({ url, init });
       if (url.endsWith("/token")) return Response.json(grant);

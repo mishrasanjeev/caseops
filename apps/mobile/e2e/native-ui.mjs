@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 
+export const IOS_SWIPE_SETTLE_MS = 300;
+export const IOS_KEYBOARD_READY_MS = 5000;
+export const IOS_FIRST_KEY_SETTLE_MS = 1000;
+const IOS_KEYBOARD = '-ios predicate string:type == "XCUIElementTypeKeyboard"';
+
 export function selector(platform, kind, value) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
   assert.ok(typeof value === 'string' && value.length > 0 && value.length <= 4000, 'NATIVE_LOCATOR_VALUE_REQUIRED');
@@ -125,6 +130,10 @@ export async function swipe(context, direction = 'down') {
     { type: 'pointerMove', duration: 0, x, y: direction === 'down' ? bottom : top },
     { type: 'pointerDown', button: 0 },
     { type: 'pointerMove', duration: 350, x, y: direction === 'down' ? top : bottom },
+    // Lifting a moving finger flings an iOS ScrollView: a short page jumps to
+    // its end and carries a row just below the fold under the fixed header, so
+    // no gesture ever leaves it visible. Hold still before lifting.
+    ...(context.platform === 'ios' ? [{ type: 'pause', duration: IOS_SWIPE_SETTLE_MS }] : []),
     { type: 'pointerUp', button: 0 },
   ] }]);
   await context.driver.releaseActions();
@@ -135,13 +144,32 @@ export async function find(context, kind, value, { scroll = false, scrollDirecti
   return findQuery(context, query, { scroll, scrollDirection, controlId: kind === 'id' ? value : undefined });
 }
 
+// Android reports a row behind the app's bottom tab bar as displayed, and a
+// tap at its center then lands on a tab (FILES-01 opened Calendar). The bar is
+// absent on viewer/note/quick-work routes, and nothing else in the window
+// draws over it, so a non-tab match centered in its band is not yet visible.
+export async function androidBehindTabBar(context, element) {
+  if (context.platform !== 'android' || typeof context.driver.getElementRect !== 'function'
+    || typeof element?.elementId !== 'string') return false;
+  if (/^tab-/.test(String(await element.getAttribute?.('resource-id') ?? ''))) return false;
+  const tabs = [];
+  for (const tab of await context.driver.$$(selector('android', 'id', 'tab-today'))) if (await tab.isDisplayed()) tabs.push(tab);
+  if (tabs.length !== 1) return false;
+  const bar = await context.driver.getElementRect(tabs[0].elementId), rect = await context.driver.getElementRect(element.elementId);
+  assert.ok([bar.y, rect.y, rect.height].every(Number.isFinite), 'NATIVE_TAB_BAR_GEOMETRY_REQUIRED');
+  // The bar's border and top padding sit just above the tab controls.
+  return rect.y + rect.height / 2 >= bar.y - ANDROID_TAB_BAR_EDGE_PX;
+}
+export const ANDROID_TAB_BAR_EDGE_PX = 16;
+
 export async function findQuery(context, query, { scroll = false, scrollDirection, controlId } = {}) {
   assert.ok(scrollDirection === undefined || scroll && ['up', 'down'].includes(scrollDirection), 'VALID_NATIVE_SCROLL_DIRECTION_REQUIRED');
   nativeAction(context, 'find', controlId ? 'id' : undefined, controlId);
   let element;
   for (let attempt = 0; attempt <= (scroll ? 9 : 0); attempt++) {
     try {
-      await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query)),
+      await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query))
+        && !await androidBehindTabBar(context, element),
         { timeout: scroll ? 1500 : 10000, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
       return element;
     } catch (error) {
@@ -174,7 +202,27 @@ export async function read(context, kind, value, options) {
 export async function input(context, kind, value, text, options) {
   const element = await find(context, kind, value, options);
   nativeAction(context, 'input', kind, value);
-  await element.setValue(text);
+  if (context.platform !== 'ios') {
+    await element.setValue(text);
+    return;
+  }
+  // XCUITest types as soon as focus is requested, and the keyboard relays out
+  // after its first keystroke; keys sent during either transition are dropped
+  // ("MOBILE-LOCAL-001" reached the API as q=M-LOCAL-001). Focus, wait for the
+  // keyboard, type the first character and let the keyboard settle before the
+  // rest, then refuse a field whose text differs rather than act on it.
+  await dispatchNativeClick(context, element, kind, value);
+  await context.driver.waitUntil(async () => !!await visible(context.driver, IOS_KEYBOARD),
+    { timeout: IOS_KEYBOARD_READY_MS, interval: 150, timeoutMsg: 'NATIVE_KEYBOARD_NOT_READY' });
+  await element.clearValue();
+  // An empty field reports its placeholder as value; clearing is the whole entry.
+  if (!text) return;
+  await element.addValue(text.slice(0, 1));
+  await context.driver.waitUntil(async () => await element.getAttribute('value') === text.slice(0, 1),
+    { timeout: IOS_KEYBOARD_READY_MS, interval: 150, timeoutMsg: 'NATIVE_INPUT_FIRST_KEY_NOT_ACCEPTED' });
+  await context.driver.pause(IOS_FIRST_KEY_SETTLE_MS);
+  if (text.length > 1) await element.addValue(text.slice(1));
+  assert.equal(await element.getAttribute('value'), text, 'NATIVE_INPUT_VALUE_MISMATCH');
 }
 export async function expectText(context, text, options = { scroll: true }) { await find(context, 'text', text, options); }
 export async function absent(context, kind, value) {
@@ -216,11 +264,29 @@ async function iosHomeScrollVisible(driver, tab) {
 export async function home(context, tab) {
   await click(context, 'id', `tab-${tab}`);
   for (let depth = 0; depth <= 4; depth++) {
-    if (await visible(context.driver, selector(context.platform, 'id', `screen-${tab}`))) return;
-    if (context.platform === 'ios' && await iosHomeScrollVisible(context.driver, tab)) return;
+    if (await homeOrBack(context, tab) === 'home') return;
     assert.ok(depth < 4, 'NATIVE_HOME_STACK_BOUND');
     await click(context, 'id', 'back');
   }
+}
+// A Back transition can briefly show neither the home marker nor a further
+// Back. Settle on one of them under the normal lookup bound; requiring another
+// Back immediately failed Android NATIVE-08 once the list had already arrived.
+async function homeOrBack(context, tab) {
+  let state, terminal;
+  await context.driver.waitUntil(async () => {
+    try {
+      if (await visible(context.driver, selector(context.platform, 'id', `screen-${tab}`))) state = 'home';
+      else if (context.platform === 'ios' && await iosHomeScrollVisible(context.driver, tab)) state = 'home';
+      else if (await visible(context.driver, selector(context.platform, 'id', 'back'))) state = 'back';
+      return !!state;
+    } catch (error) {
+      // Leave the polling loop; preserve ambiguity/proof refusals unchanged.
+      terminal = error; return true;
+    }
+  }, { timeout: 10000, interval: 150, timeoutMsg: 'NATIVE_HOME_STATE_NOT_READY' });
+  if (terminal) throw terminal;
+  return state;
 }
 export async function restart(context) {
   nativeAction(context, 'restart');

@@ -326,6 +326,10 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(
         # Prove identity-map synchronization as well as fresh-session persistence.
         timing.phase = "cache_prime"
         cached = session.get(PrivateIndexProjection, rows[0]["id"])
+        cached_output = session.get(PrivateSavedOutputAccess, outputs[0]["id"])
+        cached_prior_lock = session.get(PrivateSavedOutputAccess, prior_locked_output["id"])
+        cached_untouched = session.get(PrivateIndexProjection, untouched[0]["id"])
+        session.expire(cached_output, ["state", "locked_reason"])
         event.listen(pg_engine, "before_cursor_execute", capture)
         try:
             started = monotonic()
@@ -347,6 +351,11 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(
             assert result.status == "applied"
             assert cached.is_tombstoned and cached.content_text == ""
             assert cached.embedding_json is None
+            assert cached_output.state == "locked"
+            assert cached_output.locked_reason == "source_revoked"
+            assert cached_prior_lock.locked_reason == "prior_closure"
+            assert cached_prior_lock.locked_at == prior_locked_at
+            assert not cached_untouched.is_tombstoned
             timing.phase = "critical.commit"
             timing.commit_start_ns = monotonic_ns()
             session.commit()
@@ -389,6 +398,11 @@ def test_large_event_uses_one_set_update_without_private_byte_hydration(
         many for sql, many in statements if sql.startswith("UPDATE private_index_projections")
     )
     assert len(statements) <= 18, "SQL work must not scale with projection count."
+    assert all(
+        "content_text" not in sql.partition("RETURNING")[2]
+        and "embedding_json" not in sql.partition("RETURNING")[2]
+        for sql, _many in statements
+    ), "Streaming invalidation may return identities, never retained private bytes."
 
     timing.sql_assertions_passed = True
     timing.phase = "verification"

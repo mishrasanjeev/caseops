@@ -45,7 +45,7 @@ from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.compliance_participants import (
     ComplianceParticipantFenceError,
     _notification_context,
-    _recipient_memberships,
+    captured_compliance_notification_recipients,
     lock_compliance_participants,
 )
 from caseops_api.services.compliance_tail_protocol import (
@@ -281,18 +281,14 @@ def _notify_review_required(
         )
     except MatterNotOperationalError:
         return
-    context = _notification_context(
+    context, recipients = captured_compliance_notification_recipients(
         session,
         matter=matter,
         actor_membership_id=actor_membership_id,
     )
     if context is None:
         return
-    for recipient in _recipient_memberships(
-        session,
-        matter=matter,
-        actor_membership_id=actor_membership_id,
-    ):
+    for recipient in recipients:
         enqueue_notification_delivery_intent(
             session,
             context=context,
@@ -322,19 +318,15 @@ def _notify_extraction_failure(
         )
     except MatterNotOperationalError:
         return
-    context = _notification_context(
-        session,
-        matter=matter,
-        actor_membership_id=actor_membership_id,
-    )
-    if context is None:
-        return
-    for recipient in _recipient_memberships(
+    context, recipients = captured_compliance_notification_recipients(
         session,
         matter=matter,
         actor_membership_id=actor_membership_id,
         include_admins=True,
-    ):
+    )
+    if context is None:
+        return
+    for recipient in recipients:
         enqueue_notification_delivery_intent(
             session,
             context=context,

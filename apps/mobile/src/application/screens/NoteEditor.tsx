@@ -4,11 +4,11 @@ import {
   Platform,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { NativeButton } from "../../components/NativeControls";
 import { colors, styles } from "../../components/theme";
+import { StableTextInput } from "../../components/StableTextInput";
 import type { Matter } from "../../domain/contracts";
 import { createNoteSubmission, verifySavedNote } from "../../domain/repository";
 import type { NoteSaveResult, Repository } from "../../domain/repository";
@@ -118,7 +118,7 @@ export function NoteEditor({
           </>
         )}
         <Text style={styles.label}>Internal note</Text>
-        <TextInput
+        <StableTextInput
           testID="note-input"
           accessibilityLabel="Internal note"
           value={body}

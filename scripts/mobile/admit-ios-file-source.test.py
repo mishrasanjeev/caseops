@@ -1,7 +1,6 @@
 """Exact source admission boundaries; mocks cannot certify a native upload."""
 
 import argparse
-from contextlib import contextmanager
 import copy
 import hashlib
 import importlib.util
@@ -165,13 +164,14 @@ class Admissions(unittest.TestCase):
         workspace = copy.deepcopy(self.workspace)
         if bad_workspace:
             workspace["attachments"][0]["sha256_hex"] = "d" * 64
+        case = self
         class Client:
             headers = {"Authorization": "unit-only-never-output"}
-            def __enter__(inner): return inner
-            def __exit__(inner, *_): pass
-            def get(inner, path):
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def get(self, path):
                 actions.append(path)
-                return {"release_sha": self.core["backendSha"], "revision": self.core["backendRevision"]} if path == "/api/build" else workspace
+                return {"release_sha": case.core["backendSha"], "revision": case.core["backendRevision"]} if path == "/api/build" else workspace
         def login(_http, _credentials):
             actions.append("protected-login")
             return {"company": {"id": self.seed["companyId"]}, "membership": {"id": self.seed["membershipId"], "role": "owner"}}

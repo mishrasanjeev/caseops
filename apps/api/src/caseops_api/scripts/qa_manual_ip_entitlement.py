@@ -7,6 +7,8 @@ import json
 
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.qa_manual_ip_entitlement import (
+    ENTITLEMENT_SETS,
+    IP_WORKSPACE_SET,
     QaManualIpGrantError,
     grant_qa_manual_ip_entitlement,
     inspect_qa_manual_ip_entitlement,
@@ -26,6 +28,12 @@ def main(argv: list[str] | None = None) -> int:
         command = commands.add_parser(mode)
         command.add_argument("--company-id", required=True)
         command.add_argument("--subscription-id", required=True)
+        # Absent means the original ip_workspace grant and its schema-1 receipt.
+        command.add_argument(
+            "--entitlement-set",
+            choices=sorted(ENTITLEMENT_SETS),
+            default=IP_WORKSPACE_SET,
+        )
         if mode == "grant":
             command.add_argument("--expected-before-sha256", required=True)
             command.add_argument("--operation-id", required=True)
@@ -39,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
                     session,
                     company_id=args.company_id,
                     subscription_id=args.subscription_id,
+                    entitlement_set=args.entitlement_set,
                 )
             else:
                 receipt = grant_qa_manual_ip_entitlement(
@@ -47,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
                     subscription_id=args.subscription_id,
                     expected_before_sha256=args.expected_before_sha256,
                     operation_id=args.operation_id,
+                    entitlement_set=args.entitlement_set,
                 )
         output = receipt_dict(receipt)
         exit_code = 0

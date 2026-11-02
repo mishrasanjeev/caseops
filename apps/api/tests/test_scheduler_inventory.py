@@ -20,7 +20,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 11
+    assert len(inventory["jobs"]) == 12
     document_job = next(
         job for job in inventory["jobs"] if job["run_job_name"] == "caseops-document-processing"
     )
@@ -49,6 +49,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "caseops-judge-mapping-refresh",
         "caseops-document-processing",
         "caseops-court-sync",
+        "caseops-portfolio-export-recovery",
     }
     authority_job = next(
         job
@@ -171,7 +172,7 @@ def test_activity_report_reuses_its_scheduler_at_0730_with_four_private_recipien
         "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL="
         + report["bootstrap"]["environment"]["CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"]
     ) in environment.split(",")
-    assert len(inventory["jobs"]) == 11
+    assert len(inventory["jobs"]) == 12
 
 
 def test_release_hold_rejects_an_unknown_scheduler() -> None:
@@ -700,7 +701,7 @@ def test_reconcile_grants_each_job_invoker_before_its_scheduler(monkeypatch) -> 
 
     _reconcile_through_exit_codes(monkeypatch, inventory, calls)
 
-    assert len(inventory["jobs"]) == 11
+    assert len(inventory["jobs"]) == 12
     for job in inventory["jobs"]:
         run_job = job["run_job_name"]
         job_write = next(

@@ -20,7 +20,11 @@ def main() -> int:
         urljoin(base_url, "/api/auth/password-reset/start"),
         method="POST",
         data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CaseOps-Automated-Test": "no-paid-providers",
+        },
     )
     try:
         with urlopen(request, timeout=20) as response:

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { NativeSignIn } from './NativeSignIn';
+import { loadNativeLinkPolicy } from '@/lib/native-link-policy.server';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -10,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function NativeSignInPage() {
-  return <Suspense><NativeSignIn /></Suspense>;
+  return <Suspense><NativeSignIn policy={loadNativeLinkPolicy()} /></Suspense>;
 }

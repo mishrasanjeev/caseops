@@ -17,12 +17,15 @@ import {
   parseNativeAuthorization,
   prepareNativeHandoff,
 } from "@/lib/native-authorization";
+import { DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from '@/lib/native-link-policy.cjs';
 
-export function NativeSignIn() {
+export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?: NativeLinkPolicy }) {
   const params = useSearchParams();
-  const parsed = parseNativeAuthorization(params.toString());
-  const query = params.toString();
-  const next = `/native/sign-in?${query}`;
+  const parsed = parseNativeAuthorization(params.toString(), policy);
+  const policyKey = JSON.stringify(policy);
+  const rawQuery = params.toString();
+  const query = `${policyKey}\n${rawQuery}`;
+  const next = `/native/sign-in?${rawQuery}`;
   const [context, setContext] = useState<AuthContext | null>(null);
   const [contextQuery, setContextQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export function NativeSignIn() {
     setPending(false);
     setLoading(true);
     const controller = new AbortController();
-    if (!parseNativeAuthorization(query)) setLoading(false);
+    if (!parseNativeAuthorization(rawQuery, policy)) setLoading(false);
     else
       void apiRequest<AuthContext>("/api/auth/me", {
         signal: controller.signal,
@@ -149,7 +152,7 @@ export function NativeSignIn() {
         body: parsed,
       });
       if (owner !== epoch.current) return;
-      const prepared = prepareNativeHandoff(parsed, response);
+      const prepared = prepareNativeHandoff(parsed, response, policy);
       // Charge response latency to the server's lifetime, never extend a grant.
       const deadline = startedAt + prepared.expiresIn * 1000;
       const remaining = deadline - performance.now();
@@ -214,7 +217,7 @@ export function NativeSignIn() {
     setOpening(true);
     try {
       // Synchronous user gesture: no awaited network operation before app launch.
-      openNativeApp(current.callback);
+      openNativeApp(current.callback, policy);
     } catch {
       discardHandoff();
       setHandoffExpired(true);

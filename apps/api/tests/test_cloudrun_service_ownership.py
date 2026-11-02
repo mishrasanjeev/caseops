@@ -257,8 +257,8 @@ def test_release_constants_expand_through_indirection() -> None:
         _expand("${LOOP_A}", constants)
 
 
-def _assignments(value: str) -> dict[str, str]:
-    return dict(item.split("=", 1) for item in value.split(","))
+def _assignments(value: str, *, separator: str = ",") -> dict[str, str]:
+    return dict(item.split("=", 1) for item in value.split(separator))
 
 
 def test_fresh_project_bootstrap_creates_the_release_contract(
@@ -322,6 +322,85 @@ def test_fresh_project_bootstrap_creates_the_release_contract(
     assert settings.auto_migrate is False
     host, port, _timeout, required = virus_scan._config_from_env()
     assert (host, port, required) == ("127.0.0.1", 3310, True)
+
+
+@pytest.mark.parametrize("environment_name", ["cloud", "production", "prod"])
+def test_bootstrap_export_readiness_requires_release_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    environment_name: str,
+) -> None:
+    from fastapi import HTTPException
+
+    from caseops_api.core.settings import Settings
+    from caseops_api.services import ip_portfolio_dispatch
+
+    runbook = (REPO_ROOT / "docs" / "GCP_DEPLOY.md").read_text(encoding="utf-8")
+    bootstrap = _flag_sections(_shell_command(runbook))["api"]
+    environment = _assignments(bootstrap["--set-env-vars"])
+    secrets = _assignments(bootstrap["--set-secrets"])
+    for name in list(os.environ):
+        if name.startswith("CASEOPS_"):
+            monkeypatch.delenv(name)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    for index, name in enumerate(sorted(secrets)):
+        monkeypatch.setenv(name, f"bootstrap-secret-{index}-{'x' * 40}")
+    monkeypatch.setenv("CASEOPS_ENV", environment_name)
+    monkeypatch.setattr(ip_portfolio_dispatch, "get_settings", lambda: Settings(_env_file=None))
+
+    def assert_not_ready() -> Settings:
+        settings = Settings(_env_file=None)
+        assert settings.env == environment_name
+        assert settings.auto_migrate is False
+        with pytest.raises(HTTPException) as error:
+            ip_portfolio_dispatch.require_portfolio_export_dispatch_ready()
+        assert error.value.status_code == 503
+        assert error.value.detail == "Portfolio export processing is not configured."
+        return settings
+
+    settings = assert_not_ready()
+    assert settings.portfolio_export_dispatch_mode == "local_background"
+    assert settings.portfolio_export_worker_secret is None
+
+    worker_secret = "synthetic-bootstrap-portfolio-export-worker-key-20261026"
+    assert worker_secret not in (settings.auth_secret, settings.machine_readiness_evidence_secret)
+    monkeypatch.setenv("CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET", worker_secret)
+    assert_not_ready()
+    monkeypatch.delenv("CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET")
+
+    release = _release_sections()["api"]
+    encoded_release_environment = release["--update-env-vars"]
+    assert encoded_release_environment.startswith("^|^")
+    release_environment = _assignments(encoded_release_environment[3:], separator="|")
+    export_environment = {
+        name: release_environment[name]
+        for name in (
+            "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE",
+            "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE",
+            "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION",
+            "CASEOPS_GCP_PROJECT_ID",
+        )
+    }
+    assert export_environment == {
+        "CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE": "cloud_tasks",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_QUEUE": "caseops-portfolio-exports",
+        "CASEOPS_PORTFOLIO_EXPORT_TASK_REGION": "asia-south1",
+        "CASEOPS_GCP_PROJECT_ID": "perfect-period-305406",
+    }
+    assert _assignments(release["--update-secrets"])["CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET"] == (
+        "caseops-portfolio-export-worker-secret:latest"
+    )
+    for name, value in export_environment.items():
+        monkeypatch.setenv(name, value)
+    assert_not_ready()
+
+    monkeypatch.setenv("CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET", worker_secret)
+    assert ip_portfolio_dispatch.require_portfolio_export_dispatch_ready() is None
+    monkeypatch.delenv("CASEOPS_GCP_PROJECT_ID")
+    assert_not_ready()
+    monkeypatch.setenv("CASEOPS_GCP_PROJECT_ID", export_environment["CASEOPS_GCP_PROJECT_ID"])
+    monkeypatch.setenv("CASEOPS_PORTFOLIO_EXPORT_DISPATCH_MODE", "local_background")
+    assert_not_ready()
 
 
 def test_markdown_code_fences_count_as_operator_invocations(tmp_path: Path) -> None:

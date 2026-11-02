@@ -21,6 +21,7 @@ from typing import Literal
 
 from sqlalchemy import and_, delete, exists, func, not_, or_, select, true, update
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_dirty, set_committed_value
 
 from caseops_api.core.settings import Settings, get_settings
 from caseops_api.db.models import (
@@ -2276,6 +2277,53 @@ def _saved_outputs_reached_by_event(
     return or_(*reached)
 
 
+def _apply_private_invalidation(
+    session: Session,
+    *,
+    model,
+    predicate,
+    values,
+    collect_sources: bool = False,
+) -> tuple[int, set[tuple[str, str]]]:
+    # ORM fetch synchronization buffers one identity per matching retained row.
+    # Stream only narrow metadata and synchronize objects already in this session.
+    if session.autoflush and not session._flushing:
+        session.flush()
+    cached = {
+        state.identity[0]: state.object
+        for state in session.identity_map.all_states()
+        if state.class_ is model and state.object is not None
+    }
+    table = model.__table__
+    statement = update(table).where(predicate).values(**values)
+    columns = [table.c.id] if cached else []
+    if collect_sources:
+        columns.extend((table.c.source_type, table.c.source_id))
+    if columns:
+        statement = statement.returning(*columns)
+    result = session.execute(statement)
+    try:
+        if not columns:
+            return max(int(result.rowcount or 0), 0), set()
+        count = 0
+        sources: set[tuple[str, str]] = set()
+        source_offset = int(bool(cached))
+        for batch in result.partitions(100):
+            count += len(batch)
+            for row in batch:
+                if cached and (instance := cached.get(row[0])) is not None:
+                    for key, value in values.items():
+                        set_committed_value(instance, key, value)
+                    # Preserve savepoint rollback expiry without another SQL update.
+                    flag_dirty(instance)
+                if collect_sources:
+                    sources.add((row[source_offset], row[source_offset + 1]))
+            del batch
+        return count, sources
+    finally:
+        result.close()
+
+
 def apply_private_projection_event(session: Session, *, event_id: str) -> PrivateProjectionEvent:
     event = session.scalar(
         select(PrivateProjectionEvent)
@@ -2292,52 +2340,35 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
         # Tenant disposition must neutralize active, retired, and unreadable
         # shadow generations. A set-based update tolerates a concurrent failed-
         # shadow delete without retaining ORM instances that later go stale.
-        result = session.execute(
-            update(PrivateIndexProjection)
-            .where(
-                PrivateIndexProjection.company_id == event.company_id,
-                or_(
-                    PrivateIndexProjection.is_tombstoned.is_(False),
-                    PrivateIndexProjection.content_text != "",
-                    PrivateIndexProjection.embedding_json.is_not(None),
-                ),
-            )
-            .values(
-                content_text="",
-                embedding_json=None,
-                embedding_dimensions=None,
-                is_tombstoned=True,
-                tombstoned_at=now,
-                tombstone_reason=event.reason_code,
-                tombstone_generation=event.tombstone_generation,
-                updated_at=now,
-            )
-            .execution_options(synchronize_session="fetch")
+        projection_predicate = and_(
+            PrivateIndexProjection.company_id == event.company_id,
+            or_(
+                PrivateIndexProjection.is_tombstoned.is_(False),
+                PrivateIndexProjection.content_text != "",
+                PrivateIndexProjection.embedding_json.is_not(None),
+            ),
         )
-        affected_sources: set[tuple[str, str]] = set()
-        affected_projection_count = max(int(result.rowcount or 0), 0)
     else:
         # Strip private bytes in the database while retaining only source
         # identities for saved-output closure. Lifecycle writes must not hydrate
         # every chunk's text and embedding while holding the tenant fence.
-        affected = session.execute(
-            update(PrivateIndexProjection)
-            .where(_affected_projection_statement(event).whereclause)
-            .values(
-                content_text="",
-                embedding_json=None,
-                embedding_dimensions=None,
-                is_tombstoned=True,
-                tombstoned_at=now,
-                tombstone_reason=event.reason_code,
-                tombstone_generation=event.tombstone_generation,
-                updated_at=now,
-            )
-            .returning(PrivateIndexProjection.source_type, PrivateIndexProjection.source_id)
-            .execution_options(synchronize_session="fetch")
-        ).all()
-        affected_sources = set(affected)
-        affected_projection_count = len(affected)
+        projection_predicate = _affected_projection_statement(event).whereclause
+    affected_projection_count, affected_sources = _apply_private_invalidation(
+        session,
+        model=PrivateIndexProjection,
+        predicate=projection_predicate,
+        values={
+            "content_text": "",
+            "embedding_json": None,
+            "embedding_dimensions": None,
+            "is_tombstoned": True,
+            "tombstoned_at": now,
+            "tombstone_reason": event.reason_code,
+            "tombstone_generation": event.tombstone_generation,
+            "updated_at": now,
+        },
+        collect_sources=event.target_type != "tenant",
+    )
 
     if event.event_type in {"source_changed", "reindex"} and (
         event.target_type == "tenant" or affected_projection_count == 0
@@ -2367,22 +2398,22 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
     # Every event, access changes included, locks a saved output for good, as
     # Reviews and Drafts stay locked. One set-based update, bounded by the
     # tenant's saved outputs for the reached sources, replaces a per-row load.
-    locked_outputs = session.execute(
-        update(PrivateSavedOutputAccess)
-        .where(
+    affected_saved_output_count, _ = _apply_private_invalidation(
+        session,
+        model=PrivateSavedOutputAccess,
+        predicate=and_(
             PrivateSavedOutputAccess.company_id == event.company_id,
             PrivateSavedOutputAccess.state.not_in(("locked", "redacted")),
             _saved_outputs_reached_by_event(event, affected_sources=affected_sources),
-        )
-        .values(
-            state="locked",
-            locked_reason=event.reason_code,
-            locked_at=now,
-            access_policy_generation=event.access_policy_generation,
-            tombstone_generation=event.tombstone_generation,
-            updated_at=now,
-        )
-        .execution_options(synchronize_session="fetch")
+        ),
+        values={
+            "state": "locked",
+            "locked_reason": event.reason_code,
+            "locked_at": now,
+            "access_policy_generation": event.access_policy_generation,
+            "tombstone_generation": event.tombstone_generation,
+            "updated_at": now,
+        },
     )
     shadow_generations = list(
         session.scalars(
@@ -2412,7 +2443,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
             generation.verification_sha256 = None
             generation.verified_at = None
     event.affected_projection_count = affected_projection_count
-    event.affected_saved_output_count = max(int(locked_outputs.rowcount or 0), 0)
+    event.affected_saved_output_count = affected_saved_output_count
     event.status = "applied"
     event.applied_at = now
     event.error_code = None

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -234,5 +235,41 @@ describe("PerMatterOutsideCounselPage", () => {
       await screen.findByText(/Multiple currencies are present/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/does not execute payments/i)).toBeInTheDocument();
+  });
+
+  it("BUG-010/013 lets the budget ceiling be set in the associate's currency", async () => {
+    const user = userEvent.setup();
+    render(withClient(<PerMatterOutsideCounselPage />));
+    await user.click((await screen.findAllByTestId("matter-oc-assign-open"))[0]);
+    const currency = screen.getByLabelText("Currency");
+    expect(currency).toHaveValue("INR");
+    expect(screen.getByText("Budget ceiling (INR)")).toBeInTheDocument();
+    await user.clear(currency);
+    await user.type(currency, "gbp");
+    expect(currency).toHaveValue("GBP");
+    expect(screen.getByText("Budget ceiling (GBP)")).toBeInTheDocument();
+    expect(screen.getByText(/quote must be in this currency and within it/)).toBeInTheDocument();
+    expect(screen.queryByText(/must be in INR/)).toBeNull();
+    await user.clear(currency);
+    await user.type(currency, "G1");
+    expect(currency).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Currency: enter a 3-letter code");
+    expect(screen.getByTestId("matter-oc-assign-submit")).toBeDisabled();
+  });
+
+  it("B4-ADJ-02 never pre-chooses the counsel an invoice is logged against", async () => {
+    const user = userEvent.setup();
+    const base = await fetchWorkspaceMock();
+    const second = { ...base.assignments[0], id: "a2", counsel_id: "c2", counsel_name: "Birch Chambers" };
+    fetchWorkspaceMock.mockResolvedValue({ ...base, assignments: [...base.assignments, second] });
+    render(withClient(<PerMatterOutsideCounselPage />));
+    await user.click(await screen.findByTestId("matter-oc-spend-open"));
+    const counsel = screen.getByRole("combobox", { name: "Counsel" });
+    expect(counsel).toHaveTextContent("Pick an assignment");
+    expect(counsel).not.toHaveTextContent(/Redwood Counsel|Birch Chambers/);
+    expect(counsel).toHaveAccessibleDescription("Choose the counsel whose invoice this is.");
+    await user.type(screen.getByLabelText("Description"), "Drafting fee");
+    await user.type(screen.getByLabelText(/^Amount/), "1500");
+    expect(screen.getByTestId("matter-oc-spend-submit")).toBeDisabled();
   });
 });

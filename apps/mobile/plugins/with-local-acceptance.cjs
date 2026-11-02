@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const observer = require('./qa-observer.cjs');
 const { withAppBuildGradle, withDangerousMod } = require('@expo/config-plugins');
 
 const ANDROID_PROFILE = 'android-local-acceptance';
@@ -62,6 +63,7 @@ function readPublicCa(file, expectedSha256, now = Date.now()) {
 
 function acceptanceSettings(env) {
   const profile = env.CASEOPS_MOBILE_BUILD_PROFILE;
+  const observerSettings = observer.settings(env, profile);
   const hasCa = Boolean(env.CASEOPS_MOBILE_ANDROID_CA_FILE || env.CASEOPS_MOBILE_ANDROID_CA_SHA256);
   if (!profile) {
     assert.ok(!hasCa, 'CA_REQUIRES_ANDROID_ACCEPTANCE_PROFILE');
@@ -80,6 +82,7 @@ function acceptanceSettings(env) {
   return { profile, platform, apiOrigin: api.origin, webOrigin: web.origin,
     hosts: [...new Set([api.hostname, web.hostname])], ca,
     releaseSha: env.CASEOPS_MOBILE_RELEASE_SHA,
+    ...(observerSettings ? { observer: { ...observerSettings, sourceRoot: path.resolve(__dirname, '../../..'), helperSha256: createHash('sha256').update(observer.held(path.resolve(__dirname, '../../../scripts/mobile/android-observer-manifest.py'), 65536)).digest('hex') } } : {}),
     androidAppId: ANDROID_APP_ID,
     iosBundleIdentifier: platform === 'ios' ? IOS_BUNDLE_ID : undefined };
 }
@@ -147,6 +150,7 @@ androidComponents {
 if (extensions.getByType(com.facebook.react.ReactExtension).debuggableVariants.get().any { it.equalsIgnoreCase('localAcceptance') }) {
     throw new GradleException('Acceptance must use the supported non-debug bundling path')
 }
+${settings.observer ? observer.gradle(settings.observer, settings.observer.sourceRoot, settings.releaseSha, settings.observer.helperSha256) : ''}
 ${END}`;
 }
 
@@ -194,6 +198,7 @@ function withLocalAcceptance(config) {
   config = withDangerousMod(config, ['android', (mod) => {
     assert.ok(!settings || settings.platform === 'android', 'IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID');
     writeAndroidOverlay(mod.modRequest.platformProjectRoot, settings);
+    observer.overlay(mod.modRequest.platformProjectRoot, path.resolve(mod.modRequest.projectRoot, '../..'), settings?.observer ?? null, settings?.releaseSha);
     return mod;
   }]);
   return withDangerousMod(config, ['ios', (mod) => {

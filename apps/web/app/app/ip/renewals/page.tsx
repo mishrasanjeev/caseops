@@ -10,7 +10,9 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -21,6 +23,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
@@ -28,9 +31,11 @@ import {
   acknowledgeIpRenewalInstruction,
   createIpRenewalInstruction,
   fetchIpRenewalPortfolio,
+  fetchIpRenewalTransitionReferences,
   scheduleIpRenewalReminders,
   transitionIpRenewalTerm,
   type IpRenewalInstruction,
+  type IpRenewalReferenceEvent,
   type IpRenewalState,
   type IpRenewalWorkflow,
 } from "@/lib/api/endpoints";
@@ -558,6 +563,12 @@ function TransitionPanel({ row, canWrite, onChanged }: { row: IpRenewalWorkflow;
   const [acceptanceEventId, setAcceptanceEventId] = useState(row.term.acceptance_event_id ?? "");
   const [certificateDocumentId, setCertificateDocumentId] = useState(row.term.certificate_document_id ?? "");
   const [nextDeadlineId, setNextDeadlineId] = useState(row.term.next_term_deadline_id ?? "");
+  // The references the transition validator accepts, read from its own rules.
+  const references = useQuery({
+    queryKey: ["ip", "renewals", "transition-references", row.docket_id, row.term.id],
+    queryFn: () => fetchIpRenewalTransitionReferences({ docketId: row.docket_id, termId: row.term.id }),
+    enabled: canWrite && options.length > 0,
+  });
   useEffect(() => {
     setTarget(TRANSITIONS[row.term.state][0] ?? row.term.state);
   }, [row.term.id, row.term.state]);
@@ -584,6 +595,7 @@ function TransitionPanel({ row, canWrite, onChanged }: { row: IpRenewalWorkflow;
   const requiresFilingEvent = ["filed", "accepted", "completed"].includes(target);
   const requiresAcceptance = ["accepted", "completed"].includes(target);
   const requiresCompletion = target === "completed";
+  const docketHref = `/app/ip?docket=${encodeURIComponent(row.docket_id)}`;
   const ready =
     reason.trim().length >= 5 &&
     (!requiresFilingReference || filingReference.trim().length >= 3) &&
@@ -608,15 +620,81 @@ function TransitionPanel({ row, canWrite, onChanged }: { row: IpRenewalWorkflow;
             </Field>
             <Field label="Reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
             {requiresFilingReference ? <Field label="Filing initiation reference"><Input value={filingReference} onChange={(event) => setFilingReference(event.target.value)} /></Field> : null}
-            {requiresFilingEvent ? <Field label="Confirmed filing event ID"><Input value={filingEventId} onChange={(event) => setFilingEventId(event.target.value)} /></Field> : null}
-            {requiresAcceptance ? <Field label="Registry acceptance event ID"><Input value={acceptanceEventId} onChange={(event) => setAcceptanceEventId(event.target.value)} /></Field> : null}
-            {requiresCompletion ? <Field label="Accepted certificate document ID"><Input value={certificateDocumentId} onChange={(event) => setCertificateDocumentId(event.target.value)} /></Field> : null}
-            {requiresCompletion ? <Field label="Confirmed next-term deadline ID"><Input value={nextDeadlineId} onChange={(event) => setNextDeadlineId(event.target.value)} /></Field> : null}
+            {requiresFilingEvent ? <ReferenceSelect id={`renewal-filing-${row.term.id}`} label="Confirmed filing event" value={filingEventId} onChange={setFilingEventId} recorded={row.term.filing_event_id}
+              query={references} options={(references.data?.filing_events ?? []).map(eventOption)}
+              empty={<>No confirmed renewal filing event is on this docket. <Link className={LINK} href={docketHref}>Record and confirm it on the docket</Link>, then choose it here.</>} /> : null}
+            {requiresAcceptance ? <ReferenceSelect id={`renewal-acceptance-${row.term.id}`} label="Registry acceptance event" value={acceptanceEventId} onChange={(value) => { setAcceptanceEventId(value); if (!row.term.next_term_deadline_id) setNextDeadlineId(""); }} recorded={row.term.acceptance_event_id}
+              query={references} options={(references.data?.acceptance_events ?? []).map(eventOption)}
+              empty={<>No confirmed registry acceptance event is on this docket. <Link className={LINK} href={docketHref}>Record and confirm it on the docket</Link>, then choose it here.</>} /> : null}
+            {requiresCompletion ? <ReferenceSelect id={`renewal-certificate-${row.term.id}`} label="Accepted certificate" value={certificateDocumentId} onChange={setCertificateDocumentId} recorded={row.term.certificate_document_id}
+              query={references} options={(references.data?.certificate_documents ?? []).map((document) => ({ value: document.id, label: `${document.title} · v${document.current_version}` }))}
+              empty={<>No accepted certificate is linked to this docket. <Link className={LINK} href={`${docketHref}&tab=documents`}>Upload and accept it in the IP workspace Documents tab</Link>.</>} /> : null}
+            {requiresCompletion ? <ReferenceSelect id={`renewal-next-term-${row.term.id}`} label="Next-term renewal deadline" value={nextDeadlineId} onChange={setNextDeadlineId} recorded={row.term.next_term_deadline_id}
+              query={references} waitingFor={acceptanceEventId ? null : "Choose the registry acceptance event first"}
+              options={(references.data?.next_term_deadlines ?? []).filter((deadline) => deadline.trigger_event_id === acceptanceEventId).map((deadline) => ({ value: deadline.id, label: `${deadline.title} · ${deadline.result_on ? DATE.format(new Date(deadline.result_on)) : "date not set"} · ${deadline.state}` }))}
+              empty={<>No confirmed renewal deadline is calculated from this acceptance event. <Link className={LINK} href={`${docketHref}&view=schedule`}>Calculate it in the docket schedule</Link>, then choose it here.</>} /> : null}
             <div className="sm:col-span-2"><Button size="sm" type="submit" disabled={!ready || transition.isPending}>{transition.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}Record transition</Button></div>
           </form>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const LINK = "font-semibold text-[var(--color-brand-700)]";
+const REFERENCE_SELECT =
+  "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60";
+
+function eventOption(event: IpRenewalReferenceEvent) {
+  const kind = event.event_kind.replaceAll("_", " ");
+  const detail = event.source_reference ?? event.reason ?? "no source reference";
+  return { value: event.id, label: `${kind} · ${DATE.format(new Date(event.effective_at))} · ${detail}` };
+}
+
+/**
+ * A renewal evidence choice. Options are exactly what the transition validator
+ * accepts; a reference already recorded on the term cannot be replaced, so it
+ * is shown locked; with no eligible record the select is disabled and says
+ * where to create one.
+ */
+function ReferenceSelect({ id, label, value, onChange, options, recorded, query, empty, waitingFor = null }: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  recorded: string | null;
+  query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown };
+  empty: ReactNode;
+  waitingFor?: string | null;
+}) {
+  const hintId = `${id}-hint`;
+  let placeholder = "Select a record";
+  let hint: ReactNode = null;
+  let choices = options;
+  if (recorded) {
+    placeholder = "Recorded on this term";
+    choices = options.some((option) => option.value === recorded) ? options.filter((option) => option.value === recorded) : [{ value: recorded, label: "Recorded on this term" }];
+    hint = "Recorded on this term; renewal evidence cannot be replaced.";
+  } else if (waitingFor) {
+    placeholder = waitingFor;
+    choices = [];
+  } else if (query.isPending) {
+    placeholder = "Loading…";
+  } else if (query.isError) {
+    placeholder = "Could not be loaded";
+    hint = <span role="alert" className="flex flex-wrap items-center gap-2 text-[var(--color-danger-500)]">{apiErrorMessage(query.error, `${label} choices could not be loaded.`)}<Button type="button" size="sm" variant="outline" onClick={() => query.refetch()}>Retry</Button></span>;
+  } else if (!options.length) {
+    placeholder = "None on this docket";
+    hint = empty;
+  }
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <RecordSelect id={id} label={label} className={REFERENCE_SELECT} value={value} onChange={(event) => onChange(event.target.value)}
+        disabled={Boolean(recorded) || !choices.length} aria-describedby={hint ? hintId : undefined}
+        options={[{ value: "", label: placeholder, disabled: choices.length > 0 }, ...choices]} />
+      {hint ? <p id={hintId} className="min-w-0 break-words text-sm font-normal text-[var(--color-mute)]">{hint}</p> : null}
+    </div>
   );
 }
 

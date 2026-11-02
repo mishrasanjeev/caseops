@@ -134,8 +134,30 @@ Before any deliverable goes to the user with a "fixed" claim, the
 agent MUST be able to answer YES to all of these:
 
 - [ ] Is there a Playwright spec in `tests/e2e/` that exercises the
-      reported workflow on the deployed surface, signed in as a
-      representative user?
+      reported workflow on the deployed surface, signed in as the
+      reporting tester in the tester's own tenant and role?
+- [ ] Did the journey start from records it created through the UI with
+      fresh identifiers, not an API-built fixture, another tenant, a
+      locally enabled flag, or a shared record that later runs change?
+- [ ] Did production execute every assertion the verdict relies on? A
+      `test.skip`, a `[local-only]` exclusion, an `if` that guards
+      assertions, or a crawl that stops before the control is a skip.
+- [ ] For a document or PDF, was every page rasterized and its text
+      contrast, page count and required fields asserted? A file name,
+      `%PDF`, checksum or extracted text is not legibility proof.
+- [ ] Does every empty state or disabled control in the fix lead, in the
+      same journey, to a usable selection for the tester's role?
+- [ ] Do picker options come from the write validator's own predicate,
+      with a test for a record whose state changed after it was offered?
+- [ ] Does every list the picker or check reads page to the end or state
+      its cap with a server total, proven across two page boundaries with
+      a one-page reader shown to fail?
+- [ ] Did no fixture create the catalogue or configuration the journey
+      tests, and did the production spec leave shared tester
+      configuration unchanged and create only records it can retire, or
+      ones covered by an owner-recorded residue exception?
+- [ ] Has an independent adversarial review of the diff and spec reported
+      no blocking or major finding?
 - [ ] Did that spec PASS on the deployed commit SHA?
 - [ ] Is the spec committed (not one-shot manual)?
 - [ ] If the spec skipped, is the verdict downgraded to `Inconclusive`
@@ -187,8 +209,9 @@ This rule exists because that pattern is unacceptable.
 
 1. Write a Playwright spec under `tests/e2e/` that reproduces the original
    user-visible workflow against the **deployed** caseops.ai / api.caseops.ai
-   surface, signed in as the reporting user (or a representative test
-   account).
+   surface, signed in as the reporting user in that user's own tenant and
+   role. A substitute or representative test account is not acceptance for
+   a tester-reported bug.
 2. Run it with the deployed commit SHA. Local-only or mocked-wrapper green
    tests do NOT satisfy this rule — they prove the fix COMPILES, not that
    it works for the user.

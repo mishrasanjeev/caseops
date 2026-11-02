@@ -70,7 +70,22 @@ def get_current_context(
             claims = decode_native_access_token(credentials.credentials)
         except TokenValidationError as exc:
             raise HTTPException(401, "Invalid native session.") from exc
-        context = native_context(session, claims)
+        # Security exit/revocation remains available to an older client. The
+        # platform is taken from its validated device row, never from headers.
+        security_operation = (
+            (request.method == "GET" and request.url.path in {
+                "/api/auth/security", "/api/auth/native/sessions",
+            })
+            or (request.method == "DELETE" and request.url.path.startswith(
+                "/api/auth/native/sessions/"
+            ))
+        )
+        versions = request.headers.getlist("x-caseops-client-version")
+        context = native_context(
+            session, claims,
+            client_version=versions[0] if len(versions) == 1 else None,
+            enforce_client_compatibility=not security_operation,
+        )
         request.state.native_session_id = claims["sid"]
         set_tenant_context(
             tenant_id=context.company.id,

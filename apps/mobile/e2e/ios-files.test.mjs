@@ -7,6 +7,7 @@ import test from 'node:test';
 import { gatewayBaseline } from './traffic.mjs';
 import { collectIosFiles, expandIosSourceDetails, proveIosSelectedFile, iosFilesInventory, iosFilesScenarios, validateAsset, validateIosFilesContext,
   validatePickerAsset, validatePickerProvider, validatePrivacyReceipt, validateSourceAnchor, validateSourceSeed, textSegments, chooseIosFile,
+  awaitIosTextReady, readIosText, repeatIosFileSelection,
   IOS_UPLOAD_PERSISTED_MESSAGE, proveIosReaderEntry, proveIosUploadPersisted, findIosUploadPersisted,
   assertIosUploadErrorsAbsent, assertIosViewerAbsent, findIosFileFact, validateIosUploadAcknowledgement, rapidActivateIosUpload } from './ios-files.mjs';
 
@@ -30,13 +31,19 @@ function fixture(t) {
   const context = { platform: 'ios', driver: { $$: async () => [], waitUntil: async () => {} }, source, filesState: { uploads: {} },
     gatewayBaseline: { runId: 'offline-ios-files' }, fixture: { appId: 'ai.caseops.mobile.dev.simulatoracceptance', environment: 'docker-integration', syntheticDataOnly: true,
       coreInventory: 'native-core-2026-10-25', backendSha: 'a'.repeat(40), webSha: 'a'.repeat(40), binarySourceSha: 'a'.repeat(40),
-      apiOrigin: 'https://127.0.0.1:8443', gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: 'offline-ios-files', udid: 'offline-simulator',
+      apiOrigin: 'https://127.0.0.1:8443', gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: 'offline-ios-files', udid: '33333333-3333-4333-8333-333333333333',
       matter: { id: matterId }, companyId: 'offline-company', membershipId: 'offline-member', seedEvidence: evidence('seed', seed) },
     assets: { uploads, manifestEvidence: evidence('assets', { syntheticDataOnly: true, assets: Object.values(uploads) }) } };
   const provider = { folderName: 'CaseOps offline fixtures', folderQuery: '-ios predicate string:type == "XCUIElementTypeCell" AND name == "CaseOps offline fixtures"',
     fileQueryTemplate: '-ios predicate string:type == "XCUIElementTypeCell" AND name == {pickerNameJSON}' };
-  const picker = { observed: true, platform: 'ios', udid: context.fixture.udid, ...provider,
-    assets: Object.values(uploads).map((asset) => ({ ...asset, observedProviderHash: asset.sha256,
+  const deviceInventory = evidence('devices', { devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-5': [
+    { udid: context.fixture.udid, name: 'CaseOps offline phone', state: 'Booted', isAvailable: true,
+      deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
+  ] } });
+  context.assets.providerEvidence = evidence('provider-staging', { kind: 'explicit-synthetic-v2-provider-stage' });
+  const picker = { schemaVersion: 2, providerOriginalsRead: false, stagingEvidence: context.assets.providerEvidence, observed: true, platform: 'ios', udid: context.fixture.udid, ...provider,
+    localRoot: { label: 'On My iPhone', deviceInventory },
+    assets: Object.values(uploads).map((asset) => ({ ...asset, transferSha256: asset.sha256,
       pickerName: asset.filename.slice(0, asset.filename.lastIndexOf('.')) + ', ' + asset.filename.slice(asset.filename.lastIndexOf('.') + 1) })) };
   context.provider = { ...provider, evidence: evidence('picker', picker) };
   return { context, source, seed, uploads, evidence, picker };
@@ -78,7 +85,7 @@ test('separate frozen iOS files inventory reconciles all17 literal identities wi
   assert.equal(iosFilesScenarios.at(-1).requiresSignedOut, true);
   assert.deepEqual(iosFilesScenarios[8].requires, ['FILES-05']);
   assert.deepEqual(iosFilesScenarios.flatMap((scenario, index) => scenario.freshAuthentication ? [{ id: scenario.id, index }] : []),
-    [{ id: 'FILES-09', index: 8 }]);
+    [{ id: 'FILES-07', index: 6 }, { id: 'FILES-09', index: 8 }]);
   assert.deepEqual(iosFilesScenarios.slice(3, 8).map(({ id }) => id), ['FILES-04', 'FILES-05', 'FILES-06', 'FILES-07', 'FILES-08']);
   const core = JSON.parse(readFileSync(new URL('./core-20261025.json', import.meta.url)));
   assert.equal(core.cases.length, 23);
@@ -184,7 +191,75 @@ test('real observed picker recipe handles retained folder cancellation and exten
     assert.equal(clicks.filter((value) => value === 'exact-provider-file').length, cancel ? 0 : 1);
   }
 });
-function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false } = {}) {
+test('iOS 27 history Back leaves a retained folder for the exact observed root before cancelling', async (t) => {
+  const { context } = fixture(t);
+  let state = 'files'; const clicks = [];
+  const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
+    click: async () => { clicks.push(name); state = next ?? state; } });
+  context.driver = {
+    async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_CONDITION_FAILED'); },
+    async $$(query) {
+      if (query === '~files-choose' && state === 'files') return [element('choose', 'folder')];
+      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','folder'].includes(state) ? [element('bar')] : [];
+      if (query.includes('name == "Cancel"')) return state === 'root' ? [element('cancel', 'files')] : [];
+      // No parent-labelled BackButton exists; only the history control does.
+      if (query.includes('name == "DOC.navBarButton.backInHistory" AND label == "Back"')) return state === 'folder' ? [element('history-back', 'root')] : [];
+      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return state === 'root' ? [element('On-My-iPhone-root')] : [];
+      if (query === '~files-matter-code') return state === 'files' ? [element('matter-code')] : [];
+      return [];
+    },
+  };
+  measuredFileDriver(context);
+  await chooseIosFile(context, undefined, { cancel: true });
+  assert.equal(state, 'files');
+  assert.deepEqual(clicks, ['choose', 'history-back', 'cancel']);
+});
+function ios27PickerDouble(context, initial) {
+  let state = 'files'; const clicks = [];
+  const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
+    click: async () => { clicks.push(name); state = next ?? state; } });
+  context.driver = {
+    async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_CONDITION_FAILED'); },
+    async $$(query) {
+      if (query === '~files-choose' && state === 'files') return [element('choose', initial)];
+      if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return ['root','locations','folder','old-folder'].includes(state) ? [element('bar')] : [];
+      // iOS 27 shows history Back at the root too; it leads to Locations.
+      if (query.includes('name == "DOC.navBarButton.backInHistory"')) return ['root','folder','old-folder'].includes(state) ? [element('history-back', 'locations')] : [];
+      if (query.includes('name == "DOC.sidebar.item.On My iPhone"')) return state === 'locations' ? [element('location', 'root')] : [];
+      // The Locations cell repeats the root's name as a StaticText.
+      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return ['root','locations'].includes(state) ? [element('root-text')] : [];
+      if (query === context.provider.folderQuery) return state === 'root' ? [element('owned-folder', 'folder')] : [];
+      if (query.includes('Actions Menu')) return state === 'folder' ? [element('owned-folder-heading')] : [];
+      if (query.includes('name == "CaseOps-ios-txt-unit, txt"')) return state === 'folder' ? [element('exact-owned-file', 'selected')] : [];
+      if (query === '~files-matter-code') return ['files','selected'].includes(state) ? [element('matter-code')] : [];
+      if (query === '~files-selection' || query === '~files-upload' || query.includes('label == "')) return state === 'selected' ? [element('selection')] : [];
+      return [];
+    },
+  };
+  measuredFileDriver(context);
+  return { clicks, state: () => state };
+}
+test('iOS 27 picker opened at the root goes straight to the owned folder without history Back', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'root');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'owned-folder', 'exact-owned-file']);
+});
+test('iOS 27 retained folder whose history Back lands on Locations still reaches the exact root', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'old-folder');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'history-back', 'location', 'owned-folder', 'exact-owned-file']);
+});
+test('iOS 27 Locations list opens the local location cell, never treating its label as the root', async (t) => {
+  const { context, uploads } = fixture(t), fake = ios27PickerDouble(context, 'locations');
+  await chooseIosFile(context, { ...uploads.txt, kind: 'txt' });
+  assert.equal(fake.state(), 'selected');
+  assert.deepEqual(fake.clicks, ['choose', 'location', 'owned-folder', 'exact-owned-file']);
+});
+function pickerRouteDouble(context, asset, initial, { duplicateLocation = false, unknownAfterBrowse = false,
+  localRootLabel = 'On My iPhone', actualRootLabel = localRootLabel } = {}) {
+  const rootToken = actualRootLabel.replaceAll(' ', '-');
   let state = 'files';
   const clicks = [];
   const element = (name, next) => ({ isDisplayed: async () => true, isEnabled: async () => true,
@@ -193,13 +268,14 @@ function pickerRouteDouble(context, asset, initial, { duplicateLocation = false,
     async waitUntil(check, options) { if (!await check()) throw new Error(options?.timeoutMsg || 'OFFLINE_PICKER_STATE_NOT_READY'); },
     async $$(query) {
       if (query === '~files-choose' && state === 'files') return [element('choose', initial)];
+      if (query === '~files-selection-clear' && state === 'selected') return [element('clear-selection', 'files')];
       if (query.includes('FullDocumentManagerViewControllerNavigationBar')) return !['files','selected'].includes(state) ? [element('bar')] : [];
       if (query.includes('name == "Cancel"')) return ['root','locations'].includes(state) ? [element('cancel', 'files')] : [];
       if (query.includes('Actions Menu')) return state === 'folder' ? [element('owned-folder-heading')] : [];
-      if (query.includes('name == "BackButton"')) return state === 'old-folder' ? [element('back-On-My-iPhone', 'root')] : [];
-      if (query.includes('name == "DOC.sidebar.item.On My iPhone"')) return state === 'locations'
-        ? Array.from({ length: duplicateLocation ? 2 : 1 }, () => element('On-My-iPhone-location', 'root')) : [];
-      if (query.includes('XCUIElementTypeStaticText') && query.includes('name == "On My iPhone"')) return state === 'root' ? [element('On-My-iPhone-root')] : [];
+      if (query.includes('name == "BackButton"') && query.includes(`label == ${JSON.stringify(actualRootLabel)}`)) return state === 'old-folder' ? [element(`back-${rootToken}`, 'root')] : [];
+      if (query.includes(`name == ${JSON.stringify(`DOC.sidebar.item.${actualRootLabel}`)}`)) return state === 'locations'
+        ? Array.from({ length: duplicateLocation ? 2 : 1 }, () => element(`${rootToken}-location`, 'root')) : [];
+      if (query.includes('XCUIElementTypeStaticText') && query.includes(`name == ${JSON.stringify(actualRootLabel)}`)) return state === 'root' ? [element(`${rootToken}-root`)] : [];
       if (query.includes('name == "Browse"')) return state === 'recents' ? [element('browse', unknownAfterBrowse ? 'unknown-provider' : 'locations')] : [];
       if (query === context.provider.folderQuery) return state === 'root' ? [element('owned-folder', 'folder')] : [];
       if (query.includes('name == "CaseOps-ios-txt-unit, txt"')) return state === 'folder' ? [element('exact-owned-file', 'selected')] : [];
@@ -211,6 +287,34 @@ function pickerRouteDouble(context, asset, initial, { duplicateLocation = false,
   measuredFileDriver(context);
   return { clicks, state: () => state };
 }
+function repeatSelectionFixture(t) {
+  const f = fixture(t), fake = pickerRouteDouble(f.context, f.uploads.txt, 'folder');
+  const before = { runId: f.context.fixture.gatewayRunId, lastSequence: 0, requests: [] };
+  const ledger = { ...before, lastSequence: 1, markerRejected: 0, routeRejected: 0, overflow: false,
+    requests: [{ sequence: 1, method: 'GET', route: `/api/matters/${matterId}/workspace`, status: 200, nativeMarker: true }] };
+  f.context.gatewayBaseline = gatewayBaseline({ ...ledger, lastSequence: 0, requests: [] }, { gatewayRunId: ledger.runId });
+  const fetch = globalThis.fetch; t.after(() => { globalThis.fetch = fetch; });
+  globalThis.fetch = async () => new Response(JSON.stringify(ledger), { status: 200 });
+  const boundaries = [];
+  f.context.observeFilesystem = async boundary => { boundaries.push({ boundary, clicks: [...fake.clicks] }); return f.evidence('repeat-privacy', {
+    schemaVersion: 2, observed: true, platform: 'ios', udid: f.context.fixture.udid, bundleId: f.context.fixture.appId,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true,
+    providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0 }); };
+  return { ...f, fake, before, ledger, boundaries };
+}
+test('repeat selection composes exact picker and single clear commands twice with cold cleanup between selections', async t => {
+  const f = repeatSelectionFixture(t); await repeatIosFileSelection(f.context, f.before);
+  assert.deepEqual(f.fake.clicks, ['choose','exact-owned-file','clear-selection','choose','exact-owned-file','clear-selection']);
+  assert.equal(f.fake.state(), 'files'); assert.deepEqual(f.boundaries.map(row => row.boundary), ['selection-clear-first','selection-clear']);
+  assert.equal(f.boundaries[0].clicks.filter(value => value === 'choose').length, 1);
+  assert.ok(f.ledger.requests.every(row => row.method === 'GET'));
+});
+test('lost first clear acknowledgement stops repeat selection without another click or fabricated cleanup', async t => {
+  const f = repeatSelectionFixture(t), click = f.context.driver.elementClick, lost = Error('SYNTHETIC_CLEAR_ACK_UNKNOWN'); let clears = 0;
+  f.context.driver.elementClick = async id => { await click(id); if (id === 'files-selection-clear') { clears++; throw lost; } };
+  await assert.rejects(repeatIosFileSelection(f.context, f.before), error => error === lost);
+  assert.equal(clears, 1); assert.deepEqual(f.fake.clicks, ['choose','exact-owned-file','clear-selection']); assert.deepEqual(f.boundaries, []);
+});
 test('picker selection follows only observed old-folder, On My iPhone, Locations and single-Browse routes to the exact owned file', async (t) => {
   for (const [initial, expected] of [
     ['folder', ['choose','exact-owned-file']],
@@ -226,6 +330,84 @@ test('picker selection follows only observed old-folder, On My iPhone, Locations
     assert.deepEqual(fake.clicks, expected);
     assert.equal(fake.clicks.filter((name) => name === 'exact-owned-file').length, 1);
     assert.ok(fake.clicks.length <= 5);
+  }
+});
+test('picker local root binds exact booted device family and inventory bytes without guessing a display name', (t) => {
+  const { context, picker, evidence } = fixture(t);
+  const runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5';
+  const device = { udid: context.fixture.udid, name: 'Renamed iPhone display name', state: 'Booted', isAvailable: true,
+    deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' };
+  const bind = (value, inventory = { devices: { [runtime]: [device] } }) => ({ ...context, provider: { ...context.provider,
+    evidence: evidence('device-root', { ...picker, localRoot: { label: 'On My iPad', deviceInventory: evidence('device-inventory', inventory) }, ...value }) } });
+  assert.equal(validatePickerProvider(bind({})).folderName, context.provider.folderName);
+  for (const inventory of [
+    { devices: { [runtime]: [{ ...device, udid: '44444444-4444-4444-8444-444444444444' }] } },
+    { devices: { [runtime]: [device, device] } },
+    { devices: { [runtime]: [device], 'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [device] } },
+    { devices: { [runtime]: [{ ...device, state: 'Shutdown' }] } },
+    { devices: { [runtime]: [{ ...device, isAvailable: false }] } },
+    { devices: { [runtime]: [{ ...device, deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K' }] } },
+    { devices: { [runtime]: [{ ...device, deviceTypeIdentifier: 'iPad-Pro-11-inch' }] } },
+    { devices: { 'com.apple.CoreSimulator.SimRuntime.tvOS-27-0': [device] } },
+  ]) assert.throws(() => validatePickerProvider(bind({}, inventory)));
+  for (const label of ['On My iPhone', 'On my iPad', 'iCloud Drive', '', ['On My iPad']]) {
+    const current = bind({}), proof = JSON.parse(readFileSync(current.provider.evidence.path));
+    current.provider.evidence = evidence('wrong-local-root', { ...proof, localRoot: { ...proof.localRoot, label } });
+    assert.throws(() => validatePickerProvider(current), /IOS_FILES_OBSERVED_LOCAL_ROOT_MISMATCH/);
+  }
+  assert.throws(() => validatePickerProvider(bind({ localRoot: undefined })), /IOS_FILES_OBSERVED_LOCAL_ROOT_REQUIRED/);
+  const changed = bind({}), proof = JSON.parse(readFileSync(changed.provider.evidence.path));
+  changed.provider.evidence = evidence('wrong-inventory-hash', { ...proof,
+    localRoot: { ...proof.localRoot, deviceInventory: { ...proof.localRoot.deviceInventory, sha256: 'b'.repeat(64) } } });
+  assert.throws(() => validatePickerProvider(changed), /FIXTURE_EVIDENCE_CHANGED/);
+  const replaced = bind({}), replacement = JSON.parse(readFileSync(replaced.provider.evidence.path));
+  writeFileSync(replacement.localRoot.deviceInventory.path, '{}');
+  assert.throws(() => validatePickerProvider(replaced), /FIXTURE_EVIDENCE_CHANGED/);
+});
+function ipadPickerFixture(t) {
+  const value = fixture(t), { context, picker, evidence } = value;
+  const inventory = evidence('ipad-inventory', { devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-5': [
+    { udid: context.fixture.udid, name: 'CaseOps tablet', state: 'Booted', isAvailable: true,
+      deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' },
+  ] } });
+  context.provider.evidence = evidence('ipad-observation', { ...picker, localRoot: { label: 'On My iPad', deviceInventory: inventory } });
+  return value;
+}
+test('device-bound iPad picker selection and cancellation use only exact tablet root controls within the original action bound', async (t) => {
+  for (const [initial, expected] of [
+    ['folder', ['choose','exact-owned-file']],
+    ['old-folder', ['choose','back-On-My-iPad','owned-folder','exact-owned-file']],
+    ['root', ['choose','owned-folder','exact-owned-file']],
+    ['locations', ['choose','On-My-iPad-location','owned-folder','exact-owned-file']],
+    ['recents', ['choose','browse','On-My-iPad-location','owned-folder','exact-owned-file']],
+  ]) {
+    const { context, uploads } = ipadPickerFixture(t), asset = uploads.txt;
+    const fake = pickerRouteDouble(context, asset, initial, { localRootLabel: 'On My iPad' });
+    await chooseIosFile(context, asset);
+    assert.deepEqual(fake.clicks, expected);
+    assert.equal(fake.state(), 'selected');
+    assert.equal(fake.clicks.filter((name) => name === 'exact-owned-file').length, 1);
+    assert.ok(fake.clicks.length <= 5);
+  }
+  for (const initial of ['old-folder','root','locations']) {
+    const { context, uploads } = ipadPickerFixture(t);
+    const fake = pickerRouteDouble(context, uploads.txt, initial, { localRootLabel: 'On My iPad' });
+    await chooseIosFile(context, uploads.txt, { cancel: true });
+    assert.equal(fake.state(), 'files');
+    assert.deepEqual(fake.clicks, initial === 'old-folder' ? ['choose','back-On-My-iPad','cancel'] : ['choose','cancel']);
+  }
+});
+test('iPad picker rejects ambiguous or mismatched actual root controls before any owned-folder or file selection', async (t) => {
+  for (const [options, reason] of [
+    [{ duplicateLocation: true }, 'AMBIGUOUS_VISIBLE_NATIVE_LOCATOR'],
+    [{ actualRootLabel: 'On My iPhone' }, 'NATIVE_CONTROL_NOT_VISIBLE'],
+  ]) {
+    const { context, uploads } = ipadPickerFixture(t), asset = uploads.txt;
+    const fake = pickerRouteDouble(context, asset, 'locations', { localRootLabel: 'On My iPad', ...options });
+    await assert.rejects(chooseIosFile(context, asset), new RegExp(reason));
+    assert.equal(fake.clicks.includes('exact-owned-file'), false);
+    assert.equal(fake.clicks.includes('owned-folder'), false);
+    assert.ok(fake.clicks.filter((name) => name === 'browse').length <= 1);
   }
 });
 test('picker cancellation is cohort-independent while duplicate and unknown location states never select a file', async (t) => {
@@ -384,8 +566,8 @@ test('rapid upload uses two measured native touches in one dispatch and never re
 });
 test('privacy acceptance rejects wrong device, unowned scans, altered originals and even one retained private byte match', (t) => {
   const { context } = fixture(t), boundary='selection-clear';
-  const receipt = { schemaVersion: 1, observed: true, platform: 'ios', udid: context.fixture.udid, bundleId: context.fixture.appId,
-    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: true, stagedFileCount: 0, privateByteMatchCount: 0 };
+  const receipt = { schemaVersion: 2, observed: true, platform: 'ios', udid: context.fixture.udid, bundleId: context.fixture.appId,
+    boundary, ownedAppScopeOnly: true, providerOriginalsUnchanged: null, providerMetadataUnchanged: true, providerOriginalsRead: false, providerByteVerification: 'deferred-until-postflight', stagedFileCount: 0, privateByteMatchCount: 0 };
   assert.equal(validatePrivacyReceipt(context,boundary,receipt),receipt);
   for (const change of [{ observed:false }, {udid:'other'}, {boundary:'other'}, {ownedAppScopeOnly:false}, {providerOriginalsUnchanged:false}, {stagedFileCount:1}, {privateByteMatchCount:1}])
     assert.throws(()=>validatePrivacyReceipt(context,boundary,{...receipt,...change}));
@@ -408,13 +590,20 @@ test('picker cancel includes authoritative entry read even when the actual choos
   const files=Object.assign(control('',()=>{
     ui='files';ledger.requests.push({sequence:++ledger.lastSequence,method:'GET',route:`/api/matters/${matterId}/workspace`,status:200,nativeMarker:true});
   }),{elementId:'scoped-files-section'});
+  // iOS input focuses this field, waits for the keyboard and reads its text back.
+  let typed='';
+  const search=Object.assign(control(),{elementId:'matter-search-field',clearValue:async()=>{typed='';},
+    addValue:async(value)=>{typed+=value;},getAttribute:async(key)=>key==='value'?typed:null});
   context.driver={
+    async pause(){},
     async waitUntil(check,options){if(!await check())throw new Error(options?.timeoutMsg||'OFFLINE_UI_NOT_READY');},
     async $$(query){
       if(query==='~account-open')return [control()];
       if(query==='~tab-matters')return [control('',()=>{ui='matters';})];
       if(query==='~screen-matters')return ui==='matters'?[control()]:[];
-      if(query==='~matter-search'||query==='~matter-search-submit')return [control()];
+      if(query==='~matter-search')return [search];
+      if(query==='~matter-search-submit')return [control()];
+      if(query==='-ios predicate string:type == "XCUIElementTypeKeyboard"')return [control()];
       if(query===`~matter-row-${matterId}`)return [control('',()=>{ui='matter';})];
       if(query==='~matter-code'||query==='~files-matter-code')return [control('OFFLINE-001')];
       if(query.includes('label == "Synthetic offline matter"')||query==='~files-matter-title')return [control('Synthetic offline matter')];
@@ -425,8 +614,8 @@ test('picker cancel includes authoritative entry read even when the actual choos
       return [];
     },
   };
-  context.observeFilesystem=async(boundary)=>evidence('cancel-privacy',{schemaVersion:1,observed:true,platform:'ios',udid:context.fixture.udid,
-    bundleId:context.fixture.appId,boundary,ownedAppScopeOnly:true,providerOriginalsUnchanged:true,stagedFileCount:0,privateByteMatchCount:0});
+  context.observeFilesystem=async(boundary)=>evidence('cancel-privacy',{schemaVersion:2,observed:true,platform:'ios',udid:context.fixture.udid,
+    bundleId:context.fixture.appId,boundary,ownedAppScopeOnly:true,providerOriginalsUnchanged:null,providerMetadataUnchanged:true,providerOriginalsRead:false,providerByteVerification:'deferred-until-postflight',stagedFileCount:0,privateByteMatchCount:0});
   measuredFileDriver(context);
   const protocolClick=context.driver.elementClick;
   context.driver.elementClick=async id=>id===files.elementId?files.click():protocolClick(id);
@@ -475,6 +664,12 @@ test('iOS persisted proof requires the exact visible acknowledgement inside its 
   const good=markerFixture();
   await proveIosUploadPersisted(good.context,good.message);
   await findIosUploadPersisted(good.context);
+  // Observed on iOS 27: marker 253+73, message 253+74 after whole-point rounding.
+  const marker=good.rects.get('files-upload-persisted');
+  const rounded=markerFixture();rounded.rects.set('ack-text',{...marker,height:marker.height+1});
+  await proveIosUploadPersisted(rounded.context,rounded.message);
+  const overhang=markerFixture();overhang.rects.set('ack-text',{...marker,height:marker.height+2});
+  await assert.rejects(proveIosUploadPersisted(overhang.context,overhang.message),/IOS_FILES_UPLOAD_ACK_OUTSIDE_MARKER/);
   for(const change of ['marker-only','wrong-text','wrong-frame','duplicate-marker','duplicate-message']){
     const fake=markerFixture();
     let message=fake.message;
@@ -524,4 +719,117 @@ test('selected-file proof requires exact visible filename and enabled Upload wit
     measuredFileDriver(context,id=>id==='files-selection'?{x:20,y:150,width:362,height:options.outside?20:200}:id==='files-upload'?{x:140,y:250,width:122,height:51}:{x:20,y:160,width:300,height:25});return{context,asset};};
   const good=create({});await proveIosSelectedFile(good.context,good.asset);
   for(const options of[{duplicate:true},{wrongName:true},{outside:true}]){const c=create(options);await assert.rejects(proveIosSelectedFile(c.context,c.asset));}
+});
+
+// Full existing reader composition with public synthetic bytes and an offline
+// native/gateway double. The initial state matches the retained FILES04 facts.
+const originalTextReaderFetch = globalThis.fetch;
+function textReaderDouble(t, options = {}) {
+  const text = 'A'.repeat(9999) + '\n' + 'B'.repeat(10000) + 'C'.repeat(4000);
+  const anchor = { matterId: '11111111-1111-4111-8111-111111111111', attachmentId: '22222222-2222-4222-8222-222222222222', filename: 'synthetic-three-segments.txt', text, sizeBytes: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex') };
+  const segments = textSegments(text), clicks = [], waits = [], events = [];
+  const ledger = { runId: 'offline-text-ready', requests: [], lastSequence: 0, overflow: false, markerRejected: 0, routeRejected: 0 };
+  let ui = 'files', ready = false, page = 1, zoom = 100, polls = 0;
+  t.after(() => { globalThis.fetch = originalTextReaderFetch; });
+  globalThis.fetch = async (url) => { assert.equal(url, 'https://127.0.0.1:8443/__caseops_e2e/status'); return Response.json(ledger); };
+  const rect = id => id === 'scroll' ? { x: 0, y: 125, width: 402, height: 638 }
+    : id.startsWith('files-row-') ? { x: 10, y: 140, width: 382, height: 200 }
+      : id.startsWith('files-') ? { x: 20, y: 150, width: 362, height: 44 }
+        : id === 'private-document-viewer' ? { x: 0, y: 62, width: 402, height: 778 }
+          : id === 'viewer-close' ? { x: 8, y: 70, width: 44, height: 44 }
+            : id === 'viewer-toolbar' ? { x: 0, y: 123, width: 402, height: 53 }
+              : { x: 60, y: 79, width: 334, height: 26 };
+  const type = id => id === 'scroll' ? 'XCUIElementTypeScrollView'
+    : ['private-document-viewer', 'viewer-toolbar', 'viewer-loading', 'viewer-blocked', 'viewer-unsupported', 'viewer-closed'].includes(id) || id.startsWith('files-row-') ? 'XCUIElementTypeOther'
+      : ['viewer-close', 'viewer-next', 'viewer-previous', 'viewer-zoom-in'].includes(id) || id.startsWith('files-source-') || id.startsWith('files-open-') ? 'XCUIElementTypeButton' : 'XCUIElementTypeStaticText';
+  const textFor = id => id.startsWith('files-name-') ? anchor.filename : id.startsWith('files-hash-') ? anchor.sha256
+    : id === 'viewer-filename' ? options.wrongFilename ? 'stale-source.txt' : anchor.filename
+      : id === 'viewer-position' ? options.position ?? (ready ? `Segment ${page} of 3` : 'No page displayed')
+        : id === 'viewer-text' ? options.wrongText ? 'Wrong source bytes' : segments[page - 1]
+          : id === 'viewer-zoom' ? `${zoom}%` : id === 'viewer-close' ? 'Return to Files' : id.startsWith('files-source-') ? 'Hide source details' : id;
+  const control = id => ({ elementId: id, isDisplayed: async () => true,
+    isEnabled: async () => id === 'viewer-previous' ? ready && page > 1 : id === 'viewer-next' ? ready && page < 3 : true,
+    getText: async () => { if (id === 'viewer-position' && options.transport) throw options.transport; if (id === 'viewer-text' && options.unreadable) throw options.unreadable; return textFor(id); },
+    getAttribute: async key => key === 'name' ? id : key === 'type' ? type(id) : key === 'label' ? textFor(id) : key === 'accessible' ? 'true' : null,
+  });
+  const context = { platform: 'ios', fixture: { gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: ledger.runId }, record: value => events.push(value), driver: {
+    async $$(query) {
+      if (query === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [control('scroll')];
+      const id = query.startsWith('~') ? query.slice(1) : '';
+      if (id.startsWith('files-')) return ui === 'files' ? [control(id)] : [];
+      if (!id || ui !== 'viewer') return [];
+      if (['viewer-blocked', 'viewer-unsupported', 'viewer-closed'].includes(id)) return options.terminal === id ? [control(id)] : [];
+      if (id === 'viewer-idle' || id === 'viewer-renewing') return [];
+      if (id === 'viewer-loading') return !ready ? [control(id)] : [];
+      if (id === 'viewer-text' && !ready) return [];
+      return Array.from({length: options.duplicatePosition && id === 'viewer-position' ? 2 : 1}, () => control(id));
+    },
+    async waitUntil(check, args) {
+      waits.push(args);
+      if (args.timeoutMsg === 'IOS_FILES_INITIAL_TEXT_READY_REQUIRED') {
+        assert.ok(args.timeout > 0 && args.timeout <= 15000); assert.equal(args.interval, 200);
+        for (let attempt = 0; attempt < 4; attempt++) {
+          polls++;
+          if (!options.neverReady && attempt >= (options.readyAfter ?? 1)) ready = true;
+          const before = clicks.length;
+          const result = await check();
+          assert.equal(clicks.length, before, 'INITIAL_READINESS_POLL_MUST_NOT_DISPATCH');
+          if (result) return;
+        }
+        throw new Error(args.timeoutMsg);
+      }
+      if (!await check()) throw new Error(args.timeoutMsg);
+    },
+    async getWindowRect() { return { x: 0, y: 0, width: 402, height: 874 }; },
+    async getElementRect(id) { return rect(id); },
+    async elementClick(id) {
+      clicks.push(id);
+      if (id.startsWith('files-open-')) {
+        ui = 'viewer'; ready = options.readyAfter === 0;
+        for (const status of [206,200,206]) ledger.requests.push({ sequence: ++ledger.lastSequence, method: 'GET', route: `/api/matters/${anchor.matterId}/attachments/${anchor.attachmentId}/download`, status, nativeMarker: true });
+      } else if (id === 'viewer-zoom-in') { assert.equal(ready, true); zoom = 125; }
+      else if (id === 'viewer-next') { assert.equal(ready, true); page++; }
+      else if (id === 'viewer-previous') { assert.equal(ready, true); page--; }
+      else if (id === 'viewer-close') ui = 'files';
+      else assert.fail('UNEXPECTED_OFFLINE_NATIVE_DISPATCH');
+    },
+  } };
+  return { context, anchor, clicks, waits, events, ledger, polls: () => polls, startReader: () => { ui = 'viewer'; } };
+}
+
+test('initial TXT No page/loading may settle within the existing 15s budget before exact three-segment traversal', async t => {
+  for (const readyAfter of [0, 1]) {
+    const f = textReaderDouble(t, { readyAfter });
+    await readIosText(f.context, f.anchor);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`, 'viewer-zoom-in', 'viewer-next', 'viewer-next', 'viewer-previous', 'viewer-previous', 'viewer-close']);
+    assert.equal(f.events.filter(e => e.boundary === 'ios-private-text-segments-read').length, 1);
+    assert.ok(f.polls() >= 1); assert.equal(f.ledger.requests.filter(row => row.method === 'POST').length, 0);
+  }
+});
+
+test('initial TXT never-ready or stale segment count refuses before zoom/Next and never substitutes bytes', async t => {
+  for (const options of [{ neverReady: true }, { position: 'Segment 1 of 1' }, { position: 'Segment 2 of 3' }]) {
+    const f = textReaderDouble(t, options);
+    await assert.rejects(readIosText(f.context, f.anchor), /IOS_FILES_INITIAL_TEXT_READY_REQUIRED|IOS_FILES_TEXT_INITIAL_POSITION_MISMATCH/);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`]);
+    assert.equal(f.events.some(e => e.boundary === 'ios-private-text-segments-read'), false);
+  }
+});
+
+test('initial TXT error/closed/ambiguous/wrong-source and transport remain terminal without polling mutations', async t => {
+  const original = new Error('Synthetic stale element transport');
+  for (const options of [{terminal:'viewer-blocked'}, {terminal:'viewer-unsupported'}, {terminal:'viewer-closed'}, {duplicatePosition:true}, {wrongFilename:true}, {transport:original}]) {
+    const f = textReaderDouble(t, options); f.startReader();
+    await assert.rejects(awaitIosTextReady(f.context, f.anchor, 3), options.transport ? error => error === original : /IOS_FILES_READER_FAILURE_PRESENT|IOS_FILES_TEXT_FACT_NOT_UNIQUE|IOS_FILES_WRONG_READER_SOURCE/);
+    assert.deepEqual(f.clicks, []); assert.equal(f.polls(), 1);
+  }
+});
+
+test('TXT readiness does not excuse unreadable or wrong content once the native page is ready', async t => {
+  const original = new Error('Synthetic unreadable text');
+  for (const options of [{readyAfter:0,unreadable:original}, {readyAfter:0,wrongText:true}]) {
+    const f = textReaderDouble(t, options);
+    await assert.rejects(readIosText(f.context, f.anchor), options.unreadable ? error => error === original : /IOS_FILES_TEXT_BYTES_DISPLAY_MISMATCH/);
+    assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`]);
+  }
 });

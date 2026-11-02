@@ -5,12 +5,16 @@ import { FileCheck2, HardDrive, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  MatterName,
+  MatterPicker,
+  OPERATIONAL_MATTER_STATUSES,
+} from "@/components/app/MatterPicker";
 import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -23,7 +27,25 @@ import {
   syncGoogleDriveCandidates,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
-import type { DriveCandidateRecord } from "@/lib/api/schemas";
+import type { DriveCandidateRecord, Matter } from "@/lib/api/schemas";
+
+// The review validator (services/drive_sync.py) links or imports only into a
+// Matter the reviewer can open and that can still take operational work.
+function matterBlockedReason(matter: Matter): string | null {
+  return OPERATIONAL_MATTER_STATUSES.has(matter.status)
+    ? null
+    : "closed Matters cannot take new documents";
+}
+
+const STATUS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "All statuses" },
+  { value: "new", label: "New" },
+  { value: "linked_metadata", label: "Linked" },
+  { value: "content_import_requested", label: "Import requested" },
+  { value: "content_imported", label: "Imported" },
+  { value: "failed", label: "Failed" },
+  { value: "ignored", label: "Ignored" },
+];
 
 function tone(status: string): "success" | "warning" | "neutral" | "brand" {
   if (status === "content_imported" || status === "linked_metadata") return "success";
@@ -50,6 +72,7 @@ function CandidateRow({
   busy: boolean;
   onAction: (action: "link_metadata" | "import_file" | "ignore" | "retry") => void;
 }) {
+  const hasTarget = Boolean(matterId || row.linked_matter_id || row.suggested_matter_id);
   return (
     <div className="grid gap-3 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 lg:grid-cols-[1.5fr_1fr_auto]">
       <div className="min-w-0">
@@ -69,9 +92,17 @@ function CandidateRow({
           </div>
         ) : null}
       </div>
-      <div className="text-xs text-[var(--color-mute)]">
-        <div>Suggested: {row.suggested_matter_id ?? "none"}</div>
-        <div>Linked: {row.linked_matter_id ?? "none"}</div>
+      <div className="min-w-0 text-xs text-[var(--color-mute)]">
+        {/* The list is filtered on the linked Matter, or the suggestion when
+            nothing is linked, so only that Matter is resolved here. */}
+        {row.linked_matter_id ? (
+          <div>Linked: <MatterName matterId={row.linked_matter_id} /></div>
+        ) : (
+          <div>Suggested: <MatterName matterId={row.suggested_matter_id} fallback="none" /></div>
+        )}
+        {hasTarget ? null : (
+          <div className="mt-1">Choose a Matter for Link and Import above to link or import this file.</div>
+        )}
         {row.last_error_redacted ? (
           <div className="mt-1 text-amber-800">{row.last_error_redacted}</div>
         ) : null}
@@ -81,7 +112,7 @@ function CandidateRow({
           type="button"
           size="sm"
           variant="outline"
-          disabled={busy || (!row.suggested_matter_id && !matterId)}
+          disabled={busy || !hasTarget}
           onClick={() => onAction("link_metadata")}
         >
           Link
@@ -90,7 +121,7 @@ function CandidateRow({
           type="button"
           size="sm"
           variant="outline"
-          disabled={busy || (!row.suggested_matter_id && !matterId)}
+          disabled={busy || !hasTarget}
           onClick={() => onAction("import_file")}
         >
           Import
@@ -113,6 +144,8 @@ export default function DrivePage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("");
   const [matterId, setMatterId] = useState("");
+  const [matterBlocked, setMatterBlocked] = useState<string | null>(null);
+  const actionMatterId = matterBlocked ? "" : matterId;
   const query = useQuery({
     queryKey: ["drive-candidates", status],
     queryFn: () => fetchDriveCandidates({ status: status || undefined, limit: 75 }),
@@ -159,7 +192,7 @@ export default function DrivePage() {
       reviewDriveCandidate({
         candidateId: input.candidateId,
         action: input.action,
-        matterId: matterId || null,
+        matterId: actionMatterId || null,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["drive-candidates"] }),
     onError: (error) => {
@@ -209,23 +242,35 @@ export default function DrivePage() {
 
       <Card>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="drive-status">Status</Label>
-            <Input
+            <select
               id="drive-status"
-              placeholder="new, failed, content_imported"
+              className="mt-1 h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-            />
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
-          <div>
-            <Label htmlFor="drive-matter">Matter id for actions</Label>
-            <Input
+          <div className="min-w-0">
+            <MatterPicker
               id="drive-matter"
-              placeholder="matter id"
+              label="Matter for Link and Import"
+              searchLabel="Search Matters for Link and Import"
               value={matterId}
-              onChange={(event) => setMatterId(event.target.value)}
+              disabledReason={matterBlockedReason}
+              error={matterBlocked ? `This Matter cannot be used: ${matterBlocked}.` : null}
+              onChange={(next, matter) => {
+                setMatterId(next);
+                setMatterBlocked(matter ? matterBlockedReason(matter) : null);
+              }}
             />
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Used for files without a suggested Matter. Files with a suggestion use their suggested Matter unless you choose one here.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -255,7 +300,7 @@ export default function DrivePage() {
               <CandidateRow
                 key={row.id}
                 row={row}
-                matterId={matterId}
+                matterId={actionMatterId}
                 busy={reviewMutation.isPending}
                 onAction={(action) =>
                   reviewMutation.mutate({ candidateId: row.id, action })

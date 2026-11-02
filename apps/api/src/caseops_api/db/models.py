@@ -2467,6 +2467,12 @@ class HearingReminder(Base):
 
     __tablename__ = "hearing_reminders"
     __table_args__ = (
+        Index(
+            "ix_hearing_reminder_company_hearing_generation",
+            "company_id",
+            "hearing_id",
+            "schedule_generation",
+        ),
         UniqueConstraint(
             "hearing_id",
             "recipient_membership_id",
@@ -4026,6 +4032,10 @@ class NotificationRule(Base):
 class InAppNotification(Base):
     __tablename__ = "in_app_notifications"
     __table_args__ = (
+        Index(
+            "ix_inapp_company_recipient_created_id",
+            "company_id", "recipient_membership_id", "created_at", "id",
+        ),
         UniqueConstraint(
             "recipient_membership_id",
             "event_type",
@@ -4078,6 +4088,7 @@ class InAppNotification(Base):
 class NotificationDeliveryIntent(Base):
     __tablename__ = "notification_delivery_intents"
     __table_args__ = (
+        Index("ix_notification_intent_inapp_id", "in_app_notification_id", "id"),
         UniqueConstraint(
             "company_id",
             "idempotency_key",
@@ -9619,6 +9630,7 @@ class OutsideCounsel(Base):
 class MatterOutsideCounselAssignment(Base):
     __tablename__ = "matter_outside_counsel_assignments"
     __table_args__ = (
+        Index("ix_oc_assignments_company_matter_id", "company_id", "matter_id", "id"),
         UniqueConstraint(
             "matter_id",
             "counsel_id",
@@ -9682,6 +9694,9 @@ class MatterOutsideCounselAssignment(Base):
 
 class OutsideCounselSpendRecord(Base):
     __tablename__ = "outside_counsel_spend_records"
+    __table_args__ = (
+        Index("ix_oc_spend_company_matter_id", "company_id", "matter_id", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -9878,6 +9893,9 @@ class ContractClause(Base):
 
 class ContractObligation(Base):
     __tablename__ = "contract_obligations"
+    __table_args__ = (
+        Index("ix_contract_obligations_contract_id_id", "contract_id", "id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     contract_id: Mapped[str] = mapped_column(
@@ -11270,6 +11288,12 @@ class Recommendation(Base):
             name="ck_recommendation_review_progress",
         ),
         Index(
+            "ix_recommendation_read_company_matter_created_id",
+            "company_id", "matter_id", "created_at", "id",
+            postgresql_where=text("type <> 'intelligent_review'"),
+            sqlite_where=text("type <> 'intelligent_review'"),
+        ),
+        Index(
             "ix_recommendations_company_review_state_created",
             "company_id",
             "review_state",
@@ -11401,6 +11425,12 @@ class Recommendation(Base):
 
 class RecommendationOption(Base):
     __tablename__ = "recommendation_options"
+    __table_args__ = (
+        Index(
+            "ix_recommendation_option_parent_rank_id",
+            "recommendation_id", "rank", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     recommendation_id: Mapped[str] = mapped_column(
@@ -11420,6 +11450,12 @@ class RecommendationOption(Base):
 
 class RecommendationDecision(Base):
     __tablename__ = "recommendation_decisions"
+    __table_args__ = (
+        Index(
+            "ix_recommendation_decision_parent_created_id",
+            "recommendation_id", "created_at", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     recommendation_id: Mapped[str] = mapped_column(
@@ -11533,6 +11569,12 @@ class HearingPack(Base):
     always review_required until a partner reviews it (PRD §17.4)."""
 
     __tablename__ = "hearing_packs"
+    __table_args__ = (
+        Index(
+            "ix_hearing_pack_matter_hearing_generated_id",
+            "matter_id", "hearing_id", "generated_at", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     matter_id: Mapped[str] = mapped_column(
@@ -11576,6 +11618,12 @@ class HearingPack(Base):
 
 class HearingPackItem(Base):
     __tablename__ = "hearing_pack_items"
+    __table_args__ = (
+        Index(
+            "ix_hearing_pack_item_parent_rank_id",
+            "pack_id", "rank", "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     pack_id: Mapped[str] = mapped_column(
@@ -11973,6 +12021,24 @@ class AuditEvent(Base):
     """
 
     __tablename__ = "audit_events"
+    __table_args__ = (
+        Index(
+            "ix_audit_events_source_proof_seek",
+            "company_id", "target_id", "ip_docket_id", "action", "target_type", "id",
+        ),
+        Index(
+            "ix_audit_events_typed_source_proof_seek",
+            "target_type", "target_id", "company_id", "ip_docket_id", "action", "id",
+        ),
+        Index(
+            "ix_audit_events_source_provenance",
+            "company_id",
+            "action",
+            "target_type",
+            "target_id",
+            "ip_docket_id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -15444,6 +15510,30 @@ class IpPortfolioExportJob(Base):
             "created_at",
         ),
         Index("ix_ip_portfolio_exports_requester", "requested_by_membership_id"),
+        Index(
+            "ix_ip_portfolio_exports_requester_status",
+            "company_id", "requested_by_membership_id", "status", "id",
+        ),
+        Index(
+            "ix_ip_portfolio_exports_queue",
+            "dispatch_protocol_version", "status", "created_at", "id",
+        ),
+        Index(
+            "ix_ip_portfolio_exports_recovery",
+            "dispatch_protocol_version", "status", "worker_claim_expires_at", "created_at", "id",
+        ),
+        CheckConstraint(
+            "dispatch_protocol_version IN (0, 1)",
+            name="ck_ip_portfolio_export_dispatch_protocol",
+        ),
+        CheckConstraint(
+            "dispatch_protocol_version = 0 OR "
+            "(status = 'running' AND worker_claim_token IS NOT NULL "
+            "AND worker_claim_expires_at IS NOT NULL) OR "
+            "(status <> 'running' AND worker_claim_token IS NULL "
+            "AND worker_claim_expires_at IS NULL)",
+            name="ck_ip_portfolio_export_claim_state",
+        ),
         CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed')",
             name="ck_ip_portfolio_export_status",
@@ -15461,6 +15551,14 @@ class IpPortfolioExportJob(Base):
     )
     requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    # Zero deliberately identifies old writers that cannot fence finalization.
+    dispatch_protocol_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    worker_claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    worker_claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     format: Mapped[str] = mapped_column(String(12), nullable=False, default="csv")
     filters_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     columns_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -18074,11 +18172,24 @@ class IpDocument(Base):
             name="fk_ip_document_creator_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["retired_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_document_retired_by_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_ip_document_id_company"),
         CheckConstraint("current_version > 0", name="ck_ip_document_current_version_positive"),
         CheckConstraint(
             "confidentiality IN ('internal', 'confidential', 'restricted')",
             name="ck_ip_document_confidentiality",
+        ),
+        CheckConstraint(
+            "(retired_at IS NULL AND retired_by_membership_id IS NULL"
+            " AND retirement_reason IS NULL)"
+            " OR (retired_at IS NOT NULL AND retired_by_membership_id IS NOT NULL"
+            " AND retirement_reason IS NOT NULL)",
+            name="ck_ip_document_retirement_complete",
         ),
     )
 
@@ -18098,6 +18209,11 @@ class IpDocument(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+    # Retirement withdraws the document from pickers, validators and current
+    # lists; it never deletes the document, its versions, links or bytes.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class IpDocumentVersion(Base):
@@ -19457,15 +19573,26 @@ class LegalWorkingCalendarVersion(Base):
 
 
 class IpRuleSet(Base):
-    """Stable identity for a scoped legal deadline rule."""
+    """Stable identity for one company's scoped legal deadline rule.
+
+    IPLF-027B A1: every rule set is owned by exactly one company and its key is
+    unique only within that company. ``company_id`` stays nullable for the
+    expand phase only; the A1 migration backfills every legacy row and refuses
+    ambiguous ownership, every writer sets it, and readers treat a NULL owner
+    as not found.
+    """
 
     __tablename__ = "ip_rule_sets"
     __table_args__ = (
-        UniqueConstraint("key", name="uq_ip_rule_set_key"),
+        UniqueConstraint("company_id", "key", name="uq_ip_rule_set_company_key"),
+        UniqueConstraint("id", "company_id", name="uq_ip_rule_set_id_company"),
         CheckConstraint("rule_kind IN ('deadline', 'form', 'fee')", name="ck_ip_rule_set_kind"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=True
+    )
     key: Mapped[str] = mapped_column(String(160), nullable=False)
     rule_kind: Mapped[str] = mapped_column(String(24), nullable=False)
     jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -19548,6 +19675,13 @@ class CompanyIpRulePolicy(Base):
             ["ip_rule_versions.id", "ip_rule_versions.rule_set_id"],
             name="fk_company_ip_policy_version_set",
             ondelete="RESTRICT",
+        ),
+        # A company can only select a version of a rule set it owns.
+        ForeignKeyConstraint(
+            ["rule_set_id", "company_id"],
+            ["ip_rule_sets.id", "ip_rule_sets.company_id"],
+            name="fk_company_ip_policy_rule_set_company",
+            ondelete="CASCADE",
         ),
         UniqueConstraint("company_id", "rule_set_id", name="uq_company_ip_rule_policy"),
         CheckConstraint("version > 0", name="ck_company_ip_rule_policy_version_positive"),
@@ -22496,6 +22630,28 @@ from caseops_api.db import native_auth_models  # noqa: E402
 NativeAuthorizationCode = native_auth_models.NativeAuthorizationCode
 NativeDeviceSession = native_auth_models.NativeDeviceSession
 NativeRefreshToken = native_auth_models.NativeRefreshToken
+from caseops_api.db import account_privacy_models as _privacy_models  # noqa: E402
+from caseops_api.db import (  # noqa: E402
+    matter_readthrough_page_schema_v1,  # noqa: E402, F401
+    task_queue_page_schema_v1,  # noqa: E402, F401
+)
+
+# Register these tables and retain the actual public class identities.
+AccountDeletionRequest = _privacy_models.AccountDeletionRequest
+from caseops_api.db import counsel_page_models as _counsel_models  # noqa: E402
+
+CounselReadPage = _counsel_models.CounselReadPage
+CounselReadPageDirty = _counsel_models.CounselReadPageDirty
+CounselReadPageMember = _counsel_models.CounselReadPageMember
+from caseops_api.db import matter_readthrough_page_models as _readthrough_models  # noqa: E402
+
+MatterDecisionReadPage = _readthrough_models.MatterDecisionReadPage
+MatterHearingPackReadPage = _readthrough_models.MatterHearingPackReadPage
+MatterOptionReadPage = _readthrough_models.MatterOptionReadPage
+MatterPackItemReadPage = _readthrough_models.MatterPackItemReadPage
+MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
+MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
+from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
@@ -22504,6 +22660,15 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
     IpPatentEvidenceDocument,
     IpPatentEvidenceVersion,
     IpPatentProsecutionEvent,
+)
+
+MatterTaskQueueDirty = _queue_models.MatterTaskQueueDirty
+MatterTaskQueueGroup = _queue_models.MatterTaskQueueGroup
+MatterTaskQueuePage = _queue_models.MatterTaskQueuePage
+
+event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
+event.listen(
+    Base.metadata, "after_create", matter_readthrough_page_schema_v1.install_model_schema
 )
 
 ensure_foreign_key_indexes(Base.metadata)

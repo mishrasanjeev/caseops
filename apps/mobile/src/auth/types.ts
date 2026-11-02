@@ -13,6 +13,14 @@ export type NativeGrant = SessionIdentity & {
 };
 
 export type StoredCredential = { refreshToken: string; sessionId: string };
+export type ServerSessionBinding = Readonly<{
+  userId: string;
+  companyId: string;
+  membershipId: string;
+  sessionId: string;
+}>;
+export type LocalSessionBinding = ServerSessionBinding &
+  Readonly<{ sessionKey: string }>;
 export type CredentialStore = {
   read: () => Promise<StoredCredential | null>;
   write: (credential: StoredCredential) => Promise<void>;
@@ -31,13 +39,26 @@ export function parseIdentity(value: unknown): SessionIdentity {
     return input;
   };
   const row = record(value);
-  const company = record(row.company), user = record(row.user), membership = record(row.membership);
+  const company = record(row.company),
+    user = record(row.user),
+    membership = record(row.membership);
   if (!Array.isArray(row.capabilities) || row.capabilities.length > 2048)
     throw new Error("The workspace identity could not be verified.");
   return {
-    company: { id: text(company.id, 200), name: text(company.name, 300), slug: text(company.slug, 100) },
-    user: { id: text(user.id, 200), email: text(user.email, 320), full_name: text(user.full_name, 300) },
-    membership: { id: text(membership.id, 200), role: text(membership.role, 100) },
+    company: {
+      id: text(company.id, 200),
+      name: text(company.name, 300),
+      slug: text(company.slug, 100),
+    },
+    user: {
+      id: text(user.id, 200),
+      email: text(user.email, 320),
+      full_name: text(user.full_name, 300),
+    },
+    membership: {
+      id: text(membership.id, 200),
+      role: text(membership.role, 100),
+    },
     capabilities: row.capabilities.map((capability) => text(capability, 200)),
   };
 }

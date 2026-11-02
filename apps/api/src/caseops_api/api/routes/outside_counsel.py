@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -10,6 +10,7 @@ from caseops_api.api.dependencies import (
     require_capability,
 )
 from caseops_api.schemas.outside_counsel import (
+    MatterCounselContextResponse,
     OutsideCounselAssignmentCreateRequest,
     OutsideCounselAssignmentRecord,
     OutsideCounselCreateRequest,
@@ -26,6 +27,7 @@ from caseops_api.services.outside_counsel import (
     create_outside_counsel_assignment,
     create_outside_counsel_profile,
     create_outside_counsel_spend_record,
+    get_matter_counsel_context,
     get_outside_counsel_recommendations,
     get_outside_counsel_workspace,
     update_outside_counsel_profile,
@@ -39,6 +41,27 @@ CounselManager = Annotated[SessionContext, Depends(require_capability('outside_c
 CounselRecommender = Annotated[
     SessionContext, Depends(require_capability("outside_counsel:recommend"))
 ]
+
+
+@router.get(
+    "/matters/{matter_id}/context",
+    response_model=MatterCounselContextResponse,
+    summary="Read bounded outside counsel and spend pages for one visible Matter",
+)
+async def get_current_matter_counsel_context(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    assignment_limit: int = Query(default=10, ge=1, le=25),
+    spend_limit: int = Query(default=10, ge=1, le=25),
+    assignment_after: str | None = Query(default=None, min_length=36, max_length=36),
+    spend_after: str | None = Query(default=None, min_length=36, max_length=36),
+) -> MatterCounselContextResponse:
+    return get_matter_counsel_context(
+        session, context=context, matter_id=matter_id,
+        assignment_limit=assignment_limit, spend_limit=spend_limit,
+        assignment_after=assignment_after, spend_after=spend_after,
+    )
 
 
 @router.get(

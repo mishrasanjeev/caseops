@@ -153,8 +153,8 @@ export default function ImportActivityPage() {
       </div>
 
       {history.data.jobs.length ? (
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-line)] bg-white">
-          <table className="min-w-[840px] w-full text-left text-sm" data-testid="import-activity-table">
+        <div className="@container overflow-x-auto rounded-lg border border-[var(--color-line)] bg-white">
+          <table className="w-full text-left text-sm @min-[840px]:min-w-[840px] @max-[840px]:stacked-table @max-[840px]:px-4" data-testid="import-activity-table">
             <thead className="border-b border-[var(--color-line)] bg-[var(--color-bg-2)] text-xs uppercase text-[var(--color-mute)]">
               <tr>
                 <th className="px-4 py-3">File</th>
@@ -170,7 +170,7 @@ export default function ImportActivityPage() {
                 const downloadKey = `${job.domain}:${job.id}`;
                 return (
                   <tr key={downloadKey} className="border-b border-[var(--color-line-2)] last:border-0">
-                    <td className="max-w-[260px] px-4 py-3">
+                    <td data-label="File" className="max-w-[260px] px-4 py-3">
                       <p className="truncate font-medium text-[var(--color-ink)]" title={job.filename}>
                         {job.filename}
                       </p>
@@ -178,15 +178,15 @@ export default function ImportActivityPage() {
                         {job.creator_label ?? "Unknown creator"}
                       </p>
                     </td>
-                    <td className="px-4 py-3">{DOMAIN_LABELS[job.domain]}</td>
-                    <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
-                    <td className="px-4 py-3 tabular-nums">
+                    <td data-label="Workflow" className="px-4 py-3">{DOMAIN_LABELS[job.domain]}</td>
+                    <td data-label="Status" className="px-4 py-3"><StatusBadge status={job.status} /></td>
+                    <td data-label="Rows" className="px-4 py-3 tabular-nums">
                       <p>{job.total_rows} total</p>
                       <p className="text-xs text-[var(--color-mute)]">{rowSummary(job)}</p>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatDate(job.created_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
+                    <td data-label="Created" className="whitespace-nowrap px-4 py-3">{formatDate(job.created_at)}</td>
+                    <td data-label="Actions" className="px-4 py-3">
+                      <div className="flex justify-end gap-1 @max-[840px]:justify-start">
                         <Button
                           variant="ghost"
                           size="sm"

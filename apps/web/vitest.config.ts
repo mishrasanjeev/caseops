@@ -3,6 +3,8 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+import { hostTrustedForks } from "./lib/vitest-host-pool";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -11,6 +13,7 @@ export default defineConfig({
     },
   },
   test: {
+    pool: hostTrustedForks,
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
