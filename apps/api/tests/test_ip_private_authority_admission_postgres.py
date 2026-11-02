@@ -418,9 +418,8 @@ def test_ip_private_authority_overlap(
     pg_engine, registered_intake, tmp_path, request, autoflush, same_actor, first, mutation
 ):
     data = _fixture(pg_engine, mutation, same_actor)
-    path = Path(os.environ.get("CASEOPS_IP_AUTHORITY_EVIDENCE", str(tmp_path)))
-    path.mkdir(parents=True, exist_ok=True)
-    with (path / f"{request.node.callspec.id}.jsonl").open("x", encoding="utf-8") as stream:
+    with _authority_journal(request, tmp_path, "").open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "test", "nodeid": request.node.nodeid}) + "\n")
         guard = Lock()
 
         def record(kind, **values):
@@ -429,6 +428,24 @@ def test_ip_private_authority_overlap(
                 stream.flush()
 
         _overlap(pg_engine, data, mutation, autoflush, first, record)
+
+
+def _authority_journal(request, tmp_path, prefix):
+    """Write overlap journals where CI uploads them.
+
+    A missed directed blocker needs this evidence; tmp_path is discarded with
+    the runner. The shard's native directory uploads its direct *.jsonl
+    children, so use a bounded identity hash there and record the full id.
+    """
+    root = (
+        os.environ.get("CASEOPS_IP_AUTHORITY_EVIDENCE")
+        or os.environ.get("CASEOPS_FINALIZER_EVIDENCE_DIR")
+        or str(tmp_path)
+    )
+    path = Path(root)
+    path.mkdir(parents=True, exist_ok=True)
+    digest = sha256(request.node.nodeid.encode()).hexdigest()[:20]
+    return path / f"ip-authority-{prefix}{digest}.jsonl"
 
 
 def _overlap(engine, data, mutation, autoflush, first, record, *, dirty_source=False):
@@ -694,9 +711,8 @@ def test_ip_private_admission_precedes_pending_source_flush(
     pg_engine, registered_intake, tmp_path, request, autoflush, mutation
 ):
     data = _fixture(pg_engine, mutation, True)
-    path = Path(os.environ.get("CASEOPS_IP_AUTHORITY_EVIDENCE", str(tmp_path)))
-    path.mkdir(parents=True, exist_ok=True)
-    with (path / f"dirty-{request.node.callspec.id}.jsonl").open("x", encoding="utf-8") as stream:
+    with _authority_journal(request, tmp_path, "dirty-").open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "test", "nodeid": request.node.nodeid}) + "\n")
         guard = Lock()
 
         def record(kind, **values):
@@ -1098,9 +1114,9 @@ def test_lifecycle_event_actor_precedes_parent_during_real_offboarding(
         event.remove(pg_engine, "handle_error", database_error)
         observer.dispose()
         record("results", results=results, errors=errors, parent_error=parent_error)
-        path = Path(os.environ.get("CASEOPS_IP_AUTHORITY_EVIDENCE", str(tmp_path)))
-        path.mkdir(parents=True, exist_ok=True)
-        with (path / f"offboarding-{request.node.callspec.id}.jsonl").open("x") as stream:
+        journal = _authority_journal(request, tmp_path, "offboarding-")
+        with journal.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps({"event": "test", "nodeid": request.node.nodeid}) + "\n")
             for row in records:
                 stream.write(json.dumps(row, default=str) + "\n")
     assert not errors, errors

@@ -1,0 +1,33 @@
+{
+  "after": {
+    "environment": {
+      "CASEOPS_IP_RULE_GOVERNANCE_ENABLED": "true",
+      "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT": "2027-04-30T18:29:59Z"
+    },
+    "revision": "caseops-api-00508-tjf"
+  },
+  "before": {
+    "environment": {
+      "CASEOPS_IP_RULE_GOVERNANCE_ENABLED": "false",
+      "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT": null
+    },
+    "revision": "caseops-api-00507-dkw"
+  },
+  "completed_at": "2026-11-02T12:01:35Z",
+  "control": "iplf-027b-a2-rule-governance",
+  "gcloud_update_arguments": [
+    "--container",
+    "api",
+    "--update-env-vars",
+    "^|^CASEOPS_IP_RULE_GOVERNANCE_ENABLED=true|CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=2027-04-30T18:29:59Z"
+  ],
+  "image": "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:9c1d1e06035fd44c1ecf8f47662ac388ebed0a29a81c0881aaacd7f182bc779a",
+  "mode": "enable",
+  "project": "perfect-period-305406",
+  "region": "asia-south1",
+  "release_sha": "00bfb7fcee6eb13d3567457e6132fb0306ef1706",
+  "schema_version": 1,
+  "service": "caseops-api",
+  "started_at": "2026-11-02T11:59:57Z",
+  "updated_at": "2026-11-02T12:01:02Z"
+}

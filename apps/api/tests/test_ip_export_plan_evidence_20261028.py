@@ -54,6 +54,7 @@ def _exercise_plan_evidence(
         "statement": "SELECT id FROM audit_events WHERE company_id = %(company_id)s",
         "parameters": {"company_id": "synthetic-company"},
         "read_only": True,
+        "ordered": False,
         "limit": 1,
     }
     plan = [{

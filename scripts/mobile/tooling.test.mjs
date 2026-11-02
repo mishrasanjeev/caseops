@@ -1676,6 +1676,34 @@ test('Firefox unknown or disabled entry states exhaust one 20 second bound witho
   }
 });
 
+test('Firefox entry timeout records a text-free screen observation and keeps the original failure', async t => {
+  const page = '<hierarchy><android.widget.FrameLayout class="android.webkit.WebView"><node content-desc=" 10.0.2.2:3843/native/sign-in?state=x" />'
+    + '<node text="Connect the CaseOps app" /><node text="PRIVATE_PAGE_TEXT_SENTINEL" /><node content-desc="Use another account" />'
+    + '<node content-desc="Non-private Tabs Open: 4. Tap to switch tabs." /></android.widget.FrameLayout></hierarchy>';
+  const fake = firefoxEntryDouble(t, () => 0);
+  fake.context.driver.getCurrentPackage = async () => 'org.mozilla.firefox';
+  fake.context.driver.getPageSource = async () => page;
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /^Error: FIREFOX_ENTRY_NOT_READY$|FIREFOX_ENTRY_NOT_READY/);
+  const observation = fake.records.find(record => record.type === 'firefox_entry_observation');
+  assert.deepEqual({ ...observation, nodes: undefined, sourceBytes: undefined }, { type: 'firefox_entry_observation', packageName: 'org.mozilla.firefox',
+    nodes: undefined, sourceBytes: undefined, webContent: true, signInPage: true, connectPage: true, useAnotherAccount: true, loginForm: false,
+    passwordField: false, errorPage: false, urlEditor: false, tabCount: 4 });
+  // Only the fixed fact keys are recorded, and no page text survives.
+  assert.deepEqual(Object.keys(observation).sort(), ['connectPage', 'errorPage', 'loginForm', 'nodes', 'packageName', 'passwordField',
+    'signInPage', 'sourceBytes', 'tabCount', 'type', 'urlEditor', 'useAnotherAccount', 'webContent']);
+  assert.equal(JSON.stringify(fake.records).includes('PRIVATE_PAGE_TEXT_SENTINEL'), false, 'NO_PAGE_TEXT_RETAINED');
+  // An unavailable observation never replaces the original failure.
+  const broken = firefoxEntryDouble(t, () => 0);
+  broken.context.driver.getPageSource = async () => { throw Error('UNIT_SOURCE_LOST'); };
+  await assert.rejects(resolveFirefoxEntry(broken.context, broken.recipe), /FIREFOX_ENTRY_NOT_READY/);
+  assert.deepEqual(broken.records.filter(record => record.type === 'firefox_entry_observation_unavailable'),
+    [{ type: 'firefox_entry_observation_unavailable', reason: 'FIREFOX_ENTRY_OBSERVATION_FAILED' }]);
+  // Entry ambiguity is terminal and is not observed as a timeout.
+  const ambiguous = firefoxEntryDouble(t, ({ key }) => Number(['useAnotherAccount', 'signInLink'].includes(key)));
+  ambiguous.context.driver.getPageSource = async () => assert.fail('NO_OBSERVATION_FOR_NON_TIMEOUT');
+  await assert.rejects(resolveFirefoxEntry(ambiguous.context, ambiguous.recipe), /AMBIGUOUS/);
+});
+
 test('Firefox entry ambiguity and read transport failures remain terminal rather than waitUntil-swallowed', async t => {
   for (const state of [({ key }) => key === 'companySlug' ? 2 : 0,
     ({ key }) => Number(['useAnotherAccount', 'signInLink'].includes(key)),
@@ -5044,11 +5072,17 @@ test('CI-COMMAND-02 hardening refuses missing context foreign command names alia
   });
 });
 test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
-  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
+  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, { status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
     assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
     assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
   }, { proof: () => failure });
+  for (const stage of ['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']) await ciNativeRunnerFixture(async f => {
+    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+    assert.equal(refused?.message, `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}`);
+    assert.equal(ciTrustFailureCode(refused), `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}`);
+    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  }, { proof: () => ({ status: 1, stdout: '', stderr: `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}` }) });
   await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
     assert.equal(refused?.message, 'CI_TRUST_COMMAND_OWNER_GITHUB_OUTPUT_OWNER_ADMINISTRATORS_TOKEN_CURRENT_USER_MATCH_NO_WRITE_UNSAFE');

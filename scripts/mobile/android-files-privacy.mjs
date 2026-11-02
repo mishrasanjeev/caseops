@@ -280,6 +280,36 @@ export function settleAndroidProviderMetadata(written, statOf, { settleMs = ANDR
     return { ...asset, providerMetadata: last[index], writeChanged: asset.providerMetadata.changed };
   });
 }
+// A root emulator shell writes below FUSE, so MediaStore never learns of the
+// staged files. DocumentsUI's Downloads root lists only indexed files once its
+// own data is cleared, so index each file the way a finished download is: one
+// media-scanner request per file, then require exactly one MediaStore row for
+// it. The scan moves only ctime, so it runs before the settle that admits just
+// that move and records the final metadata. No retry dispatches a second scan.
+export const ANDROID_MEDIA_INDEX_DEADLINE_MS = 15000;
+export function indexAndroidProviderAssets(io, written, { deadlineMs = ANDROID_MEDIA_INDEX_DEADLINE_MS,
+  sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), now = Date.now } = {}) {
+  for (const { devicePath } of written) {
+    assert.match(devicePath, /^\/storage\/emulated\/0\/Download\/CaseOpsFiles-[A-Za-z0-9-]+\/[A-Za-z0-9.-]+$/, 'ANDROID_FILES_MEDIA_INDEX_PATH_REQUIRED');
+    io.text(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', `file://${devicePath}`]);
+  }
+  const rows = devicePath => {
+    const folder = path.posix.dirname(devicePath).replace(/^\/storage\/emulated\/0\//, '') + '/';
+    const output = io.text(['shell', 'content', 'query', '--uri', 'content://media/external/file', '--projection', '_display_name',
+      '--where', `"relative_path='${folder}' AND _display_name='${path.posix.basename(devicePath)}'"`]);
+    return output.split('\n').filter(line => line.startsWith('Row:')).length;
+  };
+  const deadline = now() + deadlineMs; let counts;
+  for (;;) {
+    counts = written.map(({ devicePath }) => rows(devicePath));
+    assert.ok(counts.every(count => count <= 1), 'ANDROID_FILES_MEDIA_INDEX_DUPLICATE');
+    if (counts.every(count => count === 1)) break;
+    assert.ok(now() < deadline, 'ANDROID_FILES_MEDIA_INDEX_NOT_OBSERVED');
+    sleep(500);
+  }
+  return { method: 'media-scanner-broadcast', indexedRows: counts.length, deadlineMs };
+}
+
 export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, output, settleMs = ANDROID_PROVIDER_SETTLE_MS, ...options }) {
   absoluteOutput(output); const io = current(containers, options), manifest = read(manifestEvidence);
   assert.equal(manifest.schemaVersion, 1, 'ANDROID_FILES_MANIFEST_VERSION_REQUIRED');
@@ -331,13 +361,14 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     observed.push({ ...knownSource(asset), devicePath, transferSha256: hash(asset.bytes),
       transferMethod: 'verified-buffer-exclusive-device-write', providerMetadata: metadata });
   }
+  const mediaIndex = io.physical ? { method: 'fuse-write' } : indexAndroidProviderAssets(io, observed, { sleep: options.sleep, now: options.now });
   const settled = settleAndroidProviderMetadata(observed, file => io.stat(file), { settleMs, refresh });
   current(containers, options);
   const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',
     udid: containers.udid, appId: containers.appId, bootId: containers.bootId, ...accessEvidence(containers),
     ...(Object.hasOwn(containers, 'avdName') ? { avdName: containers.avdName } : {}),
     manifestEvidence, attemptEvidence, folderName, deviceFolderPath, provider: containers.provider,
-    appData: containers.appData, assets: settled, providerSettleMs: settleMs, originalsDeleted: false, providerOriginalsRead: false,
+    appData: containers.appData, assets: settled, providerSettleMs: settleMs, mediaIndex, originalsDeleted: false, providerOriginalsRead: false,
     providerOriginalsPreserved: null, originalByteVerification: 'deferred-until-postflight' };
   return { receipt, evidence: save(output, receipt) };
 }

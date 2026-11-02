@@ -129,6 +129,11 @@ does not run there and is recorded as such, not as a pass.
   AGENTS.md fixture rule, so before release the owner must record a residue
   exception or the upload half moves to `[local-only]`; triage probe docket
   7ece82b7-f2fb-46db-bb09-2487ca1df185 remains for owner retirement.
+  Adjacent (PR #571, 2ff7ca05): under CI timing the coverage-decision band's
+  loading placeholder above the docket collapsed after the new docket had
+  scrolled into view, pushing its heading off screen; the band now holds no
+  place while loading unless opened through `#coverage-decisions`
+  (`apps/web/app/app/ip/page.test.tsx`).
 - BUG-002 Classification dropdown shows no classes. Status: Inconclusive -
   complete local proof; production verification as the reporting tester
   pending. (a) Nice class: a catalogue picker in create, opposition and
@@ -487,6 +492,23 @@ enterprise-ledger status is named where one exists:
   fails `npx tsc -p tsconfig.e2e.json` with TS2345 (a page `Response` passed to
   `json()`, which expects an `APIResponse`), first at `:51-52`; Playwright runs it
   without type-checking.
+- B4-ADJ-25 Status: Partially fixed. Found by the first production run of release
+  00bfb7fc (prod-verify 41428563260, tester shard: IPLF-057B at :443 and
+  IPLF-059B at :82). The batch made the Madrid, recordal and foreign-associate
+  lists read every page before rendering; on the retained production QA tenant
+  the Madrid intake and the new instruction had not rendered after 25 s. The
+  lists now read one page, state "Showing N of M" and read older rows with Load
+  more (`apps/web/lib/api/ip-offset-lists.test.ts`, Madrid page test). Local
+  vitest passes; production proof waits for the next release's tester shard.
+- B4-ADJ-26 Status: Partially fixed. The same run never executed Ram's Batch4
+  production cases: the wrapper refused `batch4-desktop` with
+  `mandatory_batch4_case_inventory_mismatch` before any test ran. Two control
+  crawl titles carried a query string and a Matter UUID, which the browser
+  reporter and the Python contract redact in different words; the local
+  contract used the Python redactor on both sides and passed. The production
+  routes now have word labels, and `test_mandatory_titles_survive_both_redactors_unchanged`
+  requires every mandatory title to be a fixed point of both redactors (red on
+  the old titles). Production proof waits for the next release's Batch4 roles.
 
 ## October 31 Historical Secret Findings: Partially Fixed
 

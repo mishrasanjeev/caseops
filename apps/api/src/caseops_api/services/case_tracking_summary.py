@@ -49,6 +49,7 @@ from caseops_api.services.domain_outbox import (
 from caseops_api.services.idempotency import canonical_json_sha256
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.llm import (
+    AvailabilityFallbackProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -56,6 +57,7 @@ from caseops_api.services.llm import (
     LLMProviderError,
     MockProvider,
     OpenAIProvider,
+    availability_fallback_policy,
     build_provider,
     generate_structured,
 )
@@ -319,19 +321,30 @@ def _load_source(
     return context, tracked_case, update
 
 
-def _allow_model(session: Session, *, context: SessionContext, provider: LLMProvider) -> None:
+def _allow_model(session: Session, *, context: SessionContext, model: str) -> None:
     # These summaries use the existing recommendation model allowlist; an
     # unknown purpose must not accidentally bypass the tenant's restriction.
     if not is_model_allowed(
         resolve_tenant_policy(session, company_id=context.company.id),
         purpose="recommendations",
-        model=provider.model,
+        model=model,
     ):
         raise SummarySuppressed("tenant_model_policy_changed")
 
 
+def _fallback_allowed(session: Session, *, context: SessionContext, provider: LLMProvider) -> bool:
+    # The availability fallback is a different model under the same allowlist.
+    return not isinstance(provider, AvailabilityFallbackProvider) or is_model_allowed(
+        resolve_tenant_policy(session, company_id=context.company.id),
+        purpose="recommendations",
+        model=provider.fallback_model,
+    )
+
+
 def _completion_budget(provider: LLMProvider) -> int:
     native = provider._inner if isinstance(provider, CassetteProvider) else provider
+    if isinstance(native, AvailabilityFallbackProvider):
+        native = native.primary
     if isinstance(native, OpenAIProvider):
         # Account for the SDK adapter's existing reasoning-token floor during
         # quota preflight, not only when the paid request is constructed.
@@ -472,7 +485,10 @@ def run_update_summary(claim: OutboxClaim, *, provider: LLMProvider | None = Non
                 ) and not isinstance(provider, MockProvider):
                     raise SummarySuppressed("automated_worker_or_tenant")
                 active_provider = provider or build_provider(purpose=PURPOSE)
-                _allow_model(session, context=context, provider=active_provider)
+                _allow_model(session, context=context, model=active_provider.model)
+                fallback_allowed = _fallback_allowed(
+                    session, context=context, provider=active_provider
+                )
                 messages = _messages(tracked_case, update)
                 source_url = update.source_url
                 call_context = LLMCallContext(
@@ -485,17 +501,18 @@ def run_update_summary(claim: OutboxClaim, *, provider: LLMProvider | None = Non
                 success = False
                 _assert_call_lease(session, claim, effect_args)
                 try:
-                    payload, completion = generate_structured(
-                        active_provider,
-                        session=session,
-                        schema=SummaryPayload,
-                        messages=messages,
-                        context=call_context,
-                        temperature=get_settings().llm_temperature,
-                        max_tokens=_completion_budget(active_provider),
-                        release_session_before_provider=True,
-                        on_model_run=lambda completion, *_: observed.append(completion),
-                    )
+                    with availability_fallback_policy(fallback_allowed):
+                        payload, completion = generate_structured(
+                            active_provider,
+                            session=session,
+                            schema=SummaryPayload,
+                            messages=messages,
+                            context=call_context,
+                            temperature=get_settings().llm_temperature,
+                            max_tokens=_completion_budget(active_provider),
+                            release_session_before_provider=True,
+                            on_model_run=lambda completion, *_: observed.append(completion),
+                        )
                     success = True
                 finally:
                     # Even malformed or now-unauthorized output spent tokens.
@@ -549,7 +566,8 @@ def run_update_summary(claim: OutboxClaim, *, provider: LLMProvider | None = Non
                     if getattr(exc.orig, "sqlstate", None) not in {"40P01", "55P03"}:
                         raise
                     raise SummaryPublicationContended from exc
-                _allow_model(session, context=context, provider=active_provider)
+                # Recheck the model that actually produced the summary.
+                _allow_model(session, context=context, model=completion.model)
                 # Fence *before* modifying generated fields. Completion and
                 # publication commit atomically with the same lifecycle lock.
                 complete_consumer_effect(

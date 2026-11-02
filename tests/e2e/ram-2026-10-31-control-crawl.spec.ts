@@ -150,8 +150,14 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-// Evidence redacts query strings in titles, so the tab route is named in words.
-const crawlLabel = (path: string) => path.replace("?tab=documents", " Documents tab");
+// Evidence redacts query strings and record ids in titles, and the Python and
+// browser redactors word them differently, so every route is named in words.
+const PROD_ROUTE_LABELS: Record<string, string> = {
+  [PROD_ROUTES[0]]: "/app/ip reported docket",
+  [PROD_ROUTES[1]]: "/app/matters reported Matter billing",
+};
+const crawlLabel = (path: string) =>
+  PROD_ROUTE_LABELS[path] ?? path.replace("?tab=documents", " Documents tab");
 
 for (const path of [...ROUTES, ...PROD_ROUTES]) {
   test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`, async ({}, info) => {

@@ -136,6 +136,10 @@ async function enterFiles(context) {
 }
 async function details(context, anchor) {
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'ANDROID_FILES_WRONG_FILENAME');
+  // A swipe sweep can fling past this short row (files-25 FILES-09, files-26
+  // FILES-04). Let UiAutomator position it first; readSourceHash still bounds
+  // the expansion request and the hash read.
+  await scrollAndroidIntoView(context, `new UiSelector().resourceId(${JSON.stringify(`files-source-${anchor.attachmentId}`)})`);
   assert.equal(await readSourceHash(context, anchor), anchor.sha256, 'ANDROID_FILES_WRONG_SOURCE_HASH');
 }
 async function reload(context, anchor) {
@@ -194,6 +198,33 @@ export async function rapidActivateAndroidUpload(context, button) {
   if (failure) throw failure;
   event(context, 'android-native-upload-two-tap-input', { tapAttempts: 2, nativeProtocolDispatches: 1, gapMs: 10, frame });
 }
+// The app confirms persistence only after its own readback reload, which can
+// finish while a scroll sweep has already moved past the one status element
+// (files-24 FILES-04). After the transport acknowledgement, bring that status
+// into view in whatever state it shows, then wait for the readback in place
+// without gestures. Unknown and rejected outcomes still refuse immediately.
+const ANDROID_UPLOAD_STATUS_SELECTOR = 'new UiSelector().resourceIdMatches("files-upload-(uploading|acknowledged|persisted|unknown|rejected)")';
+export const ANDROID_UPLOAD_STATUS_QUERY = `android=${ANDROID_UPLOAD_STATUS_SELECTOR}`;
+// UiAutomator's own scroll moves in small steps until the element is visible,
+// so it cannot fling past a short row the way a sweep can. It only positions;
+// it finds nothing on its own, and a miss leaves the bounded find to fail.
+export const ANDROID_SCROLL_INTO_VIEW_SWIPES = 12;
+export async function scrollAndroidIntoView(context, uiSelector) {
+  assert.equal(context.platform, 'android', 'ANDROID_FILES_PLATFORM_REQUIRED');
+  assert.match(uiSelector, /^new UiSelector\(\)\.resourceId(Matches)?\("[^"]+"\)$/, 'ANDROID_SCROLL_INTO_VIEW_SELECTOR_REQUIRED');
+  nativeAction(context, 'swipe');
+  await context.driver.$$(`android=new UiScrollable(new UiSelector().scrollable(true)).setMaxSearchSwipes(${ANDROID_SCROLL_INTO_VIEW_SWIPES}).scrollIntoView(${uiSelector})`);
+}
+export const ANDROID_UPLOAD_READBACK_MS = 15000;
+export async function awaitAndroidUploadReadback(context) {
+  await scrollAndroidIntoView(context, ANDROID_UPLOAD_STATUS_SELECTOR);
+  await findQuery(context, ANDROID_UPLOAD_STATUS_QUERY, { scroll: true });
+  await wait(context, async () => {
+    if (await visible(context.driver, 'id=files-upload-unknown')) fail('ANDROID_FILES_UPLOAD_UNKNOWN_NO_REPLAY');
+    assert.equal(await visible(context.driver, 'id=files-upload-rejected'), undefined, 'ANDROID_FILES_UPLOAD_REJECTED');
+    return !!await visible(context.driver, 'id=files-upload-persisted');
+  }, ANDROID_UPLOAD_READBACK_MS, 'ANDROID_FILES_UPLOAD_READBACK_REQUIRED');
+}
 async function upload(context, kind) {
   const asset = validateAndroidFileAsset(context, kind); await enterFiles(context); await noSelection(context);
   const query = `android=new UiSelector().resourceIdMatches("files-name-.*").text(${JSON.stringify(asset.filename)})`;
@@ -208,7 +239,7 @@ async function upload(context, kind) {
     return delta(before, await traffic(context)).some(row => row.method === 'POST' && row.route === `/api/matters/${context.source.matterId}/attachments` && row.status === 200);
   }, 30000, 'ANDROID_FILES_UPLOAD_ACK_REQUIRED');
   const ack = validateAndroidUploadAcknowledgement(delta(before, await traffic(context)), context.source.matterId);
-  await find(context, 'id', 'files-upload-persisted', { scroll: true }); await find(context, 'text', ANDROID_UPLOAD_PERSISTED_MESSAGE, { scroll: true });
+  await awaitAndroidUploadReadback(context); await find(context, 'text', ANDROID_UPLOAD_PERSISTED_MESSAGE, { scroll: true });
   const names = await context.driver.$$(query); assert.equal(names.length, 1, 'ANDROID_FILES_UPLOADED_FILENAME_NOT_UNIQUE');
   const id = /^files-name-([a-f0-9-]{36})$/.exec(await names[0].getAttribute('resource-id'))?.[1];
   assert.ok(UUID.test(id || '') && id !== context.source.attachmentId, 'ANDROID_FILES_ACKNOWLEDGED_NEW_ID_REQUIRED');
@@ -241,7 +272,13 @@ async function assertSourceRead(context, before, anchor) {
   assert.equal(rows.filter(row => row.status === 200).length, 1, 'ANDROID_FILES_ONE_FULL_ORIGINAL_READ_REQUIRED');
   assert.ok(rows.filter(row => row.status === 206).length >= 2 && rows.length <= 12 && rows.every(row => [200, 206].includes(row.status)), 'ANDROID_FILES_RANGE_PROBE_BOUND');
 }
-async function closeReader(context) { await click(context, 'id', 'viewer-close'); await assertAndroidViewerAbsent(context); await find(context, 'id', 'files-matter-code', { scroll: true }); }
+// Close unmounts the viewer on the next commit, not inside the tap; wait for that
+// acknowledgement (files-21 checked in the same instant), then keep the full check.
+async function closeReader(context) {
+  await click(context, 'id', 'viewer-close');
+  await wait(context, async () => (await context.driver.$$('id=private-document-viewer')).length === 0, 10000, 'ANDROID_FILES_VIEWER_CLOSE_ACK_REQUIRED');
+  await assertAndroidViewerAbsent(context); await find(context, 'id', 'files-matter-code', { scroll: true });
+}
 export function androidTextSegments(text) { assert.ok(typeof text === 'string' && text.length > 0 && text.length <= 500000, 'ANDROID_FILES_TEXT_BOUND'); return Array.from({ length: Math.ceil(text.length / 10000) }, (_, index) => text.slice(index * 10000, (index + 1) * 10000)); }
 async function readText(context, anchor) {
   const segments = androidTextSegments(anchor.text), before = await openReader(context, anchor);

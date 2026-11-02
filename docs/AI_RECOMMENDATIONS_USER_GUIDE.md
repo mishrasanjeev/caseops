@@ -32,13 +32,14 @@ execution, not only HTTP routes. Full caller coverage still requires verificatio
 
 There is no verified INR 10,000 budget dashboard, switch, warning threshold, or
 cap-exhaustion recovery button to instruct a user to click. The old proposed
-budget amounts are superseded. The owner selected **`gemini-3.5-flash-lite` as
-fallback**, not a new primary. Recommendations-only opt-in fallback through the
-managed Google Cloud endpoint is being implemented; it remains off by default
-until reviewed runtime configuration and acceptance are established. The plan
-is eligible only from November 2026 (IST), while the shared money guard applies
-and is enabled, with an explicit managed project. Selection is not proof of live
-activation. October's existing primary is unchanged, and promotion over Luna
+budget amounts are superseded. On 1 November 2026 the owner replaced the
+recommendations-only `gemini-3.5-flash-lite` plan with a general OpenAI
+availability fallback to **`gemini-3.8-flash`** on the managed Google Cloud
+endpoint, with its own INR 10,000 per IST month Gemini cap that does not depend
+on the shared money guard. It is off by default
+(`CASEOPS_LLM_FALLBACK_ENABLED=false`) until the operator steps in the
+[AI spending runbook](runbooks/ai-spending-reconciliation.md) are done. Selection
+is not proof of live activation. October's existing primary is unchanged, and promotion over Luna
 requires an actual comparative legal benchmark. A paid fallback cannot bypass
 the shared ceiling. See Section 9 for the verification boundaries.
 
@@ -347,7 +348,7 @@ permissions, billing, and availability.
 | A capability denial or tenant AI-policy denial | Ask the workspace administrator to verify effective permissions and the recommendation policy. Changing an assistant toggle or using another account is not recovery. |
 | AI token quota exceeded. Contact your workspace admin to adjust the monthly token policy. | Ask an authorized admin to inspect Monthly token governance. Do not equate token quota with an INR ceiling or remove a quota without approved policy. |
 | AI credit balance is insufficient for this action. | Ask a workspace owner/admin to inspect subscription credits and eligible top-ups. A payment screen or checkout redirect alone does not prove credits were granted. |
-| Configured AI provider quota is exhausted; restore or top up provider credits, then retry; no output was saved | The provider account operator must resolve that provider's quota/billing. Upstream quota or credit exhaustion never triggers the Gemini fallback. Buying CaseOps subscription credits alone may not resolve provider-account exhaustion. |
+| Configured AI provider quota is exhausted; restore or top up provider credits, then retry; no output was saved | The provider account operator must resolve that provider's quota/billing. When the Gemini fallback is enabled, OpenAI quota exhaustion makes one Gemini attempt first; this message then means that attempt was refused or unavailable (a refusal by the monthly Gemini allowance is stated after it). Buying CaseOps subscription credits alone may not resolve provider-account exhaustion. |
 | Authority retrieval is temporarily unavailable | Wait for retrieval recovery; do not classify it as an empty corpus or fabricate supporting sources. Escalate persistent failures. |
 | Provider timeout, temporary upstream error, or connection failure | Wait as directed, inspect the current saved list/audit first, then make at most one deliberate new request after recovery. An interrupted response can have an uncertain outcome. Do not automatically replay a mutation. |
 | AI monthly spending is awaiting reconciliation. No external request was sent. | This refusal is implemented in the future-period guard's source, not verified as a live UI state here. At or after the start month, the operator must reconcile the month's opening spend and pricing policy before paid admission. A missing policy is not an unused allowance. |
@@ -388,6 +389,14 @@ send passwords, API keys, session cookies, authorization headers, or unnecessary
 private document content in a support report.
 
 ## 9. Shared Budget And Selected Gemini Fallback
+
+> Updated 1 November 2026: the fallback is now the general OpenAI availability
+> fallback to `gemini-3.8-flash` described in the
+> [AI spending runbook](runbooks/ai-spending-reconciliation.md). It switches on
+> OpenAI quota exhaustion or transient unavailability, is capped at INR 10,000 per
+> IST month by a Gemini-only ledger and does not need the shared guard. Rows below
+> that describe `gemini-3.5-flash-lite`, the November eligibility gate or the
+> recommendation-only settings are historical.
 
 Operators should use the [shared spending reconciliation runbook](runbooks/ai-spending-reconciliation.md)
 for initialization, evidence retention and exhaustion diagnosis. Its conservative
@@ -431,17 +440,15 @@ configuration or an instruction to enable fallback now**:
 
 | Variable | Candidate value and requirement |
 | --- | --- |
-| `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED` | `false` by default; keep off pending reviewed activation. |
-| `CASEOPS_LLM_RECOMMENDATION_FALLBACK_MODEL` | Pinned to `gemini-3.5-flash-lite`. |
+| `CASEOPS_LLM_FALLBACK_ENABLED` | `false` by default; replaces the retired `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED`. |
+| `CASEOPS_LLM_FALLBACK_MODEL` | Pinned to `gemini-3.8-flash`; replaces the retired recommendation-only model setting. |
 | `CASEOPS_LLM_GEMINI_PROJECT` | Required only for opt-in; use an explicit managed Google Cloud project with independently verified billing/API/IAM/ADC readiness. |
 | `CASEOPS_LLM_GEMINI_LOCATION` | Pinned to `global`; owner confirmation of location and retention is pending. |
 
 No API or IAM changes were made for this guide. The pending confirmation is not
 approval: the owner has not replied to the Google global endpoint authorization
-request. Keep `CASEOPS_LLM_RECOMMENDATION_FALLBACK_ENABLED=false`; November's
-arrival does not activate fallback automatically. October stays unchanged;
-opting in cannot enable this plan before November or while the applicable shared
-budget guard is disabled.
+request. Keep `CASEOPS_LLM_FALLBACK_ENABLED=false` until the owner completes the
+runbook's GCP steps; no release turns it on.
 
 The routing plan shares **at most two total provider attempts** across primary,
 fallback and existing bounded format/safety repair. SDK retries are **zero**.

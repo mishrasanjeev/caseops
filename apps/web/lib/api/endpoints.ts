@@ -12038,44 +12038,48 @@ export type IpPortalClientInstruction = {
   updated_at: string;
 };
 
-type IpOffsetPage<TItem> = { items: TItem[]; total: number; limit: number; offset: number };
+export type IpOffsetPage<TItem> = { items: TItem[]; total: number; limit: number; offset: number };
+
+/** Rows per request of an offset-paged IP list; pages read older rows with Load more. */
+export const IP_LIST_PAGE_SIZE = 100;
 
 /**
- * Every row of an offset-paged IP list. These lists are read whole by the
- * pages that show them, and one request of 100 silently dropped row 101
- * onwards. The routes order newest change first, so a record updated while
- * paging jumps to page one: it would be skipped and its neighbour read twice.
- * Rows are keyed by id, and when fewer distinct rows arrive than the server
- * counted the list is read once more; a second shortfall is an error, never a
- * silent partial list. The result holds every row: limit is the row count and
- * offset is 0.
+ * One page of an offset-paged IP list, newest change first. Reading every page
+ * before rendering made a tenant's whole history load up front: on the retained
+ * production QA tenant the Madrid and foreign-associate pages had not rendered
+ * after 25 s (prod-verify 41428563260). Pages show the newest rows and read
+ * older ones on request, so every row stays reachable and no load is unbounded.
  */
-async function fetchAllIpOffsetPages<TItem extends { id: string }>(
+function fetchIpOffsetPage<TItem>(
   path: string,
   query: URLSearchParams,
+  offset: number,
   signal?: AbortSignal,
 ): Promise<IpOffsetPage<TItem>> {
-  const pageSize = 100;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const rows = new Map<string, TItem>();
-    let total = 0;
-    for (let offset = 0; ; offset += pageSize) {
-      const params = new URLSearchParams(query);
-      params.set("limit", String(pageSize));
-      params.set("offset", String(offset));
-      const page = await apiRequest<IpOffsetPage<TItem>>(`${path}?${params.toString()}`, {
-        signal,
-      });
-      total = page.total;
-      for (const item of page.items) rows.set(item.id, item);
-      if (page.items.length < pageSize || offset + pageSize >= page.total) break;
-    }
-    if (rows.size >= total) {
-      const items = [...rows.values()];
-      return { items, total: items.length, limit: items.length, offset: 0 };
-    }
+  const params = new URLSearchParams(query);
+  params.set("limit", String(IP_LIST_PAGE_SIZE));
+  params.set("offset", String(offset));
+  return apiRequest<IpOffsetPage<TItem>>(`${path}?${params.toString()}`, { signal });
+}
+
+/** The next offset to read, or undefined once the server's total is reached. */
+export function nextIpListOffset(page: IpOffsetPage<unknown>): number | undefined {
+  const next = page.offset + page.items.length;
+  return page.items.length && next < page.total ? next : undefined;
+}
+
+/**
+ * The rows of every page read so far, first occurrence kept. A record updated
+ * between two reads moves to page one and would otherwise appear twice.
+ */
+export function ipListRows<TItem extends { id: string }>(
+  pages: readonly IpOffsetPage<TItem>[] | undefined,
+): TItem[] {
+  const rows = new Map<string, TItem>();
+  for (const page of pages ?? []) {
+    for (const item of page.items) if (!rows.has(item.id)) rows.set(item.id, item);
   }
-  throw new Error("This list changed while it was loading. Try again to see every record.");
+  return [...rows.values()];
 }
 
 export async function fetchIpForeignAssociateInstructions(input?: {
@@ -12083,13 +12087,8 @@ export async function fetchIpForeignAssociateInstructions(input?: {
   status?: IpForeignAssociateStatus | null;
   outstandingResponse?: boolean | null;
   missingFilingEvidence?: boolean | null;
-}, options?: { signal?: AbortSignal }): Promise<{
-  items: IpForeignAssociateInstruction[];
-  total: number;
-  limit: number;
-  offset: number;
-}> {
-  const query = new URLSearchParams({ limit: "100", offset: "0" });
+}, options?: { signal?: AbortSignal; offset?: number }): Promise<IpOffsetPage<IpForeignAssociateInstruction>> {
+  const query = new URLSearchParams();
   if (input?.docketId) query.set("docket_id", input.docketId);
   if (input?.status) query.set("status", input.status);
   if (input?.outstandingResponse !== undefined && input.outstandingResponse !== null) {
@@ -12098,7 +12097,7 @@ export async function fetchIpForeignAssociateInstructions(input?: {
   if (input?.missingFilingEvidence !== undefined && input.missingFilingEvidence !== null) {
     query.set("missing_filing_evidence", String(input.missingFilingEvidence));
   }
-  return fetchAllIpOffsetPages("/api/ip/foreign-associate-instructions", query, options?.signal);
+  return fetchIpOffsetPage("/api/ip/foreign-associate-instructions", query, options?.offset ?? 0, options?.signal);
 }
 
 export async function fetchIpForeignAssociateWorkspace(
@@ -12341,17 +12340,12 @@ export async function fetchIpRecordals(input?: {
   docketId?: string | null;
   recordalType?: IpRecordalType | null;
   status?: IpRecordalStatus | null;
-}, options?: { signal?: AbortSignal }): Promise<{
-  items: IpRecordalListItem[];
-  total: number;
-  limit: number;
-  offset: number;
-}> {
-  const query = new URLSearchParams({ limit: "100", offset: "0" });
+}, options?: { signal?: AbortSignal; offset?: number }): Promise<IpOffsetPage<IpRecordalListItem>> {
+  const query = new URLSearchParams();
   if (input?.docketId) query.set("docket_id", input.docketId);
   if (input?.recordalType) query.set("recordal_type", input.recordalType);
   if (input?.status) query.set("status", input.status);
-  return fetchAllIpOffsetPages("/api/ip/recordals", query, options?.signal);
+  return fetchIpOffsetPage("/api/ip/recordals", query, options?.offset ?? 0, options?.signal);
 }
 
 export async function fetchIpRecordalWorkspace(
@@ -12474,18 +12468,13 @@ export async function recordIpRecordalTransaction(input: {
 export async function fetchMadridRecords(input?: {
   recordKind?: MadridRecord["record_kind"];
   parentRegistrationId?: string;
-}, options?: { signal?: AbortSignal }): Promise<{
-  items: MadridRecord[];
-  total: number;
-  limit: number;
-  offset: number;
-}> {
-  const params = new URLSearchParams({ limit: "100", offset: "0" });
+}, options?: { signal?: AbortSignal; offset?: number }): Promise<IpOffsetPage<MadridRecord>> {
+  const params = new URLSearchParams();
   if (input?.recordKind) params.set("record_kind", input.recordKind);
   if (input?.parentRegistrationId) {
     params.set("parent_registration_id", input.parentRegistrationId);
   }
-  return fetchAllIpOffsetPages("/api/ip/international-registrations", params, options?.signal);
+  return fetchIpOffsetPage("/api/ip/international-registrations", params, options?.offset ?? 0, options?.signal);
 }
 
 export async function createMadridRecord(input: {

@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, chooseAndroidFile,
-  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, validateAndroidFileAsset, validateAndroidFilesContext,
+import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidUploadReadback, chooseAndroidFile,
+  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
@@ -279,4 +279,57 @@ test('signed-out final case requires earlier logout, restarts only the app and p
   f.context.filesState.logoutAcknowledged = false;
   await assert.rejects(androidFilesScenarios.at(-1).run(f.context), /ANDROID_FILES_PRIOR_LOGOUT_REQUIRED/);
   assert.deepEqual(calls, ['terminate', 'activate']);
+});
+
+function uploadStatusDriver(states, { offscreenUntilSwipe = 0 } = {}) {
+  let polls = 0, swipes = 0, waits = 0; const state = () => states[Math.min(polls, states.length - 1)];
+  const element = id => ({ elementId: id, isDisplayed: async () => swipes >= offscreenUntilSwipe, getAttribute: async () => id });
+  const driver = {
+    $$: async query => {
+      if (query === ANDROID_UPLOAD_STATUS_QUERY) { polls++; return [element(`files-upload-${state()}`)]; }
+      const id = /^id=(files-upload-[a-z]+)$/.exec(query)?.[1];
+      if (id) { polls++; return id === `files-upload-${state()}` ? [element(id)] : []; }
+      return [];
+    },
+    waitUntil: async (callback, { timeout, interval, timeoutMsg }) => {
+      waits++;
+      for (let elapsed = 0; elapsed <= timeout; elapsed += interval) if (await callback()) return true;
+      throw new Error(timeoutMsg);
+    },
+    getWindowRect: async () => ({ x: 0, y: 0, width: 1080, height: 2424 }),
+    performActions: async () => { swipes++; }, releaseActions: async () => {},
+  };
+  return { driver, swipes: () => swipes, polls: () => polls, waits: () => waits };
+}
+
+test('Android upload readback waits in place for the app to confirm persistence after the transport acknowledgement', async () => {
+  // The status reads "uploading" for several polls before the app's readback confirms it.
+  const late = uploadStatusDriver(['uploading', 'uploading', 'uploading', 'uploading', 'uploading', 'uploading', 'persisted']);
+  await awaitAndroidUploadReadback({ platform: 'android', driver: late.driver });
+  assert.equal(late.swipes(), 0, 'NO_GESTURE_WHILE_WAITING_FOR_READBACK');
+  // An off-screen status is scrolled into view once, then waited on without further gestures.
+  const below = uploadStatusDriver(['uploading', 'persisted'], { offscreenUntilSwipe: 1 });
+  await awaitAndroidUploadReadback({ platform: 'android', driver: below.driver });
+  assert.equal(below.swipes(), 1);
+  for (const [outcome, code] of [['unknown', /ANDROID_FILES_UPLOAD_UNKNOWN_NO_REPLAY|ANDROID_FILES_UPLOAD_READBACK_REQUIRED/],
+    ['rejected', /ANDROID_FILES_UPLOAD_REJECTED|ANDROID_FILES_UPLOAD_READBACK_REQUIRED/]]) {
+    const refused = uploadStatusDriver(['uploading', outcome]);
+    await assert.rejects(awaitAndroidUploadReadback({ platform: 'android', driver: refused.driver }), code);
+  }
+  const stuck = uploadStatusDriver(['acknowledged']);
+  await assert.rejects(awaitAndroidUploadReadback({ platform: 'android', driver: stuck.driver }), /ANDROID_FILES_UPLOAD_READBACK_REQUIRED/);
+  assert.equal(stuck.swipes(), 0);
+});
+
+test('Android scroll-into-view only positions a plain resource-id target through UiScrollable', async () => {
+  const queries = [], records = [];
+  const context = { platform: 'android', record: event => records.push(event), driver: { $$: async query => { queries.push(query); return []; } } };
+  await scrollAndroidIntoView(context, 'new UiSelector().resourceId("files-hash-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")');
+  assert.deepEqual(queries, [`android=new UiScrollable(new UiSelector().scrollable(true)).setMaxSearchSwipes(${ANDROID_SCROLL_INTO_VIEW_SWIPES}).scrollIntoView(new UiSelector().resourceId("files-hash-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"))`]);
+  assert.deepEqual(records, [{ type: 'native_ui_action', action: 'swipe' }]);
+  for (const bad of ['new UiSelector().text("Delete")', 'new UiSelector().resourceId("a")).click(', '//*[@resource-id="x"]']) {
+    await assert.rejects(scrollAndroidIntoView(context, bad), /ANDROID_SCROLL_INTO_VIEW_SELECTOR_REQUIRED/);
+  }
+  await assert.rejects(scrollAndroidIntoView({ ...context, platform: 'ios' }, 'new UiSelector().resourceId("x")'), /ANDROID_FILES_PLATFORM_REQUIRED/);
+  assert.equal(queries.length, 1);
 });
