@@ -312,9 +312,7 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await expect(newMatterDialog).toBeHidden();
     // Tap the new matter's row to navigate to its cockpit (the dialog
     // closes back onto the list — there's no auto-redirect).
-    // The pinned Status column (B4-ADJ-13) covers the Matter cell at 360px;
-    // the row's Code cell stays uncovered on the left.
-    await page.getByRole("cell", { name: "MOB-DS-1", exact: true }).tap();
+    await page.getByText("Mobile stepper smoke").first().tap();
     await page.waitForURL(/\/app\/matters\/[0-9a-f-]+$/);
 
     // Navigate through the rendered New draft and bail-template links.

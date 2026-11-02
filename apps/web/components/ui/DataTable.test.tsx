@@ -64,9 +64,12 @@ describe("DataTable", () => {
     const { unmount } = render(<DataTable columns={columns} data={rows} pinLastColumn />);
     const pinnedRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
     const cells = Array.from(pinnedRow.querySelectorAll("td"));
-    expect(cells.at(-1)?.className).toMatch(/sticky right-0/);
+    // Pinned from 40rem up; below that the table stacks into labelled rows so nothing is covered.
+    expect(cells.at(-1)?.className).toMatch(/@min-\[40rem\]:sticky @min-\[40rem\]:right-0/);
     expect(cells[0].className).not.toMatch(/sticky/);
-    expect(screen.getByRole("columnheader", { name: "Due" }).className).toMatch(/sticky right-0/);
+    expect(screen.getByRole("columnheader", { name: "Due" }).className).toMatch(/@min-\[40rem\]:sticky/);
+    expect(pinnedRow.closest("table")?.className).toMatch(/@max-\[40rem\]:stacked-table/);
+    expect(cells.map((cell) => cell.dataset.label)).toEqual(["Name", "Due"]);
     unmount();
     render(<DataTable columns={columns} data={rows} />);
     const plainRow = screen.getByText("Bravo").closest("tr") as HTMLElement;

@@ -61,10 +61,6 @@ const ACKNOWLEDGED: Record<string, string> = {
   // The row action is the first column, so it is on screen at every width.
   "app/app/ip/renewals/page.tsx#1": "row action is the first column",
   "app/app/matters/imports/page.tsx#2": "whole row opens the import; the first column is always on screen",
-  // Pinned through a prop: the last column is sticky when the caller passes
-  // pinLastColumn (the matters list, whose Status column holds the status
-  // select and lifecycle actions); rows also open from the first column.
-  "components/ui/DataTable.tsx#1": "last column pinned by pinLastColumn; rows open on click",
   // Known offenders in the separate platform operator console, still to fix.
   "app/app/platform-admin/forum-aliases/page.tsx#1": "KNOWN OFFENDER: operator Edit action in a 980px table",
   "app/app/platform-admin/provider-events/page.tsx#1": "KNOWN OFFENDER: operator Reprocess action in a scrolling table",
@@ -155,7 +151,9 @@ describe("table rows stay reachable (B4-ADJ-13)", () => {
 
   it("pins the matters list's action column through DataTable", () => {
     const table = readFileSync(path.join(webRoot, "components/ui/DataTable.tsx"), "utf8");
-    expect(table).toMatch(/PINNED_CELL = "sticky right-0 /);
+    expect(table).toMatch(/PINNED_CELL = "@min-\[40rem\]:sticky @min-\[40rem\]:right-0 /);
+    // Below 40rem the pinned column would cover the row, so the table stacks instead.
+    expect(table).toMatch(/pinLastColumn && "@max-\[40rem\]:stacked-table/);
     expect(table).toMatch(/pinLastColumn && index === cells\.length - 1 && PINNED_CELL/);
     const matters = readFileSync(path.join(webRoot, "app/app/matters/page.tsx"), "utf8");
     expect(matters).toMatch(/pinLastColumn=\{canEditMatters \|\| canArchiveMatters\}/);
