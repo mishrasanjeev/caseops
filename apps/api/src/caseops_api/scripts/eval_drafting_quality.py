@@ -793,7 +793,7 @@ def _run_one_scenario(
         max_tokens_for_purpose,
     )
 
-    provider = build_provider(purpose=PURPOSE_DRAFTING)
+    provider = build_provider(purpose=PURPOSE_DRAFTING, availability_fallback=False)
     ctx = LLMCallContext(
         tenant_id="", matter_id=_PLACEHOLDER_MATTER_ID, purpose="drafting:eval",
     )

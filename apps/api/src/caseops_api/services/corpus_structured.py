@@ -611,7 +611,10 @@ def extract_and_persist_structured(
         try:
             llm = build_tier_provider(tier)
         except (ValueError, LLMProviderError):
-            llm = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+            # Corpus enrichment stays on the reviewed OpenAI path; no Gemini fallback.
+            llm = build_provider(
+                purpose=PURPOSE_METADATA_EXTRACT, availability_fallback=False
+            )
     else:
         llm = provider
 
