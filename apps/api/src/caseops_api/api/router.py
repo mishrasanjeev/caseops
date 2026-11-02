@@ -30,6 +30,7 @@ from caseops_api.api.routes import (
     intelligent_reviews,
     ip_foreign_associates,
     ip_international,
+    ip_nice_classes,
     ip_operations,
     ip_recordals,
     ip_registry,
@@ -94,6 +95,9 @@ def register_api_routes(application: FastAPI) -> None:
     )
     application.include_router(ip_international.router, prefix="/api/ip", tags=["ip-international"])
     application.include_router(ip_specialist.router, prefix="/api/ip", tags=["ip-specialist"])
+    application.include_router(
+        ip_nice_classes.router, prefix="/api/ip", tags=["ip-nice-classes"]
+    )
     application.include_router(ip_operations.router, prefix="/api/ip", tags=["ip-operations"])
     application.include_router(ip_recordals.router, prefix="/api/ip", tags=["ip-recordals"])
     application.include_router(ip_registry.router, prefix="/api/ip", tags=["ip-registry"])

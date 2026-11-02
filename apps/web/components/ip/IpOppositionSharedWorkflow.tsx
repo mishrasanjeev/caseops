@@ -5,16 +5,21 @@ import { CalendarPlus, Check, FileArchive, Gavel, Link2, TimerReset } from "luci
 import { cloneElement, useEffect, useId, useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 
+import { MatterPicker } from "@/components/app/MatterPicker";
+import { ExplainedSelect, enabledChoice, type ExplainedOption } from "@/components/ip/ExplainedSelect";
+import { IpMatterLinkRequired } from "@/components/ip/IpDeadlineProposalBlockers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { PersonChecklist, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpSharedHearing,
+  fetchIpDeadlineWorkspace,
   fetchIpOppositionSharedWorkflow,
   recordIpOppositionSharedAction,
   type IpDocket,
@@ -81,6 +86,14 @@ export function IpOppositionSharedWorkflow({
     queryKey,
     queryFn: () => fetchIpOppositionSharedWorkflow({ docketId: docket.id, proceedingId: proceeding.id }),
   });
+  // An extension re-confirms the deadline: offer exactly the people its
+  // confirmation accepts (stable Matter and IP-record access).
+  const deadlineWorkspace = useQuery({
+    queryKey: ["ip", "deadline-workspace", docket.id],
+    queryFn: () => fetchIpDeadlineWorkspace(docket.id),
+  });
+  const responsibleIds = deadlineWorkspace.data?.eligible_responsible_membership_ids;
+  const responsibleEmpty = "No colleague has lasting access to this matter and IP record. An owner or admin can grant access on the matter.";
 
   const [actionKind, setActionKind] = useState<ActionKind>("deadline_extended");
   const [sourceReference, setSourceReference] = useState("");
@@ -140,24 +153,63 @@ export function IpOppositionSharedWorkflow({
   const [complianceDueOn, setComplianceDueOn] = useState("");
   const [orderDocumentRef, setOrderDocumentRef] = useState("");
   const [appealReview, setAppealReview] = useState<"required" | "not_required" | "pending">("pending");
-  const [appealTargetKind, setAppealTargetKind] = useState<"appeal_proceeding" | "matter">("appeal_proceeding");
+  const [appealTargetKind, setAppealTargetKind] = useState<"" | "appeal_proceeding" | "matter">("");
   const [appealTargetId, setAppealTargetId] = useState("");
   const [appealIdentifier, setAppealIdentifier] = useState("");
   const [orderEventId, setOrderEventId] = useState("");
 
+  // The record type follows the next required step; no deadline, hearing or
+  // order is ever chosen on the user's behalf (B4-ADJ-22).
   useEffect(() => {
     if (!workflow.data) return;
     setActionKind(suggestedAction(workflow.data.next_required_action));
-    setDeadlineId((value) => value || workflow.data.active_deadlines[0]?.id || "");
-    setHearingId((value) => value || workflow.data.shared_hearings[0]?.id || "");
-    const order = [...workflow.data.shared_actions].reverse().find(
-      (event) => event.payload_json.action_kind === "order_recorded",
-    );
-    setOrderEventId((value) => value || order?.id || "");
   }, [workflow.data]);
 
-  const selectedDeadline = workflow.data?.active_deadlines.find((row) => row.id === deadlineId);
-  const selectedHearing = workflow.data?.shared_hearings.find((row) => row.id === hearingId);
+  const deadlineOptions: ExplainedOption[] = (workflow.data?.active_deadlines ?? []).map((row) => ({
+    value: row.id,
+    label: `${row.title} - ${row.result_on ?? "date unresolved"}`,
+  }));
+  // The hearing statuses this record accepts come from the API's own
+  // validator table (hearing_statuses_by_action); with no table every
+  // hearing is refused rather than guessed.
+  const allowedHearingStatuses = new Set(workflow.data?.hearing_statuses_by_action?.[actionKind] ?? []);
+  const hearingOptions: ExplainedOption[] = (workflow.data?.shared_hearings ?? []).map((row) => ({
+    value: row.id,
+    label: `${row.hearing_on} - ${row.forum_name} - ${row.status}`,
+    reason: !allowedHearingStatuses.has(row.status)
+      ? actionKind === "post_hearing_note_recorded"
+        ? "mark the hearing completed first"
+        : "only a scheduled or adjourned hearing can be prepared"
+      : null,
+  }));
+  const orderOptions: ExplainedOption[] = (workflow.data?.shared_actions ?? [])
+    .filter((event) => event.payload_json.action_kind === "order_recorded")
+    .map((event) => ({
+      value: event.id,
+      label: `${event.source_reference ?? "Opposition order"} - ${new Date(event.effective_at).toLocaleDateString()}`,
+    }));
+  const appealProceedings = workflow.data?.appeal_proceedings ?? [];
+  const appealProceedingOptions: ExplainedOption[] = appealProceedings.map((row) => ({
+    value: row.id,
+    label: `Appeal before ${row.office} - ${readable(row.stage)}`,
+    reason: row.appeal_identifiers.length ? null : "no appeal number recorded",
+  }));
+  const appealNumberOptions: ExplainedOption[] = (
+    appealProceedings.find((row) => row.id === appealTargetId)?.appeal_identifiers ?? []
+  ).map((value) => ({ value, label: value }));
+  const appealProceedingAvailable = appealProceedingOptions.some((option) => !option.reason);
+  const chosenDeadlineId = enabledChoice(deadlineOptions, deadlineId);
+  const chosenHearingId = enabledChoice(hearingOptions, hearingId);
+  const chosenOrderEventId = enabledChoice(orderOptions, orderEventId);
+  const chosenAppealTargetId = appealTargetKind === "appeal_proceeding"
+    ? enabledChoice(appealProceedingOptions, appealTargetId)
+    : appealTargetKind === "matter" ? appealTargetId : "";
+  const chosenAppealIdentifier = appealTargetKind === "appeal_proceeding"
+    ? enabledChoice(appealNumberOptions, appealIdentifier)
+    : appealIdentifier;
+
+  const selectedDeadline = workflow.data?.active_deadlines.find((row) => row.id === chosenDeadlineId);
+  const selectedHearing = workflow.data?.shared_hearings.find((row) => row.id === chosenHearingId);
   const eventDetails = useMemo(() => {
     const verification = {
       signatory,
@@ -176,7 +228,7 @@ export function IpOppositionSharedWorkflow({
       evidence_refs: refs(serviceRefs),
     };
     const preparation = {
-      shared_hearing_id: hearingId,
+      shared_hearing_id: chosenHearingId,
       checklist_items: refs(checklist),
       issues: refs(issues),
       evidence_document_refs: refs(hearingEvidenceRefs),
@@ -230,13 +282,13 @@ export function IpOppositionSharedWorkflow({
         order_document_ref: orderDocumentRef,
       },
       appealLink: {
-        target_kind: appealTargetKind,
-        target_id: appealTargetId,
-        appeal_identifier: appealIdentifier,
-        order_event_id: orderEventId,
+        target_kind: appealTargetKind || "matter",
+        target_id: chosenAppealTargetId,
+        appeal_identifier: chosenAppealIdentifier,
+        order_event_id: chosenOrderEventId,
       },
     };
-  }, [actionKind, affidavitRef, appealIdentifier, appealReview, appealTargetId, appealTargetKind, attendanceIds, authority, authorityRefs, backupId, causeListSource, checklist, complianceDirection, complianceDueOn, costDirections, deponent, exhibitRefs, filedOn, filingReference, foreignLanguageRefs, hearingEvidenceRefs, hearingId, indexRef, issues, knowledgeBasis, leaveGrantedOn, leaveReference, leaveScope, newDeadlineOn, operativeResult, orderDocumentRef, orderEventId, packageKind, packageVersion, paragraphs, place, postHearingNotes, primaryId, proceeding.application_id, proceeding.id, reliedRefs, selectedDeadline, serviceDestination, serviceMethod, serviceRefs, signatory, signedRef, submissionRefs]);
+  }, [actionKind, affidavitRef, chosenAppealIdentifier, appealReview, chosenAppealTargetId, appealTargetKind, attendanceIds, authority, authorityRefs, backupId, causeListSource, checklist, complianceDirection, complianceDueOn, costDirections, deponent, exhibitRefs, filedOn, filingReference, foreignLanguageRefs, hearingEvidenceRefs, chosenHearingId, indexRef, issues, knowledgeBasis, leaveGrantedOn, leaveReference, leaveScope, newDeadlineOn, operativeResult, orderDocumentRef, chosenOrderEventId, packageKind, packageVersion, paragraphs, place, postHearingNotes, primaryId, proceeding.application_id, proceeding.id, reliedRefs, selectedDeadline, serviceDestination, serviceMethod, serviceRefs, signatory, signedRef, submissionRefs]);
 
   const refresh = async () => {
     await Promise.all([
@@ -309,7 +361,7 @@ export function IpOppositionSharedWorkflow({
     && reason.trim().length >= 5 && confirmation.trim().length >= 2 && refs(evidenceRefs).length,
   );
   const detailReady = actionKind === "deadline_extended"
-    ? Boolean(selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
+    ? Boolean(docket.matter_id && selectedDeadline && newDeadlineOn && primaryId.trim() && backupId.trim() && primaryId.trim() !== backupId.trim())
     : actionKind === "further_evidence_leave_recorded"
       ? Boolean(leaveReference.trim() && leaveScope.trim().length >= 5 && leaveGrantedOn)
       : actionKind === "evidence_package_recorded"
@@ -318,7 +370,7 @@ export function IpOppositionSharedWorkflow({
           ? Boolean(selectedHearing && refs(checklist).length && refs(issues).length && refs(hearingEvidenceRefs).length && refs(authorityRefs).length && refs(attendanceIds).length && causeListSource.trim() && (actionKind !== "post_hearing_note_recorded" || postHearingNotes.trim()))
           : actionKind === "order_recorded"
             ? Boolean(operativeResult.trim().length >= 5 && proceeding.application_id && orderDocumentRef.trim())
-            : Boolean(appealTargetId.trim() && appealIdentifier.trim() && orderEventId.trim());
+            : Boolean(appealTargetKind && chosenAppealTargetId && chosenAppealIdentifier.trim() && chosenOrderEventId);
 
   return (
     <section data-testid="ip-opposition-shared-workflow" className="min-w-0 space-y-4 border-t border-[var(--color-line)] pt-4">
@@ -343,10 +395,12 @@ export function IpOppositionSharedWorkflow({
         </div>
 
         {actionKind === "deadline_extended" ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Active deadline"><select className={SELECT_CLASS} value={deadlineId} onChange={(event) => setDeadlineId(event.target.value)}><option value="">Select deadline</option>{workflow.data.active_deadlines.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.result_on ?? "unresolved"}</option>)}</select></Field>
+          <ExplainedSelect id="shared-extension-deadline" label="Active deadline" className={SELECT_CLASS} value={chosenDeadlineId} onChange={setDeadlineId} options={deadlineOptions} placeholder="Select a deadline" emptyText="This opposition has no confirmed deadline to extend. Propose and confirm one in the applicant or opponent workflow above, or on the Hearings and deadlines tab." />
           <Field label="Extended result date"><Input type="date" value={newDeadlineOn} onChange={(event) => setNewDeadlineOn(event.target.value)} /></Field>
-          <Field label="Primary membership ID"><Input value={primaryId} onChange={(event) => setPrimaryId(event.target.value)} /></Field>
-          <Field label="Backup membership ID"><Input value={backupId} onChange={(event) => setBackupId(event.target.value)} /></Field>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-primary">Responsible lawyer</Label><PersonPicker id="shared-extension-primary" value={primaryId} onChange={setPrimaryId} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} /></div>
+          <div className="flex min-w-0 flex-col gap-1"><Label htmlFor="shared-extension-backup">Backup lawyer</Label><PersonPicker id="shared-extension-backup" value={backupId} onChange={setBackupId} excludeMembershipIds={[primaryId]} onlyMembershipIds={responsibleIds ?? []} disabled={!responsibleIds} emptyText={responsibleEmpty} placeholder="Select a backup…" /></div>
+          {docket.matter_id ? null : <IpMatterLinkRequired id="shared-extension-matter-required" docketId={docket.id} />}
+          {deadlineWorkspace.isError ? <p className="text-xs text-[var(--color-danger)] md:col-span-2 xl:col-span-4" role="alert">Colleagues who can own this deadline could not be loaded. <button type="button" className="underline" onClick={() => deadlineWorkspace.refetch()}>Retry</button></p> : null}
         </div> : null}
 
         {actionKind === "further_evidence_leave_recorded" ? <div className="grid gap-3 md:grid-cols-3">
@@ -379,13 +433,13 @@ export function IpOppositionSharedWorkflow({
         </div> : null}
 
         {["hearing_preparation_recorded", "post_hearing_note_recorded"].includes(actionKind) ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Shared hearing"><select className={SELECT_CLASS} value={hearingId} onChange={(event) => setHearingId(event.target.value)}><option value="">Select hearing</option>{workflow.data.shared_hearings.map((row) => <option key={row.id} value={row.id}>{row.hearing_on} - {row.forum_name} - {row.status}</option>)}</select></Field>
+          <ExplainedSelect id="shared-hearing" label="Shared hearing" className={SELECT_CLASS} value={chosenHearingId} onChange={setHearingId} options={hearingOptions} placeholder="Select a hearing" emptyText={hearingOptions.length === 0 ? "No hearing is recorded for this IP record. Schedule one on the Hearings and deadlines tab, or above once the opposition is pending hearing." : actionKind === "post_hearing_note_recorded" ? "No hearing is completed yet. Mark the hearing completed on the Hearings and deadlines tab first." : "No hearing is scheduled or adjourned. Schedule one on the Hearings and deadlines tab."} />
           <Field label="Checklist items"><Input value={checklist} onChange={(event) => setChecklist(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Issues"><Input value={issues} onChange={(event) => setIssues(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Evidence documents"><Input value={hearingEvidenceRefs} onChange={(event) => setHearingEvidenceRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Authorities"><Input value={authorityRefs} onChange={(event) => setAuthorityRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Written submissions"><Input value={submissionRefs} onChange={(event) => setSubmissionRefs(event.target.value)} placeholder="Comma separated" /></Field>
-          <Field label="Attendance membership IDs"><Input value={attendanceIds} onChange={(event) => setAttendanceIds(event.target.value)} placeholder="Comma separated" /></Field>
+          <PersonChecklist id="shared-hearing-attendance" legend="Attending colleagues" value={refs(attendanceIds)} onChange={(ids) => setAttendanceIds(ids.join(","))} />
           <Field label="Cause-list source"><Input value={causeListSource} onChange={(event) => setCauseListSource(event.target.value)} /></Field>
           {actionKind === "post_hearing_note_recorded" ? <Field label="Post-hearing note"><Textarea value={postHearingNotes} onChange={(event) => setPostHearingNotes(event.target.value)} /></Field> : null}
         </div> : null}
@@ -400,10 +454,16 @@ export function IpOppositionSharedWorkflow({
         </div> : null}
 
         {actionKind === "appeal_linked" ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Appeal target"><select className={SELECT_CLASS} value={appealTargetKind} onChange={(event) => setAppealTargetKind(event.target.value as typeof appealTargetKind)}><option value="appeal_proceeding">Appeal proceeding</option><option value="matter">Matter</option></select></Field>
-          <Field label="Target record ID"><Input value={appealTargetId} onChange={(event) => setAppealTargetId(event.target.value)} /></Field>
-          <Field label="Appeal identifier"><Input value={appealIdentifier} onChange={(event) => setAppealIdentifier(event.target.value)} /></Field>
-          <Field label="Opposition order event"><select className={SELECT_CLASS} value={orderEventId} onChange={(event) => setOrderEventId(event.target.value)}><option value="">Select order</option>{workflow.data.shared_actions.filter((event) => event.payload_json.action_kind === "order_recorded").map((event) => <option key={event.id} value={event.id}>{event.source_reference ?? event.id}</option>)}</select></Field>
+          <ExplainedSelect id="shared-appeal-target-kind" label="Appeal target" className={SELECT_CLASS} value={appealTargetKind} onChange={(value) => { setAppealTargetKind(value as typeof appealTargetKind); setAppealTargetId(""); setAppealIdentifier(""); }} options={[{ value: "appeal_proceeding", label: "Appeal proceeding on this IP record", reason: appealProceedingAvailable ? null : appealProceedings.length ? "no appeal number recorded yet" : "none recorded yet" }, { value: "matter", label: "Matter" }]} placeholder="Select where the appeal is tracked" emptyText="" />
+          {appealTargetKind === "appeal_proceeding" ? <>
+            <ExplainedSelect id="shared-appeal-proceeding" label="Appeal proceeding" className={SELECT_CLASS} value={chosenAppealTargetId} onChange={(value) => { setAppealTargetId(value); setAppealIdentifier(""); }} options={appealProceedingOptions} placeholder="Select an appeal proceeding" emptyText="No appeal proceeding with an appeal number is recorded on this IP record. Link the appeal as a Matter instead." />
+            <ExplainedSelect id="shared-appeal-number" label="Appeal number" className={SELECT_CLASS} value={chosenAppealIdentifier} onChange={setAppealIdentifier} options={appealNumberOptions} placeholder="Select the appeal number" emptyText="Choose an appeal proceeding first." />
+          </> : null}
+          {appealTargetKind === "matter" ? <>
+            <MatterPicker className="md:col-span-2" id="shared-appeal-matter" label="Appeal Matter" searchLabel="Search Matters for the appeal" value={appealTargetId} onChange={(next) => setAppealTargetId(next)} />
+            <Field label="Appeal number"><Input value={appealIdentifier} onChange={(event) => setAppealIdentifier(event.target.value)} placeholder="e.g. C.A.(COMM.IPD-TM) 12/2026" /></Field>
+          </> : null}
+          <ExplainedSelect id="shared-appeal-order" label="Opposition order event" className={SELECT_CLASS} value={chosenOrderEventId} onChange={setOrderEventId} options={orderOptions} placeholder="Select the order appealed" emptyText="No opposition order is recorded yet. Record it with Record type: Opposition order first." />
         </div> : null}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

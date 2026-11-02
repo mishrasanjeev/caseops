@@ -136,7 +136,7 @@ export function PatentApplicationDetail({ applicationId }: { applicationId: stri
       : area === "evidence" || area === "prosecution" ? <PatentProsecutionWorkspace key={area} application={current} area={area} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
       : area === "proceedings" ? <PatentProceedingsWorkspace application={current} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
       : area === "documents" ? <IpDocumentWorkspace assetType="Patent" scopeDocketId={current.docket_id}
-        dockets={[{ id: current.docket_id, title: current.facts.title }]}
+        scopeDocketTitle={current.facts.title}
         canUpload={current.is_active && canWrite && canUpload} canManage={current.is_active && canWrite && canManage}
         canReview={current.is_active && canReview} canConfigure={current.is_active && canConfigure} />
         : editing && current.is_active ? <ApplicationForm initial={current} onOpenDocuments={() => setArea("documents")}

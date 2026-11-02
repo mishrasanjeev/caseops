@@ -17,8 +17,13 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  MatterName,
+  MatterPicker,
+  OPERATIONAL_MATTER_STATUSES,
+} from "@/components/app/MatterPicker";
 import { Badge } from "@/components/ui/Badge";
-import { PersonPicker } from "@/components/ui/PersonPicker";
+import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -49,10 +54,19 @@ import {
   type NotificationRuleInput,
   updateNotificationRule,
 } from "@/lib/api/endpoints";
-import type { NotificationRuleRecord } from "@/lib/api/schemas";
+import { isApiErrorShape } from "@/lib/api/config";
+import type { Matter, NotificationRuleRecord } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 
 type StatusFilter = "all" | HearingReminderStatus;
+
+// services/notification_rules.py: a Matter rule needs a Matter the admin can
+// open that can still take operational work.
+function ruleMatterBlockedReason(matter: Matter): string | null {
+  return OPERATIONAL_MATTER_STATUSES.has(matter.status)
+    ? null
+    : "closed Matters cannot take new notification rules";
+}
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -110,6 +124,9 @@ export default function AdminNotificationsPage() {
     offset_minutes: null,
     enabled: true,
   });
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [scopeMatterBlocked, setScopeMatterBlocked] = useState<string | null>(null);
+  const scopeMissing = ruleForm.scope_type !== "company" && !ruleForm.scope_id;
   const query = useQuery({
     queryKey: ["admin", "notifications", { status }],
     queryFn: () => listAdminNotifications({ status }),
@@ -125,6 +142,8 @@ export default function AdminNotificationsPage() {
     onSuccess: async () => {
       toast.success("Notification rule created.");
       await queryClient.invalidateQueries({ queryKey: ["notification-rules"] });
+      setScopeError(null);
+      setScopeMatterBlocked(null);
       setRuleForm({
         scope_type: "company",
         scope_id: null,
@@ -134,7 +153,15 @@ export default function AdminNotificationsPage() {
         enabled: true,
       });
     },
-    onError: (error) => toast.error(String(error)),
+    onError: (error) => {
+      // A refused scope (not found, walled, closed, inactive) belongs to the
+      // scope field, not a toast that disappears.
+      if (isApiErrorShape(error) && [403, 404, 409].includes(error.status) && ruleForm.scope_type !== "company") {
+        setScopeError(error.detail);
+        return;
+      }
+      toast.error(String(error));
+    },
   });
   const updateRuleMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: Partial<NotificationRuleInput> }) =>
@@ -280,13 +307,16 @@ export default function AdminNotificationsPage() {
               </label>
               <Select
                 value={ruleForm.scope_type}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  setScopeError(null);
+                  setScopeMatterBlocked(null);
+                  // A Matter is never a valid colleague, or the reverse.
                   setRuleForm((f) => ({
                     ...f,
                     scope_type: value as NotificationRuleInput["scope_type"],
-                    scope_id: value === "company" ? null : f.scope_id,
-                  }))
-                }
+                    scope_id: null,
+                  }));
+                }}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -298,26 +328,44 @@ export default function AdminNotificationsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="md:col-span-2">
-              <label className="text-[11px] font-medium text-[var(--color-mute)]">
-                Scope ID
-              </label>
-              <Input
-                className="mt-1"
-                disabled={ruleForm.scope_type === "company"}
-                value={ruleForm.scope_id ?? ""}
-                onChange={(event) =>
-                  setRuleForm((f) => ({
-                    ...f,
-                    scope_id: event.target.value || null,
-                  }))
-                }
-                placeholder={
-                  ruleForm.scope_type === "company"
-                    ? "Not required"
-                    : "Matter or membership id"
-                }
-              />
+            <div className="min-w-0 md:col-span-2">
+              {ruleForm.scope_type === "matter" ? (
+                <MatterPicker
+                  id="notification-rule-matter"
+                  label="Rule Matter"
+                  searchLabel="Search Matters for this rule"
+                  value={ruleForm.scope_id ?? ""}
+                  disabledReason={ruleMatterBlockedReason}
+                  error={scopeError ?? (scopeMatterBlocked ? `This Matter cannot be used: ${scopeMatterBlocked}.` : null)}
+                  onChange={(next, matter) => {
+                    setScopeError(null);
+                    setScopeMatterBlocked(matter ? ruleMatterBlockedReason(matter) : null);
+                    setRuleForm((f) => ({ ...f, scope_id: next || null }));
+                  }}
+                />
+              ) : ruleForm.scope_type === "user" ? (
+                <div className="flex min-w-0 flex-col gap-1">
+                  <Label htmlFor="notification-rule-person">Rule colleague</Label>
+                  <PersonPicker
+                    id="notification-rule-person"
+                    value={ruleForm.scope_id ?? ""}
+                    errorId={scopeError ? "notification-rule-scope-error" : undefined}
+                    emptyText="No active colleague can receive a rule. Add or reactivate one under Admin, Employees."
+                    onChange={(next) => {
+                      setScopeError(null);
+                      setRuleForm((f) => ({ ...f, scope_id: next || null }));
+                    }}
+                  />
+                  {scopeError ? (
+                    <p id="notification-rule-scope-error" className="text-sm text-[var(--color-danger-500)]">{scopeError}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-xs text-[var(--color-mute)]">
+                  <span className="text-[11px] font-medium">Applies to</span>
+                  <p className="mt-2">Every Matter and colleague in the company.</p>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-[11px] font-medium text-[var(--color-mute)]">
@@ -357,12 +405,18 @@ export default function AdminNotificationsPage() {
                 type="button"
                 size="sm"
                 onClick={() => createRuleMutation.mutate(ruleForm)}
-                disabled={createRuleMutation.isPending}
+                disabled={createRuleMutation.isPending || scopeMissing || Boolean(scopeMatterBlocked)}
+                aria-describedby={scopeMissing ? "notification-rule-scope-needed" : undefined}
                 data-testid="notification-rule-create"
               >
                 <Plus className="h-4 w-4" aria-hidden /> Add rule
               </Button>
             </div>
+            {scopeMissing ? (
+              <p id="notification-rule-scope-needed" className="text-xs text-[var(--color-mute)] md:col-span-6">
+                Choose the {ruleForm.scope_type === "matter" ? "Matter" : "colleague"} this rule applies to.
+              </p>
+            ) : null}
             <div className="text-xs text-[var(--color-mute)] md:col-span-6">
               Channel: in-app. Email, SMS, and WhatsApp automation remain unavailable
               until provider policy, credentials, and runbooks are approved.
@@ -753,8 +807,13 @@ function NotificationRuleRow({
           </span>
         </div>
         <div className="mt-1 text-xs text-[var(--color-mute)]">
-          {rule.scope_type}
-          {rule.scope_id ? ` · ${rule.scope_id}` : ""}
+          {rule.scope_type === "matter" ? (
+            <>Matter · <MatterName matterId={rule.scope_id} /></>
+          ) : rule.scope_type === "user" ? (
+            <>Colleague · <PersonName membershipId={rule.scope_id} /></>
+          ) : (
+            "Company"
+          )}
           {" · "}
           {rule.channels.join(", ")}
           {" · "}

@@ -37,7 +37,10 @@ from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
-from caseops_api.services.matter_operational_guard import assert_operational_matter
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+)
 from caseops_api.services.session_context import SessionContext
 
 
@@ -410,7 +413,15 @@ def create_matter_link(
     if _aware(docket.updated_at) != _aware(payload.expected_docket_updated_at):
         raise _conflict("ip_docket_version_conflict", "The IP record changed; reload and retry.")
     if payload.relation_role == "operational":
-        assert_operational_matter(session, matter=matter, lock_for_write=False)
+        try:
+            assert_operational_matter(session, matter=matter, lock_for_write=False)
+        except MatterNotOperationalError as exc:
+            # A closed, disposed or legacy inactive Matter; unmapped, this was a 500.
+            raise _conflict(
+                "ip_matter_not_operational",
+                "Only an open (intake, active or on hold) Matter can be the operational "
+                "Matter. Link this Matter in another role, or choose an open Matter.",
+            ) from exc
         active_operational = session.scalar(
             select(IpMatterLink)
             .where(

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { retireIpDocket } from "./support/retire-records";
+
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL =
   process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
@@ -57,6 +59,17 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   expect(csrf, "caseops_csrf cookie must exist after sign-in").toBeTruthy();
   return { "X-CSRF-Token": csrf! };
 }
+
+// The calendar canary docket each run creates is retired after the run,
+// pass or fail; retirement also cancels any hearing or reminder left live.
+let canaryDocket: { docketId: string; headers: Record<string, string> } | undefined;
+test.afterEach(async ({ page }) => {
+  const created = canaryDocket;
+  canaryDocket = undefined;
+  if (!created) return;
+  await retireIpDocket(page.request, PROD_API_BASE_URL, created.headers, created.docketId,
+    "IPLF-025B production calendar canary retired after the run.");
+});
 
 test("IPLF-025A/025B production serves the exact shared-work contract and a ready tenant reconciliation", async ({
   page,
@@ -217,6 +230,7 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
   );
   expect(createdDocket.status(), await createdDocket.text()).toBe(201);
   const docketId = (await createdDocket.json()).id as string;
+  canaryDocket = { docketId, headers };
 
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto(

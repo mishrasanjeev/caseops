@@ -5,12 +5,15 @@ import { AlertTriangle, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  MatterName,
+  MatterPicker,
+  OPERATIONAL_MATTER_STATUSES,
+} from "@/components/app/MatterPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -19,6 +22,15 @@ import {
   reviewCalendarProviderEventCandidate,
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
+import type { Matter } from "@/lib/api/schemas";
+
+// The accept validator (services/calendar_event_candidates.py) files an event
+// only on a Matter the reviewer can open and that can still take work.
+function matterBlockedReason(matter: Matter): string | null {
+  return OPERATIONAL_MATTER_STATUSES.has(matter.status)
+    ? null
+    : "closed Matters cannot take new hearings";
+}
 
 function tone(status: string): "success" | "warning" | "neutral" | "brand" {
   if (status === "accepted") return "success";
@@ -30,6 +42,8 @@ function tone(status: string): "success" | "warning" | "neutral" | "brand" {
 export default function CalendarConflictsPage() {
   const queryClient = useQueryClient();
   const [matterId, setMatterId] = useState("");
+  const [matterBlocked, setMatterBlocked] = useState<string | null>(null);
+  const actionMatterId = matterBlocked ? "" : matterId;
   const [forceOverwriteLocked, setForceOverwriteLocked] = useState(false);
   const query = useQuery({
     queryKey: ["calendar-provider-candidates"],
@@ -41,7 +55,7 @@ export default function CalendarConflictsPage() {
       reviewCalendarProviderEventCandidate({
         candidateId: input.id,
         action: input.action,
-        matterId: matterId || null,
+        matterId: actionMatterId || null,
         forceOverwriteLocked,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar-provider-candidates"] }),
@@ -60,16 +74,24 @@ export default function CalendarConflictsPage() {
 
       <Card>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <div>
-            <Label htmlFor="calendar-matter">Matter id for accept</Label>
-            <Input
+          <div className="min-w-0">
+            <MatterPicker
               id="calendar-matter"
-              placeholder="matter id"
+              label="Matter for Accept"
+              searchLabel="Search Matters for Accept"
               value={matterId}
-              onChange={(event) => setMatterId(event.target.value)}
+              disabledReason={matterBlockedReason}
+              error={matterBlocked ? `This Matter cannot be used: ${matterBlocked}.` : null}
+              onChange={(next, matter) => {
+                setMatterId(next);
+                setMatterBlocked(matter ? matterBlockedReason(matter) : null);
+              }}
             />
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Used for events without a linked or suggested Matter, or to file an event on a different Matter.
+            </p>
           </div>
-          <label className="flex items-center gap-2 pt-6 text-sm text-[var(--color-ink-2)]">
+          <label className="flex items-center gap-2 self-start pt-6 text-sm text-[var(--color-ink-2)]">
             <input
               className="h-4 w-4"
               type="checkbox"
@@ -124,9 +146,17 @@ export default function CalendarConflictsPage() {
                     {row.location ? ` - ${row.location}` : ""}
                   </div>
                 </div>
-                <div className="text-xs text-[var(--color-mute)]">
-                  <div>Suggested: {row.suggested_matter_id ?? "none"}</div>
-                  <div>Linked: {row.linked_matter_id ?? "none"}</div>
+                <div className="min-w-0 text-xs text-[var(--color-mute)]">
+                  {/* The list is filtered on the linked Matter, or the
+                      suggestion when nothing is linked. */}
+                  {row.linked_matter_id ? (
+                    <div>Linked: <MatterName matterId={row.linked_matter_id} /></div>
+                  ) : (
+                    <div>Suggested: <MatterName matterId={row.suggested_matter_id} fallback="none" /></div>
+                  )}
+                  {row.linked_matter_id || row.suggested_matter_id || actionMatterId ? null : (
+                    <div className="mt-1">Choose a Matter for Accept above to accept this event.</div>
+                  )}
                   {row.conflict_reason ? (
                     <div className="mt-1 flex items-center gap-1 text-amber-800">
                       <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
@@ -141,7 +171,7 @@ export default function CalendarConflictsPage() {
                     variant="outline"
                     disabled={
                       reviewMutation.isPending ||
-                      (!row.suggested_matter_id && !matterId)
+                      (!row.linked_matter_id && !row.suggested_matter_id && !actionMatterId)
                     }
                     onClick={() => reviewMutation.mutate({ id: row.id, action: "accept" })}
                   >

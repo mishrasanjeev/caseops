@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -73,6 +74,42 @@ def fixture_inventory(root: Path) -> dict:
     if not files:
         raise ValueError("Empty native runtime evidence inventory")
     return {"files": files, "directories": sorted(directories)}
+
+
+def drop_pytest_current_links(fixtures: Path) -> list[str]:
+    """Remove pytest's ``<name>current`` convenience links from the basetemp root.
+
+    pytest links each numbered temporary directory as ``<name>current`` when
+    the process may create symbolic links (an elevated Windows shell can). Only
+    a symlink whose target is an existing sibling ``<name><digits>`` directory
+    is removed; the target bytes stay, and any other link or junction is still
+    refused by ``fixture_inventory``.
+    """
+    root = native_path(fixtures)
+    if not root.is_dir() or root.is_symlink():
+        return []
+    removed = []
+    with os.scandir(root) as entries:
+        for entry in sorted(entries, key=lambda item: item.name):
+            if not entry.is_symlink() or not entry.name.endswith("current"):
+                continue
+            prefix = entry.name[: -len("current")]
+            target = Path(os.readlink(entry.path))
+            sibling = native_path(target if target.is_absolute() else root / target)
+            if (
+                not prefix
+                or os.path.normcase(str(sibling.parent)) != os.path.normcase(str(root))
+                or not re.fullmatch(re.escape(prefix) + r"\d+", sibling.name)
+                or sibling.is_symlink()
+                or not sibling.is_dir()
+            ):
+                continue
+            try:
+                os.unlink(entry.path)
+            except (IsADirectoryError, PermissionError):
+                os.rmdir(entry.path)
+            removed.append(entry.name)
+    return removed
 
 
 def retain_runtime(source: Path, destination: Path) -> dict:
@@ -357,6 +394,7 @@ def execute(api: Path, folder: Path, arguments: list[str]) -> int:
             # Close logs before retaining every partial fixture and phase journal.
             stdout.close()
             stderr.close()
+            drop_pytest_current_links(runtime / "fixtures")
             retain_runtime(runtime, folder)
             raise
     save(
@@ -370,6 +408,7 @@ def execute(api: Path, folder: Path, arguments: list[str]) -> int:
         },
     )
     try:
+        drop_pytest_current_links(runtime / "fixtures")
         retained = retain_runtime(runtime, folder)
     except (OSError, ValueError):
         save(

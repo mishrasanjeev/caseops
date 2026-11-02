@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -516,6 +517,329 @@ def test_batch3_policy_preserves_other_roles_legitimate_skipped_envelopes(captur
         capture.root, invocation, capture.args, env=capture.env, launch=capture.launch,
     ) == 0
     evidence.validate(capture.root, [invocation], BASE)
+
+
+BATCH4_GOVERNANCE_FILE = "ram-2026-10-31-governance-ui.spec.ts"
+
+
+def _batch4_source_cases():
+    """Derive every production-eligible Batch4 case per role from the spec sources."""
+    roles = {invocation: Counter() for invocation in evidence.BATCH4_MANDATORY_CASES}
+    # The same files the prod-ram BATCH4_SPECS pattern selects.
+    paths = [*(ROOT / "tests/e2e").glob("ram-2026-10-31-*.spec.ts"),
+             ROOT / "tests/e2e/ram-2026-11-01-adj-pickers.spec.ts"]
+    for path in sorted(paths):
+        source = path.read_text(encoding="utf-8")
+        if path.name == "ram-2026-10-31-control-crawl.spec.ts":
+            assert "for (const path of [...ROUTES, ...PROD_ROUTES]) {" in source
+            assert source.count(
+                "test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`"
+            ) == 1
+            assert 'path.replace("?tab=documents", " Documents tab")' in source
+            routes = []
+            for name in ("ROUTES", "PROD_ROUTES"):
+                block = re.search(rf"\nconst {name} = \[(.*?)\];", source, re.S)
+                assert block is not None
+                routes += re.findall(r'"([^"]+)"', block.group(1))
+            titles = [
+                "BUG-015 controls on {} are usable or explain themselves".format(
+                    route.replace("?tab=documents", " Documents tab")
+                )
+                for route in routes
+            ]
+        else:
+            assert "test(`" not in source, path.name
+            titles = re.findall(r'(?<![.\w])test\(\s*"((?:[^"\\]|\\.)*)"', source)
+        assert titles, path.name
+        for title in titles:
+            if "[local-only]" in title:
+                continue
+            governance = "governance-" if path.name == BATCH4_GOVERNANCE_FILE else ""
+            role = f"batch4-{governance}{'mobile' if '[mobile]' in title else 'desktop'}"
+            roles[role][(path.name, title)] += 1
+    return roles
+
+
+def test_batch4_mandatory_inventory_is_every_production_case_in_the_specs():
+    derived = _batch4_source_cases()
+    assert set(evidence.BATCH4_MANDATORY_CASES) == {
+        "batch4-desktop", "batch4-mobile", "batch4-governance-desktop", "batch4-governance-mobile",
+    }
+    for invocation, (project, cases) in evidence.BATCH4_MANDATORY_CASES.items():
+        assert Counter(cases) == derived[invocation], invocation
+        assert len(set(cases)) == len(cases)
+        assert project == {
+            "batch4-desktop": "batch4-prod-chromium",
+            "batch4-mobile": "batch4-prod-mobile",
+            "batch4-governance-desktop": "batch4-governance-prod-chromium",
+            "batch4-governance-mobile": "batch4-governance-prod-mobile",
+        }[invocation]
+        governance = invocation.startswith("batch4-governance-")
+        assert all((file == BATCH4_GOVERNANCE_FILE) is governance for file, _ in cases)
+        assert all(("[mobile]" in title) is invocation.endswith("-mobile") for _, title in cases)
+        assert not any("[local-only]" in title for _, title in cases)
+    assert {key: len(cases) for key, (_, cases) in evidence.BATCH4_MANDATORY_CASES.items()} == {
+        "batch4-desktop": 36, "batch4-mobile": 14,
+        "batch4-governance-desktop": 2, "batch4-governance-mobile": 2,
+    }
+
+
+def _restat_capture(state):
+    for document in (state.discovery, state.runtime):
+        statuses = Counter(
+            test["status"] for suite in document["suites"]
+            for spec in suite["specs"] for test in spec["tests"]
+        )
+        document["stats"].update(
+            {key: statuses[key] for key in ("expected", "skipped", "unexpected", "flaky")}
+        )
+    state.junit_count = sum(len(suite["specs"]) for suite in state.runtime["suites"])
+
+
+def _batch4_capture(state, invocation):
+    project, cases = evidence.BATCH4_MANDATORY_CASES[invocation]
+    config = state.root / "playwright.prod-ram.config.ts"
+    config.write_text("// synthetic offline Batch4 evidence contract\n", encoding="utf-8")
+    state.args[:2] = [f"--config={config.name}", f"--project={project}"]
+    state.path = state.root / evidence.EVIDENCE / invocation
+    for document in (state.discovery, state.runtime):
+        template = document["suites"][0]["specs"][0]
+        document["config"]["configFile"] = str(config)
+        document["config"]["projects"][0].update(id=project, name=project)
+        suites = {}
+        for index, (file, title) in enumerate(cases):
+            (state.root / file).touch()
+            spec = copy.deepcopy(template)
+            spec.update(id=f"batch4-native-{index}", file=file, title=title, line=index + 1)
+            spec["tests"][0].update(projectId=project, projectName=project)
+            suites.setdefault(file, {"title": file, "specs": []})["specs"].append(spec)
+        document["suites"] = list(suites.values())
+    _restat_capture(state)
+    state.run = lambda: evidence.run(
+        state.root, invocation, state.args, env=state.env, launch=state.launch,
+    )
+    return state
+
+
+def _foreign_batch4_case(invocation):
+    other = next(key for key in evidence.BATCH4_MANDATORY_CASES if key != invocation)
+    return evidence.BATCH4_MANDATORY_CASES[other][1][0]
+
+
+def _damage_batch4_capture(state, invocation, damage):
+    if damage in {"skipped", "expected_failure"}:
+        test = state.runtime["suites"][-1]["specs"][-1]["tests"][0]
+        status = "skipped" if damage == "skipped" else "failed"
+        test.update(expectedStatus=status, status="skipped" if status == "skipped" else "expected")
+        test["results"][0]["status"] = status
+        _restat_capture(state)
+        return
+    if damage == "wrong_config":
+        state.args[0] = "--config=playwright.offline.config.ts"
+    elif damage == "wrong_project":
+        state.args[1] = "--project=unreviewed-project"
+    elif damage == "parallel_workers":
+        state.args[2] = "--workers=2"
+    elif damage == "missing_retry_flag":
+        state.args.remove("--retries=0")
+    foreign_file, foreign_title = _foreign_batch4_case(invocation)
+    (state.root / foreign_file).touch(exist_ok=True)
+    for document in (state.discovery, state.runtime):
+        suite = document["suites"][-1]
+        spec = suite["specs"][-1]
+        if damage == "missing_case":
+            suite["specs"].pop()
+            if not suite["specs"]:
+                document["suites"].pop()
+        elif damage in {"duplicate", "extra_case"}:
+            extra = copy.deepcopy(spec)
+            extra["id"] += f"-{damage}"
+            if damage == "extra_case":
+                extra.update(file=foreign_file, title=foreign_title)
+                document["suites"].append({"title": foreign_file, "specs": [extra]})
+            else:
+                suite["specs"].append(extra)
+        elif damage == "substitution":
+            spec.update(file=foreign_file, title=foreign_title)
+            suite["specs"].remove(spec)
+            if not suite["specs"]:
+                document["suites"].remove(suite)
+            document["suites"].append({"title": foreign_file, "specs": [spec]})
+        elif damage == "wrong_title":
+            spec["title"] += " substituted"
+        elif damage == "wrong_project":
+            document["config"]["projects"][0].update(
+                id="unreviewed-project", name="unreviewed-project",
+            )
+            for each in _suite_specs(document):
+                each["tests"][0].update(
+                    projectId="unreviewed-project", projectName="unreviewed-project",
+                )
+        elif damage == "wrong_config":
+            document["config"]["configFile"] = str(state.root / "playwright.offline.config.ts")
+        elif damage == "parallel_workers":
+            document["config"]["workers"] = 2
+    _restat_capture(state)
+
+
+def _suite_specs(document):
+    return [spec for suite in document["suites"] for spec in suite["specs"]]
+
+
+@pytest.mark.parametrize("invocation", list(evidence.BATCH4_MANDATORY_CASES))
+def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture, invocation):
+    state = _batch4_capture(capture, invocation)
+    project, cases = evidence.BATCH4_MANDATORY_CASES[invocation]
+    assert state.run() == 0
+    evidence.validate(state.root, [invocation], BASE)
+    completion = json.loads((state.path / "completion.json").read_text())
+    assert completion["completed"] is True and completion["test_count"] == len(cases)
+    assert len(list(ET.parse(state.path / "results.xml").iter("testcase"))) == len(cases)
+    assert not list(ET.parse(state.path / "results.xml").iter("skipped"))
+    rows = json.loads((state.path / "results.json").read_text())["tests"]
+    assert Counter((row["file"], row["title_path"][-1]) for row in rows) == Counter(
+        (file, evidence._safe(title, {})) for file, title in cases
+    )
+    if invocation == "batch4-desktop":
+        # The query-bearing crawl route is retained only in privacy-minimized form.
+        assert sum("[query-or-token-redacted]" in row["title_path"][-1] for row in rows) == 1
+    assert all(
+        row["project_name"] == project and row["status"] == "expected"
+        and [result["status"] for result in row["results"]] == ["passed"]
+        for row in rows
+    )
+
+
+@pytest.mark.parametrize("invocation", list(evidence.BATCH4_MANDATORY_CASES))
+@pytest.mark.parametrize("damage", [
+    "expected_failure", "skipped", "missing_case", "duplicate", "extra_case", "substitution",
+    "wrong_title", "wrong_project", "wrong_config", "parallel_workers", "missing_retry_flag",
+])
+@pytest.mark.parametrize("phase", ["run", "validate"])
+def test_batch4_full_envelope_rejects_nonpositive_partial_or_substituted_evidence(
+    capture, monkeypatch, invocation, damage, phase,
+):
+    state = _batch4_capture(capture, invocation)
+    if damage in {"expected_failure", "skipped"}:
+        reason = "mandatory_batch4_case_not_passed"
+    elif damage in {"wrong_project", "wrong_config", "parallel_workers", "missing_retry_flag"}:
+        reason = "batch4_role_binding_mismatch"
+    else:
+        reason = "mandatory_batch4_case_inventory_mismatch"
+    _damage_batch4_capture(state, invocation, damage)
+    if phase == "run":
+        assert state.run() == 1
+        assert not (state.path / "completion.json").exists()
+        exit_marker = json.loads((state.path / "exit.json").read_text())
+        assert exit_marker["completed"] is False
+        assert exit_marker["incomplete_reason"] == reason
+        if damage not in {"expected_failure", "skipped"}:
+            assert all("--list" in command for command, _ in state.calls)
+        return
+    # An older producer accepting a malformed but internally consistent envelope
+    # must still be refused by the independent final validation.
+    with monkeypatch.context() as producer:
+        producer.setattr(evidence, "_check_batch4_evidence", lambda *a, **kw: None)
+        assert state.run() == 0
+    with pytest.raises(evidence.EvidenceError, match=f"^{reason}$"):
+        evidence.validate(state.root, [invocation], BASE)
+
+
+def test_batch4_validation_rejects_a_missing_required_role(capture):
+    state = _batch4_capture(capture, "batch4-desktop")
+    assert state.run() == 0
+    evidence.validate(state.root, ["batch4-desktop"], BASE)
+    with pytest.raises(evidence.EvidenceError, match="^missing_or_oversized_report$"):
+        evidence.validate(state.root, ["batch4-desktop", "batch4-mobile"], BASE)
+
+
+def _damage_stored_mandatory_rows(document, damage):
+    """Per-row and execution damage that leaves the role binding untouched."""
+    row = document["tests"][-1]
+    if damage == "row_project":
+        row["project_id"] = row["project_name"] = "unreviewed-project"
+    elif damage == "row_retries":
+        row["retries"] = 1
+    elif damage == "row_repeat":
+        row["repeat_each_index"] = 1
+    elif damage == "flaky":
+        row["status"] = "flaky"
+    elif damage == "retried_pass":
+        failed = copy.deepcopy(row["results"][0])
+        failed["status"] = "failed"
+        row["results"][0]["retry"] = 1
+        row["results"].insert(0, failed)
+    elif damage == "result_retry":
+        row["results"][0]["retry"] = 1
+    elif damage == "result_not_passed":
+        row["results"][0]["status"] = "timedOut"
+    elif damage == "no_result":
+        row["results"] = []
+    elif damage == "report_failed":
+        document["report_status"] = "failed"
+    elif damage == "global_error":
+        document["global_error_count"] = 1
+
+
+@pytest.mark.parametrize("invocation", [*BATCH3_EXPECTED_CASES, *evidence.BATCH4_MANDATORY_CASES])
+@pytest.mark.parametrize(("damage", "kind"), [
+    ("row_project", "inventory"), ("row_retries", "inventory"), ("row_repeat", "inventory"),
+    ("flaky", "not_passed"), ("retried_pass", "not_passed"), ("result_retry", "not_passed"),
+    ("result_not_passed", "not_passed"), ("no_result", "not_passed"),
+    ("report_failed", "not_passed"), ("global_error", "not_passed"),
+])
+def test_mandatory_case_checker_pins_row_and_execution_rules_of_stored_evidence(
+    capture, invocation, damage, kind,
+):
+    # The generic producer rejects these today; the mandatory policy must reject
+    # them on its own, against the stored (validate-phase) receipt.
+    batch = "batch3" if invocation.startswith("batch3-") else "batch4"
+    state = (_batch3_capture if batch == "batch3" else _batch4_capture)(capture, invocation)
+    assert state.run() == 0
+    binding = json.loads((state.path / "completion.json").read_text())["binding"]
+    document = json.loads((state.path / "results.json").read_text())
+    checker = getattr(evidence, f"_check_{batch}_evidence")
+    checker(binding, copy.deepcopy(document), execution=True)
+    _damage_stored_mandatory_rows(document, damage)
+    with pytest.raises(evidence.EvidenceError, match=f"^mandatory_{batch}_case_{kind}"):
+        checker(binding, document, execution=True)
+    if kind == "not_passed":
+        # Discovery carries no results: execution-only rules apply only to results.
+        checker(binding, document, execution=False)
+
+
+def test_batch4_governance_state_is_read_from_the_checked_in_release_file():
+    assert type(evidence.batch4_governance_state(ROOT)) is bool
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_batch4_governance_state_reports_the_exact_switch(tmp_path, enabled):
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / evidence.GOVERNANCE_STATE).write_text(json.dumps({
+        "schema_version": 1, "enabled": enabled, "rollout_expires_at": None,
+        "approved_by": None, "evidence": None,
+    }), encoding="utf-8")
+    assert evidence.batch4_governance_state(tmp_path) is enabled
+
+
+@pytest.mark.parametrize("content", [
+    None, "not json", "[]",
+    '{"schema_version": 1, "enabled": "true", "rollout_expires_at": null, '
+    '"approved_by": null, "evidence": null}',
+    '{"schema_version": 1, "enabled": 1, "rollout_expires_at": null, '
+    '"approved_by": null, "evidence": null}',
+    '{"schema_version": 2, "enabled": true, "rollout_expires_at": null, '
+    '"approved_by": null, "evidence": null}',
+    '{"schema_version": 1, "enabled": true}',
+    '{"schema_version": 1, "enabled": true, "rollout_expires_at": null, '
+    '"approved_by": null, "evidence": null, "override": true}',
+])
+def test_batch4_governance_state_fails_closed_on_missing_or_unreviewed_state(tmp_path, content):
+    if content is not None:
+        (tmp_path / "deploy").mkdir()
+        (tmp_path / evidence.GOVERNANCE_STATE).write_text(content, encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError, match="^invalid_rule_governance_state$"):
+        evidence.batch4_governance_state(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -1838,6 +2162,10 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "batch3-clients-desktop",
         "batch3-clients-mobile",
         "batch3-drafts-readonly",
+        "batch4-desktop",
+        "batch4-mobile",
+        "batch4-governance-desktop",
+        "batch4-governance-mobile",
         "legacy",
         "test-legal-readonly",
         "ip-a0",

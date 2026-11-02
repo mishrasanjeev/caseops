@@ -370,8 +370,8 @@ export default function EmployeesAdminPage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-[var(--color-line)] text-sm">
+                <div className="@container overflow-x-auto" data-testid="employees-table">
+                  <table className="min-w-full divide-y divide-[var(--color-line)] text-sm @max-[56rem]:stacked-table @max-[56rem]:px-4">
                     <thead className="bg-[var(--color-bg-2)] text-left text-xs font-semibold uppercase text-[var(--color-mute)]">
                       <tr>
                         <th className="px-4 py-3">Employee</th>
@@ -458,7 +458,7 @@ function EmployeeRow({
   const needsSetup = !employee.setup_completed_at || employee.employment_status === "invited";
   return (
     <tr>
-      <td className="px-4 py-3 align-top">
+      <td data-label="Employee" className="px-4 py-3 align-top">
         <div className="font-medium text-[var(--color-ink)]">{employee.full_name}</div>
         <div className="text-xs text-[var(--color-mute)]">{employee.email}</div>
         {employee.employee_code ? (
@@ -467,7 +467,7 @@ function EmployeeRow({
           </div>
         ) : null}
       </td>
-      <td className="px-4 py-3 align-top">
+      <td data-label="Role" className="px-4 py-3 align-top">
         <Badge tone={employee.role === "owner" || employee.role === "admin" ? "brand" : "neutral"}>
           {roleLabel(employee.role)}
         </Badge>
@@ -477,20 +477,20 @@ function EmployeeRow({
           </div>
         ) : null}
       </td>
-      <td className="px-4 py-3 align-top">
+      <td data-label="Department" className="px-4 py-3 align-top">
         <div>{employee.department || "Unassigned"}</div>
         {employee.designation ? (
           <div className="text-xs text-[var(--color-mute)]">{employee.designation}</div>
         ) : null}
       </td>
-      <td className="px-4 py-3 align-top">
+      <td data-label="Status" className="px-4 py-3 align-top">
         <StatusBadge status={employee.employment_status} />
       </td>
-      <td className="px-4 py-3 align-top text-xs text-[var(--color-mute)]">
+      <td data-label="Last login" className="px-4 py-3 align-top text-xs text-[var(--color-mute)]">
         {formatDate(employee.last_login_at)}
       </td>
-      <td className="px-4 py-3 align-top">
-        <div className="flex justify-end gap-1.5">
+      <td data-label="Actions" className="px-4 py-3 align-top">
+        <div className="flex flex-wrap justify-end gap-1.5 @max-[56rem]:justify-start">
           <Button size="sm" variant="ghost" onClick={onEdit} data-testid={`employee-edit-${employee.email}`}>
             <Pencil className="h-4 w-4" aria-hidden />
             Edit

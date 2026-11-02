@@ -24,6 +24,11 @@ CalendarMethod = Literal[
 ]
 
 
+# A source hash is a SHA-256 hex digest. Every input that accepts one rejects
+# anything else as a field-addressed 422 instead of storing an unverifiable value.
+SOURCE_HASH_PATTERN = r"^[0-9a-fA-F]{64}$"
+
+
 class LegalCalendarSnapshot(BaseModel):
     calendar_version_id: str
     timezone: str
@@ -31,7 +36,7 @@ class LegalCalendarSnapshot(BaseModel):
     holidays: list[date] = Field(default_factory=list)
     exceptional_working_days: list[date] = Field(default_factory=list)
     source_reference: str = Field(min_length=1, max_length=512)
-    source_hash: str = Field(min_length=64, max_length=64)
+    source_hash: str = Field(min_length=64, max_length=64, pattern=SOURCE_HASH_PATTERN)
 
     @model_validator(mode="after")
     def validate_calendar(self) -> LegalCalendarSnapshot:
@@ -154,7 +159,7 @@ class IpRuleVersionProposalRequest(BaseModel):
     role: str | None = Field(default=None, max_length=40)
     stage: str = Field(min_length=1, max_length=80)
     source_record_id: str = Field(min_length=1, max_length=120)
-    source_hash: str = Field(min_length=64, max_length=64)
+    source_hash: str = Field(min_length=64, max_length=64, pattern=SOURCE_HASH_PATTERN)
     source_reference: str = Field(min_length=1, max_length=512)
     effective_from: date
     effective_until: date | None = None
@@ -171,6 +176,52 @@ class IpRuleVersionProposalRequest(BaseModel):
             if any(fixture.calculation is None for fixture in self.fixtures):
                 raise ValueError("deadline fixtures require deterministic calculations")
         return self
+
+
+# Why the current viewer cannot take a governance action. The writers enforce
+# the same gates in the same order, so a control the projection enables is one
+# the server accepts, and every refusal it predicts has a stable code.
+IpGovernanceBlockReason = Literal[
+    "not_candidate",
+    "rule_kind_unsupported",
+    "rollout_disabled",
+    "rollout_expired",
+    "missing_entitlement",
+    "missing_capability",
+    "proposer_unavailable",
+    "proposer_cannot_self_approve",
+    "no_qualified_reviewer",
+    # Too few other active owners, admins or partners: a calendar needs one
+    # approver other than its proposer, a rule two (reviewer and approver).
+    "no_other_approver",
+    "fixtures_not_passing",
+    # A deadline rule's fixtures were calculated on a calendar that is not an
+    # active working calendar of this workspace (missing, withdrawn or superseded).
+    "fixture_calendar_not_active",
+    # A deadline rule's fixtures were calculated on an active working calendar
+    # of another jurisdiction than the rule's.
+    "fixture_calendar_jurisdiction_mismatch",
+]
+
+
+class IpGovernanceActionDecision(BaseModel):
+    """One governance action for the current viewer, from the writers' gates."""
+
+    available: bool
+    # First failing gate (or ``available``); ``reasons`` lists every one.
+    code: Literal["available"] | IpGovernanceBlockReason
+    reasons: list[IpGovernanceBlockReason] = Field(default_factory=list)
+    required_capability: str
+    entitlement_key: str
+    # ``None`` for working calendars, which are outside the rollout fence.
+    rollout_flag: str | None
+
+
+class IpDeadlineGovernanceProjection(BaseModel):
+    calendar_proposal: IpGovernanceActionDecision
+    calendar_activation: IpGovernanceActionDecision
+    rule_proposal: IpGovernanceActionDecision
+    rule_activation: IpGovernanceActionDecision
 
 
 class IpRuleVersionRecord(BaseModel):
@@ -201,6 +252,16 @@ class IpRuleVersionRecord(BaseModel):
     activated_at: datetime | None
     disabled_at: datetime | None
     created_at: datetime
+    proposed_by_membership_id: str | None = None
+    # Viewer-scoped: whether the current viewer can activate this version now,
+    # and every reason they cannot (the first is ``activation_blocked_reason``).
+    can_activate: bool = False
+    activation_blocked_reason: IpGovernanceBlockReason | None = None
+    activation_blocked_reasons: list[IpGovernanceBlockReason] = Field(default_factory=list)
+    # Members the activation validator accepts as the fixture reviewer when
+    # this viewer is the legal approver. Empty unless the viewer can activate
+    # rules; the reviewer picker must offer exactly these.
+    eligible_reviewer_membership_ids: list[str] = Field(default_factory=list)
 
 
 class IpRuleActivationRequest(BaseModel):
@@ -227,6 +288,10 @@ class IpRuleImpactResponse(BaseModel):
     open_deadline_count: int
     candidate_deadline_count: int
     confirmed_deadlines_preserved: bool = True
+    # Active versions of the same rule whose effective range the candidate
+    # collides with: activating it retires them, and only with explicit
+    # ``supersede_overlapping``. Always empty for an active version.
+    superseded_versions: list[int] = Field(default_factory=list)
 
 
 class IpCompanyRuleSelectionRequest(BaseModel):
@@ -265,7 +330,7 @@ class LegalCalendarVersionProposalRequest(BaseModel):
     exceptional_working_days: list[date] = Field(default_factory=list)
     source_priority: list[str] = Field(min_length=1)
     source_reference: str = Field(min_length=1, max_length=512)
-    source_hash: str = Field(min_length=64, max_length=64)
+    source_hash: str = Field(min_length=64, max_length=64, pattern=SOURCE_HASH_PATTERN)
     effective_from: date
     effective_until: date | None = None
 
@@ -290,6 +355,12 @@ class LegalCalendarActivationRequest(BaseModel):
     conflict_reviewed: bool = False
 
 
+class LegalCalendarWithdrawalRequest(BaseModel):
+    """The proposer withdraws its own candidate before anyone activates it."""
+
+    reason: str = Field(min_length=5, max_length=2000)
+
+
 class LegalCalendarVersionRecord(BaseModel):
     id: str
     calendar_id: str
@@ -312,6 +383,12 @@ class LegalCalendarVersionRecord(BaseModel):
     approver_label_snapshot: str | None
     approved_at: datetime | None
     created_at: datetime
+    proposed_by_membership_id: str | None = None
+    can_activate: bool = False
+    activation_blocked_reason: IpGovernanceBlockReason | None = None
+    activation_blocked_reasons: list[IpGovernanceBlockReason] = Field(default_factory=list)
+    # The viewer proposed this candidate and may still withdraw it.
+    can_withdraw: bool = False
 
 
 class IpResponsibilityInput(BaseModel):
@@ -439,6 +516,7 @@ class IpDeadlineExceptionRecord(BaseModel):
             "uncertain",
             "source_stale",
             "rule_disabled",
+            "rule_retired",
         ]
     ]
     critical: bool
@@ -450,10 +528,16 @@ class IpDeadlineWorkspaceResponse(BaseModel):
     docket_id: str
     rules: list[IpRuleVersionRecord]
     eligible_rule_version_ids: list[str] = Field(default_factory=list)
+    # Members the deadline confirmation validator accepts as responsible,
+    # backup or supervisor on this docket: active, with stable Matter and
+    # IP-record access (no ethical wall, a grant where the docket is
+    # restricted). Responsibility pickers offer exactly these.
+    eligible_responsible_membership_ids: list[str] = Field(default_factory=list)
     calendars: list[LegalCalendarVersionRecord]
     deadlines: list[IpDeadlineRecord]
     exceptions: list[IpDeadlineExceptionRecord]
     automation_state: Literal["explicit_confirmation_only"] = "explicit_confirmation_only"
+    governance: IpDeadlineGovernanceProjection
 
 
 class IpDeadlineDependencyNode(BaseModel):

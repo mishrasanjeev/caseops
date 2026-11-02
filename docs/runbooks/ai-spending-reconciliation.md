@@ -1,5 +1,13 @@
 # Shared AI Spending Reconciliation
 
+Owner decision, 1 November 2026: the shared guard is **off by default**
+(`CASEOPS_AI_MONEY_BUDGET_ENABLED` unset or `false`). OpenAI and Voyage are prepaid
+accounts whose monthly spend cannot be reconciled, and an unreconciled November
+refused every paid AI action in production that morning. Production was restored
+by deferring the start month on caseops-api (revision 00506) and the three AI jobs.
+Enable the guard only together with a reconciled month row; the procedure below
+applies then.
+
 Status: candidate implementation, not a production activation receipt.
 Owner instruction on 11 October 2026: October continues unchanged; the new
 allowance is INR 10,000 per month. The candidate defaults to enabled from

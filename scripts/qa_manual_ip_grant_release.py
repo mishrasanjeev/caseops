@@ -28,6 +28,31 @@ IMAGE_PREFIX = f"{REGION}-docker.pkg.dev/{PROJECT}/caseops-images/caseops-api@sh
 MAX_INPUT = 8_192
 MAX_OUTPUT = 200_000
 ROOT = Path(__file__).resolve().parents[1]
+# Input schema 1 grants ip_workspace only. Schema 2 names the full_ip set,
+# which the operator module maps to exactly these keys (pinned by tests to
+# FULL_IP_ENTITLEMENT_KEYS and to the IP capability catalogue).
+FULL_IP_SET = "full_ip"
+FULL_IP_ENTITLEMENT_KEYS = (
+    "ip_costs",
+    "ip_deadline_automation",
+    "ip_filing_operations",
+    "ip_notification_automation",
+    "ip_registry_sync",
+    "ip_rule_governance",
+    "ip_watch",
+    "ip_workspace",
+)
+_INPUT_FIELDS = {
+    1: {"schema_version", "company_id", "subscription_id", "before_sha256", "operation_id"},
+    2: {
+        "schema_version",
+        "company_id",
+        "subscription_id",
+        "before_sha256",
+        "operation_id",
+        "entitlement_set",
+    },
+}
 _CLOUD_STAGES = {
     ("run", "services", "describe"): "serving_service",
     ("run", "revisions", "describe"): "serving_revision",
@@ -114,21 +139,14 @@ def preflight(input_path: str | None, output_path: str | None) -> tuple[dict, st
     except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
         raise ReleaseError("invalid_input_json") from None
     value = _object(value)
+    version = value.get("schema_version")
     _require(
-        set(value)
-        == {
-            "schema_version",
-            "company_id",
-            "subscription_id",
-            "before_sha256",
-            "operation_id",
-        },
-        "invalid_input_fields",
-    )
-    _require(
-        type(value["schema_version"]) is int and value["schema_version"] == 1,
+        type(version) is int and version in _INPUT_FIELDS,
         "invalid_input_version",
     )
+    _require(set(value) == _INPUT_FIELDS[version], "invalid_input_fields")
+    if version == 2:
+        _require(value["entitlement_set"] == FULL_IP_SET, "invalid_entitlement_set")
     for key in ("company_id", "subscription_id", "operation_id"):
         _uuid(value[key])
     _require(
@@ -259,6 +277,13 @@ def assert_current_main(release: str) -> None:
         raise ReleaseError("canonical_main_unavailable") from None
 
 
+def _set_args(request: dict) -> list[str]:
+    # Schema 1 keeps its exact historical argv; only schema 2 names a set.
+    if request["schema_version"] == 2:
+        return ["--entitlement-set", request["entitlement_set"]]
+    return []
+
+
 def _args(request: dict) -> list[str]:
     return [
         "-m",
@@ -272,6 +297,20 @@ def _args(request: dict) -> list[str]:
         request["before_sha256"],
         "--operation-id",
         request["operation_id"],
+        *_set_args(request),
+    ]
+
+
+def _inspect_args(request: dict) -> list[str]:
+    return [
+        "-m",
+        MODULE,
+        "inspect",
+        "--company-id",
+        request["company_id"],
+        "--subscription-id",
+        request["subscription_id"],
+        *_set_args(request),
     ]
 
 
@@ -591,17 +630,20 @@ def _receipt(name: str, request: dict, *, mode: str = "grant", fingerprint: str 
         except (UnicodeError, json.JSONDecodeError, RecursionError):
             raise ReleaseError("grant_receipt_format") from None
     schema_types = (int, float) if "jsonPayload" in row else (int,)
+    full = request["schema_version"] == 2
     if mode == "inspect":
+        expected_inspection = {
+            "schema_version": request["schema_version"],
+            "mode": "inspect",
+            "company_id": request["company_id"],
+            "subscription_id": request["subscription_id"],
+            "before_sha256": fingerprint,
+        }
+        if full:
+            expected_inspection["entitlement_set"] = request["entitlement_set"]
         _require(
             type(receipt.get("schema_version")) in schema_types
-            and receipt
-            == {
-                "schema_version": 1,
-                "mode": "inspect",
-                "company_id": request["company_id"],
-                "subscription_id": request["subscription_id"],
-                "before_sha256": fingerprint,
-            },
+            and receipt == expected_inspection,
             "inspection_state_mismatch",
         )
         return receipt
@@ -616,7 +658,7 @@ def _receipt(name: str, request: dict, *, mode: str = "grant", fingerprint: str 
     ).hexdigest()
     _require(
         type(receipt.get("schema_version")) in schema_types
-        and receipt["schema_version"] == 1
+        and receipt["schema_version"] == request["schema_version"]
         and receipt.get("mode") == "grant"
         and receipt.get("replayed") is False
         and all(receipt.get(key) == value for key, value in request.items())
@@ -629,7 +671,9 @@ def _receipt(name: str, request: dict, *, mode: str = "grant", fingerprint: str 
             "request_sha256",
             "after_sha256",
             "audit_event_id",
-        },
+        }
+        | ({"entitlement_keys"} if full else set())
+        and (not full or receipt.get("entitlement_keys") == list(FULL_IP_ENTITLEMENT_KEYS)),
         "grant_receipt_mismatch",
     )
     _uuid(receipt.get("audit_event_id"))
@@ -867,15 +911,7 @@ def execute(
             evidence["receipt"] = _receipt(name, request)
             record()
             assert_current_main(release)
-            inspect_args = [
-                "-m",
-                MODULE,
-                "inspect",
-                "--company-id",
-                request["company_id"],
-                "--subscription-id",
-                request["subscription_id"],
-            ]
+            inspect_args = _inspect_args(request)
             evidence["inspection_execute_attempted"] = True
             record()
             inspection = _cloud(

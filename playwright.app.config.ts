@@ -16,6 +16,8 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
 );
 
 const webBaseUrl = process.env.CASEOPS_WEB_BASE_URL ?? "http://localhost:3100";
+// Parallel worktrees set CASEOPS_WEB_BASE_URL and this port together.
+const webPort = process.env.CASEOPS_E2E_WEB_PORT ?? "3100";
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
@@ -74,6 +76,10 @@ export default defineConfig({
     /ram-2026-10-17-calendar-readiness\.spec\.ts$/,
     /ram-2026-10-08-notices\.spec\.ts$/,
     /ram-2026-10-08-drive\.spec\.ts$/,
+    // Batch 4 (CaseOps_Bugs (4).xlsx): the same specs run here against a
+    // fresh test-legal-shaped tenant and in prod-ram against test-legal.
+    /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+    /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -152,6 +158,8 @@ export default defineConfig({
         /ram-2026-10-22-drafting\.spec\.ts$/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
         /platform-leads-2026-10-21\.spec\.ts$/,
+        /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
+        /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],
@@ -193,7 +201,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: "npx next start --hostname 127.0.0.1 --port 3100",
+      command: `npx next start --hostname 127.0.0.1 --port ${webPort}`,
       cwd: path.join(repoRoot, "apps", "web"),
       env: {
         ...e2eEnv,

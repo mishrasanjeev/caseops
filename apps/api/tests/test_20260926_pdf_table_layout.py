@@ -19,6 +19,7 @@ from pdfminer.high_level import extract_pages, extract_text
 from pdfminer.layout import LTChar, LTTextContainer
 
 from caseops_api.services.cause_lists import CAUSE_LIST_PDF_HEADINGS, CAUSE_LIST_PDF_WEIGHTS
+from caseops_api.services.matter_billing import INVOICE_PDF_WEIGHTS
 from caseops_api.services.pdf_layout import pdf_text, write_wrapped_table
 from tests.test_auth_company import auth_headers
 from tests.test_gba_law_office_prd import _bootstrap, _create_matter
@@ -213,7 +214,7 @@ def test_wrapped_table_never_overruns_the_printable_width() -> None:
         assert _chars(body)
 
 
-INVOICE_WEIGHTS = (82, 25, 25, 25, 28)
+INVOICE_WEIGHTS = INVOICE_PDF_WEIGHTS
 
 
 def test_invoice_pdf_wraps_line_items_and_accepts_non_latin_names(client: TestClient) -> None:

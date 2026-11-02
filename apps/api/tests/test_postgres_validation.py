@@ -7001,6 +7001,22 @@ def test_fixed_role_demotion_wins_core_capability_writer_on_postgres(
 
     with Session(pg_engine) as seed:
         fixture = _seed_locked_capability_employee_fixture(seed, custom_actor=False)
+        if writer_kind == "governance":
+            from caseops_api.db.models import BillingSubscription
+
+            # Calendar writers require the ip_rule_governance entitlement
+            # (IPLF-027B A1) before the membership fence this race exercises.
+            seed.add(
+                BillingSubscription(
+                    company_id=fixture["company_id"],
+                    status="manual_active",
+                    segment="law_firm",
+                    source="pg-capability-race",
+                    externally_billable=False,
+                    entitlement_overrides_json={"ip_rule_governance": True},
+                )
+            )
+            seed.commit()
 
     demotion_holds_actor = Event()
     release_demotion = Event()

@@ -11,6 +11,10 @@ from caseops_api.db.models import (
     IpTrademarkParticularVersion,
 )
 from caseops_api.services.ip_coverage_read import _TERMINAL_DOCKET_STATUSES
+from caseops_api.services.ip_import_source_status import (
+    SOURCE_STATUS_ALIASES,
+    source_status_key,
+)
 from caseops_api.services.ip_portfolio_source import _imported_source_row
 
 
@@ -221,8 +225,21 @@ def current_date_facts(candidates, *, company_id):
 
 
 def page_date_details(session, *, company_id, docket_ids):
+    """The canonical ``current_dates`` record for each docket on a page."""
+
+    return page_source_details(session, company_id=company_id, docket_ids=docket_ids)[0]
+
+
+def page_source_details(session, *, company_id, docket_ids):
+    """One whole-proof read per page: canonical dates and declared source status.
+
+    The date record is exactly ``current_dates`` under the SQL proof. The
+    declared source Status (B4-ADJ-11) is not a date fact, so it is returned
+    beside the record, gated by the same proof, instead of inside it.
+    """
+
     if not docket_ids:
-        return {}
+        return {}, {}
     rows = session.execute(
         select(IpTrademarkParticularVersion, imported_proof_expression())
         .join(
@@ -234,10 +251,35 @@ def page_date_details(session, *, company_id, docket_ids):
             ),
         )
         .where(IpDocketRecord.company_id == company_id, IpDocketRecord.id.in_(docket_ids))
-    )
-    return {
+    ).all()
+    dates = {
         version.docket_id: current_dates(
             session, version=version, docket_id=version.docket_id, imported_proven=proven
         )
         for version, proven in rows
     }
+    statuses = {version.docket_id: _declared_status(version, proven) for version, proven in rows}
+    return dates, statuses
+
+
+# Longest source Status wording shown back to the lawyer.
+SOURCE_STATUS_TEXT_MAX = 120
+
+
+def _declared_status(version, proven):
+    """The import's declared source status (B4-ADJ-11), unverified legal state.
+
+    ``source_status_text`` is the wording the source used; ``source_declared_status``
+    is its recognised key, or None when the wording is not recognised. Imports
+    made before the mapping kept only the wording, so the key is derived from it.
+    """
+
+    imported = (version.representation_json or {}).get("portfolio_import")
+    if not proven or not isinstance(imported, dict):
+        return {"source_declared_status": None, "source_status_text": None}
+    raw = imported.get("source_status")
+    text = " ".join(raw.split())[:SOURCE_STATUS_TEXT_MAX] if isinstance(raw, str) else ""
+    declared = imported.get("declared_status")
+    if declared not in set(SOURCE_STATUS_ALIASES.values()):
+        declared = source_status_key(text) if text else None
+    return {"source_declared_status": declared, "source_status_text": text or None}

@@ -18,7 +18,7 @@ from weakref import ref
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine, event, select, text
+from sqlalchemy import create_engine, event, insert, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -330,17 +330,21 @@ def _fixture(engine, source="matter", *, active=True):
             )
             seed.add(taxonomy)
             seed.flush()
-            document = IpDocument(
-                company_id=company,
-                taxonomy_entry_id=taxonomy.id,
-                title="IP worker historical source",
-                created_by_membership_id=actor,
+            # A table insert names only the columns it writes, so the fixture also
+            # seeds databases migrated to a revision before IP document retirement.
+            document_id = str(uuid4())
+            seed.execute(
+                insert(IpDocument.__table__).values(
+                    id=document_id,
+                    company_id=company,
+                    taxonomy_entry_id=taxonomy.id,
+                    title="IP worker historical source",
+                    created_by_membership_id=actor,
+                )
             )
-            seed.add(document)
-            seed.flush()
             version = IpDocumentVersion(
                 company_id=company,
-                document_id=document.id,
+                document_id=document_id,
                 version=1,
                 original_filename="ip-source.txt",
                 display_name="ip-source.txt",

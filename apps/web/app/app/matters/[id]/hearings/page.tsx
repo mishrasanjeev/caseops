@@ -1361,8 +1361,8 @@ function ProceedingIntelligenceSection({
             <p className="text-xs leading-relaxed text-[var(--color-mute)]">
               {response?.disclaimer}
             </p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
+            <div className="@container overflow-x-auto" data-testid="proceeding-signals-table">
+              <table className="w-full border-separate border-spacing-0 text-left text-sm @min-[760px]:min-w-[760px] @max-[760px]:stacked-table">
                 <thead className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
                   <tr>
                     <th className="border-b border-[var(--color-line)] py-2 pr-3 font-medium">
@@ -1434,13 +1434,13 @@ function ProceedingSignalRow({
   const dueText = signalDueText(signal);
   return (
     <tr data-testid={`proceeding-signal-${signal.id}`}>
-      <td className="border-b border-[var(--color-line)] py-3 pr-3 align-top">
+      <td data-label="Order" className="border-b border-[var(--color-line)] py-3 pr-3 align-top">
         <div className="font-medium text-[var(--color-ink)]">{order.title}</div>
         <div className="mt-0.5 text-xs text-[var(--color-mute)]">
           {formatDateTime(order.order_date)}
         </div>
       </td>
-      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top">
+      <td data-label="Direction" className="border-b border-[var(--color-line)] px-3 py-3 align-top">
         <div className="font-medium text-[var(--color-ink)]">
           {PROCEEDING_SIGNAL_LABELS[signal.signal_type] ?? signal.signal_type}
         </div>
@@ -1448,10 +1448,10 @@ function ProceedingSignalRow({
           {signal.source_snippet}
         </p>
       </td>
-      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top text-sm text-[var(--color-ink-2)]">
+      <td data-label="Due / hearing" className="border-b border-[var(--color-line)] px-3 py-3 align-top text-sm text-[var(--color-ink-2)]">
         {dueText ?? "Not dated"}
       </td>
-      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top">
+      <td data-label="Review" className="border-b border-[var(--color-line)] px-3 py-3 align-top">
         <div className="flex flex-col gap-1">
           <StatusBadge status={signal.review_status.replaceAll("_", " ")} />
           <span className="text-xs text-[var(--color-mute)]">
@@ -1459,7 +1459,7 @@ function ProceedingSignalRow({
           </span>
         </div>
       </td>
-      <td className="border-b border-[var(--color-line)] py-3 pl-3 align-top">
+      <td data-label="Source" className="border-b border-[var(--color-line)] py-3 pl-3 align-top">
         <Link
           href={sourceHref(matterId, order)}
           className="text-sm font-medium text-[var(--color-brand-700)] hover:underline"

@@ -13,11 +13,13 @@ def main() -> int:
     with session_factory() as session:
         result = run_journal_watch_scheduler(session)
     logger.info(
-        "journal watch due=%s checked=%s cost_paused=%s provider_paused=%s external_calls=%s",
+        "journal watch due=%s checked=%s cost_paused=%s provider_paused=%s "
+        "manual_only=%s external_calls=%s",
         result.due_profiles,
         result.checked_profiles,
         result.cost_paused_profiles,
         result.provider_paused_profiles,
+        result.manual_profiles,
         result.external_calls,
     )
     return 0

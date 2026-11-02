@@ -8,6 +8,8 @@ import {
   type APIResponse,
 } from "@playwright/test";
 
+import { retireIpDocket } from "./support/retire-records";
+
 const PROD_BASE_URL = "https://caseops.ai";
 const PROD_API_BASE_URL = "https://api.caseops.ai";
 const IP_QA_SLUG = "caseops-ip-qa";
@@ -345,13 +347,13 @@ async function findFixtureDocket(
   api: APIRequestContext,
   ownerToken: string,
 ): Promise<DocketRecord | undefined> {
-  const headers = authHeaders(ownerToken);
-  const listed = await jsonResponse<{ dockets: DocketRecord[] }>(
-    await api.get(`${PROD_API_BASE_URL}/api/ip/dockets`, { headers }),
-    200,
+  const listed = await listAllDockets(
+    api,
+    ownerToken,
     "list IP QA dockets for the deterministic A0 fixture",
+    FIXTURE_DOCKET_IDENTIFIER,
   );
-  return listed.dockets.find(
+  return listed.find(
     (row) => row.primary_identifier === FIXTURE_DOCKET_IDENTIFIER,
   );
 }
@@ -883,18 +885,40 @@ async function listReservedSyntheticMatters(
   return matches;
 }
 
+/** Every visible docket (optionally matching ``query``), read to the last keyset page. */
+async function listAllDockets(
+  api: APIRequestContext,
+  ownerToken: string,
+  operation: string,
+  query?: string,
+): Promise<DocketRecord[]> {
+  const dockets: DocketRecord[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const body: { dockets: DocketRecord[]; next_cursor: string | null } = await jsonResponse(
+      await api.get(`${PROD_API_BASE_URL}/api/ip/dockets`, {
+        headers: authHeaders(ownerToken),
+        params: { limit: 200, ...(query ? { query } : {}), ...(cursor ? { cursor } : {}) },
+      }),
+      200,
+      operation,
+    );
+    dockets.push(...body.dockets);
+    cursor = body.next_cursor;
+    if (cursor) {
+      expect(seenCursors.has(cursor), "Docket pagination must advance.").toBe(false);
+      seenCursors.add(cursor);
+    }
+  } while (cursor);
+  return dockets;
+}
+
 async function listOperationalDockets(
   api: APIRequestContext,
   ownerToken: string,
 ): Promise<DocketRecord[]> {
-  const body = await jsonResponse<{ dockets: DocketRecord[] }>(
-    await api.get(`${PROD_API_BASE_URL}/api/ip/dockets`, {
-      headers: authHeaders(ownerToken),
-    }),
-    200,
-    "list operational dockets for synthetic Matter cleanup",
-  );
-  return body.dockets;
+  return listAllDockets(api, ownerToken, "list operational dockets for synthetic Matter cleanup");
 }
 
 async function disposeSyntheticMatter(
@@ -1473,13 +1497,27 @@ async function verifyQuiescenceAndDeadlineWriters(
     expect(activeRule(workspace)?.id).toBe(rule!.id);
     expect(activeCalendar(workspace)?.id).toBe(calendar!.id);
   } finally {
-    await disposeSyntheticMatter(
-      api,
-      owner.access_token,
-      matter.id,
-      matter.company_id,
-      freshDocketId ? [freshDocketId] : [],
-    );
+    try {
+      await disposeSyntheticMatter(
+        api,
+        owner.access_token,
+        matter.id,
+        matter.company_id,
+        freshDocketId ? [freshDocketId] : [],
+      );
+    } finally {
+      // The per-run canary docket is retired after the preservation proof, so
+      // its confirmed and candidate deadlines do not stay live in the QA tenant.
+      if (freshDocketId) {
+        await retireIpDocket(
+          api,
+          PROD_API_BASE_URL,
+          authHeaders(owner.access_token),
+          freshDocketId,
+          "Retire the synthetic IPLF-027B A0 legal-deadline canary after persistence proof.",
+        );
+      }
+    }
   }
 }
 

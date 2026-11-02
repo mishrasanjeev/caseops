@@ -195,10 +195,8 @@ test("IPLF-044B links independent Matter and IP lifecycles end to end", async ({
   await expect(panel.getByText("Operational", { exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "Link Matter" }).click();
   await panel.getByLabel("Search Matters").fill(litigationMatter.matter_code);
-  await panel.getByLabel("Matter", { exact: true }).click();
-  await page
-    .getByRole("option", { name: new RegExp(litigationMatter.matter_code) })
-    .click();
+  // The Matter picker is a native select; choose by server identity.
+  await panel.getByLabel("Matter", { exact: true }).selectOption(litigationMatter.id);
   await panel
     .getByLabel("Reason")
     .fill("Trademark enforcement proceedings require a litigation reference.");

@@ -52,6 +52,36 @@ record access and lifecycle checks remain authoritative.
 Placeholders are not accepted values. Do not put a password, provider key,
 contact details or legal content in this input.
 
+### Full IP entitlement set (owner decision of October 30, 2026)
+
+The owner decided to entitle `test-legal` fully. The same operator grants the
+`full_ip` set: every entitlement key the IP capability catalogue gates on
+(`ip_costs`, `ip_deadline_automation`, `ip_filing_operations`,
+`ip_notification_automation`, `ip_registry_sync`, `ip_rule_governance`,
+`ip_watch` and `ip_workspace`). Admission, tenant identity, fingerprints,
+locking and replay rules are unchanged; only these override keys are set to
+`true`, other keys are preserved, and the receipt is schema 2 with audit action
+`qa.test_legal.full_ip_granted` and the exact key list. An entitlement does not
+open a feature by itself: rollout flags, capabilities and workspace
+configuration remain separate server gates.
+
+Inspect with `--entitlement-set full_ip` (the before-fingerprint is the same as
+the original inspection) and prepare a schema-2 input with one extra field:
+
+```json
+{
+  "schema_version": 2,
+  "company_id": "<inspected company UUID>",
+  "subscription_id": "<inspected subscription UUID>",
+  "before_sha256": "<inspected lowercase SHA-256>",
+  "operation_id": "<one new retained operation UUID>",
+  "entitlement_set": "full_ip"
+}
+```
+
+Use a new operation UUID. An operation UUID is consumed by exactly one
+entitlement set, so one already used for the `ip_workspace` grant is refused.
+
 ## Apply Through The Guarded Release
 
 1. Set `CASEOPS_TEST_LEGAL_MANUAL_IP_GRANT_INPUT` to the approved input's absolute

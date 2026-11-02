@@ -8,6 +8,7 @@ import {
   type APIResponse,
   type Page,
 } from "@playwright/test";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const WEB = "https://caseops.ai";
 const API = "https://api.caseops.ai";
@@ -436,13 +437,7 @@ async function createFixture(label: "normal" | "grace"): Promise<Fixture> {
 }
 
 async function uploadAcceptedCertificate(fixture: Fixture): Promise<string> {
-  await json(
-    await api.post(`${API}/api/ip/document-taxonomy/seed`, {
-      headers: headers(),
-    }),
-    200,
-    "seed IP document taxonomy",
-  );
+  await expectProvisionedDocumentTaxonomy(api, API, headers());
   const nonce = fixture.docket.primary_identifier!;
   const uploaded = await json<Json>(
     await api.post(`${API}/api/ip/documents/upload`, {
@@ -672,15 +667,16 @@ test("IPLF-037B production completes UJ-26 and reconciles grace explicitly", asy
   await page
     .getByLabel("Reason")
     .fill("Confirmed synthetic filing event linked");
-  await page.getByLabel("Confirmed filing event ID").fill(normal.filingId!);
+  await page.getByLabel("Confirmed filing event", { exact: true })
+    .selectOption(normal.filingId!);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(page.getByRole("table").getByText("Filed")).toBeVisible();
   await page
     .getByLabel("Reason")
     .fill("Synthetic registry acceptance verified");
   await page
-    .getByLabel("Registry acceptance event ID")
-    .fill(normal.acceptanceId!);
+    .getByLabel("Registry acceptance event", { exact: true })
+    .selectOption(normal.acceptanceId!);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(
     page.getByRole("table").getByText("Registry accepted"),
@@ -689,11 +685,11 @@ test("IPLF-037B production completes UJ-26 and reconciles grace explicitly", asy
     .getByLabel("Reason")
     .fill("Synthetic certificate and next term verified");
   await page
-    .getByLabel("Accepted certificate document ID")
-    .fill(normal.certificateId!);
+    .getByLabel("Accepted certificate", { exact: true })
+    .selectOption(normal.certificateId!);
   await page
-    .getByLabel("Confirmed next-term deadline ID")
-    .fill(normal.nextTermId!);
+    .getByLabel("Next-term renewal deadline", { exact: true })
+    .selectOption(normal.nextTermId!);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(page.getByRole("table").getByText("Completed")).toBeVisible();
   await expect(page.getByText("This renewal term is closed.")).toBeVisible();

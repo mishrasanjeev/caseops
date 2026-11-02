@@ -155,6 +155,12 @@ def _policy(
     domain_disclosure_allowed: bool,
 ) -> IpDocumentPolicyResponse:
     reasons: list[str] = []
+    retired = document.retired_at is not None
+    if retired:
+        reasons.append(
+            "This document was retired; it is kept for history and is not used for AI, "
+            "portal or notification content."
+        )
     if not domain_disclosure_allowed:
         reasons.append("This IP domain has no enabled general disclosure workflow.")
     if document.is_privileged:
@@ -181,10 +187,13 @@ def _policy(
     )
     return IpDocumentPolicyResponse(
         ai_retrieval_allowed=(
-            disclosure_allowed and version.processing_status == "indexed" and not low_quality
+            disclosure_allowed
+            and not retired
+            and version.processing_status == "indexed"
+            and not low_quality
         ),
-        portal_share_allowed=disclosure_allowed,
+        portal_share_allowed=disclosure_allowed and not retired,
         export_allowed=disclosure_allowed,
-        notification_content_allowed=disclosure_allowed,
+        notification_content_allowed=disclosure_allowed and not retired,
         reasons=reasons,
     )

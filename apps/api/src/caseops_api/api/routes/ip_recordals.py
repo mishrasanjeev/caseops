@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, status
 from caseops_api.api.dependencies import DbSession, require_any_capability, require_capability
 from caseops_api.schemas.ip_recordals import (
     IpRecordalCreateRequest,
+    IpRecordalInstrumentOptionsResponse,
     IpRecordalPageResponse,
     IpRecordalResponse,
     IpRecordalStatus,
@@ -22,6 +23,7 @@ from caseops_api.services.ip_recordals import (
     get_ip_recordal,
     ip_recordal_workspace,
     list_ip_recordals,
+    list_recordal_instruments,
     record_ip_recordal_transaction,
 )
 from caseops_api.services.session_context import SessionContext
@@ -63,6 +65,17 @@ def recordal_create(
     return IpRecordalResponse.model_validate(
         create_ip_recordal(session, context=context, payload=payload)
     )
+
+
+@router.get("/recordals/instruments", response_model=IpRecordalInstrumentOptionsResponse)
+def recordal_instrument_options(
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
+    docket_id: Annotated[str, Query(min_length=1, max_length=36)],
+) -> IpRecordalInstrumentOptionsResponse:
+    """The documents the recordal form may offer for one docket (declared before
+    /recordals/{recordal_id} so the static path is not read as an id)."""
+    return list_recordal_instruments(session, context=context, docket_id=docket_id)
 
 
 @router.get("/recordals/{recordal_id}", response_model=IpRecordalResponse)

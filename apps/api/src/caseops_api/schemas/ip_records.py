@@ -365,7 +365,9 @@ class IpWorkspaceConfigurationUpsertRequest(BaseModel):
     timezone: str = Field(min_length=3, max_length=64)
     holiday_calendar_key: str = Field(min_length=2, max_length=120)
     working_day_policy: dict
-    document_taxonomy_version: str = Field(min_length=1, max_length=80)
+    # Omitted means the server's document taxonomy version
+    # (services.ip_documents.TAXONOMY_VERSION) is recorded.
+    document_taxonomy_version: str | None = Field(default=None, min_length=1, max_length=80)
     event_catalog_version: str = Field(min_length=1, max_length=80)
     deadline_rule_versions: dict[str, str]
     notification_channels: list[Literal["in_app", "email"]] = Field(min_length=1)
@@ -461,12 +463,22 @@ class IpWorkspaceEnableRequest(BaseModel):
     enabled_automations: list[IpAutomationFeature] = Field(default_factory=list)
 
 
+class IpDocumentTaxonomyReadiness(BaseModel):
+    """Whether IP documents can be classified, so an empty taxonomy is visible."""
+
+    taxonomy_version: str
+    total_entry_count: int
+    active_entry_count: int
+    ready: bool
+
+
 class IpWorkspaceConfigurationStatusResponse(BaseModel):
     configuration: IpWorkspaceConfigurationResponse | None
     tests: list[IpWorkspaceTestResultResponse]
     ready_for_manual_docketing: bool
     enablement_blockers: list[str]
     provider_adapters: list[ProviderAdapterContractRecord] = Field(default_factory=list)
+    document_taxonomy: IpDocumentTaxonomyReadiness
 
 
 class IpDuplicateCandidate(BaseModel):

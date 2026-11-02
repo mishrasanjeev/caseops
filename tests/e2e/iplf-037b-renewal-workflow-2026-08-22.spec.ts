@@ -188,20 +188,24 @@ test("IPLF-037B completes UJ-26 and renewal exception paths", async ({ page }) =
   ).toBeVisible();
 
   await page.getByLabel("Reason").fill("Confirmed filing event linked");
-  await page.getByLabel("Confirmed filing event ID").fill(ids.filing);
+  await page.getByLabel("Confirmed filing event", { exact: true })
+    .selectOption(ids.filing);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(page.getByRole("table").getByText("Filed")).toBeVisible();
 
   await page.getByLabel("Reason").fill("Registry acceptance verified");
-  await page.getByLabel("Registry acceptance event ID").fill(ids.acceptance);
+  await page.getByLabel("Registry acceptance event", { exact: true })
+    .selectOption(ids.acceptance);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(
     page.getByRole("table").getByText("Registry accepted"),
   ).toBeVisible();
 
   await page.getByLabel("Reason").fill("Certificate and next term verified");
-  await page.getByLabel("Accepted certificate document ID").fill(ids.certificate);
-  await page.getByLabel("Confirmed next-term deadline ID").fill(ids.next_term);
+  await page.getByLabel("Accepted certificate", { exact: true })
+    .selectOption(ids.certificate);
+  await page.getByLabel("Next-term renewal deadline", { exact: true })
+    .selectOption(ids.next_term);
   await page.getByRole("button", { name: "Record transition" }).click();
   await expect(page.getByRole("table").getByText("Completed")).toBeVisible();
   await expect(page.getByText("This renewal term is closed.")).toBeVisible();

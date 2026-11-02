@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
@@ -33,7 +34,16 @@ from caseops_api.db.models import (
     OutsideCounselSpendStatus,
 )
 from caseops_api.schemas.ip_foreign_associates import (
+    IpFilingJurisdictionOption,
+    IpForeignAssociateCreateBlocker,
+    IpForeignAssociateCreateBlockerCode,
+    IpForeignAssociateCreateOptionsResponse,
     IpForeignAssociateCreateRequest,
+    IpForeignAssociateOptionAssignment,
+    IpForeignAssociateOptionAssociate,
+    IpForeignAssociateOptionClientInstruction,
+    IpForeignAssociateOptionDocument,
+    IpForeignAssociateOptionEstimate,
     IpForeignAssociatePageResponse,
     IpForeignAssociateReminderRecord,
     IpForeignAssociateReminderRequest,
@@ -45,8 +55,24 @@ from caseops_api.schemas.ip_foreign_associates import (
 )
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
-from caseops_api.services.ip_document_workflow import list_ip_documents
+from caseops_api.services.ip_docket_access import _docket_or_404
+from caseops_api.services.ip_document_citations import citable_ip_document_ids
+from caseops_api.services.ip_document_workflow import (
+    docket_scoped_document_links,
+    get_accessible_ip_document_ids,
+    list_ip_documents,
+)
+from caseops_api.services.ip_documents import ip_document_taxonomy_counts
+from caseops_api.services.ip_filing_jurisdictions import (
+    FILING_JURISDICTIONS,
+    INDIAN_ABBREVIATION_CODES,
+    canonical_filing_jurisdiction,
+    filing_jurisdiction_label,
+    filing_jurisdiction_matches,
+    profile_filing_jurisdiction,
+)
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
     _lock_ip_dockets_in_stable_order,
@@ -246,6 +272,19 @@ def _decode_list(value: str | None) -> list[str]:
     return [str(item).strip() for item in parsed if str(item).strip()]
 
 
+_PANEL_STATUSES = {OutsideCounselPanelStatus.ACTIVE, OutsideCounselPanelStatus.PREFERRED}
+_ASSIGNMENT_STATUSES = {
+    OutsideCounselAssignmentStatus.APPROVED,
+    OutsideCounselAssignmentStatus.ACTIVE,
+}
+
+
+def _associate_covers(row: OutsideCounsel, jurisdiction: str) -> bool:
+    """The one jurisdiction predicate shared by the picker and the validators."""
+
+    return filing_jurisdiction_matches(jurisdiction, _decode_list(row.jurisdictions_json))
+
+
 def _require_approved_associate(
     session: Session,
     *,
@@ -261,13 +300,9 @@ def _require_approved_associate(
     )
     if row is None:
         raise HTTPException(status_code=422, detail="Associate is outside this company.")
-    if row.panel_status not in {
-        OutsideCounselPanelStatus.ACTIVE,
-        OutsideCounselPanelStatus.PREFERRED,
-    }:
+    if row.panel_status not in _PANEL_STATUSES:
         raise HTTPException(status_code=422, detail="Associate is not on the active panel.")
-    jurisdictions = {value.casefold() for value in _decode_list(row.jurisdictions_json)}
-    if jurisdiction.casefold() not in jurisdictions:
+    if not _associate_covers(row, jurisdiction):
         raise HTTPException(
             status_code=422,
             detail="Associate is not approved for the target jurisdiction.",
@@ -303,15 +338,25 @@ def _require_assignment(
             MatterOutsideCounselAssignment.counsel_id == counsel_id,
         )
     )
-    if row is None or row.status not in {
-        OutsideCounselAssignmentStatus.APPROVED,
-        OutsideCounselAssignmentStatus.ACTIVE,
-    }:
+    if row is None or row.status not in _ASSIGNMENT_STATUSES:
         raise HTTPException(
             status_code=422,
             detail="Outside-counsel assignment is missing, mismatched, or inactive.",
         )
     return row
+
+
+def _client_authority_statement(*, company_id: str, docket_id: str):
+    # One predicate for the create-options picker and the create validator. A
+    # renewal instruction authorises a renewal, never a foreign filing, even
+    # if a stored row pairs it with a proceed decision.
+    return select(IpClientInstruction).where(
+        IpClientInstruction.company_id == company_id,
+        IpClientInstruction.docket_id == docket_id,
+        IpClientInstruction.status == "accepted",
+        IpClientInstruction.decision == "proceed",
+        IpClientInstruction.instruction_kind != "renewal",
+    )
 
 
 def _require_client_authority(
@@ -324,18 +369,25 @@ def _require_client_authority(
     if instruction_id is None:
         return None
     row = session.scalar(
-        select(IpClientInstruction).where(
-            IpClientInstruction.id == instruction_id,
-            IpClientInstruction.company_id == company_id,
-            IpClientInstruction.docket_id == docket_id,
+        _client_authority_statement(company_id=company_id, docket_id=docket_id).where(
+            IpClientInstruction.id == instruction_id
         )
     )
-    if row is None or row.status != "accepted" or row.decision != "proceed":
+    if row is None:
         raise HTTPException(
             status_code=422,
             detail="Client authority must be an accepted proceed instruction for this docket.",
         )
     return row
+
+
+def _active_cost_statement(*, company_id: str, docket_id: str, nature: str):
+    return select(IpCostItem).where(
+        IpCostItem.company_id == company_id,
+        IpCostItem.docket_id == docket_id,
+        IpCostItem.cost_nature == nature,
+        active_ip_cost_predicate(),
+    )
 
 
 def _require_cost_item(
@@ -347,12 +399,8 @@ def _require_cost_item(
     nature: str,
 ) -> IpCostItem:
     row = session.scalar(
-        select(IpCostItem).where(
-            IpCostItem.id == cost_item_id,
-            IpCostItem.company_id == company_id,
-            IpCostItem.docket_id == docket_id,
-            IpCostItem.cost_nature == nature,
-            active_ip_cost_predicate(),
+        _active_cost_statement(company_id=company_id, docket_id=docket_id, nature=nature).where(
+            IpCostItem.id == cost_item_id
         )
     )
     if row is None:
@@ -365,60 +413,390 @@ def _require_cost_item(
     return row
 
 
+def _initial_estimate_budget_problem(
+    *, estimate: IpCostItem, assignment: MatterOutsideCounselAssignment | None
+) -> str | None:
+    if assignment is None:
+        return None
+    if estimate.currency.casefold() != assignment.currency.casefold():
+        return "Initial associate estimate currency does not match the approved assignment."
+    if assignment.budget_amount_minor is None:
+        return "Approved outside-counsel assignment requires a budget ceiling."
+    if estimate.amount_minor > assignment.budget_amount_minor:
+        return "Initial associate estimate exceeds the approved assignment budget."
+    return None
+
+
 def _validate_initial_estimate_budget(
     *, estimate: IpCostItem, assignment: MatterOutsideCounselAssignment | None
 ) -> None:
-    if assignment is None:
-        return
-    if estimate.currency.casefold() != assignment.currency.casefold():
-        raise HTTPException(
-            status_code=422,
-            detail="Initial associate estimate currency does not match the approved assignment.",
-        )
-    if assignment.budget_amount_minor is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Approved outside-counsel assignment requires a budget ceiling.",
-        )
-    if estimate.amount_minor > assignment.budget_amount_minor:
-        raise HTTPException(
-            status_code=422,
-            detail="Initial associate estimate exceeds the approved assignment budget.",
-        )
+    problem = _initial_estimate_budget_problem(estimate=estimate, assignment=assignment)
+    if problem is not None:
+        raise HTTPException(status_code=422, detail=problem)
 
 
 def _document_refs(
     session: Session,
     *,
-    company_id: str,
+    context: SessionContext,
     docket_id: str,
     document_refs: list[str],
 ) -> list[IpDocument]:
+    """Documents the instruction may cite: the docket's citable set, current only.
+
+    The same predicate as GET /api/ip/documents?docket_id= (the form's picker):
+    linked to the docket or one of its events or deadlines, readable by this
+    member across every link, and not retired.
+    """
+
     unique_refs = set(document_refs)
     if not unique_refs:
         return []
-    rows = list(
+    company_id = context.company.id
+    linked = set(
         session.scalars(
-            select(IpDocument)
-            .join(
-                IpDocumentLink,
-                (IpDocumentLink.document_id == IpDocument.id)
-                & (IpDocumentLink.company_id == IpDocument.company_id),
+            select(IpDocumentLink.document_id).where(
+                docket_scoped_document_links(company_id=company_id, docket_id=docket_id),
+                IpDocumentLink.document_id.in_(unique_refs),
             )
-            .where(
-                IpDocument.company_id == company_id,
-                IpDocument.id.in_(unique_refs),
-                IpDocumentLink.docket_id == docket_id,
-            )
-            .distinct()
-        ).all()
+        )
     )
-    if {row.id for row in rows} != unique_refs:
+    current = citable_ip_document_ids(
+        session, company_id=company_id, document_ids=linked, lock=True
+    )
+    accessible = (
+        get_accessible_ip_document_ids(session, context=context, document_ids=current)
+        if current
+        else set()
+    )
+    if accessible != unique_refs:
         raise HTTPException(
             status_code=422,
-            detail="Every selected document must be linked to this IP docket.",
+            detail="Every selected document must be a current document linked to this IP docket.",
         )
-    return rows
+    return list(
+        session.scalars(
+            select(IpDocument)
+            .where(IpDocument.company_id == company_id, IpDocument.id.in_(unique_refs))
+            .order_by(IpDocument.id)
+        ).all()
+    )
+
+
+def ip_foreign_associate_create_options(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    target_jurisdiction: str | None,
+) -> IpForeignAssociateCreateOptionsResponse:
+    """List what ``create_ip_foreign_associate_instruction`` accepts for a docket.
+
+    Each list is filtered with the validator's own predicate, scoped to the
+    caller's company and to a docket the caller can see, so the create form
+    can neither offer a value the API rejects nor hide one it needs.
+    """
+
+    company_id = context.company.id
+    docket = _docket_or_404(session, context=context, docket_id=docket_id)
+    raw_target = (target_jurisdiction or "").strip() or None
+    jurisdiction = canonical_filing_jurisdiction(raw_target)
+    # A target stored before normalization (reassign only; create accepts
+    # codes alone) is matched exactly as the reassign validator matches it.
+    target = jurisdiction or raw_target
+    docket_href = f"/app/ip?docket={docket.id}"
+
+    def can(capability: str) -> bool:
+        return membership_has_capability(session, context.membership, capability)
+
+    may_manage_counsel = can("outside_counsel:manage")
+    counsel_role_note = (
+        " Adding counsel and assigning them to a Matter needs the outside-counsel "
+        "management permission (owners, admins and partners); your role cannot, so ask one "
+        "of them."
+    )
+
+    panel = list(
+        session.scalars(
+            select(OutsideCounsel)
+            .where(
+                OutsideCounsel.company_id == company_id,
+                OutsideCounsel.panel_status.in_(_PANEL_STATUSES),
+            )
+            .order_by(OutsideCounsel.name, OutsideCounsel.id)
+        ).all()
+    )
+    coverage = {
+        row.id: sorted(
+            {
+                code
+                for value in _decode_list(row.jurisdictions_json)
+                if (code := profile_filing_jurisdiction(value)) is not None
+            }
+        )
+        for row in panel
+    }
+    associates = [row for row in panel if _associate_covers(row, target)] if target else []
+
+    estimates = list(
+        session.scalars(
+            _active_cost_statement(
+                company_id=company_id, docket_id=docket.id, nature="estimate"
+            ).order_by(IpCostItem.created_at.desc(), IpCostItem.id)
+        ).all()
+    )
+    may_read_rates = can("ip:fees_manage")
+
+    def withheld(estimate: IpCostItem) -> bool:
+        return bool(estimate.rate_confidential and not may_read_rates)
+
+    def compatible(estimate: IpCostItem, assignment: MatterOutsideCounselAssignment) -> bool:
+        # A caller who may not see a confidential amount learns nothing about it
+        # from the budget: only the currency is checked here, and the create
+        # validator checks the ceiling.
+        if withheld(estimate):
+            return estimate.currency.casefold() == assignment.currency.casefold()
+        return _initial_estimate_budget_problem(estimate=estimate, assignment=assignment) is None
+
+    matter: Matter | None = None
+    assignments: list[MatterOutsideCounselAssignment] = []
+    unbudgeted = 0
+    if docket.matter_id is not None:
+        matter = session.scalar(
+            select(Matter).where(Matter.id == docket.matter_id, Matter.company_id == company_id)
+        )
+        candidates = list(
+            session.scalars(
+                select(MatterOutsideCounselAssignment)
+                .where(
+                    MatterOutsideCounselAssignment.company_id == company_id,
+                    MatterOutsideCounselAssignment.matter_id == docket.matter_id,
+                    MatterOutsideCounselAssignment.counsel_id.in_(
+                        [row.id for row in associates]
+                    ),
+                    MatterOutsideCounselAssignment.status.in_(_ASSIGNMENT_STATUSES),
+                )
+                .order_by(
+                    MatterOutsideCounselAssignment.created_at,
+                    MatterOutsideCounselAssignment.id,
+                )
+            ).all()
+        )
+        assignments = [row for row in candidates if row.budget_amount_minor is not None]
+        unbudgeted = len(candidates) - len(assignments)
+    names = {row.id: row.name for row in panel}
+
+    client_instructions = list(
+        session.scalars(
+            _client_authority_statement(company_id=company_id, docket_id=docket.id).order_by(
+                IpClientInstruction.received_at.desc(), IpClientInstruction.id
+            )
+        ).all()
+    )
+    documents = list_ip_documents(session, context=context, docket_id=docket.id).items
+
+    blockers: list[IpForeignAssociateCreateBlocker] = []
+
+    def counsel_blocker(
+        code: IpForeignAssociateCreateBlockerCode,
+        field: Literal["outside_counsel_id", "assignment_id"],
+        message: str,
+        action_label: str,
+        href: str,
+    ) -> None:
+        # Only offer the link to someone whose role can act on it.
+        blockers.append(
+            IpForeignAssociateCreateBlocker(
+                code=code,
+                field=field,
+                message=message if may_manage_counsel else message + counsel_role_note,
+                action_label=action_label if may_manage_counsel else None,
+                href=href if may_manage_counsel else None,
+            )
+        )
+
+    # Once a target is chosen the blocker names it, whether or not the panel
+    # has any counsel at all.
+    if target and not associates:
+        spelled = (
+            f"{FILING_JURISDICTIONS[jurisdiction]} written out (the bare code {jurisdiction} "
+            "also names an Indian state or court, so it is not read as a country)"
+            if jurisdiction in INDIAN_ABBREVIATION_CODES
+            else f"{jurisdiction} or {FILING_JURISDICTIONS[jurisdiction]}"
+            if jurisdiction
+            else target
+        )
+        counsel_blocker(
+            "no_associate_for_jurisdiction",
+            "outside_counsel_id",
+            "No approved associate on the panel files in "
+            f"{filing_jurisdiction_label(target)}."
+            f"{'' if panel else ' The panel has no active counsel yet.'} Add one in "
+            f"Outside Counsel with {spelled} as a jurisdiction.",
+            "Add counsel in Outside Counsel",
+            "/app/outside-counsel",
+        )
+    elif not panel:
+        counsel_blocker(
+            "no_panel_associate",
+            "outside_counsel_id",
+            "No outside counsel is on the active panel. Add the foreign associate in "
+            "Outside Counsel with the country or office it files in.",
+            "Add counsel in Outside Counsel",
+            "/app/outside-counsel",
+        )
+    if docket.matter_id is not None and associates and not assignments:
+        unbudgeted_note = (
+            f" {unbudgeted} assignment(s) on this Matter have no budget ceiling, so they "
+            "cannot fund foreign-associate work."
+            if unbudgeted
+            else ""
+        )
+        counsel_blocker(
+            "no_assignment_for_matter",
+            "assignment_id",
+            "This record's Matter has no approved assignment with a budget ceiling for an "
+            f"associate approved in {target}. Assign the associate on the Matter's Outside "
+            "counsel tab with a budget ceiling in the currency of the associate's quote."
+            f"{unbudgeted_note}",
+            "Open the Matter's Outside counsel tab",
+            f"/app/matters/{docket.matter_id}/outside-counsel",
+        )
+    if not estimates:
+        blockers.append(
+            IpForeignAssociateCreateBlocker(
+                code="no_active_estimate",
+                field="estimate_cost_item_id",
+                message=(
+                    "No active associate estimate is recorded on this record. Record the "
+                    "associate's quote below."
+                    if may_read_rates
+                    else "No active associate estimate is recorded on this record. An owner "
+                    "or admin (fee-management permission) must record the associate's quote "
+                    "in the IP record's cost evidence; your role cannot."
+                ),
+            )
+        )
+    if not documents:
+        documents_href = f"{docket_href}&tab=documents"
+        _, active_classifications = ip_document_taxonomy_counts(session, company_id=company_id)
+        if not (can("documents:upload") and can("ip:write")):
+            message = (
+                "No documents are linked to this record. Your role cannot upload IP "
+                "documents; ask a colleague with document upload permission to upload the "
+                "instruction documents in the record's Documents tab."
+            )
+            action_label, href = None, None
+        elif active_classifications == 0:
+            message = (
+                "No documents are linked to this record, and uploads need setup first: this "
+                "workspace has no active document classification. "
+                + (
+                    "Load the standard classifications in the record's Documents tab, then "
+                    "upload the instruction documents."
+                    if can("ip:taxonomy_admin")
+                    else "An owner or admin (IP taxonomy administration) must load or "
+                    "reactivate the classifications; your role cannot."
+                )
+            )
+            action_label, href = (
+                ("Open the record's Documents tab", documents_href)
+                if can("ip:taxonomy_admin")
+                else (None, None)
+            )
+        else:
+            message = (
+                "No documents are linked to this record. Upload the instruction documents "
+                "in the record's Documents tab."
+            )
+            action_label, href = "Open the record's Documents tab", documents_href
+        blockers.append(
+            IpForeignAssociateCreateBlocker(
+                code="no_linked_documents",
+                field="selected_document_refs",
+                message=message,
+                action_label=action_label,
+                href=href,
+            )
+        )
+
+    return IpForeignAssociateCreateOptionsResponse(
+        docket_id=docket.id,
+        docket_title=docket.title,
+        lifecycle_version=docket.lifecycle_version,
+        matter_id=docket.matter_id,
+        matter_title=matter.title if matter is not None else None,
+        target_jurisdiction=target,
+        jurisdictions=[
+            IpFilingJurisdictionOption(
+                code=code,
+                name=name,
+                associate_count=sum(code in coverage[row.id] for row in panel),
+            )
+            for code, name in sorted(FILING_JURISDICTIONS.items(), key=lambda item: item[1])
+        ],
+        panel_associate_count=len(panel),
+        associates=[
+            IpForeignAssociateOptionAssociate(
+                id=row.id,
+                name=row.name,
+                firm_city=row.firm_city,
+                primary_contact_name=row.primary_contact_name,
+                primary_contact_email=row.primary_contact_email,
+                panel_status=str(row.panel_status),
+                filing_jurisdictions=coverage[row.id],
+            )
+            for row in associates
+        ],
+        assignment_required=docket.matter_id is not None,
+        assignments=[
+            IpForeignAssociateOptionAssignment(
+                id=row.id,
+                counsel_id=row.counsel_id,
+                counsel_name=names.get(row.counsel_id, "Outside counsel"),
+                role_summary=row.role_summary,
+                status=str(row.status),
+                currency=row.currency,
+                budget_amount_minor=int(row.budget_amount_minor or 0),
+                compatible_estimate_ids=[
+                    estimate.id for estimate in estimates if compatible(estimate, row)
+                ],
+            )
+            for row in assignments
+        ],
+        unbudgeted_assignment_count=unbudgeted,
+        estimates=[
+            IpForeignAssociateOptionEstimate(
+                id=row.id,
+                description=row.description,
+                amount_minor=None if withheld(row) else row.amount_minor,
+                amount_withheld=withheld(row),
+                currency=row.currency,
+                evidence_reference=row.evidence_reference,
+                created_at=row.created_at,
+            )
+            for row in estimates
+        ],
+        client_instructions=[
+            IpForeignAssociateOptionClientInstruction(
+                id=row.id,
+                submitted_by=row.creator_label_snapshot,
+                instruction_kind=row.instruction_kind,
+                instruction_version=row.instruction_version,
+                received_at=row.received_at,
+            )
+            for row in client_instructions
+        ],
+        documents=[
+            IpForeignAssociateOptionDocument(
+                id=row.id, title=row.title, is_privileged=row.is_privileged
+            )
+            for row in documents
+        ],
+        can_record_estimate=may_read_rates,
+        can_manage_counsel=may_manage_counsel,
+        blockers=blockers,
+    )
 
 
 def _validate_deadline_refs(
@@ -528,7 +906,7 @@ def create_ip_foreign_associate_instruction(
     _validate_initial_estimate_budget(estimate=estimate, assignment=assignment)
     documents = _document_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.selected_document_refs,
     )
@@ -790,7 +1168,7 @@ def record_ip_foreign_associate_transaction(
     )
     _document_refs(
         session,
-        company_id=context.company.id,
+        context=context,
         docket_id=docket.id,
         document_refs=payload.document_refs,
     )
@@ -834,7 +1212,7 @@ def record_ip_foreign_associate_transaction(
         )
         documents = _document_refs(
             session,
-            company_id=context.company.id,
+            context=context,
             docket_id=docket.id,
             document_refs=row.selected_document_refs_json,
         )
@@ -1323,12 +1701,14 @@ def ip_foreign_associate_workspace(
     )
     docket = get_ip_docket(session, context=context, docket_id=row.docket_id)
     selected_document_ids = set(row.selected_document_refs_json)
+    # The instruction's own history keeps naming what it selected, retired or not.
     documents = [
         document
         for document in list_ip_documents(
             session,
             context=context,
             docket_id=row.docket_id,
+            include_history=True,
         ).items
         if document.id in selected_document_ids
     ]

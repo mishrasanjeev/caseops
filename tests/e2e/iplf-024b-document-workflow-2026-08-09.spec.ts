@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PASSWORD = "IpDocumentWorkflow2026!";
 
@@ -171,8 +172,7 @@ test("IPLF-024B completes the controlled document journey without silent legal u
   const dockets = await createDockets(api, headers);
   expect(dockets).toHaveLength(2);
 
-  const seeded = await api.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-  expect(seeded.status(), await seeded.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(api, apiBaseUrl, headers);
 
   const aliasPreview = await api.post(
     `${apiBaseUrl}/api/ip/document-taxonomy/import-aliases`,
@@ -303,8 +303,7 @@ test("IPLF-024B keeps every document action visible and usable at 360px", async 
   const tenant = await bootstrap(api);
   const headers = { Authorization: `Bearer ${tenant.access_token as string}` };
   const dockets = await createDockets(api, headers);
-  const seeded = await api.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
-  expect(seeded.status(), await seeded.text()).toBe(200);
+  await expectProvisionedDocumentTaxonomy(api, apiBaseUrl, headers);
 
   for (const [index, docketId] of dockets.entries()) {
     const created = await upload(api, headers, {
