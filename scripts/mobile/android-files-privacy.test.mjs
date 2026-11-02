@@ -153,7 +153,7 @@ function fixture(t, selectedProfile = null) {
       const file = argv[6].replace(/^file:\/\//, ''); assert.ok(nodes.has(file), 'MEDIA_SCAN_OF_STAGED_FILE_ONLY');
       state.mediaScans = [...(state.mediaScans || []), file];
       if (!state.mediaScanIgnored) (state.mediaRows ||= new Set()).add(file);
-      if (state.mediaScanTouches) nodes.get(file).changed = '2026-10-26 00:00:09.000000000 +0000';
+      if (state.mediaScanTouches) nodes.get(file)[state.mediaScanTouches] = '2026-10-26 00:00:09.000000000 +0000';
       value = 'Broadcast completed: result=0';
     } else if (argv[0] === 'shell' && argv[1] === 'content' && argv[2] === 'query') {
       const where = /relative_path='([^']+)' AND _display_name='([^']+)'/.exec(argv.at(-1));
@@ -215,14 +215,19 @@ test('root emulator staging never accepts files the media index did not admit, a
   /ANDROID_FILES_MEDIA_INDEX_NOT_OBSERVED/);
   assert.equal(f.state.mediaScans.length, 2, 'NO_SECOND_SCAN_DISPATCH');
   assert.equal(existsSync(path.join(f.root, 'provider-unindexed.json')), false);
-  const g = fixture(t); g.state.mediaScanTouches = true;
-  assert.throws(() => g.stage('touched'), /ANDROID_FILES_MEDIA_INDEX_CHANGED_PROVIDER_METADATA/);
+  // The real scan moves only ctime; settle records that move, and any other change still refuses.
+  const g = fixture(t); g.state.mediaScanTouches = 'changed';
+  const touched = g.stage('touched');
+  assert.ok(touched.receipt.assets.every(asset => asset.providerMetadata.changed === '2026-10-26 00:00:09.000000000 +0000'
+    && asset.writeChanged !== asset.providerMetadata.changed), 'SETTLE_RECORDS_THE_SCAN_CTIME');
+  const h = fixture(t); h.state.mediaScanTouches = 'modified';
+  assert.throws(() => h.stage('modified'), /PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING/);
 });
 
 test('staging copies only exact public manifest assets to one exclusive provider folder and rechecks bytes/hash', t => {
   const f = fixture(t), result = f.stage();
-  // One fresh read after each of the two writes, the settle read, then the post-index read.
-  assert.equal(f.state.fuseRefreshes, 4, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
+  // One fresh read after each of the two writes, then the settle read.
+  assert.equal(f.state.fuseRefreshes, 3, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
   assert.deepEqual(f.state.mediaScans, result.receipt.assets.map(asset => asset.devicePath), 'ONE_MEDIA_SCAN_PER_STAGED_FILE');
   assert.deepEqual(result.receipt.mediaIndex, { method: 'media-scanner-broadcast', indexedRows: 2, deadlineMs: 15000 });
   assert.equal(result.receipt.folderName, 'CaseOpsFiles-unit-run-first');
