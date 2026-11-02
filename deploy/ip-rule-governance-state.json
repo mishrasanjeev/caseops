@@ -1,1 +1,1 @@
-{"schema_version": 1, "enabled": false, "rollout_expires_at": null, "approved_by": null, "evidence": null}
+{"schema_version": 1, "enabled": true, "rollout_expires_at": "2027-04-30T18:29:59Z", "approved_by": "Sanjeev Kumar", "evidence": "docs/ip-implementation/evidence/m2/IPLF-027B/a2-enable-2026-11-02.json"}
