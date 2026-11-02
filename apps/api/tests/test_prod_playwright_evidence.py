@@ -522,6 +522,27 @@ def test_batch3_policy_preserves_other_roles_legitimate_skipped_envelopes(captur
 BATCH4_GOVERNANCE_FILE = "ram-2026-10-31-governance-ui.spec.ts"
 
 
+def test_mandatory_titles_survive_both_redactors_unchanged():
+    """A mandatory title must be a fixed point of the Python and browser redactors.
+
+    They word redactions differently (and only the browser redacts record ids), so
+    a title with a query string or a UUID matched in local contract tests and
+    failed the first production run (prod-verify 41428563260, batch4-desktop
+    mandatory_batch4_case_inventory_mismatch).
+    """
+    cases = [(row[1], row[2]) for row in evidence.BATCH3_MANDATORY_CASES.values()]
+    cases += [case for _, rows in evidence.BATCH4_MANDATORY_CASES.values() for case in rows]
+    browser_redacted = re.compile(
+        r"https?://|\S*\?\S+|\bBearer\s|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}"
+        r"|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b",
+        re.I,
+    )
+    assert cases
+    for file, title in cases:
+        assert evidence._safe(title, {}) == title, (file, title)
+        assert not browser_redacted.search(title), (file, title)
+
+
 def _batch4_source_cases():
     """Derive every production-eligible Batch4 case per role from the spec sources."""
     roles = {invocation: Counter() for invocation in evidence.BATCH4_MANDATORY_CASES}
@@ -536,14 +557,20 @@ def _batch4_source_cases():
                 "test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`"
             ) == 1
             assert 'path.replace("?tab=documents", " Documents tab")' in source
+            labels = dict(re.findall(
+                r'\[PROD_ROUTES\[(\d)\]\]: "([^"]+)"', source
+            ))
+            assert sorted(labels) == ["0", "1"]
             routes = []
             for name in ("ROUTES", "PROD_ROUTES"):
                 block = re.search(rf"\nconst {name} = \[(.*?)\];", source, re.S)
                 assert block is not None
                 routes += re.findall(r'"([^"]+)"', block.group(1))
+            prod_routes = routes[-2:]
             titles = [
                 "BUG-015 controls on {} are usable or explain themselves".format(
-                    route.replace("?tab=documents", " Documents tab")
+                    labels[str(prod_routes.index(route))] if route in prod_routes
+                    else route.replace("?tab=documents", " Documents tab")
                 )
                 for route in routes
             ]
@@ -700,9 +727,8 @@ def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture
     assert Counter((row["file"], row["title_path"][-1]) for row in rows) == Counter(
         (file, evidence._safe(title, {})) for file, title in cases
     )
-    if invocation == "batch4-desktop":
-        # The query-bearing crawl route is retained only in privacy-minimized form.
-        assert sum("[query-or-token-redacted]" in row["title_path"][-1] for row in rows) == 1
+    # Mandatory titles carry no query or record id, so evidence keeps them verbatim.
+    assert not any("redacted" in row["title_path"][-1] for row in rows)
     assert all(
         row["project_name"] == project and row["status"] == "expected"
         and [result["status"] for result in row["results"]] == ["passed"]

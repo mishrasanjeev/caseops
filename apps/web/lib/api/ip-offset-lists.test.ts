@@ -6,11 +6,13 @@ vi.mock("./client", () => ({
 }));
 import {
   fetchEveryIpDocket, fetchIpForeignAssociateInstructions, fetchIpRecordals, fetchMadridRecords,
+  ipListRows, nextIpListOffset,
 } from "./endpoints";
 
-const TOTAL = 230;
+/** A tenant whose history is far larger than one page, as the production QA tenant is. */
+const TOTAL = 5000;
 
-/** A server that serves `TOTAL` rows 100 at a time, as the IP list routes do. */
+/** A server that serves `TOTAL` rows by limit and offset, as the IP list routes do. */
 function serveOffsetPages(prefix: string) {
   call.mockImplementation(async (path: string) => {
     const url = new URL(path, "http://api.test");
@@ -30,89 +32,65 @@ function requested(): URL[] {
   return call.mock.calls.map(([path]) => new URL(String(path), "http://api.test"));
 }
 
-describe("IP offset-paged lists read the whole population", () => {
+describe("IP offset-paged lists read one page per request", () => {
   beforeEach(() => call.mockReset());
 
-  it("returns recordal 101 onwards instead of stopping at the first page", async () => {
+  it("renders from one request however large the tenant's history is", async () => {
     serveOffsetPages("recordal");
     const page = await fetchIpRecordals({ status: "draft" });
-    expect(page.total).toBe(TOTAL);
-    expect(page.items).toHaveLength(TOTAL);
-    expect(page.items.at(-1)?.id).toBe(`recordal-${TOTAL - 1}`);
-    expect(requested().map((url) => url.searchParams.get("offset"))).toEqual(["0", "100", "200"]);
-    // Filters travel with every page, not only the first.
-    expect(requested().every((url) => url.pathname === "/api/ip/recordals")).toBe(true);
-    expect(requested().every((url) => url.searchParams.get("status") === "draft")).toBe(true);
-  });
-
-  it("returns every foreign-associate instruction and every Madrid record", async () => {
-    serveOffsetPages("instruction");
-    const instructions = await fetchIpForeignAssociateInstructions({ docketId: "docket-1" });
-    expect(instructions.items).toHaveLength(TOTAL);
-    expect(requested().every((url) => url.searchParams.get("docket_id") === "docket-1")).toBe(true);
-
-    call.mockReset();
-    serveOffsetPages("madrid");
-    const madrid = await fetchMadridRecords({ recordKind: "international_designation" });
-    expect(madrid.items).toHaveLength(TOTAL);
-    expect(requested()).toHaveLength(3);
-    expect(requested().every((url) => url.pathname === "/api/ip/international-registrations")).toBe(true);
-  });
-
-  it("makes one request for a short list", async () => {
-    call.mockResolvedValueOnce({ items: [{ id: "a" }, { id: "b" }], total: 2, limit: 100, offset: 0 });
-    const short = await fetchIpRecordals();
-    expect(short.items.map((row) => row.id)).toEqual(["a", "b"]);
     expect(call).toHaveBeenCalledTimes(1);
+    expect(page.items).toHaveLength(100);
+    expect(page.total).toBe(TOTAL);
+    const [url] = requested();
+    expect(url.pathname).toBe("/api/ip/recordals");
+    expect([url.searchParams.get("limit"), url.searchParams.get("offset")]).toEqual(["100", "0"]);
+    expect(url.searchParams.get("status")).toBe("draft");
   });
 
-  it("reads again when a record updated mid-read jumped back to page one", async () => {
-    const first = Array.from({ length: 100 }, (_, index) => ({ id: `row-${index}` }));
-    call
-      .mockResolvedValueOnce({ items: first, total: 101, limit: 100, offset: 0 })
-      // row-100 was updated after page one was read: newest-change-first order
-      // moves it to offset 0, so offset 100 now holds row-99 again and row-100
-      // is never served on this pass.
-      .mockResolvedValueOnce({ items: [{ id: "row-99" }], total: 101, limit: 100, offset: 100 })
-      .mockResolvedValueOnce({ items: [{ id: "row-100" }, ...first.slice(0, 99)], total: 101, limit: 100, offset: 0 })
-      .mockResolvedValueOnce({ items: [{ id: "row-99" }], total: 101, limit: 100, offset: 100 });
-    const moved = await fetchIpRecordals();
-    expect(call).toHaveBeenCalledTimes(4);
-    expect(moved.items).toHaveLength(101);
-    expect(new Set(moved.items.map((row) => row.id)).size).toBe(101);
-    expect(moved.items.some((row) => row.id === "row-100")).toBe(true);
+  it("reads the requested later page with its filters for each list", async () => {
+    serveOffsetPages("instruction");
+    const instructions = await fetchIpForeignAssociateInstructions({ docketId: "docket-1" }, { offset: 200 });
+    expect(instructions.items[0]?.id).toBe("instruction-200");
+    serveOffsetPages("madrid");
+    const madrid = await fetchMadridRecords({ recordKind: "international_designation" }, { offset: 100 });
+    expect(madrid.items[0]?.id).toBe("madrid-100");
+    expect(requested().map((url) => [url.pathname, url.searchParams.get("offset")])).toEqual([
+      ["/api/ip/foreign-associate-instructions", "200"],
+      ["/api/ip/international-registrations", "100"],
+    ]);
+    expect(requested()[0].searchParams.get("docket_id")).toBe("docket-1");
+    expect(requested()[1].searchParams.get("record_kind")).toBe("international_designation");
   });
 
-  it("fails instead of returning a short list when the list keeps changing", async () => {
-    const first = Array.from({ length: 100 }, (_, index) => ({ id: `row-${index}` }));
-    call.mockImplementation(async (path: string) => {
-      const offset = Number(new URL(path, "http://api.test").searchParams.get("offset"));
-      return offset === 0
-        ? { items: first, total: 101, limit: 100, offset }
-        : { items: [{ id: "row-99" }], total: 101, limit: 100, offset };
-    });
-    await expect(fetchIpRecordals()).rejects.toThrow("This list changed while it was loading");
-    expect(call).toHaveBeenCalledTimes(4);
-  });
-
-  it("forwards the query's abort signal to every page request", async () => {
+  it("forwards the query's abort signal", async () => {
     serveOffsetPages("madrid");
     const controller = new AbortController();
     await fetchMadridRecords(undefined, { signal: controller.signal });
-    expect(call).toHaveBeenCalledTimes(3);
-    expect(call.mock.calls.every(([, init]) => init?.signal === controller.signal)).toBe(true);
+    expect(call.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 
-  it("surfaces a failed later page instead of returning a silent partial list", async () => {
-    call
-      .mockResolvedValueOnce({
-        items: Array.from({ length: 100 }, (_, index) => ({ id: `row-${index}` })),
-        total: 150,
-        limit: 100,
-        offset: 0,
-      })
-      .mockRejectedValueOnce(new Error("Service unavailable"));
-    await expect(fetchIpRecordals()).rejects.toThrow("Service unavailable");
+  it("offers Load more until the server's total is reached, so every row stays reachable", () => {
+    const page = (offset: number, count: number, total: number) => ({
+      items: Array.from({ length: count }, (_, index) => ({ id: `row-${offset + index}` })),
+      total,
+      limit: 100,
+      offset,
+    });
+    expect(nextIpListOffset(page(0, 100, 230))).toBe(100);
+    expect(nextIpListOffset(page(100, 100, 230))).toBe(200);
+    expect(nextIpListOffset(page(200, 30, 230))).toBeUndefined();
+    expect(nextIpListOffset(page(0, 2, 2))).toBeUndefined();
+    // An empty page ends paging even if the count grew meanwhile.
+    expect(nextIpListOffset(page(300, 0, 400))).toBeUndefined();
+  });
+
+  it("shows a record updated between two reads once", () => {
+    const first = { items: [{ id: "a" }, { id: "b" }], total: 3, limit: 2, offset: 0 };
+    // "b" was updated after page one was read, so newest-change-first order
+    // served it again on the next page.
+    const second = { items: [{ id: "b" }, { id: "c" }], total: 3, limit: 2, offset: 2 };
+    expect(ipListRows([first, second]).map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(ipListRows(undefined)).toEqual([]);
   });
 });
 

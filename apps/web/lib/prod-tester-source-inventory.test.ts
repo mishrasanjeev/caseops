@@ -172,8 +172,8 @@ const crawlRoutes = [
   "/app/ip/foreign-associates", "/app/ip/registry", "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal",
   "/app/ip/patents", "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
   "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
-  "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
-  "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
+  "/app/ip reported docket",
+  "/app/matters reported Matter billing",
 ];
 const batch4Titles: Record<string, [string, string][]> = {
   "batch4-prod-chromium": [

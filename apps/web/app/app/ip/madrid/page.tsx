@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -19,6 +19,7 @@ import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { IpListMore } from "@/components/ip/IpListMore";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -36,6 +37,8 @@ import {
   createMadridRecord,
   fetchIpCoreRecords,
   fetchMadridRecords,
+  ipListRows,
+  nextIpListOffset,
   fetchMadridWorkspace,
   recordMadridAction,
   type IpCoreRecords,
@@ -135,11 +138,14 @@ export default function MadridPage() {
   const canWrite = useCapability("ip:write");
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState("");
-  const records = useQuery({
+  const records = useInfiniteQuery({
     queryKey: ["ip", "madrid", "records"],
-    queryFn: () => fetchMadridRecords(),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => fetchMadridRecords(undefined, { offset: pageParam, signal }),
+    getNextPageParam: nextIpListOffset,
     enabled: canRead,
   });
+  const rows = ipListRows(records.data?.pages);
   const workspace = useQuery({
     queryKey: ["ip", "madrid", "workspace", selectedId],
     queryFn: () => fetchMadridWorkspace(selectedId),
@@ -147,8 +153,8 @@ export default function MadridPage() {
   });
 
   useEffect(() => {
-    if (!selectedId && records.data?.items[0]) setSelectedId(records.data.items[0].id);
-  }, [records.data, selectedId]);
+    if (!selectedId && rows[0]) setSelectedId(rows[0].id);
+  }, [rows, selectedId]);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["ip", "madrid"] });
@@ -187,7 +193,18 @@ export default function MadridPage() {
         <>
           {canWrite ? <CreateMadridRecord onCreated={async (id) => { await refresh(); setSelectedId(id); }} /> : null}
           <div className="grid min-w-0 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-            <RecordList records={records.data.items} selectedId={selectedId} onSelect={setSelectedId} />
+            <div className="min-w-0 self-start">
+              <RecordList records={rows} selectedId={selectedId} onSelect={setSelectedId} />
+              <IpListMore
+                shown={rows.length}
+                total={records.data.pages.at(-1)?.total ?? 0}
+                noun="Madrid records"
+                hasMore={records.hasNextPage}
+                loading={records.isFetchingNextPage}
+                failed={records.isFetchNextPageError}
+                onMore={() => void records.fetchNextPage()}
+              />
+            </div>
             {workspace.isPending ? (
               <Skeleton className="h-[520px]" />
             ) : workspace.isError ? (
