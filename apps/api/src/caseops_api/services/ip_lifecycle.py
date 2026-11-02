@@ -64,6 +64,7 @@ from caseops_api.services.calendar_projection_safety import (
     materialize_expired_calendar_sync_upsert_claim,
 )
 from caseops_api.services.ip_capability_catalog import assert_ip_feature_available
+from caseops_api.services.ip_document_citations import reject_retired_document_refs
 from caseops_api.services.ip_domain_policy import assert_trademark_docket
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
 from caseops_api.services.matter_access import (
@@ -590,8 +591,6 @@ def preview_ip_docket_event(
 def _reject_retired_event_refs(session: Session, *, company_id: str, refs: list[str]) -> None:
     # Event references are free text; one that names an IP document is a
     # citation that document retirement counts, so it must name a current one.
-    from caseops_api.services.ip_document_workflow import reject_retired_document_refs
-
     reject_retired_document_refs(session, company_id=company_id, refs=refs)
 
 

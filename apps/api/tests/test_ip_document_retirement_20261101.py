@@ -57,7 +57,7 @@ def _retire(client: TestClient, headers: dict[str, str], document_id: str, reaso
     current = client.get(f"{LIST}/{document_id}", headers=headers)
     assert current.status_code == 200, current.text
     return client.post(
-        f"{LIST}/{document_id}/retire",
+        f"/api/ip/documents/{document_id}/retire",
         headers=headers,
         json={"expected_current_version": current.json()["current_version"], "reason": reason},
     )
@@ -213,7 +213,7 @@ def test_retired_document_leaves_pickers_and_validators_but_stays_in_history(
     keeper = _upload(client, headers, title="Deed that stays current",
                      links=[{"target_type": "docket", "target_id": docket_id}])
 
-    preview = client.get(f"{LIST}/{deed}/retirement", headers=headers)
+    preview = client.get(f"/api/ip/documents/{deed}/retirement", headers=headers)
     assert preview.status_code == 200, preview.text
     assert preview.json() == {
         "document_id": deed,

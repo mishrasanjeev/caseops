@@ -581,21 +581,25 @@ function RuleProposalForm({
         hint={`Starts from: ${scope.triggerLabel}. Opposition deadline pickers list only rules of their exact scope; proposing the same scope again creates its next version.`}
       >
         {(describedBy, invalid) => (
-          <select
-            id="rule-scope"
-            className={SELECT_CLASS}
-            value={scopeId}
-            aria-invalid={invalid || undefined}
-            aria-describedby={describedBy}
-            onChange={(event) => {
-              const nextScope = RULE_SCOPES.find((row) => row.id === event.target.value) ?? RULE_SCOPES[0];
-              setScopeId(nextScope.id);
-              setMethod(nextScope.calendarMethod);
-              clear("rule-scope");
-            }}
-          >
-            {RULE_SCOPES.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
-          </select>
+          <>
+            <select
+              id="rule-scope"
+              className={SELECT_CLASS}
+              value={scopeId}
+              aria-invalid={invalid || undefined}
+              aria-describedby={[describedBy, "rule-scope-detail"].filter(Boolean).join(" ")}
+              onChange={(event) => {
+                const nextScope = RULE_SCOPES.find((row) => row.id === event.target.value) ?? RULE_SCOPES[0];
+                setScopeId(nextScope.id);
+                setMethod(nextScope.calendarMethod);
+                clear("rule-scope");
+              }}
+            >
+              {RULE_SCOPES.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+            </select>
+            {/* Scope names can be wider than the select; spell the chosen one out in full. */}
+            <p id="rule-scope-detail" data-selected-option-value={scope.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{scope.label}</p>
+          </>
         )}
       </Field>
       <Field id="rule-jurisdiction" label="Jurisdiction" error={errors["rule-jurisdiction"]}>
@@ -628,19 +632,23 @@ function RuleProposalForm({
       <SourceHashField id="rule-source-hash" label="Rule source file" value={sourceHash} onChange={(value) => { setSourceHash(value); clear("rule-source-hash"); }} error={errors["rule-source-hash"]} />
       <Field id="rule-fixture-calendar" label="Fixture working calendar" error={errors["rule-fixture-calendar"]}>
         {(describedBy, invalid) => (
-          <select
-            id="rule-fixture-calendar"
-            className={SELECT_CLASS}
-            value={calendar?.id ?? ""}
-            disabled={!calendars.length}
-            aria-invalid={invalid || undefined}
-            aria-describedby={calendars.length ? describedBy : prerequisiteId}
-            onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
-          >
-            {!calendars.length ? <option value="">{ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "Enter the jurisdiction first"}</option> : null}
-            {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
-            {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
-          </select>
+          <>
+            <select
+              id="rule-fixture-calendar"
+              className={SELECT_CLASS}
+              value={calendar?.id ?? ""}
+              disabled={!calendars.length}
+              aria-invalid={invalid || undefined}
+              aria-describedby={calendars.length ? [describedBy, calendar ? "rule-fixture-calendar-detail" : null].filter(Boolean).join(" ") || undefined : prerequisiteId}
+              onChange={(event) => { setCalendarId(event.target.value); clear("rule-fixture-calendar"); }}
+            >
+              {!calendars.length ? <option value="">{ruleJurisdiction ? `No active ${ruleJurisdiction} working calendar` : "Enter the jurisdiction first"}</option> : null}
+              {calendars.length > 1 && !calendar ? <option value="" disabled>Choose a working calendar</option> : null}
+              {calendars.map((row) => <option key={row.id} value={row.id}>{workingCalendarOptionCaption(row)}</option>)}
+            </select>
+            {/* A long calendar name is clipped inside the select; spell the chosen one out in full. */}
+            {calendar ? <p id="rule-fixture-calendar-detail" data-selected-option-value={calendar.id} className="min-w-0 whitespace-normal break-all text-sm text-[var(--color-mute)]">{workingCalendarOptionCaption(calendar)}</p> : null}
+          </>
         )}
       </Field>
       <Field id="rule-fixture-base" label="Fixture trigger date" error={errors["rule-fixture-base"]}>

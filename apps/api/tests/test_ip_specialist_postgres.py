@@ -422,6 +422,10 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 if rows:
                     session.execute(insert(model.__table__), rows)
             session.commit()
+            # Bulk-loaded tables need fresh statistics before the plan is measured;
+            # stale ones (autovacuum timing, rows left by earlier tests) make the bound flaky.
+            for table in ("ip_docket_records", "ip_specialist_records", "matter_access_grants"):
+                session.execute(text(f"ANALYZE {table}"))
         expected_ids = [str(UUID(int=record_rank - 10_000 + i)) for i in range(10_000)]
         assert list(session.scalars(
             select(IpSpecialistRecord.id).where(

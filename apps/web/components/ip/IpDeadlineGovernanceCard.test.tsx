@@ -352,6 +352,8 @@ describe("IpDeadlineGovernanceCard", () => {
 
     fireEvent.change(calendar, { target: { value: "cal-delhi" } });
     expect(calendar).not.toHaveAttribute("aria-invalid");
+    // The chosen calendar is spelled out in full, since a long name is clipped inside the select.
+    expect(described(calendar)).toContain("Delhi registry 2026");
     fireEvent.click(screen.getByRole("button", { name: "Propose rule and fixture" }));
     await waitFor(() => expect(mocks.proposeRule).toHaveBeenCalledOnce());
     expect(mocks.proposeRule.mock.calls[0][0].fixtureCalculation.calendar).toEqual(

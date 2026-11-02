@@ -149,6 +149,7 @@ from caseops_api.services.ip_deadlines import (
     assert_distinct_deadline_escalation,
 )
 from caseops_api.services.ip_docket_access import _docket_or_404, _lock_ip_writer_context
+from caseops_api.services.ip_document_citations import reject_retired_document_refs
 from caseops_api.services.ip_domain_policy import TRADEMARK_RECORD_TYPES, assert_trademark_docket
 from caseops_api.services.ip_portfolio_search import portfolio_target_search_predicate
 from caseops_api.services.matter_access import (
@@ -3550,7 +3551,6 @@ def add_ip_title_interest(
         required_capability="ip:approve",
     )
     docket = locked_dockets[docket_id]
-    from caseops_api.services.ip_document_workflow import reject_retired_document_refs
 
     # Evidence is free text; when it names an IP document, document retirement
     # counts this interest as a citation, so it must name a current document.

@@ -18,9 +18,10 @@ import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 
 // A pinned last column stays at the right edge of the scrolling table, so a
-// row's actions are on screen at any width (B4-ADJ-13).
-const PINNED_HEADER = "sticky right-0 z-[1] bg-[var(--color-bg)] shadow-[-1px_0_0_var(--color-line)]";
-const PINNED_CELL = "sticky right-0 z-[1] bg-white shadow-[-1px_0_0_var(--color-line)]";
+// row's actions are on screen (B4-ADJ-13). Below 40rem a pinned column would
+// cover the row's other cells, so the table stacks into labelled rows instead.
+const PINNED_HEADER = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-[var(--color-bg)] @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
+const PINNED_CELL = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-white @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
 
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
@@ -91,8 +92,8 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-white">
-        <table className="w-full text-sm">
+      <div className={cn("overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-white", pinLastColumn && "@container")}>
+        <table className={cn("w-full text-sm", pinLastColumn && "@max-[40rem]:stacked-table @max-[40rem]:px-4")}>
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-[var(--color-line)] bg-[var(--color-bg)]">
@@ -175,6 +176,7 @@ export function DataTable<TData, TValue>({
                     {row.getVisibleCells().map((cell, index, cells) => (
                       <td
                         key={cell.id}
+                        data-label={pinLastColumn && typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined}
                         className={cn(
                           "px-4 py-3 text-[var(--color-ink-2)]",
                           pinLastColumn && index === cells.length - 1 && PINNED_CELL,

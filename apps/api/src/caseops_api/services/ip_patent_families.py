@@ -42,12 +42,12 @@ from caseops_api.services.idempotency import (
     claim_idempotency,
     complete_idempotency,
 )
+from caseops_api.services.ip_document_citations import citable_ip_document_ids
 from caseops_api.services.ip_document_workflow import (
     _create_link,
     _propagate_private_document_change,
     _require_document_capability,
     _target_docket_id,
-    citable_ip_document_ids,
     get_accessible_ip_document_ids,
 )
 from caseops_api.services.ip_lifecycle import (
