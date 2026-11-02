@@ -54,6 +54,7 @@ vi.mock("@/lib/api/endpoints", async () => {
 });
 
 import RecordalsPage from "@/app/app/ip/recordals/page";
+import { ApiError, NetworkError } from "@/lib/api/config";
 import { availableGovernance } from "@/test/ip-governance-fixtures";
 
 const RECORDAL: IpRecordal = {
@@ -227,9 +228,15 @@ const WORKSPACE: IpRecordalWorkspace = {
   },
 };
 
-function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function wrapper(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+  return { promise, resolve, reject };
 }
 
 describe("post-registration workspace", () => {
@@ -238,9 +245,123 @@ describe("post-registration workspace", () => {
     mocks.capability.mockReturnValue(true);
     mocks.everyDockets.mockResolvedValue([DOCKET]);
     mocks.documents.mockResolvedValue({ items: [DOCUMENT], total: 1 });
-    mocks.recordals.mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
+    mocks.recordals.mockReset().mockResolvedValue({ items: [{ ...RECORDAL, docket_title: "ASTER registration" }], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(WORKSPACE);
     mocks.transaction.mockResolvedValue({ recordal: { ...RECORDAL, status: "accepted", version: 4 }, event: WORKSPACE.transactions[0], projected_title_interests: [DOCKET.title_interests[1]], registry_projection_applied: true });
+  });
+
+  it.each([
+    { name: "HTTP 503", error: new ApiError(503, "Temporarily unavailable", {}) },
+    { name: "network failure", error: new NetworkError("Connection lost", new TypeError("Failed to fetch")) },
+  ])("keeps the first recordal page after a next-page $name and retries only on request", async ({ error }) => {
+    const user = userEvent.setup();
+    const row = { ...RECORDAL, docket_title: "ASTER registration" };
+    const older = { ...RECORDAL, id: "recordal-older", docket_title: "Older recordal" };
+    const secondPage = { items: [older], total: 2, limit: 100, offset: 1 };
+    const next = deferred<typeof secondPage>();
+    const retry = deferred<typeof secondPage>();
+    mocks.recordals
+      .mockResolvedValueOnce({ items: [row], total: 2, limit: 100, offset: 0 })
+      .mockReturnValueOnce(next.promise)
+      .mockReturnValueOnce(retry.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 2, retryDelay: 0 } } });
+    const view = render(<RecordalsPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByText("Showing 1 of 2 recordals");
+      await page.findByRole("heading", { name: "Assignment" });
+      expect(mocks.recordals).toHaveBeenCalledTimes(1);
+      await user.click(page.getByRole("button", { name: "Load more recordals" }));
+      const busy = page.getByRole("button", { name: "Load more recordals" });
+      await waitFor(() => expect(busy).toHaveAttribute("aria-busy", "true"));
+      expect(busy).toBeDisabled();
+      await user.click(busy);
+      expect(mocks.recordals).toHaveBeenCalledTimes(2);
+      await act(async () => { next.reject(error); });
+      expect(await page.findByRole("alert")).toHaveTextContent(/Could not load more recordals/);
+      expect(page.getByRole("button", { name: /Assignment.*ASTER registration/ })).toHaveAttribute("aria-pressed", "true");
+      expect(page.getByRole("heading", { name: "Assignment" })).toBeVisible();
+      expect(page.getByText("Showing 1 of 2 recordals")).toBeVisible();
+      expect(page.queryByTestId("query-error-retry")).not.toBeInTheDocument();
+      const more = page.getByRole("button", { name: "Load more recordals" });
+      expect(more).toBeEnabled();
+      expect(more).toHaveAttribute("aria-busy", "false");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(mocks.recordals).toHaveBeenCalledTimes(2);
+      await user.click(more);
+      await waitFor(() => expect(page.getByRole("button", { name: "Load more recordals" })).toHaveAttribute("aria-busy", "true"));
+      expect(mocks.recordals).toHaveBeenCalledTimes(3);
+      await act(async () => { retry.resolve(secondPage); });
+      expect(await page.findByRole("button", { name: /Assignment.*Older recordal/ })).toBeVisible();
+      expect(page.getByText("Showing 2 of 2 recordals")).toBeVisible();
+      expect(page.queryByRole("alert")).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
+      expect(mocks.recordals.mock.calls.map((call) => call[1].offset)).toEqual([0, 1, 1]);
+      expect(mocks.workspace).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([401, 403, 404, 409, "unknown"] as const)("hides cached recordals after a next-page %s failure", async (status) => {
+    const row = { ...RECORDAL, docket_title: "ASTER registration" };
+    mocks.recordals
+      .mockResolvedValueOnce({ items: [row], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValueOnce(status === "unknown" ? new Error("Unexpected response") : new ApiError(status, "Read refused", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<RecordalsPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("button", { name: /Assignment.*ASTER registration/ });
+      await userEvent.setup().click(page.getByRole("button", { name: "Load more recordals" }));
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryByRole("button", { name: /Assignment.*ASTER registration/ })).not.toBeInTheDocument();
+      expect(page.queryAllByText("ASTER registration")).toEqual([]);
+      expect(page.queryByRole("heading", { name: "Assignment" })).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip", "recordals", "", ""])).toMatchObject({ pages: [{ items: [row] }] });
+      expect(mocks.recordals).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it("blocks a failed first-page recordal refresh even while its private rows remain cached", async () => {
+    const row = { ...RECORDAL, docket_title: "ASTER registration" };
+    mocks.recordals
+      .mockResolvedValueOnce({ items: [row], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValue(new ApiError(503, "Temporarily unavailable", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<RecordalsPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("heading", { name: "Assignment" });
+      await act(async () => { await client.refetchQueries({ queryKey: ["ip", "recordals", "", ""], exact: true }); });
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryAllByText("ASTER registration")).toEqual([]);
+      expect(page.queryByRole("heading", { name: "Assignment" })).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip", "recordals", "", ""])).toMatchObject({ pages: [{ items: [row] }] });
+      expect(mocks.recordals.mock.calls.map((call) => call[1].offset)).toEqual([0, 0]);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([
+    new ApiError(503, "Temporarily unavailable", {}),
+    new NetworkError("Connection lost", new TypeError("Failed to fetch")),
+  ])("keeps a first-page recordal failure blocking (%s)", async (error) => {
+    mocks.recordals.mockRejectedValue(error);
+    render(<RecordalsPage />, { wrapper: wrapper() });
+    expect(await screen.findByTestId("query-error-retry")).toBeVisible();
+    expect(screen.queryAllByText("ASTER registration")).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
+    expect(mocks.recordals).toHaveBeenCalledTimes(1);
+    expect(mocks.workspace).not.toHaveBeenCalled();
   });
 
   it("separates Registry-recorded and effective title while surfacing partial pending conflicts", async () => {
