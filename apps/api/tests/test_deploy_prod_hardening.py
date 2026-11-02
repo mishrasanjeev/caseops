@@ -2784,7 +2784,15 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 if governance_state is None
                 else json.dumps(governance_state)
             ),
-            "FAKE_COMMITTED_FILES": "\n".join(committed_files),
+            # The checked-in state names evidence that the real release commit carries.
+            "FAKE_COMMITTED_FILES": "\n".join(
+                committed_files
+                if governance_state is not None
+                else (
+                    *committed_files,
+                    json.loads(_read_repo_text(_GOVERNANCE_STATE_FILE)).get("evidence") or "",
+                )
+            ),
             "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
             "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
             "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
