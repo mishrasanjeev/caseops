@@ -305,6 +305,11 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     folderName, deviceFolderPath, assets: assets.map(knownSource), automaticReplayAllowed: false });
   // mkdir without -p is the exclusive ownership admission. Never reuse/delete
   // a preexisting provider folder, and never retry an unknown push outcome.
+  // Root emulator only: drop cached dentries/inodes so the FUSE view reports
+  // current attributes; right after a streamed write it can still serve a
+  // stale mtime/ctime for that file. Physical shell access is unchanged.
+  const refresh = io.physical ? () => {} : () => io.script('CASEOPS_ANDROID_FUSE_ATTR_REFRESH_V1',
+    'sync && echo 2 > /proc/sys/vm/drop_caches', [], { encoding: 'utf8', timeout: 15000 });
   io.text(['shell', 'mkdir', '-m', '0755', deviceFolderPath]);
   const folderMetadata = io.stat(deviceFolderPath);
   assert.equal(folderMetadata?.kind, 'directory', 'ANDROID_FILES_EXCLUSIVE_PROVIDER_DIRECTORY_REQUIRED');
@@ -318,6 +323,7 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
       + '[ "$(stat -c "%d:%i" .)" = "$3" ] || exit 42; [ ! -L "$2" ] || exit 43; '
       + 'umask 022; set -C; cat >"$2" || exit 44', [deviceFolderPath, asset.filename,
       `${folderMetadata.device}:${folderMetadata.inode}`], { input: asset.bytes, encoding: 'utf8', timeout: 15000 });
+    refresh();
     const metadata = io.stat(devicePath);
     assert.equal(metadata?.kind, 'file', 'ANDROID_FILES_PROVIDER_FILE_REQUIRED');
     assert.equal(metadata.sizeBytes, asset.sizeBytes, 'ANDROID_FILES_PROVIDER_SIZE_MISMATCH');
@@ -325,10 +331,6 @@ export function stageAndroidFilesAssets({ containers, manifestEvidence, runId, o
     observed.push({ ...knownSource(asset), devicePath, transferSha256: hash(asset.bytes),
       transferMethod: 'verified-buffer-exclusive-device-write', providerMetadata: metadata });
   }
-  // Root emulator only: drop cached dentries/inodes so the FUSE view reports
-  // current attributes. Physical shell access keeps its reviewed scripts.
-  const refresh = io.physical ? () => {} : () => io.script('CASEOPS_ANDROID_FUSE_ATTR_REFRESH_V1',
-    'sync && echo 2 > /proc/sys/vm/drop_caches', [], { encoding: 'utf8', timeout: 15000 });
   const settled = settleAndroidProviderMetadata(observed, file => io.stat(file), { settleMs, refresh });
   current(containers, options);
   const receipt = { schemaVersion: 2, kind: 'android-files-provider-assets', observed: true, platform: 'android',

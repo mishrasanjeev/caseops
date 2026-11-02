@@ -197,7 +197,8 @@ test('missing root, foreign AVD, changed boot or private directory owner refuse 
 
 test('staging copies only exact public manifest assets to one exclusive provider folder and rechecks bytes/hash', t => {
   const f = fixture(t), result = f.stage();
-  assert.equal(f.state.fuseRefreshes, 1, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
+  // One fresh read after each of the two writes, then the settle read.
+  assert.equal(f.state.fuseRefreshes, 3, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
   assert.equal(result.receipt.folderName, 'CaseOpsFiles-unit-run-first');
   assert.equal(result.receipt.assets.length, 2); assert.equal(result.receipt.originalsDeleted, false);
   assert.equal(f.calls.filter(args => args.some(value => value.includes('CASEOPS_ANDROID_WRITE_ASSET_V1'))).length, 2);
