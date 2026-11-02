@@ -1621,7 +1621,7 @@ test('Firefox entry timeout records a text-free screen observation and keeps the
   assert.deepEqual({ ...observation, nodes: undefined, sourceBytes: undefined }, { type: 'firefox_entry_observation', packageName: 'org.mozilla.firefox',
     nodes: undefined, sourceBytes: undefined, webContent: true, signInPage: true, connectPage: true, useAnotherAccount: true, loginForm: false,
     passwordField: false, errorPage: false, urlEditor: false, tabCount: 4 });
-  assert.equal(JSON.stringify(fake.records).includes('example.com'), false, 'NO_PAGE_TEXT_RETAINED');
+  assert.doesNotMatch(JSON.stringify(fake.records), /example\.com/, 'NO_PAGE_TEXT_RETAINED');
   // An unavailable observation never replaces the original failure.
   const broken = firefoxEntryDouble(t, () => 0);
   broken.context.driver.getPageSource = async () => { throw Error('UNIT_SOURCE_LOST'); };
