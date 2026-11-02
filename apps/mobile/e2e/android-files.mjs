@@ -242,7 +242,13 @@ async function assertSourceRead(context, before, anchor) {
   assert.equal(rows.filter(row => row.status === 200).length, 1, 'ANDROID_FILES_ONE_FULL_ORIGINAL_READ_REQUIRED');
   assert.ok(rows.filter(row => row.status === 206).length >= 2 && rows.length <= 12 && rows.every(row => [200, 206].includes(row.status)), 'ANDROID_FILES_RANGE_PROBE_BOUND');
 }
-async function closeReader(context) { await click(context, 'id', 'viewer-close'); await assertAndroidViewerAbsent(context); await find(context, 'id', 'files-matter-code', { scroll: true }); }
+// Close unmounts the viewer on the next commit, not inside the tap; wait for that
+// acknowledgement (files-21 checked in the same instant), then keep the full check.
+async function closeReader(context) {
+  await click(context, 'id', 'viewer-close');
+  await wait(context, async () => (await context.driver.$$('id=private-document-viewer')).length === 0, 10000, 'ANDROID_FILES_VIEWER_CLOSE_ACK_REQUIRED');
+  await assertAndroidViewerAbsent(context); await find(context, 'id', 'files-matter-code', { scroll: true });
+}
 export function androidTextSegments(text) { assert.ok(typeof text === 'string' && text.length > 0 && text.length <= 500000, 'ANDROID_FILES_TEXT_BOUND'); return Array.from({ length: Math.ceil(text.length / 10000) }, (_, index) => text.slice(index * 10000, (index + 1) * 10000)); }
 async function readText(context, anchor) {
   const segments = androidTextSegments(anchor.text), before = await openReader(context, anchor);
