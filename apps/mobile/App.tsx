@@ -283,18 +283,23 @@ export default function App() {
       },
     };
   }, [picker, viewerEvents]);
-  const coverPrivate = useCallback(async () => {
-    if (alive.current) setIdentity(null);
-    runPrivateFileCleanup([
-      () => viewerEvents.notify("background"),
-      () => {
-        if (!picker.picking) {
-          picker.clear();
-          purgeMatterFileTemps();
-        }
-      },
-    ]);
-  }, [picker, viewerEvents]);
+  // "background": only an in-flight SDK pick survives. "resume": the local
+  // lock covering a return also keeps the opaque picker return lease.
+  const coverPrivate = useCallback(
+    async (mode: "background" | "resume" = "background") => {
+      if (alive.current) setIdentity(null);
+      runPrivateFileCleanup([
+        () => viewerEvents.notify("background"),
+        () => {
+          if (mode === "resume" ? !picker.leased : !picker.picking) {
+            picker.clear();
+            purgeMatterFileTemps();
+          }
+        },
+      ]);
+    },
+    [picker, viewerEvents],
+  );
 
   const openServerSession = useCallback(async () => {
     runtime.compatibility.admit("/api/auth/me", "GET");
@@ -321,10 +326,14 @@ export default function App() {
         owner.commandEpoch === expectedEpoch &&
         owner.allows(binding) &&
         runtime.compatibility.supported
-      )
+      ) {
         setIdentity(current);
+        // The returned picker result is now published with its identity; a
+        // later background, recheck or cover clears it as usual.
+        picker.settle();
+      }
     },
-    [runtime],
+    [runtime, picker],
   );
   const currentUiCommand = useCallback(
     (command: LocalUiCommand) => {
@@ -376,9 +385,6 @@ export default function App() {
     const lock = localLock.current,
       sessionKey = runtime.session.sessionKey;
     const supported = await runtime.compatibility.refresh();
-    // The returned picker result has survived its routine recheck; any later
-    // background or recheck clears it as usual.
-    if (supported && foreground.current) picker.settle();
     if (
       !supported ||
       !alive.current ||
@@ -394,7 +400,7 @@ export default function App() {
       return;
     const expectedEpoch = lock.commandEpoch;
     publishUnlocked(await lock.resume(openServerSession), lock, expectedEpoch);
-  }, [runtime, picker, openServerSession, publishUnlocked]);
+  }, [runtime, openServerSession, publishUnlocked]);
   const uiCommand: LocalUiCommand = {
     lock: localLock.current,
     epoch: localLock.current?.commandEpoch ?? null,
@@ -459,7 +465,7 @@ export default function App() {
             current: () => runtime.session.localBinding,
             revalidate: () => runtime.session.revalidate(),
           },
-          coverPrivate,
+          () => coverPrivate("resume"),
           () => {
             if (!disposed) setLockRevision((value) => value + 1);
           },

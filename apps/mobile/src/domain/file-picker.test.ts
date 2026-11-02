@@ -126,7 +126,10 @@ test("the return lease outlives the pick until settle, and never a later clear",
   assert.equal(f.coordinator.leased, true);
   f.coordinator.settle();
   assert.equal(f.coordinator.leased, false);
-  assert.deepEqual(f.coordinator.snapshot(identity, "epoch-1")?.selection?.asset, asset);
+  assert.deepEqual(
+    f.coordinator.snapshot(identity, "epoch-1")?.selection?.asset,
+    asset,
+  );
   // Settling ends only the lease; a later privacy clear still purges it.
   f.coordinator.clear();
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
