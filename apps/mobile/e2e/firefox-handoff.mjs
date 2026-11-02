@@ -113,7 +113,40 @@ export async function prepareFirefox(context, recipe) {
   await locate(context, 'urlOpen');
 }
 
+// Mid-run Firefox entries have timed out with neither the form nor the entry
+// link reaching UiAutomator, and nothing recorded what the screen held. Keep
+// the original failure and add a bounded, text-free observation of it.
+export const FIREFOX_ENTRY_OBSERVATION_BYTES = 524288;
+export async function observeFirefoxEntry(context) {
+  const packageName = await context.driver.getCurrentPackage();
+  const source = await context.driver.getPageSource();
+  assert.ok(typeof source === 'string', 'FIREFOX_ENTRY_OBSERVATION_UNAVAILABLE');
+  const bytes = Buffer.byteLength(source);
+  assert.ok(bytes <= FIREFOX_ENTRY_OBSERVATION_BYTES, 'FIREFOX_ENTRY_OBSERVATION_OVERSIZE');
+  const has = pattern => pattern.test(source);
+  const tabs = /Tabs Open: (\d{1,3})\b/.exec(source)?.[1];
+  return { type: 'firefox_entry_observation', packageName, sourceBytes: bytes,
+    nodes: (source.match(/<[A-Za-z][^>\s]*\s/g) || []).length,
+    webContent: has(/class="android\.webkit\.WebView"|org\.mozilla\.geckoview/),
+    signInPage: has(/\/native\/sign-in/), connectPage: has(/Connect the CaseOps app/),
+    useAnotherAccount: has(/content-desc="Use another account"/), loginForm: has(/resource-id="company-slug"/),
+    passwordField: has(/password="true"/), errorPage: has(/Secure Connection Failed|Unable to connect|Problem loading page/),
+    urlEditor: has(/resource-id="ADDRESSBAR_SEARCH_BOX"/), tabCount: tabs === undefined ? null : Number(tabs) };
+}
 export async function resolveFirefoxEntry(context, recipe) {
+  try { return await resolveFirefoxEntryOnce(context, recipe); }
+  catch (error) {
+    if (error?.message === 'FIREFOX_ENTRY_NOT_READY') {
+      try { context.record?.(await observeFirefoxEntry(context)); }
+      catch (observationError) {
+        context.record?.({ type: 'firefox_entry_observation_unavailable',
+          reason: /^FIREFOX_ENTRY_OBSERVATION_[A-Z_]+$/.test(observationError?.message) ? observationError.message : 'FIREFOX_ENTRY_OBSERVATION_FAILED' });
+      }
+    }
+    throw error;
+  }
+}
+async function resolveFirefoxEntryOnce(context, recipe) {
   const deadline = Date.now() + 20000, attempted = new Set();
   browserStep(context, 'companySlug', 'wait');
   for (;;) {
