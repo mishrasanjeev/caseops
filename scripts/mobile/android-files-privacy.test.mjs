@@ -1,7 +1,7 @@
 import { descriptor as observerDescriptorBase, packet as observerPacket, wire as observerWire } from './qa-observer-test-fixture.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -148,6 +148,18 @@ function fixture(t, selectedProfile = null) {
         assert.ok(script.includes('echo 2 > /proc/sys/vm/drop_caches'), 'EXACT_FUSE_ATTRIBUTE_REFRESH_REQUIRED');
         state.fuseRefreshes = (state.fuseRefreshes || 0) + 1; value = '';
       } else assert.fail('UNRECOGNIZED_OFFLINE_DEVICE_SCRIPT');
+    } else if (argv[0] === 'shell' && argv[1] === 'am' && argv[2] === 'broadcast') {
+      assert.deepEqual(argv.slice(3, 6), ['-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d'], 'EXACT_MEDIA_SCAN_REQUEST_REQUIRED');
+      const file = argv[6].replace(/^file:\/\//, ''); assert.ok(nodes.has(file), 'MEDIA_SCAN_OF_STAGED_FILE_ONLY');
+      state.mediaScans = [...(state.mediaScans || []), file];
+      if (!state.mediaScanIgnored) (state.mediaRows ||= new Set()).add(file);
+      if (state.mediaScanTouches) nodes.get(file).changed = '2026-10-26 00:00:09.000000000 +0000';
+      value = 'Broadcast completed: result=0';
+    } else if (argv[0] === 'shell' && argv[1] === 'content' && argv[2] === 'query') {
+      const where = /relative_path='([^']+)' AND _display_name='([^']+)'/.exec(argv.at(-1));
+      assert.ok(where && argv.includes('content://media/external/file'), 'EXACT_MEDIA_ROW_QUERY_REQUIRED');
+      const file = `/storage/emulated/0/${where[1]}${where[2]}`;
+      value = state.mediaRows?.has(file) ? `Row: 0 _display_name=${where[2]}\n` : 'No result found.\n';
     } else if (argv[0] === 'shell' && argv[1] === 'mkdir') {
       assert.equal(nodes.has(argv.at(-1)), false, 'UNIT_EXCLUSIVE_PROVIDER_FOLDER'); add(argv.at(-1), null, 0); value = '';
     } else if (argv[0] === 'push') { add(argv[2], readFileSync(argv[1]), 0); value = '1 file pushed'; }
@@ -195,10 +207,24 @@ test('missing root, foreign AVD, changed boot or private directory owner refuse 
   }
 });
 
+test('root emulator staging never accepts files the media index did not admit, and never scans twice', t => {
+  let clock = 0;
+  const f = fixture(t); f.state.mediaScanIgnored = true;
+  assert.throws(() => stageAndroidFilesAssets({ ...f.options, containers: f.containers, settleMs: 0, manifestEvidence: f.manifestEvidence,
+    runId: 'unit-run-unindexed', output: path.join(f.root, 'provider-unindexed.json'), sleep: () => { clock += 500; }, now: () => clock }),
+  /ANDROID_FILES_MEDIA_INDEX_NOT_OBSERVED/);
+  assert.equal(f.state.mediaScans.length, 2, 'NO_SECOND_SCAN_DISPATCH');
+  assert.equal(existsSync(path.join(f.root, 'provider-unindexed.json')), false);
+  const g = fixture(t); g.state.mediaScanTouches = true;
+  assert.throws(() => g.stage('touched'), /ANDROID_FILES_MEDIA_INDEX_CHANGED_PROVIDER_METADATA/);
+});
+
 test('staging copies only exact public manifest assets to one exclusive provider folder and rechecks bytes/hash', t => {
   const f = fixture(t), result = f.stage();
-  // One fresh read after each of the two writes, then the settle read.
-  assert.equal(f.state.fuseRefreshes, 3, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
+  // One fresh read after each of the two writes, the settle read, then the post-index read.
+  assert.equal(f.state.fuseRefreshes, 4, 'ROOT_EMULATOR_REFRESHES_FUSE_ATTRIBUTES_BEFORE_RECORDING');
+  assert.deepEqual(f.state.mediaScans, result.receipt.assets.map(asset => asset.devicePath), 'ONE_MEDIA_SCAN_PER_STAGED_FILE');
+  assert.deepEqual(result.receipt.mediaIndex, { method: 'media-scanner-broadcast', indexedRows: 2, deadlineMs: 15000 });
   assert.equal(result.receipt.folderName, 'CaseOpsFiles-unit-run-first');
   assert.equal(result.receipt.assets.length, 2); assert.equal(result.receipt.originalsDeleted, false);
   assert.equal(f.calls.filter(args => args.some(value => value.includes('CASEOPS_ANDROID_WRITE_ASSET_V1'))).length, 2);
