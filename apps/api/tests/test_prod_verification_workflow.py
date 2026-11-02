@@ -189,6 +189,22 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
         "PROD_BASE_URL": "${{ vars.PROD_BASE_URL }}",
         "PROD_API_BASE_URL": "${{ vars.PROD_API_BASE_URL }}",
         "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+        # Node runs only under the prepared host trust policy, like every other
+        # Node step (scripts/mobile/tooling.test.mjs owns that contract).
+        **{
+            key: "${{ steps.node_trust.outputs." + key + " }}"
+            for key in (
+                "NODE_OPTIONS",
+                "SSL_CERT_FILE",
+                "SSL_CERT_DIR",
+                "CASEOPS_HOST_NODE_TRUST_POLICY_FILE",
+                "CASEOPS_HOST_NODE_TRUST_POLICY_SHA256",
+                "NPM_CONFIG_USERCONFIG",
+                "NPM_CONFIG_GLOBALCONFIG",
+                "NPM_CONFIG_STRICT_SSL",
+                "NPM_CONFIG_REGISTRY",
+            )
+        },
     }
     # Every variable the Batch4 production runtime requires is supplied by the step.
     support = (REPO_ROOT / "tests/e2e/support/ram-bugs4.ts").read_text()
