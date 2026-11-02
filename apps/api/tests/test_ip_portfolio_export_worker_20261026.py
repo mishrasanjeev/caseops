@@ -907,7 +907,16 @@ def test_postgres_statement_budget_is_real_and_failure_is_durable(
 
     monkeypatch.setattr(workflow, "EXPORT_WORK_SECONDS", 2.0)
     monkeypatch.setattr(workflow, "portfolio_export_page", slow_page)
+    started = monotonic()
     assert workflow.run_portfolio_export_job(job_id) == "terminal"
-    assert entered == [True]
+    elapsed = monotonic() - started
+    # Name the durable failure if preflight, not the page, consumed the budget.
+    failed = [event.metadata_json for event in _attempt_audits(
+        job_id, action="ip_portfolio.export.attempt_failed"
+    )]
+    assert entered == [True], {
+        "elapsed_seconds": round(elapsed, 3), "attempt_failed": failed,
+        "status": _state(job_id)["status"],
+    }
     assert _state(job_id)["status"] == "failed" and not storage.calls
     assert not _completion_audits(job_id)

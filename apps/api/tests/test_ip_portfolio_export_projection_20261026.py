@@ -147,6 +147,8 @@ def _observe():
             "statement": statement,
             "parameters": parameters,
             "read_only": is_read_only_select(clause),
+            # Only a top-level ORDER BY makes result order part of the contract.
+            "ordered": bool(getattr(clause, "_order_by_clauses", ())),
             "limit": bound[0].get(limit_name) if bound and limit_name else None,
         })
 
@@ -286,6 +288,15 @@ def _generic_plan(connection, record, entry, *, index):
             expected_rows = [tuple(row) for row in connection.exec_driver_sql(
                 record["statement"], parameters
             ).all()]
+            if not record["ordered"]:
+                # Without ORDER BY a different plan may return the same complete
+                # tuples in another order; compare the exact multiset instead.
+                def canonical(row):
+                    return json.dumps(row, sort_keys=True, separators=(",", ":"), default=str)
+
+                actual_rows = sorted(actual_rows, key=canonical)
+                expected_rows = sorted(expected_rows, key=canonical)
+            entry["prepared_result_order_sensitive"] = record["ordered"]
             entry["prepared_result_observation"] = {
                 "observed_rows": len(actual_rows), "expected_rows": len(expected_rows),
                 "observed_sha256": hashlib.sha256(json.dumps(
