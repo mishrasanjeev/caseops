@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { absent, click, dispatchNativeClick, findQuery, home, input, IOS_FIRST_KEY_SETTLE_MS, IOS_KEYBOARD_READY_MS, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
+import { absent, androidBehindTabBar, click, dispatchNativeClick, findQuery, home, input, IOS_FIRST_KEY_SETTLE_MS, IOS_KEYBOARD_READY_MS, IOS_SWIPE_SETTLE_MS, selector, swipe, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { freshNoteAbsent, scenarios, selectMatterActivity, selectMatterDraft, verifyIosCalendarRow } from '../../apps/mobile/e2e/journeys.mjs';
 
 function element(id, { displayed = true, accessible = 'false', label = 'CaseOps', value = label } = {}) {
@@ -194,6 +194,8 @@ function homeDouble(platform, { active = true, headingVisible = false, rawCount 
       if (query === selector(platform, 'id', 'screen-calendar')) return Array(rawCount).fill(marker);
       if (query === 'xpath://XCUIElementTypeStaticText[@name="screen-calendar"]') return Array(baseCount).fill({ elementId: baseId });
       if (query === 'xpath://XCUIElementTypeStaticText[@name="screen-calendar"]/ancestor::XCUIElementTypeScrollView') return Array(ancestorCount).fill(scroll);
+      // Android's tab-bar occlusion check; this fixture renders no bar.
+      if (platform === 'android' && query === selector(platform, 'id', 'tab-today')) return [];
       assert.fail('UNRELATED_VISIBLE_SCROLL_CANNOT_PROVE_HOME');
     },
     getElementRect: async (id) => { assert.equal(id, 'owned-home-scroll'); return frame; },
@@ -275,6 +277,42 @@ test('Android home still fails with a typed state error when neither the list no
       ? [{ isDisplayed: async () => true, click: async () => {} }] : [],
   });
   await assert.rejects(() => home({ platform: 'android', driver }, 'matters'), /NATIVE_HOME_STATE_NOT_READY/);
+});
+
+function tabBarDouble({ rowY, rowHeight = 60, swipesToLift = 1 } = {}) {
+  let swipes = 0;
+  const bar = { elementId: 'tab-today', isDisplayed: async () => true, getAttribute: async () => 'tab-today', click: async () => {} };
+  const row = { elementId: 'row', isDisplayed: async () => true, getAttribute: async () => 'files-hash-x', click: async () => {} };
+  const driver = nativeProtocolDouble({
+    waitUntil: async (callback, { timeout, timeoutMsg }) => {
+      for (let waited = 0; waited <= timeout; waited += 150) if (await callback()) return; throw new Error(timeoutMsg);
+    },
+    getWindowRect: async () => ({ x: 0, y: 0, width: 1080, height: 2424 }),
+    performActions: async () => { swipes++; }, releaseActions: async () => {},
+    getElementRect: async (id) => id === 'tab-today' ? { x: 0, y: 2172, width: 270, height: 189 }
+      : { x: 53, y: swipes >= swipesToLift ? 1500 : rowY, width: 975, height: rowHeight },
+    $$: async (query) => query === selector('android', 'id', 'tab-today') ? [bar]
+      : query === selector('android', 'id', 'files-hash-x') ? [row] : [],
+  });
+  return { context: { platform: 'android', driver }, swipes: () => swipes, row };
+}
+
+test('Android treats a match centered behind the tab bar as not yet visible and sweeps it into view', async () => {
+  // Observed in files-15 FILES-01: tapping "Source details" behind the bar opened Calendar.
+  const behind = tabBarDouble({ rowY: 2150 });
+  assert.equal(await androidBehindTabBar(behind.context, behind.row), true);
+  const found = await findQuery(behind.context, selector('android', 'id', 'files-hash-x'), { scroll: true });
+  assert.equal(found.elementId, 'row');
+  assert.ok(behind.swipes() >= 1);
+  const clear = tabBarDouble({ rowY: 1500 });
+  assert.equal(await androidBehindTabBar(clear.context, clear.row), false);
+  await findQuery(clear.context, selector('android', 'id', 'files-hash-x'), { scroll: true });
+  assert.equal(clear.swipes(), 0);
+  // A tab itself, iOS, or a route without the bar is never treated as occluded.
+  assert.equal(await androidBehindTabBar(behind.context, { elementId: 'tab-today', getAttribute: async () => 'tab-today' }), false);
+  assert.equal(await androidBehindTabBar({ ...behind.context, platform: 'ios' }, behind.row), false);
+  const stuck = tabBarDouble({ rowY: 2150, swipesToLift: 99 });
+  await assert.rejects(() => findQuery(stuck.context, selector('android', 'id', 'files-hash-x')), /NATIVE_CONTROL_NOT_VISIBLE/);
 });
 
 test('input forwards optional bounded scroll discovery while preserving its default lookup budget and exact value', async () => {

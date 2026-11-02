@@ -144,13 +144,32 @@ export async function find(context, kind, value, { scroll = false, scrollDirecti
   return findQuery(context, query, { scroll, scrollDirection, controlId: kind === 'id' ? value : undefined });
 }
 
+// Android reports a row behind the app's bottom tab bar as displayed, and a
+// tap at its center then lands on a tab (FILES-01 opened Calendar). The bar is
+// absent on viewer/note/quick-work routes, and nothing else in the window
+// draws over it, so a non-tab match centered in its band is not yet visible.
+export async function androidBehindTabBar(context, element) {
+  if (context.platform !== 'android' || typeof context.driver.getElementRect !== 'function'
+    || typeof element?.elementId !== 'string') return false;
+  if (/^tab-/.test(String(await element.getAttribute?.('resource-id') ?? ''))) return false;
+  const tabs = [];
+  for (const tab of await context.driver.$$(selector('android', 'id', 'tab-today'))) if (await tab.isDisplayed()) tabs.push(tab);
+  if (tabs.length !== 1) return false;
+  const bar = await context.driver.getElementRect(tabs[0].elementId), rect = await context.driver.getElementRect(element.elementId);
+  assert.ok([bar.y, rect.y, rect.height].every(Number.isFinite), 'NATIVE_TAB_BAR_GEOMETRY_REQUIRED');
+  // The bar's border and top padding sit just above the tab controls.
+  return rect.y + rect.height / 2 >= bar.y - ANDROID_TAB_BAR_EDGE_PX;
+}
+export const ANDROID_TAB_BAR_EDGE_PX = 16;
+
 export async function findQuery(context, query, { scroll = false, scrollDirection, controlId } = {}) {
   assert.ok(scrollDirection === undefined || scroll && ['up', 'down'].includes(scrollDirection), 'VALID_NATIVE_SCROLL_DIRECTION_REQUIRED');
   nativeAction(context, 'find', controlId ? 'id' : undefined, controlId);
   let element;
   for (let attempt = 0; attempt <= (scroll ? 9 : 0); attempt++) {
     try {
-      await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query)),
+      await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query))
+        && !await androidBehindTabBar(context, element),
         { timeout: scroll ? 1500 : 10000, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
       return element;
     } catch (error) {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { FixtureUnavailable, admitApplication, verifiedFile } from './fixture-contract.mjs';
 import { authenticate, delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
-import { absent, click, dispatchNativeClick, find, findQuery, read, selector, visible } from './native-ui.mjs';
+import { absent, androidBehindTabBar, click, dispatchNativeClick, find, findQuery, read, selector, swipe, visible } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
 
 // Supplement only: not part of core-20261025.json or a claim of native execution.
@@ -85,8 +85,16 @@ export function validateFilesContext(context) {
 }
 
 export async function expandSourceDetails(context, control) {
-  const show = await visible(control, selector(context.platform, 'text', 'Source details'));
-  const hide = await visible(control, selector(context.platform, 'text', 'Hide source details'));
+  let show, hide;
+  // The link is read inside an already-found row, so lift it above Android's
+  // tab bar with the same bounded sweep before tapping it.
+  for (let attempt = 0; ; attempt++) {
+    show = await visible(control, selector(context.platform, 'text', 'Source details'));
+    hide = await visible(control, selector(context.platform, 'text', 'Hide source details'));
+    if (!await androidBehindTabBar(context, show || hide)) break;
+    assert.ok(attempt < 3, 'FILES_SOURCE_DETAILS_BEHIND_TAB_BAR');
+    await swipe(context, 'down');
+  }
   assert.equal(Number(!!show) + Number(!!hide), 1, 'FILES_SOURCE_DETAILS_STATE_UNOBSERVED');
   if (show) await dispatchNativeClick(context, show, 'text', 'Source details');
 }
