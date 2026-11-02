@@ -36,6 +36,8 @@ test("native-viewer security: navigation never hands off network/file/custom sch
     false,
   );
   assert.deepEqual(PRIVATE_WEBVIEW_POLICY.originWhitelist, ["*"]);
+  // Android's native WebView delegate reads this prop as an array.
+  assert.deepEqual(PRIVATE_WEBVIEW_POLICY.dataDetectorTypes, ["none"]);
 });
 test("native-viewer security: isolated WebView has no cache, cookies, file access or debugging", () => {
   for (const field of [

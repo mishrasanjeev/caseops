@@ -22,7 +22,9 @@ export const PRIVATE_WEBVIEW_POLICY = Object.freeze({
   allowsInlineMediaPlayback: false,
   mediaPlaybackRequiresUserAction: true,
   mediaCapturePermissionGrantType: "deny" as const,
-  dataDetectorTypes: "none" as const,
+  // Array form: only the iOS wrapper wraps a string, and the Android Fabric
+  // delegate casts this prop to an array, so a bare string crashed the app.
+  dataDetectorTypes: ["none" as const],
   webviewDebuggingEnabled: false,
   textInteractionEnabled: false,
   fraudulentWebsiteWarningEnabled: true,
