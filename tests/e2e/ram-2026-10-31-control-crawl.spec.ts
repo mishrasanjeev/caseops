@@ -15,6 +15,7 @@ import {
 } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import reportedRoutes from "./fixtures/control-crawl-reported-routes.json";
 import {
   collectOpenPopoverOffenders, deadSelects, markPositive, prepareTester, type TesterRuntime,
 } from "./support/ram-bugs4";
@@ -41,10 +42,7 @@ const ROUTES = [
   "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
 ];
 // The reported records, selected by server identity (production retains them).
-const PROD_ROUTES = [
-  "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
-  "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
-];
+const PROD_ROUTES = reportedRoutes.map(({ path }) => path);
 
 let context: BrowserContext;
 let page: Page;
@@ -150,8 +148,15 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-// Evidence redacts query strings in titles, so the tab route is named in words.
-const crawlLabel = (path: string) => path.replace("?tab=documents", " Documents tab");
+// Case identity names the workflow, never a retained record or query value.
+const reportedRouteLabels = new Map(reportedRoutes.map(({ path, label }) => [path, label]));
+const crawlLabel = (path: string) => {
+  const label = reportedRouteLabels.get(path) ?? path.replace("?tab=documents", " Documents tab");
+  if (/[?@]|https?:\/\/|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(label)) {
+    throw new Error("A crawl route needs a stable public workflow label.");
+  }
+  return label;
+};
 
 for (const path of [...ROUTES, ...PROD_ROUTES]) {
   test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`, async ({}, info) => {

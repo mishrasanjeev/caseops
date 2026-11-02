@@ -1,6 +1,8 @@
 /** IPLF-059B exact-release production acceptance for foreign associates. */
 
-import { expect, request, test, type Page } from "@playwright/test";
+import { expect, request, type Page } from "@playwright/test";
+import { test } from "./support/prod-diagnostic-test";
+import { noPaidProviderHeaders } from "./support/cost-controls";
 
 import { expectStatus } from "./support/iplf058b";
 import {
@@ -56,7 +58,7 @@ test("IPLF-059B production proves every UJ-37 path and source-backed responsive 
 
   const session = await authenticate(page);
   const headers = { Authorization: `Bearer ${session.access_token}` };
-  const api = await request.newContext();
+  const api = await request.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
   const runId = `${Date.now()}`;
   const fixture = await createForeignAssociateFixture(
     api, API, headers, session.membership.id, runId,

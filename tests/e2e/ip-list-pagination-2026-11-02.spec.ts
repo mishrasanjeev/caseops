@@ -1,8 +1,8 @@
 /**
  * B4-ADJ-25 / IPLF-057..059 / UJ-35..37: bounded IP list reads.
- * Authored only; not executed yet. Parent owns normal-suite discovery and
- * Docker/production acceptance. All invented identities stay in browser GET
- * fixtures; workspace failure is independent of list pagination acceptance.
+ * Local-only fault injection; the original dated production journeys own
+ * real-server acceptance. Invented identities stay in browser GET fixtures;
+ * workspace failure is independent of list pagination acceptance.
  */
 import { expect, test, type APIRequestContext, type Locator, type Page, type Route } from "@playwright/test";
 

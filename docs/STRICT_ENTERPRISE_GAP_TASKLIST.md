@@ -1,5 +1,26 @@
 # Strict Enterprise Gap Tasklist
 
+## November 2 Mandatory Case Identity Before Execution
+
+Partially implemented/NO-GO. Stable public titles replace two private route
+inputs in Batch4 discovery; actual routes and exact role counts are retained.
+Source redaction stays strict and a private unlabelled route rejects collection.
+Actual00bfb Oct13 role has54passes/54unexecuted, not complete verification.
+Require actual reporter/checker discovery agreement and fresh complete final
+Docker/current CI/exact-serving replay, with every native identity and retry
+reconciled. No redactor removal, skipped-case waiver or private input retention.
+
+## November 2 Tenant-History List Admission
+
+Partially implemented/NO-GO. Eager complete-history reads have been replaced in
+the combined candidate by explicit100-row continuation, including the older
+Parent IR options. Known transient next-page failures preserve loaded rows and
+offer read retry, while denied/unknown states still hide cached private data.
+Original production errors were fully redacted without network observations;
+add only allowlisted route/status/timing diagnostics, never private bodies or
+identifiers. Complete local/native/browser/current-main and serving-release
+proof remains required; source work and review probes are not certification.
+
 ## November 2 Independent Code-Scanning Admission
 
 Partially implemented/NO-GO until the corrected candidate is fully accepted.

@@ -1,5 +1,37 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 B4-ADJ-26 Mandatory Public Case Identity: Acceptance Pending
+
+Partially fixed/NO-GO. Exact00bfb QA41428563260's Oct13 role retained54actual
+passes and54unexecuted Batch4 obligations, not54skips or failed assertions.
+Independent reporter/checker query tokens and UUID redaction disagreed on two
+route-bearing titles; discovery exited0 but mandatory inventory refused before
+execution. Keep both redactors/privacy fences and all36/14/2/2 role obligations.
+Use stable public workflow labels for the two reported routes without changing
+their input URLs, add collection-time privacy rejection and inventory regression,
+then prove real reporter discovery and all original production cases on the final
+release. Do not waive missing/extra/substituted/skipped/retried evidence.
+
+Targeted IP component01 retained126P/8F, with the entire foreign-associate module
+unexecuted after a worker-start timeout. Component02 collected all five modules:
+158P/1F, the unchanged instrument-payload setup exceeding15s. New pagination,
+denial and parent101 assertions passed there; no full acceptance is inferred.
+Correct accessible casing, fill pending options deterministically, and use real
+focus/paste input for text fixture values while retaining every payload assertion
+and the original deadline. Complete replacement module/Docker/live gates pending.
+
+## November 2 B4-ADJ-25 Combined Pagination: NO-GO Until Acceptance
+
+Partially fixed. Integrated PR572391908db locally before freezing another long
+gate. Two00bfb tester failures remain source-bound historical findings, not a
+proven HTTP root cause. Review reproduced an adjacent next-page503 causing the
+query to report isError while retaining data; prior page-wide guards hid that
+data and its retry control. The Parent IR picker also lacked continuation beyond
+100. Correct both with explicit bounded read continuation and transient-only
+cache retention; authorization/policy/unknown failures stay closed. New unit
+and browser regressions and privacy-safe dated diagnostics are in progress.
+No full-Docker, merged-main, deployed or final-workbook promotion yet.
+
 ## November 2 Independent CodeQL Alert811: Release-Gated
 
 Partially fixed/NO-GO. Actions CI41413848035 succeeded on BEFA, but its separate

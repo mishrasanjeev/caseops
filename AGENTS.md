@@ -1,5 +1,25 @@
 # CaseOps agent instructions
 
+- Mandatory browser case titles must name a stable public workflow, never a
+  query value, retained record ID or personal address. Keep exact input routes
+  separate from titles. Prove real reporter discovery agrees with the mandatory
+  inventory before execution; two independent redactors are not one identity
+  contract. Preserve native IDs, complete role counts and every negative guard.
+- Reconcile every requested Vitest module against the native result as well as
+  pytest inventories. A worker-start failure can omit a whole requested module;
+  its cases are unexecuted, not passed. Keep failed reports and unchanged time
+  budgets; fixture typing speed must not replace payload/permission assertions.
+
+- Pagination must reach every eligible picker option as well as every list row.
+  Prove an older parent beyond the first100, its selected identity and bounded
+  per-page reads. A latest-N note is not a continuation control. Preserve loaded
+  rows only after positively identified transient next-page failures; first-page,
+  authorization, policy and unknown errors must still hide cached private data.
+- A redacted production assertion cannot establish a network root cause. Attach
+  bounded allowlisted route/status/timing evidence to the exact dated journey,
+  keep bodies, credentials, record IDs and queries excluded, and retain all old
+  incomplete diagnostics. Never relabel a source-based hypothesis as measured.
+
 - A scheduled all-refs secret scan can fail on later unmerged commits even
   when the serving tree and release PR range passed. Reconcile the actual
   selected DAG and every immutable origin/span before classifying it. Review

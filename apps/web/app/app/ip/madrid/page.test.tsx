@@ -495,11 +495,13 @@ describe("Madrid portfolio", () => {
 
   it.each([401, 403])("hides cached parent options and refuses create after a next-page HTTP %i", async (status) => {
     const user = userEvent.setup();
+    const initialPage = { items: PARENT_IRS, total: 101, limit: 100, offset: 0 };
+    const initial = deferred<typeof initialPage>();
     recordsMock.mockImplementation((filters, options) => {
       if (filters?.recordKind !== "international_registration") return Promise.resolve({ items: [IR], total: 1, limit: 100, offset: 0 });
       return options?.offset
         ? Promise.reject(new ApiError(status, "Parent registrations are no longer accessible.", {}))
-        : Promise.resolve({ items: PARENT_IRS, total: 101, limit: 100, offset: 0 });
+        : initial.promise;
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const view = render(<MadridPage />, { wrapper: wrapper(client) });
@@ -509,9 +511,10 @@ describe("Madrid portfolio", () => {
       const form = within(page.getByRole("button", { name: "Create record" }).closest("form")!);
       await user.selectOptions(form.getByLabelText("Record type"), "international_designation");
       const select = form.getByRole<HTMLSelectElement>("combobox", { name: "Parent IR" });
+      await fillDesignationForm(user, form);
+      await act(async () => { initial.resolve(initialPage); });
       await waitFor(() => expect(select.options).toHaveLength(101));
       await user.selectOptions(select, "parent-50");
-      await fillDesignationForm(user, form);
       await user.click(form.getByRole("button", { name: "Load more parent IRs" }));
       expect(await form.findByRole("alert")).toHaveTextContent("Parent registrations are no longer accessible.");
       expect(select).toBeDisabled();
@@ -520,6 +523,7 @@ describe("Madrid portfolio", () => {
       expect(form.queryByRole("button", { name: "Load more parent IRs" })).not.toBeInTheDocument();
       expect(client.getQueryData(["ip", "madrid", "records", "international_registration"])).toMatchObject({ pages: [{ items: PARENT_IRS }] });
       await user.click(form.getByRole("button", { name: "Create record" }));
+      expect(await form.findByText("International registrations could not be loaded. Retry before creating a designation.")).toBeVisible();
       expect(createMock).not.toHaveBeenCalled();
       expect(recordsMock.mock.calls.filter(([filters]) => filters?.recordKind === "international_registration").map((call) => call[1].offset)).toEqual([0, 100]);
     } finally {

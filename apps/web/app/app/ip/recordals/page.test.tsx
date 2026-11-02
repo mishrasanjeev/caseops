@@ -279,7 +279,7 @@ describe("post-registration workspace", () => {
       expect(mocks.recordals).toHaveBeenCalledTimes(2);
       await act(async () => { next.reject(error); });
       expect(await page.findByRole("alert")).toHaveTextContent(/Could not load more recordals/);
-      expect(page.getByRole("button", { name: /Assignment.*ASTER registration/ })).toHaveAttribute("aria-pressed", "true");
+      expect(page.getByRole("button", { name: /assignment.*ASTER registration/i })).toHaveAttribute("aria-pressed", "true");
       expect(page.getByRole("heading", { name: "Assignment" })).toBeVisible();
       expect(page.getByText("Showing 1 of 2 recordals")).toBeVisible();
       expect(page.queryByTestId("query-error-retry")).not.toBeInTheDocument();
@@ -292,7 +292,7 @@ describe("post-registration workspace", () => {
       await waitFor(() => expect(page.getByRole("button", { name: "Load more recordals" })).toHaveAttribute("aria-busy", "true"));
       expect(mocks.recordals).toHaveBeenCalledTimes(3);
       await act(async () => { retry.resolve(secondPage); });
-      expect(await page.findByRole("button", { name: /Assignment.*Older recordal/ })).toBeVisible();
+      expect(await page.findByRole("button", { name: /assignment.*Older recordal/i })).toBeVisible();
       expect(page.getByText("Showing 2 of 2 recordals")).toBeVisible();
       expect(page.queryByRole("alert")).not.toBeInTheDocument();
       expect(page.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
@@ -313,10 +313,10 @@ describe("post-registration workspace", () => {
     const view = render(<RecordalsPage />, { wrapper: wrapper(client) });
     const page = within(view.container);
     try {
-      await page.findByRole("button", { name: /Assignment.*ASTER registration/ });
+      await page.findByRole("button", { name: /assignment.*ASTER registration/i });
       await userEvent.setup().click(page.getByRole("button", { name: "Load more recordals" }));
       expect(await page.findByTestId("query-error-retry")).toBeVisible();
-      expect(page.queryByRole("button", { name: /Assignment.*ASTER registration/ })).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: /assignment.*ASTER registration/i })).not.toBeInTheDocument();
       expect(page.queryAllByText("ASTER registration")).toEqual([]);
       expect(page.queryByRole("heading", { name: "Assignment" })).not.toBeInTheDocument();
       expect(page.queryByRole("button", { name: "Load more recordals" })).not.toBeInTheDocument();
@@ -572,6 +572,13 @@ describe("BUG-008 new recordal form", () => {
     return within(screen.getByRole("group", { name: `Party ${party}` })).getByLabelText("Instrument");
   }
 
+  async function pasteField(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, value: string) {
+    await user.click(field);
+    expect(field).toHaveFocus();
+    await user.paste(value);
+    expect(field).toHaveDisplayValue(value);
+  }
+
   it("lists every instrument the API accepts in each party's picker and submits them", async () => {
     const user = userEvent.setup();
     const form = await openForm(user);
@@ -593,17 +600,17 @@ describe("BUG-008 new recordal form", () => {
     }
     expect(screen.getByLabelText("Affected application or registration references")).toHaveValue("TM-10001");
 
-    await user.type(screen.getByLabelText("Form code"), "TM-P");
-    await user.type(screen.getByLabelText("Legal basis"), "Trade Marks Act, 1999, section 45");
-    await user.type(screen.getByLabelText("Execution date"), "2026-07-01");
-    await user.type(screen.getByLabelText("Effective date"), "2026-07-15");
-    await user.type(within(screen.getByRole("group", { name: "Party 1" })).getByLabelText("Party name"), "Aster Labs Private Limited");
-    await user.type(within(screen.getByRole("group", { name: "Party 2" })).getByLabelText("Party name"), "Nova Holdings LLP");
+    await pasteField(user, within(form).getByLabelText("Form code"), "TM-P");
+    await pasteField(user, within(form).getByLabelText("Legal basis"), "Trade Marks Act, 1999, section 45");
+    await user.type(within(form).getByLabelText("Execution date"), "2026-07-01");
+    await user.type(within(form).getByLabelText("Effective date"), "2026-07-15");
+    await pasteField(user, within(screen.getByRole("group", { name: "Party 1" })).getByLabelText("Party name"), "Aster Labs Private Limited");
+    await pasteField(user, within(screen.getByRole("group", { name: "Party 2" })).getByLabelText("Party name"), "Nova Holdings LLP");
     await user.selectOptions(instrumentPicker(1), "document-1");
     await user.selectOptions(instrumentPicker(2), "document-event");
     expect(instrumentPicker(1)).toHaveAccessibleDescription(/Executed assignment deed · Assignment deed · uploaded 1 Jul 2026 · confidential/);
-    await user.type(screen.getByLabelText("Affected classes"), "Class 9, 42");
-    await user.type(screen.getByLabelText("Creation reason"), "Record the executed assignment.");
+    await pasteField(user, within(form).getByLabelText("Affected classes"), "Class 9, 42");
+    await pasteField(user, within(form).getByLabelText("Creation reason"), "Record the executed assignment.");
     expect(create).toBeEnabled();
     await user.click(create);
 
