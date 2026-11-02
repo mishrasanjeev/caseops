@@ -1215,7 +1215,12 @@ def test_summary_fallback_obeys_the_recommendation_allowlist(summary_case, allow
     # Both transports are offline emulators, so the wrapper is admitted as one
     # (the worker only runs emulator-typed providers under tests).
     class EmulatedFallback(AvailabilityFallbackProvider, MockProvider):
-        pass
+        # Both bases are initialised; the wrapper's routing and identity win.
+        def __init__(self, primary, **kwargs):
+            MockProvider.__init__(self, model=primary.model)
+            AvailabilityFallbackProvider.__init__(self, primary, **kwargs)
+
+        generate = AvailabilityFallbackProvider.generate
 
     primary, gemini = UnavailablePrimary(), RecordingGemini()
     provider = EmulatedFallback(

@@ -57,9 +57,14 @@ def _set_settings(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> None:
     fields.update(overrides)
 
     class _Stub:
+        """The real settings with only these fields overridden."""
+
         def __init__(self, **kw: object) -> None:
             for k, v in kw.items():
                 setattr(self, k, v)
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(original, name)
 
     stub = _Stub(**fields)
     monkeypatch.setattr(notifications_route, "get_settings", lambda: stub)
