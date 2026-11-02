@@ -57,6 +57,14 @@ export function SignInForm() {
     [watchedCompanySlug, watchedEmail],
   );
 
+  // The next page replaces this form without a blur. Android Firefox then
+  // keeps the keyboard open with no field attached, covering the next page's
+  // controls (the native Connect page's MFA code). Release focus first.
+  const leaveForm = (path: string) => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    router.replace(path);
+  };
+
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
       signIn({
@@ -68,7 +76,7 @@ export function SignInForm() {
       if (session.mfa_enrollment_required) {
         storeSession(session);
         toast.success("MFA enrollment is required before workspace access.");
-        router.replace(`/account/security?next=${encodeURIComponent(nextPath)}`);
+        leaveForm(`/account/security?next=${encodeURIComponent(nextPath)}`);
         return;
       }
       if (session.mfa_challenge_required) {
@@ -78,7 +86,7 @@ export function SignInForm() {
       }
       storeSession(session);
       toast.success(`Welcome back, ${session.user.full_name.split(" ")[0]}`);
-      router.replace(nextPath);
+      leaveForm(nextPath);
     },
     onError: (err) => {
       const message =
@@ -92,7 +100,7 @@ export function SignInForm() {
       if (!pendingSession) return;
       storeSession(pendingSession);
       toast.success(`Welcome back, ${pendingSession.user.full_name.split(" ")[0]}`);
-      router.replace(nextPath);
+      leaveForm(nextPath);
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not verify MFA code."));
