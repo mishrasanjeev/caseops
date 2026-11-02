@@ -1,5 +1,16 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 Independent CodeQL Alert811: Release-Gated
+
+Partially fixed/NO-GO. Actions CI41413848035 succeeded on BEFA, but its separate
+CodeQL check125173071409 failed with one complete annotation at the conditional
+test target. This check was missed before the long local gate. The corrected
+fixture uses one unconditional expected relative target, with original reparse
+rejection and outside evidence assertions unchanged. No scanner suppression.
+Retain BEFA's completed457-case native group and all partial/interrupted evidence
+without treating them as acceptance of the corrected tree. Fresh native test,
+all hosted checks, full Docker, merge and exact-serving replay remain required.
+
 ## November 2 Specialist Prefix And Reused-Journey Contract: NO-GO
 
 DB092 CI41407189368 PG6/8 retained two actual global-index work failures,

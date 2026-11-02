@@ -592,9 +592,9 @@ def test_pytest_current_link_cleanup_rejects_root_junction_without_touching_outs
     evidence = numbered / "evidence.bin"
     evidence.write_bytes(b"outside-original\x00\r\nbytes")
     alias = outside / "test_casecurrent"
+    expected_target = numbered.name
     if alias_kind == "relative_symlink":
-        _symlink_or_skip(alias, Path(numbered.name))
-        target = os.readlink(alias)
+        _symlink_or_skip(alias, Path(expected_target))
     else:
         alias.mkdir()
         (alias / "untouched.bin").write_bytes(b"outside-current-entry")
@@ -614,7 +614,7 @@ def test_pytest_current_link_cleanup_rejects_root_junction_without_touching_outs
     with pytest.raises(ValueError, match="Reparse point"):
         driver.drop_pytest_current_links(fixtures)
     if alias_kind == "relative_symlink":
-        assert alias.is_symlink() and os.readlink(alias) == target
+        assert alias.is_symlink() and os.readlink(alias) == expected_target
     else:
         assert not alias.is_symlink()
         assert (alias / "untouched.bin").read_bytes() == b"outside-current-entry"

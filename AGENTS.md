@@ -3699,3 +3699,8 @@ requirements when using the fallback.
   well as pytest discovery. Inventory every caller and propagate the controlled
   fixture and profile explicitly; do not hide missing coverage behind a default
   argument. Reconcile all collected identities, including the caller matrix.
+- A successful CodeQL Actions workflow does not prove its independent code-
+  scanning check is green. Inspect the exact head's check-runs and all native
+  annotations before freezing a long candidate. Keep fixture expectations
+  initialized on every path and preserve the scanner instead of suppressing a
+  test-code finding. Earlier source-bound gates remain historical evidence.

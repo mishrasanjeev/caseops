@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## November 2 Independent Code-Scanning Admission
+
+Partially implemented/NO-GO until the corrected candidate is fully accepted.
+CodeQL Actions success did not override the exact head's independent failed
+check125173071409/alert811. Its complete single test-code annotation is retained.
+Use a fixture expectation initialized on every path, keep test-code scanning,
+and inspect all separate check-runs before long freeze. No production-path
+defect, suppression, new security exemption or completed release is inferred.
+
 ## November 2 Specialist Prefix Planning: Release-Gated
 
 Partially implemented/NO-GO. Fresh analyzed statistics do not prevent a global
