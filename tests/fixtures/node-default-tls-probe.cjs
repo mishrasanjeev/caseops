@@ -3,6 +3,7 @@
 const https = require('node:https');
 
 const target = new URL(process.argv[2]);
+const headers = Object.freeze({ 'X-CaseOps-Automated-Test': 'no-paid-providers' });
 if (target.protocol !== 'https:' || target.hostname !== '127.0.0.1' ||
     !target.port || target.username || target.password || target.pathname !== '/' ||
     target.search || target.hash) {
@@ -14,14 +15,14 @@ async function probe() {
   // One total deadline bounds both default-runtime clients, including body reads.
   const signal = AbortSignal.timeout(5_000);
   try {
-    const response = await fetch(target, { signal });
+    const response = await fetch(target, { headers, signal });
     output.push(await response.text());
   } catch (error) {
     output.push(error.cause?.code ?? error.code);
   }
   try {
     output.push(await new Promise((resolve, reject) => {
-      const request = https.get(target, { signal, timeout: 5_000 }, async (response) => {
+      const request = https.get(target, { headers, signal, timeout: 5_000 }, async (response) => {
         try {
           let body = '';
           for await (const chunk of response) body += chunk;

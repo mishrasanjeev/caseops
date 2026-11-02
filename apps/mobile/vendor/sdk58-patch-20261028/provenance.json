@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "kind": "official-sdk58-patch-inputs",
+  "scope": "exact five npm official patch archives and installed package identity; not a resolved native binary/permission/theme acceptance",
+  "packages": [
+    {
+      "name": "@expo/ui",
+      "version": "58.0.25",
+      "previousVersion": "58.0.24",
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo-ui"
+      },
+      "registryUrl": "https://registry.npmjs.org/@expo%2fui/58.0.25",
+      "tarball": "https://registry.npmjs.org/@expo/ui/-/ui-58.0.25.tgz",
+      "sha256": "e0f54346a0f6d5fc495fc909c4a4789d0cd033d0cee2c17048d4298e64560cd4",
+      "shasum": "9cb67442c516d8ca0dbbbd67e76dc55fda91d9d3",
+      "integrity": "sha512-nBYoFNTWWI8/LZPPVBs1kxQZxyaTKx0YfJx13VlFOu7YUtaUXGE5ivSf7OGVvO2qio+J2godvKy+8bgwKVnz1A==",
+      "archiveSizeBytes": 2891851,
+      "registryGitHead": null,
+      "registryGitHeadPresent": false,
+      "packageManifest": {
+        "sha256": "3cdb82648e360c94758a37f656a04a101678b9a5c816a6fb3efdc7ee633275f9",
+        "sizeBytes": 6032
+      }
+    },
+    {
+      "name": "expo",
+      "version": "58.0.21",
+      "previousVersion": "58.0.20",
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo"
+      },
+      "registryUrl": "https://registry.npmjs.org/expo/58.0.21",
+      "tarball": "https://registry.npmjs.org/expo/-/expo-58.0.21.tgz",
+      "sha256": "9ae9f2d90211138d00d7f6b02983af2de4fafef15c3b5cf7daa0cf5a3058ff98",
+      "shasum": "f548a6361c2d0a1d1e17448ce42090de5641961d",
+      "integrity": "sha512-2Q8jp0fKLrDMou4aKWZ5V2cCVfcwOScuV8GBMkogiXIv7bCwwN4CIkUIq5QsX7DHXJxbruXLTXEgrp6J+iF4YA==",
+      "archiveSizeBytes": 703446,
+      "registryGitHead": null,
+      "registryGitHeadPresent": false,
+      "packageManifest": {
+        "sha256": "0d4a633461bbccc90212ce1f6e429f3bb2247117329d38b8626b8cb9cd6856dd",
+        "sizeBytes": 8151
+      }
+    },
+    {
+      "name": "expo-dev-client",
+      "version": "58.0.17",
+      "previousVersion": "58.0.16",
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo-dev-client"
+      },
+      "registryUrl": "https://registry.npmjs.org/expo-dev-client/58.0.17",
+      "tarball": "https://registry.npmjs.org/expo-dev-client/-/expo-dev-client-58.0.17.tgz",
+      "sha256": "d53740d7b77c19ac63b8806bf53666eaf26637fb613f6aa8c6a095734f4b18b5",
+      "shasum": "2edbf03fd5900472f9c8c3fad53a40ad5ad72d0a",
+      "integrity": "sha512-9kGl91OWp4oxNuxAxg3C6UxgLFC78JpK4mRmNNo3B3K6OB40rZ5m6PqtqlxcZ1BWvGV8SGGoALxaYrxP68uw5A==",
+      "archiveSizeBytes": 15665,
+      "registryGitHead": null,
+      "registryGitHeadPresent": false,
+      "packageManifest": {
+        "sha256": "b5e5ec351b3699d593d976731f3d560de4770101ed72389bc68b19374f389515",
+        "sizeBytes": 1489
+      }
+    },
+    {
+      "name": "expo-file-system",
+      "version": "58.0.13",
+      "previousVersion": "58.0.12",
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo-file-system"
+      },
+      "registryUrl": "https://registry.npmjs.org/expo-file-system/58.0.13",
+      "tarball": "https://registry.npmjs.org/expo-file-system/-/expo-file-system-58.0.13.tgz",
+      "sha256": "820d4af9889f3906b78d70d11533a4a4b2bb3099397d69cb1957273e220cb7d7",
+      "shasum": "c4a44a6706c1e42d9daea048cc50635e7ce642b2",
+      "integrity": "sha512-+/1aFErkawyky5UdWI06zYeO2DeHUnfaWnYHeiI8M8Z/sB6L66gI3WUxqtvUvKJoaM0Ti1CximD3x3JwteLYIg==",
+      "archiveSizeBytes": 8613075,
+      "registryGitHead": null,
+      "registryGitHeadPresent": false,
+      "packageManifest": {
+        "sha256": "7a5f05dffbdfb6071054dc164f44be739b25397f846845a38989686ef7b32cac",
+        "sizeBytes": 2254
+      }
+    },
+    {
+      "name": "expo-linking",
+      "version": "58.0.15",
+      "previousVersion": "58.0.14",
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo-linking"
+      },
+      "registryUrl": "https://registry.npmjs.org/expo-linking/58.0.15",
+      "tarball": "https://registry.npmjs.org/expo-linking/-/expo-linking-58.0.15.tgz",
+      "sha256": "032d7080e605adc25bf990f876d441cafa214dd049033800499ebbe84f2b7616",
+      "shasum": "aa63a109c2f1aeaf338ed657bd2190a7193ac471",
+      "integrity": "sha512-N6jmeKRsMO+DXmAH1AnStVEXK4FpL3fMzam9dJWIhd/FlMt/DCNRGUn2cqM7kNsDPSHGYGBIOCGsrW+Akp0xwA==",
+      "archiveSizeBytes": 52628,
+      "registryGitHead": null,
+      "registryGitHeadPresent": false,
+      "packageManifest": {
+        "sha256": "d4e796da2a6208bd47b0f8b5dd41589e9dbc8c2d3d24c388e2952a0ff0f7f333",
+        "sizeBytes": 1853
+      }
+    }
+  ],
+  "licence": {
+    "path": "EXPO-LICENSE.txt",
+    "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+    "sizeBytes": 1106,
+    "source": "expo@58.0.21 package/LICENSE",
+    "packageLicenseDeclarations": "MIT for all five official packages"
+  },
+  "retainedOfficialArchivesOutsideGit": true,
+  "sourceHeadBeforeChange": "60da5f61da0ebd270a3db27a9a30f1e9dc0742c5",
+  "nativeAcceptance": false,
+  "selectedSupplierFiles": {
+    "@expo/ui/package/CHANGELOG.md": {
+      "sha256": "9b888581c5351499237a21363e49147c3073093b94c3188138c021d16e2a0ccd",
+      "sizeBytes": 152460
+    },
+    "@expo/ui/package/android/build.gradle": {
+      "sha256": "1d3572a153cb5a82cc964615b1c63719f0f3b104f000b94bec005b292fc4f3b7",
+      "sizeBytes": 1832
+    },
+    "@expo/ui/package/ios/ExpoUI.podspec": {
+      "sha256": "fed89123aed28e50b67ca1ef1c1f2a861a0c29cc680ca3f143f06649f8d22646",
+      "sizeBytes": 853
+    },
+    "@expo/ui/package/package.json": {
+      "sha256": "3cdb82648e360c94758a37f656a04a101678b9a5c816a6fb3efdc7ee633275f9",
+      "sizeBytes": 6032
+    },
+    "@expo/ui/package/spm.config.json": {
+      "sha256": "230d8542a9a5b1d910adb40a818944a21b35f2a74c010f269525b3100f4e0fc1",
+      "sizeBytes": 1247
+    },
+    "@expo/ui/package/src/community/segmented-control/vendor/LICENSE": {
+      "sha256": "22a28f29cff8f5ecf9f463301d9c03b8245a2952ebae0bcab633fd654c0792fb",
+      "sizeBytes": 1080
+    },
+    "expo/package/android/build.gradle": {
+      "sha256": "1be5104ebf6651792a0d623f4c07daa1128f0230448c587634132cba7c98af38",
+      "sizeBytes": 1479
+    },
+    "expo/package/package.json": {
+      "sha256": "0d4a633461bbccc90212ce1f6e429f3bb2247117329d38b8626b8cb9cd6856dd",
+      "sizeBytes": 8151
+    },
+    "expo/package/LICENSE": {
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    },
+    "expo-dev-client/package/CHANGELOG.md": {
+      "sha256": "87f4bfac2c960a4cdba497feea70017c211f8e8c210decc11591f502d0ff2b5b",
+      "sizeBytes": 29271
+    },
+    "expo-dev-client/package/android/build.gradle": {
+      "sha256": "eae63644e895bbbeb8b31f5818b0313f1ca31b422148b9f7cf77c152c814a541",
+      "sizeBytes": 2300
+    },
+    "expo-dev-client/package/package.json": {
+      "sha256": "b5e5ec351b3699d593d976731f3d560de4770101ed72389bc68b19374f389515",
+      "sizeBytes": 1489
+    },
+    "expo-dev-client/package/LICENSE": {
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    },
+    "expo-file-system/package/CHANGELOG.md": {
+      "sha256": "1166d71eafaf9880de01788f8558e7119df63e828a1ab8d42bc86e757b7a18d2",
+      "sizeBytes": 50163
+    },
+    "expo-file-system/package/android/build.gradle": {
+      "sha256": "34342d8ffe5b4e0005ba41929da8554ec3e5b45899f400bee28e7472701d5c3c",
+      "sizeBytes": 930
+    },
+    "expo-file-system/package/package.json": {
+      "sha256": "7a5f05dffbdfb6071054dc164f44be739b25397f846845a38989686ef7b32cac",
+      "sizeBytes": 2254
+    },
+    "expo-file-system/package/spm.config.json": {
+      "sha256": "1ae1a54768504ce5c91bd91264fb1450b17425bf413b330a20060da11f6d874c",
+      "sizeBytes": 1320
+    },
+    "expo-file-system/package/LICENSE": {
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    },
+    "expo-linking/package/CHANGELOG.md": {
+      "sha256": "47598dd1f31e55bf2ea8cfb4237d32c3d47ad1da02d224eee66e960a9af65661",
+      "sizeBytes": 17626
+    },
+    "expo-linking/package/android/build.gradle": {
+      "sha256": "8b24bc19a707bbab4b7683420b68154f5a6b07cb723c5b14255766f2624e5d31",
+      "sizeBytes": 278
+    },
+    "expo-linking/package/package.json": {
+      "sha256": "d4e796da2a6208bd47b0f8b5dd41589e9dbc8c2d3d24c388e2952a0ff0f7f333",
+      "sizeBytes": 1853
+    },
+    "expo-linking/package/spm.config.json": {
+      "sha256": "7503c0cc504b8589252b3a968cc10dc90464a62cee4687d4ffe79d87b8d5c46e",
+      "sizeBytes": 752
+    },
+    "expo-linking/package/LICENSE": {
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    }
+  }
+}

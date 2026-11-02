@@ -8,7 +8,7 @@
 
 # Keep the pinned Node root set except the compromised emSign ECC G3 root.
 # This store also applies to npm/build processes, before any package download.
-FROM node:22.14.0-alpine AS trusted-base
+FROM node:22.23.4-alpine AS trusted-base
 COPY apps/web/scripts/node-trust.cjs apps/web/scripts/node-trust-start.cjs /opt/caseops/trust/
 RUN node /opt/caseops/trust/node-trust.cjs --generate \
   && chmod 0444 /opt/caseops/trust/*.cjs \
@@ -17,8 +17,22 @@ ENV NODE_OPTIONS=--use-openssl-ca \
     SSL_CERT_FILE=/opt/caseops/trust/ca-bundle.pem \
     SSL_CERT_DIR=/opt/caseops/trust/empty
 
+# The runtime needs Node, not the upstream image's unused global package managers.
+# Keep the exact tool roots and launcher list finite; local application deps stay.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+  && node -e 'const fs=require("node:fs"); for(const p of ["/usr/local/lib/node_modules/npm","/usr/local/lib/node_modules/corepack","/opt/yarn-v1.22.22","/usr/local/bin/npm","/usr/local/bin/npx","/usr/local/bin/corepack","/usr/local/bin/yarn","/usr/local/bin/yarnpkg"]) if(fs.lstatSync(p,{throwIfNoEntry:false})!==undefined) throw Error("UNUSED_GLOBAL_TOOL_REMAINS");'
+
+# Build tools never enter the runner's ancestry. The helper checks the exact
+# healthy CLI archive and sends registry requests through its marked transport.
+FROM trusted-base AS builder-tooling
+COPY scripts/mobile/npm-tooling.mjs scripts/mobile/npm-registry.mjs /opt/caseops/scripts/mobile/
+COPY apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz /opt/caseops/apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz
+ENV npm_config_update_notifier=false
+RUN test "$(node /opt/caseops/scripts/mobile/npm-tooling.mjs --version)" = "11.12.1"
+
 # ---- deps ---------------------------------------------------------
-FROM trusted-base AS deps
+FROM builder-tooling AS deps
 WORKDIR /app
 
 # Installing *all* deps (including dev) is intentional here: tailwind,
@@ -27,10 +41,10 @@ WORKDIR /app
 # stage copies a separately pruned dependency tree.
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
-RUN npm ci --no-audit --no-fund
+RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund
 
 FROM deps AS prod-deps
-RUN npm prune --omit=dev --no-audit --no-fund
+RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund
 
 # ---- builder ------------------------------------------------------
 FROM deps AS builder
@@ -52,6 +66,7 @@ COPY apps/web ./
 # One colocated page test imports this canonical fixture during Next's type
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
+COPY tests/fixtures/node-default-tls-probe.cjs /app/tests/fixtures/node-default-tls-probe.cjs
 # Colocated diagnostic units require their direct and transitive support imports.
 # Admit this explicit closure in both root ignore files; keep it out of the runner.
 COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts
@@ -62,7 +77,7 @@ COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
 
-RUN npm run build
+RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 
 # ---- runner -------------------------------------------------------
 FROM trusted-base AS runner

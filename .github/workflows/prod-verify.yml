@@ -168,15 +168,47 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
 
-      - run: npm ci
+      - uses: ./.github/actions/node-trust
+        id: node_trust
+      - env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm ci
 
       - name: Install Chromium for Playwright
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         timeout-minutes: 5
         run: npx playwright install chromium
 
       - name: Verify Playwright Chromium runtime
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         timeout-minutes: 2
         run: |
           node <<'NODE'
@@ -204,6 +236,16 @@ jobs:
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release-owned native Playwright evidence
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         id: native-evidence
         run: |
           set -euo pipefail
@@ -248,6 +290,15 @@ jobs:
       - name: Run canonical tester production regressions
         if: matrix.suite == 'tester'
         env: &prod-tester-env
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
@@ -277,6 +328,15 @@ jobs:
       - name: Run retained indexing and Contract AI production regressions
         if: matrix.suite == 'tester-index'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
@@ -303,6 +363,15 @@ jobs:
       - name: Run release-owned test-legal portfolio and Calendar regressions
         if: matrix.suite == 'test-legal-write-oct13'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_RAM_PROD_SLUG: test-legal
           CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
@@ -325,6 +394,15 @@ jobs:
       - name: Run release-owned Batch3 client and retained drafting acceptance
         if: matrix.suite == 'test-legal-write-oct13'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_RAM_PROD_SLUG: test-legal
           CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
@@ -366,6 +444,15 @@ jobs:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         run: |
           set -euo pipefail
           if [ ! -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]; then
@@ -412,6 +499,15 @@ jobs:
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
@@ -425,6 +521,15 @@ jobs:
       - name: Run test-legal read-only hearing acceptance
         if: matrix.suite == 'test-legal-readonly'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_RAM_PROD_SLUG: test-legal
           CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
@@ -445,6 +550,15 @@ jobs:
         if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && inputs.run_historical_a0_gate == true
         timeout-minutes: 5
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_A0_PROD_MODE: verify
@@ -496,6 +610,15 @@ jobs:
         if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
@@ -550,6 +673,15 @@ jobs:
         if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
           CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
@@ -566,6 +698,15 @@ jobs:
         # outcomes in the same fail-closed workflow result.
         if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
@@ -588,6 +729,15 @@ jobs:
       - name: Run exact-release patent and domain journeys
         if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
@@ -598,6 +748,15 @@ jobs:
       - name: Verify every release-owned statute source record
         if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
@@ -610,6 +769,15 @@ jobs:
       - name: Run exact-release public SEO read-only acceptance
         if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           CASEOPS_WEB_BASE_URL: https://caseops.ai
         run: |
           test "${{ steps.native-evidence.outputs.mode }}" = native
@@ -632,6 +800,15 @@ jobs:
       - name: Run exact-release report-console read-only acceptance
         if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.platform-report-prerequisites.outputs.ready == 'true'
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
@@ -760,11 +937,33 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
 
-      - run: npm ci
+      - uses: ./.github/actions/node-trust
+        id: node_trust
+      - env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm ci
 
       - name: Install Chromium for Playwright
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         timeout-minutes: 5
         run: npx playwright install chromium
 
@@ -778,6 +977,16 @@ jobs:
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release-owned native Playwright evidence
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         id: native-evidence
         run: |
           set -euo pipefail
@@ -817,6 +1026,15 @@ jobs:
 
       - name: Verify every release-owned statute source record
         env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}

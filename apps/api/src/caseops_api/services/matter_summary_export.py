@@ -111,7 +111,7 @@ def render_summary_pdf(
     timeline: MatterTimeline,
 ) -> tuple[bytes, str]:
     """Sprint Q7 PDF slice — same shape as ``render_summary_docx``
-    but emits a PDF using ``fpdf2`` (pure Python MIT, no native deps).
+    but emits a PDF using ``fpdf2`` (an API-side LGPL-3.0-only dependency).
 
     Prefers the grounded Q8 timeline over the LLM-guessed one in the
     summary payload, matching the DOCX path.

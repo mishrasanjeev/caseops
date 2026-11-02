@@ -1,0 +1,6 @@
+CaseOps dependency artifact repair
+
+glob 14.0.2-caseops.1 retains the official glob 14.0.2 source, raw dist, types, and APIs.
+Only the default CommonJS/ESM minified bundles and their maps were rebuilt using the upstream esbuild flags with exact fixed minimatch 11.0.1 and @isaacs/nonrecursive-glob-match 1.0.3 inputs.
+Original archives and full bundled dependency attributions are identified in CASEOPS-BUNDLE-SOURCES.json and CASEOPS-BUNDLE-LICENSES.txt.
+No network access or npm lifecycle is used during rebuilding.

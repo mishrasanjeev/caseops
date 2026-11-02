@@ -1,0 +1,30 @@
+// Windows Ninja cannot stat long prefab paths, even when object names are hashed.
+// Use AGP's supported external-native staging directory, not a source checkout alias.
+if (!System.getProperty('os.name').toLowerCase().contains('windows')) {
+    throw new GradleException('The Windows native staging profile is Windows-only')
+}
+if (System.getenv('CASEOPS_MOBILE_BUILD_PROFILE') != 'android-local-acceptance' ||
+    System.getenv('CASEOPS_MOBILE_AUTOMATED_TEST') != '1') {
+    throw new GradleException('Native staging requires the explicit local acceptance profile')
+}
+def configured = System.getenv('CASEOPS_MOBILE_NATIVE_STAGING')
+if (!configured || !new File(configured).isAbsolute()) {
+    throw new GradleException('An absolute isolated native staging root is required')
+}
+def owned = new File(System.getProperty('user.home'), '.cache/caseops-mobile/cxx').canonicalFile.toPath()
+def staging = new File(configured).canonicalFile.toPath()
+if (!staging.startsWith(owned) || staging == owned || staging.toString().length() > 100) {
+    throw new GradleException('Native staging must remain in the short CaseOps cache')
+}
+gradle.beforeProject { project ->
+    def configure = {
+        def components = project.extensions.getByName('androidComponents')
+        components.finalizeDsl { dsl ->
+            def module = java.security.MessageDigest.getInstance('SHA-256')
+                .digest(project.path.getBytes('UTF-8')).encodeHex().toString().substring(0, 12)
+            dsl.externalNativeBuild.cmake.buildStagingDirectory = staging.resolve(module).toFile()
+        }
+    }
+    project.pluginManager.withPlugin('com.android.application') { configure() }
+    project.pluginManager.withPlugin('com.android.library') { configure() }
+}

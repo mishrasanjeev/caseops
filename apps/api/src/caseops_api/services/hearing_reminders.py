@@ -160,7 +160,13 @@ def schedule_reminders_for_hearing(
     and skip).
     """
     settings = get_settings()
-    policy = hearing.reminder_policy_json or {}
+    from caseops_api.services.hearing_channel_policy import hearing_channels
+
+    raw_policy = hearing.reminder_policy_json
+    requested_channels = hearing_channels(raw_policy)
+    if not requested_channels:
+        return []
+    policy = {} if raw_policy is None else raw_policy
     offsets = policy.get("offsets_hours") or settings.hearing_reminder_offsets_hours or []
     if not offsets:
         return []
@@ -207,7 +213,6 @@ def schedule_reminders_for_hearing(
     )
     if matter is None and ip_docket is None:
         raise ValueError("Hearing target no longer exists.")
-    requested_channels = list(policy.get("channels") or [HearingReminderChannel.EMAIL])
     for offset_h in offsets:
         send_at = hearing_at - timedelta(hours=int(offset_h))
         if send_at <= now:
@@ -305,10 +310,7 @@ def schedule_reminders_for_hearing(
                 raise
         for membership_id, _email in recipients:
             for channel in requested_channels:
-                if channel == HearingReminderChannel.EMAIL or (
-                    channel == HearingReminderChannel.IN_APP
-                    and hearing.ip_docket_id is None
-                ):
+                if channel == HearingReminderChannel.EMAIL:
                     continue
                 reminder = HearingReminder(
                     company_id=company_id,

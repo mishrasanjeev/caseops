@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "name": "uv",
+  "version": "0.13.5",
+  "sourceCommit": "46776a95d6686ac0160c10611327ce491e6b202f",
+  "sourceTag": "0.13.5",
+  "licenseExpression": "MIT OR Apache-2.0",
+  "selectedLicense": "MIT",
+  "scope": "API image installer/runtime tool; not a browser dependency",
+  "materials": [
+    {
+      "path": "LICENSE-APACHE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "gitBlob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "sourceUrl": "https://raw.githubusercontent.com/astral-sh/uv/46776a95d6686ac0160c10611327ce491e6b202f/LICENSE-APACHE"
+    },
+    {
+      "path": "LICENSE-MIT",
+      "sha256": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
+      "gitBlob": "014835144877ea9c926d027ece3e1a26290cf481",
+      "sourceUrl": "https://raw.githubusercontent.com/astral-sh/uv/46776a95d6686ac0160c10611327ce491e6b202f/LICENSE-MIT"
+    }
+  ],
+  "dependencySource": {
+    "cargoLockGitBlob": "4947b7ec7062c31273db734c991c74e776c2cc9f",
+    "rootCertificateCrate": "webpki-root-certs",
+    "rootCertificateVersion": "1.0.10",
+    "rootCertificateCount": 120,
+    "certificateVerifierCrate": "rustls-webpki",
+    "certificateVerifierVersion": "0.103.16"
+  },
+  "securityBoundary": {
+    "advisory": "https://rustsec.org/advisories/RUSTSEC-2026-0382",
+    "previousUvVersion": "0.13.4",
+    "previousSourceCommit": "7456b60bc6bc348e13e06e3691bf08e78d3aef54",
+    "previousVerifierVersion": "0.103.14",
+    "cleanRootsDoNotCertifyOldVerifier": true
+  },
+  "installedLinuxImageVerification": "required separately; source provenance is not image acceptance"
+}

@@ -9,13 +9,59 @@ from xml.etree import ElementTree
 
 import pytest
 
+# Source685 hosted run40634043720 measured complete phase costs. Retain this
+# sixteen-parent inventory, including these four routes, when splitting32 jobs.
+_MEASURED_SIXTEEN_SHARD_DESTINATIONS = {
+    (
+        "tests/test_ip_import_review_gaps_20261013.py::"
+        "test_thousand_same_mark_distinct_applicants_commit_has_linear_materialization"
+    ): 10,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[hearing_pack_items]"
+    ): 3,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[hearing_packs]"
+    ): 6,
+    (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_"
+        "before_current_head[recommendation_decisions]"
+    ): 16,
+}
+
 
 def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
-    if not 1 <= shard <= total <= 32:
+    if type(shard) is not int or type(total) is not int or not 1 <= shard <= total <= 32:
         raise ValueError("Require 1 <= shard <= total <= 32")
-    if not nodeids or len(set(nodeids)) != len(nodeids):
+    if (
+        type(nodeids) is not list
+        or not nodeids
+        or any(type(node) is not str or not node for node in nodeids)
+        or len(set(nodeids)) != len(nodeids)
+    ):
         raise ValueError("The complete PostgreSQL collection must be nonempty and unique")
-    selected = sorted(nodeids)[shard - 1::total]
+    ordered = sorted(nodeids)
+    if total == 32:
+        parent = (shard - 1) % 16 + 1
+        parent_nodes = partition(nodeids, parent, 16)
+        child = int(shard > 16)
+        # Balanced ABBA prefixes split each frozen parent without new case routes.
+        selected = [
+            node for index, node in enumerate(parent_nodes)
+            if (index + 1) // 2 % 2 == child
+        ]
+    elif total == 16:
+        selected = [
+            node
+            for index, node in enumerate(ordered)
+            if _MEASURED_SIXTEEN_SHARD_DESTINATIONS.get(node, index % total + 1) == shard
+        ]
+    else:
+        selected = ordered[shard - 1 :: total]
     if not selected:
         raise ValueError("A PostgreSQL shard may not be empty")
     return selected

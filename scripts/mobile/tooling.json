@@ -1,0 +1,39 @@
+{
+  "appium": "3.9.0",
+  "uiautomator2": "8.7.3",
+  "xcuitest": "12.22.2",
+  "webdriverio": "10.1.0",
+  "jdk": {
+    "version": "17.0.20.1+1",
+    "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip",
+    "sha256": "e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
+  },
+  "node": "24.15.0",
+  "npm": "11.12.1",
+  "hostNodeTrust": {
+    "helperSha256": "4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18",
+    "bootstrapSha256": "c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1"
+  },
+  "sourceGateObserver": {
+    "recorder": {
+      "file": "source-gate-observer.mjs",
+      "sha256": "2ae20473d58cf47e9491c24ff25629477ccf1bd2e0568cec1c721dc5ef65407b",
+      "sizeBytes": 40651
+    },
+    "bootstrapReadable": {
+      "file": "host-node-trust-start.source.mjs",
+      "sha256": "16367f0147febdde8d99e3aa7ec63aae6f5f990efe74a210dcb791140fbfbc30",
+      "sizeBytes": 7096
+    },
+    "generator": {
+      "file": "rebuild-host-node-bootstrap.mjs",
+      "sha256": "ca34e1cbddf97141747b602ec85c0c1a269991a771212a63f3dabe549c99ea91",
+      "sizeBytes": 7131
+    },
+    "provenance": {
+      "file": "host-node-trust-start.provenance.json",
+      "sha256": "7ba56f2b0db70d560a8dfb83123ac1d9d872e713dd3a35c108821afec87d0248",
+      "sizeBytes": 778
+    }
+  }
+}

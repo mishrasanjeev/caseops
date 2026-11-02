@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from caseops_api.core.cookies import PORTAL_SESSION_COOKIE, SESSION_COOKIE
+from caseops_api.core.native_auth import NATIVE_ACCESS_PREFIX, decode_native_access_token
 from caseops_api.core.observability import set_tenant_context
 from caseops_api.core.security import (
     TokenValidationError,
@@ -42,6 +43,56 @@ def get_current_context(
     # keep working. The cookie wins when both are present so a refresh
     # immediately pivots an existing session to the new flow.
     cookie_token = request.cookies.get(SESSION_COOKIE)
+    native_token = credentials is not None and credentials.credentials.startswith(
+        NATIVE_ACCESS_PREFIX
+    )
+    if native_token:
+        if (
+            cookie_token
+            or request.url.path.startswith(("/api/platform-", "/api/portal/"))
+            or (
+                request.url.path.startswith("/api/auth/")
+                and request.url.path
+                not in {
+                    "/api/auth/me",
+                    "/api/auth/security",
+                    "/api/auth/native/sessions",
+                }
+                and not request.url.path.startswith("/api/auth/native/sessions/")
+            )
+        ):
+            raise HTTPException(
+                401, "Native credentials cannot authorize this authentication realm."
+            )
+        from caseops_api.services.native_auth import native_context
+
+        try:
+            claims = decode_native_access_token(credentials.credentials)
+        except TokenValidationError as exc:
+            raise HTTPException(401, "Invalid native session.") from exc
+        # Security exit/revocation remains available to an older client. The
+        # platform is taken from its validated device row, never from headers.
+        security_operation = (
+            (request.method == "GET" and request.url.path in {
+                "/api/auth/security", "/api/auth/native/sessions",
+            })
+            or (request.method == "DELETE" and request.url.path.startswith(
+                "/api/auth/native/sessions/"
+            ))
+        )
+        versions = request.headers.getlist("x-caseops-client-version")
+        context = native_context(
+            session, claims,
+            client_version=versions[0] if len(versions) == 1 else None,
+            enforce_client_compatibility=not security_operation,
+        )
+        request.state.native_session_id = claims["sid"]
+        set_tenant_context(
+            tenant_id=context.company.id,
+            user_id=context.user.id,
+            membership_id=context.membership.id,
+        )
+        return context
     if cookie_token:
         token = cookie_token
     elif credentials is not None:

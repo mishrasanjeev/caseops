@@ -15,6 +15,19 @@ docs/security/**
 apps/**
 !apps/web/
 !apps/web/**
+!apps/mobile/
+apps/mobile/**
+!apps/mobile/vendor/
+apps/mobile/vendor/**
+!apps/mobile/vendor/npm-11.12.1-caseops-security/
+apps/mobile/vendor/npm-11.12.1-caseops-security/**
+!apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz
+!scripts/
+scripts/**
+!scripts/mobile/
+scripts/mobile/**
+!scripts/mobile/npm-tooling.mjs
+!scripts/mobile/npm-registry.mjs
 !tests/
 tests/**
 !tests/fixtures/
@@ -22,6 +35,7 @@ tests/fixtures/**
 !tests/fixtures/statutes/
 tests/fixtures/statutes/**
 !tests/fixtures/statutes/structured-schedule-api.json
+!tests/fixtures/node-default-tls-probe.cjs
 !tests/e2e/
 tests/e2e/**
 !tests/e2e/support/

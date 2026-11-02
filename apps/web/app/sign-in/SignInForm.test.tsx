@@ -161,6 +161,31 @@ describe("SignInForm", () => {
     );
   });
 
+  it("releases the focused password field before leaving the form", async () => {
+    // Android Firefox kept its keyboard open over the next page when the
+    // focused field was unmounted by navigation instead of blurred.
+    const user = userEvent.setup();
+    searchParamsGetMock.mockImplementation((key: string) =>
+      key === "next" ? "/app/matters" : null,
+    );
+    signInMock.mockResolvedValue(buildSession());
+    let focusedAtNavigation: Element | null | undefined;
+    routerReplaceMock.mockImplementation(() => {
+      focusedAtNavigation = document.activeElement;
+    });
+
+    render(withClient(<SignInForm />));
+    await user.type(screen.getByLabelText("Company slug"), "aster");
+    await user.type(screen.getByLabelText("Work email"), "asha@ex.com");
+    const password = screen.getByLabelText("Password");
+    await user.type(password, "correcthorse{Enter}");
+
+    await waitFor(() => expect(routerReplaceMock).toHaveBeenCalledWith("/app/matters"));
+    expect(signInMock).toHaveBeenCalledTimes(1);
+    expect(focusedAtNavigation).not.toBe(password);
+    expect(focusedAtNavigation).toBe(document.body);
+  });
+
   it.each([
     ["absolute URL", "https://attacker.example/phish"],
     ["protocol-relative URL", "//attacker.example/phish"],
