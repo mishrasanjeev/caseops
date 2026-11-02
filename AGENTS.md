@@ -3695,3 +3695,7 @@ requirements when using the fallback.
   or unlinking. Windows junctions are not ordinary symlinks; test a real root
   junction without requiring symbolic-link privileges, preserve outside bytes,
   and keep unavailable relative-alias cases explicitly unverified.
+- Parameterizing a reused test journey changes its direct-call contract as
+  well as pytest discovery. Inventory every caller and propagate the controlled
+  fixture and profile explicitly; do not hide missing coverage behind a default
+  argument. Reconcile all collected identities, including the caller matrix.

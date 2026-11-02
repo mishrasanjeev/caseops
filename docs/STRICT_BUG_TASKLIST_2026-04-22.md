@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 Specialist Prefix And Reused-Journey Contract: NO-GO
+
+DB092 CI41407189368 PG6/8 retained two actual global-index work failures,
+11205/10680>2048; each shard151passed/1failedcall, all152setups/teardowns pass.
+PG13/14 separately fail the direct stale-team journey call after its statistics
+argument changed. This was missed caller propagation, not another DB defect.
+Retain all four complete native artifacts and inspect the aggregate failure
+separately; no blanket timeout or flaky classification. Runtime prefix fix
+passes4controlled20k profiles/12phases on frozen WIP; caller matrix now4cases.
+Original budgets, negative policy checks and SQLite path remain unchanged.
+Final-source full Docker/CI/main/live and paired Excel publication still open.
+
 ## November 2 Disclosure Loading: Partially Fixed, NO-GO
 
 Docker02/1c failed the fresh-mixed physical-work case after successful setup:

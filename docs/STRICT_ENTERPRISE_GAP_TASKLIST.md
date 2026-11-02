@@ -1,5 +1,15 @@
 # Strict Enterprise Gap Tasklist
 
+## November 2 Specialist Prefix Planning: Release-Gated
+
+Partially implemented/NO-GO. Fresh analyzed statistics do not prevent a global
+specialist primary-key walk over earlier foreign rows. Runtime-bound exact
+tenant/domain ranges and composite cursor order preserve existing semantics;
+4controlled20k-row profiles passed/12phases, no enlarged2048/5s budget. Direct
+stale-team caller propagation is repaired across both statistics states, but
+complete final-source Docker/CI/main/live proof and actual Excel publication
+remain required. Preserve all earlier same-tree failures and owned interruption.
+
 ## November 2 Fresh Disclosure Statistics: NO-GO
 
 Partially implemented. Exact1c Docker02 exposed later disclosure hydration:
