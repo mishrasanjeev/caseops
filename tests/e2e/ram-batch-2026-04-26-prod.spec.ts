@@ -31,6 +31,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { expectPaidProviderBlocked } from "./support/cost-controls";
+
 // `??` treats empty string as a value; an unset GitHub repo variable
 // materializes as "" in the workflow. Trim + truthy-check.
 const envOr = (key: string, fallback: string): string => {
@@ -230,8 +232,14 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     //         not a hang)
     //   503 — provider quota/service unavailable surfaced as a bounded
     //         response (also success: not a hang)
+    //   409 — automated requests never reach a paid provider; the refusal
+    //         is bounded too, but only in its exact no-paid form.
     expect.soft(status).not.toBe(504);
     expect.soft(status).not.toBe(0); // 0 = no response (curl HTTP 000)
+    if (status === 409) {
+      await expectPaidProviderBlocked(resp, "BUG-015 recommendations");
+      return;
+    }
     expect([200, 201, 422, 429, 502, 503]).toContain(status);
   });
 

@@ -41,7 +41,11 @@ vi.mock("@/lib/use-session", () => ({
 
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
-vi.mock("@/lib/api/endpoints", () => ({
+vi.mock("@/lib/api/endpoints", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/endpoints")>("@/lib/api/endpoints");
+  return {
+  ipListRows: actual.ipListRows,
+  nextIpListOffset: actual.nextIpListOffset,
   createMadridRecord: createMock,
   fetchIpCoreRecords: coreMock,
   fetchIpDockets: docketsMock,
@@ -49,7 +53,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchMadridRecords: recordsMock,
   fetchMadridWorkspace: workspaceMock,
   recordMadridAction: actionMock,
-}));
+  };
+});
 
 import MadridPage from "@/app/app/ip/madrid/page";
 import { ApiError } from "@/lib/api/config";
@@ -215,6 +220,23 @@ describe("Madrid portfolio", () => {
 
     expect(screen.getByText("IP access required")).toBeVisible();
     expect(recordsMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the newest page and reads older Madrid records on request", async () => {
+    const older = { ...IR, id: "ir-older", mark_name: "Older Madrid mark" };
+    recordsMock
+      .mockResolvedValueOnce({ items: [IR], total: 2, limit: 100, offset: 0 })
+      .mockResolvedValueOnce({ items: [older], total: 2, limit: 100, offset: 1 });
+    render(<MadridPage />, { wrapper: wrapper() });
+    expect(await screen.findByText("Showing 1 of 2 Madrid records")).toBeInTheDocument();
+    expect(screen.queryByText("Older Madrid mark")).not.toBeInTheDocument();
+    expect(recordsMock).toHaveBeenCalledTimes(1);
+    expect(recordsMock.mock.calls[0]?.[1]).toMatchObject({ offset: 0 });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Load more Madrid records" }));
+    expect(await screen.findByText("Older Madrid mark")).toBeInTheDocument();
+    expect(recordsMock.mock.calls[1]?.[1]).toMatchObject({ offset: 1 });
+    expect(screen.getByText("Showing 2 of 2 Madrid records")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
   });
 
   it("BUG-015 picks the basic mark docket through the picker and offers only the validator's Indian applications", async () => {

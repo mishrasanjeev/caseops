@@ -445,6 +445,14 @@ enterprise-ledger status is named where one exists:
   fails `npx tsc -p tsconfig.e2e.json` with TS2345 (a page `Response` passed to
   `json()`, which expects an `APIResponse`), first at `:51-52`; Playwright runs it
   without type-checking.
+- B4-ADJ-25 Status: Partially fixed. Found by the first production run of release
+  00bfb7fc (prod-verify 41428563260, tester shard: IPLF-057B at :443 and
+  IPLF-059B at :82). The batch made the Madrid, recordal and foreign-associate
+  lists read every page before rendering; on the retained production QA tenant
+  the Madrid intake and the new instruction had not rendered after 25 s. The
+  lists now read one page, state "Showing N of M" and read older rows with Load
+  more (`apps/web/lib/api/ip-offset-lists.test.ts`, Madrid page test). Local
+  vitest passes; production proof waits for the next release's tester shard.
 
 ## October 31 Historical Secret Findings: Partially Fixed
 

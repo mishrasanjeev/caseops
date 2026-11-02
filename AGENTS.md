@@ -2857,6 +2857,10 @@ requirements when using the fallback.
   chunk boundaries with the interesting row sorted last, and show a one-page
   reader fails the test; a fixture that fits on one page cannot fail.
   `apps/web/lib/ip/docket-dropdowns.test.ts` pins bare docket list reads.
+  A list a person reads pages on request (Load more with the server total);
+  reading every page before it renders is unbounded. That passed every fresh
+  local tenant and timed out on the retained production QA tenant
+  (prod-verify 41428563260, Madrid and foreign associates).
 - A fixture must not create the catalogue or tenant configuration its journey
   claims to test, and a production spec must not change shared tester
   configuration (AI policy, billing profile, workspace setup) or create a

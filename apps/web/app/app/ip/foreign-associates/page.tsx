@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
@@ -17,6 +17,7 @@ import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { IpListMore } from "@/components/ip/IpListMore";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -43,6 +44,8 @@ import {
   fetchIpForeignAssociateCreateOptions,
   fetchIpForeignAssociateInstructions,
   fetchIpForeignAssociateWorkspace,
+  ipListRows,
+  nextIpListOffset,
   fetchMatterCommunications,
   fetchOutsideCounselWorkspace,
   recordIpForeignAssociateTransaction,
@@ -146,20 +149,24 @@ export default function ForeignAssociatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const instructions = useQuery({
+  const instructions = useInfiniteQuery({
     queryKey: ["ip-foreign-associates", queue],
-    queryFn: () => fetchIpForeignAssociateInstructions({
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => fetchIpForeignAssociateInstructions({
       outstandingResponse: queue === "outstanding" ? true : null,
       missingFilingEvidence: queue === "evidence" ? true : null,
-    }),
+    }, { offset: pageParam, signal }),
+    getNextPageParam: nextIpListOffset,
     enabled: canRead,
   });
+  const rows = ipListRows(instructions.data?.pages);
+  const total = instructions.data?.pages.at(-1)?.total ?? 0;
 
   useEffect(() => {
-    if (!creating && !selectedId && instructions.data?.items[0]) {
-      setSelectedId(instructions.data.items[0].id);
+    if (!creating && !selectedId && rows[0]) {
+      setSelectedId(rows[0].id);
     }
-  }, [creating, instructions.data?.items, selectedId]);
+  }, [creating, rows, selectedId]);
 
   if (!canRead) {
     return <EmptyState title="IP access required" description="Your role cannot read IP instructions." />;
@@ -200,10 +207,10 @@ export default function ForeignAssociatesPage() {
         <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-2">
             {instructions.isLoading ? <><Skeleton className="h-24" /><Skeleton className="h-24" /></> : null}
-            {!instructions.isLoading && !instructions.data?.items.length && !creating ? (
+            {!instructions.isLoading && !rows.length && !creating ? (
               <EmptyState title="No instructions in this queue" description="" />
             ) : null}
-            {instructions.data?.items.map((row) => (
+            {rows.map((row) => (
               <button
                 key={row.id}
                 type="button"
@@ -220,6 +227,15 @@ export default function ForeignAssociatesPage() {
                 <span className="mt-2 block text-xs text-[var(--color-mute)]">Updated {DATE.format(new Date(row.updated_at))}</span>
               </button>
             ))}
+            <IpListMore
+              shown={rows.length}
+              total={total}
+              noun="instructions"
+              hasMore={instructions.hasNextPage}
+              loading={instructions.isFetchingNextPage}
+              failed={instructions.isFetchNextPageError}
+              onMore={() => void instructions.fetchNextPage()}
+            />
           </div>
 
           <div className="min-w-0">
