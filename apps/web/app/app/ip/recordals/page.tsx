@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -24,6 +24,7 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { IpListMore } from "@/components/ip/IpListMore";
 import { RecordalInstrumentUpload } from "@/components/ip/RecordalInstrumentUpload";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -48,6 +49,8 @@ import {
   fetchEveryIpDocket,
   fetchIpRecordalInstruments,
   fetchIpRecordals,
+  ipListRows,
+  nextIpListOffset,
   fetchIpRecordalWorkspace,
   recordIpRecordalTransaction,
   type IpDocket,
@@ -241,16 +244,19 @@ export default function RecordalsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [docketCatalogRequested, setDocketCatalogRequested] = useState(false);
 
-  const recordals = useQuery({
+  const recordals = useInfiniteQuery({
     queryKey: ["ip", "recordals", statusFilter, typeFilter],
-    queryFn: () =>
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
       fetchIpRecordals({
         status: (statusFilter || null) as IpRecordal["status"] | null,
         recordalType: (typeFilter || null) as IpRecordalType | null,
-      }),
+      }, { offset: pageParam, signal }),
+    getNextPageParam: nextIpListOffset,
     enabled: canRead,
   });
-  const selectedRecordal = recordals.data?.items.find((row) => row.id === selectedId) ?? null;
+  const rows = ipListRows(recordals.data?.pages);
+  const selectedRecordal = rows.find((row) => row.id === selectedId) ?? null;
   const dockets = useQuery({
     queryKey: ["ip", "dockets", "catalog", "every"],
     queryFn: ({ signal }) => fetchEveryIpDocket({ signal }),
@@ -263,10 +269,10 @@ export default function RecordalsPage() {
   });
 
   useEffect(() => {
-    if (!recordals.data?.items.some((row) => row.id === selectedId)) {
-      setSelectedId(recordals.data?.items[0]?.id ?? "");
+    if (!rows.some((row) => row.id === selectedId)) {
+      setSelectedId(rows[0]?.id ?? "");
     }
-  }, [recordals.data, selectedId]);
+  }, [rows, selectedId]);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["ip"] });
@@ -337,11 +343,18 @@ export default function RecordalsPage() {
         <QueryErrorState error={recordals.error} onRetry={refresh} />
       ) : (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <RecordalList
-            rows={recordals.data.items}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+          <div className="min-w-0">
+            <RecordalList rows={rows} selectedId={selectedId} onSelect={setSelectedId} />
+            <IpListMore
+              shown={rows.length}
+              total={recordals.data.pages.at(-1)?.total ?? 0}
+              noun="recordals"
+              hasMore={recordals.hasNextPage}
+              loading={recordals.isFetchingNextPage}
+              failed={recordals.isFetchNextPageError}
+              onMore={() => void recordals.fetchNextPage()}
+            />
+          </div>
           {selectedRecordal ? (
             <RecordalDetail
               recordal={workspace.data?.recordal ?? selectedRecordal}
