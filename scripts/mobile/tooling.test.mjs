@@ -1611,7 +1611,7 @@ test('Firefox unknown or disabled entry states exhaust one 20 second bound witho
 
 test('Firefox entry timeout records a text-free screen observation and keeps the original failure', async t => {
   const page = '<hierarchy><android.widget.FrameLayout class="android.webkit.WebView"><node content-desc=" 10.0.2.2:3843/native/sign-in?state=x" />'
-    + '<node text="Connect the CaseOps app" /><node text="mobile-core-1@example.com" /><node content-desc="Use another account" />'
+    + '<node text="Connect the CaseOps app" /><node text="PRIVATE_PAGE_TEXT_SENTINEL" /><node content-desc="Use another account" />'
     + '<node content-desc="Non-private Tabs Open: 4. Tap to switch tabs." /></android.widget.FrameLayout></hierarchy>';
   const fake = firefoxEntryDouble(t, () => 0);
   fake.context.driver.getCurrentPackage = async () => 'org.mozilla.firefox';
@@ -1621,7 +1621,10 @@ test('Firefox entry timeout records a text-free screen observation and keeps the
   assert.deepEqual({ ...observation, nodes: undefined, sourceBytes: undefined }, { type: 'firefox_entry_observation', packageName: 'org.mozilla.firefox',
     nodes: undefined, sourceBytes: undefined, webContent: true, signInPage: true, connectPage: true, useAnotherAccount: true, loginForm: false,
     passwordField: false, errorPage: false, urlEditor: false, tabCount: 4 });
-  assert.doesNotMatch(JSON.stringify(fake.records), /example\.com/, 'NO_PAGE_TEXT_RETAINED');
+  // Only the fixed fact keys are recorded, and no page text survives.
+  assert.deepEqual(Object.keys(observation).sort(), ['connectPage', 'errorPage', 'loginForm', 'nodes', 'packageName', 'passwordField',
+    'signInPage', 'sourceBytes', 'tabCount', 'type', 'urlEditor', 'useAnotherAccount', 'webContent']);
+  assert.equal(JSON.stringify(fake.records).includes('PRIVATE_PAGE_TEXT_SENTINEL'), false, 'NO_PAGE_TEXT_RETAINED');
   // An unavailable observation never replaces the original failure.
   const broken = firefoxEntryDouble(t, () => 0);
   broken.context.driver.getPageSource = async () => { throw Error('UNIT_SOURCE_LOST'); };
