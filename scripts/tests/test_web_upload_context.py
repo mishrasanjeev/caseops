@@ -29,6 +29,7 @@ NPM_TOOLING_INPUTS = {
 }
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
+    "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
     *(f"tests/e2e/support/{name}.ts" for name in (
@@ -127,6 +128,21 @@ class NativeUploadTests(unittest.TestCase):
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",
         )
+
+    def test_every_dockerfile_copy_file_is_a_declared_input(self):
+        # A COPY source missing from these sets is never checked against the
+        # gcloud upload, so a release build can lose it while CI stays green.
+        sources = set()
+        for line in (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8").splitlines():
+            words = line.split()
+            if not words or words[0] != "COPY" or any(w.startswith("--from=") for w in words):
+                continue
+            sources.update(
+                w for w in words[1:-1] if not w.startswith("--") and (ROOT / w).is_file()
+            )
+        self.assertTrue(sources)
+        missing = sources - BUILDER_INPUTS - self.required
+        self.assertFalse(missing, f"Dockerfile COPY inputs not declared: {sorted(missing)}")
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {
