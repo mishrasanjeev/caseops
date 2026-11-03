@@ -39,7 +39,7 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
       CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides } },
     e2eEnv: { CASEOPS_RELEASE_SHA: sha, CASEOPS_ENV: "e2e",
       CASEOPS_DATABASE_URL: `sqlite+pysqlite:///${path.join(root, "caseops-e2e.db").replaceAll("\\", "/")}` },
-    randomUUID: () => run, noPaidProviderHeaders: marker, localTransportHeaders, request: publicRequest });
+    randomUUID: () => run, runId: () => run, noPaidProviderHeaders: marker, localTransportHeaders, request: publicRequest });
   const publicAst = ts.createSourceFile("public-release-identity.ts", publicSource, ts.ScriptTarget.Latest, true);
   const publicBody = publicAst.statements.filter(ts.isFunctionDeclaration).map(statement => statement.getText(publicAst)).join("\n");
   vm.runInContext(ts.transpileModule(publicBody + "\n" + body, { compilerOptions: { target: ts.ScriptTarget.ES2022,

@@ -29,7 +29,7 @@ function fixture(overrides: Record<string, string> = {}, ready = true, loginComp
     CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides };
   const context = vm.createContext({ URL, path, expect, spawnSync, repoRoot: root,
     process: { env, platform: process.platform }, e2eEnv: { CASEOPS_DATABASE_URL: database, CASEOPS_ENV: "e2e" },
-    randomUUID: () => runId, noPaidProviderHeaders: marker });
+    randomUUID: () => runId, runId: () => runId, noPaidProviderHeaders: marker });
   vm.runInContext(ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS } }).outputText, context);
   const helper = context as unknown as {
