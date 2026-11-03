@@ -60,6 +60,7 @@ export function packagingPlan(request, { root, output, links, settings, source, 
     const s = request.signing;
     keys(s, ['teamId', 'applicationIdentifierPrefix', 'certificateSha1', 'certificateSha256', 'provisioningProfileUuid', 'provisioningProfileEvidence', 'developerDirectory', 'podfileLockEvidence'], 'EXPLICIT_IOS_DISTRIBUTION_INPUTS_REQUIRED');
     assert.match(s.teamId, /^[A-Z0-9]{10}$/); assert.match(s.applicationIdentifierPrefix, /^[A-Z0-9]{10}$/);
+    assert.ok(links.config.ios, 'IOS_NATIVE_LINK_CONFIG_REQUIRED');
     assert.equal(s.applicationIdentifierPrefix, links.config.ios.applicationIdentifierPrefix, 'IOS_APPLICATION_PREFIX_MISMATCH');
     // The Team ID and application-identifier prefix are deliberately distinct.
     assert.match(s.certificateSha1, /^[a-f0-9]{40}$/); digest(s.certificateSha256);

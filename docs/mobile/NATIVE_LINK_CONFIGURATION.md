@@ -26,6 +26,7 @@ The complete schema (no additional keys) is:
 | `kind` | `caseops-native-links` |
 | `syntheticDataOnly` | Boolean; production consumers require `false` |
 | `redirectUri` | Canonical HTTPS URL, exact path `/native/oauth/callback`, no credentials, port, query, fragment or wildcard |
+| `ios` | Optional. Absent for an Android-only release: no AASA is served and an iOS native project is refused (`IOS_NATIVE_LINK_CONFIG_REQUIRED`). When present it holds exactly the two fields below |
 | `ios.bundleIdentifier` | Owner-selected registered bundle identifier |
 | `ios.applicationIdentifierPrefix` | Actual application identifier prefix from the signed app/profile; do not infer or invent a Team ID |
 | `android.packageName` | Owner-selected registered application ID |

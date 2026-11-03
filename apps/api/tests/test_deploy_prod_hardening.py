@@ -4196,6 +4196,18 @@ def test_deploy_prod_enables_native_sign_in_from_the_committed_link_input(
     assert "--remove-env-vars" not in web
 
 
+def test_deploy_prod_admits_an_android_only_native_link_input(tmp_path: Path) -> None:
+    config = json.loads(_native_link_config())
+    del config["ios"]
+    encoded = json.dumps(config, separators=(",", ":"))
+    result = _run_deploy_with_fakes(tmp_path, native_link_config=encoded)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    assert f"CASEOPS_NATIVE_LINK_CONFIG_SHA256={digest} " in _web_deploy_call(tmp_path)
+    assert "|CASEOPS_NATIVE_AUTH_ENABLED=true|" in _api_deploy_call(tmp_path)
+
+
 def test_deploy_prod_refuses_native_sign_in_without_an_enabled_signing_secret(
     tmp_path: Path,
 ) -> None:

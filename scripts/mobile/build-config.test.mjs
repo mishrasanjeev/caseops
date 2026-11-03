@@ -449,15 +449,15 @@ test('default Expo config retains production origins, native IDs and no QA trust
   assert.doesNotMatch(JSON.stringify(config), /BEGIN CERTIFICATE|public-ca\.pem|fingerprint256/);
 });
 
-function publicLinkFixture(t, syntheticDataOnly = true) {
+function publicLinkFixture(t, syntheticDataOnly = true, { ios = true } = {}) {
   const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-native-links-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const config = { schemaVersion: 1, kind: 'caseops-native-links', syntheticDataOnly,
     redirectUri: syntheticDataOnly ? 'https://native.invalid/native/oauth/callback' : 'https://native.caseops.ai/native/oauth/callback',
-    ios: { bundleIdentifier: 'ai.caseops.mobile', applicationIdentifierPrefix: 'X9Y8Z7W6V5' },
+    ...(ios ? { ios: { bundleIdentifier: 'ai.caseops.mobile', applicationIdentifierPrefix: 'X9Y8Z7W6V5' } } : {}),
     android: { packageName: 'ai.caseops.mobile', signingCertificateSha256: [digest('public synthetic signing certificate test bytes')] } };
   const file = path.join(dir, 'links.json'), bytes = JSON.stringify(config) + '\n'; writeFileSync(file, bytes);
-  const identities = { iosBundleIdentifier: config.ios.bundleIdentifier, androidPackageName: config.android.packageName };
+  const identities = { iosBundleIdentifier: config.ios ? config.ios.bundleIdentifier : null, androidPackageName: config.android.packageName };
   const baseline = { schemaVersion: 1, kind: 'caseops-declared-store-build-baseline', syntheticDataOnly, identities,
     marketingVersion: '0.0.0', iosBuildNumber: '0', androidVersionCode: 0, scope: 'operator-declared-not-store-verified' };
   const baselineFile = path.join(dir, 'declared-baseline.json'), baselineBytes = JSON.stringify(baseline) + '\n';
@@ -503,6 +503,22 @@ test('complete immutable structural config projects exactly matching mobile, web
   assert.deepEqual(p.assetlinks[0].target.sha256_cert_fingerprints, [f.config.android.signingCertificateSha256[0].toUpperCase().match(/../g).join(':')]);
   assert.equal(config.extra.nativeLinkPolicy.configSha256, digest(f.bytes));
   assert.deepEqual(config.extra.privacyPolicy, { url: 'https://native.caseops.ai/privacy-policy', version: 'synthetic-policy-v1', sha256: f.env.CASEOPS_MOBILE_PRIVACY_POLICY_SHA256 });
+});
+test('Android-only production link input projects Android, publishes no AASA and refuses an iOS native project', t => {
+  const f = publicLinkFixture(t, false, { ios: false }), loaded = readNativeLinkConfig(f.env), p = loaded.projections;
+  assert.equal(p.mobile.ios, null); assert.equal(p.appleAppSiteAssociation, null);
+  assert.equal(p.assetlinks[0].target.package_name, 'ai.caseops.mobile');
+  const config = expoConfig({ ...f.env, NODE_ENV: 'production' });
+  assert.equal(config.android.package, 'ai.caseops.mobile');
+  assert.deepEqual(config.android.intentFilters, p.mobile.android.intentFilters);
+  assert.deepEqual(config.extra.nativeLinkPolicy, p.policy);
+  assert.equal(config.ios.associatedDomains, undefined);
+  const ios = spawnSync(process.execPath, ['./node_modules/expo/bin/cli', 'config', '--type', 'introspect', '--json'], {
+    cwd: app, env: cleanEnv({ ...f.env, NODE_ENV: 'production' }), encoding: 'utf8', timeout: 60000 });
+  assert.notEqual(ios.status, 0); assert.match(ios.stderr + ios.stdout, /IOS_NATIVE_LINK_CONFIG_REQUIRED/);
+  // The iOS section stays exact when present: partial or unknown iOS keys are refused.
+  for (const value of [{}, { bundleIdentifier: 'ai.caseops.mobile' }, null])
+    assert.throws(() => linkPolicy.validateNativeLinkConfig({ ...f.config, ios: value }), /EXACT_IOS_APPLICATION_ID_REQUIRED|NATIVE_LINK_CONFIG_SCHEMA_REQUIRED/);
 });
 test('production policy rejects reserved endpoints, scheme downgrade, QA identities and malformed or unknown fields', t => {
   const f = publicLinkFixture(t, false);

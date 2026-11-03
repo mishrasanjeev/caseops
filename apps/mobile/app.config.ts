@@ -1,5 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
+const { withInfoPlist } = require("expo/config-plugins");
 const { acceptanceSettings } = require("./plugins/with-local-acceptance.cjs");
 const acceptance = acceptanceSettings(process.env);
 const { readNativeLinkConfig } = require("../web/lib/native-link-config.cjs");
@@ -55,9 +56,9 @@ const config: ExpoConfig = {
     ...(storeBuild ? { buildNumber: storeBuild.iosBuildNumber } : {}),
     bundleIdentifier:
       acceptance?.iosBundleIdentifier ||
-      links?.projections.mobile.ios.bundleIdentifier ||
+      links?.projections.mobile.ios?.bundleIdentifier ||
       "ai.caseops.mobile.dev",
-    ...(links
+    ...(links?.projections.mobile.ios
       ? {
           associatedDomains: links.projections.mobile.ios.associatedDomains,
           deploymentTarget: "17.4",
@@ -108,6 +109,16 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/with-local-acceptance.cjs",
+    // An Android-only production link input has no iOS application identity:
+    // refuse an iOS native project rather than build the development bundle.
+    ...(links && !links.projections.mobile.ios
+      ? [
+          (expo: ExpoConfig) =>
+            withInfoPlist(expo, () => {
+              throw new Error("IOS_NATIVE_LINK_CONFIG_REQUIRED");
+            }),
+        ]
+      : []),
     [
       "./plugins/with-privacy-policy.cjs",
       privacyPolicy

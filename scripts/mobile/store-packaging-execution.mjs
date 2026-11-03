@@ -345,7 +345,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     const attestationRef = writePrivate(path.join(output, 'artifact-attestation.json'), Buffer.from(JSON.stringify(attestation)));
     const expected = { appId: q.platform === 'ios' ? config.ios.bundleIdentifier : config.android.packageName,
       version: settings.version, iosBuildNumber: settings.iosBuildNumber, androidVersionCode: settings.androidVersionCode,
-      signing: request.signing, associatedDomains: links.projections.mobile.ios.associatedDomains,
+      signing: request.signing, associatedDomains: links.projections.mobile.ios?.associatedDomains ?? null,
       iosArchitectures: [...q.architecture.ios].sort(), androidAbis: q.architecture.android, now: Date.now(), privacyPolicy, attestation };
     let signingAdmitted = false;
     const admitSigning = async () => {

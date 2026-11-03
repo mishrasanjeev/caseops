@@ -56,6 +56,16 @@ describe('native association files', () => {
     }] } });
   });
 
+  it('serve Digital Asset Links but no AASA for an Android-only input', async () => {
+    const env = configured({ ios: undefined });
+    const assetlinks = nativeAssociationResponse('assetlinks', env);
+    expect(assetlinks.status).toBe(200);
+    expect((await assetlinks.json())[0].target.package_name).toBe('ai.caseops.mobile');
+    const aasa = nativeAssociationResponse('appleAppSiteAssociation', env);
+    expect(aasa.status).toBe(404);
+    expect(aasa.headers.get('Cache-Control')).toBe('no-store');
+  });
+
   it('fail closed for a tampered, partial or synthetic input', () => {
     const env = configured();
     expect(() => nativeAssociationResponse('assetlinks', { ...env, CASEOPS_NATIVE_LINK_CONFIG_SHA256: '0'.repeat(64) }))

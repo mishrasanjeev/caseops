@@ -14,6 +14,10 @@ export function nativeAssociationResponse(
     return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
   }
   const { projections } = readNativeLinkConfig(env);
+  // An Android-only input has no iOS application, so no AASA is published.
+  if (projections[kind] === null) {
+    return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  }
   return new Response(JSON.stringify(projections[kind]), {
     status: 200,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
