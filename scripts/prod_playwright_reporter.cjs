@@ -10,6 +10,8 @@ const limit = 64 * 1024 * 1024;
 const diagnosticLimit = 64 * 1024;
 const routes = new Set(["auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
   "ip/title-interest", "ip/application", "calendar/events", "ip/renewal-tracker",
+  "ip/madrid-list", "ip/madrid-workspace", "ip/foreign-associate-list",
+  "ip/foreign-associate-workspace", "ip/recordal-list", "ip/recordal-workspace",
   "ip/portfolio-export-preview", "ip/portfolio-export", "ip/portfolio-export-status",
   "ip/portfolio-export-download", "ip/portfolio-export-retry",
   "web/sign-in", "web/app-navigation"]);

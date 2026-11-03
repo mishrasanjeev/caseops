@@ -6,7 +6,7 @@ from datetime import UTC
 from hmac import compare_digest
 
 from fastapi import HTTPException
-from sqlalchemy import select, true
+from sqlalchemy import literal, select, true
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.util import ClauseAdapter
 
@@ -231,6 +231,7 @@ def list_records(
 ):
     if domain not in FACT_MODELS or not 1 <= limit <= 50:
         raise _error("specialist_list_invalid", "Select a domain and a page size up to 50.", 422)
+    postgres = session.get_bind().dialect.name == "postgresql"
     docket_conditions = [
         IpDocketRecord.record_type == f"{domain}_intake",
         IpDocketRecord.restricted.is_(True),
@@ -247,7 +248,7 @@ def list_records(
     relationship = (IpDocketRecord.id == IpSpecialistRecord.docket_id) & (
         IpDocketRecord.company_id == IpSpecialistRecord.company_id
     )
-    if session.get_bind().dialect.name == "postgresql":
+    if postgres:
         # Seek one key before policy filters; a tenant/status index can otherwise
         # scan thousands of dockets per candidate under another valid plan.
         candidate = (
@@ -303,13 +304,28 @@ def list_records(
             .join(IpDocketRecord, relationship)
             .where(*docket_conditions)
         )
-    statement = statement.where(
-        IpSpecialistRecord.company_id == context.company.id,
-        IpSpecialistRecord.domain == domain,
-    )
+    if postgres:
+        # Retain the complete tenant/domain cursor prefix in ordered planning;
+        # a global ID walk can otherwise filter every earlier foreign record.
+        company_key = select(literal(context.company.id)).scalar_subquery()
+        domain_key = select(literal(domain)).scalar_subquery()
+        statement = statement.where(
+            IpSpecialistRecord.company_id.between(company_key, company_key),
+            IpSpecialistRecord.domain.between(domain_key, domain_key),
+        )
+        ordering = (
+            IpSpecialistRecord.company_id, IpSpecialistRecord.domain, IpSpecialistRecord.id
+        )
+    else:
+        statement = statement.where(
+            IpSpecialistRecord.company_id == context.company.id,
+            IpSpecialistRecord.domain == domain,
+        )
+        ordering = (IpSpecialistRecord.id,)
     if cursor:
-        statement = statement.where(IpSpecialistRecord.id > cursor)
-    rows = session.execute(statement.order_by(IpSpecialistRecord.id).limit(limit + 1)).all()
+        cursor_key = select(literal(cursor)).scalar_subquery() if postgres else cursor
+        statement = statement.where(IpSpecialistRecord.id > cursor_key)
+    rows = session.execute(statement.order_by(*ordering).limit(limit + 1)).all()
     return SpecialistList(
         records=[
             SpecialistSummary(

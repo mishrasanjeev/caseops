@@ -351,11 +351,51 @@ def _explain_specialist_clause(request, session, clauses, statements, *, label):
     return _retain_specialist_plan(request, plan, label=label)
 
 
+@pytest.fixture
+def specialist_scale_engine(migration_pg_engine, statistics_profile):
+    engine = migration_pg_engine
+    tables = ("ip_docket_records", "ip_specialist_records", "matter_access_grants")
+    previous = {}
+    with engine.begin() as connection:
+        assert connection.scalar(text("SELECT current_database()")).startswith("caseops_migration_")
+        for table in tables:
+            previous[table] = connection.scalar(text(
+                "SELECT option_value FROM pg_class, LATERAL pg_options_to_table(reloptions) "
+                "WHERE oid = to_regclass(:table) AND option_name = 'autovacuum_enabled'"
+            ), {"table": table})
+            assert previous[table] in (None, "true", "false")
+            connection.execute(text(f"ALTER TABLE {table} SET (autovacuum_enabled = false)"))
+    try:
+        yield engine
+    finally:
+        with engine.begin() as connection:
+            for table, value in previous.items():
+                clause = "RESET (autovacuum_enabled)" if value is None else (
+                    f"SET (autovacuum_enabled = {value})"
+                )
+                connection.execute(text(f"ALTER TABLE {table} {clause}"))
+                assert connection.scalar(text(
+                    "SELECT option_value FROM pg_class, LATERAL pg_options_to_table(reloptions) "
+                    "WHERE oid = to_regclass(:table) AND option_name = 'autovacuum_enabled'"
+                ), {"table": table}) == value
+
+
+def _specialist_statistics(session):
+    return [dict(row) for row in session.execute(text(
+        "SELECT relname, reltuples::bigint AS estimated_rows, reloptions FROM pg_class "
+        "WHERE oid IN ('ip_docket_records'::regclass, 'ip_specialist_records'::regclass, "
+        "'matter_access_grants'::regclass) ORDER BY relname"
+    )).mappings()]
+
+
+@pytest.mark.parametrize("statistics_profile", ["analyzed", "unrefreshed_bulk"])
 @pytest.mark.parametrize("visibility_order", ["balanced", "hidden_next_page"])
 def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
-    pg_engine, registered_intake, request, visibility_order
+    specialist_scale_engine, registered_intake, request, visibility_order, statistics_profile
 ):
+    pg_engine = specialist_scale_engine
     company, actor, record = _seed(pg_engine)
+    _foreign_company, _foreign_actor, foreign_record = _seed(pg_engine)
     with Session(pg_engine) as session:
         inactive_team_id = _seed_team_catalog_noise(session, company, actor, request=request)
         docket = session.get(IpDocketRecord, str(record.docket_id))
@@ -368,13 +408,50 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
             select(IpSpecialistVersion).where(IpSpecialistVersion.record_id == header.id)
         )
         record_rank, docket_rank = UUID(header.id).int, UUID(docket.id).int
-        assert record_rank > 10_000 and docket_rank > 10_000
+        assert record_rank > 20_000 and docket_rank > 20_000
 
         def clone(row, **changes):
             return {
                 **{column.name: getattr(row, column.name) for column in row.__table__.columns},
                 **changes,
             }
+
+        for table in ("ip_docket_records", "ip_specialist_records", "matter_access_grants"):
+            session.execute(text(f"ANALYZE {table}"))
+        before_bulk = _specialist_statistics(session)
+        session.commit()
+        foreign_header = session.get(IpSpecialistRecord, str(foreign_record.id))
+        foreign_docket = session.get(IpDocketRecord, str(foreign_record.docket_id))
+        foreign_asset = session.get(IpAsset, str(foreign_record.asset_id))
+        foreign_version = session.scalar(select(IpSpecialistVersion).where(
+            IpSpecialistVersion.record_id == foreign_header.id
+        ))
+        foreign_grant = session.scalar(select(MatterAccessGrant).where(
+            MatterAccessGrant.ip_docket_id == foreign_docket.id
+        ))
+        # Lower-ID foreign rows make a global primary-key walk observably wrong
+        # even when a freshly loaded tenant would otherwise get lucky UUID order.
+        for batch in range(20):
+            noise = {model: [] for model in (
+                IpDocketRecord, IpAsset, IpSpecialistRecord, IpSpecialistVersion, MatterAccessGrant
+            )}
+            for offset in range(500):
+                noise_id = str(UUID(int=1 + batch * 500 + offset))
+                asset_id = str(uuid4())
+                noise[IpDocketRecord].append(clone(foreign_docket, id=noise_id))
+                noise[IpAsset].append(clone(foreign_asset, id=asset_id, docket_id=noise_id))
+                noise[IpSpecialistRecord].append(clone(
+                    foreign_header, id=noise_id, docket_id=noise_id, asset_id=asset_id
+                ))
+                noise[IpSpecialistVersion].append(clone(
+                    foreign_version, id=str(uuid4()), record_id=noise_id
+                ))
+                noise[MatterAccessGrant].append(clone(
+                    foreign_grant, id=str(uuid4()), ip_docket_id=noise_id
+                ))
+            for model, rows in noise.items():
+                session.execute(insert(model.__table__), rows)
+            session.commit()
 
         for batch in range(20):
             dockets, assets, records, versions, grants = [], [], [], [], []
@@ -422,10 +499,20 @@ def test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
                 if rows:
                     session.execute(insert(model.__table__), rows)
             session.commit()
-            # Bulk-loaded tables need fresh statistics before the plan is measured;
-            # stale ones (autovacuum timing, rows left by earlier tests) make the bound flaky.
+        if statistics_profile == "analyzed":
             for table in ("ip_docket_records", "ip_specialist_records", "matter_access_grants"):
                 session.execute(text(f"ANALYZE {table}"))
+        after_bulk = _specialist_statistics(session)
+        request.node.user_properties.append(("specialist_statistics_profile", json.dumps({
+            "profile": statistics_profile, "before_bulk": before_bulk,
+            "after_bulk": after_bulk, "foreign_lower_id_noise": 10_000,
+            "isolated_database": True,
+        })))
+        assert all("autovacuum_enabled=false" in row["reloptions"] for row in after_bulk)
+        if statistics_profile == "unrefreshed_bulk":
+            assert after_bulk == before_bulk
+        else:
+            assert all(row["estimated_rows"] > 10_000 for row in after_bulk)
         expected_ids = [str(UUID(int=record_rank - 10_000 + i)) for i in range(10_000)]
         assert list(session.scalars(
             select(IpSpecialistRecord.id).where(

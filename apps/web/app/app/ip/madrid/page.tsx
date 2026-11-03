@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { IpListMore } from "@/components/ip/IpListMore";
+import { showIpListError } from "@/components/ip/ip-list-query-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -140,6 +141,7 @@ export default function MadridPage() {
   const [selectedId, setSelectedId] = useState("");
   const records = useInfiniteQuery({
     queryKey: ["ip", "madrid", "records"],
+    retry: false,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => fetchMadridRecords(undefined, { offset: pageParam, signal }),
     getNextPageParam: nextIpListOffset,
@@ -187,7 +189,7 @@ export default function MadridPage() {
           <Skeleton className="h-72" />
           <Skeleton className="h-72" />
         </div>
-      ) : records.isError ? (
+      ) : showIpListError(records) ? (
         <QueryErrorState error={records.error} onRetry={refresh} />
       ) : (
         <>
@@ -197,7 +199,7 @@ export default function MadridPage() {
               <RecordList records={rows} selectedId={selectedId} onSelect={setSelectedId} />
               <IpListMore
                 shown={rows.length}
-                total={records.data.pages.at(-1)?.total ?? 0}
+                total={records.data?.pages.at(-1)?.total ?? 0}
                 noun="Madrid records"
                 hasMore={records.hasNextPage}
                 loading={records.isFetchingNextPage}
@@ -327,8 +329,19 @@ function CreateMadridRecord({ onCreated }: { onCreated: (id: string) => Promise<
   const core = useQuery({ queryKey: ["ip", "core-records", basicDocketId], queryFn: () => fetchIpCoreRecords(basicDocketId), enabled: outbound && Boolean(basicDocketId) });
   // Parent IR options come from the server's international-registration filter,
   // so designations never crowd a registration out of the list.
-  const parents = useQuery({ queryKey: ["ip", "madrid", "records", "international_registration"], queryFn: () => fetchMadridRecords({ recordKind: "international_registration" }), enabled: open && kind === "international_designation" });
-  const registrations = parents.data?.items ?? [];
+  const parents = useInfiniteQuery({
+    queryKey: ["ip", "madrid", "records", "international_registration"],
+    retry: false,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => fetchMadridRecords(
+      { recordKind: "international_registration" },
+      { offset: pageParam, signal },
+    ),
+    getNextPageParam: nextIpListOffset,
+    enabled: open && kind === "international_designation",
+  });
+  const parentFailure = showIpListError(parents);
+  const registrations = parentFailure ? [] : ipListRows(parents.data?.pages);
   // The create validator accepts only an active application in India on a trademark docket.
   const indianApplications = (core.data?.applications ?? []).filter((row) => row.is_active && row.jurisdiction.toUpperCase() === "IN");
   const parsedClasses = parseNiceClasses(classes).classes;
@@ -336,8 +349,10 @@ function CreateMadridRecord({ onCreated }: { onCreated: (id: string) => Promise<
   const missingGoods = parsedClasses.filter((row) => !goods[String(row)]?.trim());
   const blocker = outbound && !basicApplicationId
     ? "Choose the basic mark docket and its Indian application."
-    : kind === "international_designation" && !parentId
-      ? "Choose the parent international registration."
+    : kind === "international_designation" && !registrations.some((row) => row.id === parentId)
+      ? parentFailure
+        ? "International registrations could not be loaded. Retry before creating a designation."
+        : "Choose the parent international registration."
       : classError
         ? "Fix the Nice classes."
         : missingGoods.length
@@ -405,7 +420,51 @@ function CreateMadridRecord({ onCreated }: { onCreated: (id: string) => Promise<
       <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between"><CardTitle as="h2">Madrid intake</CardTitle><Button size="sm" variant={open ? "ghost" : "outline"} onClick={() => setOpen((value) => !value)}><Plus className="h-4 w-4" />{open ? "Close" : "New record"}</Button></CardHeader>
       {open ? <CardContent><form className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={submit} noValidate>
         <Field label="Record type"><select className={SELECT_CLASS} value={kind} onChange={(event) => setKind(event.target.value as MadridRecord["record_kind"])}><option value="international_registration">International registration</option><option value="international_designation">Designation</option></select></Field>
-        {kind === "international_registration" ? <Field label="Direction"><select className={SELECT_CLASS} value={direction} onChange={(event) => setDirection(event.target.value as MadridRecord["direction"])}><option value="outbound">Outbound from India</option><option value="inbound">Inbound foundation</option></select></Field> : <Field label="Parent IR" htmlFor={CREATE_FIELD_IDS.parent_registration_id} error={errorFor(CREATE_FIELD_IDS.parent_registration_id)} hint={parents.isPending ? null : parents.isError ? <span role="alert" className="flex flex-wrap items-center gap-2 text-[var(--color-danger-500)]">{apiErrorMessage(parents.error, "International registrations could not be loaded.")}<Button type="button" size="sm" variant="outline" onClick={() => parents.refetch()}>Retry</Button></span> : registrations.length ? (parents.data && parents.data.total > registrations.length ? `Showing the latest ${registrations.length} of ${parents.data.total} international registrations.` : null) : "No international registration is recorded yet. Create the international registration first, then add its designations."}><select {...invalidProps(CREATE_FIELD_IDS.parent_registration_id, errorFor(CREATE_FIELD_IDS.parent_registration_id))} className={SELECT_CLASS} value={parentId} onChange={(event) => setParentId(event.target.value)} required disabled={!registrations.length}><option value="">{parents.isPending ? "Loading international registrations…" : parents.isError ? "International registrations could not be loaded" : registrations.length ? "Select IR" : "No international registration yet"}</option>{registrations.map((row) => <option key={row.id} value={row.id}>{row.mark_name} · {row.ir_number ?? row.wipo_reference}</option>)}</select></Field>}
+        {kind === "international_registration" ? (
+          <Field label="Direction">
+            <select className={SELECT_CLASS} value={direction} onChange={(event) => setDirection(event.target.value as MadridRecord["direction"])}>
+              <option value="outbound">Outbound from India</option>
+              <option value="inbound">Inbound foundation</option>
+            </select>
+          </Field>
+        ) : (
+          <div className="min-w-0">
+            <Field
+              label="Parent IR"
+              htmlFor={CREATE_FIELD_IDS.parent_registration_id}
+              error={errorFor(CREATE_FIELD_IDS.parent_registration_id)}
+              hint={parents.isPending ? null : parentFailure ? (
+                <span role="alert" className="flex flex-wrap items-center gap-2 text-[var(--color-danger-500)]">
+                  {apiErrorMessage(parents.error, "International registrations could not be loaded.")}
+                  <Button type="button" size="sm" variant="outline" onClick={() => void parents.refetch()}>Retry</Button>
+                </span>
+              ) : registrations.length ? null : "No international registration is recorded yet. Create the international registration first, then add its designations."}
+            >
+              <select
+                {...invalidProps(CREATE_FIELD_IDS.parent_registration_id, errorFor(CREATE_FIELD_IDS.parent_registration_id))}
+                className={SELECT_CLASS}
+                value={parentId}
+                onChange={(event) => setParentId(event.target.value)}
+                required
+                disabled={!registrations.length}
+              >
+                <option value="">{parents.isPending ? "Loading international registrations..." : parentFailure ? "International registrations could not be loaded" : registrations.length ? "Select IR" : "No international registration yet"}</option>
+                {registrations.map((row) => <option key={row.id} value={row.id}>{row.mark_name} · {row.ir_number ?? row.wipo_reference}</option>)}
+              </select>
+            </Field>
+            {!parentFailure ? (
+              <IpListMore
+                shown={registrations.length}
+                total={parents.data?.pages.at(-1)?.total ?? 0}
+                noun="parent IRs"
+                hasMore={parents.hasNextPage}
+                loading={parents.isFetchingNextPage}
+                failed={parents.isFetchNextPageError}
+                onMore={() => void parents.fetchNextPage()}
+              />
+            ) : null}
+          </div>
+        )}
         {outbound ? <><IpDocketPicker className="md:col-span-2" label="Basic mark docket" searchLabel="Find the basic mark docket" recordTypes={["trademark"]} value={basicDocketId} required
             onChange={(id) => { setBasicDocketId(id); setBasicApplicationId(""); }} />
           <div className="min-w-0 space-y-1.5 md:col-span-2">
