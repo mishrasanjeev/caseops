@@ -3053,7 +3053,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand, reviewCITrustHardenResult, CI_TRUST_HARDEN_RESULT_CODES } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -5072,10 +5072,23 @@ test('CI-COMMAND-02 hardening refuses missing context foreign command names alia
   });
 });
 test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
-  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, { status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
-    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
-    assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
-    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  for (const [failure, expected] of [
+    [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT'],
+    [{ status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL'],
+    [{ status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL'],
+  ]) await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace();
+    try {
+      const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+      assert.equal(refused?.message, expected);
+      assert.equal(ciTrustFailureCode(refused), expected);
+      assert.equal(f.commandCalls, 1); assert.equal(trace.writes, 0);
+      assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+    } finally { trace.restore(); }
+    trace.closed();
   }, { proof: () => failure });
   for (const stage of ['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']) await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
@@ -5097,6 +5110,61 @@ test('CI-COMMAND-04 hardening rejects same-byte pathname replacement and changed
     assert.equal(fs.readFileSync(f.command, 'utf8'), replacement ? 'EARLIER=retained\n' : 'CHANGED=retained\n');
     if (replacement) assert.equal(fs.readFileSync(path.join(f.directory, 'retained-command'), 'utf8'), 'EARLIER=retained\n');
   }, { proof: (f) => { if (replacement) { fs.renameSync(f.command, path.join(f.directory, 'retained-command')); fs.writeFileSync(f.command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); } else fs.writeFileSync(f.command, 'CHANGED=retained\n'); return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
+test('CI-COMMAND-05 pure hardening result decoder exposes only bounded native dispositions', () => {
+  const ok = { status: 0, signal: null, stdout: 'SECURED', stderr: '' };
+  const cases = [
+    ['success', ok, null],
+    ['timeout', { ...ok, status: null, signal: 'SIGTERM', error: { code: 'ETIMEDOUT', message: 'SYNTHETIC_PRIVATE' } }, 'TIMEOUT'],
+    ['late-success-with-timeout', { ...ok, error: { code: 'ETIMEDOUT' } }, 'TIMEOUT'],
+    ['max-buffer', { ...ok, status: null, error: { code: 'ENOBUFS', message: 'SYNTHETIC_PRIVATE' } }, 'OUTPUT_BOUND'],
+    ['other-error', { ...ok, error: { code: 'EACCES', message: 'SYNTHETIC_PRIVATE', path: 'SYNTHETIC_PRIVATE' } }, 'ERROR'],
+    ['sigterm', { ...ok, status: null, signal: 'SIGTERM' }, 'SIGNAL'],
+    ['sigkill', { ...ok, status: null, signal: 'SIGKILL' }, 'SIGNAL'],
+    ['private-signal', { ...ok, status: null, signal: 'SYNTHETIC_PRIVATE' }, 'SIGNAL'],
+    ['no-disposition', { ...ok, status: null }, 'STATUS'],
+    ['nonzero-status', { ...ok, status: 2 }, 'STATUS'],
+    ['boolean-status', { ...ok, status: true }, 'PROTOCOL'],
+    ['null-result', null, 'PROTOCOL'],
+    ['array-result', [], 'PROTOCOL'],
+    ['missing-status', { stdout: 'SECURED', stderr: '' }, 'PROTOCOL'],
+    ['private-stdout', { ...ok, stdout: 'SECURED\nSYNTHETIC_PRIVATE' }, 'PROTOCOL'],
+    ['private-stderr', { ...ok, stderr: 'SYNTHETIC_PRIVATE' }, 'PROTOCOL'],
+    ['false-stage-success', { ...ok, stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_ACL' }, 'PROTOCOL'],
+    ['nonstring-signal', { ...ok, signal: true }, 'PROTOCOL'],
+    ['nonstring-stdout', { ...ok, stdout: Buffer.from('SECURED') }, 'PROTOCOL'],
+    ['nonstring-stderr', { ...ok, stderr: null }, 'PROTOCOL'],
+    ['byte-bound', { ...ok, stdout: 'x'.repeat(4097) }, 'OUTPUT_BOUND'],
+    ['utf8-bound', { ...ok, stderr: '\u00e9'.repeat(2049) }, 'OUTPUT_BOUND'],
+    ['false-error-field', { ...ok, error: false }, 'PROTOCOL'],
+  ];
+  for (const [id, result, suffix] of cases) {
+    const before = JSON.stringify(result);
+    if (suffix === null) assert.equal(reviewCITrustHardenResult(result), undefined, id);
+    else assert.throws(() => reviewCITrustHardenResult(result), error => {
+      const expected = 'CI_TRUST_COMMAND_HARDEN_REFUSED_' + suffix;
+      assert.equal(error.message, expected, id);
+      assert.equal(ciTrustFailureCode(error), expected, id);
+      assert.ok(!error.message.includes('SYNTHETIC_PRIVATE'), id); return true;
+    });
+    assert.equal(JSON.stringify(result), before, id);
+  }
+});
+test('CI-COMMAND-06 hardening diagnostic allowlist cannot reflect private output or forged suffixes', () => {
+  const expected = [
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT', 'CI_TRUST_COMMAND_HARDEN_REFUSED_ERROR',
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_SIGNAL', 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS',
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL', 'CI_TRUST_COMMAND_HARDEN_REFUSED_OUTPUT_BOUND',
+  ];
+  assert.deepEqual(CI_TRUST_HARDEN_RESULT_CODES, expected);
+  for (const code of expected) {
+    assert.equal(ciTrustFailureCode(new Error(code)), code);
+    assert.equal(ciTrustFailureCode(new Error(code + '\nSYNTHETIC_PRIVATE')), code);
+    for (const message of [code + '_SYNTHETIC_PRIVATE', code + ' SYNTHETIC_PRIVATE',
+      'SYNTHETIC_PRIVATE ' + code, code.toLowerCase()]) {
+      assert.equal(ciTrustFailureCode(new Error(message)), 'CI_TRUST_PREPARATION_REFUSED');
+    }
+  }
 });
 test('CI native runner output admits only its observed safe Administrators owner and preserves distinct authority', async () => ciNativeRunnerFixture(async ({ environment, command }) => {
   const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.commandFileAuthority, 'native-runner-command-safe-administrators-owner'); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);

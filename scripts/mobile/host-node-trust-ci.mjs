@@ -452,6 +452,36 @@ if($bodyFailed -or $cleanupFailed){[Console]::Error.WriteLine('COPS_PARENT_REFUS
  * values. The existing append and ownership checks remain independent. */
 export const CI_TRUST_HARDEN_STAGES = Object.freeze(['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']
   .map(stage => `CI_TRUST_COMMAND_HARDEN_REFUSED_${stage}`));
+/** Classify only the original spawnSync result; this grants no native authority. */
+export const CI_TRUST_HARDEN_RESULT_CODES = Object.freeze([
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT',
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_ERROR',
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_SIGNAL',
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS',
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL',
+  'CI_TRUST_COMMAND_HARDEN_REFUSED_OUTPUT_BOUND',
+]);
+export function reviewCITrustHardenResult(result) {
+  const refuse = suffix => { throw new Error('CI_TRUST_COMMAND_HARDEN_REFUSED_' + suffix); };
+  if (!result || typeof result !== 'object' || Array.isArray(result)) refuse('PROTOCOL');
+  if (result.error !== undefined && result.error !== null) {
+    if (typeof result.error !== 'object' || Array.isArray(result.error)) refuse('PROTOCOL');
+    if (result.error.code === 'ETIMEDOUT') refuse('TIMEOUT');
+    if (result.error.code === 'ENOBUFS') refuse('OUTPUT_BOUND');
+    refuse('ERROR');
+  }
+  if (result.signal !== undefined && result.signal !== null) {
+    if (typeof result.signal !== 'string' || result.signal.length === 0) refuse('PROTOCOL');
+    refuse('SIGNAL');
+  }
+  if (result.status !== null && !Number.isInteger(result.status)) refuse('PROTOCOL');
+  if (typeof result.stdout !== 'string' || typeof result.stderr !== 'string') refuse('PROTOCOL');
+  if (result.stdout.length > 4096 || result.stderr.length > 4096
+      || Buffer.byteLength(result.stdout) > 4096 || Buffer.byteLength(result.stderr) > 4096) refuse('OUTPUT_BOUND');
+  if (result.status === 1 && result.stdout === '' && CI_TRUST_HARDEN_STAGES.includes(result.stderr)) throw new Error(result.stderr);
+  if (result.status !== 0) refuse('STATUS');
+  if (result.stdout !== 'SECURED' || result.stderr !== '') refuse('PROTOCOL');
+}
 export function hardenCITrustRunnerCommand(environment = process.env) {
   assert.equal(process.platform, 'win32', 'CI_TRUST_COMMAND_HARDEN_PLATFORM');
   assert.ok(environment.GITHUB_ACTIONS === 'true' && environment.CI === 'true', 'CI_TRUST_COMMAND_HARDEN_CONTEXT');
@@ -511,9 +541,8 @@ Check;[Console]::Out.Write('SECURED')
       env: { SystemRoot: environment.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_COMMAND_INO: String(initial.ino), CASEOPS_COMMAND_VOLUME: String(initial.dev), CASEOPS_COMMAND_BIRTH: String(initial.birthtimeNs), CASEOPS_COMMAND_MTIME: String(initial.mtimeNs), CASEOPS_COMMAND_LENGTH: String(initial.size), CASEOPS_COMMAND_SHA256: createHash('sha256').update(before).digest('base64') }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
     });
     check();
-    // The PowerShell block names which fixed check refused; any other output stays generic.
-    if (!result.error && result.status === 1 && result.stdout === '' && CI_TRUST_HARDEN_STAGES.includes(result.stderr)) throw new Error(result.stderr);
-    assert.ok(!result.error && result.status === 0 && result.stdout === 'SECURED' && result.stderr === '', 'CI_TRUST_COMMAND_HARDEN_REFUSED');
+    // Only fixed result classes are exposed; raw subprocess output stays private.
+    reviewCITrustHardenResult(result);
     const final = fs.fstatSync(fd, { bigint: true }), finalNamed = fs.lstatSync(file, { bigint: true });
     // The ACL/owner change may update ctime. Every other observed field and all
     // bytes must match the same retained descriptor before publication.
@@ -595,7 +624,7 @@ const DIAGNOSTICS = new Set([
   'HOST_TRUST_WINDOWS_WRITE_SCOPE_REQUIRED', 'HOST_TRUST_DEADLINE',
   'HOST_TRUST_NAMED_FD_CHANGED', 'HOST_TRUST_DIRECTORY_PATH',
   'CI_TRUST_COMMAND_OWNER', 'CI_TRUST_COMMAND_OWNER_PROTOCOL', 'CI_TRUST_RUNNER_COMMAND_NAMESPACE', 'CI_TRUST_RUNNER_COMMAND_CHANGED', 'CI_TRUST_NAMESPACE', 'CI_TRUST_CONFIG_DEADLINE',
-  'CI_TRUST_COMMAND_HARDEN_PLATFORM', 'CI_TRUST_COMMAND_HARDEN_CONTEXT', 'CI_TRUST_COMMAND_HARDEN_DEADLINE', 'CI_TRUST_COMMAND_HARDEN_EXTENT', 'CI_TRUST_COMMAND_HARDEN_CHANGED', 'CI_TRUST_COMMAND_HARDEN_REFUSED', ...CI_TRUST_HARDEN_STAGES,
+  'CI_TRUST_COMMAND_HARDEN_PLATFORM', 'CI_TRUST_COMMAND_HARDEN_CONTEXT', 'CI_TRUST_COMMAND_HARDEN_DEADLINE', 'CI_TRUST_COMMAND_HARDEN_EXTENT', 'CI_TRUST_COMMAND_HARDEN_CHANGED', 'CI_TRUST_COMMAND_HARDEN_REFUSED', ...CI_TRUST_HARDEN_STAGES, ...CI_TRUST_HARDEN_RESULT_CODES,
   'CI_TRUST_APPEND_DEADLINE', 'CI_TRUST_PREPARATION_DEADLINE',
   'CI_TRUST_RUNTIME_SOURCE_ACL_COMMAND', 'CI_TRUST_RUNTIME_SOURCE_ACL_PROTOCOL', 'CI_TRUST_RUNTIME_SOURCE_OWNER',
   'CI_TRUST_RUNTIME_SOURCE_REVIEWED_BYTES', 'CI_TRUST_RUNTIME_SOURCE_PUBLIC_INPUT_REQUIRED', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_WRITE', 'CI_TRUST_RUNTIME_SOURCE_CHANGED_BEFORE_READ',
