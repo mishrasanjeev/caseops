@@ -1271,3 +1271,78 @@ def test_stop_calls_with_unavailable_clock_do_not_claim_reaping_or_native_comple
         {"stage": "terminate_wait", "error_type": "TimeoutExpired"},
         {"stage": "kill_wait", "error_type": "TimeoutExpired"},
     ]
+
+
+@pytest.mark.parametrize("initial", [False, True])
+@pytest.mark.parametrize("label", ["error", "keyboard", "system-exit", "direct-base"])
+def test_directory_open_refusal_keeps_published_bytes_without_inventing_owned_descriptor(
+    tmp_path, monkeypatch, initial, label,
+):
+    if (type(initial) is not bool
+            or label not in {"error", "keyboard", "system-exit", "direct-base"}):
+        raise ValueError("Unsupported synthetic directory-opener fixture")
+    primary = OSError("owned-synthetic-open") if label == "error" else _owned_control(label)
+    path = tmp_path / "receipt.json"
+    expected_publication = (
+        b'{\r\n  "owned": true\r\n}\r\n' if sys.platform == "win32"
+        else b'{\n  "owned": true\n}\n'
+    )
+    if not initial:
+        path.write_bytes(b"previous-owned-publication\n")
+    owners, streams, descriptors, opens, syncs, closes = [], [], [], [], [], []
+    owner_type, temporary_factory = native.PublicationAttempt, native.tempfile.NamedTemporaryFile
+    real_fsync, real_fstat = os.fsync, os.fstat
+    directory_flag = 0x10000
+
+    def owner(target, first):
+        value = owner_type(target, first)
+        owners.append(value)
+        return value
+
+    def temporary(**kwargs):
+        stream = temporary_factory(**kwargs)
+        streams.append(stream)
+        descriptors.append(stream.fileno())
+        return stream
+
+    def refuse_open(target, flags):
+        value = owners[0]
+        opens.append((target, flags, value.directory_descriptor, value.directory_stage))
+        raise primary
+
+    def sync(descriptor):
+        syncs.append(descriptor)
+        if descriptor not in descriptors:
+            raise AssertionError("Synthetic opener must not invent a directory descriptor")
+        real_fsync(descriptor)
+
+    def close(descriptor):
+        closes.append(descriptor)
+        raise AssertionError("Failed synthetic opener has no directory descriptor to close")
+
+    # Only this helper's os binding is synthetic. Global os.name, tempfile and
+    # pathlib retain the actual platform. No POSIX directory syscall occurs.
+    proxy = SimpleNamespace(name="posix", O_RDONLY=os.O_RDONLY, O_DIRECTORY=directory_flag,
+                            open=refuse_open, fsync=sync, close=close,
+                            link=os.link, replace=os.replace)
+    monkeypatch.setattr(native, "os", proxy)
+    monkeypatch.setattr(native, "PublicationAttempt", owner)
+    monkeypatch.setattr(native.tempfile, "NamedTemporaryFile", temporary)
+    with pytest.raises(native.PublicationError) as caught:
+        native._publish(path, {"owned": True}, initial=initial)
+    error = caught.value
+    retained = path.read_bytes()
+    temporary_paths = list(tmp_path.glob(path.name + ".*"))
+    owner_states = [(value.directory_descriptor, value.directory_stage, value.published)
+                    for value in owners]
+    stream_states = [stream.closed for stream in streams]
+    assert error.primary is primary and error.__cause__ is primary and error.published is True
+    assert error.failures == [{"stage": "directory_open", "error_type": type(primary).__name__}]
+    assert retained == expected_publication and temporary_paths == []
+    assert owner_states == [(None, "directory_open", True)]
+    assert opens == [(path.parent, os.O_RDONLY | directory_flag, None, "directory_open")]
+    assert syncs == descriptors and len(descriptors) == 1 and closes == []
+    assert stream_states == [True]
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            real_fstat(descriptor)

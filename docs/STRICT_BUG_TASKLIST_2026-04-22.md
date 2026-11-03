@@ -1,5 +1,68 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Directory Publication Ownership: Current Replacement Proof
+
+**Partially fixed; final release acceptance remains pending.** Candidate7c6ee7c
+cleared the prior14 PR CodeQL instances, but its exact mergef3a4b148 retained two
+new py/multiple-definition warnings828/829 on directory descriptor/stage locals.
+All three analyzer jobs succeeded; the separate check still reported two warnings.
+Keep codeql-7c6ee7-review01 and the14 contextual fixed-instance records; null
+global states are not a claim that every repository alert is globally closed.
+
+The initial values are necessary when directory open raises inside the explicit
+operation-outcome boundary. The repair retains descriptor/stage on the existing
+publication owner, preserving the None/directory_open state, exact first cause,
+already-published bytes and conditional close. No needed initial state was simply
+deleted, and no scanner alias, exclusion, rule or exception registry changed.
+Eight focused controls cover both publication paths and four error/control kinds.
+They use a helper-local synthetic POSIX opener on Windows, actual file publication,
+file fsync and stream closure; they do not claim a real Windows POSIX syscall.
+All179 preceding test bytes and all original budgets/CLI/runtime behavior remain.
+
+The first Windows516 run is retained FAILED:505 passes, eight new byte-comparison
+failures and three original POSIX skips, with1545 phase reports. Its LF-only expected
+literal disagreed with the existing writer's native Windows CRLF output. Later
+owner/FD assertions in those eight calls were unreached. Separately, the new
+controller missed two CRLF-sensitive insertions and raised NameError runtime_before;
+its runtime bookends were unverified. Neither failure is erased by source or Linux
+passes. See native-exit-integrated516-failed-readback01.
+
+Source04 corrects only the fixture's independent Windows CRLF/POSIX LF expected
+literals, selected by real sys.platform before the helper-local proxy. Actual bytes
+are not normalized and production formatting is unchanged. The replacement stager
+normalizes its own construction input, requires both runtime assignments/sidecars
+before admission and preserves the old owner/budget logic. The complete replacement
+ran516 cases:513 passes, the same three skips and1545 phases across187 helper,
+119 sharding,58 finalizer and152 workflow cases. All328 deployment identities were
+collected in exact order with zero bodies; Ruff7 passed. All3984 source and the
+actual cfg/wrapper/literal-base runtime bookends matched.
+
+Linux Source04 ran187 passes/561 phases without skips, including all eight opener
+controls. Both actual32-shard fixtures prove64 disjoint cases/192 phases and32
+source/PID/runtime-bound native-zero receipts, with unchanged realUV numeric139,
+deliberate SIGSEGV and refused-scope controls. Root independently read499 pinned
+payloads and every Windows phase/JUnit identity; all128 Windows fixture sidecars
+are retained durably. See native-exit-integrated516-readback02/ROOT-RECONCILIATION.json
+and native-exit-linux187-04/MANIFEST.json. One PID was legitimately reused between
+sequential shard lifetimes; retain all64 bindings rather than require64 unique IDs.
+Root separated later foreign PID instances using exact seven-fraction UTC strings;
+they were never adopted or stopped. Original process/report failures remain retained.
+
+The narrow owned-venv home pin separately qualified actual CPython3.13.14 and139
+unchanged compatible packages,600 metadata/startup/tool inputs and3984 source files.
+Only the home line changed197 to200 bytes. Native actor0 finished in2.539 seconds
+under its independent120-second owner; eleven children were reaped. The earlier
+prewrite allowlist refusal remains preserved. See venv-home-pin-actual03/ROOT-READBACK.json.
+The global alias, packages, protected55463 and retained diagnostic PG data were not
+modified. This runtime qualification does not certify a release or device sign-in.
+
+Fresh final-source CI/Security/Mobile/CodeQL and its separate alert verdict, all328
+actual rehearsal bodies, exact-main canonical deployment, whole exact-serving QA
+and two later serial clean maintenance runs remain required. Private cadence stays
+held. The separate public verifier's150/210 completion fence passed60 offline tests;
+its live outer remains unexecuted. Actual APK/emulator/store acceptance is separate.
+
+
 ## November 3 Native Observer CodeQL Repair: Final Acceptance Pending
 
 **Partially fixed; native release remains NO-GO.** The3dfa candidate's

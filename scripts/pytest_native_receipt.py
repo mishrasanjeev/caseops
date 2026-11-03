@@ -120,6 +120,8 @@ class PublicationAttempt:
         self.path, self.initial = path, initial
         self.stream, self.temporary = None, None
         self.published, self.stage, self.errors = False, "open", []
+        self.directory_descriptor = None
+        self.directory_stage = "directory_open"
 
     def __enter__(self):
         return self
@@ -145,15 +147,14 @@ class PublicationAttempt:
                 self.temporary.unlink(missing_ok=True)
             self.record("temporary_unlink", removed)
         if self.published and os.name == "posix":
-            descriptor, stage = None, "directory_open"
             with OperationOutcome() as synced:
-                descriptor = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-                stage = "directory_fsync"
-                os.fsync(descriptor)
-            self.record(stage, synced)
-            if descriptor is not None:
+                self.directory_descriptor = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                self.directory_stage = "directory_fsync"
+                os.fsync(self.directory_descriptor)
+            self.record(self.directory_stage, synced)
+            if self.directory_descriptor is not None:
                 with OperationOutcome() as closed:
-                    os.close(descriptor)
+                    os.close(self.directory_descriptor)
                 self.record("directory_close", closed)
         # All failures become one chained publication failure immediately after
         # this owner finishes. A control never turns into a published success.

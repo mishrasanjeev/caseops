@@ -1,5 +1,40 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Directory Owner Repair: Preserve Failed and Replacement Evidence
+
+**Partially fixed; final release remains NO-GO pending complete acceptance.**
+7c6ee7c's three CodeQL jobs succeeded, but the separate check retained warnings
+828/829. Prior14 PR instances are fixed contextually, not globally declared closed.
+Directory descriptor/stage now belong to the existing publication owner; None and
+directory_open remain available when opening fails. No needed failure state,
+scanner rule or original time/retry/CLI/runtime boundary was removed.
+
+Eight new controls exposed a Windows fixture error: the first516 run retained
+505 passes/eight LF-versus-CRLF failures/three old POSIX skips. Later assertions
+in those eight calls remained unverified. Its independent controller also missed
+CRLF-sensitive runtime insertions, so runtime bookends were unverified. Both
+failures remain preserved. The corrected fixture uses explicit native byte
+literals without normalizing actual bytes or changing the writer; the corrected
+stager requires both runtime capture sites before admission.
+
+Complete replacement proof now covers516 cases/1545 phases:513 Windows passes
+and three unchanged skips, plus187 Linux passes/561 phases. Both real32 fixtures
+retain64 cases/192 phases/32 native-zero receipts, and realUV controls preserve
+numeric139/signal/refused-scope distinctions. Ruff7, all3984 source and three
+runtime bookends match; Root independently read499 payload pins. All328 cases
+remain collected-only. Per-shard identity survives legitimate PID reuse, and
+later foreign process instances were never adopted or stopped. See the matching
+strict bug-ledger entry and native-exit-integrated516-readback02/ROOT-RECONCILIATION.json.
+
+Owned runtime qualification separately proves unchanged CPython3.13.14/139
+compatible packages and a home-only197-to200-byte cfg pin; it is not source or
+release acceptance. Fresh current full CI/scanners and separate CodeQL verdict,
+actual328 rehearsal, canonical exact-main deploy, whole serving QA and two later
+serial clean maintenance executions remain pending. Private cadence stays held;
+protected55463 and retained PG data remain preserved. Actual APK/device/store
+acceptance remains separate. M15/NFT-016;J20/M22.
+
+
 ## November 3 Native CodeQL Findings and Replacement Component Proof
 
 **Partially fixed; native release remains NO-GO.** Successful3dfa workflow jobs
