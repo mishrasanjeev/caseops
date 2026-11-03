@@ -8,6 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // modification date, so omit lastModified until it can be maintained honestly.
   const paths = [
     "/",
+    "/privacy",
     "/guide",
     "/pricing",
     "/law-firms",
