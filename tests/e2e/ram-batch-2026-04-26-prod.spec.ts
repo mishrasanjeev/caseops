@@ -212,6 +212,8 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       request,
       PROD_API_BASE_URL,
       headers,
+      undefined, // Keep the helper's original setup clock; the hint is optional.
+      "9fcf975a-3dbc-482d-9d4a-8f196916bcc4", // Prefer only if currently visible/operational.
     );
 
     const resp = await request.post(

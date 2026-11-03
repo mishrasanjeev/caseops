@@ -289,3 +289,202 @@ test("the actual list wire contract requires next_cursor even when its value is 
     f.done();
   }
 });
+
+test("an operational preferred hint is revalidated directly before any shortlist", async () => {
+  for (const status of ["intake", "active", "on_hold"]) {
+    const f = fake([page([matter(1, status)])]);
+    assert.equal(await select(f.request, BASE, HEADERS, undefined, id(1)), id(1));
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual([...f.calls[0].url.searchParams], [["id", id(1)], ["limit", "1"]]);
+    assert.equal(f.calls[0].options.headers["X-CaseOps-Automated-Test"], "no-paid-providers");
+    f.done();
+  }
+});
+
+test("stale inactive and hidden preferences reach the active-filtered sibling beyond an unfiltered prefix", async () => {
+  for (const preferred of [
+    page([matter(1, "disposed")]), page([matter(1, "active", false)]), page([]),
+  ]) {
+    // The active-filtered endpoint returns this candidate without first walking
+    // the tenant's retained/disposed rows; no synthetic150-row scan is needed.
+    const f = fake([preferred, page([matter(900)]), page([matter(900)])]);
+    assert.equal(await select(f.request, BASE, HEADERS, undefined, id(1)), id(900));
+    assert.equal(f.calls.length, 3);
+    assert.equal(f.calls[0].url.searchParams.get("id"), id(1));
+    assert.equal(f.calls[1].url.searchParams.get("status"), "active");
+    assert.equal(f.calls[1].url.searchParams.get("limit"), "50");
+    assert.equal(f.calls[1].url.searchParams.has("cursor"), false);
+    assert.equal(f.calls[2].url.searchParams.get("id"), id(900));
+    f.done();
+  }
+});
+
+test("active shortlist and unfiltered fallback keep separate cursors and immutable marked authority", async () => {
+  const cursor = "same opaque+/= &?\u0939";
+  const headers = Object.freeze({
+    ...HEADERS, "X-CSRF-Token": "fixture-csrf", "X-CaseOps-Automated-Test": "wrong",
+  });
+  const f = fake([
+    page([]), page([], cursor), page([matter(1, "disposed")], cursor),
+    page([matter(900, "on_hold")]), page([matter(900, "on_hold")]),
+  ]);
+  assert.equal(await select(f.request, BASE, headers, undefined, id(1)), id(900));
+  assert.equal(f.calls.length, 5);
+  assert.equal(f.calls[1].url.searchParams.get("status"), "active");
+  assert.equal(f.calls[2].url.searchParams.has("status"), false);
+  assert.equal(f.calls[2].url.searchParams.has("cursor"), false);
+  assert.equal(f.calls[3].url.searchParams.has("status"), false);
+  assert.equal(f.calls[3].url.searchParams.get("cursor"), cursor);
+  for (const call of f.calls) {
+    assert.equal(call.url.origin, BASE);
+    assert.equal(call.url.pathname, "/api/matters/");
+    assert.deepEqual(call.options.headers, {
+      ...headers, "X-CaseOps-Automated-Test": "no-paid-providers",
+    });
+    assert.equal(call.options.timeout, 5_000);
+    assert.deepEqual(Object.keys(call.options).sort(), ["headers", "timeout"]);
+  }
+  assert.equal(headers["X-CaseOps-Automated-Test"], "wrong");
+  f.done();
+});
+
+test("invalid preferred IDs are fixed setup failures before any HTTP admission", async () => {
+  for (const invalid of [null, "", "x".repeat(37), 0, {}, []]) {
+    const f = fake([]);
+    await rejectsSetup(() => select(f.request, BASE, HEADERS, () => 0, invalid), "PREFERRED_ID");
+    assert.equal(f.calls.length, 0);
+    f.done();
+  }
+});
+
+test("a stale preferred candidate and other previously checked IDs are never revalidated twice", async () => {
+  const f = fake([
+    page([matter(1, "disposed")]), page([matter(1), matter(2)]), page([]),
+    page([matter(1), matter(2), matter(3, "on_hold")]), page([matter(3, "on_hold")]),
+  ]);
+  assert.equal(await select(f.request, BASE, HEADERS, undefined, id(1)), id(3));
+  assert.deepEqual(f.calls.filter((call) => call.url.searchParams.has("id"))
+    .map((call) => call.url.searchParams.get("id")), [id(1), id(2), id(3)]);
+  assert.equal(f.calls.length, 5);
+  f.done();
+});
+
+test("the preferred exact-ID read cannot admit another identity duplicate rows or a continuation", async () => {
+  for (const invalid of [
+    page([matter(2)]), page([matter(1), matter(1)]), page([matter(1)], "unexpected"),
+  ]) {
+    const f = fake([invalid]);
+    await rejectsSetup(() => select(f.request, BASE, HEADERS, undefined, id(1)), "READBACK_IDENTITY");
+    assert.equal(f.calls.length, 1);
+    f.done();
+  }
+});
+
+test("preferred active and fallback observations retain one company identity", async () => {
+  const foreign = { company_id: "foreign", matters: [], next_cursor: null };
+  for (const steps of [
+    [page([{ ...matter(1), company_id: "foreign" }])],
+    [page([]), foreign],
+    [page([]), page([]), foreign],
+    [page([]), page([matter(2)]), { ...foreign, matters: [{ ...matter(2), company_id: "foreign" }] }],
+  ]) {
+    const f = fake(steps);
+    await rejectsSetup(() => select(f.request, BASE, HEADERS, undefined, id(1)), "DTO_RESPONSE");
+    f.done();
+  }
+});
+
+test("an authorization refusal on the preferred hint stops instead of searching another authority", async () => {
+  for (const status of [401, 403]) {
+    const f = fake([() => ({
+      status: () => status, json: async () => { throw new Error("private denied response"); },
+    })]);
+    await rejectsSetup(() => select(f.request, BASE, HEADERS, undefined, id(1)), "AUTHORIZATION");
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls[0].options.headers, {
+      ...HEADERS, "X-CaseOps-Automated-Test": "no-paid-providers",
+    });
+    f.done();
+  }
+});
+
+test("preferred admission keeps the exact global boundary after decoding and validation", async () => {
+  for (const acceptedAt of [19_999, 20_000, 20_001]) {
+    let decoded = false;
+    const observations = [19_999, acceptedAt];
+    const clock = () => {
+      if (!decoded) return 0;
+      assert.ok(observations.length > 0, "unexpected clock observation");
+      return observations.shift();
+    };
+    const f = fake([() => ({
+      status: () => 200,
+      json: async () => { decoded = true; return page([matter(1)]); },
+    })]);
+    if (acceptedAt < 20_000) {
+      assert.equal(await select(f.request, BASE, HEADERS, clock, id(1)), id(1));
+    } else {
+      await rejectsSetup(() => select(f.request, BASE, HEADERS, clock, id(1)), "DEADLINE");
+    }
+    assert.deepEqual(observations, []);
+    assert.equal(f.calls.length, 1);
+    f.done();
+  }
+});
+
+test("preferred active and unfiltered scopes consume the same original setup deadline", async () => {
+  let clock = 0;
+  const f = fake([
+    (call) => {
+      assert.equal(call.options.timeout, 5_000);
+      clock = 10_000;
+      return { status: () => 200, json: async () => page([]) };
+    },
+    (call) => {
+      assert.equal(call.options.timeout, 5_000);
+      clock = 19_200;
+      return { status: () => 200, json: async () => page([], "active-only-cursor") };
+    },
+    (call) => {
+      assert.equal(call.options.timeout, 800);
+      assert.equal(call.url.searchParams.has("status"), false);
+      assert.equal(call.url.searchParams.has("cursor"), false);
+      clock = 20_000;
+      return { status: () => 200, json: async () => page([matter(2)]) };
+    },
+  ]);
+  await rejectsSetup(() => select(f.request, BASE, HEADERS, () => clock, id(1)), "DEADLINE");
+  assert.equal(f.calls.length, 3);
+  assert.ok(f.calls.every((call) => call.options.headers["X-CaseOps-Automated-Test"] === "no-paid-providers"));
+  f.done();
+});
+
+test("preferred lookup shares the original six revalidations and three pages with at most nine reads", async () => {
+  const f = fake([
+    page([]),
+    page([matter(2)]), page([]),
+    page([matter(3), matter(4)], "next"), page([]), page([]),
+    page([matter(5), matter(6), matter(7)]), page([]), page([]),
+  ]);
+  await rejectsSetup(() => select(f.request, BASE, HEADERS, undefined, id(1)), "CANDIDATE_LIMIT");
+  assert.equal(f.calls.length, 9);
+  assert.deepEqual(f.calls.filter((call) => call.url.searchParams.has("id"))
+    .map((call) => call.url.searchParams.get("id")), [id(1), id(2), id(3), id(4), id(5), id(6)]);
+  const listed = f.calls.filter((call) => !call.url.searchParams.has("id"));
+  assert.equal(listed.length, 3);
+  assert.equal(listed[0].url.searchParams.get("status"), "active");
+  assert.ok(listed.slice(1).every((call) => !call.url.searchParams.has("status")));
+  f.done();
+});
+
+test("active shortlist counts toward the original page cap while unfiltered cursor cycles remain errors", async () => {
+  for (const [lastCursor, expected] of [["same", "CURSOR_CYCLE"], ["later", "PAGE_LIMIT"]]) {
+    const f = fake([page([]), page([], "active-cursor"), page([], "same"), page([], lastCursor)]);
+    await rejectsSetup(() => select(f.request, BASE, HEADERS, undefined, id(1)), expected);
+    assert.equal(f.calls.length, 4);
+    assert.equal(f.calls[1].url.searchParams.get("status"), "active");
+    assert.equal(f.calls[2].url.searchParams.has("cursor"), false);
+    assert.equal(f.calls[3].url.searchParams.get("cursor"), "same");
+    f.done();
+  }
+});

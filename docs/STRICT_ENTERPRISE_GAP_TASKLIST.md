@@ -1,5 +1,39 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Current-Main Integration and Complete Local Replacement
+
+**Partially implemented; final release remains NO-GO.** The native integration
+retains main7780's individual-timeout continuation,historical Batch4 diagnostics,
+complete QA display-template inventory and preferred/active operational Matter
+lookup. Whole-run cancellation,source/authority fences,the original20-second
+setup/240-second test/200-second POST and modern five-v2/172-test/seven-artifact/
+fourteen-successful-role certification stay strict. A historical marker deliberately
+fails the record job before publication; it cannot authorize cadence resume.
+
+The first complete1709-case local run remains1705 passed/one stale22-count failure/
+three original skips,with all5124 phases retained. Its actual inner fixture passed34.
+The repair updates exactly five lines/six count values,including launcher-property
+and fake-summary consumers,without changing30-second bounds,native handling or
+zero-failure/skip/cancellation/todo checks. All raw failure evidence is preserved.
+
+The complete replacement passed1706 plus the same three skips across1709 cases/
+5124 phases. Exact43 frontend and direct+nested34 Node cases,component/E2E TypeScript,
+type generation and Ruff13 passed. Native32 proof retains128 sidecars,32 native0,
+64 disjoint cases and192 phases. All3984 source and cfg/wrapper/literal-base runtime
+bookends match,and Root independently checked outcomes and owned process absence.
+All328 deployment identities are still collection-only. See the matching strict
+bug-ledger entry and preparation03/main7780-local-verification02/ROOT-RECONCILIATION.json
+under mac-release-closure-20261103; preserve the failed01 readback and supplement.
+
+The intended merge requires ordered a2+778 parents,27 paths versusaa55 and31 versus
+current main. Full final-source CI/scanners plus independent CodeQL verdict,current
+full frontend,actual328 rehearsal,exact-main canonical deploy and whole serving QA
+remain pending. Private cadence stays held until two later serial exact-image clean
+maintenance executions,second rebuild_count0,and guarded resume. Secret/privacy
+prerequisites are complete; actual APK/device/store and the separate Source42 gap
+programme are not certified by these local checks. Protected55463/retained PG data
+and foreign resources remain untouched. M15/NFT-016;J20/M22.
+
 ## November 3 Directory Owner Repair: Preserve Failed and Replacement Evidence
 
 **Partially fixed; final release remains NO-GO pending complete acceptance.**

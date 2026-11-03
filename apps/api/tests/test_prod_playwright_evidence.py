@@ -1637,7 +1637,7 @@ def test_bug015_operational_fixture_read_contracts(tmp_path, record_property):
         # paths. Direct files survive TimeoutExpired without decoding or retry.
         record_property("operational_fixture_stdout", str(stdout_path))
         record_property("operational_fixture_stderr", str(stderr_path))
-        record_property("operational_fixture_test_count", "22")
+        record_property("operational_fixture_test_count", "34")
         result = subprocess.run(
             [
                 node,
@@ -1663,8 +1663,8 @@ def test_bug015_operational_fixture_read_contracts(tmp_path, record_property):
         re.MULTILINE,
     ))
     assert counts == {
-        "tests": "22",
-        "pass": "22",
+        "tests": "34",
+        "pass": "34",
         "fail": "0",
         "cancelled": "0",
         "skipped": "0",
@@ -1683,7 +1683,7 @@ def test_bug015_launcher_retains_raw_streams_and_original_failure(
     timeout = subprocess.TimeoutExpired(["offline-node"], 30)
     constructor_error = OSError("offline constructor refusal")
     summary = (
-        b"# tests 22\n# pass 22\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+        b"# tests 34\n# pass 34\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
     )
     partial_stdout = b"partial stdout\xff\n"
     partial_stderr = b"partial stderr\xfe\n"
@@ -1695,7 +1695,7 @@ def test_bug015_launcher_retains_raw_streams_and_original_failure(
         assert properties == {
             "operational_fixture_stdout": str(stdout_path),
             "operational_fixture_stderr": str(stderr_path),
-            "operational_fixture_test_count": "22",
+            "operational_fixture_test_count": "34",
         }
         assert options["timeout"] == 30 and options["check"] is False
         assert "capture_output" not in options and "encoding" not in options

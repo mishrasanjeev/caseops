@@ -1,5 +1,59 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Main Integration: Complete Local Replacement, Release Still Pending
+
+**Partially implemented; final release remains NO-GO.** Main7780 introduced
+protections that the native candidate must preserve. The current integration
+keeps four serial bounded browser groups, adds individual timeout/cancellation
+continuation only at the three new internal links, and retains whole-workflow
+cancellation, exact-source checkout and manual-dispatch fences. Historical Batch4
+markers require the reviewed ancestry anchor, exact HEAD/SHA and both workspace
+and Git-tree source absence. They remain diagnostic: the final record job rejects
+them before current-release certification. Modern five-v2-envelope,172-test union,
+seven-artifact and fourteen-successful-role requirements remain unchanged.
+
+The private resume source contract now enumerates every display-template matrix
+job before requiring the exact ordered six IDs. Four controls reject repurposed
+existing non-QA jobs, including duplicate legitimate roles that a set could hide.
+The operational Matter fixture preserves the upstream preferred-ID/active-shortlist
+reach, current tenant visibility and exact-ID revalidation within the original
+20-second,three-page,six-readback/nine-GET setup bounds. Its original22 controls
+remain intact with12 additions; the dated240-second test,one200-second POST,
+no-paid headers and exact paid-provider409 assertion remain unchanged.
+
+Retain the first complete local1709 run as FAILED:1705 passed,one parent fixture
+count failed and the same three original POSIX-only cases skipped; all5124 phases
+and1709 JUnit identities were reconciled. The actual inner Node fixture passed34;
+its independent launcher/property/fake-summary contract still expected22. Exactly
+five lines/six values now say34, preserving30-second admission, raw stdout/stderr,
+native-exit handling and zero failure/cancellation/skip/todo requirements. The ten
+launcher sidecars,all15 affected phases and128 native32 sidecars remain retained.
+See main7780-local-verification01-peer-readback01,its failure supplement and the
+failed gate's ROOT-RECONCILIATION.json; the failed result is not promoted to pass.
+
+The complete changed-source replacement passed1709 cases:1706 passes,the same
+three skips and5124 phases across539 evidence,231 workflow,444 resume,58 scheduler,
+73 checkout,187 native-helper,119 sharding and58 finalizer cases. Exact43 frontend
+inventory/worker cases and both direct and nested34-case Node fixtures passed.
+Component and E2E TypeScript,type generation and Ruff13 passed. All328 deployment
+identities were collected in exact order,with no deployment-test bodies executed.
+Both original and durably retained native32 receipts prove32 native-zero exits,
+64 disjoint cases and192 phases. All3984 source and three runtime bookends match;
+Root independently reconciled phases,JUnits,receipts and original process absence.
+See preparation03/main7780-local-verification02/ROOT-RECONCILIATION.json beneath the
+mac-release evidence directory. The earlier Source04 Linux187 proof remains scoped
+to its unchanged helper bytes; local component checks are not whole-release proof.
+
+The real ancestry integration requires ordered parentsa2aa5810 and7780fe2,27
+reviewed changed paths versusaa55 and31 versus current main; it is not an empty
+substitute for upstream adaptation. Fresh final-source complete CI/Security/Mobile,
+CodeQL analysis plus its separate alert verdict,current full shipping-runtime
+frontend,actual328 rehearsal and exact-main canonical deployment remain required.
+Whole exact-serving production QA and two later serial clean maintenance executions
+(second rebuild_count0) precede guarded private-cadence resume. Privacy is live and
+the signing secret exists; native activation and actual Mac APK/emulator/store
+acceptance remain separate pending boundaries. M15/NFT-016;J20/M22.
+
 ## November 3 Directory Publication Ownership: Current Replacement Proof
 
 **Partially fixed; final release acceptance remains pending.** Candidate7c6ee7c

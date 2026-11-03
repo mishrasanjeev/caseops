@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -309,8 +310,11 @@ def _batch4_checkout(tmp_path: Path, *, specs: bool, governance: object) -> Path
 
 def _run_offline_step(
     tmp_path: Path, script: str, root: Path, env: dict[str, str], ancestor: int = 1,
-    live: str = "disabled",
+    live: str = "disabled", head_sha: str = "a" * 40, tracked_specs: str = "",
+    git_error: str = "",
 ) -> tuple[subprocess.CompletedProcess[str], list[list[str]], list[str], list[str]]:
+    if git_error not in {"", "head", "tree"}:
+        raise ValueError("Unsupported offline Git failure boundary")
     runner = tmp_path / "runner"
     runner.mkdir()
     calls = tmp_path / "calls.log"
@@ -321,15 +325,29 @@ def _run_offline_step(
     )
     # Only shell shims run: no Playwright, network, or real git history is touched.
     shims = (
-        'git() { [[ "$*" == "merge-base --is-ancestor HEAD ' + BATCH4_BASE + '" ]] || exit 97; '
-        'return "$CASEOPS_TEST_ANCESTOR"; }\n'
-        'python() { if [[ "${2:-}" == validate ]]; then '
+        'git() { case "$*" in\n'
+        '"merge-base --is-ancestor HEAD ' + BATCH4_BASE + '") '
+        'return "$CASEOPS_TEST_ANCESTOR" ;;\n'
+        '"rev-parse HEAD") [[ "$CASEOPS_TEST_GIT_ERROR" != head ]] || return 1; '
+        'printf \'%s\\n\' "$CASEOPS_TEST_HEAD_SHA" ;;\n'
+        '"ls-tree --name-only HEAD -- tests/e2e/ram-2026-10-31-control-crawl.spec.ts '
+        'tests/e2e/ram-2026-10-31-governance-ui.spec.ts") '
+        '[[ "$CASEOPS_TEST_GIT_ERROR" != tree ]] || return 1; '
+        'printf \'%s\' "$CASEOPS_TEST_TRACKED_SPECS" ;;\n'
+        '*) return 97 ;; esac; }\n'
+        'python() { if [[ "$#" -ge 4 && "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == validate && "${3:-}" == --required ]]; then '
         'printf \'%s\\n\' "${@:4}" > "$CASEOPS_TEST_VALIDATED"; return 0; fi; '
         # The live production probe is replaced: no credentials leave the test.
         'if [[ "${1:-}" == scripts/prod_rule_governance_live.py ]]; then '
         '[[ "$CASEOPS_TEST_LIVE" != fail ]] || return 1; '
         'printf \'%s\\n\' "$CASEOPS_TEST_LIVE"; return 0; fi; '
-        '"$CASEOPS_TEST_PYTHON" "$@"; }\n'
+        'if [[ "$#" == 2 && "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == batch4-governance ]]; then '
+        '"$CASEOPS_TEST_PYTHON" "$@"; return; fi; '
+        'if [[ "$#" == 2 && "${1:-}" == - && "${2:-}" == '
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]]; then '
+        '"$CASEOPS_TEST_PYTHON" "$@"; return; fi; return 98; }\n'
     )
     environment = {
         key: value for key, value in os.environ.items()
@@ -339,7 +357,9 @@ def _run_offline_step(
         "RUNNER_TEMP": runner.as_posix(), "CASEOPS_TEST_CALLS": calls.as_posix(),
         "CASEOPS_TEST_VALIDATED": validated.as_posix(), "CASEOPS_TEST_ANCESTOR": str(ancestor),
         "CASEOPS_TEST_PYTHON": Path(sys.executable).as_posix(), "PYTHONUTF8": "1",
-        "CASEOPS_TEST_LIVE": live, "GITHUB_OUTPUT": outputs.as_posix(), **env,
+        "CASEOPS_TEST_LIVE": live, "CASEOPS_TEST_HEAD_SHA": head_sha,
+        "CASEOPS_TEST_TRACKED_SPECS": tracked_specs, "CASEOPS_TEST_GIT_ERROR": git_error,
+        "GITHUB_OUTPUT": outputs.as_posix(), **env,
     })
     result = subprocess.run(
         [_git_bash(), "-c", shims + script], cwd=root, env=environment,
@@ -478,7 +498,7 @@ def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
     if not specs:
         # A pre-feature step notice is history, never current mandatory-job proof.
         assert result.returncode == 1 and required == []
-        assert "Batch4 acceptance recorded no live rule-governance state." in result.stdout
+        assert "Newer serving release is missing Batch4 acceptance." in result.stdout
     else:
         assert result.returncode == 0, result.stderr
         assert required == batch4
@@ -795,6 +815,11 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         assert job["needs"] == ["resolve-release", predecessor]
         assert "always()" in job["if"] and "!cancelled()" in job["if"]
         assert f"needs.{predecessor}.result == 'failure'" in job["if"]
+        cancelled = f"needs.{predecessor}.result == 'cancelled'"
+        if name in {"prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester"}:
+            assert cancelled in job["if"]
+        else:
+            assert cancelled not in job["if"]
         assert "needs.resolve-release.result == 'success'" in job["if"]
         assert job["strategy"]["matrix"]["suite"] == [suite]
         assert job["steps"] == original["steps"]
@@ -1562,3 +1587,252 @@ def test_final_claim_has_no_empty_or_unknown_batch4_governance_waiver(tmp_path, 
     env = {} if governance is None else {"BATCH4_GOVERNANCE": governance}
     result, invoked, required, _ = _run_offline_step(tmp_path, step["run"], root, env)
     assert result.returncode == 1 and invoked == [] and required == []
+
+
+LATE_SPLIT_LINKS = (
+    ("prod-test-legal-write-oct13-b", "prod-test-legal-write-oct13-a"),
+    ("prod-batch3-tester", "prod-test-legal-write-oct13-b"),
+    ("prod-batch4-tester", "prod-batch3-tester"),
+)
+HISTORICAL_BATCH4_CLASSIFIER = (
+    "Reject historical Batch4 markers before current-release certification"
+)
+
+
+def _split_condition(
+    condition: str, predecessor: str, result: str, *, whole_cancelled: bool,
+    resolve: str = "success", event: str = "workflow_dispatch",
+) -> bool:
+    replacements = {
+        "always()": True, "!cancelled()": not whole_cancelled,
+        "github.event_name": event, "needs.resolve-release.result": resolve,
+        f"needs.{predecessor}.result": result,
+    }
+    for token, value in replacements.items():
+        condition = condition.replace(token, repr(value))
+    expression = ast.parse(condition.replace("&&", "and").replace("||", "or"), mode="eval")
+
+    def evaluate(node):
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+        if isinstance(node, ast.Constant) and type(node.value) in {str, bool}:
+            return node.value
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+            values = [evaluate(value) for value in node.values]
+            return all(values) if isinstance(node.op, ast.And) else any(values)
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
+            return evaluate(node.left) == evaluate(node.comparators[0])
+        raise ValueError("Unreviewed production split condition")
+
+    value = evaluate(expression)
+    if type(value) is not bool:
+        raise ValueError("Production split condition did not produce a Boolean")
+    return value
+
+
+@pytest.mark.parametrize("job,predecessor", LATE_SPLIT_LINKS)
+@pytest.mark.parametrize("result", [
+    "success", "failure", "cancelled", "skipped", "queued", "in_progress",
+])
+@pytest.mark.parametrize("whole_cancelled", [False, True])
+def test_late_split_jobs_continue_after_individual_cancellation_but_not_workflow_cancellation(
+    job, predecessor, result, whole_cancelled,
+):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    selected = workflow["jobs"][job]
+    assert selected["needs"] == ["resolve-release", predecessor]
+    actual = _split_condition(selected["if"], predecessor, result,
+                              whole_cancelled=whole_cancelled)
+    assert actual is (not whole_cancelled and result in {"success", "failure", "cancelled"})
+
+
+@pytest.mark.parametrize("job,predecessor", LATE_SPLIT_LINKS)
+@pytest.mark.parametrize("resolve,event", [("failure", "workflow_dispatch"), ("success", "push")])
+def test_late_split_continuation_keeps_resolver_and_manual_dispatch_fences(
+    job, predecessor, resolve, event,
+):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    actual = _split_condition(workflow["jobs"][job]["if"], predecessor, "cancelled",
+                              whole_cancelled=False, resolve=resolve, event=event)
+    assert actual is False
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("specs", [False, True])
+@pytest.mark.parametrize("live", ["", "disabled", "enabled"])
+def test_october13_partition_no_longer_owes_batch4_receipts(tmp_path, part, specs, live):
+    root = _batch4_checkout(tmp_path, specs=specs, governance=live == "enabled")
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": part, "BATCH4_GOVERNANCE": live},
+    )
+    marker_exists = (root / "test-results/prod-native-evidence/batch4-predates.json").exists()
+    assert result.returncode == 0, result.stderr
+    assert invoked == [] and recorded == [] and required == [part]
+    assert marker_exists is False
+
+
+@pytest.mark.parametrize("ancestor,code,message", [
+    (0, 0, "::notice::Serving source predates Batch4 acceptance; no Batch4 receipts are owed."),
+    (1, 1, "::error::Newer serving release is missing Batch4 acceptance."),
+])
+def test_batch4_partition_owes_nothing_only_for_a_release_that_predates_batch4(
+    tmp_path, ancestor, code, message,
+):
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "batch4", "CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40}, ancestor=ancestor,
+    )
+    marker = root / "test-results/prod-native-evidence/batch4-predates.json"
+    marker_bytes = marker.read_bytes() if marker.exists() else None
+    assert result.returncode == code and result.stdout.strip() == message
+    assert invoked == [] and required == [] and recorded == []
+    assert marker_bytes == (
+        b'{"release_sha": "' + b"a" * 40 +
+        b'", "completed": false, "reason": "serving_release_predates_batch4_acceptance"}\n'
+        if code == 0 else None
+    )
+
+
+@pytest.mark.parametrize("fault", [
+    "head_mismatch", "head_unreadable", "tree_contains_spec", "tree_unreadable",
+    "partial_workspace", "partial_control", "malformed_expected_sha", "lineage_unknown",
+])
+def test_batch4_historical_marker_requires_exact_sha_and_both_source_absence_observations(
+    tmp_path, fault,
+):
+    faults = {"head_mismatch", "head_unreadable", "tree_contains_spec", "tree_unreadable",
+              "partial_workspace", "partial_control", "malformed_expected_sha", "lineage_unknown"}
+    if fault not in faults:
+        raise ValueError("Unsupported historical Batch4 source fault")
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    if fault in {"partial_workspace", "partial_control"}:
+        (root / "tests/e2e").mkdir(parents=True)
+        spec = ("ram-2026-10-31-governance-ui.spec.ts" if fault == "partial_workspace"
+                else "ram-2026-10-31-control-crawl.spec.ts")
+        (root / "tests/e2e" / spec).touch()
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "batch4", "CASEOPS_EXPECTED_RELEASE_SHA": (
+            "invalid" if fault == "malformed_expected_sha" else "a" * 40)},
+        ancestor=2 if fault == "lineage_unknown" else 0,
+        head_sha="b" * 40 if fault == "head_mismatch" else "a" * 40,
+        tracked_specs="tests/e2e/ram-2026-10-31-control-crawl.spec.ts"
+        if fault == "tree_contains_spec" else "",
+        git_error={"head_unreadable": "head", "tree_unreadable": "tree"}.get(fault, ""),
+    )
+    marker_exists = (root / "test-results/prod-native-evidence/batch4-predates.json").exists()
+    assert result.returncode == 1 and invoked == [] and required == [] and recorded == []
+    assert marker_exists is False
+    if fault == "partial_workspace":
+        message = "Batch4 historical marker requires both acceptance source files absent."
+    elif fault in {"partial_control", "lineage_unknown"}:
+        message = "Newer serving release is missing Batch4 acceptance."
+    elif fault in {"tree_contains_spec", "tree_unreadable"}:
+        message = "Batch4 acceptance source absence is not proven by the serving tree."
+    else:
+        message = "Batch4 historical marker requires the exact serving SHA."
+    assert message in result.stdout
+
+
+def _historical_classifier_step():
+    import yaml
+
+    job = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text()
+    )["jobs"]["record-release-evidence"]
+    return job, next(step for step in job["steps"]
+                     if step.get("name") == HISTORICAL_BATCH4_CLASSIFIER)
+
+
+@pytest.mark.parametrize("case", [
+    "current", "historical", "newer_missing", "marker_on_current", "missing_marker",
+    "wrong_sha", "wrong_payload", "extra_payload", "tree_contains_spec", "tree_unreadable",
+    "head_mismatch", "head_unreadable", "malformed_expected_sha", "partial_workspace",
+])
+def test_historical_marker_cannot_publish_current_release_claims(tmp_path, case):
+    supported = {"current", "historical", "newer_missing", "marker_on_current", "missing_marker",
+                 "wrong_sha", "wrong_payload", "extra_payload", "tree_contains_spec",
+                 "tree_unreadable", "head_mismatch", "head_unreadable",
+                 "malformed_expected_sha", "partial_workspace"}
+    if case not in supported:
+        raise ValueError("Unsupported historical certification fixture")
+    modern = case in {"current", "marker_on_current"}
+    root = _batch4_checkout(tmp_path, specs=modern, governance=False)
+    if case == "partial_workspace":
+        (root / "tests/e2e").mkdir(parents=True)
+        (root / "tests/e2e/ram-2026-10-31-governance-ui.spec.ts").touch()
+    marker = root / "test-results/prod-native-evidence/batch4-predates.json"
+    if case not in {"current", "missing_marker"}:
+        marker.parent.mkdir(parents=True)
+        payload = {"release_sha": "b" * 40 if case == "wrong_sha" else "a" * 40,
+                   "completed": case == "wrong_payload",
+                   "reason": "serving_release_predates_batch4_acceptance"}
+        if case == "extra_payload":
+            payload["extra"] = True
+        marker.write_bytes((json.dumps(payload) + "\n").encode("ascii"))
+    original_marker = marker.read_bytes() if marker.exists() else None
+    _, step = _historical_classifier_step()
+    writer = tmp_path / "writer-reached"
+    # The sentinel is an owned offline publication stand-in; no live writer may run.
+    script = ('set -euo pipefail\n(\n' + step["run"]
+              + '\n)\nprintf reached > "$CASEOPS_TEST_WRITER"\n')
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, script, root,
+        {"CASEOPS_EXPECTED_RELEASE_SHA": (
+            "invalid" if case == "malformed_expected_sha" else "a" * 40),
+         "CASEOPS_TEST_WRITER": writer.as_posix()},
+        ancestor=1 if case == "newer_missing" else 0,
+        head_sha="b" * 40 if case == "head_mismatch" else "a" * 40,
+        tracked_specs="tests/e2e/ram-2026-10-31-control-crawl.spec.ts"
+        if case == "tree_contains_spec" else "",
+        git_error={"tree_unreadable": "tree", "head_unreadable": "head"}.get(case, ""),
+    )
+    writer_reached = writer.exists()
+    retained_marker = marker.read_bytes() if marker.exists() else None
+    assert result.returncode == (0 if case == "current" else 1)
+    assert writer_reached is (case == "current")
+    assert invoked == [] and required == [] and recorded == []
+    assert retained_marker == original_marker
+    if case == "current":
+        writer_bytes = writer.read_bytes()
+        assert writer_bytes == b"reached"
+        return
+    if case == "historical":
+        message = "diagnostic only. Current-release certification is incomplete."
+    elif case in {"newer_missing", "marker_on_current", "partial_workspace"}:
+        message = "Batch4 historical marker does not match a pre-feature serving source."
+    elif case == "missing_marker":
+        message = "Missing Batch4 source has no verified historical marker"
+    elif case in {"tree_contains_spec", "tree_unreadable"}:
+        message = "Batch4 acceptance source absence is not proven by the serving tree."
+    elif case in {"head_mismatch", "head_unreadable", "malformed_expected_sha"}:
+        message = "Batch4 certification requires the exact serving SHA."
+    else:
+        message = "Batch4 historical marker payload does not match the exact serving release."
+    assert message in result.stdout + result.stderr
+
+
+def test_historical_classifier_never_replaces_current_union_roles_or_successful_qa_jobs():
+    job, classifier = _historical_classifier_step()
+    names = [step.get("name") for step in job["steps"]]
+    assert names.index(classifier["name"]) < names.index(
+        "Require complete source-bound tester partition union"
+    ) < names.index("Record exact-release public-claims evidence")
+    union = next(step for step in job["steps"]
+                 if step.get("name") == "Require complete source-bound tester partition union")
+    assert "--required-version 2" in union["run"] and "--tester-partition-union" in union["run"]
+    assert (
+        "--required tester tester-catalog tester-index "
+        "test-legal-write-oct13-a test-legal-write-oct13-b"
+    ) in union["run"]
+    for name, _, _ in SPLIT_QA_JOBS:
+        assert f"needs.{name}.result == 'success'" in job["if"]
+    writer = next(step for step in job["steps"]
+                  if step.get("name") == "Record exact-release public-claims evidence")
+    assert "if" not in writer

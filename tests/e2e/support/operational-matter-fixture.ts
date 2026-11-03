@@ -20,6 +20,7 @@ type FixtureRequest = {
 };
 
 type SetupFailure =
+  | "PREFERRED_ID"
   | "DEADLINE"
   | "TRANSPORT"
   | "AUTHORIZATION"
@@ -97,7 +98,12 @@ export async function selectOperationalMatterForRecommendations(
   apiBaseUrl: string,
   headers: Record<string, string>,
   now: () => number = () => performance.now(),
+  preferredId?: string,
 ): Promise<string> {
+  // Match MatterListFilters.id before any HTTP admission; never reflect the hint.
+  if (preferredId !== undefined && (
+    typeof preferredId !== "string" || preferredId.length === 0 || preferredId.length > 36
+  )) fail("PREFERRED_ID");
   const deadline = now() + SETUP_TIMEOUT_MS;
   const readHeaders = {
     ...headers,
@@ -135,35 +141,58 @@ export async function selectOperationalMatterForRecommendations(
     return parsePage(body, companyId);
   };
 
-  let cursor: string | null = null;
-  const cursors = new Set<string>();
   const candidates = new Set<string>();
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const query = new URLSearchParams({ limit: String(LIST_PAGE_SIZE) });
-    if (cursor !== null) query.set("cursor", cursor);
-    const listed = await read(query);
-    companyId = listed.company_id;
-    for (const matter of listed.matters) {
-      if (!operational(matter) || candidates.has(matter.id)) continue;
-      if (candidates.size >= MAX_REVALIDATIONS) fail("CANDIDATE_LIMIT");
-      candidates.add(matter.id);
-      // This normal list filter applies current tenant + ethical-wall visibility.
-      // It avoids probing a denied detail route or promoting a retained Matter.
-      const current = await read(new URLSearchParams({ id: matter.id, limit: "1" }));
-      if (
-        current.matters.length > 1
-        || (current.matters.length === 1 && current.matters[0].id !== matter.id)
-        || current.next_cursor !== null
-      ) fail("READBACK_IDENTITY");
-      if (current.matters.length === 1 && operational(current.matters[0])) {
-        checkTime();
-        return current.matters[0].id;
-      }
+  const revalidate = async (id: string): Promise<string | null> => {
+    if (candidates.size >= MAX_REVALIDATIONS) fail("CANDIDATE_LIMIT");
+    candidates.add(id);
+    // The normal id list filter retains current tenant + ethical-wall visibility.
+    // A hidden hint is an empty list, never a reason to probe a denied detail route.
+    const current = await read(new URLSearchParams({ id, limit: "1" }));
+    companyId = current.company_id;
+    if (
+      current.matters.length > 1
+      || (current.matters.length === 1 && current.matters[0].id !== id)
+      || current.next_cursor !== null
+    ) fail("READBACK_IDENTITY");
+    if (current.matters.length === 1 && operational(current.matters[0])) {
+      checkTime();
+      return current.matters[0].id;
     }
-    if (listed.next_cursor === null) fail("NO_OPERATIONAL_MATTER");
-    if (cursors.has(listed.next_cursor)) fail("CURSOR_CYCLE");
-    cursors.add(listed.next_cursor);
-    cursor = listed.next_cursor;
+    return null;
+  };
+
+  if (preferredId !== undefined) {
+    const preferred = await revalidate(preferredId);
+    if (preferred !== null) return preferred;
+  }
+
+  let listedPages = 0;
+  // Preserve main's one active-filtered shortlist when a preferred hint is stale.
+  // It shares the original three-page/six-readback budget with the fallback.
+  const scopes: Array<"active" | null> = preferredId === undefined ? [null] : ["active", null];
+  for (const status of scopes) {
+    let cursor: string | null = null;
+    const cursors = new Set<string>();
+    while (listedPages < MAX_LIST_PAGES) {
+      const query = new URLSearchParams({ limit: String(LIST_PAGE_SIZE) });
+      if (status !== null) query.set("status", status);
+      if (cursor !== null) query.set("cursor", cursor);
+      const listed = await read(query);
+      listedPages += 1;
+      companyId = listed.company_id;
+      for (const matter of listed.matters) {
+        if (!operational(matter) || candidates.has(matter.id)) continue;
+        const selected = await revalidate(matter.id);
+        if (selected !== null) return selected;
+      }
+      // This is the same single filtered lookup as main. Never carry its opaque
+      // cursor into the unfiltered scope, which can admit intake/on_hold too.
+      if (status === "active") break;
+      if (listed.next_cursor === null) fail("NO_OPERATIONAL_MATTER");
+      if (cursors.has(listed.next_cursor)) fail("CURSOR_CYCLE");
+      cursors.add(listed.next_cursor);
+      cursor = listed.next_cursor;
+    }
   }
   fail("PAGE_LIMIT");
 }

@@ -284,21 +284,56 @@ def test_private_resume_requires_each_regular_job_even_with_recorded_evidence(
     assert_no_resume(state)
 
 
-def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory():
-    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
-    jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
-    regular = {"Resolve exact production release", "Record exact-release evidence"}
-    for key in (
+def _regular_dispatch_inventory(jobs):
+    partitions = [
+        key for key, job in jobs.items()
+        if job.get("name") == "Prod Playwright (${{ matrix.suite }})"
+    ]
+    assert partitions == [
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester",
-    ):
+    ], "Complete regular QA partition inventory changed"
+    regular = {"Resolve exact production release", "Record exact-release evidence"}
+    for key in partitions:
         regular.update("Prod Playwright (" + suite + ")"
                        for suite in jobs[key]["strategy"]["matrix"]["suite"])
+    return regular
+
+
+def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory():
+    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
+    jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
+    regular = _regular_dispatch_inventory(jobs)
     assert len(regular) == 14 and set(REQUIRED_JOBS) == regular
     assert "prod-test-legal-write-oct13" not in jobs
     assert "Prod Playwright (test-legal-write-oct13)" not in regular
     assert "Scheduled read-only statute verification" not in regular
+
+
+@pytest.mark.parametrize("job_id", ["scheduled-statute-verification", "record-release-evidence"])
+@pytest.mark.parametrize("suite", ["tester", "unreviewed-extra"])
+def test_private_resume_inventory_rejects_existing_non_qa_job_repurposed_as_matrix(job_id, suite):
+    if job_id not in {"scheduled-statute-verification", "record-release-evidence"} or suite not in {
+        "tester", "unreviewed-extra",
+    }:
+        raise ValueError("Unsupported repurposed QA inventory fixture")
+    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
+    jobs = copy.deepcopy(yaml.safe_load(workflow_path.read_text())["jobs"])
+    regular = _regular_dispatch_inventory(jobs)
+    assert regular == set(REQUIRED_JOBS) and len(regular) == 14
+    original_ids = set(jobs)
+    original_steps = copy.deepcopy(jobs[job_id]["steps"])
+    assert jobs[job_id]["name"] != "Prod Playwright (${{ matrix.suite }})"
+    assert original_steps[1]["name"] == "Validate canonical serving commit before release code"
+    # Keep this existing job's identity and valid guard. A duplicate legitimate
+    # suite also defeats an inventory that merely collapses all roles to a set.
+    jobs[job_id]["name"] = "Prod Playwright (${{ matrix.suite }})"
+    jobs[job_id]["strategy"] = {"matrix": {"suite": [suite]}}
+    with pytest.raises(AssertionError, match="Complete regular QA partition inventory"):
+        _regular_dispatch_inventory(jobs)
+    assert set(jobs) == original_ids
+    assert jobs[job_id]["steps"] == original_steps
 
 
 def captured_jobs():
