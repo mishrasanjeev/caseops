@@ -462,6 +462,19 @@ test("portfolio export categories survive sanitization without source identities
   }
 });
 
+test("IP list and workspace categories retain reads without private identities", async () => {
+  for (const route of ["ip/madrid-list", "ip/madrid-workspace", "ip/foreign-associate-list",
+    "ip/foreign-associate-workspace", "ip/recordal-list", "ip/recordal-workspace"]) {
+    const data = snapshot();
+    data.records = [{ ...data.records[0], route, method: "GET" }];
+    const { evidence } = await diagnostic(attach(data));
+    assert.equal(evidence.status, "retained");
+    assert.deepEqual(evidence.snapshot, data);
+    data.records[0].route = `${route}/PRIVATE-RECORD?query=${sentinel}`;
+    assert.equal((await diagnostic(attach(data))).evidence.status, "rejected");
+  }
+});
+
 test("same-name malicious extra keys or private enum/correlator values rejected before any write", async () => {
   const bad = [];
   const extra = snapshot(); extra.rawBody = sentinel; bad.push(extra);

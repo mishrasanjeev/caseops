@@ -1,5 +1,5 @@
 import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,7 @@ vi.mock("@/lib/api/endpoints", async () => {
 });
 
 import ForeignAssociatesPage from "@/app/app/ip/foreign-associates/page";
+import { ApiError, NetworkError } from "@/lib/api/config";
 
 const INSTRUCTION: IpForeignAssociateInstruction = {
   id: "instruction-1",
@@ -237,16 +238,22 @@ async function openCreateFor(user: ReturnType<typeof userEvent.setup>, docketId:
   return jurisdiction;
 }
 
-function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function wrapper(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+  return { promise, resolve, reject };
 }
 
 describe("foreign-associate coordinator workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.capability.mockReturnValue(true);
-    mocks.instructions.mockResolvedValue({ items: [INSTRUCTION], total: 1, limit: 100, offset: 0 });
+    mocks.instructions.mockReset().mockResolvedValue({ items: [INSTRUCTION], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(workspace());
     mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     mocks.documents.mockResolvedValue({ items: DOCUMENTS, total: DOCUMENTS.length });
@@ -260,6 +267,116 @@ describe("foreign-associate coordinator workspace", () => {
       docket_id: "docket-1", matter_id: "matter-1", assignment_required: true, target_jurisdiction: "US",
       associates: [LIBERTY, HUDSON], blockers: [],
     }));
+  });
+
+  it.each([
+    { name: "HTTP 503", error: new ApiError(503, "Temporarily unavailable", {}) },
+    { name: "network failure", error: new NetworkError("Connection lost", new TypeError("Failed to fetch")) },
+  ])("keeps the first instruction page after a next-page $name and retries only on request", async ({ error }) => {
+    const user = userEvent.setup();
+    const older = { ...INSTRUCTION, id: "instruction-older", scope_json: { ...INSTRUCTION.scope_json, source_reference: "OLDER-US-101" } };
+    const secondPage = { items: [older], total: 2, limit: 100, offset: 1 };
+    const next = deferred<typeof secondPage>();
+    const retry = deferred<typeof secondPage>();
+    mocks.instructions
+      .mockResolvedValueOnce({ items: [INSTRUCTION], total: 2, limit: 100, offset: 0 })
+      .mockReturnValueOnce(next.promise)
+      .mockReturnValueOnce(retry.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 2, retryDelay: 0 } } });
+    const view = render(<ForeignAssociatesPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByText("Showing 1 of 2 instructions");
+      await page.findByRole("heading", { name: "Liberty IP LLP" });
+      expect(mocks.instructions).toHaveBeenCalledTimes(1);
+      await user.click(page.getByRole("button", { name: "Load more instructions" }));
+      const busy = page.getByRole("button", { name: "Load more instructions" });
+      await waitFor(() => expect(busy).toHaveAttribute("aria-busy", "true"));
+      expect(busy).toBeDisabled();
+      await user.click(busy);
+      expect(mocks.instructions).toHaveBeenCalledTimes(2);
+      await act(async () => { next.reject(error); });
+      expect(await page.findByRole("alert")).toHaveTextContent(/Could not load more instructions/);
+      expect(page.getByRole("button", { name: /National application.*TM-US-101/ })).toBeVisible();
+      expect(page.getByRole("heading", { name: "Liberty IP LLP" })).toBeVisible();
+      expect(page.getByText("Showing 1 of 2 instructions")).toBeVisible();
+      expect(page.queryByTestId("query-error-retry")).not.toBeInTheDocument();
+      const more = page.getByRole("button", { name: "Load more instructions" });
+      expect(more).toBeEnabled();
+      expect(more).toHaveAttribute("aria-busy", "false");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(mocks.instructions).toHaveBeenCalledTimes(2);
+      await user.click(more);
+      await waitFor(() => expect(page.getByRole("button", { name: "Load more instructions" })).toHaveAttribute("aria-busy", "true"));
+      expect(mocks.instructions).toHaveBeenCalledTimes(3);
+      await act(async () => { retry.resolve(secondPage); });
+      expect(await page.findByRole("button", { name: /National application.*OLDER-US-101/ })).toBeVisible();
+      expect(page.getByText("Showing 2 of 2 instructions")).toBeVisible();
+      expect(page.queryByRole("alert")).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more instructions" })).not.toBeInTheDocument();
+      expect(mocks.instructions.mock.calls.map((call) => call[1].offset)).toEqual([0, 1, 1]);
+      expect(mocks.workspace).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([401, 403, 404, 409, "unknown"] as const)("hides cached instructions after a next-page %s failure", async (status) => {
+    mocks.instructions
+      .mockResolvedValueOnce({ items: [INSTRUCTION], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValueOnce(status === "unknown" ? new Error("Unexpected response") : new ApiError(status, "Read refused", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<ForeignAssociatesPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("heading", { name: "Liberty IP LLP" });
+      await userEvent.setup().click(page.getByRole("button", { name: "Load more instructions" }));
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryByRole("button", { name: /National application.*TM-US-101/ })).not.toBeInTheDocument();
+      expect(page.queryByRole("heading", { name: "Liberty IP LLP" })).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more instructions" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip-foreign-associates", "all"])).toMatchObject({ pages: [{ items: [INSTRUCTION] }] });
+      expect(mocks.instructions).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it("blocks a failed first-page instruction refresh even while its private rows remain cached", async () => {
+    mocks.instructions
+      .mockResolvedValueOnce({ items: [INSTRUCTION], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValue(new ApiError(503, "Temporarily unavailable", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<ForeignAssociatesPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("heading", { name: "Liberty IP LLP" });
+      await act(async () => { await client.refetchQueries({ queryKey: ["ip-foreign-associates", "all"], exact: true }); });
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryByRole("button", { name: /National application.*TM-US-101/ })).not.toBeInTheDocument();
+      expect(page.queryByRole("heading", { name: "Liberty IP LLP" })).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more instructions" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip-foreign-associates", "all"])).toMatchObject({ pages: [{ items: [INSTRUCTION] }] });
+      expect(mocks.instructions.mock.calls.map((call) => call[1].offset)).toEqual([0, 0]);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([
+    new ApiError(503, "Temporarily unavailable", {}),
+    new NetworkError("Connection lost", new TypeError("Failed to fetch")),
+  ])("keeps a first-page instruction failure blocking (%s)", async (error) => {
+    mocks.instructions.mockRejectedValue(error);
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+    expect(await screen.findByTestId("query-error-retry")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /National application.*TM-US-101/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more instructions" })).not.toBeInTheDocument();
+    expect(mocks.instructions).toHaveBeenCalledTimes(1);
+    expect(mocks.workspace).not.toHaveBeenCalled();
   });
 
   it("keeps delivery separate from acknowledgement and opens selected source documents", async () => {

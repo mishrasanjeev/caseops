@@ -83,7 +83,8 @@ BATCH4_MANDATORY_CASES = {
             "/app/ip/watch", "/app/ip/reports", "/app/ip/client-portal", "/app/ip/patents",
             "/app/ip/specialist", "/app/calendar", "/app/admin/matter-billing",
             "/app/drive", "/app/mailbox", "/app/calendar/conflicts", "/app/admin/notifications",
-            "/app/ip reported docket", "/app/matters reported Matter billing",
+            "/app/ip reported docket",
+            "/app/matters reported Matter billing",
         )),
         (_B4("docket-sweep"), "DOCKET-SWEEP calendar-copy reviews: the daily docket counts "
          "every pending review the server reports, not the first 100"),

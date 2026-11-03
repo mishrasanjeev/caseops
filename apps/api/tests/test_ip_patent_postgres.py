@@ -978,6 +978,7 @@ def _check_patent_family_scale(
     tmp_path,
     mixed_order=False,
     fresh_statistics=False,
+    fresh_disclosure_statistics=False,
     family_uuid_base=None,
     adverse_joins=True,
 ):
@@ -1026,6 +1027,8 @@ def _check_patent_family_scale(
                 "ethical_walls",
             ):
                 session.execute(text(f"ANALYZE {table}"))
+        if fresh_disclosure_statistics:
+            session.execute(text("ANALYZE ip_patent_family_versions"))
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         statements = []
         page_statements = []
@@ -1367,20 +1370,26 @@ def test_patent_family_list_fresh_mixed_tenant_statistics_bound_outer_family_wor
     )
 
 
-@pytest.mark.parametrize("profile", ["fresh", "stale_unique", "stale_mixed"])
+@pytest.mark.parametrize("profile", ["fresh", "stale_unique", "stale_mixed", "fresh_mixed"])
 def test_patent_family_list_default_join_scale_profiles(
     migration_pg_engine, request, tmp_path, profile
 ):
     if profile == "stale_unique":
         _train_patent_family_unique_statistics(migration_pg_engine)
-    elif profile == "stale_mixed":
+    elif profile in {"stale_mixed", "fresh_mixed"}:
+        if profile == "fresh_mixed":
+            with migration_pg_engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE ip_patent_family_versions SET (autovacuum_enabled = false)")
+                )
         _train_patent_family_mixed_statistics(migration_pg_engine)
     _check_patent_family_scale(
         migration_pg_engine,
         request=request,
         tmp_path=tmp_path,
-        mixed_order=profile == "stale_mixed",
-        fresh_statistics=profile == "fresh",
+        mixed_order=profile in {"stale_mixed", "fresh_mixed"},
+        fresh_statistics=profile in {"fresh", "fresh_mixed"},
+        fresh_disclosure_statistics=profile == "fresh_mixed",
         adverse_joins=False,
     )
 

@@ -1,5 +1,34 @@
 # Lifecycle Admission And Race Ownership
 
+## November 2 Fresh Disclosure Statistics: Candidate Only
+
+Fresh canonical Docker02 on1c exposed a remaining later-stage flaw, not a
+missing index or an incorrect authorized page. First/cursor custom and automatic
+disclosure-version plans chose `ix_patent_family_versions_company_registry`
+100times, charging482800/492800 total work and29022/29616 blocks. The complete
+unique composite index was present, valid and ready. All124 actual query,
+binding, catalogue and plan records were retained before stopping the failed
+baseline. It has91passed calls/1failed call and one setup-only partial, not a
+complete3625-case gate; its outer Windows exit0 cannot override native exit2
+and explicit interruption. No browser cases executed or production release.
+
+The previous correction equated complete unique-key predicates with reliable
+index selection. That was insufficient: fresh skewed statistics can still favor
+a company-only scan once per admitted key. Earlier fresh-family profiles did
+not explicitly control disclosure-version analysis, so this state could depend
+on background analysis timing. The narrow repair reuses the already established
+runtime tenant key inside all exact disclosure predicates. No range, new index,
+schema, literalized LIMIT, planner override, ACL/source/current-version change
+or larger work/buffer budget is introduced; SQLite stays unchanged.
+
+The new default-join `[fresh_mixed]` profile controls disclosure auto-analysis
+only in its separately migrated disposable fixture and explicitly analyzes
+those versions. The original adverse-join case and every existing profile stay.
+Focused original/new pair passed2cases/6phases/0skips at06:02UTC on isolated WIP,
+with unchanged source hashes. These are PostgreSQL component results, not CI,
+full Docker, canonical main, Playwright or production certification. Wider
+profile/integrity/adjacent checks and complete replacement gates remain required.
+
 ## October 31 Generic-Plan Correction: Still NO-GO
 
 3987 CI41170834397 independently failed four complete PostgreSQL selections:

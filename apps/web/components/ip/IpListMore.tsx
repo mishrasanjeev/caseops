@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronDown, Loader2 } from "lucide-react";
+
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -28,8 +30,17 @@ export function IpListMore({
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1 py-2 text-sm text-[var(--color-mute)]">
       <span role="status">Showing {shown} of {total} {noun}</span>
       {hasMore ? (
-        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={onMore}>
-          {loading ? "Loading…" : `Load more ${noun}`}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-auto min-h-8 min-w-0 max-w-full whitespace-normal"
+          disabled={loading}
+          aria-busy={loading}
+          onClick={onMore}
+        >
+          {loading ? <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" /> : <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0" />}
+          {`Load more ${noun}`}
         </Button>
       ) : null}
       {failed ? (
