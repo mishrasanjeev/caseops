@@ -4122,7 +4122,9 @@ def _native_link_config(**overrides: object) -> str:
     return json.dumps({
         "schemaVersion": 1, "kind": "caseops-native-links", "syntheticDataOnly": False,
         "redirectUri": "https://caseops.ai/native/oauth/callback",
-        "ios": {"bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "X9Y8Z7W6V5"},
+        "ios": {
+            "bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "X9Y8Z7W6V5",
+        },
         "android": {"packageName": "ai.caseops.mobile", "signingCertificateSha256": [
             "ebf387aaef4a5bf0de29d82bac7f6267988895bc48f63a518d23b1fb4690ec8f"]},
         **overrides,
@@ -4131,7 +4133,9 @@ def _native_link_config(**overrides: object) -> str:
 
 def _removed_env(call: str) -> set[str]:
     tokens = call.split(" ")
-    removed = [tokens[index + 1] for index, token in enumerate(tokens) if token == "--remove-env-vars"]
+    removed = [
+        tokens[index + 1] for index, token in enumerate(tokens) if token == "--remove-env-vars"
+    ]
     assert len(removed) <= 1, call
     return set(removed[0].split(",")) if removed else set()
 
@@ -4173,8 +4177,8 @@ def test_deploy_prod_enables_native_sign_in_from_the_committed_link_input(
     digest = hashlib.sha256(config.encode("utf-8")).hexdigest()
     assert f"native sign-in enabled from {_NATIVE_LINK_SOURCE} ({digest})" in result.stdout
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
-    secret = next(index for index, call in enumerate(calls)
-                  if call.startswith("secrets versions describe latest --secret caseops-native-signing-secret "))
+    describe = "secrets versions describe latest --secret caseops-native-signing-secret "
+    secret = next(index for index, call in enumerate(calls) if call.startswith(describe))
     api_index = next(index for index, call in enumerate(calls)
                      if call.startswith("run deploy caseops-api "))
     assert secret < api_index
@@ -4208,7 +4212,9 @@ def test_deploy_prod_refuses_native_sign_in_without_an_enabled_signing_secret(
 
 @pytest.mark.parametrize("config", [
     _native_link_config(syntheticDataOnly=True),
-    _native_link_config(ios={"bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "ABCDE12345"}),
+    _native_link_config(
+        ios={"bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "ABCDE12345"},
+    ),
     _native_link_config(redirectUri="https://caseops.ai/native/oauth/callback?x=1"),
     "{}",
 ])
@@ -4218,7 +4224,8 @@ def test_deploy_prod_refuses_an_invalid_native_link_input_before_cloud_work(
     result = _run_deploy_with_fakes(tmp_path, native_link_config=config)
 
     assert result.returncode == 2
-    assert f"{_NATIVE_LINK_SOURCE} at abcdef1234567890abcdef1234567890abcdef12 was refused" in result.stdout
+    release = "abcdef1234567890abcdef1234567890abcdef12"
+    assert f"{_NATIVE_LINK_SOURCE} at {release} was refused" in result.stdout
     assert "NATIVE_LINK_RELEASE_REFUSED" in result.stderr
     log = tmp_path / "gcloud.log"
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
