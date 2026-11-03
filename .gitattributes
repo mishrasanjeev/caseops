@@ -162,3 +162,4 @@ apps/api/vendor/fpdf2-2.8.9/NOTICE.txt text eol=lf
 apps/api/vendor/fpdf2-2.8.9/provenance.json text eol=lf
 apps/api/vendor/fpdf2-2.8.9/verify.py text eol=lf
 apps/api/vendor/fpdf2-2.8.9/fpdf2-2.8.9.tar.gz -text
+apps/web/native-links/production.json -text

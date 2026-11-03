@@ -258,7 +258,7 @@ IFS='|' read -r IP_RULE_GOVERNANCE_ENABLED IP_RULE_GOVERNANCE_EXPIRES_AT \
 IP_RULE_GOVERNANCE_ENV="CASEOPS_IP_RULE_GOVERNANCE_ENABLED=${IP_RULE_GOVERNANCE_ENABLED}"
 # A disabled release also deletes any expiry an earlier A2 revision set. gcloud
 # applies --remove-env-vars before --update-env-vars and ignores an absent key.
-IP_RULE_GOVERNANCE_REMOVE_FLAGS=(--remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT)
+IP_RULE_GOVERNANCE_REMOVE_KEYS=CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT
 if [[ "${IP_RULE_GOVERNANCE_ENABLED}" == "true" ]]; then
   IP_RULE_GOVERNANCE_EVIDENCE_TYPE=$(git cat-file -t \
     "${HEAD_SHA}:${IP_RULE_GOVERNANCE_EVIDENCE}" 2>/dev/null || true)
@@ -272,7 +272,7 @@ if [[ "${IP_RULE_GOVERNANCE_ENABLED}" == "true" ]]; then
     exit 2
   fi
   IP_RULE_GOVERNANCE_ENV="${IP_RULE_GOVERNANCE_ENV}|CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=${IP_RULE_GOVERNANCE_EXPIRES_AT}"
-  IP_RULE_GOVERNANCE_REMOVE_FLAGS=()
+  IP_RULE_GOVERNANCE_REMOVE_KEYS=""
 elif [[ "${IP_RULE_GOVERNANCE_ENABLED}" != "false" ]]; then
   echo "ERROR: ${IP_RULE_GOVERNANCE_STATE_FILE} produced no governance decision; refusing release."
   exit 2
@@ -332,6 +332,68 @@ if [[ -n "${TEST_LEGAL_MANUAL_IP_GRANT_INPUT}" || -n "${TEST_LEGAL_MANUAL_IP_GRA
 fi
 assert_current_main "release preflight"
 
+# Production native sign-in is enabled only by the committed public link input
+# apps/web/native-links/production.json (schema: docs/mobile/NATIVE_LINK_CONFIGURATION.md).
+# Without it every release removes the native API/web configuration, so sign-in
+# stays disabled; the API also refuses issuance while those settings are absent.
+NATIVE_LINK_SOURCE=apps/web/native-links/production.json
+NATIVE_LINK_RUNTIME_FILE=/app/apps/web/native-links/production.json
+NATIVE_SIGNING_SECRET=caseops-native-signing-secret
+NATIVE_LINK_ENABLED=false
+NATIVE_API_ENV=""
+NATIVE_API_SECRET=""
+NATIVE_API_REMOVE_KEYS="CASEOPS_NATIVE_AUTH_ENABLED,CASEOPS_NATIVE_SIGNING_ENABLED,CASEOPS_NATIVE_REDIRECT_URIS"
+NATIVE_WEB_ENV=""
+NATIVE_WEB_REMOVE_FLAGS=(--remove-env-vars CASEOPS_NATIVE_LINK_CONFIG_FILE,CASEOPS_NATIVE_LINK_CONFIG_SHA256)
+NATIVE_LINK_TYPE=$(git cat-file -t "${HEAD_SHA}:${NATIVE_LINK_SOURCE}" 2>/dev/null || true)
+if [[ -n "${NATIVE_LINK_TYPE}" ]]; then
+  if [[ "${NATIVE_LINK_TYPE}" != "blob" ]]; then
+    echo "ERROR: ${NATIVE_LINK_SOURCE} at ${HEAD_SHA} is not a file; refusing release."
+    exit 2
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: node is required to admit ${NATIVE_LINK_SOURCE}; refusing release."
+    exit 2
+  fi
+  # The shared reader validates the exact released bytes; only the digest and
+  # the redirect registry projection leave the helper.
+  if ! NATIVE_LINK_ADMISSION=$(git show "${HEAD_SHA}:${NATIVE_LINK_SOURCE}" \
+    | node scripts/mobile/native-link-release.cjs); then
+    echo "ERROR: ${NATIVE_LINK_SOURCE} at ${HEAD_SHA} was refused; refusing release."
+    exit 2
+  fi
+  NATIVE_LINK_FIELDS=$(printf '%s' "${NATIVE_LINK_ADMISSION}" | python -c '
+import json, re, sys
+d = json.loads(sys.stdin.read())
+assert set(d) == {"sha256", "redirectUris"} and re.fullmatch(r"[0-9a-f]{64}", d["sha256"])
+uris = json.loads(d["redirectUris"])
+assert isinstance(uris, list) and len(uris) == 1 and isinstance(uris[0], str)
+assert re.fullmatch(r"https://[^|,\s\"]+", uris[0])
+print(d["sha256"] + " " + d["redirectUris"])
+' | tr -d '\r') || NATIVE_LINK_FIELDS=""
+  read -r NATIVE_LINK_SHA256 NATIVE_REDIRECT_URIS <<< "${NATIVE_LINK_FIELDS}"
+  if [[ ! "${NATIVE_LINK_SHA256:-}" =~ ^[0-9a-f]{64}$ || -z "${NATIVE_REDIRECT_URIS:-}" ]]; then
+    echo "ERROR: ${NATIVE_LINK_SOURCE} admission output is invalid; refusing release."
+    exit 2
+  fi
+  NATIVE_LINK_ENABLED=true
+  NATIVE_API_ENV="|CASEOPS_NATIVE_AUTH_ENABLED=true|CASEOPS_NATIVE_SIGNING_ENABLED=true|CASEOPS_NATIVE_REDIRECT_URIS=${NATIVE_REDIRECT_URIS}"
+  NATIVE_API_SECRET=",CASEOPS_NATIVE_SIGNING_SECRET=${NATIVE_SIGNING_SECRET}:latest"
+  NATIVE_API_REMOVE_KEYS=""
+  NATIVE_WEB_ENV=",CASEOPS_NATIVE_LINK_CONFIG_FILE=${NATIVE_LINK_RUNTIME_FILE},CASEOPS_NATIVE_LINK_CONFIG_SHA256=${NATIVE_LINK_SHA256}"
+  NATIVE_WEB_REMOVE_FLAGS=()
+  echo "  native sign-in enabled from ${NATIVE_LINK_SOURCE} (${NATIVE_LINK_SHA256})"
+else
+  echo "  native sign-in disabled: ${NATIVE_LINK_SOURCE} is not committed"
+fi
+# gcloud applies --remove-env-vars before --update-env-vars and ignores an
+# absent key; one flag carries every key this release removes from the API.
+API_REMOVE_ENV_KEYS="${IP_RULE_GOVERNANCE_REMOVE_KEYS}${IP_RULE_GOVERNANCE_REMOVE_KEYS:+${NATIVE_API_REMOVE_KEYS:+,}}${NATIVE_API_REMOVE_KEYS}"
+API_REMOVE_ENV_FLAGS=()
+if [[ -n "${API_REMOVE_ENV_KEYS}" ]]; then
+  API_REMOVE_ENV_FLAGS=(--remove-env-vars "${API_REMOVE_ENV_KEYS}")
+fi
+
 DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "${API_SOURCE_DIR}" "apps/web" package.json package-lock.json \
   .dockerignore .gcloudignore "license-policy" \
@@ -341,6 +403,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
   "scripts/qa_manual_ip_grant_release.py" "scripts/release_security_gate.py" \
   "scripts/portfolio_export_release.py" "infra/cloudrun/scheduler-inventory.json" \
+  "scripts/mobile/native-link-release.cjs" \
   ".github/workflows/security.yml" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
   "tests/fixtures/node-default-tls-probe.cjs" \
@@ -972,6 +1035,15 @@ cancel_active_prod_verification
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.
 echo "--- 4/6 deploy caseops-api ---"
+if [[ "${NATIVE_LINK_ENABLED}" == "true" ]]; then
+  assert_current_main "before-native-signing-secret"
+  NATIVE_SIGNING_STATE=$(gcloud secrets versions describe latest --secret "${NATIVE_SIGNING_SECRET}" \
+    --project "${PROJECT}" --format 'value(state)' | tr -d '\r') || NATIVE_SIGNING_STATE=""
+  if [[ "${NATIVE_SIGNING_STATE}" != "ENABLED" ]]; then
+    echo "ERROR: native sign-in needs an enabled ${NATIVE_SIGNING_SECRET} version; refusing release."
+    exit 2
+  fi
+fi
 CLAMAV_IMAGE=$(gcloud run services describe caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
@@ -1028,9 +1100,9 @@ gcloud run deploy caseops-api \
   --image "${API_IMAGE}" \
   ${API_DEPENDENCY_FLAGS[@]+"${API_DEPENDENCY_FLAGS[@]}"} \
   --startup-probe "tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120" \
-  --update-secrets "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=${PORTFOLIO_EXPORT_WORKER_SECRET}:latest,CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION},CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
-  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|${PUBLIC_LEAD_MAIL_ENV}|${PORTFOLIO_EXPORT_ENV}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|${IP_RULE_GOVERNANCE_ENV}|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
-  "${IP_RULE_GOVERNANCE_REMOVE_FLAGS[@]}" \
+  --update-secrets "CASEOPS_PORTFOLIO_EXPORT_WORKER_SECRET=${PORTFOLIO_EXPORT_WORKER_SECRET}:latest,CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION},CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest${NATIVE_API_SECRET}" \
+  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|${PUBLIC_LEAD_MAIL_ENV}|${PORTFOLIO_EXPORT_ENV}|CASEOPS_GCP_PROJECT_ID=${PROJECT}|CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE=cloud_run_job|CASEOPS_DOCUMENT_PROCESSING_RUN_REGION=${REGION}|CASEOPS_DOCUMENT_PROCESSING_RUN_JOB=caseops-document-processing|CASEOPS_COURT_SYNC_DISPATCH_MODE=cloud_run_job|CASEOPS_COURT_SYNC_RUN_REGION=${REGION}|CASEOPS_COURT_SYNC_RUN_JOB=caseops-court-sync|CASEOPS_RATE_IDENTITY_REQUIRED=true|CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true|${IP_RULE_GOVERNANCE_ENV}|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}${NATIVE_API_ENV}" \
+  ${API_REMOVE_ENV_FLAGS[@]+"${API_REMOVE_ENV_FLAGS[@]}"} \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -1042,7 +1114,8 @@ echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, co
 echo "--- 5/6 deploy caseops-web ---"
 gcloud run deploy caseops-web \
   --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet \
-  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_RATE_IDENTITY_REQUIRED=true,CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true,CASEOPS_API_BASE_URL=https://api.caseops.ai" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_RATE_IDENTITY_REQUIRED=true,CASEOPS_RATE_IDENTITY_EDGE_HTTPS=true,CASEOPS_API_BASE_URL=https://api.caseops.ai${NATIVE_WEB_ENV}" \
+  ${NATIVE_WEB_REMOVE_FLAGS[@]+"${NATIVE_WEB_REMOVE_FLAGS[@]}"} \
   --update-secrets "CASEOPS_RATE_IDENTITY_EDGE_SECRET=${RATE_IDENTITY_EDGE_SECRET}:${RATE_IDENTITY_SECRET_VERSION}" \
   --min "${WEB_MIN_INSTANCES}" \
   --min-instances default
