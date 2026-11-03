@@ -15,7 +15,7 @@ import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEAD
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
-import { resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
+import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
@@ -1391,7 +1391,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
-  let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
+  let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
   // Field text as the browser reports it; options.autofill models Firefox prefill.
@@ -1407,7 +1407,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
-      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll) {
+      // Pending Firefox preparation is observed one click per poll, so it
+      // takes the simulated clock below rather than a single poll.
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && fullBrowser) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1470,7 +1472,8 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
         : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}` && !promptCleared
           && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
-        : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0) : false;
+        : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0)
+          && Number(key.slice('prepare-'.length)) <= preparationShown : false;
       if (!shown) return [];
       const elementId = `unit-firefox-${++fieldSequence}`;
       fields.set(elementId, key);
@@ -1489,6 +1492,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = options.directForm ? 'login' : 'landing';
+          if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
@@ -1510,6 +1514,69 @@ function firefoxDouble(t, foreign = false, options = {}) {
   return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
     elapsed: () => clock };
 }
+
+function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure } = {}) {
+  const recipe = { packageName: 'org.mozilla.firefox', locators: {
+    fullBrowser: { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, urlOpen: { kind: 'id', value: 'ADDRESSBAR_URL_BOX' },
+  }, prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] };
+  let menuOpen = menuInitiallyOpen, full = false, clock = 0;
+  const clicks = [], records = [];
+  const menuQuery = selector('android', 'label', 'More options'), conversionQuery = selector('android', 'label', 'Open in Firefox');
+  const driver = {
+    async getCurrentPackage() { return recipe.packageName; },
+    async elementClick(id) {
+      clicks.push(id);
+      if (dispatchFailure) throw dispatchFailure;
+      if (id === menuQuery) { menuOpen = !menuOpen; if (fullAfterMenu) full = true; }
+      if (id === conversionQuery) full = true;
+    },
+    async $$(query) {
+      const shown = query === selector('android', 'id', 'ADDRESSBAR_TABS_COUNTER') ? full : query === menuQuery ? true
+        : query === conversionQuery ? menuOpen && !full && !missingConversion
+        : query === selector('android', 'id', 'ADDRESSBAR_URL_BOX') ? full : false;
+      return shown ? [{ elementId: query, async isDisplayed() { return true; }, async isEnabled() { return true; },
+        async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); } }] : [];
+    },
+    async waitUntil(predicate, { timeout = 10000, interval = 150, timeoutMsg } = {}) {
+      const start = clock;
+      while (!await predicate()) {
+        if (clock - start >= timeout) throw new Error(timeoutMsg);
+        clock += Math.min(interval, timeout - (clock - start));
+      }
+    },
+    async performActions() { assert.fail('BROWSER_READINESS_MUST_NOT_SCROLL'); },
+  };
+  return { context: { driver, platform: 'android', fixture: { auth: { firefoxUi: recipe } }, record: row => records.push(row) },
+    recipe, clicks, records, elapsed: () => clock };
+}
+
+test('Firefox preparation consumes an already open conversion menu without toggling it closed', async () => {
+  const fake = firefoxPreparation({ menuInitiallyOpen: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'Open in Firefox')]);
+});
+
+test('Firefox preparation observes completed conversion instead of demanding an obsolete menu item', async () => {
+  const fake = firefoxPreparation({ fullAfterMenu: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+});
+
+test('Firefox missing conversion fails within ten seconds without reopening its menu or entering credentials', async () => {
+  const fake = firefoxPreparation({ missingConversion: true });
+  await assert.rejects(prepareFirefox(fake.context, fake.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+  assert.equal(fake.elapsed(), 10000);
+});
+
+test('Firefox preparation retains stale and lost dispatch failures without refetching or replaying a menu action', async () => {
+  for (const message of ['stale element reference', 'native acknowledgement lost']) {
+    const failure = new Error(message), fake = firefoxPreparation({ dispatchFailure: failure });
+    await assert.rejects(prepareFirefox(fake.context, fake.recipe), error => error === failure);
+    assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+    assert.equal(fake.elapsed(), 0);
+  }
+});
 
 test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
   browserEnvironment(t);
@@ -1741,7 +1808,8 @@ test('Firefox conversion without the full-browser marker fails before entering c
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, customTabUrlShared: true, neverFullBrowser: true,
     prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
-  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  await assert.rejects(() => browserLogin(fake.context), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.equal(fake.elapsed(), 10000);
   assert.deepEqual(fake.writes, []);
   assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)), []);
   assert.deepEqual(fake.swipes, []);
