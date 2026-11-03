@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Scheduled All-Refs Secret Scan Timeout
+
+Partially implemented. Scheduled Security 41634007029 on main 7780fe2e passed
+the tree (0 findings after 36 reviewed translations), but its all-refs history
+(3337 commits) hit the 240 s boundary with TimeoutExpired. Root cause: first-
+parent merge diffs re-scanned everything main gained at each "merge main into
+branch" commit, which stays reachable through retained branch refs. The three
+largest such merges carry 640k lines. CI-shaped local measurement: 248 MB,
+172 s, 67 merge-copy findings needing a second pass, versus remerge diffs:
+124 MB, 116 s, one clean pass. Every non-merge commit is still scanned against
+its parent; a merge now adds only text its resolution introduced (new canary
+for a secret added inside a conflict-free merge). Timeout and refs unchanged.
+Close only after a hosted all-refs dispatch on main and the next schedule pass.
+The history boundary scales with retained branch content; record its timing.
+
 ## November 2 Offline Release Policy Boundary
 
 Partially implemented/NO-GO. Synthetic deployment commits must not silently
