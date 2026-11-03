@@ -1,0 +1,10 @@
+[
+  {
+    "path": "/app/ip?docket=2cc78d06-8fc5-535b-b21f-75da52914233",
+    "label": "/app/ip reported docket"
+  },
+  {
+    "path": "/app/matters/56264441-dd0d-48e6-9c57-691892c63912/billing",
+    "label": "/app/matters reported Matter billing"
+  }
+]

@@ -27,6 +27,7 @@ from tests.test_postgres_validation import (
 
 pytestmark = pytest.mark.postgres
 registered_intake = specialist.registered_intake
+specialist_scale_engine = specialist.specialist_scale_engine
 
 
 def _use_bearer_identity_without_cookie_mixing(client, monkeypatch):
@@ -300,10 +301,13 @@ def _assert_visibility(session, context, docket_id, expected, request, label):
     assert all("Index" in node["Node Type"] for node in teams if node["Actual Loops"])
 
 
+@pytest.mark.parametrize("statistics_profile", ["analyzed", "unrefreshed_bulk"])
 @pytest.mark.parametrize("visibility_order", ["balanced", "hidden_next_page"])
 def test_stale_team_catalog_cannot_expand_specialist_page_work(
-    migration_pg_engine, registered_intake, monkeypatch, request, visibility_order
+    specialist_scale_engine, registered_intake, monkeypatch, request, visibility_order,
+    statistics_profile,
 ):
+    migration_pg_engine = specialist_scale_engine
     original_seed = specialist._seed_team_catalog_noise
 
     def stale_seed(session, company, actor, **kwargs):
@@ -312,7 +316,7 @@ def test_stale_team_catalog_cannot_expand_specialist_page_work(
     monkeypatch.setattr(specialist, "_seed_team_catalog_noise", stale_seed)
     try:
         specialist.test_ten_thousand_records_list_bounds_queries_and_omits_ungranted_rows(
-            migration_pg_engine, registered_intake, request, visibility_order
+            migration_pg_engine, registered_intake, request, visibility_order, statistics_profile
         )
     finally:
         with migration_pg_engine.begin() as connection:

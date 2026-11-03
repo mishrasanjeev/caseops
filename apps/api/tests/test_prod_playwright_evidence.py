@@ -568,20 +568,25 @@ def _batch4_source_cases():
                 "test(`BUG-015 controls on ${crawlLabel(path)} are usable or explain themselves`"
             ) == 1
             assert 'path.replace("?tab=documents", " Documents tab")' in source
-            labels = dict(re.findall(
-                r'\[PROD_ROUTES\[(\d)\]\]: "([^"]+)"', source
-            ))
-            assert sorted(labels) == ["0", "1"]
-            routes = []
-            for name in ("ROUTES", "PROD_ROUTES"):
-                block = re.search(rf"\nconst {name} = \[(.*?)\];", source, re.S)
-                assert block is not None
-                routes += re.findall(r'"([^"]+)"', block.group(1))
-            prod_routes = routes[-2:]
+            assert (
+                'import reportedRoutes from "./fixtures/control-crawl-reported-routes.json";'
+                in source
+            )
+            assert "const PROD_ROUTES = reportedRoutes.map(({ path }) => path);" in source
+            block = re.search(r"\nconst ROUTES = \[(.*?)\];", source, re.S)
+            assert block is not None
+            routes = re.findall(r'"([^"]+)"', block.group(1))
+            reported = json.loads(
+                (ROOT / "tests/e2e/fixtures/control-crawl-reported-routes.json").read_text()
+            )
+            assert len(reported) == 2
+            assert all(set(row) == {"path", "label"} for row in reported)
+            labels = {row["path"]: row["label"] for row in reported}
+            assert len(labels) == len(reported) and not set(labels).intersection(routes)
+            routes += list(labels)
             titles = [
                 "BUG-015 controls on {} are usable or explain themselves".format(
-                    labels[str(prod_routes.index(route))] if route in prod_routes
-                    else route.replace("?tab=documents", " Documents tab")
+                    labels.get(route, route.replace("?tab=documents", " Documents tab"))
                 )
                 for route in routes
             ]
@@ -738,6 +743,7 @@ def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture
     assert Counter((row["file"], row["title_path"][-1]) for row in rows) == Counter(
         (file, evidence._safe(title, {})) for file, title in cases
     )
+    assert all(evidence._safe(title, {}) == title for _, title in cases)
     # Mandatory titles carry no query or record id, so evidence keeps them verbatim.
     assert not any("redacted" in row["title_path"][-1] for row in rows)
     assert all(
@@ -745,6 +751,21 @@ def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture
         and [result["status"] for result in row["results"]] == ["passed"]
         for row in rows
     )
+
+
+@pytest.mark.parametrize("invocation", list(evidence.BATCH4_MANDATORY_CASES))
+def test_batch4_case_identity_uses_public_workflows_not_private_route_values(invocation):
+    _, cases = evidence.BATCH4_MANDATORY_CASES[invocation]
+    private = re.compile(r"[?@]|https?://|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.I)
+    assert len(set(cases)) == len(cases)
+    assert all(
+        not private.search(title) and evidence._safe(title, {}) == title
+        for _, title in cases
+    )
+    if invocation == "batch4-desktop":
+        titles = {title for _, title in cases}
+        assert evidence._B4_CRAWL("/app/ip reported docket") in titles
+        assert evidence._B4_CRAWL("/app/matters reported Matter billing") in titles
 
 
 @pytest.mark.parametrize("invocation", list(evidence.BATCH4_MANDATORY_CASES))
@@ -1585,11 +1606,11 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "34")
+    record_property("native_reporter_test_count", "35")
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "# tests 34" in result.stdout
-        and "# pass 34" in result.stdout
+        "# tests 35" in result.stdout
+        and "# pass 35" in result.stdout
         and "# fail 0" in result.stdout
         and "# skipped 0" in result.stdout
         and "# cancelled 0" in result.stdout

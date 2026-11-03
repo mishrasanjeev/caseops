@@ -10,6 +10,7 @@ const PUBLIC_SITEMAP_PATHS = [
   "/guide",
   "/law-firms",
   "/pricing",
+  "/privacy",
   "/resources/legal-matter-management-india",
   "/resources/source-grounded-legal-recommendations",
   "/solo-lawyers",

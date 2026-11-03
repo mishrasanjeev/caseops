@@ -27,6 +27,10 @@ scripts/*
 scripts/mobile/*
 !scripts/mobile/npm-tooling.mjs
 !scripts/mobile/npm-registry.mjs
+# gcloud applies scripts/* at every depth (Docker anchors it at the root), so
+# re-admit the web image's own trust scripts after it.
+!apps/web/scripts/
+!apps/web/scripts/**
 !tests/
 !tests/fixtures/
 !tests/fixtures/statutes/

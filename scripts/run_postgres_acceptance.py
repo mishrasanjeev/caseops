@@ -86,7 +86,13 @@ def drop_pytest_current_links(fixtures: Path) -> list[str]:
     refused by ``fixture_inventory``.
     """
     root = native_path(fixtures)
-    if not root.is_dir() or root.is_symlink():
+    try:
+        metadata = root.lstat()
+    except FileNotFoundError:
+        return []
+    if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & 0x400:
+        raise ValueError("Reparse point in native runtime evidence")
+    if not stat.S_ISDIR(metadata.st_mode):
         return []
     removed = []
     with os.scandir(root) as entries:

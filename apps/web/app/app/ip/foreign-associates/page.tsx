@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { IpListMore } from "@/components/ip/IpListMore";
+import { showIpListError } from "@/components/ip/ip-list-query-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -151,6 +152,7 @@ export default function ForeignAssociatesPage() {
 
   const instructions = useInfiniteQuery({
     queryKey: ["ip-foreign-associates", queue],
+    retry: false,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => fetchIpForeignAssociateInstructions({
       outstandingResponse: queue === "outstanding" ? true : null,
@@ -201,7 +203,7 @@ export default function ForeignAssociatesPage() {
         ))}
       </div>
 
-      {instructions.isError ? (
+      {showIpListError(instructions) ? (
         <QueryErrorState error={instructions.error} onRetry={() => void instructions.refetch()} />
       ) : (
         <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
