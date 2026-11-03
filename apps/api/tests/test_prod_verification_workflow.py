@@ -111,7 +111,7 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     name = "Run release-owned Batch3 client and retained drafting acceptance"
     step = next(item for item in steps if item.get("name") == name)
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == "matrix.suite == 'test-legal-batch4'"
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
     assert (
@@ -465,7 +465,8 @@ def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
         {"SUITE": "test-legal-batch4", "BATCH4_GOVERNANCE": live},
     )
     assert result.returncode == 0, result.stderr
-    assert required == batch4
+    batch3 = ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]
+    assert required == [*batch3, *batch4]
 
 
 @pytest.mark.parametrize("specs", [False, True])
@@ -473,15 +474,14 @@ def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
 def test_october13_partition_no_longer_owes_batch4_receipts(
     tmp_path: Path, specs: bool, live: str,
 ) -> None:
-    # Batch4 moved to its own job: the October 13 partition never runs or owes it.
+    # Batch3 and Batch4 run in their own job: the October 13 partition owes neither.
     root = _batch4_checkout(tmp_path, specs=specs, governance=live == "enabled")
     result, _, required, _ = _run_offline_step(
         tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
         {"SUITE": "test-legal-write-oct13", "BATCH4_GOVERNANCE": live},
     )
     assert result.returncode == 0, result.stderr
-    batch3 = ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]
-    assert required == ["test-legal-write-oct13", *(batch3 if specs else [])]
+    assert required == ["test-legal-write-oct13"]
 
 
 @pytest.mark.parametrize(("ancestor", "code", "message"), [
@@ -524,10 +524,12 @@ def test_batch4_step_and_receipts_belong_only_to_the_batch4_partition() -> None:
     ]
     assert suites["prod-test-legal-batch4"] == ["test-legal-batch4"]
     assert _shard_step(BATCH4_STEP)["if"] == "matrix.suite == 'test-legal-batch4'"
-    # Neither the October 13 nor the Batch3 runs execute in the Batch4 partition.
-    for name in ("Run release-owned test-legal portfolio and Calendar regressions",
-                 "Run release-owned Batch3 client and retained drafting acceptance"):
-        assert _shard_step(name)["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    # The October 13 run stays in its own partition; Batch3 moved with Batch4,
+    # since October 13 alone uses nearly the whole 38-minute job (run 41573885495).
+    oct13 = _shard_step("Run release-owned test-legal portfolio and Calendar regressions")
+    assert oct13["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    batch3 = _shard_step("Run release-owned Batch3 client and retained drafting acceptance")
+    assert batch3["if"] == "matrix.suite == 'test-legal-batch4'"
     reconcile = _shard_step("Reconcile required native Playwright evidence")["run"]
     assert "test-legal-batch4) required=() ;;" in reconcile
     assert (
@@ -858,6 +860,11 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         assert job["timeout-minutes"] == 38
         assert job["strategy"]["max-parallel"] == 1
         assert job["strategy"]["fail-fast"] is False
+    # A timed-out October 13 job reports `cancelled`; Batch4 still runs after it.
+    assert (
+        "needs.prod-test-legal-write-oct13.result == 'cancelled'"
+        in jobs["prod-test-legal-batch4"]["if"]
+    )
     certificate = jobs["record-release-evidence"]
     steps = certificate["steps"]
     union_index = next(

@@ -392,7 +392,7 @@ jobs:
           bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13 --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13
 
       - name: Run release-owned Batch3 client and retained drafting acceptance
-        if: matrix.suite == 'test-legal-write-oct13'
+        if: matrix.suite == 'test-legal-batch4'
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -845,7 +845,7 @@ jobs:
               ;;
             *) exit 1 ;;
           esac
-          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
+          if [[ "$SUITE" == test-legal-batch4 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
             required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
           fi
           if [[ "$SUITE" == test-legal-batch4 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
@@ -914,7 +914,9 @@ jobs:
 
   prod-test-legal-batch4:
     name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13.result == 'success' || needs.prod-test-legal-write-oct13.result == 'failure')
+    # A timed-out October 13 job reports `cancelled`; it has still finished, so
+    # the serialized Batch4 work runs and reports on its own.
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13.result == 'success' || needs.prod-test-legal-write-oct13.result == 'failure' || needs.prod-test-legal-write-oct13.result == 'cancelled')
     needs: [resolve-release, prod-test-legal-write-oct13]
     runs-on: ubuntu-24.04
     timeout-minutes: 38
