@@ -167,7 +167,7 @@ writes no evidence and tells the operator to read the service and roll back.
    Do not run the historical A0 gate (`run_historical_a0_gate`); it asserts
    the governance writers return the A0 `503` and fails once A2 is on.
 
-   The `test-legal-write-oct13` shard reads the live rule-governance state as
+   The `batch4` shard in `prod-batch4-tester` reads the live rule-governance state as
    Ram on `test-legal` (`scripts/prod_rule_governance_live.py`). With
    production enabled it must run, and reconcile requires receipts for,
    `batch4-governance-desktop` and `batch4-governance-mobile`

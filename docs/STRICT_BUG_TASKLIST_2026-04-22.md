@@ -1,5 +1,47 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Adjacent Workflow Consumers: Retain the Rejected Candidate
+
+**Partially fixed; replacement acceptance pending.** After0fbcbe5b was frozen,
+the whole-source consumer audit found three omitted adjacent updates: the
+trusted-checkout consumer list still named the retired combined job; the
+mobile workflow security test still expected15 setup steps/111 Node commands;
+and the A2 runbook named the old governance shard. The complete checkout module
+reproduced one failure and38 passes with unchanged3984 source inputs. Its
+original source-bound failure remains in native-adjacent-proof01. The mobile
+target was not reached: its module import failed because this clone had no
+installed mobile js-yaml. Preserve that setup failure separately; do not call
+it an executed failing assertion or omit it from verification history.
+
+The checkout contract now names all eight current consumers and rejects an
+unknown consumer with or without its own guard. A new negative baseline proved
+the initial helper-derived oracle missed an unguarded unknown job: one failure
+and one pass in native-unknown-consumer-baseline01, with unchanged source
+bookends. The corrected oracle also binds the complete nine-job workflow.
+Keep the intervening1261-case/43-frontend component pass scoped; it did not
+cover that missing negative boundary. Independent per-consumer controls break the YAML
+alias before damaging its own guard, source binding, serving recheck or order.
+The mobile source contract retains all nine trust outputs and exact conditional
+admission checks with independently reconciled18 setup steps/171 commands.
+The runbook points to Batch4's actual governance role. The18-path review remains
+valid only within its stated scope; it did not certify these adjacent files.
+Complete replacement local component acceptance passed1262 Python cases and
+3786 phases, including all73 checkout cases, plus43 Windows inventory/worker
+cases; component/E2E TypeScript and Ruff passed. All3984 source inputs matched
+before/after. See capacity-local-verification04/INDEPENDENT-RECONCILIATION.json.
+These are local component results, not complete release acceptance.
+
+Hosted Mobile run41611293614 on0fbcbe5b independently reproduced the stale
+setup count (actual18, expected15) as its only native-harness failure:1523
+passes, one failure and two declared skips across1526 cases. Its later171
+command-count comparison and action-output assertions were unreached. The
+other four jobs passed, including both installed dependency platforms and the
+Windows offline job. Those passes do not diagnose the historical Windows
+incident. The rejected0f CI/Security runs were cancelled and retained; no
+unchanged retry was requested. The corrected mobile case, fresh current full
+CI, deployment rehearsal and deployed acceptance remain required. No trust
+boundary, side effect or time budget was weakened.
+
 ## November 3 Native PostgreSQL Exit Evidence and Fixture Repairs
 
 **Partially implemented; historical CI exit139 remains Inconclusive.** The

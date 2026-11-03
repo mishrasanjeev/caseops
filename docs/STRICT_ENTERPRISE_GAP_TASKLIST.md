@@ -1,5 +1,31 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Workflow Consumer Reconciliation Still Requires Acceptance
+
+**Partially implemented; native release NO-GO.** The0fbcbe5b candidate omitted
+three adjacent consumers of the new job layout. The retained complete checkout
+module result is one failure/38 passes; the separate mobile target was never
+reached because its dependency import failed. Neither result is erased by the
+earlier1189/43 component passes or the scoped18-path review.
+
+The replacement binds all eight trusted-checkout consumers, independently
+rejects each damaged admission and unknown consumers with or without a guard,
+binds the complete nine-job source inventory, and retains the mobile
+contract's nine trust outputs with exact18 setup steps/171 Node commands. The
+A2 runbook identifies Batch4's real governance role. See the matching strict
+bug-ledger entry and native-adjacent-proof01. Source and installed dependency
+verification, fresh complete gates and exact-serving acceptance remain pending.
+The additional unguarded-job negative baseline is retained as one failure/one
+pass; the earlier1261-case component pass did not cover this missing boundary.
+The complete replacement local gate passed1262 Python cases/3786 phases,
+including73 checkout controls, and43 Windows source/worker cases, with zero
+failure/skip/pending/todo, unchanged3984 source inputs, TypeScript and Ruff.
+See capacity-local-verification04/INDEPENDENT-RECONCILIATION.json. Hosted0f
+Mobile reproduced only the stale count:1523pass/1fail/2declaredskips; its other
+four jobs passed. Corrected complete hosted gates, current328 rehearsal and
+deployed acceptance remain required; the superseded CI/Security cancellations
+are preserved and cannot be treated as completed scans.
+
 ## November 3 Native Exit Evidence: Complete Acceptance Still Required
 
 **Partially implemented; native release NO-GO.** Native pytest exit receipts
