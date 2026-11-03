@@ -91,12 +91,13 @@ def test_only_actual_returned_cached_rows_are_synchronized_without_attribute_rea
 def test_uncached_saved_output_invalidation_uses_rowcount_without_returning_ids():
     result = _NarrowResult(rowcount=10_000)
     session = _session(result, autoflush=False)
-    assert _apply_private_invalidation(
+    invalidation_result = _apply_private_invalidation(
         session,
         model=PrivateSavedOutputAccess,
         predicate=PrivateSavedOutputAccess.company_id == "tenant-a",
         values={"state": "locked"},
-    ) == (10_000, set())
+    )
+    assert invalidation_result == (10_000, set())
     assert not session.execute.call_args.args[0]._returning
     assert result.batch_sizes == []
     session.flush.assert_not_called()
@@ -121,11 +122,12 @@ def test_invalidation_does_not_recursively_autoflush_a_flushing_session():
     result = _NarrowResult(rowcount=0)
     session = _session(result)
     session._flushing = True
-    assert _apply_private_invalidation(
+    invalidation_result = _apply_private_invalidation(
         session,
         model=PrivateSavedOutputAccess,
         predicate=PrivateSavedOutputAccess.company_id == "tenant-a",
         values={"state": "locked"},
-    ) == (0, set())
+    )
+    assert invalidation_result == (0, set())
     session.flush.assert_not_called()
     assert result.closed
