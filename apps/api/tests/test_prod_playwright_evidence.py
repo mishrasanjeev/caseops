@@ -1618,6 +1618,125 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     )
 
 
+def test_bug015_operational_fixture_read_contracts(tmp_path, record_property):
+    node = shutil.which("node")
+    assert node, "The standard release evidence contracts require Node.js."
+    # This offline unit owns no network adapter and needs no trust preload or
+    # product credentials. Explicit lookup retains Windows' SystemRoot casing.
+    environment = {
+        name: os.environ[name]
+        for name in ("SystemRoot", "WINDIR", "PATH", "TEMP", "TMP")
+        if name in os.environ
+    }
+    stdout_path = tmp_path / "bug015-operational-fixture.stdout"
+    stderr_path = tmp_path / "bug015-operational-fixture.stderr"
+    with stdout_path.open("xb", buffering=0) as stdout_stream, stderr_path.open(
+        "xb", buffering=0,
+    ) as stderr_stream:
+        # Publish raw stream paths before construction, including timeout/error
+        # paths. Direct files survive TimeoutExpired without decoding or retry.
+        record_property("operational_fixture_stdout", str(stdout_path))
+        record_property("operational_fixture_stderr", str(stderr_path))
+        record_property("operational_fixture_test_count", "22")
+        result = subprocess.run(
+            [
+                node,
+                "--experimental-strip-types",
+                "--test",
+                "--test-reporter=tap",
+                str(ROOT / "scripts/tests/operational-matter-fixture.test.mjs"),
+            ],
+            cwd=ROOT,
+            env=environment,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            check=False,
+            timeout=30,
+        )
+    stdout = stdout_path.read_bytes().decode("utf-8", errors="replace")
+    stderr = stderr_path.read_bytes().decode("utf-8", errors="replace")
+    # Preserve native stderr diagnostics; the exit status determines success.
+    assert result.returncode == 0, stdout + stderr
+    counts = dict(re.findall(
+        r"^# (tests|pass|fail|cancelled|skipped|todo) (\d+)$",
+        stdout,
+        re.MULTILINE,
+    ))
+    assert counts == {
+        "tests": "22",
+        "pass": "22",
+        "fail": "0",
+        "cancelled": "0",
+        "skipped": "0",
+        "todo": "0",
+    }
+
+
+@pytest.mark.parametrize("mode", ["timeout", "constructor", "nonzero", "pass"])
+def test_bug015_launcher_retains_raw_streams_and_original_failure(
+    tmp_path, monkeypatch, mode,
+):
+    stdout_path = tmp_path / "bug015-operational-fixture.stdout"
+    stderr_path = tmp_path / "bug015-operational-fixture.stderr"
+    properties = {}
+    calls = []
+    timeout = subprocess.TimeoutExpired(["offline-node"], 30)
+    constructor_error = OSError("offline constructor refusal")
+    summary = (
+        b"# tests 22\n# pass 22\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+    )
+    partial_stdout = b"partial stdout\xff\n"
+    partial_stderr = b"partial stderr\xfe\n"
+
+    def run(arguments, **options):
+        calls.append((arguments, options))
+        assert stdout_path.is_file() and stderr_path.is_file()
+        assert stdout_path.read_bytes() == stderr_path.read_bytes() == b""
+        assert properties == {
+            "operational_fixture_stdout": str(stdout_path),
+            "operational_fixture_stderr": str(stderr_path),
+            "operational_fixture_test_count": "22",
+        }
+        assert options["timeout"] == 30 and options["check"] is False
+        assert "capture_output" not in options and "encoding" not in options
+        assert "NODE_OPTIONS" not in options["env"]
+        assert Path(options["stdout"].name) == stdout_path
+        assert Path(options["stderr"].name) == stderr_path
+        if mode == "constructor":
+            raise constructor_error
+        options["stdout"].write(partial_stdout if mode == "timeout" else summary)
+        options["stderr"].write(partial_stderr if mode == "timeout" else b"native diagnostic\n")
+        if mode == "timeout":
+            raise timeout
+        return subprocess.CompletedProcess(arguments, 17 if mode == "nonzero" else 0)
+
+    monkeypatch.setattr(shutil, "which", lambda name: "offline-node")
+    monkeypatch.setattr(subprocess, "run", run)
+    if mode == "timeout":
+        with pytest.raises(subprocess.TimeoutExpired) as failure:
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+        assert failure.value is timeout
+    elif mode == "constructor":
+        with pytest.raises(OSError) as failure:
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+        assert failure.value is constructor_error
+    elif mode == "nonzero":
+        with pytest.raises(AssertionError, match="native diagnostic"):
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+    else:
+        test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+    assert len(calls) == 1
+    if mode == "timeout":
+        assert stdout_path.read_bytes() == partial_stdout
+        assert stderr_path.read_bytes() == partial_stderr
+    elif mode == "constructor":
+        assert stdout_path.read_bytes() == stderr_path.read_bytes() == b""
+    else:
+        assert stdout_path.read_bytes() == summary
+        assert stderr_path.read_bytes() == b"native diagnostic\n"
+    assert calls[0][1]["stdout"].closed and calls[0][1]["stderr"].closed
+
+
 @pytest.mark.parametrize("argument", ["--grep=hidden", "--workers=8", "--config=../outside.ts"])
 def test_unreviewed_or_duplicate_invocation_arguments_fail_before_execution(capture, argument):
     capture.args.append(argument)

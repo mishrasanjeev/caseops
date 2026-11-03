@@ -1,5 +1,19 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Release QA Operational Fixture Admission
+
+**Partially implemented; release NO-GO pending deployed acceptance.** The legacy
+BUG-015 provider-boundary probe now admits a currently authorized operational
+Matter with bounded marked list/readback requests. It adds no skip, lifecycle
+promotion, provider retry or broader tenant authority. Original240s/200s budgets
+and exact paid-refusal assertions remain. The22 offline controls, full479-case
+native-evidence module and E2E TypeScript passed locally on the candidate based
+on `05db5c7d`; final-source CI and whole-file production proof remain required.
+Historical prod-verify `41573885495` / job `125713415855` retained HTTP409 with an
+unidentified redacted reason,41passes,1failure and3skips. A safer fixture does not
+identify that old response or certify the skipped workflows. See the November3
+BUG-015 entry in the strict bug ledger and the committed fixture regressions.
+
 ## November 2 Offline Release Policy Boundary
 
 Partially implemented/NO-GO. Synthetic deployment commits must not silently

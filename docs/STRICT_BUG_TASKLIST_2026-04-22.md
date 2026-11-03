@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 BUG-015: Operational Fixture Admission, Production Proof Pending
+
+**Inconclusive** for the historical production cause. On serving release
+`6a7463e465e6af7213bd335a9991517a1677ada7`, prod-verify `41573885495`, legacy job
+`125713415855` reached HTTP409 and parsed JSON, then failed the exact
+`paid_provider_blocked_for_test` assertion. The actual code/reason and target
+lifecycle state were redacted; neither a product-guard defect,504 nor a paid
+provider call is established. Preserve its41passes,1failure and3skips.
+
+The source-proven fixture weakness was its historical/arbitrary Matter choice
+after discarding lifecycle fields. BUG-015 now selects and revalidates a current,
+authorized operational Matter through marked, bounded read-only requests. The
+single POST,240s test/200s POST budgets and exact409/code/detail assertions remain
+unchanged. All22 offline selector controls and the complete479-case evidence
+module passed on the local candidate based on `05db5c7d`; E2E TypeScript passed.
+See `tests/e2e/support/operational-matter-fixture.ts`, its Node regression and
+`apps/api/tests/test_prod_playwright_evidence.py`. This local component proof does
+not close BUG-015: fresh complete CI and the entire exact-release deployed legacy
+file remain required. The calendar, mobile-invoice and OCR skips remain unverified.
+
 ## November 2 B4-ADJ-28 Browser Selector: Focused Replay Passed
 
 Partially fixed/NO-GO. CI41469295739 on1a4 has742browser passes,21explicit
