@@ -2,8 +2,12 @@
 
 `production.json` in this directory is the one public, immutable native-link
 configuration for production (schema: `docs/mobile/NATIVE_LINK_CONFIGURATION.md`).
-It is absent until the owner supplies the Apple application identifier prefix,
-so production native sign-in stays disabled.
+The committed input is Android-only (no `ios` section): package
+`ai.caseops.mobile`, the upload-key certificate digest and the callback
+`https://caseops.ai/native/oauth/callback`. Add the `ios` section once the Apple
+application identifier prefix exists, and add the Google Play app-signing digest
+before distributing through Play. Keep the bytes exact: released apps embed this
+file's SHA-256.
 
 When the file is committed, `scripts/deploy-prod.sh` validates it with the
 shared reader, enables API native issuance with the
