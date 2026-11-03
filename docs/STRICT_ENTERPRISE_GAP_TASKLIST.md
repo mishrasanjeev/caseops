@@ -1,5 +1,244 @@
 # Strict Enterprise Gap Tasklist
 
+## REL-APP-CAPACITY-2026-11-03 — Source-bound App project capacity
+
+**Partially implemented; release NO-GO.** QG-REL-005/QG-REL-008. The original
+4dea App CI exceeded its 60-minute job bound after 762/766 terminal rows. Preserve
+the full failed packet and the four unverified mobile picker boundaries; the
+complete 713 Chromium rows and 49 mobile rows are scoped evidence, not a full pass.
+See the matching strict bug entry and
+ci-4dea-app-native-review01/MANIFEST.json
+(SHA256 660c0b993a9ff979034a5147761d577b84f7c61b1e3681659b484c7b97ea0d1f).
+
+The replacement uses two isolated fixed App projects with the same 60-minute
+per-job bound, one worker, zero retries, all source test/assertion timeouts and
+the existing 21 skips. Both independently retain full canonical 766 metadata,
+selected native results, JUnit, progress, completion/native-exit envelopes and
+unique raw artifacts. The e2e required-context aggregate fails closed unless
+both uploads/jobs succeeded and
+raw native/current-config/normalized inventories prove an exact ordered disjoint
+713+53 union for the same release. Independent Python and frontend source
+contracts cover both project selection and complete inventory; production 172,
+Batch 3 and Batch 4 certification is unchanged. The new App metadata constructor
+has a 15-second bound and new hooks/units have 20-second bounds. Existing
+production metadata calls retain eight seconds; browser budgets are unchanged.
+
+Focused source verification remains distinct from a fresh hosted whole-browser
+replacement. The failed old run, earlier dependency-install protocol deviation
+and separate Windows CMD failures remain retained. Final CI, shipping-image,
+production and native/store acceptance are not certified by this source patch.
+
+The pre-integration repair now has 1,041 source-test passes and 3,123 passing
+phases; final-head verification is still required. Earlier frozen 4dea evidence
+also includes the complete deployment rehearsal (327 passes, one unchanged
+POSIX-only skip, 983 phases). The retained Windows CMD failures were isolated
+to the external harness's COMSPEC path spelling: the corrected five cases and
+all 167 cases in the related module passed with unchanged product assertions.
+These later results supersede only their recorded local acceptance scopes;
+retain every earlier failed or incomplete run and each original source binding.
+
+## November 3 Current-Main Integration and Complete Local Replacement
+
+**Partially implemented; final release remains NO-GO.** The native integration
+retains main7780's individual-timeout continuation,historical Batch4 diagnostics,
+complete QA display-template inventory and preferred/active operational Matter
+lookup. Whole-run cancellation,source/authority fences,the original20-second
+setup/240-second test/200-second POST and modern five-v2/172-test/seven-artifact/
+fourteen-successful-role certification stay strict. A historical marker deliberately
+fails the record job before publication; it cannot authorize cadence resume.
+
+The first complete1709-case local run remains1705 passed/one stale22-count failure/
+three original skips,with all5124 phases retained. Its actual inner fixture passed34.
+The repair updates exactly five lines/six count values,including launcher-property
+and fake-summary consumers,without changing30-second bounds,native handling or
+zero-failure/skip/cancellation/todo checks. All raw failure evidence is preserved.
+
+The complete replacement passed1706 plus the same three skips across1709 cases/
+5124 phases. Exact43 frontend and direct+nested34 Node cases,component/E2E TypeScript,
+type generation and Ruff13 passed. Native32 proof retains128 sidecars,32 native0,
+64 disjoint cases and192 phases. All3984 source and cfg/wrapper/literal-base runtime
+bookends match,and Root independently checked outcomes and owned process absence.
+All328 deployment identities are still collection-only. See the matching strict
+bug-ledger entry and preparation03/main7780-local-verification02/ROOT-RECONCILIATION.json
+under mac-release-closure-20261103; preserve the failed01 readback and supplement.
+
+The intended merge requires ordered a2+778 parents,27 paths versusaa55 and31 versus
+current main. Full final-source CI/scanners plus independent CodeQL verdict,current
+full frontend,actual328 rehearsal,exact-main canonical deploy and whole serving QA
+remain pending. Private cadence stays held until two later serial exact-image clean
+maintenance executions,second rebuild_count0,and guarded resume. Secret/privacy
+prerequisites are complete; actual APK/device/store and the separate Source42 gap
+programme are not certified by these local checks. Protected55463/retained PG data
+and foreign resources remain untouched. M15/NFT-016;J20/M22.
+
+## November 3 Directory Owner Repair: Preserve Failed and Replacement Evidence
+
+**Partially fixed; final release remains NO-GO pending complete acceptance.**
+7c6ee7c's three CodeQL jobs succeeded, but the separate check retained warnings
+828/829. Prior14 PR instances are fixed contextually, not globally declared closed.
+Directory descriptor/stage now belong to the existing publication owner; None and
+directory_open remain available when opening fails. No needed failure state,
+scanner rule or original time/retry/CLI/runtime boundary was removed.
+
+Eight new controls exposed a Windows fixture error: the first516 run retained
+505 passes/eight LF-versus-CRLF failures/three old POSIX skips. Later assertions
+in those eight calls remained unverified. Its independent controller also missed
+CRLF-sensitive runtime insertions, so runtime bookends were unverified. Both
+failures remain preserved. The corrected fixture uses explicit native byte
+literals without normalizing actual bytes or changing the writer; the corrected
+stager requires both runtime capture sites before admission.
+
+Complete replacement proof now covers516 cases/1545 phases:513 Windows passes
+and three unchanged skips, plus187 Linux passes/561 phases. Both real32 fixtures
+retain64 cases/192 phases/32 native-zero receipts, and realUV controls preserve
+numeric139/signal/refused-scope distinctions. Ruff7, all3984 source and three
+runtime bookends match; Root independently read499 payload pins. All328 cases
+remain collected-only. Per-shard identity survives legitimate PID reuse, and
+later foreign process instances were never adopted or stopped. See the matching
+strict bug-ledger entry and native-exit-integrated516-readback02/ROOT-RECONCILIATION.json.
+
+Owned runtime qualification separately proves unchanged CPython3.13.14/139
+compatible packages and a home-only197-to200-byte cfg pin; it is not source or
+release acceptance. Fresh current full CI/scanners and separate CodeQL verdict,
+actual328 rehearsal, canonical exact-main deploy, whole serving QA and two later
+serial clean maintenance executions remain pending. Private cadence stays held;
+protected55463 and retained PG data remain preserved. Actual APK/device/store
+acceptance remains separate. M15/NFT-016;J20/M22.
+
+
+## November 3 Native CodeQL Findings and Replacement Component Proof
+
+**Partially fixed; native release remains NO-GO.** Successful3dfa workflow jobs
+did not clear independent CodeQL's14 actual findings. The repair makes two
+intentional strings explicit without changing their complete values/AST, and
+uses typed failure outcomes plus explicit publication/child owners. No broad
+catch alias, suppression, rule waiver, production budget or retry change was
+introduced. Earliest observer failure, nonzero native-exit priority, original
+runtime/UV/CLI contracts and four-second cleanup remain. Unknown clock budget
+is zero; uncertain reaping remains honestly unavailable.
+
+Complete replacement component proof: integrated508 cases/1521 phases equals
+505 Windows passes plus three original POSIX skips; separate179-case Linux
+module passed all537 phases. Both actual32-launcher fixtures prove64 cases/192
+phases/32 native0 receipts; real LinuxUV numeric139/SIGSEGV/refused-scope controls
+retain distinct native statuses. All3984 source bookends and Ruff7 matched.
+Root independently read487 pinned payloads. Retain the integrated controller's
+postprocessing exit1 separately: corrected read-only evidence proves native
+results and declaration order/membership without rerunning subjects. Retain the
+Linux initial zero-body listener refusal and its separately isolated replacement.
+The owned diagnostic PG volume/data and protected55463 remain preserved.
+
+Current3dfa frontend286/2614, PG21 complete124/372/native0, Security8/8 and
+Mobile5/5 are scoped passes. The fresh projection's0.709002s measured query is
+separate from79.019s including seeding; the historical139 cause is unidentified.
+Privacy9a legacy's41pass/1fail/3skip result still needs exact-serving BUG015
+replacement acceptance. Redacted provider-code failure and skipped UI predicates
+do not establish their underlying product/data/capability causes.
+
+See the matching November3 strict bug-ledger entry,
+native-exit-integrated508-readback01/ROOT-RECONCILIATION.json,
+native-exit-linux179-02/MANIFEST.json and pg21-3dfa-success-review01. Current328
+collection is not body execution. Final-source complete gates, fresh CodeQL
+analysis and separate alert verdict, actual328 rehearsal, exact-main deploy,
+whole serving QA and two later serial clean maintenance runs remain pending;
+private cadence stays held. Venv home pin, actual APK/device and store readiness
+are not certified. M15/NFT-016;J20/M22.
+
+
+## November 3 Workflow Consumer Reconciliation Still Requires Acceptance
+
+**Partially implemented; native release NO-GO.** The0fbcbe5b candidate omitted
+three adjacent consumers of the new job layout. The retained complete checkout
+module result is one failure/38 passes; the separate mobile target was never
+reached because its dependency import failed. Neither result is erased by the
+earlier1189/43 component passes or the scoped18-path review.
+
+The replacement binds all eight trusted-checkout consumers, independently
+rejects each damaged admission and unknown consumers with or without a guard,
+binds the complete nine-job source inventory, and retains the mobile
+contract's nine trust outputs with exact18 setup steps/171 Node commands. The
+A2 runbook identifies Batch4's real governance role. See the matching strict
+bug-ledger entry and native-adjacent-proof01. Source and installed dependency
+verification, fresh complete gates and exact-serving acceptance remain pending.
+The additional unguarded-job negative baseline is retained as one failure/one
+pass; the earlier1261-case component pass did not cover this missing boundary.
+The complete replacement local gate passed1262 Python cases/3786 phases,
+including73 checkout controls, and43 Windows source/worker cases, with zero
+failure/skip/pending/todo, unchanged3984 source inputs, TypeScript and Ruff.
+See capacity-local-verification04/INDEPENDENT-RECONCILIATION.json. Hosted0f
+Mobile reproduced only the stale count:1523pass/1fail/2declaredskips; its other
+four jobs passed. Corrected complete hosted gates, current328 rehearsal and
+deployed acceptance remain required; the superseded CI/Security cancellations
+are preserved and cannot be treated as completed scans.
+
+## November 3 Native Exit Evidence: Complete Acceptance Still Required
+
+**Partially implemented; native release NO-GO.** Native pytest exit receipts
+now bind all32 PostgreSQL shards to exact source, child PID, complete journal
+and successful receipt publication under the existing uv activation. Failed
+outer launchers still fail the release. Normal numeric139 differs from a
+signal-terminated child; cleanup cannot replace original native evidence.
+No job, query, request, UI, worker or retry budget was relaxed.
+
+Current local evidence:233 Windows passes and three declared POSIX-only skips
+across236 cases,705 phase reports,32 real owned shard receipts and unchanged
+3984 tracked inputs; Linux59/59 helper cases and177 phases plus real uv0.13.7
+ancestry/environment/exit controls. Retain all earlier failures, including the
+offline fixture's source-SHA mismatch. Detailed proof and scope are in the
+November3 strict bug-ledger entry, native-exit-components-windows04 and
+native-exit-linux59-01. The native CI139 cause remains unidentified; a bounded
+local seeding timeout does not establish a production query or plan defect.
+
+The complete Windows frontend attempt also remains failed/incomplete, with13
+shipping-trust failures under Windows Node24.15 and a600-second controller
+timeout. Its required replacement is the unchanged complete CI frontend suite
+under Linux Node22.23.4, including coverage, type checks and build. Windows
+worker/inventory component passes do not replace that suite. Fresh exact-source
+CI, all328 deployment-rehearsal cases and exact-serving production acceptance
+remain required before release closure or maintenance/cadence resumption.
+
+## November 3 Release QA Capacity and Windows Worker Admission
+
+**Partially implemented; native release NO-GO pending complete acceptance.**
+The confirmed38-minute production-job capacity failure is preserved with its
+51+3+2 completed cases and52 unverified later Batch4 boundaries. Four serial
+jobs preserve every case, role, worker/retry/test/request budget and required
+failure behavior. Independent Python/frontend source contracts bind October13's
+40/11 partition and complete51 order; version2 requires all five tester
+envelopes, all seven native artifacts and14 exact current regular QA jobs.
+Legacy job receipts and unreviewed invocation/project claims cannot substitute.
+
+The Windows Vitest worker also now binds its hash-pinned producer's exact
+forward-slash argument while retaining native file/descriptor/hash and complete
+argument checks. A diagnostic reproduced the former zero-test startup refusal.
+Local candidate based on aa55ebc passed1189 Python cases/3567 phases and43 actual
+Windows frontend cases (11 inventory+32 pool), with zero failure/skip/pending/
+todo; component/E2E TypeScript, Ruff and3982 tracked-input bookends passed.
+See capacity-local-verification02/INDEPENDENT-RECONCILIATION.json and the
+November3 strict bug-ledger entries. The first failed local run stays retained.
+
+This is component evidence. Current frozen-source full CI, complete replacement
+Windows deployment rehearsal, new whole-job production completion/headroom,
+exact-serving workflow acceptance and guarded maintenance/cadence resumption
+remain required. The old325-pass/one-POSIX-skip rehearsal at05db does not certify
+these changed inputs. The unidentified native CI139 and separate Windows
+node-trust failure remain Inconclusive, not repaired by different local passes.
+No native, all-product or store-readiness claim is made. M15/NFT-016;J20/M22.
+
+## November 3 Release QA Operational Fixture Admission
+
+**Partially implemented; release NO-GO pending deployed acceptance.** The legacy
+BUG-015 provider-boundary probe now admits a currently authorized operational
+Matter with bounded marked list/readback requests. It adds no skip, lifecycle
+promotion, provider retry or broader tenant authority. Original240s/200s budgets
+and exact paid-refusal assertions remain. The22 offline controls, full479-case
+native-evidence module and E2E TypeScript passed locally on the candidate based
+on `05db5c7d`; final-source CI and whole-file production proof remain required.
+Historical prod-verify `41573885495` / job `125713415855` retained HTTP409 with an
+unidentified redacted reason,41passes,1failure and3skips. A safer fixture does not
+identify that old response or certify the skipped workflows. See the November3
+BUG-015 entry in the strict bug ledger and the committed fixture regressions.
+
 ## November 3 Scheduled All-Refs Secret Scan Timeout
 
 Partially implemented. Scheduled Security 41634007029 on main 7780fe2e passed

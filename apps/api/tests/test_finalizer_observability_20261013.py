@@ -4,6 +4,7 @@ import ctypes
 import gc
 import io
 import json
+import shlex
 import sys
 from concurrent.futures import Future
 from contextlib import contextmanager
@@ -531,8 +532,14 @@ def test_ci_retains_exact_per_shard_native_journals_without_weakening_invocation
     ))
     directory = "postgres-shard-${{ matrix.shard }}-native"
     assert test["env"]["CASEOPS_FINALIZER_EVIDENCE_DIR"] == directory
-    assert test["run"] == "uv run python -m pytest -q -m postgres"
+    assert shlex.split(test["run"]) == [
+        "uv", "run", "python", "../../scripts/pytest_native_receipt.py",
+        "postgres-native-exit-${{ matrix.shard }}.json", "--", "-q", "-m", "postgres",
+    ]
     assert upload["if"] == "always()"
+    assert "apps/api/postgres-native-exit-${{ matrix.shard }}.json" in (
+        upload["with"]["path"].splitlines()
+    )
     assert f"apps/api/{directory}/*.jsonl" in upload["with"]["path"].splitlines()
     for extension in ("json", "jsonl"):
         assert (

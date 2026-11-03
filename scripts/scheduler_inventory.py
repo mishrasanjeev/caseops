@@ -1240,15 +1240,15 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     ):
         raise InventoryError("prod-verify dispatch identity changed or is incomplete")
     jobs = detail.get("jobs")
-    # A run recorded before a partition job existed (for example Batch4) lacks
-    # that job and is refused: re-run prod-verify rather than resume on less proof.
     required = {
         "Resolve exact production release",
         "Prod Playwright (tester)",
         "Prod Playwright (tester-catalog)",
         "Prod Playwright (tester-index)",
-        "Prod Playwright (test-legal-write-oct13)",
-        "Prod Playwright (test-legal-batch4)",
+        "Prod Playwright (test-legal-write-oct13-a)",
+        "Prod Playwright (test-legal-write-oct13-b)",
+        "Prod Playwright (batch3)",
+        "Prod Playwright (batch4)",
         "Prod Playwright (test-legal-readonly)",
         "Prod Playwright (legacy)",
         "Prod Playwright (supporting)",
@@ -1259,11 +1259,16 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     if not isinstance(jobs, list):
         raise InventoryError("prod-verify job evidence is missing")
     role_by_name = {name: name for name in required}
-    # GitHub appended the one-value matrix to these literal names on older releases.
+    # Admit only these reviewed one-value matrix display shapes. The retired
+    # combined Oct13 job is not a substitute for any current required role.
     role_by_name.update({
         "Prod Playwright (tester-index) (tester-index)": "Prod Playwright (tester-index)",
-        "Prod Playwright (test-legal-write-oct13) (test-legal-write-oct13)":
-        "Prod Playwright (test-legal-write-oct13)",
+        "Prod Playwright (test-legal-write-oct13-a) (test-legal-write-oct13-a)":
+        "Prod Playwright (test-legal-write-oct13-a)",
+        "Prod Playwright (test-legal-write-oct13-b) (test-legal-write-oct13-b)":
+        "Prod Playwright (test-legal-write-oct13-b)",
+        "Prod Playwright (batch3) (batch3)": "Prod Playwright (batch3)",
+        "Prod Playwright (batch4) (batch4)": "Prod Playwright (batch4)",
     })
     completed: list[datetime] = []
     successful: set[str] = set()

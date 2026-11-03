@@ -1,5 +1,12 @@
 # Production Verification Job Identity
 
+> November3 supersession: the11-job receipt and serving identities below are
+> dated historical evidence. The current candidate requires14 regular QA jobs
+> and five tester envelopes, including four serial October13A/October13B/Batch3/
+> Batch4 jobs. See [the strict bug ledger](STRICT_BUG_TASKLIST_2026-04-22.md).
+> Complete current-source and deployed acceptance remain pending; historical
+> evidence is preserved and cannot admit the new layout.
+
 ## Scope And Current Truth
 
 Operational acceptance: ARCH-OPS-23/QG-SEC-004, J04/M03, J08/M08 and UJ-18.

@@ -67,8 +67,13 @@ export function selectHostForkArguments(execArgv: readonly string[], warningFile
   // This is the actual default vector emitted by the pinned resolver. Profiling,
   // extra preloads/imports/loaders and arbitrary config.execArgv remain refused.
   requireThat(path.isAbsolute(warningFile) && path.resolve(warningFile) === warningFile);
+  // Match only the spelling emitted by the hash-pinned pathe resolver.
+  // The checked native file identity remains unchanged; no path is resolved here.
+  const warningArgument = process.platform === "win32"
+    ? warningFile.replaceAll("\\", "/").replace(/^[a-z]:\//, (drive) => drive.toUpperCase())
+    : warningFile;
   requireThat(execArgv.length === 7 && execArgv[0] === "--experimental-import-meta-resolve"
-    && execArgv[1] === "--require" && execArgv[2] === warningFile
+    && execArgv[1] === "--require" && execArgv[2] === warningArgument
     && execArgv[3] === "--conditions" && execArgv[4] === "node"
     && execArgv[5] === "--conditions" && (execArgv[6] === "development" || execArgv[6] === "production"));
   return [execArgv[0], ...execArgv.slice(3)];

@@ -1,5 +1,388 @@
 # Strict Bug Task List - 2026-04-22
 
+## REL-APP-CAPACITY-2026-11-03 — Complete App CI within unchanged job bounds
+
+**Partially fixed; final release remains NO-GO.** This is release verification
+capacity under QG-REL-005/QG-REL-008. CI 41640207924 on
+4dea3801e5aac5d3b4f007c502013b42f7033fc5 cancelled App job 125963634097 at its
+original one-hour limit. Native discovery has 766 identities: 713 Chromium and
+53 mobile. All 713 Chromium and 49 mobile rows reached a terminal receipt
+(741 passed, 21 existing skips, zero observed failed cases); four mobile picker
+rows lack final results. Chromium consumed 3065.762 seconds and the completed
+mobile prefix consumed 378.891 seconds.
+Missing terminal receipts do not prove those four bodies never started.
+
+The isolated repair assigns the unchanged app-chromium and app-mobile projects
+to two fresh hosted runners. Each retains its 60-minute bound, one worker, zero
+retries and the original test/assertion deadlines, synthetic tenant setup and
+no-paid marker.
+Unique full-report/native artifacts prevent shared report paths from overwriting
+each other. The original e2e required context now validates both successful jobs,
+both complete envelopes, the exact current source/config, raw JSON/XML/progress,
+the same full 766 canonical list and the ordered disjoint 713+53 execution union.
+Exactly the original 21 capability/provider skips are permitted. Existing production 172,
+Batch 3 and Batch 4 acceptance roles remain separate and unchanged. The new App
+metadata check has a 15-second constructor and 20-second new hook/unit bounds;
+the existing production metadata constructor retains its eight-second bound.
+
+Original failed evidence is immutable at
+outputs/mac-release-closure-20261103/ci-4dea-app-native-review01/MANIFEST.json
+(SHA256 660c0b993a9ff979034a5147761d577b84f7c61b1e3681659b484c7b97ea0d1f).
+Its server artifact 13241008455 is 52,076,745 bytes,
+SHA256 f67dc7205c86473c2b590f969f95b3ee1417e95da6d0d83913886a6b1e6771c4;
+all 336 ZIP members were checked. Source controls and focused verification are
+recorded in the isolated repair handoff; fresh full CI/browser acceptance is
+still required. The separate Windows CMD failure was traced to the external
+harness's COMSPEC spelling; its corrected five-case component passed. That
+component is separate from App capacity and final release acceptance.
+No merge, deployment, device, store
+or final release claim is made.
+
+## November 3 Main Integration: Complete Local Replacement, Release Still Pending
+
+**Partially implemented; final release remains NO-GO.** Main7780 introduced
+protections that the native candidate must preserve. The current integration
+keeps four serial bounded browser groups, adds individual timeout/cancellation
+continuation only at the three new internal links, and retains whole-workflow
+cancellation, exact-source checkout and manual-dispatch fences. Historical Batch4
+markers require the reviewed ancestry anchor, exact HEAD/SHA and both workspace
+and Git-tree source absence. They remain diagnostic: the final record job rejects
+them before current-release certification. Modern five-v2-envelope,172-test union,
+seven-artifact and fourteen-successful-role requirements remain unchanged.
+
+The private resume source contract now enumerates every display-template matrix
+job before requiring the exact ordered six IDs. Four controls reject repurposed
+existing non-QA jobs, including duplicate legitimate roles that a set could hide.
+The operational Matter fixture preserves the upstream preferred-ID/active-shortlist
+reach, current tenant visibility and exact-ID revalidation within the original
+20-second,three-page,six-readback/nine-GET setup bounds. Its original22 controls
+remain intact with12 additions; the dated240-second test,one200-second POST,
+no-paid headers and exact paid-provider409 assertion remain unchanged.
+
+Retain the first complete local1709 run as FAILED:1705 passed,one parent fixture
+count failed and the same three original POSIX-only cases skipped; all5124 phases
+and1709 JUnit identities were reconciled. The actual inner Node fixture passed34;
+its independent launcher/property/fake-summary contract still expected22. Exactly
+five lines/six values now say34, preserving30-second admission, raw stdout/stderr,
+native-exit handling and zero failure/cancellation/skip/todo requirements. The ten
+launcher sidecars,all15 affected phases and128 native32 sidecars remain retained.
+See main7780-local-verification01-peer-readback01,its failure supplement and the
+failed gate's ROOT-RECONCILIATION.json; the failed result is not promoted to pass.
+
+The complete changed-source replacement passed1709 cases:1706 passes,the same
+three skips and5124 phases across539 evidence,231 workflow,444 resume,58 scheduler,
+73 checkout,187 native-helper,119 sharding and58 finalizer cases. Exact43 frontend
+inventory/worker cases and both direct and nested34-case Node fixtures passed.
+Component and E2E TypeScript,type generation and Ruff13 passed. All328 deployment
+identities were collected in exact order,with no deployment-test bodies executed.
+Both original and durably retained native32 receipts prove32 native-zero exits,
+64 disjoint cases and192 phases. All3984 source and three runtime bookends match;
+Root independently reconciled phases,JUnits,receipts and original process absence.
+See preparation03/main7780-local-verification02/ROOT-RECONCILIATION.json beneath the
+mac-release evidence directory. The earlier Source04 Linux187 proof remains scoped
+to its unchanged helper bytes; local component checks are not whole-release proof.
+
+The real ancestry integration requires ordered parentsa2aa5810 and7780fe2,27
+reviewed changed paths versusaa55 and31 versus current main; it is not an empty
+substitute for upstream adaptation. Fresh final-source complete CI/Security/Mobile,
+CodeQL analysis plus its separate alert verdict,current full shipping-runtime
+frontend,actual328 rehearsal and exact-main canonical deployment remain required.
+Whole exact-serving production QA and two later serial clean maintenance executions
+(second rebuild_count0) precede guarded private-cadence resume. Privacy is live and
+the signing secret exists; native activation and actual Mac APK/emulator/store
+acceptance remain separate pending boundaries. M15/NFT-016;J20/M22.
+
+## November 3 Directory Publication Ownership: Current Replacement Proof
+
+**Partially fixed; final release acceptance remains pending.** Candidate7c6ee7c
+cleared the prior14 PR CodeQL instances, but its exact mergef3a4b148 retained two
+new py/multiple-definition warnings828/829 on directory descriptor/stage locals.
+All three analyzer jobs succeeded; the separate check still reported two warnings.
+Keep codeql-7c6ee7-review01 and the14 contextual fixed-instance records; null
+global states are not a claim that every repository alert is globally closed.
+
+The initial values are necessary when directory open raises inside the explicit
+operation-outcome boundary. The repair retains descriptor/stage on the existing
+publication owner, preserving the None/directory_open state, exact first cause,
+already-published bytes and conditional close. No needed initial state was simply
+deleted, and no scanner alias, exclusion, rule or exception registry changed.
+Eight focused controls cover both publication paths and four error/control kinds.
+They use a helper-local synthetic POSIX opener on Windows, actual file publication,
+file fsync and stream closure; they do not claim a real Windows POSIX syscall.
+All179 preceding test bytes and all original budgets/CLI/runtime behavior remain.
+
+The first Windows516 run is retained FAILED:505 passes, eight new byte-comparison
+failures and three original POSIX skips, with1545 phase reports. Its LF-only expected
+literal disagreed with the existing writer's native Windows CRLF output. Later
+owner/FD assertions in those eight calls were unreached. Separately, the new
+controller missed two CRLF-sensitive insertions and raised NameError runtime_before;
+its runtime bookends were unverified. Neither failure is erased by source or Linux
+passes. See native-exit-integrated516-failed-readback01.
+
+Source04 corrects only the fixture's independent Windows CRLF/POSIX LF expected
+literals, selected by real sys.platform before the helper-local proxy. Actual bytes
+are not normalized and production formatting is unchanged. The replacement stager
+normalizes its own construction input, requires both runtime assignments/sidecars
+before admission and preserves the old owner/budget logic. The complete replacement
+ran516 cases:513 passes, the same three skips and1545 phases across187 helper,
+119 sharding,58 finalizer and152 workflow cases. All328 deployment identities were
+collected in exact order with zero bodies; Ruff7 passed. All3984 source and the
+actual cfg/wrapper/literal-base runtime bookends matched.
+
+Linux Source04 ran187 passes/561 phases without skips, including all eight opener
+controls. Both actual32-shard fixtures prove64 disjoint cases/192 phases and32
+source/PID/runtime-bound native-zero receipts, with unchanged realUV numeric139,
+deliberate SIGSEGV and refused-scope controls. Root independently read499 pinned
+payloads and every Windows phase/JUnit identity; all128 Windows fixture sidecars
+are retained durably. See native-exit-integrated516-readback02/ROOT-RECONCILIATION.json
+and native-exit-linux187-04/MANIFEST.json. One PID was legitimately reused between
+sequential shard lifetimes; retain all64 bindings rather than require64 unique IDs.
+Root separated later foreign PID instances using exact seven-fraction UTC strings;
+they were never adopted or stopped. Original process/report failures remain retained.
+
+The narrow owned-venv home pin separately qualified actual CPython3.13.14 and139
+unchanged compatible packages,600 metadata/startup/tool inputs and3984 source files.
+Only the home line changed197 to200 bytes. Native actor0 finished in2.539 seconds
+under its independent120-second owner; eleven children were reaped. The earlier
+prewrite allowlist refusal remains preserved. See venv-home-pin-actual03/ROOT-READBACK.json.
+The global alias, packages, protected55463 and retained diagnostic PG data were not
+modified. This runtime qualification does not certify a release or device sign-in.
+
+Fresh final-source CI/Security/Mobile/CodeQL and its separate alert verdict, all328
+actual rehearsal bodies, exact-main canonical deployment, whole exact-serving QA
+and two later serial clean maintenance runs remain required. Private cadence stays
+held. The separate public verifier's150/210 completion fence passed60 offline tests;
+its live outer remains unexecuted. Actual APK/emulator/store acceptance is separate.
+
+
+## November 3 Native Observer CodeQL Repair: Final Acceptance Pending
+
+**Partially fixed; native release remains NO-GO.** The3dfa candidate's
+CodeQL workflow succeeded, but independent check125846714795 retained14
+actual Python findings on merge9a652/treeae8671: two implicit string-list
+concatenations, eleven BaseException handlers and one empty handler. All14
+remain historical evidence. No rule, exception registry or suppression changed.
+The two intended shell strings now use explicit+; the complete module's
+constant-folded AST and command values are identical.
+
+The native observer now gives publication and child resources explicit owners,
+classifies errors/interrupts/exits/other controls separately, and preserves the
+first observer failure and any already-observed nonzero native exit. Persistent
+clock errors cannot bypass stop attempts. An unavailable scheduling clock grants
+zero wait allowance, and a stop alone never claims reaping. Original4-second
+cleanup and12-minute CI limits, raw streams, CLI, UV activation and runtime
+identity checks remain. Independent Source02 review found no remaining material
+source issue; fresh native CodeQL and its separate alert verdict are still required.
+
+Source02 retains all original59 tests byte-for-byte and adds120 controls.
+Windows ran176 passes plus three original POSIX-only skips across179 cases/534
+phases; Linux ran179 passes/537 phases without skips. The integrated Windows
+inventory ran508 cases:505 passes, the same three skips and1521 complete phases
+(179 helper,119 sharding,58 finalizer,152 workflow). Ruff on seven distinct files
+passed; all3984 source byte/metadata bookends matched. All328 deployment cases
+were collected in exact prior order, but their bodies have not yet run here.
+
+The integrated controller exited1 after these native commands exited0: its new
+reader confused declaration order with sorted shard membership in seven shards.
+Retain that observer failure. Separate read-only reconciliation verified every
+508 phase/JUnit identity and both ordering contracts without a subject replay.
+Both platforms' real32 launcher fixtures prove64 disjoint cases/192 phases and
+32 source/PID/runtime-bound native0 receipts. Linux's real uv0.13.7 controls
+separately retain numeric139, deliberate SIGSEGV and refused-scope exits. Root
+checked487 retained payload pins and current named process dispositions. See
+native-exit-integrated508-readback01/ROOT-RECONCILIATION.json and
+native-exit-linux179-02/MANIFEST.json.
+
+The first Linux attempt refused before all target bodies because the retained
+owned diagnostic PostgreSQL service shared its namespace. Root stopped only that
+exact isolated service cleanly and retained its volume/data; protected55463 was
+untouched. The fresh namespace02 replay passed with no listener, SQL, install or
+external network. Keep setup-refusal01 as zero-case incomplete evidence.
+
+Current3dfa's full frontend passed286 files/2614 tests, type checks, coverage and
+production build under shipping Linux Node22.23.4. Its PG21 ran all124 cases/372
+phases with native exit0, including the formerly interrupted fresh projection.
+That call's79.019s includes seeding; the measured query was0.709002s under the
+unchanged10-second assertion. This does not identify or erase the old exit139.
+See ci-3dfa-web-review01 and pg21-3dfa-success-review01. Current3dfa Security8/8
+and Mobile5/5 also passed, including the corrected18-step/171-command consumer.
+These scoped passes do not clear3dfa's14 CodeQL findings or certify its successor.
+
+Privacy9a's separate legacy job125811827031 completed41 passes, one BUG015
+failure and three skips across45 cases. Its failed provider-code assertion does
+not retain the actual redacted409 body/code; do not infer a particular guard.
+The current operational-Matter selector remains pending exact-serving whole-file
+acceptance. The three skipped UI boundaries likewise remain unverified; their
+banner/trigger/snippet predicates do not establish data or capability causes.
+See privacy9a-legacy-failure-review01. No old product cause is claimed from a
+different local fixture pass.
+
+Fresh final-source CI/Security/Mobile/CodeQL, all328 actual rehearsal bodies,
+exact-main canonical deployment, complete exact-serving QA, and two later clean
+serial maintenance executions remain required. Private cadence remains held.
+The owned venv's literal-home qualification is not yet executed. Actual APK,
+emulator/device sign-in and store distribution remain separate acceptance.
+
+
+## November 3 Adjacent Workflow Consumers: Retain the Rejected Candidate
+
+**Partially fixed; replacement acceptance pending.** After0fbcbe5b was frozen,
+the whole-source consumer audit found three omitted adjacent updates: the
+trusted-checkout consumer list still named the retired combined job; the
+mobile workflow security test still expected15 setup steps/111 Node commands;
+and the A2 runbook named the old governance shard. The complete checkout module
+reproduced one failure and38 passes with unchanged3984 source inputs. Its
+original source-bound failure remains in native-adjacent-proof01. The mobile
+target was not reached: its module import failed because this clone had no
+installed mobile js-yaml. Preserve that setup failure separately; do not call
+it an executed failing assertion or omit it from verification history.
+
+The checkout contract now names all eight current consumers and rejects an
+unknown consumer with or without its own guard. A new negative baseline proved
+the initial helper-derived oracle missed an unguarded unknown job: one failure
+and one pass in native-unknown-consumer-baseline01, with unchanged source
+bookends. The corrected oracle also binds the complete nine-job workflow.
+Keep the intervening1261-case/43-frontend component pass scoped; it did not
+cover that missing negative boundary. Independent per-consumer controls break the YAML
+alias before damaging its own guard, source binding, serving recheck or order.
+The mobile source contract retains all nine trust outputs and exact conditional
+admission checks with independently reconciled18 setup steps/171 commands.
+The runbook points to Batch4's actual governance role. The18-path review remains
+valid only within its stated scope; it did not certify these adjacent files.
+Complete replacement local component acceptance passed1262 Python cases and
+3786 phases, including all73 checkout cases, plus43 Windows inventory/worker
+cases; component/E2E TypeScript and Ruff passed. All3984 source inputs matched
+before/after. See capacity-local-verification04/INDEPENDENT-RECONCILIATION.json.
+These are local component results, not complete release acceptance.
+
+Hosted Mobile run41611293614 on0fbcbe5b independently reproduced the stale
+setup count (actual18, expected15) as its only native-harness failure:1523
+passes, one failure and two declared skips across1526 cases. Its later171
+command-count comparison and action-output assertions were unreached. The
+other four jobs passed, including both installed dependency platforms and the
+Windows offline job. Those passes do not diagnose the historical Windows
+incident. The rejected0f CI/Security runs were cancelled and retained; no
+unchanged retry was requested. The corrected mobile case, fresh current full
+CI, deployment rehearsal and deployed acceptance remain required. No trust
+boundary, side effect or time budget was weakened.
+
+## November 3 Native PostgreSQL Exit Evidence and Fixture Repairs
+
+**Partially implemented; historical CI exit139 remains Inconclusive.** The
+failed aa55 PostgreSQL shard21 retained67 completed passes and the next case's
+setup, without its call/teardown or a native child-exit receipt. The same uv
+version maps both a numeric139 and SIGSEGV to outer139. Neither that result nor
+the retained60-second stack dump proves which process failed or its cause.
+The separate bounded local diagnostic stopped during retained-data seeding;
+its query, plan and ten-second query budget were never reached. Keep its data,
+original failure and all later unverified boundaries.
+
+CI now retains a same-runtime native pytest child's planned, started and exited
+receipt under the original uv activation. Exact source SHA, child PID, journal,
+native exit and publication success must reconcile across all32 shards. The
+original twelve-minute job limit, pytest arguments, shard layout and failed
+outer-launcher gate remain. Normal139 and signal termination remain distinct;
+cleanup exit status cannot certify native completion. M15/NFT-016; J20/M22.
+
+The complete affected Windows component passed233 cases with three explicit
+POSIX-only skips across236 collected cases (59 helper,119 sharding,58 finalizer),
+705 phase reports,32 actual owned shard receipts, unchanged3984 source inputs
+and Ruff. See native-exit-components-windows04/INDEPENDENT-RECONCILIATION02.json.
+Earlier31-failure and two one-failure attempts are retained. They exposed a
+Windows descriptor/path mode projection, the Windows venv redirector's distinct
+PID, and an offline fixture inheriting the parent's SHA instead of binding its
+synthetic child SHA. The repairs retain exact same-channel metadata and the
+native child/journal PID assertion. The owned Windows replay uses the actual
+accepted base interpreter and only the existing pytest site directory; it does
+not claim uv activation coverage.
+
+Linux ran all59 helper cases and177 phases without skips or failures, plus
+actual uv0.13.7 ancestry/environment controls for numeric139, SIGSEGV and a
+refused scope. Runtime, all161 installed package identities and source stayed
+unchanged; no new process survived. See native-exit-linux59-01/MANIFEST.json.
+This proves the observer's tested boundaries, not a repair of the old crash.
+Current-source complete CI and the328-case deployment rehearsal remain pending.
+
+The earlier full Windows frontend attempt is failed/incomplete: its600-second
+outer controller stopped it, and13 shipping-trust cases had already failed
+under Windows Node24.15. Those cases explicitly require shipping Node22.23.4
+and POSIX trust-file controls. Preserve all13 failures and the timeout. Complete
+frontend replacement acceptance must run the unchanged full suite in CI's
+Linux Node22.23.4 environment, retaining its coverage/type/build gates. The
+separate43 passing Windows worker/inventory controls retain their own scope.
+
+## November 3 Release QA: Preserve Every Case Within Separate Job Budgets
+
+**Partially fixed.** Production run41573885495, job125744538058 exceeded its
+unchanged38-minute job cap. Its prelude plus completed October13 and Batch3
+steps had already consumed2287seconds against2280 before Batch4. Retained
+native evidence proves51 October13,3 Batch3 and2 Batch4 passes;52 later Batch4
+boundaries remain unverified. No in-flight case identity or product failure is
+established by the cancellation.
+
+The release workflow now uses four serial38-minute jobs: October13A40cases,
+October13B11cases, unchanged Batch3, and unchanged complete Batch4. Workers1,
+retries0, test/request limits, roles, credentials and failure continuation remain.
+The independent literal51-case source inventory,172-case tester union, five
+version2 envelopes, seven native artifacts and14 current required job names
+agree. Retired/unknown October13 names and other roles claiming its project
+fail before browser/evidence admission. Historical11-job receipts cannot admit
+this current layout. J20/M22 and release M15/NFT-016.
+
+Local candidate based on aa55ebc00bfb7676a5b3c728459eef0667833b30 passed all1189
+Python cases (539 evidence,152 workflow,440 resume,58 scheduler),3567 phases,
+and11 frontend source-inventory cases. Component/E2E TypeScript and Ruff passed;
+3982 tracked source inputs were identical before/after. Retained proof:
+capacity-local-verification02/INDEPENDENT-RECONCILIATION.json. Preserve the first
+Ruff failure and source-only intermediate refusals. Final frozen-source CI,
+complete replacement deployment rehearsal, and every new exact-release
+production job remain required; neither historical case sums nor local passes
+prove the new whole jobs fit their cap. No production QA closure is claimed.
+
+## November 3 Windows Vitest: Bind the Actual Pinned Path Producer
+
+**Partially fixed.** The original local Vitest run exited1 with zero tests; its
+JSON reporter omitted the startup error. A separate default-plus-JSON diagnostic
+exposed VITEST_HOST_FORK_CONSTRUCTOR_REFUSED at selectHostForkArguments.
+Hash-pinned Vitest uses pathe for its warning-preload argument, producing forward
+slashes on Windows; the adapter compared that argument with native backslashes.
+The old unit fixture constructed both sides with node:path and hid the mismatch.
+
+The adapter accepts only the pinned producer's Windows slash/drive spelling.
+It retains every installed-file hash, descriptor/metadata check, exact seven
+arguments, warning filename and extra-preload/loader/TLS refusal. Its full32
+controls retain the prior27 and cover the actual installed producer and malformed
+path spellings. Actual Windows Vitest ran all32 plus all11 source-inventory
+cases,43 passes with zero failure/skip/pending/todo. Both project type checks and
+Ruff passed, with unchanged full source bookends in the same retained component
+proof above. Other consumers were audited; vitest.config.ts owns this pool.
+
+The separate main9a mobile CI node-trust refusal is not this Vitest defect. It
+happened before dependency installation/audit and remains Inconclusive; the
+candidate's clearer native refusal classification is observability, not proof
+of its underlying repair. Full current-source CI and release evidence remain
+pending. No historical failure is erased by these local component passes.
+
+## November 3 BUG-015: Operational Fixture Admission, Production Proof Pending
+
+**Inconclusive** for the historical production cause. On serving release
+`6a7463e465e6af7213bd335a9991517a1677ada7`, prod-verify `41573885495`, legacy job
+`125713415855` reached HTTP409 and parsed JSON, then failed the exact
+`paid_provider_blocked_for_test` assertion. The actual code/reason and target
+lifecycle state were redacted; neither a product-guard defect,504 nor a paid
+provider call is established. Preserve its41passes,1failure and3skips.
+
+The source-proven fixture weakness was its historical/arbitrary Matter choice
+after discarding lifecycle fields. BUG-015 now selects and revalidates a current,
+authorized operational Matter through marked, bounded read-only requests. The
+single POST,240s test/200s POST budgets and exact409/code/detail assertions remain
+unchanged. All22 offline selector controls and the complete479-case evidence
+module passed on the local candidate based on `05db5c7d`; E2E TypeScript passed.
+See `tests/e2e/support/operational-matter-fixture.ts`, its Node regression and
+`apps/api/tests/test_prod_playwright_evidence.py`. This local component proof does
+not close BUG-015: fresh complete CI and the entire exact-release deployed legacy
+file remain required. The calendar, mobile-invoice and OCR skips remain unverified.
+
 ## November 2 B4-ADJ-28 Browser Selector: Focused Replay Passed
 
 Partially fixed/NO-GO. CI41469295739 on1a4 has742browser passes,21explicit

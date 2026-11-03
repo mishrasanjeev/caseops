@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,85 @@ const datedFiles = {
   "ram-2026-10-22-prod.spec.ts": 1,
 };
 
+// These are independent reviewed identities, not imported planner expectations.
+// The unchanged Playwright project owns all51 cases; only native invocations
+// select these contiguous whole-file groups.
+const oct13AFiles = [
+  "ram-2026-10-13-hearings.spec.ts",
+  "ram-2026-10-13-ip-portfolio.spec.ts",
+  "ram-2026-10-15-ip-controls.spec.ts",
+] as const;
+const oct13BFiles = [
+  "ram-2026-10-15-ip-renewal-tracker.spec.ts",
+  "ram-2026-10-17-calendar-readiness.spec.ts",
+  "ram-2026-10-17-ip-reminders.spec.ts",
+  "ram-2026-10-17-ip-tracker.spec.ts",
+  "ram-2026-10-22-prod.spec.ts",
+] as const;
+const oct13AIdentities = [
+  ["ram-2026-10-13-hearings.spec.ts","October 13 court Calendar acceptance","saved court identities and every hidden event remain reachable at 1280px"],
+  ["ram-2026-10-13-hearings.spec.ts","October 13 court Calendar acceptance","saved court identities and every hidden event remain reachable at 393px"],
+  ["ram-2026-10-13-ip-portfolio.spec.ts","source-tolerant portfolio import, duplicate skip and renewal alert at 1280px"],
+  ["ram-2026-10-13-ip-portfolio.spec.ts","acknowledged 50-row batches recover from keyless history at 1280px"],
+  ["ram-2026-10-13-ip-portfolio.spec.ts","source-tolerant portfolio import, duplicate skip and renewal alert at 393px"],
+  ["ram-2026-10-13-ip-portfolio.spec.ts","acknowledged 50-row batches recover from keyless history at 393px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard current"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard missing-link"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard stale-id-same-caption"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard wrong-caption"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard hidden"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard transparent"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard clipped"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard ellipsis"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard absolute"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard narrow-outside-form"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard outside-form"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard outside-viewport"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard empty-selection"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard button-overflow"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard required-no-overflow"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard missing-required-no-overflow"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard ancestor-clipped"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 geometry guard outside-owner-vertical"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 393px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 639px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 640px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 641px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 767px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 768px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 769px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1023px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1024px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1025px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1279px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1280px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1281px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1535px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1536px"],
+  ["ram-2026-10-15-ip-controls.spec.ts","IP15 BUG-001..007 governed controls and readable forms at 1537px"],
+] as const;
+const oct13BIdentities = [
+  ["ram-2026-10-15-ip-renewal-tracker.spec.ts","IP15 editable portfolio dates and persisted renewal tracker at 1280px"],
+  ["ram-2026-10-15-ip-renewal-tracker.spec.ts","IP15 editable portfolio dates and persisted renewal tracker at 393px"],
+  ["ram-2026-10-17-calendar-readiness.spec.ts","CAL17 actual Calendar readiness and retained cleanup remain truthful at 1280px"],
+  ["ram-2026-10-17-calendar-readiness.spec.ts","CAL17 actual Calendar readiness and retained cleanup remain truthful at 393px"],
+  ["ram-2026-10-17-ip-reminders.spec.ts","IP17 hearing reminder policy and time confirmation at 1280px"],
+  ["ram-2026-10-17-ip-reminders.spec.ts","IP17 recipient dismisses and restores delivered renewal at 1280px"],
+  ["ram-2026-10-17-ip-reminders.spec.ts","IP17 hearing reminder policy and time confirmation at 393px"],
+  ["ram-2026-10-17-ip-reminders.spec.ts","IP17 recipient dismisses and restores delivered renewal at 393px"],
+  ["ram-2026-10-17-ip-tracker.spec.ts","IP18 current-source tracker filters saved views export and full continuation at 1280px"],
+  ["ram-2026-10-17-ip-tracker.spec.ts","IP18 current-source tracker filters saved views export and full continuation at 393px"],
+  ["ram-2026-10-22-prod.spec.ts","NOTES22 newest three of four saved notes persist after reload at 1280px and 393px"],
+] as const;
+const oct13Parts = [
+  { invocation: "test-legal-write-oct13-a", files: oct13AFiles, identities: oct13AIdentities, count: 40 },
+  { invocation: "test-legal-write-oct13-b", files: oct13BFiles, identities: oct13BIdentities, count: 11 },
+] as const;
+
+function datedIdentity(row: Case) {
+  return [row.file, ...row.titles.slice(1)];
+}
+
 function flatten(suites: NativeSuite[], projectRetries: Record<string, number>, parents: string[] = []): Case[] {
   return suites.flatMap(suite => {
     const titles = [...parents, suite.title];
@@ -56,7 +135,7 @@ function counts(values: string[]) {
   }, {});
 }
 
-function collectProjects(selectedProjects: Record<string, number>): Case[] {
+function collectProjects(selectedProjects: Record<string, number>, selectedFiles: readonly string[] = []): Case[] {
   // Collection imports specs but never runs setup, browsers, auth or app code.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
@@ -68,10 +147,15 @@ function collectProjects(selectedProjects: Record<string, number>): Case[] {
     NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
     CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
   });
+  // Match only the literal whole-file basenames, including native path separators.
+  const fileFilter = selectedFiles.length ? [
+    String.raw`(?:^|[/\\])(?:` + selectedFiles.map(file => file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")$",
+  ] : [];
   const result = spawnSync(process.execPath, [
     path.join(root, "node_modules/@playwright/test/cli.js"), "test",
     "--config=playwright.prod-ram.config.ts", "--list", "--reporter=json",
     ...Object.keys(selectedProjects).map(project => `--project=${project}`),
+    ...fileFilter,
   ], { cwd: root, env, encoding: "utf8", timeout: 8_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
   expect(result.error).toBeUndefined();
   expect(result.status, result.stderr).toBe(0);
@@ -84,6 +168,187 @@ function collectProjects(selectedProjects: Record<string, number>): Case[] {
   const projectRetries = Object.fromEntries(native.config.projects.map(project => [project.id, project.retries]));
   return flatten(native.suites, projectRetries).filter(row => Object.hasOwn(selectedProjects, row.project));
 }
+
+type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
+  Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
+const appSourceProjects = { "app-chromium": 713, "app-mobile": 53 };
+
+function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
+  return suites.flatMap(suite => {
+    const titles = [...parents, suite.title];
+    return [
+      ...(suite.specs ?? []).flatMap(spec => spec.tests.map((test, ordinal) => ({
+        id: `${spec.id}:${test.projectId}:${ordinal}`, file: spec.file.replaceAll("\\", "/"),
+        titles: [...titles, spec.title], project: test.projectName,
+        repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? retries[test.projectId], results: test.results,
+      }))),
+      ...flattenApp(suite.suites ?? [], retries, titles),
+    ];
+  });
+}
+
+function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
+  // New766-case metadata scope:15s constructor/20s new hooks and units. The
+  // established production collector above keeps its literal8s bound unchanged.
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  Object.assign(env, {
+    CI: "1", CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
+    CASEOPS_WEB_BASE_URL: "http://127.0.0.1:3100",
+    NOTICE_QA_SLUG: "source-inventory-fixture", NOTICE_QA_OWNER_EMAIL: "qa@fixture.invalid",
+    NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
+  });
+  const selected = project ? [`--project=${project}`] : [];
+  const result = execute(process.execPath, [
+    path.join(root, "node_modules/@playwright/test/cli.js"), "test",
+    "--config=playwright.app.config.ts", "--list", "--reporter=json", ...selected,
+  ], { cwd: root, env, encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  const native = JSON.parse(result.stdout) as {
+    errors: unknown[]; suites: NativeSuite[];
+    config: { projects: { id: string; name: string; retries: number; repeatEach: number }[] };
+  };
+  expect(native.errors).toEqual([]);
+  // FullConfig declares both projects even for a single selected native suite.
+  expect(native.config.projects.map(row => [row.id, row.name, row.retries, row.repeatEach])).toEqual([
+    ["app-chromium", "app-chromium", 0, 1], ["app-mobile", "app-mobile", 0, 1],
+  ]);
+  const retries = Object.fromEntries(native.config.projects.map(row => [row.id, row.retries]));
+  return flattenApp(native.suites, retries); // Never hide an unselected native row.
+}
+
+const appIdentity = (row: Case) => [row.id, row.file, row.titles, row.project, row.repeat, row.retries];
+function expectAppSelection(actual: Case[], expected: Case[]) {
+  expect(actual.map(appIdentity)).toEqual(expected.map(appIdentity));
+  expect(actual.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+}
+
+function canonicalAppProject(canonical: Case[], project: keyof typeof appSourceProjects): Case[] {
+  // Playwright's file collector visits directory entries by localeCompare.
+  // Its built-in JSON reporter then merges files from separate projects, which
+  // can append a mobile-only file. Reconstruct only canonical source-file order;
+  // equal-file rows retain their observed order. Selected output stays untouched.
+  return canonical.filter(row => row.project === project).sort((left, right) => {
+    const a = left.file.split("/"), b = right.file.split("/");
+    for (let index = 0; index < Math.max(a.length, b.length); index++) {
+      if (a[index] === undefined) return -1;
+      if (b[index] === undefined) return 1;
+      const order = a[index].localeCompare(b[index]);
+      if (order) return order;
+    }
+    return 0;
+  });
+}
+
+// Independent source collection: no production Python registry or config import
+// supplies the expected App partition. --list never starts either local stack.
+describe("complete independent App CI project inventory", () => {
+  let canonical: Case[];
+  let wholeByDeclaration: Case[];
+
+  beforeAll(() => {
+    canonical = collectAppProject();
+    // Built-in JSON merges shared spec suites across projects. This named
+    // projection preserves observed order inside each literal declaration.
+    wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
+      .flatMap(project => canonicalAppProject(canonical, project));
+  }, 20_000);
+
+  it("keeps all766 canonical identities, original project order and zero retry/repeat", () => {
+    expect(canonical).toHaveLength(766);
+    expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
+    expect(wholeByDeclaration.map(row => row.project)).toEqual([
+      ...Array<string>(713).fill("app-chromium"), ...Array<string>(53).fill("app-mobile"),
+    ]);
+    expect(new Set(canonical.map(row => row.id)).size).toBe(766);
+    expect(canonical.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(canonical.every(row => !path.isAbsolute(row.file) && !row.file.split("/").includes(".."))).toBe(true);
+  });
+
+  for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
+    const count = appSourceProjects[project];
+    it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
+      const selected = collectAppProject(project);
+      expect(selected).toHaveLength(count);
+      expectAppSelection(selected, canonicalAppProject(canonical, project));
+    }, 20_000);
+  }
+
+  it("forms an exact disjoint713+53 ordered union with the original mobile tag boundary", () => {
+    const chromium = canonicalAppProject(canonical, "app-chromium");
+    const mobile = canonicalAppProject(canonical, "app-mobile");
+    expect(chromium.every(row => !row.titles.join(" ").includes("[mobile]"))).toBe(true);
+    expect(mobile.every(row => row.titles.join(" ").includes("[mobile]"))).toBe(true);
+    expect([...chromium, ...mobile].map(appIdentity)).toEqual(wholeByDeclaration.map(appIdentity));
+    expect(new Set(wholeByDeclaration.map(row => row.id))).toEqual(new Set(canonical.map(row => row.id)));
+    const desktopIds = new Set(chromium.map(row => row.id));
+    expect(mobile.every(row => !desktopIds.has(row.id))).toBe(true);
+  });
+
+});
+
+describe("App metadata constructor and source-order controls", () => {
+  it("rejects an extra project returned by the selected native constructor without filtering it away", () => {
+    const suites: NativeSuite[] = [{ title: "nested/spec.ts", specs: [{
+      id: "source-id", file: "nested/spec.ts", title: "literal case", tests: [
+        { projectId: "app-chromium", projectName: "app-chromium", repeatEachIndex: 0, retries: 0, results: [] },
+        { projectId: "app-mobile", projectName: "app-mobile", repeatEachIndex: 0, retries: 0, results: [] },
+      ],
+    }] }];
+    const execute: MetadataConstructor = (_command, args, options) => {
+      expect(args).toContain("--project=app-chromium");
+      expect(args).toContain("--list");
+      expect(options.timeout).toBe(15_000);
+      return { status: 0, stderr: "", stdout: JSON.stringify({ errors: [], suites, config: { projects:
+        Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+      } }) };
+    };
+    const rows = collectAppProject("app-chromium", execute);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].file).toBe("nested/spec.ts");
+    expect(() => expectAppSelection(rows, [rows[0]])).toThrow();
+  });
+
+  function projectionFixture() {
+    const row = (id: string, file: string, title: string, project = "app-mobile"): Case => ({
+      id, file, titles: [file, title], project, repeat: 0, retries: 0, results: [],
+    });
+    return [
+      row("desktop", "a.spec.ts", "desktop source", "app-chromium"),
+      row("root-file", "a.spec.ts", "mobile root file"),
+      row("other", "other/same.spec.ts", "same basename in other directory"),
+      row("registered-B", "a/same.spec.ts", "Z title registered first"),
+      row("registered-A", "a/same.spec.ts", "A title registered second"),
+    ];
+  }
+
+  it("projects full relative directory order while preserving each file's registration order", () => {
+    const canonical = projectionFixture();
+    const originalIds = canonical.map(row => row.id);
+    const projected = canonicalAppProject(canonical, "app-mobile");
+    expect(projected.map(row => row.id)).toEqual(["registered-B", "registered-A", "root-file", "other"]);
+    expect(canonical.map(row => row.id)).toEqual(originalIds);
+    expect(new Set(projected.map(row => row.id))).toEqual(new Set(canonical.filter(row => row.project === "app-mobile").map(row => row.id)));
+    expectAppSelection(projected, [canonical[3], canonical[4], canonical[1], canonical[2]]);
+  });
+
+  it.each(["swapped-files", "within-file-order", "missing", "foreign", "same-basename-other-directory"])(
+    "rejects %s in selected raw rows without repairing their sequence", damage => {
+      const canonical = projectionFixture();
+      const expected = canonicalAppProject(canonical, "app-mobile");
+      const actual = expected.map(row => ({ ...row, titles: [...row.titles] }));
+      if (damage === "swapped-files") [actual[2], actual[3]] = [actual[3], actual[2]];
+      else if (damage === "within-file-order") [actual[0], actual[1]] = [actual[1], actual[0]];
+      else if (damage === "missing") actual.pop();
+      else if (damage === "foreign") actual[0] = canonical[0];
+      else actual[0] = { ...actual[0], file: "other/same.spec.ts" };
+      expect(() => expectAppSelection(actual, expected)).toThrow();
+    },
+  );
+});
 
 describe("reviewed production tester source inventory", () => {
   let cases: Case[];
@@ -122,6 +387,37 @@ describe("reviewed production tester source inventory", () => {
     expect(new Set(cases.map(row => JSON.stringify([row.file, row.titles, row.repeat]))).size).toBe(cases.length);
   });
 
+
+  it("retains every literal dated identity in the contiguous disjoint40+11 canonical order", () => {
+    const dated = cases.filter(row => row.project === "test-legal-write-prod-chromium");
+    const a = dated.filter(row => oct13AFiles.some(file => file === row.file));
+    const b = dated.filter(row => oct13BFiles.some(file => file === row.file));
+    expect(oct13AIdentities).toHaveLength(40);
+    expect(oct13BIdentities).toHaveLength(11);
+    expect(a.map(datedIdentity)).toEqual(oct13AIdentities);
+    expect(b.map(datedIdentity)).toEqual(oct13BIdentities);
+    expect(dated.map(datedIdentity)).toEqual([...oct13AIdentities, ...oct13BIdentities]);
+    expect(dated.map(row => row.id)).toEqual([...a, ...b].map(row => row.id));
+    expect(new Set([...a, ...b].map(row => row.id)).size).toBe(51);
+    expect(a.every(row => !b.some(other => other.id === row.id))).toBe(true);
+    expect([...new Set(a.map(row => row.file))]).toEqual(oct13AFiles);
+    expect([...new Set(b.map(row => row.file))]).toEqual(oct13BFiles);
+    expect([...oct13AFiles, ...oct13BFiles]).toEqual(Object.keys(datedFiles));
+    expect(new Set([...oct13AFiles, ...oct13BFiles]).size).toBe(8);
+    expect(counts(a.map(row => row.file))).toEqual({
+      "ram-2026-10-13-hearings.spec.ts": 2,
+      "ram-2026-10-13-ip-portfolio.spec.ts": 4,
+      "ram-2026-10-15-ip-controls.spec.ts": 34,
+    });
+    expect(counts(b.map(row => row.file))).toEqual({
+      "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+      "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+      "ram-2026-10-17-ip-reminders.spec.ts": 4,
+      "ram-2026-10-17-ip-tracker.spec.ts": 2,
+      "ram-2026-10-22-prod.spec.ts": 1,
+    });
+  });
+
   it("discovers all16 breakpoint journeys and18 pure-DOM guard identities", () => {
     const controls = cases.filter(row => row.file === "ram-2026-10-15-ip-controls.spec.ts");
     const widths = [393, 639, 640, 641, 767, 768, 769, 1023, 1024, 1025, 1279, 1280, 1281, 1535, 1536, 1537];
@@ -132,6 +428,26 @@ describe("reviewed production tester source inventory", () => {
       ...widths.map(width => `IP15 BUG-001..007 governed controls and readable forms at ${width}px`),
       ...guards.map(guard => `IP15 geometry guard ${guard}`),
     ].sort());
+  });
+});
+
+
+describe.each(oct13Parts)("$invocation fixed native source inventory", part => {
+  let cases: Case[];
+
+  // Each subset has its own original8s native collection bound. The unfiltered
+  // canonical project above remains the independent51-case admission oracle.
+  beforeAll(() => {
+    cases = collectProjects({ "test-legal-write-prod-chromium": part.count }, part.files);
+  });
+
+  it("discovers its complete whole-file group once in canonical order without retries or repeats", () => {
+    expect(counts(cases.map(row => row.project))).toEqual({ "test-legal-write-prod-chromium": part.count });
+    expect(cases).toHaveLength(part.count);
+    expect(cases.map(datedIdentity)).toEqual(part.identities);
+    expect([...new Set(cases.map(row => row.file))]).toEqual(part.files);
+    expect(new Set(cases.map(row => row.id)).size).toBe(part.count);
+    expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
   });
 });
 
