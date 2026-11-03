@@ -1233,6 +1233,49 @@ class RealGitleaksTests(GitFixture):
         inventory = json.loads((self.root / "evidence/inventory.json").read_text())
         self.assertIn(merged, inventory["commits"])
 
+    def test_real_secret_added_inside_clean_merge_is_found_in_history(self):
+        self.git("switch", "-c", "side")
+        self.write("side.txt", "clean side change\n")
+        self.commit("clean side change")
+        self.git("switch", "main")
+        self.write("record.txt", "clean main change\n")
+        before = self.commit("clean main change")
+        self.git("merge", "--no-ff", "--no-commit", "side")
+        self.write("merge-only.txt", self.canary())
+        merged = self.commit("conflict-free merge that adds a file")
+        self.git("rm", "merge-only.txt")
+        head = self.commit("remove merge-only credential")
+        with self.assertRaises(scan.ScanError):
+            self.run_scan(head, self.push(head, before))
+        self.assert_redacted_failure("history.sarif")
+        report = json.loads((self.root / "evidence/history.sarif").read_text())
+        reported = {
+            row["partialFingerprints"]["commitSha"] for row in report["runs"][0]["results"]
+        }
+        self.assertEqual(reported, {merged})
+
+    def test_real_merging_main_into_branch_does_not_rescan_main_content(self):
+        # A first-parent merge diff re-reported every line main gained since the
+        # branch point, which doubled the all-refs scan and timed it out.
+        self.git("switch", "-c", "long-lived")
+        self.write("branch.txt", "clean branch work\n")
+        self.commit("clean branch work")
+        self.git("switch", "main")
+        origin, _ = self.reviewed_fixture()
+        self.git("switch", "long-lived")
+        self.git("merge", "--no-ff", "main", "-m", "merge main into long-lived")
+        head = self.git("rev-parse", "HEAD")
+        result = self.run_scan(head, {}, "schedule")
+        output = self.root / "evidence"
+        inventory = json.loads((output / "inventory.json").read_text())
+        self.assertIn(origin, inventory["commits"])
+        history = result["boundaries"]["history"]
+        self.assertEqual(history["exit_code"], 0)
+        self.assertNotIn("existing_policy_translations", history)
+        self.assertFalse((output / "history-initial-receipt.json").exists())
+        report = json.loads((output / "history.sarif").read_text())
+        self.assertEqual(report["runs"][0]["results"], [])
+
     def test_real_empty_commit_zero_bytes_is_rejected_after_positive_tree(self):
         self.git("commit", "--allow-empty", "-m", "empty change")
         head = self.git("rev-parse", "HEAD")
@@ -1357,7 +1400,7 @@ class RealGitleaksTests(GitFixture):
         self.assertEqual(receipt["exit_code"], 2)
         self.assertTrue(receipt["cleanup_confirmed"])
 
-    def test_real_schedule_translates_reviewed_merge_and_line_drift_not_history_scope(
+    def test_real_schedule_reviewed_merge_and_line_drift_add_no_history_findings(
         self,
     ):
         origin, _ = self.reviewed_fixture()
@@ -1392,31 +1435,30 @@ class RealGitleaksTests(GitFixture):
         self.assertIn(merged, inventory["commits"])
         self.assertIn(empty_merge, inventory["commits"])
         self.assertIn(head, inventory["commits"])
-        # Pinned gitleaks omits the empty commit, empty-diff merge and the
-        # deletion-only side commit, while all remain in the selected DAG.
+        # Pinned gitleaks omits the empty commit, the deletion-only side commit
+        # and both merges: one is empty and the other only kept the side's
+        # reviewed span, which its own commits already presented. All remain in
+        # the selected DAG.
         self.assertEqual(
             result["boundaries"]["history"]["scanned_commits"],
-            len(inventory["commits"]) - 3,
+            len(inventory["commits"]) - 4,
         )
         output = self.root / "evidence"
-        initial = json.loads((output / "history-initial-receipt.json").read_text())
-        self.assertEqual(initial["exit_code"], 2)
-        self.assertGreater(initial["scanned_bytes"], 0)
-        proofs = json.loads((output / "history-policy-provenance.json").read_text())
-        self.assertGreater(proofs["accepted_existing_policy"], 0)
+        self.assertFalse((output / "history-initial-receipt.json").exists())
+        self.assertFalse((output / "history-policy-provenance.json").exists())
+        self.assertTrue(
+            json.loads((output / "history-cleanup.json").read_text())[
+                "cleanup_confirmed"
+            ]
+        )
+        tree = json.loads((output / "tree-policy-provenance.json").read_text())
+        self.assertGreater(tree["accepted_existing_policy"], 0)
         self.assertTrue(
             all(
                 row["existing_fingerprint"].startswith(origin + ":")
-                for row in proofs["findings"]
+                for row in tree["findings"]
             )
         )
-        self.assertIn(merged, {row["reported_commit"] for row in proofs["findings"]})
-        for suffix in ("initial-cleanup", "cleanup"):
-            self.assertTrue(
-                json.loads((output / f"history-{suffix}.json").read_text())[
-                    "cleanup_confirmed"
-                ]
-            )
         self.assertEqual(
             json.loads((output / "history.sarif").read_text())["runs"][0]["results"], []
         )

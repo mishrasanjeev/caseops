@@ -487,10 +487,21 @@ def scan_boundary(
     docker: str,
     timeout: int,
     head: str,
+    git_objects: str = "/repo/.git/objects",
     _policy_ignore: str | None = None,
 ) -> dict:
     name = "caseops-secret-" + uuid.uuid4().hex
     report = workspace / (kind + ".sarif")
+    git_env = []
+    if kind == "history":
+        # Remerge diffs write temporary trees; the repository stays read-only.
+        (workspace / "objects").mkdir(exist_ok=True)
+        git_env = [
+            "--env",
+            "GIT_OBJECT_DIRECTORY=/scan/objects",
+            "--env",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES=" + git_objects,
+        ]
     args = [
         docker,
         "create",
@@ -505,6 +516,7 @@ def scan_boundary(
         f"type=bind,source={repo},target=/repo,readonly",
         "--mount",
         f"type=bind,source={workspace},target=/scan",
+        *git_env,
         "--workdir",
         "/scan/tree" if kind == "tree" else "/repo",
         GITLEAKS_IMAGE,
@@ -522,9 +534,12 @@ def scan_boundary(
     ]
     if kind == "history":
         # This controls merge DIFFS, not traversal. All side parents remain in
-        # the walk; each merge's first-parent diff includes resolution-only text.
+        # the walk and each of their commits is scanned, so a merge adds only
+        # what its resolution introduced: diff it against Git's own re-merge.
+        # A first-parent diff re-scans the whole side parent at every "merge
+        # main into branch" commit (2026-11-03: 248 MB, timeout; remerge 124 MB).
         args.append(
-            "--log-opts=--full-history --diff-merges=first-parent --root "
+            "--log-opts=--full-history --diff-merges=remerge --root "
             f"--no-ext-diff --no-textconv {selection}"
         )
     result = None
@@ -608,6 +623,7 @@ def scan_boundary(
             docker=docker,
             timeout=timeout,
             head=head,
+            git_objects=git_objects,
             _policy_ignore=resolved,
         )
         final["existing_policy_translations"] = len(findings)
@@ -658,6 +674,7 @@ def run_scan(
             common = repo / common
         if not common.resolve().is_relative_to(repo):
             raise ScanError("Scanner requires a self-contained Git checkout")
+        objects = (common.resolve() / "objects").relative_to(repo).as_posix()
         with tempfile.TemporaryDirectory(prefix="caseops-secret-") as temporary:
             workspace = Path(temporary)
             entries = tracked_tree(repo, head, workspace / "tree")
@@ -702,6 +719,7 @@ def run_scan(
                     docker=docker,
                     timeout=timeout,
                     head=head,
+                    git_objects="/repo/" + objects,
                 )
                 record({"event": "boundary_completed", "kind": kind, **receipts[kind]})
             if git(repo, "rev-parse", "HEAD").decode().strip() != head:

@@ -28,6 +28,15 @@ replacement. The failed old run, earlier dependency-install protocol deviation
 and separate Windows CMD failures remain retained. Final CI, shipping-image,
 production and native/store acceptance are not certified by this source patch.
 
+The pre-integration repair now has 1,041 source-test passes and 3,123 passing
+phases; final-head verification is still required. Earlier frozen 4dea evidence
+also includes the complete deployment rehearsal (327 passes, one unchanged
+POSIX-only skip, 983 phases). The retained Windows CMD failures were isolated
+to the external harness's COMSPEC path spelling: the corrected five cases and
+all 167 cases in the related module passed with unchanged product assertions.
+These later results supersede only their recorded local acceptance scopes;
+retain every earlier failed or incomplete run and each original source binding.
+
 ## November 3 Current-Main Integration and Complete Local Replacement
 
 **Partially implemented; final release remains NO-GO.** The native integration
@@ -229,6 +238,21 @@ Historical prod-verify `41573885495` / job `125713415855` retained HTTP409 with 
 unidentified redacted reason,41passes,1failure and3skips. A safer fixture does not
 identify that old response or certify the skipped workflows. See the November3
 BUG-015 entry in the strict bug ledger and the committed fixture regressions.
+
+## November 3 Scheduled All-Refs Secret Scan Timeout
+
+Partially implemented. Scheduled Security 41634007029 on main 7780fe2e passed
+the tree (0 findings after 36 reviewed translations), but its all-refs history
+(3337 commits) hit the 240 s boundary with TimeoutExpired. Root cause: first-
+parent merge diffs re-scanned everything main gained at each "merge main into
+branch" commit, which stays reachable through retained branch refs. The three
+largest such merges carry 640k lines. CI-shaped local measurement: 248 MB,
+172 s, 67 merge-copy findings needing a second pass, versus remerge diffs:
+124 MB, 116 s, one clean pass. Every non-merge commit is still scanned against
+its parent; a merge now adds only text its resolution introduced (new canary
+for a secret added inside a conflict-free merge). Timeout and refs unchanged.
+Close only after a hosted all-refs dispatch on main and the next schedule pass.
+The history boundary scales with retained branch content; record its timing.
 
 ## November 2 Offline Release Policy Boundary
 
