@@ -17,6 +17,7 @@
  * Issuing creates a final invoice, so the issue journey is [local-only]. The
  * two reported invoices are read (downloaded, never changed) in production.
  */
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -25,6 +26,7 @@ import {
 } from "@playwright/test";
 
 import { repoRoot } from "./support/env";
+import { recordBatch4Diagnostic } from "./support/batch4-safe-diagnostics";
 import {
   expectNoPageOverflow, expectOnScreen, json, markPositive, prepareTester, stamp, type TesterRuntime,
 } from "./support/ram-bugs4";
@@ -49,6 +51,36 @@ const STATUS_DOCUMENT: Record<string, { label: string; banner: string }> = {
 };
 
 const compact = (value: string) => value.replace(/\s+/g, "");
+// Diagnostic prediction of the serving core-font adapter. This is never used
+// as the expected value for the original invoice assertions below.
+const CORE_FONT_TYPOGRAPHY: Record<string, string> = {
+  "\u2013": "-", "\u2014": "--", "\u2018": "'", "\u2019": "'",
+  "\u201c": '"', "\u201d": '"', "\u2026": "...", "\u00a0": " ",
+  "\u00b7": "-", "\u2022": "*", "\u2192": "->", "\u20b9": "INR ",
+};
+const textDigest = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
+
+function recordReportedInvoiceLines(text: string, invoiceOrdinal: number, lineItems: Array<{ description: string }>) {
+  const pdfDigest = textDigest(text);
+  lineItems.forEach((line, lineOrdinal) => {
+    const expected = compact(line.description);
+    let changes = 0;
+    const typography = Array.from(line.description, character => {
+      const replacement = CORE_FONT_TYPOGRAPHY[character];
+      if (replacement !== undefined) changes += 1;
+      return replacement ?? character;
+    }).join("");
+    const legacyCandidate = compact(typography.replace(/[^\x00-\xff]+/g, "?"));
+    recordBatch4Diagnostic({
+      kind: "invoice_line", invoice_ordinal: invoiceOrdinal, line_ordinal: lineOrdinal + 1,
+      expected_length: expected.length, raw_match: text.includes(expected),
+      typography_candidate_match: text.includes(legacyCandidate),
+      nfkc_match: compact(text.normalize("NFKC")).includes(compact(line.description.normalize("NFKC"))),
+      has_non_latin1: /[^\x00-\xff]/.test(line.description), typography_change_count: changes,
+      expected_sha256: textDigest(expected), pdf_compact_sha256: pdfDigest,
+    });
+  });
+}
 const isLocal = (baseURL: string | undefined) =>
   ["localhost", "127.0.0.1", "[::1]"].includes(new URL(baseURL ?? process.env.CASEOPS_WEB_BASE_URL ?? "https://caseops.ai").hostname);
 const inr = (minor: number) =>
@@ -372,6 +404,8 @@ async function reportedInvoicesJourney(page: Page, request: APIRequestContext, b
   const workspace = await json(await request.get(`${rt.api.origin}/api/matters/${REPORTED_MATTER_ID}/workspace`,
     { headers: rt.headers }), "Read the reported matter");
   await page.goto(`${rt.web.origin}/app/matters/${REPORTED_MATTER_ID}/billing`);
+  let diagnosticFailed = false;
+  let firstDiagnosticFailure: unknown;
   for (const invoiceId of REPORTED_INVOICE_IDS) {
     const invoice = workspace.invoices.find((item: { id: string }) => item.id === invoiceId);
     expect(invoice, `reported invoice ${invoiceId} is on the reported matter`).toBeTruthy();
@@ -381,6 +415,15 @@ async function reportedInvoicesJourney(page: Page, request: APIRequestContext, b
     const text = await expectLegiblePdf(page.context(), file, info, invoice.invoice_number);
     expect(text).toContain(compact(document.banner));
     expect(text).toContain(compact(invoice.invoice_number));
+    try {
+      recordReportedInvoiceLines(text, REPORTED_INVOICE_IDS.indexOf(invoiceId) + 1, invoice.line_items);
+    } catch (error) {
+      // Preserve the original document assertion as the primary failure.
+      if (!diagnosticFailed) {
+        diagnosticFailed = true;
+        firstDiagnosticFailure = error;
+      }
+    }
     for (const line of invoice.line_items) expect(text, `line item ${line.description}`).toContain(compact(line.description));
     // INVR-2026-028 is stored with taxable value 0 and no tax; it prints its subtotal.
     const taxable = invoice.taxable_value_minor || (invoice.tax_amount_minor ? 0 : invoice.subtotal_amount_minor);
@@ -389,6 +432,7 @@ async function reportedInvoicesJourney(page: Page, request: APIRequestContext, b
     await markPositive(info, `bug016-reported-${invoice.invoice_number}`, { invoice_id: invoiceId, status: invoice.status });
   }
   await rt.release();
+  if (diagnosticFailed) throw firstDiagnosticFailure;
 }
 
 test("BUG-016 draft invoice PDF downloaded from the billing page is legible, one page and marked DRAFT", async (

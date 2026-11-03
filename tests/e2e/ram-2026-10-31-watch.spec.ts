@@ -29,6 +29,7 @@ import {
   expectNoPageOverflow, expectOnScreen, json, deadSelects, markPositive, prepareTester, stamp,
   type TesterRuntime,
 } from "./support/ram-bugs4";
+import { recordBatch4Diagnostic } from "./support/batch4-safe-diagnostics";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -50,9 +51,24 @@ const BLOCKED_CATEGORY: Record<string, string> = {
 };
 
 type Docket = { id: string; title: string };
+type WatchDiagnosticFailure = { failed: boolean; error: unknown };
 
 /** A browser response the UI itself made; body intentionally not logged. */
-async function uiJson<T = any>(response: Response, operation: string, expected = 200): Promise<T> {
+async function uiJson<T = any>(
+  response: Response,
+  operation: string,
+  phase: "profile_create" | "journal_intake" | "hit_disposition" | "profile_pause",
+  diagnosticFailure: WatchDiagnosticFailure,
+  expected = 200,
+): Promise<T> {
+  try {
+    recordBatch4Diagnostic({ kind: "watch_http", phase, status: response.status() });
+  } catch (error) {
+    if (!diagnosticFailure.failed) {
+      diagnosticFailure.failed = true;
+      diagnosticFailure.error = error;
+    }
+  }
   expect(response.status(), `${operation} returned ${response.status()}`).toBe(expected);
   return response.json() as Promise<T>;
 }
@@ -132,15 +148,18 @@ async function captureJournalEntry(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean,
 ) {
   const created: Created = { profileId: null, profilePaused: false, hitId: null, hitRetired: false };
+  const diagnosticFailure: WatchDiagnosticFailure = { failed: false, error: undefined };
   try {
-    await journey(page, request, rt, info, mobile, created);
+    await journey(page, request, rt, info, mobile, created, diagnosticFailure);
   } finally {
     await retireLeftovers(request, rt, created);
   }
+  return diagnosticFailure;
 }
 
 async function journey(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean, created: Created,
+  diagnosticFailure: WatchDiagnosticFailure,
 ) {
   const checkLayout = async () => { if (mobile) await expectNoPageOverflow(page); };
   const docket = await watchDocket(rt, request);
@@ -190,7 +209,7 @@ async function journey(
   const profileResponse = page.waitForResponse(response =>
     response.url().endsWith("/api/ip/watch/profiles") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Create profile" }).click();
-  const profile = await uiJson(await profileResponse, "Create watch profile through the UI", 201);
+  const profile = await uiJson(await profileResponse, "Create watch profile through the UI", "profile_create", diagnosticFailure, 201);
   created.profileId = profile.id;
   expect(profile.class_numbers_json).toEqual([45]);
   expect(profile.recipient_membership_ids_json).toEqual([rt.actor.membership.id]);
@@ -234,7 +253,7 @@ async function journey(
   const ingestResponse = page.waitForResponse(response =>
     response.url().endsWith("/api/ip/watch/journal-ingestions") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Record and compare" }).click();
-  const ingested = await uiJson(await ingestResponse, "Record the journal entry through the UI", 201);
+  const ingested = await uiJson(await ingestResponse, "Record the journal entry through the UI", "journal_intake", diagnosticFailure, 201);
   const entry = ingested.publications[0];
   expect(entry.class_numbers_json).toEqual([45]);
   expect(entry.goods_services_json).toEqual({ "45": ["Legal services"] });
@@ -277,14 +296,14 @@ async function journey(
   const reviewed = page.waitForResponse(response =>
     response.url().endsWith(`/api/ip/watch/hits/${ownHit.id}/disposition`) && response.request().method() === "POST");
   await page.getByRole("button", { name: "Record review" }).click();
-  expect((await uiJson(await reviewed, "Retire the journey hit")).disposition).toBe("not_relevant");
+  expect((await uiJson(await reviewed, "Retire the journey hit", "hit_disposition", diagnosticFailure)).disposition).toBe("not_relevant");
   created.hitRetired = true;
   await page.getByRole("button", { name: "Profiles", exact: true }).click();
   const card = page.getByTestId(`watch-profile-${profile.id}`);
   const paused = page.waitForResponse(response =>
     response.url().endsWith(`/api/ip/watch/profiles/${profile.id}/status`) && response.request().method() === "POST");
   await card.getByRole("button", { name: "Pause" }).click();
-  expect((await uiJson(await paused, "Pause the journey profile")).poll_status).toBe("paused");
+  expect((await uiJson(await paused, "Pause the journey profile", "profile_pause", diagnosticFailure)).poll_status).toBe("paused");
   created.profilePaused = true;
   await expect(card.getByText("paused", { exact: true })).toBeVisible();
 
@@ -300,13 +319,15 @@ async function journey(
 test("BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, baseURL);
-  await captureJournalEntry(page, request, rt, info, false);
+  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, false);
   await rt.release();
+  if (diagnosticFailure.failed) throw diagnosticFailure.error;
 });
 
 test("[mobile] BUG-014 journal capture works at 393px without horizontal page scroll", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
   const rt = await prepareTester(page, request, baseURL, { width: 393, height: 851 });
-  await captureJournalEntry(page, request, rt, info, true);
+  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, true);
   await rt.release();
+  if (diagnosticFailure.failed) throw diagnosticFailure.error;
 });

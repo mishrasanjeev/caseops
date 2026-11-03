@@ -1,190 +1,112 @@
-name: Prod verification (Playwright)
+name: NONRELEASE scoped Batch4 failure diagnostics
 
-# Runs the brutal-honest prod-Playwright suites against the LIVE
-# caseops.ai + api.caseops.ai surface using the dedicated
-# CaseOps QA Bot workspace (caseops-qa). Every fix verdict must name the
-# automated spec and exact commit SHA that prove it. This job is the canonical
-# machine-owned proof artifact.
-#
-# Test infra has zero dependency on real-user credentials — see
-# feedback_dedicated_test_account_no_real_users.md.
-#
-# Triggers:
-#   - schedule (every 6h): catches prod drift (data loss, provider
-#     regressions, third-party API changes) between deploys.
-#   - workflow_dispatch: exact-release trigger from deploy-prod.sh after
-#     API and web have both converged to the requested commit.
-#
-# Prereq secret: CASEOPS_QA_PASSWORD (the CaseOps QA Bot owner password
-# on prod — generated 2026-04-27 during workspace bootstrap, held only
-# in a password manager + this GitHub secret). Without it the job
-# aborts with a clear message — does NOT silently skip and pass green.
-
+# Branch-only diagnostic control plane. No deploy, HMAC, fourteen-role verdict,
+# readiness writer or scheduler resume. The watch case mutates only its stamped
+# synthetic QA profile; invoice downloads also create the normal export audit.
 on:
-  schedule:
-    - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
     inputs:
       expected_release_sha:
-        description: "Exact 40-character commit expected on both production services"
+        description: Exact serving M; diagnostics never deploy their branch
         required: true
         type: string
-      run_historical_a0_gate:
-        description: "Run the archived IPLF-027B predecessor-fixture acceptance (only while rule governance is disabled)"
-        required: false
-        default: false
-        type: boolean
-
-concurrency:
-  # Scheduled verification is read-only and must not cancel an exact-release
-  # dispatch that is holding the projection scheduler paused. Within each
-  # trigger class, cancel a superseded run so two mutation-capable release
-  # verifiers cannot contend for the persistent QA tenants.
-  group: prod-verify-${{ github.event_name }}
-  cancel-in-progress: true
+      diagnostic_ack:
+        description: Enter scoped-owned-qa-mutations-and-export-audit
+        required: true
+        type: string
 
 permissions:
   contents: read
-
-# Service-enforced scoped cache tokens: release code may neither restore nor save.
+  actions: read
 cache-mode: none
+concurrency:
+  # Share canonical mutating-dispatch admission without cancelling its owner.
+  # A newer canonical run can cancel this diagnostic: that is incomplete evidence.
+  group: prod-verify-workflow_dispatch
+  cancel-in-progress: false
 
 jobs:
-  resolve-release:
-    name: Resolve exact production release
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      release_sha: ${{ steps.deployed-release.outputs.release_sha }}
-      api_revision: ${{ steps.deployed-release.outputs.api_revision }}
-      web_revision: ${{ steps.deployed-release.outputs.web_revision }}
-    steps:
-      - name: Check out release-verification control plane
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Require canonical verification control plane
-        run: |
-          test "$GITHUB_REF" = "refs/heads/main"
-          test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
-
-      - name: Verify one exact API/web production release
-        id: deployed-release
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_SHA: ${{ inputs.expected_release_sha }}
-        run: |
-          expected=""
-          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
-            expected="${DISPATCH_SHA}"
-          fi
-          # deploy-prod.sh dispatches only after its exact-SHA staleness,
-          # traffic, health, and sidecar gates pass. This short grace period
-          # covers public endpoint propagation without masking a missing deploy.
-          args=(--wait-seconds 180 --interval-seconds 5 --github-output "$GITHUB_OUTPUT")
-          if [ -n "$expected" ]; then
-            args+=(--expected-sha "$expected")
-          fi
-          python scripts/verify_deployed_release.py "${args[@]}"
-
-      - name: Record exact serving identity
-        run: |
-          echo "release_sha=${{ steps.deployed-release.outputs.release_sha }}"
-          echo "api_revision=${{ steps.deployed-release.outputs.api_revision }}"
-          echo "web_revision=${{ steps.deployed-release.outputs.web_revision }}"
-
-  prod-playwright-shards:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: github.event_name == 'workflow_dispatch'
-    needs: resolve-release
+  scoped-failure-diagnostics:
+    name: NONRELEASE three original Batch4 failures
     runs-on: ubuntu-24.04
-    # GitHub-hosted execution is capped at 40 minutes for this repository.
-    # Keep each shard below that boundary and serialize mutation-capable QA
-    # work so persistent test tenants cannot race each other.
-    timeout-minutes: 38
+    timeout-minutes: 30
     env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite:
-          - tester
-          - tester-catalog
-          - test-legal-readonly
-          - legacy
-          - supporting
-          - patent-statute
-          - public-pages
-    steps: &prod-playwright-steps
-      - name: Check out trusted canonical verification control plane
-        uses: actions/checkout@v4
+      CASEOPS_EXPECTED_RELEASE_SHA: bdd1480699222712475372690334659088629429
+      CASEOPS_BATCH4_SAFE_DIAGNOSTICS: "1"
+      CASEOPS_BATCH4_DIAGNOSTIC_MODE: scoped-failure-diagnostics
+    steps:
+      - name: Refuse every other branch mode or serving SHA
+        env:
+          REQUESTED_SHA: ${{ inputs.expected_release_sha }}
+          DIAGNOSTIC_ACK: ${{ inputs.diagnostic_ack }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_REF" = refs/heads/codex/prod-batch4-diagnostics-20261104
+          test "$REQUESTED_SHA" = bdd1480699222712475372690334659088629429
+          test "$DIAGNOSTIC_ACK" = scoped-owned-qa-mutations-and-export-audit
+          test "$GITHUB_REPOSITORY" = mishrasanjeev/caseops
+
+      - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate canonical serving commit before release code
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
-
-      - name: Recheck exact serving identity at shard boundary
+      - name: Bind diagnostic checkout and original source ancestry
         run: |
-          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
-          python scripts/verify_deployed_release.py \
-            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
-            --wait-seconds 30 \
-            --interval-seconds 5
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor bdd1480699222712475372690334659088629429 HEAD
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          git diff --name-only bdd1480699222712475372690334659088629429 HEAD > "$RUNNER_TEMP/diagnostic-paths"
+          python - <<'PY'
+          import os,pathlib
+          allowed={'.github/workflows/prod-verify.yml','playwright.batch4-failure-diagnostics.config.ts','tests/e2e/support/batch4-safe-diagnostics.ts','tests/e2e/support/ram-bugs4.ts','tests/e2e/ram-2026-10-31-control-crawl.spec.ts','tests/e2e/ram-2026-10-31-invoice-pdf.spec.ts','tests/e2e/ram-2026-10-31-watch.spec.ts'}
+          changed=set(pathlib.Path(os.environ['RUNNER_TEMP'],'diagnostic-paths').read_text().splitlines())
+          if changed != allowed: raise SystemExit('DIAGNOSTIC_CHANGED_PATHS_REFUSED')
+          PY
 
-      - name: Gate on production QA secrets
-        # Fail loudly + early if the secret is missing. Without it the
-        # setup project's signIn would fail anyway, but this makes the
-        # diagnosis obvious in the run log instead of buried in a
-        # Playwright timeout.
-        env:
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
+      - name: Prepare finite marked active-production-QA guard
         run: |
-          if [ -z "$CASEOPS_QA_PASSWORD" ]; then
-            echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
-            echo "Add it under repo Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-          if [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
-            echo "::error::CASEOPS_IP_QA_PASSWORD secret is not configured."
-            echo "Add it under repo Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-          if [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
-            echo "::error::CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not configured."
-            echo "Provision the same dedicated value in GitHub Actions and the API Secret Manager binding."
-            exit 1
-          fi
+          cat > "$RUNNER_TEMP/guard-production-qa.py" <<'PY'
+          import json,os,time,urllib.request
+          start=time.monotonic()
+          own=int(os.environ['GITHUB_RUN_ID'])
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,request,fp,code,msg,headers,newurl): return None
+          opener=urllib.request.build_opener(NoRedirect())
+          for status in ('queued','in_progress','requested','waiting','pending'):
+              total=None;ids=[]
+              for page in range(1,11):
+                  if time.monotonic()-start>=60: raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
+                  url=f'https://api.github.com/repos/mishrasanjeev/caseops/actions/workflows/prod-verify.yml/runs?status={status}&per_page=100&page={page}'
+                  request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','X-CaseOps-Automated-Test':'no-paid-providers'})
+                  with opener.open(request,timeout=10) as response:
+                      if response.status!=200: raise SystemExit('QA_GUARD_HTTP_STATUS_REFUSED')
+                      raw=response.read(4*1024*1024+1)
+                  if len(raw)>4*1024*1024: raise SystemExit('QA_GUARD_RESPONSE_BOUND_REFUSED')
+                  body=json.loads(raw)
+                  if total is None: total=body['total_count']
+                  if type(total) is not int or not 0<=total<=1000 or body['total_count']!=total: raise SystemExit('QA_GUARD_PAGINATION_REFUSED')
+                  ids.extend(row['id'] for row in body['workflow_runs'])
+                  if len(ids)>=total: break
+              if len(ids)!=total or len(set(ids))!=total or any(value!=own for value in ids): raise SystemExit('OTHER_PRODUCTION_QA_ACTIVE_REFUSED')
+          print('MARKED_FINITE_ACTIVE_PRODUCTION_QA_GUARD_PASS')
+          PY
+
+      - name: Require no other active production QA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python "$RUNNER_TEMP/guard-production-qa.py"
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.23.4"
-
+          node-version: "24.15.0"
       - uses: ./.github/actions/node-trust
         id: node_trust
-      - env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: npm ci
-
-      - name: Install Chromium for Playwright
+      - name: Export inherited reviewed Node trust
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -195,1106 +117,130 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        timeout-minutes: 5
-        run: npx playwright install chromium
-
-      - name: Verify Playwright Chromium runtime
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        timeout-minutes: 2
         run: |
-          node <<'NODE'
-          const { chromium } = require("@playwright/test");
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            try {
-              const page = await browser.newPage();
-              await page.setContent("<title>CaseOps CI browser check</title>");
-              if ((await page.title()) !== "CaseOps CI browser check") {
-                throw new Error("Playwright Chromium did not execute the smoke page");
-              }
-            } finally {
-              await browser.close();
-            }
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const names=['NODE_OPTIONS','SSL_CERT_FILE','SSL_CERT_DIR','CASEOPS_HOST_NODE_TRUST_POLICY_FILE','CASEOPS_HOST_NODE_TRUST_POLICY_SHA256','NPM_CONFIG_USERCONFIG','NPM_CONFIG_GLOBALCONFIG','NPM_CONFIG_STRICT_SSL','NPM_CONFIG_REGISTRY'];
+          if(process.version!=='v24.15.0')throw Error('NODE_IDENTITY_REFUSED');
+          for(const name of names){const value=process.env[name];if(!value||/[\r\n]/.test(value))throw Error('TRUST_OUTPUT_REFUSED');fs.appendFileSync(process.env.GITHUB_ENV,name+'='+value+'\n');}
           NODE
-
-      - name: Mark prod-Playwright prerequisites ready
-        id: prod-playwright-prerequisites
-        run: echo "ready=true" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare release-owned native Playwright evidence
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        id: native-evidence
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
-          [[ "$CASEOPS_EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
-            echo "mode=native" >> "$GITHUB_OUTPUT"
-          elif git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7; then
-            # Only a serving ancestor predating this helper may use its original CLI.
-            # This is explicitly incomplete native evidence, never a new-main waiver.
-            echo "mode=legacy" >> "$GITHUB_OUTPUT"
-            mkdir -p test-results/prod-native-evidence
-            python - <<'PY'
-          import json, os
-          from pathlib import Path
-          Path("test-results/prod-native-evidence/legacy.json").write_text(
-              json.dumps({"release_sha": os.environ["CASEOPS_EXPECTED_RELEASE_SHA"],
-                          "completed": False, "reason": "serving_release_predates_native_capture"}),
-              encoding="utf-8")
-          PY
-            echo "::notice::Older exact serving release: native capture is unavailable; do not certify skip reasons from this legacy run."
-          else
-            echo "::error::A newer serving release is missing required native evidence capture."
-            exit 1
-          fi
-          cat > "$RUNNER_TEMP/caseops-prod-playwright" <<'SH'
-          set -euo pipefail
-          invocation="$1"
-          shift
-          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
-          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
-            exec python scripts/prod_playwright_evidence.py run --invocation "$invocation" -- "$@"
-          fi
-          git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7
-          exec npx playwright test "$@"
-          SH
-
-      - name: Require release-owned bounded tester partition contract
-        if: matrix.suite == 'tester' || matrix.suite == 'tester-catalog' || matrix.suite == 'tester-index' || matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'
-        run: python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
-
-      - name: Run canonical tester production regressions
-        if: matrix.suite == 'tester'
-        env: &prod-tester-env
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          CASEOPS_LEGACY_PROD_TEST_PASSWORD: ${{ secrets.CASEOPS_LEGACY_PROD_TEST_PASSWORD }}
-          CASEOPS_LEGACY_PROD_TEST_EMAIL: ${{ vars.CASEOPS_LEGACY_PROD_TEST_EMAIL }}
-          CASEOPS_LEGACY_PROD_TEST_SLUG: ${{ vars.CASEOPS_LEGACY_PROD_TEST_SLUG }}
-          CASEOPS_NOTICE_QA_SLUG: test-legal
-          CASEOPS_NOTICE_OWNER_EMAIL: ram@testfirm.com
-          CASEOPS_NOTICE_OWNER_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          CASEOPS_NOTICE_CREATE_TEST_LEGAL_MEMBER: 'true'
-          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
-          CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
-
-      - name: Run source-bound September 05 catalog regressions
-        if: matrix.suite == 'tester-catalog'
-        env: *prod-tester-env
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" tester-catalog --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-catalog
-
-      - name: Run retained indexing and Contract AI production regressions
-        if: matrix.suite == 'tester-index'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          CASEOPS_NOTICE_QA_SLUG: test-legal
-          CASEOPS_NOTICE_OWNER_EMAIL: ram@testfirm.com
-          CASEOPS_NOTICE_OWNER_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          for key in CASEOPS_NOTICE_QA_SLUG CASEOPS_NOTICE_OWNER_EMAIL CASEOPS_NOTICE_OWNER_PASSWORD; do
-            value="${!key:-}"
-            if [[ -z "${value//[[:space:]]/}" ]]; then
-              printf '::error::Missing required tester-index fixture key: %s\n' "$key" >&2
-              exit 1
-            fi
-          done
-          unset value
-          bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index --config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-index
-
-      - name: Run release-owned test-legal portfolio and Calendar regressions
-        if: matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_RAM_PROD_SLUG: test-legal
-          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          if [ ! -f tests/e2e/ram-2026-10-13-hearings.spec.ts ]; then
-            if ! git merge-base --is-ancestor HEAD 30e7229368de013123e9a48db2b19230829ddac2; then
-              echo "::error::Newer exact serving release is missing required October 13 acceptance."
-              exit 1
-            fi
-            echo "::notice::Exact serving release predates October 13 acceptance; this is not new-feature certification."
-            exit 0
-          fi
-          test -n "$CASEOPS_RAM_PROD_PASSWORD"
-          test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts
-          case "${{ matrix.suite }}" in
-            test-legal-write-oct13-a)
-              bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13-a --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13-a ;;
-            test-legal-write-oct13-b)
-              bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13-b --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13-b ;;
-            *) echo "::error::Unreviewed October13 partition."; exit 1 ;;
-          esac
-
-      - name: Run release-owned Batch3 client and retained drafting acceptance
-        if: matrix.suite == 'batch3'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_RAM_PROD_SLUG: test-legal
-          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_RAM_BATCH3_QA_CLIENT_ID: ${{ vars.CASEOPS_RAM_BATCH3_QA_CLIENT_ID }}
-          CASEOPS_RAM_BATCH3_QA_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_QA_MATTER_ID }}
-          CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256: ${{ vars.CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256 }}
-          CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID: ${{ vars.CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID }}
-          CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID }}
-          CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID: ${{ vars.CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID }}
-          CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID: ${{ vars.CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID }}
-        run: |
-          set -euo pipefail
-          if [ ! -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]; then
-            if ! git merge-base --is-ancestor HEAD 38b700facbbadc7e730aca09329a436a9008e3ac; then
-              echo "::error::Newer serving release is missing Batch3 acceptance."
-              exit 1
-            fi
-            echo "::notice::Serving source predates Batch3 acceptance; no new-feature certification."
-            exit 0
-          fi
-          test -f tests/e2e/ram-2026-10-22-bugs.spec.ts
-          for key in CASEOPS_RAM_PROD_PASSWORD CASEOPS_RAM_BATCH3_QA_CLIENT_ID CASEOPS_RAM_BATCH3_QA_MATTER_ID CASEOPS_RAM_BATCH3_QA_RETAINED_SHA256 CASEOPS_RAM_BATCH3_FINALIZED_DRAFT_ID CASEOPS_RAM_BATCH3_FINALIZED_MATTER_ID CASEOPS_RAM_BATCH3_MUTABLE_DRAFT_ID CASEOPS_RAM_BATCH3_MUTABLE_MATTER_ID; do
-            if [ -z "${!key}" ]; then printf '::error::Missing Batch3 fixture key: %s\n' "$key"; exit 1; fi
-          done
-          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-desktop --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-desktop
-          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-clients-mobile --config=playwright.prod-ram.config.ts --project=batch3-clients-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch3-clients-mobile
-          bash "$RUNNER_TEMP/caseops-prod-playwright" batch3-drafts-readonly --config=playwright.prod-ram.config.ts --project=batch3-drafts-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch3-drafts-readonly
-
-      - name: Run release-owned Batch4 tester acceptance
-        id: batch4-tester
-        if: matrix.suite == 'batch4'
-        env:
-          CASEOPS_RAM_PROD_SLUG: test-legal
-          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: |
-          set -euo pipefail
-          if [ ! -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]; then
-            if ! git merge-base --is-ancestor HEAD 02d0b0e48ec86e1ff59866cb9bc53f8c35ddf232; then
-              echo "::error::Newer serving release is missing Batch4 acceptance."
-              exit 1
-            fi
-            echo "::notice::Serving source predates Batch4 acceptance; no new-feature certification."
-            exit 0
-          fi
-          test -f tests/e2e/ram-2026-10-31-governance-ui.spec.ts
-          for key in CASEOPS_RAM_PROD_SLUG CASEOPS_RAM_PROD_EMAIL CASEOPS_RAM_PROD_PASSWORD CASEOPS_EXPECTED_RELEASE_SHA; do
-            value="${!key:-}"
-            if [[ -z "${value//[[:space:]]/}" ]]; then printf '::error::Missing Batch4 fixture key: %s\n' "$key" >&2; exit 1; fi
-          done
-          unset value
-          # BUG-003..006 can pass only while production serves rule governance
-          # enabled. IPLF-027B A2 enables it by config alone, ahead of the
-          # checked-in state, so the live state decides which roles are owed.
-          if ! checked_in="$(python scripts/prod_playwright_evidence.py batch4-governance)"; then
-            echo "::error::Serving release has no valid deploy/ip-rule-governance-state.json."
-            exit 1
-          fi
-          if ! governance="$(python scripts/prod_rule_governance_live.py)"; then
-            echo "::error::Could not read the live production rule-governance state."
-            exit 1
-          fi
-          case "$checked_in:$governance" in
-            enabled:enabled|disabled:disabled) ;;
-            disabled:enabled) echo "::notice::Production enables rule governance ahead of the checked-in state (IPLF-027B A2); BUG-003..006 run against the live state." ;;
-            enabled:disabled) echo "::error::The serving release enables rule governance but production reports it disabled."; exit 1 ;;
-            *) echo "::error::Unreviewed rule-governance state."; exit 1 ;;
-          esac
-          echo "governance=$governance" >> "$GITHUB_OUTPUT"
-          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-desktop --config=playwright.prod-ram.config.ts --project=batch4-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-desktop
-          bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-mobile --config=playwright.prod-ram.config.ts --project=batch4-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-mobile
-          if [[ "$governance" == enabled ]]; then
-            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-desktop --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-desktop
-            bash "$RUNNER_TEMP/caseops-prod-playwright" batch4-governance-mobile --config=playwright.prod-ram.config.ts --project=batch4-governance-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch4-governance-mobile
-          else
-            echo "::notice::Rule governance is disabled in production; BUG-003..006 production proof waits for the enabled state."
-          fi
-
-      - name: Run legacy QA production regressions
-        if: matrix.suite == 'legacy'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
-          CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" legacy --config=playwright.prod-ram.config.ts --project=prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/legacy
-
-      - name: Run test-legal read-only hearing acceptance
-        if: matrix.suite == 'test-legal-readonly'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_RAM_PROD_SLUG: test-legal
-          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          if [ -z "$CASEOPS_RAM_PROD_PASSWORD" ]; then
-            echo "::error::CASEOPS_TEST_LEGAL_PROD_PASSWORD secret is not configured."
-            exit 1
-          fi
-          bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-readonly --config=playwright.prod-ram.config.ts --project=test-legal-readonly-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-readonly
-
-      - name: Run IPLF-027B A0 quiescence acceptance
-        # This is immutable historical rollout evidence tied to one exact
-        # predecessor fixture. It is available for deliberate replay but is
-        # not a recurring release-health gate after that fixture is retired.
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && inputs.run_historical_a0_gate == true
-        timeout-minutes: 5
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_IP_A0_PROD_MODE: verify
-        run: |
-          set -euo pipefail
-          # The A0 journey asserts the rule-governance fence. Once the serving
-          # release enables governance (IPLF-027B A2) it would only report the
-          # intended state as a failure, so refuse instead of running it.
-          if [ -f deploy/ip-rule-governance-state.json ] && python3 -c 'import json, sys; sys.exit(0 if json.load(open("deploy/ip-rule-governance-state.json", encoding="utf-8"))["enabled"] is True else 1)'; then
-            echo "::error::Rule governance is enabled at the serving release; the historical A0 fence acceptance no longer applies."
-            exit 1
-          fi
-          bash "$RUNNER_TEMP/caseops-prod-playwright" ip-a0 --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
-
-      - name: Check IPLF-037B renewal acceptance configuration
-        id: renewal-prerequisites
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        env:
-          CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
-        run: |
-          fixture_names=(
-            CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID
-            CASEOPS_IP_RENEWAL_RULE_VERSION_ID
-            CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID
-            CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID
-          )
-          configured=0
-          for fixture_name in "${fixture_names[@]}"; do
-            if [[ -n "${!fixture_name}" ]]; then
-              configured=$((configured + 1))
-            fi
-          done
-          if [[ "$configured" -eq 0 ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=IPLF-037B governed acceptance pending::No approved renewal fixture IDs are configured; the external legal-governance activation blocker remains open."
-            echo "### IPLF-037B renewal acceptance" >> "$GITHUB_STEP_SUMMARY"
-            echo "Not run: all four approved renewal fixture IDs remain unconfigured. The documented legal-governance activation blocker remains open." >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "$configured" -ne 4 ]]; then
-            echo "::error title=Incomplete IPLF-037B configuration::Renewal acceptance is fail-closed because only $configured of 4 governed fixture IDs are configured."
-            exit 1
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run IPLF-037B renewal acceptance
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
-        timeout-minutes: 8
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
-          CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-renewal --config=playwright.ip-renewal-prod.config.ts --reporter=list --output=test-results/ip-renewal
-
-      - name: Check IPLF-039F cost acceptance configuration
-        id: ip-cost-prerequisites
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        env:
-          CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
-          CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
-          CASEOPS_IP_COST_PROD_COMPANY_SLUG: ${{ vars.CASEOPS_IP_COST_PROD_COMPANY_SLUG }}
-          CASEOPS_IP_COST_PROD_EMAIL: ${{ vars.CASEOPS_IP_COST_PROD_EMAIL }}
-          CASEOPS_IP_COST_PROD_PASSWORD: ${{ secrets.CASEOPS_IP_COST_PROD_PASSWORD }}
-          CASEOPS_IP_COST_PROD_DOCKET_ID: ${{ vars.CASEOPS_IP_COST_PROD_DOCKET_ID }}
-        run: |
-          fixture_names=(
-            CASEOPS_IP_COST_PROD_TEST_TENANT_ACK
-            CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON
-            CASEOPS_IP_COST_PROD_COMPANY_SLUG
-            CASEOPS_IP_COST_PROD_EMAIL
-            CASEOPS_IP_COST_PROD_PASSWORD
-            CASEOPS_IP_COST_PROD_DOCKET_ID
-          )
-          configured=0
-          for fixture_name in "${fixture_names[@]}"; do
-            if [[ -n "${!fixture_name}" ]]; then
-              configured=$((configured + 1))
-            fi
-          done
-          if [[ "$configured" -eq 0 ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=IPLF-039F deployed acceptance pending::No dedicated cost fixture is configured; generic scheduled production verification continues independently."
-            echo "### IPLF-039F cost acceptance" >> "$GITHUB_STEP_SUMMARY"
-            echo "Not run: all six dedicated test-tenant values are unconfigured. Configure all six together to activate this mutation-capable exact-release gate." >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "$configured" -ne 6 ]]; then
-            echo "::error title=Incomplete IPLF-039F configuration::Cost acceptance is fail-closed because only $configured of 6 dedicated test-tenant values are configured."
-            exit 1
-          elif [[ ! -f playwright.ip-cost-prod.config.ts ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=IPLF-039F serving release predates cost acceptance::The exact serving checkout does not contain the dedicated cost config; the newer workflow control plane will not run unreleased test code against it."
-            echo "### IPLF-039F cost acceptance" >> "$GITHUB_STEP_SUMMARY"
-            echo "Not applicable: the exact serving release predates the release-owned cost acceptance config. Deploy the current main release before certifying IPLF-039F." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run IPLF-039F cost acceptance
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
-        timeout-minutes: 8
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
-          CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
-          CASEOPS_IP_COST_PROD_COMPANY_SLUG: ${{ vars.CASEOPS_IP_COST_PROD_COMPANY_SLUG }}
-          CASEOPS_IP_COST_PROD_EMAIL: ${{ vars.CASEOPS_IP_COST_PROD_EMAIL }}
-          CASEOPS_IP_COST_PROD_PASSWORD: ${{ secrets.CASEOPS_IP_COST_PROD_PASSWORD }}
-          CASEOPS_IP_COST_PROD_DOCKET_ID: ${{ vars.CASEOPS_IP_COST_PROD_DOCKET_ID }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" ip-cost --config=playwright.ip-cost-prod.config.ts --reporter=list --output=test-results/ip-cost
-
-      - name: Run prod-Playwright suite (notice module)
-        # The RAM batch is intentionally broad and can expose an independent
-        # provider or quota incident.  The Notice suite is still a required
-        # production signal, so run it after a RAM failure and retain both
-        # outcomes in the same fail-closed workflow result.
-        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
-          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" notice --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
-
-      - name: Check release-owned patent and statute acceptance
-        id: patent-statute-prerequisites
-        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        run: |
-          if [[ -f tests/e2e/support/patent-acceptance.ts ]]; then
-            test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::The exact serving release predates the patent/statute acceptance projects; newer test code will not run against it."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run exact-release patent and domain journeys
-        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" patent --config=playwright.prod-ram.config.ts --project=patent-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/patent
-
-      - name: Verify every release-owned statute source record
-        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
-          CASEOPS_RAM_PROD_SLUG: caseops-qa
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        # Read-only batches use bounded parallelism after all mutation phases.
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" statute-sources --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
-
-      - name: Run exact-release public SEO read-only acceptance
-        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          CASEOPS_WEB_BASE_URL: https://caseops.ai
-        run: |
-          test "${{ steps.native-evidence.outputs.mode }}" = native
-          test -f playwright.public-seo.config.ts
-          bash "$RUNNER_TEMP/caseops-prod-playwright" public-pages --config=playwright.public-seo.config.ts --workers=1 --retries=0 --reporter=list --output=test-results/public-pages
-
-      - name: Check release-owned report-console acceptance
-        id: platform-report-prerequisites
-        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
-        run: |
-          if [[ -f tests/e2e/platform-report-admin-2026-10-20.prod.spec.ts ]]; then
-            test -f playwright.prod-ram.config.ts
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::The exact serving checkout predates report-console acceptance; do not execute newer branch tests against it."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Report-console production acceptance not run: absent from the exact serving release." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Run exact-release report-console read-only acceptance
-        if: always() && !cancelled() && matrix.suite == 'public-pages' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.platform-report-prerequisites.outputs.ready == 'true'
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          test "${{ steps.native-evidence.outputs.mode }}" = native
-          bash "$RUNNER_TEMP/caseops-prod-playwright" platform-reports --config=playwright.prod-ram.config.ts --project=platform-reports-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/platform-reports
-
-      - name: Reconcile required native Playwright evidence
-        if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
-        env:
-          SUITE: ${{ matrix.suite }}
-          HISTORICAL_A0: ${{ inputs.run_historical_a0_gate }}
-          RENEWAL_CONFIGURED: ${{ steps.renewal-prerequisites.outputs.configured }}
-          COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
-          PLATFORM_REPORT_READY: ${{ steps.platform-report-prerequisites.outputs.ready }}
-          BATCH4_GOVERNANCE: ${{ steps.batch4-tester.outputs.governance }}
-        run: |
-          set -euo pipefail
-          case "$SUITE" in
-            tester|tester-catalog|tester-index|test-legal-write-oct13-a|test-legal-write-oct13-b) required=("$SUITE") ;;
-            batch3|batch4) required=() ;;
-            legacy|test-legal-readonly) required=("$SUITE") ;;
-            supporting)
-              required=(notice)
-              if [[ "$HISTORICAL_A0" == true ]]; then required+=(ip-a0); fi
-              if [[ "$RENEWAL_CONFIGURED" == true ]]; then required+=(ip-renewal); fi
-              if [[ "$COST_CONFIGURED" == true ]]; then required+=(ip-cost); fi
-              ;;
-            patent-statute) required=(patent statute-sources) ;;
-            public-pages)
-              required=(public-pages)
-              if [[ "$PLATFORM_REPORT_READY" == true ]]; then required+=(platform-reports); fi
-              ;;
-            *) exit 1 ;;
-          esac
-          if [[ "$SUITE" == batch3 ]]; then
-            required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
-          fi
-          if [[ "$SUITE" == batch4 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
-            if [[ ! -f tests/e2e/ram-2026-10-31-governance-ui.spec.ts ]]; then
-              echo "::error::Newer serving release is missing Batch4 acceptance."
-              exit 1
-            fi
-            required+=(batch4-desktop batch4-mobile)
-            # The live state the Batch4 step cross-checked and ran against.
-            case "${BATCH4_GOVERNANCE:-}" in
-              enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
-              disabled) ;;
-              *) echo "::error::Batch4 acceptance recorded no live rule-governance state."; exit 1 ;;
-            esac
-          fi
-          if [[ ${#required[@]} -eq 0 ]]; then
-            if [[ "$SUITE" != batch4 ]] || [[ -e tests/e2e/ram-2026-10-31-control-crawl.spec.ts || -e tests/e2e/ram-2026-10-31-governance-ui.spec.ts ]]; then
-              echo "::error::Batch4 historical marker requires both acceptance source files absent."
-              exit 1
-            fi
-            if ! git merge-base --is-ancestor HEAD 02d0b0e48ec86e1ff59866cb9bc53f8c35ddf232; then
-              echo "::error::Newer serving release is missing Batch4 acceptance."
-              exit 1
-            fi
-            if [[ ! "${CASEOPS_EXPECTED_RELEASE_SHA:-}" =~ ^[a-f0-9]{40}$ ]] || ! head_sha="$(git rev-parse HEAD)" || [[ "$head_sha" != "$CASEOPS_EXPECTED_RELEASE_SHA" ]]; then
-              echo "::error::Batch4 historical marker requires the exact serving SHA."
-              exit 1
-            fi
-            if ! tracked_specs="$(git ls-tree --name-only HEAD -- tests/e2e/ram-2026-10-31-control-crawl.spec.ts tests/e2e/ram-2026-10-31-governance-ui.spec.ts)" || [[ -n "$tracked_specs" ]]; then
-              echo "::error::Batch4 acceptance source absence is not proven by the serving tree."
-              exit 1
-            fi
-            mkdir -p test-results/prod-native-evidence
-            printf '{"release_sha": "%s", "completed": false, "reason": "serving_release_predates_batch4_acceptance"}\n' \
-              "$CASEOPS_EXPECTED_RELEASE_SHA" > test-results/prod-native-evidence/batch4-predates.json
-            echo "::notice::Serving source predates Batch4 acceptance; no Batch4 receipts are owed."
-            exit 0
-          fi
-          python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
-
-      - name: Upload native Playwright evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prod-playwright-report-${{ matrix.suite }}
-          path: |
-            test-results/prod-native-evidence/
-          if-no-files-found: ${{ steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn' }}
-          retention-days: 14
-
-  prod-tester-index:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-playwright-shards.result == 'success' || needs.prod-playwright-shards.result == 'failure')
-    needs: [resolve-release, prod-playwright-shards]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 38
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite: [tester-index]
-    steps: *prod-playwright-steps
-
-  prod-test-legal-write-oct13-a:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-tester-index.result == 'success' || needs.prod-tester-index.result == 'failure')
-    needs: [resolve-release, prod-tester-index]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 38
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite: [test-legal-write-oct13-a]
-    steps: *prod-playwright-steps
-
-  prod-test-legal-write-oct13-b:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13-a.result == 'success' || needs.prod-test-legal-write-oct13-a.result == 'failure' || needs.prod-test-legal-write-oct13-a.result == 'cancelled')
-    needs: [resolve-release, prod-test-legal-write-oct13-a]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 38
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite: [test-legal-write-oct13-b]
-    steps: *prod-playwright-steps
-
-  prod-batch3-tester:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13-b.result == 'success' || needs.prod-test-legal-write-oct13-b.result == 'failure' || needs.prod-test-legal-write-oct13-b.result == 'cancelled')
-    needs: [resolve-release, prod-test-legal-write-oct13-b]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 38
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite: [batch3]
-    steps: *prod-playwright-steps
-
-  prod-batch4-tester:
-    name: Prod Playwright (${{ matrix.suite }})
-    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-batch3-tester.result == 'success' || needs.prod-batch3-tester.result == 'failure' || needs.prod-batch3-tester.result == 'cancelled')
-    needs: [resolve-release, prod-batch3-tester]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 38
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    outputs:
-      governance: ${{ steps.batch4-tester.outputs.governance }}
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        suite: [batch4]
-    steps: *prod-playwright-steps
-
-  scheduled-statute-verification:
-    name: Scheduled read-only statute verification
-    if: github.event_name == 'schedule'
-    needs: resolve-release
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-    steps:
-      - name: Check out trusted canonical verification control plane
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Validate canonical serving commit before release code
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
-
-      - name: Recheck exact serving identity
-        run: |
-          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
-          python scripts/verify_deployed_release.py \
-            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
-            --wait-seconds 30 \
-            --interval-seconds 5
-
-      - name: Gate on production QA secret
-        env:
-          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-        run: |
-          if [ -z "$CASEOPS_QA_PASSWORD" ]; then
-            echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
-            exit 1
-          fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-
-      - uses: ./.github/actions/node-trust
-        id: node_trust
-      - env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+      - name: Own locked dependency installation
         run: npm ci
-
-      - name: Install Chromium for Playwright
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+      - name: Install pinned Playwright Chromium
         timeout-minutes: 5
         run: npx playwright install chromium
+      - name: Compile complete E2E TypeScript
+        run: npx tsc --noEmit -p tsconfig.e2e.json
 
-      - name: Verify release-owned statute acceptance exists
-        run: |
-          test -f tests/e2e/support/patent-acceptance.ts
-          test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
-
-      - name: Mark prod-Playwright prerequisites ready
-        id: prod-playwright-prerequisites
-        run: echo "ready=true" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare release-owned native Playwright evidence
+      - name: Recheck sole QA window and exact serving M
+        id: admitted
         env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        id: native-evidence
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
-          [[ "$CASEOPS_EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
-          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
-            echo "mode=native" >> "$GITHUB_OUTPUT"
-          elif git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7; then
-            # Only a serving ancestor predating this helper may use its original CLI.
-            # This is explicitly incomplete native evidence, never a new-main waiver.
-            echo "mode=legacy" >> "$GITHUB_OUTPUT"
-            mkdir -p test-results/prod-native-evidence
-            python - <<'PY'
-          import json, os
-          from pathlib import Path
-          Path("test-results/prod-native-evidence/legacy.json").write_text(
-              json.dumps({"release_sha": os.environ["CASEOPS_EXPECTED_RELEASE_SHA"],
-                          "completed": False, "reason": "serving_release_predates_native_capture"}),
-              encoding="utf-8")
+          python "$RUNNER_TEMP/guard-production-qa.py"
+          python scripts/verify_deployed_release.py --expected-sha bdd1480699222712475372690334659088629429 --wait-seconds 30 --interval-seconds 5
+          echo ready=true >> "$GITHUB_OUTPUT"
+
+      - name: Prepare fresh bounded safe output and native redacted records
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import { prepareBatch4DiagnosticOutput } from './tests/e2e/support/batch4-safe-diagnostics.ts';
+          prepareBatch4DiagnosticOutput();
+          NODE
+          test ! -e test-results/prod-native-evidence/batch4-failure-diagnostics
+          mkdir -p test-results/prod-native-evidence/batch4-failure-diagnostics
+
+      - name: Run exactly three original failure cases with private stdio suppressed
+        id: native
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: https://caseops.ai
+          PROD_API_BASE_URL: https://api.caseops.ai
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib,subprocess,time
+          root=pathlib.Path.cwd();folder=root/'test-results/prod-native-evidence/batch4-failure-diagnostics'
+          if not os.environ.get('CASEOPS_RAM_PROD_PASSWORD','').strip(): raise SystemExit('APPROVED_QA_CREDENTIAL_MISSING')
+          expected=[('ram-2026-10-31-control-crawl.spec.ts','BUG-015 controls on /app/ip/specialist are usable or explain themselves'),('ram-2026-10-31-invoice-pdf.spec.ts','BUG-016 [prod-only] the reported invoices INVR-2026-028 and INVR-2026-068 download legible (read-only)'),('ram-2026-10-31-watch.spec.ts',"BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field")]
+          argv=['node','node_modules/@playwright/test/cli.js','test','--config=playwright.batch4-failure-diagnostics.config.ts','--project=batch4-prod-chromium','--workers=1','--retries=0','--repeat-each=1','--output=test-results/batch4-diagnostic-private']
+          def run(phase):
+              env=dict(os.environ,CASEOPS_PW_EVIDENCE_PHASE=phase,CASEOPS_PW_EVIDENCE_INVOCATION='batch4-failure-diagnostics',CASEOPS_PW_EVIDENCE_JSON_FILE=str(folder/('native-discovery.json' if phase=='discovery' else 'native-results.json')),CASEOPS_PW_EVIDENCE_JUNIT_FILE=str(folder/'native-results.xml'))
+              env.pop('GH_TOKEN',None)
+              child=subprocess.Popen(argv+(['--list'] if phase=='discovery' else []),env=env,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              started=time.monotonic();limit=120 if phase=='discovery' else 25*60;errors=[]
+              try: code=child.wait(timeout=limit)
+              except subprocess.TimeoutExpired:
+                  errors.append('original_native_acceptance_deadline_exceeded')
+                  # Keep the SAME original handle until EOF. A late zero can
+                  # never repair failed acceptance; outer job cancellation is incomplete.
+                  code=child.wait()
+              if time.monotonic()-started>=limit and not errors: errors.append('original_native_acceptance_deadline_exceeded')
+              receipt={'purpose':'NONRELEASE_SCOPED_FAILURE_DIAGNOSTICS','phase':phase,'native_exit':code,'wrapper_exit':code if not errors else 1,'original_pid':child.pid,'original_handle_reaped':True,'acceptance_seconds':limit,'errors':errors,'seconds':time.monotonic()-started,'serving_sha':'bdd1480699222712475372690334659088629429','diagnostic_checkout':os.environ['GITHUB_SHA'],'canonical_release_qualification':False}
+              with (folder/(phase+'-native-exit.json')).open('x') as stream:json.dump(receipt,stream,indent=2)
+              return code if not errors else 1
+          discovery=run('discovery')
+          if discovery!=0: raise SystemExit(discovery)
+          document=json.loads((folder/'native-discovery.json').read_bytes());found=[]
+          def visit(value):
+              if isinstance(value,dict):
+                  if 'tests' in value and 'title' in value and 'file' in value:
+                      for case in value['tests']:
+                          if case.get('projectName')!='batch4-prod-chromium': raise SystemExit('DIAGNOSTIC_PROJECT_COLLECTION_REFUSED')
+                          found.append((value['file'],value['title']))
+                  for nested in value.values():visit(nested)
+              elif isinstance(value,list):
+                  for nested in value:visit(nested)
+          visit(document.get('suites',[]))
+          if found!=expected: raise SystemExit('EXACT_THREE_DIAGNOSTIC_CASES_REFUSED')
+          # This observation supplements the Root-admitted exclusive QA window;
+          # it is not an atomic lock or a claim that another workflow was paused.
+          guard=subprocess.run(['python',str(pathlib.Path(os.environ['RUNNER_TEMP'])/'guard-production-qa.py')],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=70,check=False)
+          if guard.returncode!=0: raise SystemExit('PRE_EXECUTION_QA_WINDOW_REFUSED')
+          raise SystemExit(run('execution'))
           PY
-            echo "::notice::Older exact serving release: native capture is unavailable; do not certify skip reasons from this legacy run."
-          else
-            echo "::error::A newer serving release is missing required native evidence capture."
-            exit 1
-          fi
-          cat > "$RUNNER_TEMP/caseops-prod-playwright" <<'SH'
-          set -euo pipefail
-          invocation="$1"
-          shift
-          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
-          if [[ -f scripts/prod_playwright_evidence.py && -f scripts/prod_playwright_reporter.cjs ]]; then
-            exec python scripts/prod_playwright_evidence.py run --invocation "$invocation" -- "$@"
-          fi
-          git merge-base --is-ancestor HEAD 99297e17b00dd51178e21baf596ba2ebfd92c5f7
-          exec npx playwright test "$@"
-          SH
 
-      - name: Verify every release-owned statute source record
-        env:
-          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
-          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
-          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
-          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
-          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
-          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
-          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
-          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
-          CASEOPS_RAM_PROD_SLUG: caseops-qa
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: bash "$RUNNER_TEMP/caseops-prod-playwright" statute-sources --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
+      - name: Validate safe rows before any row upload
+        id: safe
+        if: always() && steps.admitted.outputs.ready == 'true'
+        run: |
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import { validateBatch4DiagnosticOutput } from './tests/e2e/support/batch4-safe-diagnostics.ts';
+          const summary=validateBatch4DiagnosticOutput();
+          fs.writeFileSync('test-results/batch4-safe-summary.json',JSON.stringify(summary)+'\n',{flag:'wx'});
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'safe=true\n');
+          if(Object.values(summary.counts).some(count=>count===0))throw Error('DIAGNOSTIC_KIND_INCOMPLETE');
+          NODE
+      - name: Recheck exact serving M after diagnostics
+        if: always() && steps.admitted.outputs.ready == 'true'
+        run: python scripts/verify_deployed_release.py --expected-sha bdd1480699222712475372690334659088629429 --wait-seconds 30 --interval-seconds 5
 
-      - name: Reconcile required native Playwright evidence
-        if: always() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.native-evidence.outputs.mode == 'native'
-        run: python scripts/prod_playwright_evidence.py validate --required statute-sources
-
-      - name: Upload native Playwright evidence
-        if: always()
+      - name: Upload validated safe rows only
+        if: always() && steps.safe.outputs.safe == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: prod-playwright-report-scheduled-statutes
-          path: test-results/prod-native-evidence/
-          if-no-files-found: ${{ steps.prod-playwright-prerequisites.outputs.ready == 'true' && 'error' || 'warn' }}
-          retention-days: 14
-
-  record-release-evidence:
-    name: Record exact-release evidence
-    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13-a.result == 'success' && needs.prod-test-legal-write-oct13-b.result == 'success' && needs.prod-batch3-tester.result == 'success' && needs.prod-batch4-tester.result == 'success'
-    needs:
-      - resolve-release
-      - prod-playwright-shards
-      - prod-tester-index
-      - prod-test-legal-write-oct13-a
-      - prod-test-legal-write-oct13-b
-      - prod-batch3-tester
-      - prod-batch4-tester
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out trusted canonical verification control plane
-        uses: actions/checkout@v4
+          name: NONRELEASE-batch4-safe-diagnostic-rows
+          path: |
+            test-results/batch4-safe/records-*.jsonl
+            test-results/batch4-safe-summary.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload original privacy-redacted native records only
+        if: always() && steps.admitted.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Validate canonical serving commit before release code
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: python scripts/trusted_release_checkout.py --release-sha "$CASEOPS_EXPECTED_RELEASE_SHA"
-
-      - name: Recheck exact serving identity before evidence write
-        run: |
-          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
-          python scripts/verify_deployed_release.py \
-            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
-            --wait-seconds 30 \
-            --interval-seconds 5
-
-      - name: Retain canonical tester partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-tester
-          path: test-results/prod-native-evidence
-
-      - name: Retain indexing partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-tester-index
-          path: test-results/prod-native-evidence
-
-      - name: Retain September 05 catalog partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-tester-catalog
-          path: test-results/prod-native-evidence
-
-      - name: Retain October 13A partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-test-legal-write-oct13-a
-          path: test-results/prod-native-evidence
-
-      - name: Retain October 13B partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-test-legal-write-oct13-b
-          path: test-results/prod-native-evidence
-
-      - name: Retain Batch3 partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-batch3
-          path: test-results/prod-native-evidence
-
-      - name: Retain Batch4 partition evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-playwright-report-batch4
-          path: test-results/prod-native-evidence
-
-      - name: Reject historical Batch4 markers before current-release certification
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          set -euo pipefail
-          if [[ ! "${CASEOPS_EXPECTED_RELEASE_SHA:-}" =~ ^[a-f0-9]{40}$ ]] || ! head_sha="$(git rev-parse HEAD)" || [[ "$head_sha" != "$CASEOPS_EXPECTED_RELEASE_SHA" ]]; then
-            echo "::error::Batch4 certification requires the exact serving SHA."
-            exit 1
-          fi
-          marker=test-results/prod-native-evidence/batch4-predates.json
-          if [[ ! -e "$marker" && ! -L "$marker" ]]; then
-            if [[ -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts && -f tests/e2e/ram-2026-10-31-governance-ui.spec.ts ]]; then
-              exit 0
-            fi
-            echo "::error::Missing Batch4 source has no verified historical marker; certification is incomplete."
-            exit 1
-          fi
-          if [[ -e tests/e2e/ram-2026-10-31-control-crawl.spec.ts || -e tests/e2e/ram-2026-10-31-governance-ui.spec.ts ]] || ! git merge-base --is-ancestor HEAD 02d0b0e48ec86e1ff59866cb9bc53f8c35ddf232; then
-            echo "::error::Batch4 historical marker does not match a pre-feature serving source."
-            exit 1
-          fi
-          if ! tracked_specs="$(git ls-tree --name-only HEAD -- tests/e2e/ram-2026-10-31-control-crawl.spec.ts tests/e2e/ram-2026-10-31-governance-ui.spec.ts)" || [[ -n "$tracked_specs" ]]; then
-            echo "::error::Batch4 acceptance source absence is not proven by the serving tree."
-            exit 1
-          fi
-          python - "$CASEOPS_EXPECTED_RELEASE_SHA" <<'PY'
-          import sys
-          from pathlib import Path
-          expected = (
-              '{"release_sha": "%s", "completed": false, '
-              '"reason": "serving_release_predates_batch4_acceptance"}\n'
-          ) % sys.argv[1]
-          try:
-              with Path("test-results/prod-native-evidence/batch4-predates.json").open("rb") as stream:
-                  received = stream.read(len(expected.encode("ascii")) + 1)
-          except OSError:
-              raise SystemExit("::error::Batch4 historical marker is unreadable.") from None
-          if received != expected.encode("ascii"):
-              raise SystemExit("::error::Batch4 historical marker payload does not match the exact serving release.")
-          PY
-          echo "::error::Serving source predates Batch4 acceptance; its retained marker is diagnostic only. Current-release certification is incomplete."
-          exit 1
-
-      - name: Require complete source-bound tester partition union
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          set -euo pipefail
-          python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
-          python scripts/prod_playwright_evidence.py validate \
-            --required tester tester-catalog tester-index test-legal-write-oct13-a test-legal-write-oct13-b \
-            --tester-partition-union
-
-      - name: Require complete release-owned Batch3 and Batch4 role evidence
-        env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-          BATCH4_GOVERNANCE: ${{ needs.prod-batch4-tester.outputs.governance }}
-        run: |
-          set -euo pipefail
-          required=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly batch4-desktop batch4-mobile)
-          case "${BATCH4_GOVERNANCE:-}" in
-            enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
-            disabled) ;;
-            *) echo "::error::Batch4 acceptance recorded no live rule-governance state."; exit 1 ;;
-          esac
-          python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
-
-      - name: Record exact-release public-claims evidence
-        env:
-          CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
-          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          SERVING_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
-        run: |
-          if [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
-            echo "::error::CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not configured."
-            exit 1
-          fi
-          evidence_ref="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
-          python scripts/write_machine_readiness_evidence.py \
-            --api-base "${PROD_API_BASE_URL:-https://api.caseops.ai}" \
-            --producer github-actions/prod-verify \
-            --release-sha "$SERVING_RELEASE_SHA" \
-            --run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-            --evidence-ref "$evidence_ref" \
-            --operational public_claims_reviewed=pass
+          name: NONRELEASE-batch4-original-native-redacted
+          path: |
+            test-results/prod-native-evidence/batch4-failure-diagnostics/native-discovery.json
+            test-results/prod-native-evidence/batch4-failure-diagnostics/native-results.json
+            test-results/prod-native-evidence/batch4-failure-diagnostics/native-results.xml
+            test-results/prod-native-evidence/batch4-failure-diagnostics/progress.jsonl
+            test-results/prod-native-evidence/batch4-failure-diagnostics/discovery-native-exit.json
+            test-results/prod-native-evidence/batch4-failure-diagnostics/execution-native-exit.json
+          if-no-files-found: error
+          retention-days: 7

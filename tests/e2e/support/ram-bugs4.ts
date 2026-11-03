@@ -330,20 +330,43 @@ export async function expectNoPageOverflow(page: Page) {
     "The page must not overflow the viewport horizontally").toBe(true);
 }
 
+export type ControlSnapshotDiagnostic = {
+  tag: "select" | "input" | "textarea";
+  own_disabled: boolean;
+  effective_disabled: boolean;
+  ancestor_fieldset_disabled: boolean;
+  real_option_count: number;
+  total_option_count: number;
+  internal_field: boolean;
+};
+
 /** A control the user can see must never be an enabled select whose only options are placeholders. */
-export async function deadSelects(page: Page, scope?: Locator): Promise<string[]> {
+export async function deadSelects(page: Page, scope?: Locator,
+  onDiagnostics?: (rows: ControlSnapshotDiagnostic[]) => void): Promise<string[]> {
   const root = scope ?? page.locator("body");
-  return root.evaluate((element) => {
+  const snapshot = await root.evaluate((element, captureDiagnostics) => {
     const out: string[] = [];
+    const diagnostics: ControlSnapshotDiagnostic[] = [];
     for (const select of Array.from(element.querySelectorAll<HTMLSelectElement>("select"))) {
       const box = select.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0 || select.disabled) continue;
+      if (box.width === 0 || box.height === 0) continue;
+      const ownDisabled = select.disabled;
+      if (!captureDiagnostics && ownDisabled) continue;
       const real = Array.from(select.options).filter(o => o.value !== "" && !o.disabled);
+      if (captureDiagnostics) diagnostics.push({
+        tag: "select", own_disabled: ownDisabled, effective_disabled: select.matches(":disabled"),
+        ancestor_fieldset_disabled: !!select.closest("fieldset[disabled]"),
+        real_option_count: real.length, total_option_count: select.options.length, internal_field: false,
+      });
+      // Preserve the original own-disabled predicate; this branch only observes it.
+      if (ownDisabled) continue;
       if (real.length === 0) {
         const label = select.labels?.[0]?.innerText || select.getAttribute("aria-label") || select.id || select.name || "unlabelled";
         out.push(label.trim().split("\n")[0]);
       }
     }
-    return out;
-  });
+    return { out, diagnostics };
+  }, !!onDiagnostics);
+  onDiagnostics?.(snapshot.diagnostics);
+  return snapshot.out;
 }

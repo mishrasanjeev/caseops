@@ -15,9 +15,10 @@ import {
 } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { recordBatch4Diagnostic } from "./support/batch4-safe-diagnostics";
 import reportedRoutes from "./fixtures/control-crawl-reported-routes.json";
 import {
-  collectOpenPopoverOffenders, deadSelects, markPositive, prepareTester, type TesterRuntime,
+  collectOpenPopoverOffenders, deadSelects, markPositive, prepareTester, type ControlSnapshotDiagnostic, type TesterRuntime,
 } from "./support/ram-bugs4";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
@@ -60,20 +61,32 @@ async function clickIfVisible(target: Locator): Promise<boolean> {
   return true;
 }
 
-async function inspect(route: string, offenders: Offender[]) {
+async function inspect(route: string, offenders: Offender[], onDiagnostics?: (rows: ControlSnapshotDiagnostic[]) => void) {
   const main = page.locator("main");
-  for (const label of await deadSelects(page, main)) offenders.push({ route, kind: "dead-select", detail: label });
-  const internal = await main.evaluate((root, pattern) => {
+  for (const label of await deadSelects(page, main, onDiagnostics)) offenders.push({ route, kind: "dead-select", detail: label });
+  const internal = await main.evaluate((root, { pattern, captureDiagnostics }) => {
     const re = new RegExp(pattern, "i");
     const out: string[] = [];
+    const diagnostics: ControlSnapshotDiagnostic[] = [];
     for (const field of Array.from(root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))) {
-      if (field.type === "hidden" || field.disabled || field.getBoundingClientRect().width === 0) continue;
+      if (field.type === "hidden" || field.getBoundingClientRect().width === 0) continue;
+      const ownDisabled = field.disabled;
+      if (!captureDiagnostics && ownDisabled) continue;
       const label = field.labels?.[0]?.innerText || field.getAttribute("aria-label") || field.placeholder || "";
-      if (re.test(label)) out.push(label.trim().split("\n")[0]);
+      const internalField = re.test(label);
+      if (captureDiagnostics) diagnostics.push({
+        tag: field.tagName === "TEXTAREA" ? "textarea" : "input",
+        own_disabled: ownDisabled, effective_disabled: field.matches(":disabled"),
+        ancestor_fieldset_disabled: !!field.closest("fieldset[disabled]"),
+        real_option_count: 0, total_option_count: 0, internal_field: internalField,
+      });
+      // Preserve the original own-disabled predicate and private in-memory detail.
+      if (!ownDisabled && internalField) out.push(label.trim().split("\n")[0]);
     }
-    return out;
-  }, INTERNAL_FIELD.source);
-  for (const label of internal) offenders.push({ route, kind: "internal-identifier-input", detail: label });
+    return { out, diagnostics };
+  }, { pattern: INTERNAL_FIELD.source, captureDiagnostics: !!onDiagnostics });
+  onDiagnostics?.(internal.diagnostics);
+  for (const label of internal.out) offenders.push({ route, kind: "internal-identifier-input", detail: label });
   const comboboxes = main.locator("button[role=combobox]");
   const total = Math.min(await comboboxes.count(), 25);
   for (let index = 0; index < total; index += 1) {
@@ -96,18 +109,18 @@ async function inspect(route: string, offenders: Offender[]) {
   }
 }
 
-async function crawl(path: string): Promise<Offender[]> {
+async function crawl(path: string, onDiagnostics?: (rows: ControlSnapshotDiagnostic[]) => void): Promise<Offender[]> {
   const offenders: Offender[] = [];
   await page.goto(`${rt.web.origin}${path}`);
   await settle(page);
   if (!(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1))) {
     offenders.push({ route: path, kind: "page-overflow", detail: "horizontal" });
   }
-  await inspect(path, offenders);
+  await inspect(path, offenders, onDiagnostics);
   for (const name of FORM_TOGGLES) {
     if (await clickIfVisible(page.locator("main").getByRole("button", { name, exact: true }).first())) {
       await settle(page);
-      await inspect(`${path} [${name}]`, offenders);
+      await inspect(`${path} [${name}]`, offenders, onDiagnostics);
     }
   }
   for (const name of TAB_NAMES) {
@@ -115,7 +128,7 @@ async function crawl(path: string): Promise<Offender[]> {
       .or(page.locator("main").getByRole("button", { name, exact: true })).first();
     if (await clickIfVisible(tab)) {
       await settle(page);
-      await inspect(`${path} [${name}]`, offenders);
+      await inspect(`${path} [${name}]`, offenders, onDiagnostics);
     }
   }
   const disclosures = page.locator("main button[aria-expanded=false]");
@@ -124,7 +137,7 @@ async function crawl(path: string): Promise<Offender[]> {
     if (!(await clickIfVisible(disclosures.first()))) break;
     await page.waitForTimeout(150);
   }
-  if (count > 0) await inspect(`${path} [disclosures]`, offenders);
+  if (count > 0) await inspect(`${path} [disclosures]`, offenders, onDiagnostics);
   return offenders;
 }
 
@@ -163,13 +176,20 @@ for (const path of [...ROUTES, ...PROD_ROUTES]) {
     test.setTimeout(6 * 60_000);
     test.skip(PROD_ROUTES.includes(path) && rt.local, "Reported production records exist only in test-legal.");
     const before = apiFailures.length;
-    const offenders = await crawl(path);
+    const diagnostics: ControlSnapshotDiagnostic[] = [];
+    const offenders = await crawl(path, path === "/app/ip/specialist" ? rows => diagnostics.push(...rows) : undefined);
     const failures = apiFailures.slice(before);
+    let diagnosticFailure: unknown;
+    for (const [index, row] of diagnostics.entries()) {
+      try { recordBatch4Diagnostic({ kind: "specialist_control", ordinal: index + 1, ...row }); }
+      catch (error) { diagnosticFailure ??= error; }
+    }
     await info.attach("control-crawl-offenders", { body: JSON.stringify(offenders, null, 2), contentType: "application/json" });
     await info.attach("control-crawl-api-5xx", { body: JSON.stringify(failures, null, 2), contentType: "application/json" });
     await markPositive(info, "control-crawl", { path, offenders: offenders.length, local: rt.local });
     expect(failures, "No API 5xx while a tester browses").toEqual([]);
     expect(offenders, `Dead or misleading controls:\n${offenders.map(o => `${o.route} :: ${o.kind} :: ${o.detail}`).join("\n")}`)
       .toEqual([]);
+    if (diagnosticFailure) throw diagnosticFailure;
   });
 }
