@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 HELPER = ROOT / "scripts/trusted_release_checkout.py"
 CONSUMERS = (
     "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-    "scheduled-statute-verification", "record-release-evidence",
+    "prod-test-legal-batch4", "scheduled-statute-verification", "record-release-evidence",
 )
 
 

@@ -27,6 +27,7 @@ REQUIRED_JOBS = (
     "Prod Playwright (tester-catalog)",
     "Prod Playwright (tester-index)",
     "Prod Playwright (test-legal-write-oct13)",
+    "Prod Playwright (test-legal-batch4)",
     "Prod Playwright (test-legal-readonly)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
@@ -280,10 +281,16 @@ def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
     regular = {"Resolve exact production release", "Record exact-release evidence"}
-    for key in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+    partitions = [key for key, job in jobs.items()
+                  if job.get("name") == "Prod Playwright (${{ matrix.suite }})"]
+    assert partitions == [
+        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
+        "prod-test-legal-batch4",
+    ]
+    for key in partitions:
         regular.update("Prod Playwright (" + suite + ")"
                        for suite in jobs[key]["strategy"]["matrix"]["suite"])
-    assert len(regular) == 11 and set(REQUIRED_JOBS) == regular
+    assert len(regular) == 12 and set(REQUIRED_JOBS) == regular
     assert "Scheduled read-only statute verification" not in regular
 
 
@@ -292,11 +299,26 @@ def captured_jobs():
     return json.loads(path.read_text(encoding="utf-8"))["jobs"]
 
 
-def test_private_resume_accepts_captured_successful_matrix_display_names(monkeypatch):
+# Run 38942699099 predates the Batch4 partition job; this row is what a current
+# run adds between the October 13 partition and the evidence writer.
+CAPTURED_ERA_BATCH4_JOB = {
+    "databaseId": 117147709022, "name": "Prod Playwright (test-legal-batch4)",
+    "status": "completed", "conclusion": "success",
+    "startedAt": "2026-10-16T19:29:28Z", "completedAt": "2026-10-16T19:29:29Z",
+}
+
+
+@pytest.mark.parametrize("batch4", [True, False])
+def test_private_resume_accepts_captured_matrix_display_names_only_with_batch4(
+    monkeypatch, batch4,
+):
     inventory, state = evidence(monkeypatch)
     jobs = captured_jobs()
     assert len(jobs) == 12
     assert sum(job["conclusion"] == "success" for job in jobs) == 11
+    assert not any("test-legal-batch4" in job["name"] for job in jobs)
+    if batch4:
+        jobs.append(copy.deepcopy(CAPTURED_ERA_BATCH4_JOB))
     state["qa_jobs"] = jobs
     state["qa_end"] = datetime.fromisoformat("2026-10-16T19:29:46+00:00")
     for name, minutes in zip(NAMES, (5, 3, -5), strict=True):
@@ -307,7 +329,13 @@ def test_private_resume_accepts_captured_successful_matrix_display_names(monkeyp
             started_at=stamp(start + timedelta(seconds=1)),
             completed_at=stamp(end - timedelta(seconds=1)),
         )
-    assert resume(inventory)["state"] == "ENABLED"
+    if batch4:
+        assert resume(inventory)["state"] == "ENABLED"
+        return
+    # A run that never executed the Batch4 partition is not release proof.
+    with pytest.raises(guard.InventoryError, match="every required QA job"):
+        resume(inventory)
+    assert_no_resume(state)
 
 
 @pytest.mark.parametrize("name", REQUIRED_JOBS)

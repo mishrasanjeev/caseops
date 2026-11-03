@@ -1240,12 +1240,15 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     ):
         raise InventoryError("prod-verify dispatch identity changed or is incomplete")
     jobs = detail.get("jobs")
+    # A run recorded before a partition job existed (for example Batch4) lacks
+    # that job and is refused: re-run prod-verify rather than resume on less proof.
     required = {
         "Resolve exact production release",
         "Prod Playwright (tester)",
         "Prod Playwright (tester-catalog)",
         "Prod Playwright (tester-index)",
         "Prod Playwright (test-legal-write-oct13)",
+        "Prod Playwright (test-legal-batch4)",
         "Prod Playwright (test-legal-readonly)",
         "Prod Playwright (legacy)",
         "Prod Playwright (supporting)",

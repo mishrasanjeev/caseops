@@ -181,7 +181,7 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
     ) + 1
     step = steps[names.index(BATCH4_STEP)]
     assert step["id"] == "batch4-tester"
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == "matrix.suite == 'test-legal-batch4'"
     assert step["env"] == {
         "CASEOPS_RAM_PROD_SLUG": "test-legal",
         "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com",
@@ -450,24 +450,95 @@ def test_batch4_step_fails_before_any_browser_without_a_required_key(
     assert invoked == []
 
 
-@pytest.mark.parametrize(("specs", "checked_in", "live", "batch4"), [
-    (False, False, "", []),
-    (True, False, "disabled", ["batch4-desktop", "batch4-mobile"]),
-    (True, True, "enabled", list(BATCH4_ROLES)),
+@pytest.mark.parametrize(("checked_in", "live", "batch4"), [
+    (False, "disabled", ["batch4-desktop", "batch4-mobile"]),
+    (True, "enabled", list(BATCH4_ROLES)),
     # The live state, not the checked-in file, decides the owed receipts (A2).
-    (True, False, "enabled", list(BATCH4_ROLES)),
+    (False, "enabled", list(BATCH4_ROLES)),
 ])
 def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
-    tmp_path: Path, specs: bool, checked_in: bool, live: str, batch4: list[str],
+    tmp_path: Path, checked_in: bool, live: str, batch4: list[str],
 ) -> None:
-    root = _batch4_checkout(tmp_path, specs=specs, governance=checked_in)
+    root = _batch4_checkout(tmp_path, specs=True, governance=checked_in)
+    result, _, required, _ = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "test-legal-batch4", "BATCH4_GOVERNANCE": live},
+    )
+    assert result.returncode == 0, result.stderr
+    assert required == batch4
+
+
+@pytest.mark.parametrize("specs", [False, True])
+@pytest.mark.parametrize("live", ["", "disabled", "enabled"])
+def test_october13_partition_no_longer_owes_batch4_receipts(
+    tmp_path: Path, specs: bool, live: str,
+) -> None:
+    # Batch4 moved to its own job: the October 13 partition never runs or owes it.
+    root = _batch4_checkout(tmp_path, specs=specs, governance=live == "enabled")
     result, _, required, _ = _run_offline_step(
         tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
         {"SUITE": "test-legal-write-oct13", "BATCH4_GOVERNANCE": live},
     )
     assert result.returncode == 0, result.stderr
     batch3 = ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]
-    assert required == ["test-legal-write-oct13", *(batch3 if specs else []), *batch4]
+    assert required == ["test-legal-write-oct13", *(batch3 if specs else [])]
+
+
+@pytest.mark.parametrize(("ancestor", "code", "message"), [
+    (0, 0, "::notice::Serving source predates Batch4 acceptance; no Batch4 receipts are owed."),
+    (1, 1, "::error::Newer serving release is missing Batch4 acceptance."),
+])
+def test_batch4_partition_owes_nothing_only_for_a_release_that_predates_batch4(
+    tmp_path: Path, ancestor: int, code: int, message: str,
+) -> None:
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    result, _, required, _ = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "test-legal-batch4", "BATCH4_GOVERNANCE": "",
+         "CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40},
+        ancestor=ancestor,
+    )
+    assert result.returncode == code
+    assert result.stdout.strip() == message
+    assert required == []
+    marker = root / "test-results/prod-native-evidence/batch4-predates.json"
+    if code:
+        assert not marker.exists()
+    else:
+        # The upload step requires a non-empty artifact; the marker is explicit.
+        assert json.loads(marker.read_text(encoding="utf-8")) == {
+            "release_sha": "a" * 40, "completed": False,
+            "reason": "serving_release_predates_batch4_acceptance",
+        }
+
+
+def test_batch4_step_and_receipts_belong_only_to_the_batch4_partition() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    jobs = workflow["jobs"]
+    suites = {key: job["strategy"]["matrix"]["suite"] for key, job in jobs.items()
+              if "strategy" in job}
+    assert [key for key, values in suites.items() if "test-legal-batch4" in values] == [
+        "prod-test-legal-batch4"
+    ]
+    assert suites["prod-test-legal-batch4"] == ["test-legal-batch4"]
+    assert _shard_step(BATCH4_STEP)["if"] == "matrix.suite == 'test-legal-batch4'"
+    # Neither the October 13 nor the Batch3 runs execute in the Batch4 partition.
+    for name in ("Run release-owned test-legal portfolio and Calendar regressions",
+                 "Run release-owned Batch3 client and retained drafting acceptance"):
+        assert _shard_step(name)["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    reconcile = _shard_step("Reconcile required native Playwright evidence")["run"]
+    assert "test-legal-batch4) required=() ;;" in reconcile
+    assert (
+        'if [[ "$SUITE" == test-legal-batch4 && '
+        "-f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then\n"
+        "  required+=(batch4-desktop batch4-mobile)"
+    ) in reconcile
+    assert reconcile.count("required+=(batch4-desktop batch4-mobile)") == 1
+    assert 'if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-31' not in (
+        reconcile
+    )
 
 
 @pytest.mark.parametrize("live", [None, "", "Enabled", "enabled\nenabled", "unknown"])
@@ -475,7 +546,7 @@ def test_batch4_receipts_fail_closed_without_a_recorded_live_state(
     tmp_path: Path, live: str | None,
 ) -> None:
     root = _batch4_checkout(tmp_path, specs=True, governance=True)
-    env = {"SUITE": "test-legal-write-oct13"}
+    env = {"SUITE": "test-legal-batch4"}
     if live is not None:
         env["BATCH4_GOVERNANCE"] = live
     result, _, required, _ = _run_offline_step(
@@ -743,10 +814,11 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     assert "needs.prod-playwright-shards.result == 'success'" in job["if"]
     assert job["needs"] == [
         "resolve-release", "prod-playwright-shards", "prod-tester-index",
-        "prod-test-legal-write-oct13",
+        "prod-test-legal-write-oct13", "prod-test-legal-batch4",
     ]
     assert "needs.prod-tester-index.result == 'success'" in job["if"]
     assert "needs.prod-test-legal-write-oct13.result == 'success'" in job["if"]
+    assert "needs.prod-test-legal-batch4.result == 'success'" in job["if"]
     assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer["env"]
     assert "needs.resolve-release.outputs.release_sha" in writer["env"]["SERVING_RELEASE_SHA"]
     assert '--run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in writer["run"]
@@ -768,6 +840,7 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     for name, predecessor, suite in (
         ("prod-tester-index", "prod-playwright-shards", "tester-index"),
         ("prod-test-legal-write-oct13", "prod-tester-index", "test-legal-write-oct13"),
+        ("prod-test-legal-batch4", "prod-test-legal-write-oct13", "test-legal-batch4"),
     ):
         job = jobs[name]
         assert job["name"] == "Prod Playwright (${{ matrix.suite }})"
@@ -777,7 +850,10 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         assert "needs.resolve-release.result == 'success'" in job["if"]
         assert job["strategy"]["matrix"]["suite"] == [suite]
         assert job["steps"] == original["steps"]
-    for name in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+    for name in (
+        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
+        "prod-test-legal-batch4",
+    ):
         job = jobs[name]
         assert job["timeout-minutes"] == 38
         assert job["strategy"]["max-parallel"] == 1
@@ -803,6 +879,7 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     assert downloaded == {
         "prod-playwright-report-tester", "prod-playwright-report-tester-index",
         "prod-playwright-report-tester-catalog", "prod-playwright-report-test-legal-write-oct13",
+        "prod-playwright-report-test-legal-batch4",
     }
 
 
@@ -1249,7 +1326,7 @@ BROWSER_WORKFLOW_JOBS = {
     "ci.yml": ("e2e",),
     "prod-verify.yml": (
         "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-        "scheduled-statute-verification",
+        "prod-test-legal-batch4", "scheduled-statute-verification",
     ),
     "release-verify.yml": ("release-playwright",),
     "mobile-source.yml": ("source", "browser-handoff"),
@@ -1337,8 +1414,10 @@ def test_browser_runner_inventory_rejects_unreviewed_direct_or_script_callers(co
         _assert_browser_workflow_runners(workflows, scripts)
 
 
-@pytest.mark.parametrize("job", ["prod-tester-index", "prod-test-legal-write-oct13"])
-def test_browser_runner_inventory_keeps_both_yaml_anchor_consumers(job: str) -> None:
+@pytest.mark.parametrize(
+    "job", ["prod-tester-index", "prod-test-legal-write-oct13", "prod-test-legal-batch4"],
+)
+def test_browser_runner_inventory_keeps_every_yaml_anchor_consumer(job: str) -> None:
     workflows, scripts = _browser_workflows()
     del workflows["prod-verify.yml"]["jobs"][job]
     with pytest.raises(AssertionError, match="Complete browser-job inventory"):
