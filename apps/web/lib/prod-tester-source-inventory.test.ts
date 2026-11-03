@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -168,6 +168,187 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
   const projectRetries = Object.fromEntries(native.config.projects.map(project => [project.id, project.retries]));
   return flatten(native.suites, projectRetries).filter(row => Object.hasOwn(selectedProjects, row.project));
 }
+
+type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
+  Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
+const appSourceProjects = { "app-chromium": 713, "app-mobile": 53 };
+
+function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
+  return suites.flatMap(suite => {
+    const titles = [...parents, suite.title];
+    return [
+      ...(suite.specs ?? []).flatMap(spec => spec.tests.map((test, ordinal) => ({
+        id: `${spec.id}:${test.projectId}:${ordinal}`, file: spec.file.replaceAll("\\", "/"),
+        titles: [...titles, spec.title], project: test.projectName,
+        repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? retries[test.projectId], results: test.results,
+      }))),
+      ...flattenApp(suite.suites ?? [], retries, titles),
+    ];
+  });
+}
+
+function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
+  // New766-case metadata scope:15s constructor/20s new hooks and units. The
+  // established production collector above keeps its literal8s bound unchanged.
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  Object.assign(env, {
+    CI: "1", CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
+    CASEOPS_WEB_BASE_URL: "http://127.0.0.1:3100",
+    NOTICE_QA_SLUG: "source-inventory-fixture", NOTICE_QA_OWNER_EMAIL: "qa@fixture.invalid",
+    NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
+  });
+  const selected = project ? [`--project=${project}`] : [];
+  const result = execute(process.execPath, [
+    path.join(root, "node_modules/@playwright/test/cli.js"), "test",
+    "--config=playwright.app.config.ts", "--list", "--reporter=json", ...selected,
+  ], { cwd: root, env, encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  const native = JSON.parse(result.stdout) as {
+    errors: unknown[]; suites: NativeSuite[];
+    config: { projects: { id: string; name: string; retries: number; repeatEach: number }[] };
+  };
+  expect(native.errors).toEqual([]);
+  // FullConfig declares both projects even for a single selected native suite.
+  expect(native.config.projects.map(row => [row.id, row.name, row.retries, row.repeatEach])).toEqual([
+    ["app-chromium", "app-chromium", 0, 1], ["app-mobile", "app-mobile", 0, 1],
+  ]);
+  const retries = Object.fromEntries(native.config.projects.map(row => [row.id, row.retries]));
+  return flattenApp(native.suites, retries); // Never hide an unselected native row.
+}
+
+const appIdentity = (row: Case) => [row.id, row.file, row.titles, row.project, row.repeat, row.retries];
+function expectAppSelection(actual: Case[], expected: Case[]) {
+  expect(actual.map(appIdentity)).toEqual(expected.map(appIdentity));
+  expect(actual.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+}
+
+function canonicalAppProject(canonical: Case[], project: keyof typeof appSourceProjects): Case[] {
+  // Playwright's file collector visits directory entries by localeCompare.
+  // Its built-in JSON reporter then merges files from separate projects, which
+  // can append a mobile-only file. Reconstruct only canonical source-file order;
+  // equal-file rows retain their observed order. Selected output stays untouched.
+  return canonical.filter(row => row.project === project).sort((left, right) => {
+    const a = left.file.split("/"), b = right.file.split("/");
+    for (let index = 0; index < Math.max(a.length, b.length); index++) {
+      if (a[index] === undefined) return -1;
+      if (b[index] === undefined) return 1;
+      const order = a[index].localeCompare(b[index]);
+      if (order) return order;
+    }
+    return 0;
+  });
+}
+
+// Independent source collection: no production Python registry or config import
+// supplies the expected App partition. --list never starts either local stack.
+describe("complete independent App CI project inventory", () => {
+  let canonical: Case[];
+  let wholeByDeclaration: Case[];
+
+  beforeAll(() => {
+    canonical = collectAppProject();
+    // Built-in JSON merges shared spec suites across projects. This named
+    // projection preserves observed order inside each literal declaration.
+    wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
+      .flatMap(project => canonicalAppProject(canonical, project));
+  }, 20_000);
+
+  it("keeps all766 canonical identities, original project order and zero retry/repeat", () => {
+    expect(canonical).toHaveLength(766);
+    expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
+    expect(wholeByDeclaration.map(row => row.project)).toEqual([
+      ...Array<string>(713).fill("app-chromium"), ...Array<string>(53).fill("app-mobile"),
+    ]);
+    expect(new Set(canonical.map(row => row.id)).size).toBe(766);
+    expect(canonical.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(canonical.every(row => !path.isAbsolute(row.file) && !row.file.split("/").includes(".."))).toBe(true);
+  });
+
+  for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
+    const count = appSourceProjects[project];
+    it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
+      const selected = collectAppProject(project);
+      expect(selected).toHaveLength(count);
+      expectAppSelection(selected, canonicalAppProject(canonical, project));
+    }, 20_000);
+  }
+
+  it("forms an exact disjoint713+53 ordered union with the original mobile tag boundary", () => {
+    const chromium = canonicalAppProject(canonical, "app-chromium");
+    const mobile = canonicalAppProject(canonical, "app-mobile");
+    expect(chromium.every(row => !row.titles.join(" ").includes("[mobile]"))).toBe(true);
+    expect(mobile.every(row => row.titles.join(" ").includes("[mobile]"))).toBe(true);
+    expect([...chromium, ...mobile].map(appIdentity)).toEqual(wholeByDeclaration.map(appIdentity));
+    expect(new Set(wholeByDeclaration.map(row => row.id))).toEqual(new Set(canonical.map(row => row.id)));
+    const desktopIds = new Set(chromium.map(row => row.id));
+    expect(mobile.every(row => !desktopIds.has(row.id))).toBe(true);
+  });
+
+});
+
+describe("App metadata constructor and source-order controls", () => {
+  it("rejects an extra project returned by the selected native constructor without filtering it away", () => {
+    const suites: NativeSuite[] = [{ title: "nested/spec.ts", specs: [{
+      id: "source-id", file: "nested/spec.ts", title: "literal case", tests: [
+        { projectId: "app-chromium", projectName: "app-chromium", repeatEachIndex: 0, retries: 0, results: [] },
+        { projectId: "app-mobile", projectName: "app-mobile", repeatEachIndex: 0, retries: 0, results: [] },
+      ],
+    }] }];
+    const execute: MetadataConstructor = (_command, args, options) => {
+      expect(args).toContain("--project=app-chromium");
+      expect(args).toContain("--list");
+      expect(options.timeout).toBe(15_000);
+      return { status: 0, stderr: "", stdout: JSON.stringify({ errors: [], suites, config: { projects:
+        Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+      } }) };
+    };
+    const rows = collectAppProject("app-chromium", execute);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].file).toBe("nested/spec.ts");
+    expect(() => expectAppSelection(rows, [rows[0]])).toThrow();
+  });
+
+  function projectionFixture() {
+    const row = (id: string, file: string, title: string, project = "app-mobile"): Case => ({
+      id, file, titles: [file, title], project, repeat: 0, retries: 0, results: [],
+    });
+    return [
+      row("desktop", "a.spec.ts", "desktop source", "app-chromium"),
+      row("root-file", "a.spec.ts", "mobile root file"),
+      row("other", "other/same.spec.ts", "same basename in other directory"),
+      row("registered-B", "a/same.spec.ts", "Z title registered first"),
+      row("registered-A", "a/same.spec.ts", "A title registered second"),
+    ];
+  }
+
+  it("projects full relative directory order while preserving each file's registration order", () => {
+    const canonical = projectionFixture();
+    const originalIds = canonical.map(row => row.id);
+    const projected = canonicalAppProject(canonical, "app-mobile");
+    expect(projected.map(row => row.id)).toEqual(["registered-B", "registered-A", "root-file", "other"]);
+    expect(canonical.map(row => row.id)).toEqual(originalIds);
+    expect(new Set(projected.map(row => row.id))).toEqual(new Set(canonical.filter(row => row.project === "app-mobile").map(row => row.id)));
+    expectAppSelection(projected, [canonical[3], canonical[4], canonical[1], canonical[2]]);
+  });
+
+  it.each(["swapped-files", "within-file-order", "missing", "foreign", "same-basename-other-directory"])(
+    "rejects %s in selected raw rows without repairing their sequence", damage => {
+      const canonical = projectionFixture();
+      const expected = canonicalAppProject(canonical, "app-mobile");
+      const actual = expected.map(row => ({ ...row, titles: [...row.titles] }));
+      if (damage === "swapped-files") [actual[2], actual[3]] = [actual[3], actual[2]];
+      else if (damage === "within-file-order") [actual[0], actual[1]] = [actual[1], actual[0]];
+      else if (damage === "missing") actual.pop();
+      else if (damage === "foreign") actual[0] = canonical[0];
+      else actual[0] = { ...actual[0], file: "other/same.spec.ts" };
+      expect(() => expectAppSelection(actual, expected)).toThrow();
+    },
+  );
+});
 
 describe("reviewed production tester source inventory", () => {
   let cases: Case[];

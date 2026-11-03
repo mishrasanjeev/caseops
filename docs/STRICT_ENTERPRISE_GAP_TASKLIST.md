@@ -1,5 +1,33 @@
 # Strict Enterprise Gap Tasklist
 
+## REL-APP-CAPACITY-2026-11-03 — Source-bound App project capacity
+
+**Partially implemented; release NO-GO.** QG-REL-005/QG-REL-008. The original
+4dea App CI exceeded its 60-minute job bound after 762/766 terminal rows. Preserve
+the full failed packet and the four unverified mobile picker boundaries; the
+complete 713 Chromium rows and 49 mobile rows are scoped evidence, not a full pass.
+See the matching strict bug entry and
+ci-4dea-app-native-review01/MANIFEST.json
+(SHA256 660c0b993a9ff979034a5147761d577b84f7c61b1e3681659b484c7b97ea0d1f).
+
+The replacement uses two isolated fixed App projects with the same 60-minute
+per-job bound, one worker, zero retries, all source test/assertion timeouts and
+the existing 21 skips. Both independently retain full canonical 766 metadata,
+selected native results, JUnit, progress, completion/native-exit envelopes and
+unique raw artifacts. The e2e required-context aggregate fails closed unless
+both uploads/jobs succeeded and
+raw native/current-config/normalized inventories prove an exact ordered disjoint
+713+53 union for the same release. Independent Python and frontend source
+contracts cover both project selection and complete inventory; production 172,
+Batch 3 and Batch 4 certification is unchanged. The new App metadata constructor
+has a 15-second bound and new hooks/units have 20-second bounds. Existing
+production metadata calls retain eight seconds; browser budgets are unchanged.
+
+Focused source verification remains distinct from a fresh hosted whole-browser
+replacement. The failed old run, earlier dependency-install protocol deviation
+and separate Windows CMD failures remain retained. Final CI, shipping-image,
+production and native/store acceptance are not certified by this source patch.
+
 ## November 3 Current-Main Integration and Complete Local Replacement
 
 **Partially implemented; final release remains NO-GO.** The native integration

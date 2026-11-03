@@ -1,5 +1,43 @@
 # Strict Bug Task List - 2026-04-22
 
+## REL-APP-CAPACITY-2026-11-03 — Complete App CI within unchanged job bounds
+
+**Partially fixed; final release remains NO-GO.** This is release verification
+capacity under QG-REL-005/QG-REL-008. CI 41640207924 on
+4dea3801e5aac5d3b4f007c502013b42f7033fc5 cancelled App job 125963634097 at its
+original one-hour limit. Native discovery has 766 identities: 713 Chromium and
+53 mobile. All 713 Chromium and 49 mobile rows reached a terminal receipt
+(741 passed, 21 existing skips, zero observed failed cases); four mobile picker
+rows lack final results. Chromium consumed 3065.762 seconds and the completed
+mobile prefix consumed 378.891 seconds.
+Missing terminal receipts do not prove those four bodies never started.
+
+The isolated repair assigns the unchanged app-chromium and app-mobile projects
+to two fresh hosted runners. Each retains its 60-minute bound, one worker, zero
+retries and the original test/assertion deadlines, synthetic tenant setup and
+no-paid marker.
+Unique full-report/native artifacts prevent shared report paths from overwriting
+each other. The original e2e required context now validates both successful jobs,
+both complete envelopes, the exact current source/config, raw JSON/XML/progress,
+the same full 766 canonical list and the ordered disjoint 713+53 execution union.
+Exactly the original 21 capability/provider skips are permitted. Existing production 172,
+Batch 3 and Batch 4 acceptance roles remain separate and unchanged. The new App
+metadata check has a 15-second constructor and 20-second new hook/unit bounds;
+the existing production metadata constructor retains its eight-second bound.
+
+Original failed evidence is immutable at
+outputs/mac-release-closure-20261103/ci-4dea-app-native-review01/MANIFEST.json
+(SHA256 660c0b993a9ff979034a5147761d577b84f7c61b1e3681659b484c7b97ea0d1f).
+Its server artifact 13241008455 is 52,076,745 bytes,
+SHA256 f67dc7205c86473c2b590f969f95b3ee1417e95da6d0d83913886a6b1e6771c4;
+all 336 ZIP members were checked. Source controls and focused verification are
+recorded in the isolated repair handoff; fresh full CI/browser acceptance is
+still required. The separate Windows CMD failure was traced to the external
+harness's COMSPEC spelling; its corrected five-case component passed. That
+component is separate from App capacity and final release acceptance.
+No merge, deployment, device, store
+or final release claim is made.
+
 ## November 3 Main Integration: Complete Local Replacement, Release Still Pending
 
 **Partially implemented; final release remains NO-GO.** Main7780 introduced

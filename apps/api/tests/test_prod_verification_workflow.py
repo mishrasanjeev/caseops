@@ -974,7 +974,7 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     import yaml
 
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
-    steps = {step.get("name"): step for step in workflow["jobs"]["e2e"]["steps"]}
+    steps = {step.get("name"): step for step in workflow["jobs"]["e2e-projects"]["steps"]}
     execute = steps["Playwright (app config)"]
     assert execute["id"] == "app-playwright"
     assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
@@ -982,9 +982,9 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     assert execute["env"]["CASEOPS_WEB_BASE_URL"] == "http://127.0.0.1:3100"
     assert execute["run"].strip() == (
         "uv run --project apps/api --python 3.13 python "
-        "scripts/prod_playwright_evidence.py run --invocation ci-app -- "
-        "--config=playwright.app.config.ts --workers=1 --retries=0 "
-        "--reporter=list --output=test-results/app"
+        "scripts/prod_playwright_evidence.py run --invocation ci-${{ matrix.project }} -- "
+        "--config=playwright.app.config.ts --project=${{ matrix.project }} --workers=1 --retries=0 "
+        "--reporter=list --output=test-results/${{ matrix.project }}"
     )
     reconcile = steps["Reconcile app native Playwright evidence"]
     assert reconcile["if"] == (
@@ -993,17 +993,26 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     assert reconcile["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
     assert reconcile["run"].strip() == (
         "uv run --project apps/api --python 3.13 python "
-        "scripts/prod_playwright_evidence.py validate --required ci-app"
+        "scripts/prod_playwright_evidence.py validate --required ci-${{ matrix.project }}"
     )
     upload = steps["Upload Playwright report"]
     assert upload["if"] == "always()"
     assert "test-results/" in upload["with"]["path"]
-    assert "test-results/prod-native-evidence/ci-app/" in upload["with"]["path"]
+    assert "test-results/prod-native-evidence/ci-${{ matrix.project }}/" in upload["with"]["path"]
+    assert upload["with"]["name"] == "playwright-report-${{ matrix.project }}"
+    native = steps["Upload App native evidence"]
+    assert native["if"] == "always()"
+    assert native["with"] == {
+        "name": "playwright-native-${{ matrix.project }}",
+        "path": "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
+        "retention-days": 7, "if-no-files-found": "error",
+    }
 
 
 @pytest.mark.parametrize("stage", ["execute", "reconcile"])
 @pytest.mark.parametrize("exit_code", [0, 7])
-def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code):
+@pytest.mark.parametrize("project", ["app-chromium", "app-mobile"])
+def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code, project):
     import yaml
 
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
@@ -1011,13 +1020,13 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
         "Playwright (app config)" if stage == "execute"
         else "Reconcile app native Playwright evidence"
     )
-    step = next(step for step in workflow["jobs"]["e2e"]["steps"]
+    step = next(step for step in workflow["jobs"]["e2e-projects"]["steps"]
                 if step.get("name") == name)
     assert step["run"].startswith("uv run --project apps/api --python 3.13 python ")
     # A shell function cannot fall through to a real uv or external service.
     script = (
         'uv() { printf "%s\\n" "$@" > native-arguments; return "$OFFLINE_EXIT"; }\n'
-        + step["run"]
+        + step["run"].replace("${{ matrix.project }}", project)
     )
     bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
     assert bash and Path(bash).is_file()
@@ -1032,9 +1041,10 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
         "scripts/prod_playwright_evidence.py",
     ]
     assert arguments[7:] == (
-        ["run", "--invocation", "ci-app", "--", "--config=playwright.app.config.ts",
-         "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/app"]
-        if stage == "execute" else ["validate", "--required", "ci-app"]
+        ["run", "--invocation", f"ci-{project}", "--", "--config=playwright.app.config.ts",
+         f"--project={project}", "--workers=1", "--retries=0", "--reporter=list",
+         f"--output=test-results/{project}"]
+        if stage == "execute" else ["validate", "--required", f"ci-{project}"]
     )
 
 
@@ -1308,7 +1318,7 @@ def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
 
 
 BROWSER_WORKFLOW_JOBS = {
-    "ci.yml": ("e2e",),
+    "ci.yml": ("e2e-projects",),
     "prod-verify.yml": (
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
@@ -1821,11 +1831,16 @@ def test_historical_marker_cannot_publish_current_release_claims(tmp_path, case)
 def test_historical_classifier_never_replaces_current_union_roles_or_successful_qa_jobs():
     job, classifier = _historical_classifier_step()
     names = [step.get("name") for step in job["steps"]]
-    assert names.index(classifier["name"]) < names.index(
-        "Require complete source-bound tester partition union"
-    ) < names.index("Record exact-release public-claims evidence")
-    union = next(step for step in job["steps"]
-                 if step.get("name") == "Require complete source-bound tester partition union")
+    assert (
+        names.index(classifier["name"])
+        < names.index("Require complete source-bound tester partition union")
+        < names.index("Record exact-release public-claims evidence")
+    )
+    union = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Require complete source-bound tester partition union"
+    )
     assert "--required-version 2" in union["run"] and "--tester-partition-union" in union["run"]
     assert (
         "--required tester tester-catalog tester-index "
@@ -1833,6 +1848,203 @@ def test_historical_classifier_never_replaces_current_union_roles_or_successful_
     ) in union["run"]
     for name, _, _ in SPLIT_QA_JOBS:
         assert f"needs.{name}.result == 'success'" in job["if"]
-    writer = next(step for step in job["steps"]
-                  if step.get("name") == "Record exact-release public-claims evidence")
+    writer = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Record exact-release public-claims evidence"
+    )
     assert "if" not in writer
+
+
+def _assert_app_project_workflow(workflow):
+    jobs = workflow["jobs"]
+    browser, aggregate = jobs["e2e-projects"], jobs["e2e"]
+    assert browser["strategy"] == {
+        "fail-fast": False,
+        "max-parallel": 2,
+        "matrix": {"project": ["app-chromium", "app-mobile"]},
+    }
+    assert browser["timeout-minutes"] == 60
+    assert browser["runs-on"] == "ubuntu-24.04"
+    assert browser["needs"] == ["api", "web", "postgres-validation"]
+    assert "if" not in browser
+    assert "continue-on-error" not in browser
+    steps = {step.get("name"): step for step in browser["steps"]}
+    execute = steps["Playwright (app config)"]
+    assert "continue-on-error" not in execute and "if" not in execute
+    assert "--project=${{ matrix.project }} --workers=1 --retries=0" in execute["run"]
+    assert "--grep" not in execute["run"] and "--shard" not in execute["run"]
+    assert "--repeat" not in execute["run"]
+    assert execute["env"]["CASEOPS_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    # Same source-owned global setup/separate SQLite stack, credential-free
+    # synthetic tenant and no-paid runtime recipe on each fresh hosted runner.
+    assert any(step.get("uses") == "./.github/actions/node-trust" for step in browser["steps"])
+    assert any(
+        step.get("name") == "Verify local IP fixture protocol and database parity"
+        for step in browser["steps"]
+    )
+    assert not browser.get("services")
+    for step in browser["steps"]:
+        assert "continue-on-error" not in step
+        for key in step.get("env", {}):
+            assert "secrets." not in str(step["env"][key])
+    raw, native = steps["Upload Playwright report"], steps["Upload App native evidence"]
+    assert raw["if"] == native["if"] == "always()"
+    assert raw["with"]["name"] == "playwright-report-${{ matrix.project }}"
+    assert native["with"] == {
+        "name": "playwright-native-${{ matrix.project }}",
+        "path": "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
+        "retention-days": 7,
+        "if-no-files-found": "error",
+    }
+    assert aggregate["name"] == "Playwright app suite"
+    assert aggregate["needs"] == ["api", "web", "postgres-validation", "e2e-projects"]
+    assert aggregate["if"] == "always() && !cancelled()"
+    assert aggregate["timeout-minutes"] == 5
+    assert "continue-on-error" not in aggregate
+    required = aggregate["steps"][0]
+    assert required["env"] == {"APP_PROJECT_RESULT": "${{ needs['e2e-projects'].result }}"}
+    assert required["run"] == 'test "$APP_PROJECT_RESULT" = success'
+    downloads = [
+        step for step in aggregate["steps"] if step.get("uses") == "actions/download-artifact@v4"
+    ]
+    assert [step["with"] for step in downloads] == [
+        {
+            "name": f"playwright-native-{project}",
+            "path": f"test-results/prod-native-evidence/ci-{project}",
+        }
+        for project in ("app-chromium", "app-mobile")
+    ]
+    union = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Reconcile complete App project union"
+    )
+    assert union["env"] == {"CASEOPS_EXPECTED_RELEASE_SHA": "${{ github.sha }}"}
+    assert union["run"].strip() == (
+        "python3 -B scripts/prod_playwright_evidence.py validate "
+        "--required ci-app-chromium ci-app-mobile --app-project-union > app-project-union.json"
+    )
+    assert "if" not in union and "continue-on-error" not in union
+    receipt = aggregate["steps"][-1]
+    assert receipt["if"] == "always()"
+    assert receipt["with"] == {
+        "name": "playwright-app-union",
+        "path": "app-project-union.json",
+        "retention-days": 7,
+        "if-no-files-found": "error",
+    }
+    assert jobs["deploy-staging"]["needs"] == ["api", "web", "e2e"]
+
+
+def test_app_project_matrix_keeps_isolated_original_budgets_and_complete_native_aggregate():
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    _assert_app_project_workflow(workflow)
+    config = (REPO_ROOT / "playwright.app.config.ts").read_text()
+    for policy in (
+        "fullyParallel: false",
+        "workers: 1",
+        "timeout: 120_000",
+        "expect: { timeout: 15_000 }",
+        "globalSetup:",
+        "reuseExistingServer: false",
+        "extraHTTPHeaders: localTransportHeaders(webBaseUrl)",
+    ):
+        assert policy in config
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "omit_project",
+        "duplicate_project",
+        "unknown_project",
+        "fail_fast",
+        "workers",
+        "retry",
+        "skip_browser",
+        "continue",
+        "shared_artifact",
+        "shared_download",
+        "missing_download",
+        "missing_union_role",
+        "skip_union",
+        "wrong_source",
+        "missing_native",
+        "missing_needs",
+    ],
+)
+def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(damage):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    browser, aggregate = workflow["jobs"]["e2e-projects"], workflow["jobs"]["e2e"]
+    steps = {step.get("name"): step for step in browser["steps"]}
+    if damage in {"omit_project", "duplicate_project", "unknown_project"}:
+        browser["strategy"]["matrix"]["project"] = {
+            "omit_project": ["app-chromium"],
+            "duplicate_project": ["app-chromium", "app-chromium"],
+            "unknown_project": ["app-chromium", "app-tablet"],
+        }[damage]
+    elif damage == "fail_fast":
+        browser["strategy"]["fail-fast"] = True
+    elif damage in {"workers", "retry"}:
+        old, new = (
+            ("--workers=1", "--workers=2")
+            if damage == "workers"
+            else ("--retries=0", "--retries=1")
+        )
+        steps["Playwright (app config)"]["run"] = steps["Playwright (app config)"]["run"].replace(
+            old, new
+        )
+    elif damage == "skip_browser":
+        browser["if"] = "false"
+    elif damage == "continue":
+        browser["continue-on-error"] = True
+    elif damage == "shared_artifact":
+        steps["Upload Playwright report"]["with"]["name"] = "playwright-report"
+    elif damage == "missing_native":
+        steps["Upload App native evidence"]["with"]["if-no-files-found"] = "warn"
+    elif damage in {"shared_download", "missing_download"}:
+        downloads = [
+            s for s in aggregate["steps"] if s.get("uses") == "actions/download-artifact@v4"
+        ]
+        if damage == "shared_download":
+            downloads[1]["with"]["path"] = downloads[0]["with"]["path"]
+        else:
+            aggregate["steps"].remove(downloads[1])
+    elif damage == "missing_needs":
+        aggregate["needs"].remove("e2e-projects")
+    else:
+        union = next(
+            s for s in aggregate["steps"] if s.get("name") == "Reconcile complete App project union"
+        )
+        if damage == "skip_union":
+            union["if"] = "false"
+        elif damage == "wrong_source":
+            union["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] = "0" * 40
+        else:
+            union["run"] = union["run"].replace(" ci-app-mobile", "")
+    with pytest.raises(AssertionError):
+        _assert_app_project_workflow(workflow)
+
+
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped", ""])
+def test_app_aggregate_native_guard_rejects_every_non_successful_matrix(tmp_path, result):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    command = workflow["jobs"]["e2e"]["steps"][0]["run"]
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    child = subprocess.run(
+        [bash, "-e", "-c", command],
+        cwd=tmp_path,
+        capture_output=True,
+        env={**os.environ, "APP_PROJECT_RESULT": result},
+        timeout=10,
+    )
+    assert (child.returncode == 0) is (result == "success")

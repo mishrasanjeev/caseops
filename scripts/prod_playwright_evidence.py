@@ -40,6 +40,57 @@ REPORT_FILES = {
     "progress.jsonl",
 }
 REPORTER = "./scripts/prod_playwright_reporter.cjs"
+APP_PROJECT_PARTITIONS = {
+    "ci-app-chromium": "app-chromium",
+    "ci-app-mobile": "app-mobile",
+}
+APP_PROJECT_COUNTS = {"app-chromium": 713, "app-mobile": 53}
+# Exact pre-existing capability/provider skips retained from the complete
+# source-bound partial run; discovery's empty-result status is never a skip.
+APP_EXPECTED_SKIPS = (
+    ("app-chromium", "all-modules-regression.spec.ts",
+     ("all-modules-regression.spec.ts", "All modules and critical court operations", "e-List search uses the entered case number through the real Docker API",)),
+    ("app-chromium", "billing-payment.spec.ts",
+     ("billing-payment.spec.ts", "Matter billing — Pine Labs payment link (provider-gated)", "create invoice + payment link, payment link reachable",)),
+    ("app-chromium", "case-tracking-summary-2026-09-10.spec.ts",
+     ("case-tracking-summary-2026-09-10.spec.ts", "dated async summary: visible fallback, release-image worker, retained source and no-paid fences",)),
+    ("app-chromium", "ram-2026-08-24-bugs.spec.ts",
+     ("ram-2026-08-24-bugs.spec.ts", "Ram 2026-08-24 local and deployed regressions", "exact deployed API and web identify the release under test",)),
+    ("app-chromium", "ram-2026-09-02-bugs.spec.ts",
+     ("ram-2026-09-02-bugs.spec.ts", "Ram 2026-09-02 workbook regressions", "exact production release identifies the deployed revision",)),
+    ("app-chromium", "ram-2026-09-03-prod.spec.ts",
+     ("ram-2026-09-03-prod.spec.ts", "Ram 2026-09-03 Bulk Matter Exact Court mapping", "exact production release identifies the deployed revision",)),
+    ("app-chromium", "ram-2026-09-04-bugs.spec.ts",
+     ("ram-2026-09-04-bugs.spec.ts", "Ram 2026-09-04 automatic next-hearing sync", "BUG-012 older cnr matter shows its scheduled hearing date without lifecycle mutation",)),
+    ("app-chromium", "ram-2026-09-04-bugs.spec.ts",
+     ("ram-2026-09-04-bugs.spec.ts", "Ram 2026-09-04 automatic next-hearing sync", "BUG-012 older case-number matter shows its scheduled hearing date without lifecycle mutation",)),
+    ("app-chromium", "ram-2026-09-04-bugs.spec.ts",
+     ("ram-2026-09-04-bugs.spec.ts", "Ram 2026-09-04 automatic next-hearing sync", "BUG-012 older backfill-bound matter shows its scheduled hearing date without lifecycle mutation",)),
+    ("app-chromium", "ram-2026-09-04-bugs.spec.ts",
+     ("ram-2026-09-04-bugs.spec.ts", "Ram 2026-09-04 automatic next-hearing sync", "production surface is exact-release ready and regular verification spends zero provider credits",)),
+    ("app-chromium", "ram-2026-09-10-hearings.spec.ts",
+     ("ram-2026-09-10-hearings.spec.ts", "BUG-014 scheduled CNR, combined registration and filing identities persist the nearest visible hearing",)),
+    ("app-chromium", "ram-2026-09-10-hearings.spec.ts",
+     ("ram-2026-09-10-hearings.spec.ts", "BUG-014 reported production Matters explain missing court identity without spending",)),
+    ("app-chromium", "ram-2026-09-24-prod.spec.ts",
+     ("ram-2026-09-24-prod.spec.ts", "QA-owned matter has a canonical hearing and automated eCourts lookup cannot spend",)),
+    ("app-chromium", "ram-2026-09-24-prod.spec.ts",
+     ("ram-2026-09-24-prod.spec.ts", "reported legacy Matters retain backfilled hearing evidence in their authorized workspace",)),
+    ("app-chromium", "ram-2026-09-26-bugs.spec.ts",
+     ("ram-2026-09-26-bugs.spec.ts", "Ram 2026-09-26 workbook (IV)", "BUG-032 case tracking recognises a Matter's own eCourts case and opens the existing Matter",)),
+    ("app-chromium", "ram-2026-10-08-prod.spec.ts",
+     ("ram-2026-10-08-prod.spec.ts", "BUG-003/004: live authorization scopes and rejected callback return to Calendar safely",)),
+    ("app-chromium", "ram-2026-10-08-prod.spec.ts",
+     ("ram-2026-10-08-prod.spec.ts", "BUG-003: owner-consented Google account remains connected after responsive reloads",)),
+    ("app-chromium", "ram-2026-10-31-control-crawl.spec.ts",
+     ("ram-2026-10-31-control-crawl.spec.ts", "BUG-015 controls on /app/ip reported docket are usable or explain themselves",)),
+    ("app-chromium", "ram-2026-10-31-control-crawl.spec.ts",
+     ("ram-2026-10-31-control-crawl.spec.ts", "BUG-015 controls on /app/matters reported Matter billing are usable or explain themselves",)),
+    ("app-chromium", "ram-2026-10-31-invoice-pdf.spec.ts",
+     ("ram-2026-10-31-invoice-pdf.spec.ts", "BUG-016 [prod-only] the reported invoices INVR-2026-028 and INVR-2026-068 download legible (read-only)",)),
+    ("app-mobile", "ram-2026-10-31-invoice-pdf.spec.ts",
+     ("ram-2026-10-31-invoice-pdf.spec.ts", "BUG-016 [prod-only] [mobile] the reported invoices download legible at 393px (read-only)",)),
+)
 TESTER_PARTITIONS = {
     "tester": "tester-prod-chromium",
     "tester-catalog": "tester-prod-chromium",
@@ -214,6 +265,87 @@ def _require_current_oct13_namespace(invocation, *, project=None):
         and invocation not in OCT13_PARTITION_FILES
     ):
         raise EvidenceError("unreviewed_oct13_partition_invocation")
+
+
+def _app_project_partition(binding):
+    invocation = binding["invocation"]
+    if invocation not in APP_PROJECT_PARTITIONS:
+        return None
+    project = APP_PROJECT_PARTITIONS[invocation]
+    expected = {
+        f"--project={project}", "--config=playwright.app.config.ts",
+        "--workers=1", "--retries=0", "--reporter=list",
+        f"--output=test-results/{project}",
+    }
+    if (binding["config"] != "playwright.app.config.ts"
+            or binding["project"] != project
+            or len(binding["arguments"]) != len(expected)
+            or set(binding["arguments"]) != expected):
+        raise EvidenceError("app_project_binding_mismatch")
+    return invocation
+
+
+def _app_inventory(canonical):
+    rows = canonical["tests"]
+    if (Counter(row["project_name"] for row in rows) != APP_PROJECT_COUNTS
+            or len({row["id"] for row in rows}) != sum(APP_PROJECT_COUNTS.values())
+            or [row["project_name"] for row in rows] != [
+                project for project, count in APP_PROJECT_COUNTS.items() for _ in range(count)
+            ]
+            or len(set(APP_EXPECTED_SKIPS)) != 21
+            or not set(APP_EXPECTED_SKIPS).issubset({_app_skip_identity(row) for row in rows})
+            or any(row["project_id"] != row["project_name"] for row in rows)
+            or any(row["retries"] != 0 or row["repeat_each_index"] != 0
+                   or row["results"] for row in rows)
+            or canonical["configuration"]["workers"] != 1
+            or canonical["global_error_count"] != 0
+            or canonical["report_status"] != "passed"
+            or any(canonical["stats"][key] for key in ("expected", "unexpected", "flaky"))
+            or len(canonical["projects"]) != len(APP_PROJECT_COUNTS)
+            or {(p["id"], p["name"]) for p in canonical["projects"]}
+            != {(project, project) for project in APP_PROJECT_COUNTS}
+            or any(p["retries"] != 0 or p["repeatEach"] != 1
+                   for p in canonical["projects"])):
+        raise EvidenceError("app_canonical_inventory_mismatch")
+    return rows
+
+
+def _app_skip_identity(row):
+    return row["project_name"], row["file"], tuple(row["title_path"])
+
+
+def _check_app_selection(binding, selected, canonical, *, execution=False):
+    invocation = _app_project_partition(binding)
+    if invocation is None:
+        raise EvidenceError("unreviewed_app_project_binding")
+    project = APP_PROJECT_PARTITIONS[invocation]
+    expected = [row for row in _app_inventory(canonical) if row["project_name"] == project]
+    if (selected["configuration"] != canonical["configuration"]
+            # FullConfig retains every declaration even for --project. Only
+            # native test rows are selected; the declaration map stays whole.
+            or selected["projects"] != canonical["projects"]
+            or [_tester_case_identity(row) for row in selected["tests"]]
+            != [_tester_case_identity(row) for row in expected]):
+        raise EvidenceError("app_project_selection_mismatch")
+    if not execution:
+        if (selected["global_error_count"] or selected["report_status"] != "passed"
+                or any(row["results"] for row in selected["tests"])
+                or any(selected["stats"][key] for key in ("expected", "unexpected", "flaky"))):
+            raise EvidenceError("app_project_discovery_executed_tests")
+        return
+    allowed_skips = {row for row in APP_EXPECTED_SKIPS if row[0] == project}
+    actual_skips = set()
+    for row in selected["tests"]:
+        attempts = row["results"]
+        if len(attempts) != 1 or attempts[0]["retry"] != 0:
+            raise EvidenceError("app_project_attempt_mismatch")
+        actual = attempts[0]["status"]
+        if actual == "skipped" and row["status"] == "skipped":
+            actual_skips.add(_app_skip_identity(row))
+        elif actual != "passed" or row["status"] != "expected":
+            raise EvidenceError("app_project_case_not_passed")
+    if actual_skips != allowed_skips:
+        raise EvidenceError("app_project_skip_inventory_mismatch")
 
 
 def _tester_partition(binding):
@@ -919,6 +1051,7 @@ def _binding(root, invocation, args, env):
         "capture_version": 2,
     }
     _tester_partition(binding)
+    _app_project_partition(binding)
     return binding
 
 
@@ -998,7 +1131,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _check_batch4_evidence(binding, discovery)
         _check_notes22_evidence(binding, discovery)
         partition = _tester_partition(binding)
-        if partition is not None:
+        app_partition = _app_project_partition(binding)
+        if partition is not None or app_partition is not None:
             canonical_invocation = f"{invocation}-canonical"
             canonical_directory = root / EVIDENCE / canonical_invocation
             canonical_directory.mkdir(parents=True, exist_ok=False)
@@ -1032,7 +1166,10 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             canonical["binding"] = {
                 key: value for key, value in canonical_binding.items() if key != "config_path"
             }
-            _check_tester_selection(binding, discovery, canonical)
+            if partition is not None:
+                _check_tester_selection(binding, discovery, canonical)
+            else:
+                _check_app_selection(binding, discovery, canonical)
             with (destination / "canonical-native-discovery.json").open("xb") as stream:
                 stream.write(canonical_path.read_bytes())
             _write(destination / "canonical-discovery.json", canonical)
@@ -1064,6 +1201,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         result["binding"] = public_binding
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
+        if app_partition is not None:
+            _check_app_selection(binding, result, canonical, execution=True)
         _check_batch3_evidence(binding, result, execution=True)
         _check_batch4_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, result, execution=True)
@@ -1131,7 +1270,9 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
                 "sha256": {
                     name: _hash(destination / name)
                     for name in sorted(
-                        REPORT_FILES | (TESTER_CANONICAL_FILES if partition is not None else set())
+                        REPORT_FILES | (TESTER_CANONICAL_FILES
+                                        if partition is not None or app_partition is not None
+                                        else set())
                     )
                 },
             },
@@ -1169,6 +1310,224 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
     return code
 
 
+def _app_native_fields(document):
+    """Validate the new App reporter's raw schema before normalization."""
+    import math
+
+    def refuse():
+        raise EvidenceError("app_raw_native_value_mismatch")
+
+    def fields(value, *, strings="", counts="", signed="", numbers="",
+               booleans="", arrays="", objects="", nullable="", required=""):
+        groups = {"strings": strings.split(), "counts": counts.split(),
+                  "signed": signed.split(), "numbers": numbers.split(),
+                  "booleans": booleans.split(), "arrays": arrays.split(),
+                  "objects": objects.split(), "nullable": nullable.split()}
+        allowed = {key for names in groups.values() for key in names}
+        if not isinstance(value, dict) or not set(value) <= allowed:
+            raise EvidenceError("app_raw_native_unreviewed_field")
+        if not set(required.split()) <= set(value):
+            refuse()
+        for group, names in groups.items():
+            for key in names:
+                if key not in value:
+                    continue
+                item = value[key]
+                valid = {
+                    "strings": lambda: type(item) is str,
+                    "counts": lambda: type(item) is int and 0 <= item <= 9007199254740991,
+                    "signed": lambda: type(item) is int and -1 <= item <= 9007199254740991,
+                    "numbers": lambda: type(item) in (int, float) and 0 <= item <= 9007199254740991 and math.isfinite(item),
+                    "booleans": lambda: type(item) is bool,
+                    "arrays": lambda: type(item) is list,
+                    "objects": lambda: type(item) is dict,
+                    "nullable": lambda: item is None or type(item) is str,
+                }[group]()
+                if not valid:
+                    refuse()
+
+    def timestamp(value):
+        if type(value) is not str or not re.fullmatch(
+                r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", value):
+            refuse()
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            refuse()
+
+    def safe_string(value):
+        if type(value) is not str or _safe(value, {}) != value or re.search(
+                r"[\x00-\x08\x0b\x0c\x0e-\x1f]", value):
+            refuse()
+
+    def location(value):
+        fields(value, strings="file", counts="line column", required="file")
+        if (Path(value["file"]).is_absolute() or ".." in Path(value["file"]).parts
+                or not re.fullmatch(r"[\w./-]+\.[cm]?[jt]sx?", value["file"])
+                or any(value[key] < 1 for key in ("line", "column") if key in value)):
+            refuse()
+
+    def annotations(values):
+        for value in values:
+            fields(value, strings="type description", objects="location", required="type")
+            for key in ("type", "description"):
+                if key in value:
+                    safe_string(value[key])
+            if "location" in value:
+                location(value["location"])
+
+    def errors(values):
+        for value in values:
+            fields(value, strings="message", objects="location", required="message")
+            if value["message"] != "[redacted native test error; outcome retained]":
+                refuse()
+            if "location" in value:
+                location(value["location"])
+
+    def network(value):
+        if type(value) is not dict:
+            refuse()
+        status = value.get("status")
+        if status == "absent":
+            fields(value, strings="status", required="status")
+            return
+        if status == "rejected":
+            fields(value, strings="status reason", required="status reason")
+            if value["reason"] not in {
+                    "type_or_path", "body_bound", "invalid_utf8", "invalid_json", "snapshot_schema",
+                    "outcome", "record_schema", "response_schema", "transport_schema", "attachment_inventory"}:
+                refuse()
+            return
+        if status != "retained":
+            refuse()
+        fields(value, strings="status name contentType", objects="snapshot",
+               required="status name contentType snapshot")
+        if value["name"] != "sanitized-network-evidence" or value["contentType"] != "application/json":
+            refuse()
+        snapshot = value["snapshot"]
+        fields(snapshot, counts="schemaVersion omitted", booleans="drainTimedOut", arrays="records",
+               required="schemaVersion omitted drainTimedOut records")
+        if snapshot["schemaVersion"] != 1 or len(snapshot["records"]) > 64:
+            refuse()
+        routes = {
+            "auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
+            "ip/title-interest", "ip/application", "calendar/events", "ip/renewal-tracker",
+            "ip/madrid-list", "ip/madrid-workspace", "ip/foreign-associate-list",
+            "ip/foreign-associate-workspace", "ip/recordal-list", "ip/recordal-workspace",
+            "ip/portfolio-export-preview", "ip/portfolio-export", "ip/portfolio-export-status",
+            "ip/portfolio-export-download", "ip/portfolio-export-retry", "web/sign-in", "web/app-navigation",
+        }
+        problems = {
+            "database_lock_timeout", "database_busy", "database_unavailable", "invalid_token",
+            "missing_bearer_token", "rate_limited", "capability_required", "role_required", "step_up_required",
+            "mfa_enrollment_required", "validation_error",
+        }
+        transports = {
+            "net::ERR_CONNECTION_RESET", "net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_REFUSED",
+            "net::ERR_TIMED_OUT", "net::ERR_ABORTED", "net::ERR_FAILED", "net::ERR_INTERNET_DISCONNECTED",
+            "net::ERR_NAME_NOT_RESOLVED", "net::ERR_SSL_PROTOCOL_ERROR", "unclassified_transport_failure",
+        }
+        for row in snapshot["records"]:
+            if type(row) is not dict:
+                refuse()
+            outcome = row.get("outcome")
+            if type(outcome) is not str or outcome not in {"response_completed", "transport_failed", "pending_at_test_end",
+                               "response_unavailable", "diagnostic_unavailable"}:
+                refuse()
+            response = outcome == "response_completed"
+            fields(row, strings="route method startedAt outcome" + (" failureCode" if outcome == "transport_failed" else ""),
+                   nullable="finishedAt" + (" requestId problemType" if response else ""),
+                   counts="status" if response else "",
+                   required="route method startedAt finishedAt outcome" + (
+                       " status requestId problemType" if response else " failureCode" if outcome == "transport_failed" else ""))
+            if row["route"] not in routes or row["method"] not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+                refuse()
+            timestamp(row["startedAt"])
+            if outcome == "pending_at_test_end":
+                if row["finishedAt"] is not None:
+                    refuse()
+            else:
+                timestamp(row["finishedAt"])
+            if response:
+                if not 100 <= row["status"] <= 599:
+                    refuse()
+                request_id = row["requestId"]
+                if request_id is not None and not re.fullmatch(
+                        r"(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})", request_id):
+                    refuse()
+                if row["problemType"] is not None and row["problemType"] not in problems:
+                    refuse()
+            elif outcome == "transport_failed" and row["failureCode"] not in transports:
+                refuse()
+
+    fields(document, objects="config stats", arrays="suites errors", strings="status release_sha invocation phase",
+           required="config stats suites errors status release_sha invocation phase")
+    fields(document["stats"], strings="startTime", numbers="duration", counts="expected skipped unexpected flaky",
+           required="startTime duration expected skipped unexpected flaky")
+    timestamp(document["stats"]["startTime"])
+    fields(document["config"], strings="configFile rootDir", counts="workers", arrays="projects",
+           required="configFile rootDir workers projects")
+    for project in document["config"]["projects"]:
+        fields(project, strings="id name testDir", counts="retries repeatEach timeout",
+               required="id name testDir retries repeatEach timeout")
+    errors(document["errors"])
+
+    def visit(suites):
+        for suite in suites:
+            fields(suite, strings="title file", arrays="specs suites", required="title")
+            safe_string(suite["title"])
+            for spec in suite.get("specs", []):
+                fields(spec, strings="title id file", counts="line column", booleans="ok", arrays="tags tests",
+                       required="title id file line column tags tests")
+                safe_string(spec["title"])
+                for tag in spec["tags"]:
+                    safe_string(tag)
+                for test in spec["tests"]:
+                    fields(test, counts="timeout retries repeatEachIndex", arrays="annotations results",
+                           strings="expectedStatus projectId projectName status",
+                           required="timeout retries repeatEachIndex annotations results expectedStatus projectId projectName status")
+                    annotations(test["annotations"])
+                    for attempt in test["results"]:
+                        fields(attempt, signed="workerIndex parallelIndex", counts="retry", numbers="duration",
+                               strings="status startTime", arrays="annotations errors", objects="networkEvidence",
+                               required="status retry")
+                        if "startTime" in attempt:
+                            timestamp(attempt["startTime"])
+                        annotations(attempt.get("annotations", []))
+                        errors(attempt.get("errors", []))
+                        if "networkEvidence" in attempt:
+                            network(attempt["networkEvidence"])
+            visit(suite.get("suites", []))
+    visit(document["suites"])
+
+
+def _validate_app_native(root, directory, binding, discovery, result, canonical):
+    """Independently bind raw native channels; a rehashed envelope is not enough."""
+    internal = {**binding, "config_path": str((root / binding["config"]).resolve())}
+    for name, phase, normalized, selected_binding in (
+        ("native-discovery.json", "discovery", discovery, internal),
+        ("native-results.json", "execution", result, internal),
+        ("canonical-native-discovery.json", "discovery", canonical, {
+            **internal, "invocation": f'{binding["invocation"]}-canonical',
+            "project": None,
+            "arguments": [arg for arg in binding["arguments"]
+                          if not arg.startswith("--project=")],
+        }),
+    ):
+        _app_native_fields(_json(directory / name))
+        observed = _native(directory / name, selected_binding, {}, phase)
+        observed["binding"] = {
+            key: value for key, value in selected_binding.items() if key != "config_path"
+        }
+        if observed != normalized:
+            raise EvidenceError("app_raw_native_normalized_mismatch")
+    if (_hash(root / binding["config"]) != binding["config_sha256"]
+            or result["report_status"] != "passed"
+            or result["global_error_count"] or result["stats"]["unexpected"]
+            or result["stats"]["flaky"]):
+        raise EvidenceError("app_project_source_or_result_mismatch")
+
+
 def validate(root: Path, required, expected: str) -> None:
     if not SHA.fullmatch(expected) or not required:
         raise EvidenceError("empty_validation_scope")
@@ -1182,7 +1541,10 @@ def validate(root: Path, required, expected: str) -> None:
             raise EvidenceError("incomplete_invocation")
         binding = completion["binding"]
         partition = _tester_partition(binding)
-        report_files = REPORT_FILES | (TESTER_CANONICAL_FILES if partition is not None else set())
+        app_partition = _app_project_partition(binding)
+        report_files = REPORT_FILES | (
+            TESTER_CANONICAL_FILES if partition is not None or app_partition is not None else set()
+        )
         if (
             binding["release_sha"] != expected
             or binding["checkout_sha"] != expected
@@ -1192,6 +1554,16 @@ def validate(root: Path, required, expected: str) -> None:
             raise EvidenceError("completion_release_mismatch")
         if exit_marker["wrapper_exit"] or completion["execution_exit"]:
             raise EvidenceError("failed_invocation")
+        if app_partition is not None and (
+            completion.get("phase") != "complete"
+            or exit_marker.get("phase") != "complete"
+            or completion.get("discovery_exit") != 0
+            or completion.get("canonical_discovery_exit") != 0
+            or exit_marker.get("discovery_exit") != 0
+            or exit_marker.get("canonical_discovery_exit") != 0
+            or exit_marker.get("execution_exit") != 0
+        ):
+            raise EvidenceError("app_project_nonterminal_native_exit")
         for name, digest in completion["sha256"].items():
             if name not in report_files:
                 raise EvidenceError("unreviewed_evidence_file")
@@ -1204,7 +1576,7 @@ def validate(root: Path, required, expected: str) -> None:
                 raise EvidenceError("evidence_binding_mismatch")
         discovery = _json(directory / "discovery.json")
         result = _json(directory / "results.json")
-        if partition is not None:
+        if partition is not None or app_partition is not None:
             canonical = _json(directory / "canonical-discovery.json")
             canonical_binding = canonical["binding"]
             if (
@@ -1220,7 +1592,12 @@ def validate(root: Path, required, expected: str) -> None:
                 or any(row["results"] for row in canonical["tests"])
             ):
                 raise EvidenceError("canonical_tester_binding_mismatch")
-            _check_tester_selection(binding, discovery, canonical)
+            if partition is not None:
+                _check_tester_selection(binding, discovery, canonical)
+            else:
+                _validate_app_native(root, directory, binding, discovery, result, canonical)
+                _check_app_selection(binding, discovery, canonical)
+                _check_app_selection(binding, result, canonical, execution=True)
         if (
             completion["test_count"] <= 0
             or len(result["tests"]) != completion["test_count"]
@@ -1285,6 +1662,51 @@ def validate_tester_partition_union(root: Path, required, expected: str) -> None
         raise EvidenceError("oct13_partition_order_or_union_mismatch")
 
 
+def validate_app_project_union(root: Path, required, expected: str):
+    if (len(required) != len(APP_PROJECT_PARTITIONS)
+            or set(required) != set(APP_PROJECT_PARTITIONS)):
+        raise EvidenceError("missing_or_duplicate_app_project")
+    validate(root, required, expected)
+    canonical_identities = None
+    config_hash = None
+    selected = []
+    roles = []
+    for invocation, project in APP_PROJECT_PARTITIONS.items():
+        directory = root / EVIDENCE / invocation
+        result = _json(directory / "results.json")
+        binding = result["binding"]
+        if _app_project_partition(binding) != invocation:
+            raise EvidenceError("unreviewed_app_project_binding")
+        digest = binding["config_sha256"]
+        if _hash(root / binding["config"]) != digest or (config_hash and config_hash != digest):
+            raise EvidenceError("app_project_source_mismatch")
+        config_hash = digest
+        canonical = _app_inventory(_json(directory / "canonical-discovery.json"))
+        identities = [_tester_case_identity(row) for row in canonical]
+        if canonical_identities is not None and canonical_identities != identities:
+            raise EvidenceError("app_canonical_inventories_disagree")
+        canonical_identities = identities
+        selected.extend(_tester_case_identity(row) for row in result["tests"])
+        roles.append({
+            "invocation": invocation, "project": project,
+            "test_count": len(result["tests"]),
+            "outcomes": dict(Counter(row["status"] for row in result["tests"])),
+            "completion_sha256": _hash(directory / "completion.json"),
+            "exit_sha256": _hash(directory / "exit.json"),
+        })
+    if len(set(selected)) != len(selected) or selected != canonical_identities:
+        raise EvidenceError("app_project_order_or_union_mismatch")
+    identity_bytes = json.dumps(canonical_identities, ensure_ascii=False,
+                                separators=(",", ":")).encode("utf-8")
+    return {
+        "completed": True, "app_project_union": 1,
+        "release_sha": expected, "config": "playwright.app.config.ts",
+        "config_sha256": config_hash, "test_count": len(selected),
+        "canonical_identity_sha256": hashlib.sha256(identity_bytes).hexdigest(),
+        "expected_skip_count": len(APP_EXPECTED_SKIPS), "roles": roles,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
@@ -1293,7 +1715,9 @@ def main() -> int:
     runner.add_argument("arguments", nargs=argparse.REMAINDER)
     validator = modes.add_parser("validate")
     validator.add_argument("--required", nargs="+", required=True)
-    validator.add_argument("--tester-partition-union", action="store_true")
+    union = validator.add_mutually_exclusive_group()
+    union.add_argument("--tester-partition-union", action="store_true")
+    union.add_argument("--app-project-union", action="store_true")
     contract = modes.add_parser("tester-partition-contract")
     contract.add_argument("--required-version", type=int, choices=[TESTER_PARTITION_CONTRACT])
     modes.add_parser("batch4-governance")
@@ -1309,13 +1733,16 @@ def main() -> int:
             return 0
         if options.mode == "validate":
             validation = (
+                validate_app_project_union if options.app_project_union else
                 validate_tester_partition_union if options.tester_partition_union else validate
             )
-            validation(
+            receipt = validation(
                 ROOT,
                 options.required,
                 os.environ.get("CASEOPS_EXPECTED_RELEASE_SHA", ""),
             )
+            if options.app_project_union:
+                print(json.dumps(receipt))
             return 0
         arguments = options.arguments
         if arguments[:1] == ["--"]:
