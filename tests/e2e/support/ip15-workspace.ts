@@ -6,7 +6,7 @@ import { expect, type APIRequestContext, type APIResponse, type Page } from "@pl
 import type { IpDocket } from "../../../apps/web/lib/api/endpoints";
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
 import { e2eEnv, repoRoot } from "./env";
-import { runId } from "./run-id";
+import { RUN_ID, runId } from "./run-id";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 type Ip15Actor = {
@@ -63,7 +63,7 @@ function localRuntime() {
 }
 
 function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: string) {
-  if (![web, api].every(loopback) || !slug.startsWith("ip15-") || !uuid.test(slug.slice(5))
+  if (![web, api].every(loopback) || !slug.startsWith("ip15-") || !RUN_ID.test(slug.slice(5))
     || actor.company.slug !== slug || !uuid.test(actor.company.id) || !uuid.test(actor.membership.id)) {
     throw new Error("IP15 entitlement requires the exact newly bootstrapped loopback tenant.");
   }

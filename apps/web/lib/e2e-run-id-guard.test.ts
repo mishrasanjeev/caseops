@@ -41,11 +41,11 @@ describe("e2e run ids", () => {
   });
 
   it("makes run ids that are unique, slug-safe and never UUID-shaped", async () => {
-    const { runId } = await import("../../../tests/e2e/support/run-id");
+    const { RUN_ID, runId } = await import("../../../tests/e2e/support/run-id");
     const ids = Array.from({ length: 20 }, () => runId());
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) {
-      expect(id).toMatch(/^\d{8}-\d{6}-[0-9a-f]{6}$/);
+      expect(id).toMatch(RUN_ID);
       expect(id).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
     }
   });

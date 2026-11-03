@@ -4,11 +4,12 @@ import path from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import { RUN_ID } from "../../../tests/e2e/support/run-id";
 
 const root = path.resolve(__dirname, "../../..");
 const source = readFileSync(path.join(root, "tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts"), "utf8");
 const tenantId = "11111111-1111-4111-8111-111111111111";
-const runId = "22222222-2222-4222-8222-222222222222";
+const runId = "20261103-120000-a1b2c3";
 const slug = `ip13-${runId}`;
 const actor = { company: { id: tenantId, slug }, membership: { id: "owner-membership" }, access_token: "offline-token" };
 type FixtureActor = typeof actor;
@@ -29,7 +30,7 @@ function fixture(overrides: Record<string, string> = {}, ready = true, loginComp
     CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides };
   const context = vm.createContext({ URL, path, expect, spawnSync, repoRoot: root,
     process: { env, platform: process.platform }, e2eEnv: { CASEOPS_DATABASE_URL: database, CASEOPS_ENV: "e2e" },
-    randomUUID: () => runId, runId: () => runId, noPaidProviderHeaders: marker });
+    randomUUID: () => runId, runId: () => runId, RUN_ID, noPaidProviderHeaders: marker });
   vm.runInContext(ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS } }).outputText, context);
   const helper = context as unknown as {

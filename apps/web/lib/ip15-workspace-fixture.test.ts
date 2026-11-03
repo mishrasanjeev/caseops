@@ -3,13 +3,15 @@ import path from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import { RUN_ID } from "../../../tests/e2e/support/run-id";
 import { localTransportHeaders } from "../../../tests/e2e/support/cost-controls";
 
 const root = path.resolve(__dirname, "../../..");
 const source = readFileSync(path.join(root, "tests/e2e/support/ip15-workspace.ts"), "utf8");
 const publicSource = readFileSync(path.join(root, "tests/e2e/support/public-release-identity.ts"), "utf8");
 const companyId = "11111111-1111-4111-8111-111111111111";
-const run = "22222222-2222-4222-8222-222222222222";
+const run = "20261103-120000-a1b2c3";
+const applicationId = "22222222-2222-4222-8222-222222222222";
 const ownerId = "33333333-3333-4333-8333-333333333333";
 const marker = { "X-CaseOps-Automated-Test": "no-paid-providers" };
 const sha = "c".repeat(40);
@@ -39,7 +41,7 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
       CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides } },
     e2eEnv: { CASEOPS_RELEASE_SHA: sha, CASEOPS_ENV: "e2e",
       CASEOPS_DATABASE_URL: `sqlite+pysqlite:///${path.join(root, "caseops-e2e.db").replaceAll("\\", "/")}` },
-    randomUUID: () => run, runId: () => run, noPaidProviderHeaders: marker, localTransportHeaders, request: publicRequest });
+    randomUUID: () => run, runId: () => run, RUN_ID, noPaidProviderHeaders: marker, localTransportHeaders, request: publicRequest });
   const publicAst = ts.createSourceFile("public-release-identity.ts", publicSource, ts.ScriptTarget.Latest, true);
   const publicBody = publicAst.statements.filter(ts.isFunctionDeclaration).map(statement => statement.getText(publicAst)).join("\n");
   vm.runInContext(ts.transpileModule(publicBody + "\n" + body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
@@ -62,7 +64,7 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
       events.push(new URL(url).pathname);
       if (url.endsWith("/bootstrap/company")) return response(actor);
       if (url.endsWith("/auth/login")) return response({ ...actor, company: { id: loginId, slug: options.data.company_slug } });
-      if (url.endsWith("/trademark-applications/manual")) return response({ docket: { id: ownerId, company_id: companyId }, application: { id: run } }, 201);
+      if (url.endsWith("/trademark-applications/manual")) return response({ docket: { id: ownerId, company_id: companyId }, application: { id: applicationId } }, 201);
       return response({});
     }),
     put: vi.fn(async (_url: string, options: { headers: Record<string, string> }) => {
@@ -161,7 +163,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
   });
 
   it("rejects a foreign login identity before direct local grant", async () => {
-    const f = fixture({}, true, sha, run);
+    const f = fixture({}, true, sha, applicationId);
     await expect(f.run()).rejects.toThrow(/tenant identity/);
     expect(f.spawnSync).not.toHaveBeenCalled();
   });
