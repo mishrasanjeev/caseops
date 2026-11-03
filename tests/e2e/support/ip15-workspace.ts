@@ -6,6 +6,7 @@ import { expect, type APIRequestContext, type APIResponse, type Page } from "@pl
 import type { IpDocket } from "../../../apps/web/lib/api/endpoints";
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
 import { e2eEnv, repoRoot } from "./env";
+import { runId } from "./run-id";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 type Ip15Actor = {
@@ -112,7 +113,7 @@ export async function prepareIp15Workspace(
     await assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
   };
   await release();
-  const run = randomUUID();
+  const run = runId();
   const credentials = local ? { slug: `ip15-${run}`, email: `owner-${run}@example.com`, password: `Synthetic!${randomUUID()}` }
     : { slug: process.env.CASEOPS_RAM_PROD_SLUG?.trim() || "test-legal", email: required("CASEOPS_RAM_PROD_EMAIL"),
       password: process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() || required("CASEOPS_TEST_LEGAL_PROD_PASSWORD") };

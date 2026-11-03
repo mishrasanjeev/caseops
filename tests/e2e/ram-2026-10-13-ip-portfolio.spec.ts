@@ -11,6 +11,7 @@ import JSZip from "jszip";
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv, repoRoot } from "./support/env";
+import { runId } from "./support/run-id";
 import { ipImportAcknowledgements } from "./support/ip-import-acknowledgements";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
@@ -215,7 +216,7 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     }
     const sha = local ? required("CASEOPS_RELEASE_SHA") : required("CASEOPS_EXPECTED_RELEASE_SHA");
     expect(sha).toMatch(/^[a-f0-9]{40}$/);
-    const run = randomUUID();
+    const run = runId();
     const credentials = local ? {
       slug: `ip13-${run}`, email: `owner-${run}@example.com`, password: `Portfolio!${randomUUID()}`,
     } : {

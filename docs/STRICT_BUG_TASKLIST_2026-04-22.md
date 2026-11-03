@@ -1,5 +1,42 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Batch4 Production Run On 9a29a74a: B4-ADJ-29..32
+
+Prod-verify 41627245115 (release 9a29a74a, its own Batch4 job from #578):
+Batch3 passed all three roles; Batch4 desktop passed 33 and failed 3, so mobile
+and governance did not run. Each failure was replayed locally against
+production as the tester.
+
+- B4-ADJ-29 Status: Partially fixed. BUG-016 reopen on production data: the
+  reported INVR-2026-028 line "Drafting brief — bail application" printed with
+  "--". PDF text was encoded as Latin-1 although fpdf2 declares the core fonts
+  WinAnsi, so dashes, curly quotes, ellipses and bullets were rewritten. All
+  PDFs now use Windows-1252 through the one `pdf_text` mapping (the draft and
+  matter-summary copies delegate to it).
+  `test_bug016_invoice_pdf_prints_typed_punctuation_as_typed` is red on the old
+  code. The earlier fixtures used ASCII-only line items. Production proof
+  waits for the next release's Batch4 role.
+- B4-ADJ-30 Status: Partially fixed. BUG-014 on production: a second journal
+  capture for the same docket and journal date returned 409 "A matching event
+  already exists". Every watch hit records a "publication" docket event on its
+  journal date, and the same-day duplicate rule treated any two as one event,
+  so a journal issue with two watched conflicts, or a same-day client-report
+  confirmation, was refused. Each watch hit is now its own event identity
+  (candidate and client-report item); preview and append share the rule.
+  `test_bug_014_two_hits_from_one_journal_issue_both_record_and_report`
+  reproduces the 409 on the old code.
+- B4-ADJ-31 Status: Partially fixed. BUG-014's "hit screen shows no internal
+  id" failed on retained docket titles such as "IP18 <uuid> missing 50": five
+  journeys named retained records after a `randomUUID()` run. They now use
+  `support/run-id.ts`; `apps/web/lib/e2e-run-id-guard.test.ts` refuses a UUID run
+  outside two loopback-only journeys. The check still fails on a bare-id option,
+  any other UUID line or this journey's own ids; it no longer fails on a typed
+  record name that contains one.
+- B4-ADJ-32 Status: Inconclusive. BUG-015 controls on /app/ip/specialist failed
+  in CI at the offender assertion (5.5 s), but passed six isolated and one
+  full-file local replays against the same release. Native evidence keeps no
+  offender detail. Rerun in the next release's Batch4 role before any change.
+
 ## November 2 B4-ADJ-28 Browser Selector: Focused Replay Passed
 
 Partially fixed/NO-GO. CI41469295739 on1a4 has742browser passes,21explicit
