@@ -1,5 +1,102 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Native PostgreSQL Exit Evidence and Fixture Repairs
+
+**Partially implemented; historical CI exit139 remains Inconclusive.** The
+failed aa55 PostgreSQL shard21 retained67 completed passes and the next case's
+setup, without its call/teardown or a native child-exit receipt. The same uv
+version maps both a numeric139 and SIGSEGV to outer139. Neither that result nor
+the retained60-second stack dump proves which process failed or its cause.
+The separate bounded local diagnostic stopped during retained-data seeding;
+its query, plan and ten-second query budget were never reached. Keep its data,
+original failure and all later unverified boundaries.
+
+CI now retains a same-runtime native pytest child's planned, started and exited
+receipt under the original uv activation. Exact source SHA, child PID, journal,
+native exit and publication success must reconcile across all32 shards. The
+original twelve-minute job limit, pytest arguments, shard layout and failed
+outer-launcher gate remain. Normal139 and signal termination remain distinct;
+cleanup exit status cannot certify native completion. M15/NFT-016; J20/M22.
+
+The complete affected Windows component passed233 cases with three explicit
+POSIX-only skips across236 collected cases (59 helper,119 sharding,58 finalizer),
+705 phase reports,32 actual owned shard receipts, unchanged3984 source inputs
+and Ruff. See native-exit-components-windows04/INDEPENDENT-RECONCILIATION02.json.
+Earlier31-failure and two one-failure attempts are retained. They exposed a
+Windows descriptor/path mode projection, the Windows venv redirector's distinct
+PID, and an offline fixture inheriting the parent's SHA instead of binding its
+synthetic child SHA. The repairs retain exact same-channel metadata and the
+native child/journal PID assertion. The owned Windows replay uses the actual
+accepted base interpreter and only the existing pytest site directory; it does
+not claim uv activation coverage.
+
+Linux ran all59 helper cases and177 phases without skips or failures, plus
+actual uv0.13.7 ancestry/environment controls for numeric139, SIGSEGV and a
+refused scope. Runtime, all161 installed package identities and source stayed
+unchanged; no new process survived. See native-exit-linux59-01/MANIFEST.json.
+This proves the observer's tested boundaries, not a repair of the old crash.
+Current-source complete CI and the328-case deployment rehearsal remain pending.
+
+The earlier full Windows frontend attempt is failed/incomplete: its600-second
+outer controller stopped it, and13 shipping-trust cases had already failed
+under Windows Node24.15. Those cases explicitly require shipping Node22.23.4
+and POSIX trust-file controls. Preserve all13 failures and the timeout. Complete
+frontend replacement acceptance must run the unchanged full suite in CI's
+Linux Node22.23.4 environment, retaining its coverage/type/build gates. The
+separate43 passing Windows worker/inventory controls retain their own scope.
+
+## November 3 Release QA: Preserve Every Case Within Separate Job Budgets
+
+**Partially fixed.** Production run41573885495, job125744538058 exceeded its
+unchanged38-minute job cap. Its prelude plus completed October13 and Batch3
+steps had already consumed2287seconds against2280 before Batch4. Retained
+native evidence proves51 October13,3 Batch3 and2 Batch4 passes;52 later Batch4
+boundaries remain unverified. No in-flight case identity or product failure is
+established by the cancellation.
+
+The release workflow now uses four serial38-minute jobs: October13A40cases,
+October13B11cases, unchanged Batch3, and unchanged complete Batch4. Workers1,
+retries0, test/request limits, roles, credentials and failure continuation remain.
+The independent literal51-case source inventory,172-case tester union, five
+version2 envelopes, seven native artifacts and14 current required job names
+agree. Retired/unknown October13 names and other roles claiming its project
+fail before browser/evidence admission. Historical11-job receipts cannot admit
+this current layout. J20/M22 and release M15/NFT-016.
+
+Local candidate based on aa55ebc00bfb7676a5b3c728459eef0667833b30 passed all1189
+Python cases (539 evidence,152 workflow,440 resume,58 scheduler),3567 phases,
+and11 frontend source-inventory cases. Component/E2E TypeScript and Ruff passed;
+3982 tracked source inputs were identical before/after. Retained proof:
+capacity-local-verification02/INDEPENDENT-RECONCILIATION.json. Preserve the first
+Ruff failure and source-only intermediate refusals. Final frozen-source CI,
+complete replacement deployment rehearsal, and every new exact-release
+production job remain required; neither historical case sums nor local passes
+prove the new whole jobs fit their cap. No production QA closure is claimed.
+
+## November 3 Windows Vitest: Bind the Actual Pinned Path Producer
+
+**Partially fixed.** The original local Vitest run exited1 with zero tests; its
+JSON reporter omitted the startup error. A separate default-plus-JSON diagnostic
+exposed VITEST_HOST_FORK_CONSTRUCTOR_REFUSED at selectHostForkArguments.
+Hash-pinned Vitest uses pathe for its warning-preload argument, producing forward
+slashes on Windows; the adapter compared that argument with native backslashes.
+The old unit fixture constructed both sides with node:path and hid the mismatch.
+
+The adapter accepts only the pinned producer's Windows slash/drive spelling.
+It retains every installed-file hash, descriptor/metadata check, exact seven
+arguments, warning filename and extra-preload/loader/TLS refusal. Its full32
+controls retain the prior27 and cover the actual installed producer and malformed
+path spellings. Actual Windows Vitest ran all32 plus all11 source-inventory
+cases,43 passes with zero failure/skip/pending/todo. Both project type checks and
+Ruff passed, with unchanged full source bookends in the same retained component
+proof above. Other consumers were audited; vitest.config.ts owns this pool.
+
+The separate main9a mobile CI node-trust refusal is not this Vitest defect. It
+happened before dependency installation/audit and remains Inconclusive; the
+candidate's clearer native refusal classification is observability, not proof
+of its underlying repair. Full current-source CI and release evidence remain
+pending. No historical failure is erased by these local component passes.
+
 ## November 3 BUG-015: Operational Fixture Admission, Production Proof Pending
 
 **Inconclusive** for the historical production cause. On serving release

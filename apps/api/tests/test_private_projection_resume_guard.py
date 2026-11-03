@@ -26,7 +26,10 @@ REQUIRED_JOBS = (
     "Prod Playwright (tester)",
     "Prod Playwright (tester-catalog)",
     "Prod Playwright (tester-index)",
-    "Prod Playwright (test-legal-write-oct13)",
+    "Prod Playwright (test-legal-write-oct13-a)",
+    "Prod Playwright (test-legal-write-oct13-b)",
+    "Prod Playwright (batch3)",
+    "Prod Playwright (batch4)",
     "Prod Playwright (test-legal-readonly)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
@@ -34,6 +37,10 @@ REQUIRED_JOBS = (
     "Prod Playwright (public-pages)",
     "Record exact-release evidence",
 )
+NEW_PARTITION_SUITES = (
+    "test-legal-write-oct13-a", "test-legal-write-oct13-b", "batch3", "batch4",
+)
+MATRIX_ALIAS_SUITES = ("tester-index", *NEW_PARTITION_SUITES)
 
 
 def stamp(value: datetime) -> str:
@@ -231,6 +238,7 @@ def assert_no_resume(state):
 def test_private_resume_accepts_two_later_serial_clean_runs_after_historical_breach(monkeypatch):
     inventory, state = evidence(monkeypatch)
     original = copy.deepcopy(inventory)
+    assert len(REQUIRED_JOBS) == 14
 
     result = resume(inventory)
 
@@ -280,19 +288,27 @@ def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
     regular = {"Resolve exact production release", "Record exact-release evidence"}
-    for key in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+    for key in (
+        "prod-playwright-shards", "prod-tester-index",
+        "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+        "prod-batch3-tester", "prod-batch4-tester",
+    ):
         regular.update("Prod Playwright (" + suite + ")"
                        for suite in jobs[key]["strategy"]["matrix"]["suite"])
-    assert len(regular) == 11 and set(REQUIRED_JOBS) == regular
+    assert len(regular) == 14 and set(REQUIRED_JOBS) == regular
+    assert "prod-test-legal-write-oct13" not in jobs
+    assert "Prod Playwright (test-legal-write-oct13)" not in regular
     assert "Scheduled read-only statute verification" not in regular
 
 
 def captured_jobs():
+    # Retain the original eleven-successful-job capture as historical evidence;
+    # never rewrite it to look like a fourteen-role current dispatch.
     path = Path(__file__).with_name("fixtures") / "prod_verify_38942699099_jobs.json"
     return json.loads(path.read_text(encoding="utf-8"))["jobs"]
 
 
-def test_private_resume_accepts_captured_successful_matrix_display_names(monkeypatch):
+def test_private_resume_rejects_historical_unsplit_matrix_display_names(monkeypatch):
     inventory, state = evidence(monkeypatch)
     jobs = captured_jobs()
     assert len(jobs) == 12
@@ -307,7 +323,131 @@ def test_private_resume_accepts_captured_successful_matrix_display_names(monkeyp
             started_at=stamp(start + timedelta(seconds=1)),
             completed_at=stamp(end - timedelta(seconds=1)),
         )
-    assert resume(inventory)["state"] == "ENABLED"
+    with pytest.raises(guard.InventoryError, match="job name is unknown"):
+        resume(inventory)
+    assert_no_resume(state)
+
+
+@pytest.mark.parametrize("suite", MATRIX_ALIAS_SUITES)
+@pytest.mark.parametrize("outcome", [
+    "success", "missing", "failure", "cancelled", "skipped", "queued", "in_progress",
+])
+def test_private_resume_requires_each_current_matrix_alias_to_complete(
+    monkeypatch, suite, outcome,
+):
+    if suite not in MATRIX_ALIAS_SUITES or outcome not in {
+        "success", "missing", "failure", "cancelled", "skipped", "queued", "in_progress",
+    }:
+        raise ValueError("unsupported current matrix-alias case")
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] != ["run", "view"]:
+            return result
+        assert len(result["jobs"]) == 14
+        job = next(row for row in result["jobs"]
+                   if row["name"] == f"Prod Playwright ({suite})")
+        job["name"] += f" ({suite})"
+        if outcome == "missing":
+            result["jobs"].remove(job)
+        elif outcome in {"queued", "in_progress"}:
+            job["status"] = outcome
+        elif outcome != "success":
+            job["conclusion"] = outcome
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    if outcome == "success":
+        result = resume(inventory)
+        assert result["state"] == "ENABLED"
+        assert sum(
+            args[:3] == ["scheduler", "jobs", "resume"]
+            for kind, args in state["calls"] if kind == "gcloud"
+        ) == 1
+    else:
+        with pytest.raises(guard.InventoryError, match="every required QA job"):
+            resume(inventory)
+        assert_no_resume(state)
+
+
+@pytest.mark.parametrize("suite", [*NEW_PARTITION_SUITES, None])
+@pytest.mark.parametrize("old_name", [
+    "Prod Playwright (test-legal-write-oct13)",
+    "Prod Playwright (test-legal-write-oct13) (test-legal-write-oct13)",
+])
+def test_private_resume_rejects_retired_unsplit_role_as_substitute_or_extra(
+    monkeypatch, suite, old_name,
+):
+    if (suite is not None and suite not in NEW_PARTITION_SUITES) or old_name not in {
+        "Prod Playwright (test-legal-write-oct13)",
+        "Prod Playwright (test-legal-write-oct13) (test-legal-write-oct13)",
+    }:
+        raise ValueError("unsupported retired-role case")
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] != ["run", "view"]:
+            return result
+        if suite is None:
+            extra = copy.deepcopy(result["jobs"][0])
+            extra.update(name=old_name, databaseId=999999)
+            result["jobs"].append(extra)
+        else:
+            job = next(row for row in result["jobs"]
+                       if row["name"] == f"Prod Playwright ({suite})")
+            job["name"] = old_name
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError, match="job name is unknown"):
+        resume(inventory)
+    assert_no_resume(state)
+
+
+@pytest.mark.parametrize("suite", NEW_PARTITION_SUITES)
+@pytest.mark.parametrize("damage", [
+    "duplicate_id", "wrong_role_suffix", "double_suffix", "unexpected_prefix", "unexpected_suffix",
+])
+def test_private_resume_rejects_unreviewed_or_ambiguous_current_aliases(
+    monkeypatch, suite, damage,
+):
+    if suite not in NEW_PARTITION_SUITES or damage not in {
+        "duplicate_id", "wrong_role_suffix", "double_suffix",
+        "unexpected_prefix", "unexpected_suffix",
+    }:
+        raise ValueError("unsupported current alias-identity case")
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] != ["run", "view"]:
+            return result
+        job = next(row for row in result["jobs"]
+                   if row["name"] == f"Prod Playwright ({suite})")
+        job["name"] += f" ({suite})"
+        if damage == "duplicate_id":
+            job["databaseId"] = next(
+                row["databaseId"] for row in result["jobs"] if row is not job
+            )
+        elif damage == "wrong_role_suffix":
+            job["name"] = f"Prod Playwright ({suite}) (tester-index)"
+        elif damage == "double_suffix":
+            job["name"] += f" ({suite})"
+        elif damage == "unexpected_prefix":
+            job["name"] = "unreviewed " + job["name"]
+        else:
+            job["name"] += " (unreviewed)"
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError):
+        resume(inventory)
+    assert_no_resume(state)
 
 
 @pytest.mark.parametrize("name", REQUIRED_JOBS)
@@ -364,7 +504,7 @@ def test_private_resume_rejects_ambiguous_or_incomplete_job_identity(monkeypatch
     assert_no_resume(state)
 
 
-@pytest.mark.parametrize("suite", ["tester-index", "test-legal-write-oct13"])
+@pytest.mark.parametrize("suite", MATRIX_ALIAS_SUITES)
 @pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled", "skipped"])
 def test_private_resume_rejects_canonical_plus_legacy_alias_even_when_failed(
     monkeypatch, suite, conclusion,

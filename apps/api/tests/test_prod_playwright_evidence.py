@@ -1765,7 +1765,7 @@ def _tester_canonical_rows():
         "tester": {"ordinary-prod.spec.ts": 97},
         "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
-        "test-legal-write-oct13": evidence.OCT13_FILES,
+        "test-legal-write-oct13-a": evidence.OCT13_FILES,
     }
     for invocation, files in partitions.items():
         for file, count in files.items():
@@ -1791,7 +1791,7 @@ def _tester_canonical_rows():
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 51,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
@@ -1809,7 +1809,7 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 51,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
 
@@ -1821,7 +1821,7 @@ def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     "parallel_workers", "missing_retry_flag", "boolean_workers",
 ])
 def test_notes22_requires_the_exact_positive_case_in_the_authorized_write_role(execution, damage):
-    invocation = "test-legal-write-oct13"
+    invocation = "test-legal-write-oct13-b"
     project = "test-legal-write-prod-chromium"
     binding = {
         "invocation": invocation, "config": "playwright.prod-ram.config.ts", "project": project,
@@ -1873,7 +1873,7 @@ def test_notes22_requires_the_exact_positive_case_in_the_authorized_write_role(e
 def test_notes22_runtime_evidence_cannot_certify_a_skip_or_an_incomplete_attempt(damage):
     project = "test-legal-write-prod-chromium"
     binding = {
-        "invocation": "test-legal-write-oct13", "config": "playwright.prod-ram.config.ts",
+        "invocation": "test-legal-write-oct13-b", "config": "playwright.prod-ram.config.ts",
         "project": project, "arguments": ["--config=playwright.prod-ram.config.ts",
                                            f"--project={project}", "--workers=1", "--retries=0"],
     }
@@ -1982,7 +1982,7 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["native_spec_id"] += "-substitute"
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
-    project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
+    project = evidence.OCT13_PROJECT
     assert sum(row["project_name"] == project for row in rows) == 51
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
@@ -2130,7 +2130,7 @@ def test_tester_canonical_inventory_rejects_dropped_or_overlapping_cases(damage)
         rows = rows[1:]
     elif damage in {"missing_index", "missing_oct13"}:
         project = evidence.TESTER_PARTITIONS[
-            "tester-index" if damage == "missing_index" else "test-legal-write-oct13"
+            "tester-index" if damage == "missing_index" else "test-legal-write-oct13-a"
         ]
         rows.remove(next(row for row in rows if row["project_name"] == project))
     elif damage in {"duplicate_id", "extra_index"}:
@@ -2203,8 +2203,11 @@ def verified_tester_union(tmp_path, monkeypatch):
 def test_verified_tester_union_requires_all_four_envelopes_before_certification(
     verified_tester_union,
 ):
+    # Historical test identity retained; contractv2 now requires allfive envelopes.
     state = verified_tester_union
     required = list(evidence.TESTER_PARTITIONS)
+    assert required == ["tester", "tester-catalog", "tester-index",
+                        "test-legal-write-oct13-a", "test-legal-write-oct13-b"]
     evidence.validate_tester_partition_union(state.root, required, BASE)
     assert state.checked == [(state.root, required, BASE)]
 
@@ -2277,8 +2280,9 @@ def test_verified_tester_union_is_fail_closed(verified_tester_union, damage):
 
 def _assert_native_manifest(workflow):
     for job_name in (
-        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-        "scheduled-statute-verification",
+        "prod-playwright-shards", "prod-tester-index",
+        "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+        "prod-batch3-tester", "prod-batch4-tester", "scheduled-statute-verification",
     ):
         job = workflow["jobs"][job_name]
         steps = {step.get("name"): step for step in job["steps"]}
@@ -2335,7 +2339,8 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "tester",
         "tester-catalog",
         "tester-index",
-        "test-legal-write-oct13",
+        "test-legal-write-oct13-a",
+        "test-legal-write-oct13-b",
         "batch3-clients-desktop",
         "batch3-clients-mobile",
         "batch3-drafts-readonly",
@@ -2517,3 +2522,213 @@ def test_workflow_prepare_uses_only_release_owned_capture_or_proven_older_ancest
             marker = json.loads((tmp_path / evidence.EVIDENCE / "legacy.json").read_text())
             assert marker["completed"] is False
             assert marker["release_sha"] == boundary
+
+
+# Independent literals: do not derive the expected split from the production map.
+OCT13_EXPECTED_PARTS = {
+    "test-legal-write-oct13-a": {
+        "ram-2026-10-13-hearings.spec.ts": 2,
+        "ram-2026-10-13-ip-portfolio.spec.ts": 4,
+        "ram-2026-10-15-ip-controls.spec.ts": 34,
+    },
+    "test-legal-write-oct13-b": {
+        "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+        "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+        "ram-2026-10-17-ip-reminders.spec.ts": 4,
+        "ram-2026-10-17-ip-tracker.spec.ts": 2,
+        "ram-2026-10-22-prod.spec.ts": 1,
+    },
+}
+
+
+def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
+    canonical = {"tests": _tester_canonical_rows()}
+    assert evidence.TESTER_PARTITION_CONTRACT == 2
+    assert evidence.OCT13_PROJECT == "test-legal-write-prod-chromium"
+    assert evidence.OCT13_PARTITION_FILES == {
+        part: tuple(files) for part, files in OCT13_EXPECTED_PARTS.items()
+    }
+    old51 = [row for row in canonical["tests"]
+             if row["project_name"] == "test-legal-write-prod-chromium"]
+    assert len(old51) == 51
+    selected = [evidence._tester_selected_rows(canonical, part) for part in OCT13_EXPECTED_PARTS]
+    assert [len(rows) for rows in selected] == [40, 11]
+    for part, rows in zip(OCT13_EXPECTED_PARTS, selected, strict=True):
+        assert Counter(row["file"] for row in rows) == Counter(OCT13_EXPECTED_PARTS[part])
+        assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
+    assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
+    assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
+    assert len(evidence._tester_inventory(canonical)) == 172
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+def test_oct13_source_owned_file_filter_matches_only_its_literal_whole_files(part):
+    binding = {"config": "playwright.prod-ram.config.ts", "invocation": part,
+               "project": "test-legal-write-prod-chromium",
+               "arguments": ["--workers=1", "--retries=0"]}
+    filters = evidence._tester_file_filters(binding)
+    assert len(filters) == 1
+    expected_filter = r"(?:^|[/\\])(?:" + "|".join(
+        re.escape(file) for file in OCT13_EXPECTED_PARTS[part]) + r")$"
+    assert filters == [expected_filter]
+    for files in OCT13_EXPECTED_PARTS.values():
+        for file in files:
+            admitted = file in OCT13_EXPECTED_PARTS[part]
+            for path in (file, "tests/e2e/" + file, "C:\\repo\\tests\\e2e\\" + file):
+                assert bool(re.search(filters[0], path)) is admitted
+            for path in ("prefix-" + file, file + "/other.spec.ts", file + ".bak",
+                         file.replace(".spec.ts", "XspecYts")):
+                assert re.search(filters[0], path) is None
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("damage", ["missing", "extra", "foreign", "reordered", "metadata"])
+def test_each_oct13_part_rejects_noncanonical_or_overlapping_selection(part, damage):
+    canonical = {"tests": _tester_canonical_rows()}
+    selected = copy.deepcopy(evidence._tester_selected_rows(canonical, part))
+    other = copy.deepcopy(evidence._tester_selected_rows(
+        canonical,
+        "test-legal-write-oct13-b" if part.endswith("-a") else "test-legal-write-oct13-a",
+    )[0])
+    if damage == "missing":
+        selected.pop()
+    elif damage == "extra":
+        selected.append(other)
+    elif damage == "foreign":
+        selected[-1] = other
+    elif damage == "reordered":
+        selected.reverse()
+    else:
+        selected[0]["title_path"][-1] += " changed"
+    with pytest.raises(evidence.EvidenceError, match="tester_partition_selection_mismatch"):
+        evidence._check_tester_selection({
+            "config": "playwright.prod-ram.config.ts", "invocation": part,
+            "project": "test-legal-write-prod-chromium",
+            "arguments": ["--workers=1", "--retries=0"],
+        }, {"tests": selected}, canonical)
+
+
+@pytest.mark.parametrize("invocation", [
+    "test-legal-write-oct13", "test-legal-write-oct13-c", "test-legal-write-oct13-aa",
+    "test-legal-write-oct13-a-canonical", "test-legal-write-oct13-b-extra",
+    "test-legal-write-oct13a", "test-legal-write-oct13x", "test-legal-write-oct130",
+])
+def test_old_unsplit_and_unknown_oct13_namespace_refuse_before_any_capture(capture, invocation):
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence.run(capture.root, invocation, capture.args, env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._tester_partition({"invocation": invocation})
+
+
+@pytest.mark.parametrize("argument", [
+    "--grep=case", "--grep-invert=case", "--shard=1/2", "ram-2026-10-13-hearings.spec.ts",
+    "--config=playwright.prod-ram.config.ts", "--workers=1",
+    "--project=test-legal-write-prod-chromium",
+])
+def test_oct13_parts_do_not_admit_caller_filters_or_duplicate_options(capture, argument):
+    args = [
+        "--config=playwright.prod-ram.config.ts", "--project=test-legal-write-prod-chromium",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/oct13-a", argument,
+    ]
+    with pytest.raises(
+        evidence.EvidenceError,
+        match="unreviewed_invocation_argument|duplicate_invocation_option",
+    ):
+        evidence.run(capture.root, "test-legal-write-oct13-a", args,
+                     env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / "test-legal-write-oct13-a").exists()
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("field,value,reason", [
+    ("config", "playwright.offline.config.ts", "tester_partition_config_mismatch"),
+    ("project", "tester-prod-chromium", "tester_partition_project_mismatch"),
+    ("arguments", ["--workers=1"], "tester_partition_serial_zero_retry_required"),
+])
+def test_oct13_part_names_cannot_bypass_project_config_or_zero_retry_binding(
+    part, field, value, reason,
+):
+    binding = {
+        "invocation": part, "config": "playwright.prod-ram.config.ts",
+        "project": "test-legal-write-prod-chromium", "arguments": ["--workers=1", "--retries=0"],
+    }
+    binding[field] = value
+    with pytest.raises(evidence.EvidenceError, match=reason):
+        evidence._tester_partition(binding)
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("damage", ["reordered", "duplicate", "foreign", "missing", "metadata"])
+def test_five_envelope_union_independently_rejects_damaged_oct13_parts(
+    verified_tester_union, part, damage,
+):
+    state = verified_tester_union
+    path = state.directories[part] / "results.json"
+    result = json.loads(path.read_text())
+    other = "test-legal-write-oct13-b" if part.endswith("-a") else "test-legal-write-oct13-a"
+    foreign = json.loads((state.directories[other] / "results.json").read_text())["tests"][0]
+    if damage == "reordered":
+        result["tests"].reverse()
+    elif damage == "duplicate":
+        result["tests"].append(copy.deepcopy(result["tests"][0]))
+    elif damage == "foreign":
+        result["tests"][0] = foreign
+    elif damage == "missing":
+        result["tests"].pop()
+    else:
+        result["tests"][0]["title_path"][-1] += " changed"
+    path.write_text(json.dumps(result))
+    with pytest.raises(
+        evidence.EvidenceError,
+        match="oct13_partition_order_or_union_mismatch|tester_partition_union_mismatch",
+    ):
+        evidence.validate_tester_partition_union(state.root, list(evidence.TESTER_PARTITIONS), BASE)
+
+
+@pytest.mark.parametrize("invocation", [
+    "offline", "ci-app", "oct13-other", "tester", "tester-index",
+])
+@pytest.mark.parametrize("config_name", [
+    "playwright.offline.config.ts", "playwright.prod-ram.config.ts",
+])
+def test_oct13_project_cannot_be_claimed_by_generic_or_other_roles(
+    capture, invocation, config_name,
+):
+    config = capture.root / config_name
+    config.write_text("// owned offline project-admission control\n", encoding="utf-8")
+    args = [
+        f"--config={config_name}", "--project=test-legal-write-prod-chromium",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/unreviewed",
+    ]
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence.run(capture.root, invocation, args, env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()
+    binding = {"invocation": invocation, "project": "test-legal-write-prod-chromium"}
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._tester_partition(binding)
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._check_notes22_evidence(binding, {})
+
+
+@pytest.mark.parametrize("invocation,config_name,project", [
+    ("offline", "playwright.offline.config.ts", "offline"),
+    ("ci-app", "playwright.app.config.ts", "chromium"),
+])
+def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, config_name, project):
+    config = capture.root / config_name
+    config.write_text("// owned offline generic-admission control\n", encoding="utf-8")
+    args = [
+        f"--config={config_name}", f"--project={project}",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/generic",
+    ]
+    binding = evidence._binding(capture.root, invocation, args, capture.env)
+    assert binding["invocation"] == invocation and binding["project"] == project
+    assert evidence._tester_partition(binding) is None
+    assert evidence._tester_file_filters(binding) == []
+    evidence._check_notes22_evidence(binding, {})
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()

@@ -284,8 +284,8 @@ jobs:
           SH
 
       - name: Require release-owned bounded tester partition contract
-        if: matrix.suite == 'tester' || matrix.suite == 'tester-catalog'
-        run: python scripts/prod_playwright_evidence.py tester-partition-contract
+        if: matrix.suite == 'tester' || matrix.suite == 'tester-catalog' || matrix.suite == 'tester-index' || matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'
+        run: python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
 
       - name: Run canonical tester production regressions
         if: matrix.suite == 'tester'
@@ -361,7 +361,7 @@ jobs:
           bash "$RUNNER_TEMP/caseops-prod-playwright" tester-index --config=playwright.prod-ram.config.ts --project=tester-index-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester-index
 
       - name: Run release-owned test-legal portfolio and Calendar regressions
-        if: matrix.suite == 'test-legal-write-oct13'
+        if: matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -389,10 +389,16 @@ jobs:
           fi
           test -n "$CASEOPS_RAM_PROD_PASSWORD"
           test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts
-          bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13 --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13
+          case "${{ matrix.suite }}" in
+            test-legal-write-oct13-a)
+              bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13-a --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13-a ;;
+            test-legal-write-oct13-b)
+              bash "$RUNNER_TEMP/caseops-prod-playwright" test-legal-write-oct13-b --config=playwright.prod-ram.config.ts --project=test-legal-write-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/test-legal-write-oct13-b ;;
+            *) echo "::error::Unreviewed October13 partition."; exit 1 ;;
+          esac
 
       - name: Run release-owned Batch3 client and retained drafting acceptance
-        if: matrix.suite == 'test-legal-write-oct13'
+        if: matrix.suite == 'batch3'
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -436,7 +442,7 @@ jobs:
 
       - name: Run release-owned Batch4 tester acceptance
         id: batch4-tester
-        if: matrix.suite == 'test-legal-write-oct13'
+        if: matrix.suite == 'batch4'
         env:
           CASEOPS_RAM_PROD_SLUG: test-legal
           CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
@@ -828,7 +834,8 @@ jobs:
         run: |
           set -euo pipefail
           case "$SUITE" in
-            tester|tester-catalog|tester-index|test-legal-write-oct13) required=("$SUITE") ;;
+            tester|tester-catalog|tester-index|test-legal-write-oct13-a|test-legal-write-oct13-b) required=("$SUITE") ;;
+            batch3|batch4) required=() ;;
             legacy|test-legal-readonly) required=("$SUITE") ;;
             supporting)
               required=(notice)
@@ -843,10 +850,10 @@ jobs:
               ;;
             *) exit 1 ;;
           esac
-          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-22-drafting.prod.spec.ts ]]; then
+          if [[ "$SUITE" == batch3 ]]; then
             required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)
           fi
-          if [[ "$SUITE" == test-legal-write-oct13 && -f tests/e2e/ram-2026-10-31-control-crawl.spec.ts ]]; then
+          if [[ "$SUITE" == batch4 ]]; then
             required+=(batch4-desktop batch4-mobile)
             # The live state the Batch4 step cross-checked and ran against.
             case "${BATCH4_GOVERNANCE:-}" in
@@ -882,7 +889,7 @@ jobs:
         suite: [tester-index]
     steps: *prod-playwright-steps
 
-  prod-test-legal-write-oct13:
+  prod-test-legal-write-oct13-a:
     name: Prod Playwright (${{ matrix.suite }})
     if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-tester-index.result == 'success' || needs.prod-tester-index.result == 'failure')
     needs: [resolve-release, prod-tester-index]
@@ -894,7 +901,54 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        suite: [test-legal-write-oct13]
+        suite: [test-legal-write-oct13-a]
+    steps: *prod-playwright-steps
+
+  prod-test-legal-write-oct13-b:
+    name: Prod Playwright (${{ matrix.suite }})
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13-a.result == 'success' || needs.prod-test-legal-write-oct13-a.result == 'failure')
+    needs: [resolve-release, prod-test-legal-write-oct13-a]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [test-legal-write-oct13-b]
+    steps: *prod-playwright-steps
+
+  prod-batch3-tester:
+    name: Prod Playwright (${{ matrix.suite }})
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-test-legal-write-oct13-b.result == 'success' || needs.prod-test-legal-write-oct13-b.result == 'failure')
+    needs: [resolve-release, prod-test-legal-write-oct13-b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [batch3]
+    steps: *prod-playwright-steps
+
+  prod-batch4-tester:
+    name: Prod Playwright (${{ matrix.suite }})
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-batch3-tester.result == 'success' || needs.prod-batch3-tester.result == 'failure')
+    needs: [resolve-release, prod-batch3-tester]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    outputs:
+      governance: ${{ steps.batch4-tester.outputs.governance }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [batch4]
     steps: *prod-playwright-steps
 
   scheduled-statute-verification:
@@ -1058,12 +1112,15 @@ jobs:
 
   record-release-evidence:
     name: Record exact-release evidence
-    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13.result == 'success'
+    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13-a.result == 'success' && needs.prod-test-legal-write-oct13-b.result == 'success' && needs.prod-batch3-tester.result == 'success' && needs.prod-batch4-tester.result == 'success'
     needs:
       - resolve-release
       - prod-playwright-shards
       - prod-tester-index
-      - prod-test-legal-write-oct13
+      - prod-test-legal-write-oct13-a
+      - prod-test-legal-write-oct13-b
+      - prod-batch3-tester
+      - prod-batch4-tester
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1105,19 +1162,53 @@ jobs:
           name: prod-playwright-report-tester-catalog
           path: test-results/prod-native-evidence
 
-      - name: Retain October 13 partition evidence
+      - name: Retain October 13A partition evidence
         uses: actions/download-artifact@v4
         with:
-          name: prod-playwright-report-test-legal-write-oct13
+          name: prod-playwright-report-test-legal-write-oct13-a
+          path: test-results/prod-native-evidence
+
+      - name: Retain October 13B partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-test-legal-write-oct13-b
+          path: test-results/prod-native-evidence
+
+      - name: Retain Batch3 partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-batch3
+          path: test-results/prod-native-evidence
+
+      - name: Retain Batch4 partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-batch4
           path: test-results/prod-native-evidence
 
       - name: Require complete source-bound tester partition union
         env:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         run: |
+          set -euo pipefail
+          python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
           python scripts/prod_playwright_evidence.py validate \
-            --required tester tester-catalog tester-index test-legal-write-oct13 \
+            --required tester tester-catalog tester-index test-legal-write-oct13-a test-legal-write-oct13-b \
             --tester-partition-union
+
+      - name: Require complete release-owned Batch3 and Batch4 role evidence
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+          BATCH4_GOVERNANCE: ${{ needs.prod-batch4-tester.outputs.governance }}
+        run: |
+          set -euo pipefail
+          required=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly batch4-desktop batch4-mobile)
+          case "${BATCH4_GOVERNANCE:-}" in
+            enabled) required+=(batch4-governance-desktop batch4-governance-mobile) ;;
+            disabled) ;;
+            *) echo "::error::Batch4 acceptance recorded no live rule-governance state."; exit 1 ;;
+          esac
+          python scripts/prod_playwright_evidence.py validate --required "${required[@]}"
 
       - name: Record exact-release public-claims evidence
         env:

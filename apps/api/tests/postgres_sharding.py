@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -98,7 +101,65 @@ def _junit_identity(nodeid: str) -> tuple[str, str]:
     return ".".join([module.removesuffix(".py").replace("/", "."), *parts[:-1]]), parts[-1]
 
 
-def verify_reports(folder: Path, total: int) -> dict:
+def _verify_native_exit(folder: Path, shard: int, source_sha: str) -> None:
+    row = json.loads((folder / f"postgres-native-exit-{shard}.json").read_text(encoding="utf-8"))
+    if type(row) is not dict or set(row) != {
+        "schema_version", "stage", "source_sha", "launcher_pid", "child_pid", "planned_at",
+        "started_at", "finished_at", "native_returncode", "native_signal", "exit_code",
+        "publication_errors", "runtime",
+    }:
+        raise ValueError("PostgreSQL native exit receipt schema is not current")
+    runtime = row.get("runtime", {})
+    if (
+        type(row.get("schema_version")) is not int or row["schema_version"] != 1
+        or row.get("stage") != "exited" or row.get("source_sha") != source_sha
+        or type(row.get("launcher_pid")) is not int or row["launcher_pid"] <= 0
+        or type(row.get("child_pid")) is not int or row["child_pid"] <= 0
+        or row["child_pid"] == row["launcher_pid"]
+        or type(row.get("native_returncode")) is not int or row["native_returncode"] != 0
+        or row.get("native_signal", "missing") is not None
+        or type(row.get("exit_code")) is not int or row["exit_code"] != 0
+        or row.get("publication_errors") != []
+        or type(runtime) is not dict or set(runtime) != {
+            "executable", "resolved", "sha256", "bytes", "device", "inode",
+        }
+        or type(runtime.get("bytes")) is not int or runtime["bytes"] <= 0
+        or type(runtime.get("sha256")) is not str
+        or not re.fullmatch(r"[0-9a-f]{64}", runtime["sha256"])
+        or any(type(runtime.get(key)) is not int or runtime[key] < 0
+               for key in ("device", "inode"))
+        or any(type(runtime.get(key)) is not str or not Path(runtime[key]).is_absolute()
+               for key in ("executable", "resolved"))
+    ):
+        raise ValueError("PostgreSQL native exit receipt is incomplete or unsuccessful")
+    try:
+        values = [row[key] for key in ("planned_at", "started_at", "finished_at")]
+        if any(type(value) is not str or not value.endswith("+00:00") for value in values):
+            raise ValueError("Require explicit UTC observations")
+        times = [datetime.fromisoformat(value) for value in values]
+        if not times[0] <= times[1] <= times[2]:
+            raise ValueError("Native observations are not ordered")
+        journal = [json.loads(line) for line in
+                   (folder / f"postgres-shard-{shard}.jsonl").read_text().splitlines()]
+        if journal[0] != {"event": "session_started", "pid": row["child_pid"]}:
+            raise ValueError("Native child does not own the recorded pytest session")
+        if (type(journal[-1]) is not dict or type(journal[-1].get("exitstatus")) is not int
+                or journal[-1] != {"event": "session_finished", "exitstatus": 0}):
+            raise ValueError("The native pytest session did not complete")
+    except (OSError, KeyError, IndexError, TypeError, ValueError) as error:
+        raise ValueError("PostgreSQL native exit observations do not reconcile") from error
+
+
+def verify_reports(
+    folder: Path, total: int, *, require_native_exit: bool = False, source_sha: str | None = None,
+) -> dict:
+    if require_native_exit:
+        source_sha = os.getenv("GITHUB_SHA") if source_sha is None else source_sha
+        expected = {folder / f"postgres-native-exit-{shard}.json"
+                    for shard in range(1, total + 1)}
+        if (type(source_sha) is not str or not re.fullmatch(r"[0-9a-f]{40}", source_sha)
+                or set(folder.glob("postgres-native-exit-*.json")) != expected):
+            raise ValueError("Missing, unexpected or unbound PostgreSQL native exit receipts")
     inventories = sorted(folder.glob("postgres-shard-*.json"))
     reports = sorted(folder.glob("postgres-shard-*.xml"))
     if len(inventories) != total or len(reports) != total:
@@ -128,14 +189,21 @@ def verify_reports(folder: Path, total: int) -> dict:
         ):
             raise ValueError("PostgreSQL acceptance contains a skipped, failed or errored node")
         executed.update(row["selected"])
+        if require_native_exit:
+            _verify_native_exit(folder, shard, source_sha)
     if seen_shards != set(range(1, total + 1)) or executed != set(complete or []):
         raise ValueError("PostgreSQL acceptance did not execute the entire collection")
-    return {"status": "passed", "shards": total, "collected": len(executed), "skipped": 0}
+    result = {"status": "passed", "shards": total, "collected": len(executed), "skipped": 0}
+    if require_native_exit:
+        result.update(native_exit_receipts=total, source_sha=source_sha)
+    return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("folder", type=Path)
     parser.add_argument("--total", type=int, required=True)
+    parser.add_argument("--require-native-exit", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(verify_reports(args.folder, args.total)))
+    print(json.dumps(verify_reports(args.folder, args.total,
+                                    require_native_exit=args.require_native_exit)))

@@ -845,11 +845,46 @@ def _assert_complete_postgres_selection(command: str) -> None:
     ), command
 
 
+@pytest.mark.parametrize("shape", ["inline", "folded"])
+def test_ci_rejects_a_second_postgres_command_outside_the_named_job(monkeypatch, shape):
+    original_read = _read_repo_text
+    text = original_read(".github/workflows/ci.yml")
+    command = (
+        "      - run: python -m pytest -q -m postgres tests/test_narrowed.py\n"
+        if shape == "inline" else
+        "      - run: >-\n          python -m pytest -q\n"
+        "          -m postgres tests/test_narrowed.py\n"
+    )
+    changed = text + "\n  extra-pg-probe:\n    runs-on: ubuntu-latest\n    steps:\n" + command
+
+    def read(name):
+        return changed if name == ".github/workflows/ci.yml" else original_read(name)
+
+    monkeypatch.setitem(globals(), "_read_repo_text", read)
+    with pytest.raises(AssertionError):
+        test_all_postgres_marked_modules_are_selected_locally_and_in_ci()
+
+
 def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
-    lines = _read_repo_text(".github/workflows/ci.yml").splitlines()
+    text = _read_repo_text(".github/workflows/ci.yml")
+    lines = text.splitlines()
     commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
     assert len(commands) == 1
-    _assert_complete_postgres_selection(commands[0])
+    workflow = yaml.safe_load(text)
+    steps = workflow["jobs"]["postgres-validation-shards"]["steps"]
+    step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
+    assert commands[0] == "run: " + step["run"]
+    global_pg_steps = [
+        item for job in workflow["jobs"].values() for item in job.get("steps", [])
+        if "pytest" in item.get("run", "") and "-m postgres" in item.get("run", "")
+    ]
+    assert len(global_pg_steps) == 1 and global_pg_steps[0] is step
+    command = shlex.split(step["run"])
+    assert command[:6] == [
+        "uv", "run", "python", "../../scripts/pytest_native_receipt.py",
+        "postgres-native-exit-${{ matrix.shard }}.json", "--",
+    ]
+    _assert_complete_postgres_selection("python -m pytest " + shlex.join(command[6:]))
 
     wrapper = _read_repo_text("scripts/verify-docker.ps1")
     assert wrapper.count("& $ApiPython @NativeArguments") == 1

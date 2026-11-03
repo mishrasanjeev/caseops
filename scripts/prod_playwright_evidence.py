@@ -44,11 +44,13 @@ TESTER_PARTITIONS = {
     "tester": "tester-prod-chromium",
     "tester-catalog": "tester-prod-chromium",
     "tester-index": "tester-index-prod-chromium",
-    "test-legal-write-oct13": "test-legal-write-prod-chromium",
+    "test-legal-write-oct13-a": "test-legal-write-prod-chromium",
+    "test-legal-write-oct13-b": "test-legal-write-prod-chromium",
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6, "test-legal-write-oct13": 51,
+    "tester": 97, "tester-catalog": 18, "tester-index": 6,
+    "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
 BATCH3_MANDATORY_CASES = {
@@ -163,7 +165,7 @@ GOVERNANCE_STATE_KEYS = {
     "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
 }
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
-TESTER_PARTITION_CONTRACT = 1
+TESTER_PARTITION_CONTRACT = 2
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
 INDEX_FILES = {
     "ram-2026-10-10-prod.spec.ts": 4,
@@ -181,14 +183,46 @@ OCT13_FILES = {
 }
 
 
+# Immutable whole-file partitions of the original canonical51 oracle above.
+# Their tuple order preserves the two contiguous native discovery blocks.
+OCT13_PARTITION_FILES = {
+    "test-legal-write-oct13-a": (
+        "ram-2026-10-13-hearings.spec.ts",
+        "ram-2026-10-13-ip-portfolio.spec.ts",
+        "ram-2026-10-15-ip-controls.spec.ts",
+    ),
+    "test-legal-write-oct13-b": (
+        "ram-2026-10-15-ip-renewal-tracker.spec.ts",
+        "ram-2026-10-17-calendar-readiness.spec.ts",
+        "ram-2026-10-17-ip-reminders.spec.ts",
+        "ram-2026-10-17-ip-tracker.spec.ts",
+        "ram-2026-10-22-prod.spec.ts",
+    ),
+}
+OCT13_PROJECT = "test-legal-write-prod-chromium"
+
+
 class EvidenceError(ValueError):
     pass
 
 
+def _require_current_oct13_namespace(invocation, *, project=None):
+    if type(invocation) is not str:
+        raise EvidenceError("invalid_release_or_invocation")
+    if (
+        (invocation.startswith("test-legal-write-oct13") or project == OCT13_PROJECT)
+        and invocation not in OCT13_PARTITION_FILES
+    ):
+        raise EvidenceError("unreviewed_oct13_partition_invocation")
+
+
 def _tester_partition(binding):
     invocation = binding["invocation"]
-    if binding["config"] != "playwright.prod-ram.config.ts" or invocation not in TESTER_PARTITIONS:
+    _require_current_oct13_namespace(invocation, project=binding.get("project"))
+    if invocation not in TESTER_PARTITIONS:
         return None
+    if binding["config"] != "playwright.prod-ram.config.ts":
+        raise EvidenceError("tester_partition_config_mismatch")
     if binding["project"] != TESTER_PARTITIONS[invocation]:
         raise EvidenceError("tester_partition_project_mismatch")
     if "--workers=1" not in binding["arguments"] or "--retries=0" not in binding["arguments"]:
@@ -212,13 +246,13 @@ def _tester_inventory(canonical):
     }
     if len(semantic_cases) != len(rows):
         raise EvidenceError("duplicate_tester_semantic_identity")
-    for invocation, expected_files in (
-        ("tester-index", INDEX_FILES), ("test-legal-write-oct13", OCT13_FILES)
+    for project, expected_files in (
+        (TESTER_PARTITIONS["tester-index"], INDEX_FILES), (OCT13_PROJECT, OCT13_FILES)
     ):
         actual = Counter(
             Path(row["file"]).name
             for row in rows
-            if row["project_name"] == TESTER_PARTITIONS[invocation]
+            if row["project_name"] == project
         )
         if actual != Counter(expected_files):
             raise EvidenceError("mandatory_tester_partition_inventory_mismatch")
@@ -238,11 +272,16 @@ def _tester_selected_rows(canonical, invocation):
     if invocation in {"tester", "tester-catalog"}:
         rows = [row for row in rows if (Path(row["file"]).name == TESTER_CATALOG_FILE)
                 == (invocation == "tester-catalog")]
+    elif invocation in OCT13_PARTITION_FILES:
+        rows = [row for row in rows if Path(row["file"]).name in OCT13_PARTITION_FILES[invocation]]
     return rows
 
 
 def _tester_file_filters(binding):
     invocation = _tester_partition(binding)
+    if invocation in OCT13_PARTITION_FILES:
+        files = "|".join(re.escape(name) for name in OCT13_PARTITION_FILES[invocation])
+        return [rf"(?:^|[/\\])(?:{files})$"]
     if invocation not in {"tester", "tester-catalog"}:
         return []
     catalog = rf"(?:^|[/\\]){re.escape(TESTER_CATALOG_FILE)}$"
@@ -340,7 +379,8 @@ def batch4_governance_state(root: Path) -> bool:
 
 
 def _check_notes22_evidence(binding, document, *, execution=False):
-    if binding["invocation"] != "test-legal-write-oct13":
+    _require_current_oct13_namespace(binding["invocation"], project=binding.get("project"))
+    if binding["invocation"] != "test-legal-write-oct13-b":
         return
     project = "test-legal-write-prod-chromium"
     file = "ram-2026-10-22-prod.spec.ts"
@@ -840,6 +880,7 @@ def _binding(root, invocation, args, env):
     expected = env.get("CASEOPS_EXPECTED_RELEASE_SHA", "")
     if not SHA.fullmatch(expected) or not INVOCATION.fullmatch(invocation):
         raise EvidenceError("invalid_release_or_invocation")
+    _require_current_oct13_namespace(invocation)
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,
@@ -866,7 +907,7 @@ def _binding(root, invocation, args, env):
         raise EvidenceError("missing_release_config")
     if options.get("reporter") != "list":
         raise EvidenceError("unreviewed_reporter")
-    return {
+    binding = {
         "release_sha": expected,
         "checkout_sha": head,
         "invocation": invocation,
@@ -877,6 +918,8 @@ def _binding(root, invocation, args, env):
         "arguments": args,
         "capture_version": 2,
     }
+    _tester_partition(binding)
+    return binding
 
 
 def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> int:
@@ -1208,6 +1251,7 @@ def validate_tester_partition_union(root: Path, required, expected: str) -> None
         raise EvidenceError("missing_or_duplicate_tester_partition")
     validate(root, required, expected)
     selected = []
+    oct13_selected = []
     canonical_ids = None
     config_hash = None
     for invocation in TESTER_PARTITIONS:
@@ -1232,8 +1276,13 @@ def validate_tester_partition_union(root: Path, required, expected: str) -> None
         ):
             raise EvidenceError("mandatory_tester_partition_not_passed")
         selected.extend(_tester_case_identity(row) for row in result["tests"])
+        if invocation in OCT13_PARTITION_FILES:
+            oct13_selected.extend(_tester_case_identity(row) for row in result["tests"])
     if len(set(selected)) != len(selected) or Counter(selected) != Counter(canonical_ids):
         raise EvidenceError("tester_partition_union_mismatch")
+    if oct13_selected != [_tester_case_identity(row) for row in canonical
+                           if row["project_name"] == OCT13_PROJECT]:
+        raise EvidenceError("oct13_partition_order_or_union_mismatch")
 
 
 def main() -> int:
@@ -1245,7 +1294,8 @@ def main() -> int:
     validator = modes.add_parser("validate")
     validator.add_argument("--required", nargs="+", required=True)
     validator.add_argument("--tester-partition-union", action="store_true")
-    modes.add_parser("tester-partition-contract")
+    contract = modes.add_parser("tester-partition-contract")
+    contract.add_argument("--required-version", type=int, choices=[TESTER_PARTITION_CONTRACT])
     modes.add_parser("batch4-governance")
     options = parser.parse_args()
     try:

@@ -407,7 +407,7 @@ jobs:
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
             -o faulthandler_timeout=60
-        run: uv run python -m pytest -q -m postgres
+        run: uv run python ../../scripts/pytest_native_receipt.py "postgres-native-exit-${{ matrix.shard }}.json" -- -q -m postgres
 
       - name: Upload exact PostgreSQL collection and results
         if: always()
@@ -418,6 +418,7 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.json
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
+            apps/api/postgres-native-exit-${{ matrix.shard }}.json
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-readthrough/
             apps/api/postgres-shard-${{ matrix.shard }}-query-plans/
@@ -447,7 +448,9 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 32
+        run: >-
+          uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence
+          --total 32 --require-native-exit
 
   web:
     name: Web (typecheck + vitest + build)

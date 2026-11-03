@@ -1,5 +1,59 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Native Exit Evidence: Complete Acceptance Still Required
+
+**Partially implemented; native release NO-GO.** Native pytest exit receipts
+now bind all32 PostgreSQL shards to exact source, child PID, complete journal
+and successful receipt publication under the existing uv activation. Failed
+outer launchers still fail the release. Normal numeric139 differs from a
+signal-terminated child; cleanup cannot replace original native evidence.
+No job, query, request, UI, worker or retry budget was relaxed.
+
+Current local evidence:233 Windows passes and three declared POSIX-only skips
+across236 cases,705 phase reports,32 real owned shard receipts and unchanged
+3984 tracked inputs; Linux59/59 helper cases and177 phases plus real uv0.13.7
+ancestry/environment/exit controls. Retain all earlier failures, including the
+offline fixture's source-SHA mismatch. Detailed proof and scope are in the
+November3 strict bug-ledger entry, native-exit-components-windows04 and
+native-exit-linux59-01. The native CI139 cause remains unidentified; a bounded
+local seeding timeout does not establish a production query or plan defect.
+
+The complete Windows frontend attempt also remains failed/incomplete, with13
+shipping-trust failures under Windows Node24.15 and a600-second controller
+timeout. Its required replacement is the unchanged complete CI frontend suite
+under Linux Node22.23.4, including coverage, type checks and build. Windows
+worker/inventory component passes do not replace that suite. Fresh exact-source
+CI, all328 deployment-rehearsal cases and exact-serving production acceptance
+remain required before release closure or maintenance/cadence resumption.
+
+## November 3 Release QA Capacity and Windows Worker Admission
+
+**Partially implemented; native release NO-GO pending complete acceptance.**
+The confirmed38-minute production-job capacity failure is preserved with its
+51+3+2 completed cases and52 unverified later Batch4 boundaries. Four serial
+jobs preserve every case, role, worker/retry/test/request budget and required
+failure behavior. Independent Python/frontend source contracts bind October13's
+40/11 partition and complete51 order; version2 requires all five tester
+envelopes, all seven native artifacts and14 exact current regular QA jobs.
+Legacy job receipts and unreviewed invocation/project claims cannot substitute.
+
+The Windows Vitest worker also now binds its hash-pinned producer's exact
+forward-slash argument while retaining native file/descriptor/hash and complete
+argument checks. A diagnostic reproduced the former zero-test startup refusal.
+Local candidate based on aa55ebc passed1189 Python cases/3567 phases and43 actual
+Windows frontend cases (11 inventory+32 pool), with zero failure/skip/pending/
+todo; component/E2E TypeScript, Ruff and3982 tracked-input bookends passed.
+See capacity-local-verification02/INDEPENDENT-RECONCILIATION.json and the
+November3 strict bug-ledger entries. The first failed local run stays retained.
+
+This is component evidence. Current frozen-source full CI, complete replacement
+Windows deployment rehearsal, new whole-job production completion/headroom,
+exact-serving workflow acceptance and guarded maintenance/cadence resumption
+remain required. The old325-pass/one-POSIX-skip rehearsal at05db does not certify
+these changed inputs. The unidentified native CI139 and separate Windows
+node-trust failure remain Inconclusive, not repaired by different local passes.
+No native, all-product or store-readiness claim is made. M15/NFT-016;J20/M22.
+
 ## November 3 Release QA Operational Fixture Admission
 
 **Partially implemented; release NO-GO pending deployed acceptance.** The legacy

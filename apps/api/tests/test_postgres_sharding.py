@@ -43,7 +43,8 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     # Pytest timing excludes launcher overhead; retain the original whole-job budget.
     assert "timeout-minutes" not in step
     assert shlex.split(step["run"]) == [
-        "uv", "run", "python", "-m", "pytest", "-q", "-m", "postgres",
+        "uv", "run", "python", "../../scripts/pytest_native_receipt.py",
+        "postgres-native-exit-${{ matrix.shard }}.json", "--", "-q", "-m", "postgres",
     ]
     assert "--postgres-shards=${{ matrix.total_shards }}" in step["env"]["PYTEST_ADDOPTS"]
     assert step["env"]["CASEOPS_READTHROUGH_EVIDENCE_DIR"] == (
@@ -71,6 +72,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
         f"apps/api/postgres-shard-${{{{ matrix.shard }}}}.{extension}"
         for extension in ("json", "xml", "jsonl")
     ] + [
+        "apps/api/postgres-native-exit-${{ matrix.shard }}.json",
         "apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl",
         "apps/api/postgres-shard-${{ matrix.shard }}-readthrough/",
         "apps/api/postgres-shard-${{ matrix.shard }}-query-plans/",
@@ -89,6 +91,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     assert shlex.split(reconcile["run"]) == [
         "uv", "run", "--python", "3.13", "python", "-m", "tests.postgres_sharding",
         "postgres-evidence", "--total", str(total),
+        "--require-native-exit",
     ]
     assert "postgres-validation" in workflow["jobs"]["e2e"]["needs"]
 
@@ -128,11 +131,24 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     assert job["timeout-minutes"] == 12
     assert total == 32 and matrix["shard"] == list(range(1, total + 1))
     step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
-    command = shlex.split(step["run"])
-    assert command[:2] == ["uv", "run"]
-    command = command[2:]
-    command[0] = sys.executable if command[0] == "python" else shutil.which(command[0])
-    assert command[0], "The workflow's Python entry point must be installed"
+    command_template = shlex.split(step["run"])
+    assert command_template[:4] == [
+        "uv", "run", "python", "../../scripts/pytest_native_receipt.py",
+    ]
+    # This owned replay substitutes only the validated uv/bootstrap prefix.
+    # It still runs the real helper and actual pytest child; live uv activation
+    # is a separate Linux admission, not implied by this offline replay.
+    fixture_python = sys.executable
+    fixture_site = None
+    if sys.platform == "win32":
+        # CPython's Windows venv executable is a redirector with another child
+        # PID. This offline fixture observes the actual base interpreter and
+        # admits only its existing pytest site directory, never inherited app
+        # PYTHONPATH. The Linux CI launcher still uses uv's real activation.
+        fixture_python = str(Path(sys._base_executable).resolve(strict=True))
+        fixture_site = Path(sys.prefix) / "Lib/site-packages"
+        assert Path(pytest.__file__).resolve().is_relative_to(fixture_site.resolve(strict=True))
+    command_template[:4] = [fixture_python, str(root / "scripts/pytest_native_receipt.py")]
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "__init__.py").write_text("")
@@ -144,8 +160,14 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     )
     (tests / "conftest.py").write_text('pytest_plugins = ["tests.retained_results"]\n')
     (tests / "test_sample.py").write_text(
-        "import pytest\n@pytest.mark.postgres\n@pytest.mark.parametrize('item', range(64))\n"
+        "import json,os,sys\nfrom pathlib import Path\nimport pytest\n"
+        "@pytest.mark.postgres\n@pytest.mark.parametrize('item', range(64))\n"
         "def test_marked(item):\n    assert item >= 0\n"
+        "    expected=json.loads(Path('owned-child-environment.json').read_text())\n"
+        "    assert {key:os.environ.get(key) for key in expected} == expected\n"
+        "    runtime=json.loads(Path('owned-child-runtime.json').read_text())\n"
+        "    assert str(Path(sys.executable).resolve()) == runtime['executable']\n"
+        "    assert str(Path(pytest.__file__).resolve()) == runtime['pytest_file']\n"
         "def test_unmarked():\n    raise AssertionError('Non-PostgreSQL test selected')\n"
     )
     (tmp_path / "pytest.ini").write_text("[pytest]\nmarkers = postgres: PostgreSQL acceptance\n")
@@ -154,11 +176,25 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
                                   "CASEOPS_TEST_RESULT_JOURNAL",
                                   "CASEOPS_TEST_RESULT_JOURNAL_OWNER_PID"}}
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    environment["GITHUB_SHA"] = "a" * 40
+    environment["CASEOPS_NATIVE_ENV_LITERAL"] = "owned-pass-through"
+    if fixture_site is not None:
+        environment["PYTHONPATH"] = str(fixture_site.resolve(strict=True))
+    (tmp_path / "owned-child-runtime.json").write_text(json.dumps({
+        "executable": str(Path(fixture_python).resolve(strict=True)),
+        "pytest_file": str(Path(pytest.__file__).resolve(strict=True)),
+    }))
     expected = sorted(f"tests/test_sample.py::test_marked[{item}]" for item in range(64))
     executed = []
     for shard in matrix["shard"]:
         for key in ("PYTEST_ADDOPTS", "CASEOPS_TEST_RESULT_JOURNAL"):
             environment[key] = _render_postgres_matrix(step["env"][key], shard, total)
+        expected_environment = {key: environment.get(key) for key in (
+            "PATH", "VIRTUAL_ENV", "UV_RUN_RECURSION_DEPTH", "UV_CACHE_DIR", "PYTEST_ADDOPTS",
+            "CASEOPS_NATIVE_ENV_LITERAL", "PYTHONPATH",
+        )}
+        (tmp_path / "owned-child-environment.json").write_text(json.dumps(expected_environment))
+        command = [_render_postgres_matrix(value, shard, total) for value in command_template]
         result = subprocess.run(command, cwd=tmp_path, env=environment, capture_output=True,
                                 text=True, timeout=30, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -173,6 +209,11 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
             selected
         )
         assert journal[-1] == {"event": "session_finished", "exitstatus": 0}
+        native = json.loads((tmp_path / f"postgres-native-exit-{shard}.json").read_text())
+        assert native["stage"] == "exited" and native["native_returncode"] == 0
+        assert native["native_signal"] is None and native["publication_errors"] == []
+        assert native["source_sha"] == environment["GITHUB_SHA"]
+        assert journal[0] == {"event": "session_started", "pid": native["child_pid"]}
         reports = [row for row in journal if row["event"] == "test_report"]
         assert len(reports) == len(selected) * 3
         assert all(row["outcome"] == "passed" for row in reports)
@@ -181,19 +222,158 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     assert sorted(executed) == expected
     summary = {"status": "passed", "shards": total, "collected": len(expected), "skipped": 0}
     assert verify_reports(tmp_path, total) == summary
+    native_summary = {**summary, "native_exit_receipts": total,
+                      "source_sha": environment["GITHUB_SHA"]}
+    reconciled_native = verify_reports(
+        tmp_path, total, require_native_exit=True, source_sha=environment["GITHUB_SHA"],
+    )
+    assert reconciled_native == native_summary
     evidence = tmp_path / "postgres-evidence"
     evidence.mkdir()
-    for path in tmp_path.glob("postgres-shard-*.*"):
+    for path in [*tmp_path.glob("postgres-shard-*.*"),
+                 *tmp_path.glob("postgres-native-exit-*.json")]:
         shutil.copyfile(path, evidence / path.name)
     aggregate = next(item for item in workflow["jobs"]["postgres-validation"]["steps"]
                      if item.get("name") == "Reconcile complete PostgreSQL acceptance")
     aggregate_command = shlex.split(aggregate["run"])
     assert aggregate_command[:5] == ["uv", "run", "--python", "3.13", "python"]
-    aggregate_command = [sys.executable, *aggregate_command[5:]]
+    aggregate_command = [fixture_python, *aggregate_command[5:]]
     result = subprocess.run(aggregate_command, cwd=tmp_path, env=environment, capture_output=True,
                             text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(result.stdout) == summary
+    assert json.loads(result.stdout) == native_summary
+
+
+@pytest.mark.parametrize("damage", ["omit_native_flag", "omit_native_artifact", "bypass_helper"])
+def test_current_ci_cannot_omit_native_exit_admission_or_publication(monkeypatch, damage):
+    root = Path(__file__).resolve().parents[3]
+    target = root / ".github/workflows/ci.yml"
+    original_read = Path.read_text
+    workflow = yaml.safe_load(original_read(target, encoding="utf-8"))
+    if damage == "omit_native_flag":
+        steps = workflow["jobs"]["postgres-validation"]["steps"]
+        step = next(item for item in steps
+                    if item.get("name") == "Reconcile complete PostgreSQL acceptance")
+        step["run"] = step["run"].replace(" --require-native-exit", "")
+    else:
+        steps = workflow["jobs"]["postgres-validation-shards"]["steps"]
+        if damage == "bypass_helper":
+            step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
+            step["run"] = "uv run python -m pytest -q -m postgres"
+        else:
+            step = next(item for item in steps if item.get("name") == (
+                "Upload exact PostgreSQL collection and results"
+            ))
+            step["with"]["path"] = "\n".join(
+                line for line in step["with"]["path"].splitlines()
+                if "postgres-native-exit-" not in line
+            )
+
+    def read(path, *args, **kwargs):
+        return yaml.safe_dump(workflow) if path == target else original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
+    with pytest.raises(AssertionError):
+        test_ci_postgres_capacity_keeps_bounded_complete_acceptance()
+
+
+@pytest.mark.parametrize("fault", [
+    None, "missing", "extra", "source", "source_missing", "stage", "schema", "child_pid",
+    "same_pid", "boolean_pid", "journal_pid", "journal_missing", "journal_incomplete",
+    "journal_boolean_exit",
+    "exit17", "normal139", "negative_signal", "boolean_return", "runtime_sha",
+    "runtime_missing", "runtime_path", "runtime_boolean_bytes", "time_naive", "time_order",
+    "publication", "unknown_key",
+])
+def test_native_exit_protocol_requires_every_source_bound_successful_pytest_child(
+    tmp_path, monkeypatch, fault,
+):
+    nodes = [f"tests/test_owned.py::test_item[{item}]" for item in range(64)]
+    for shard in range(1, 33):
+        selected = partition(nodes, shard, 32)
+        (tmp_path / f"postgres-shard-{shard}.json").write_text(json.dumps({
+            "shard": shard, "total": 32, "nodeids": nodes, "selected": selected,
+        }))
+        suite = ElementTree.Element("testsuite")
+        for node in selected:
+            classname, name = _junit_identity(node)
+            ElementTree.SubElement(suite, "testcase", classname=classname, name=name)
+        ElementTree.ElementTree(suite).write(tmp_path / f"postgres-shard-{shard}.xml")
+        (tmp_path / f"postgres-shard-{shard}.jsonl").write_text("\n".join([
+            json.dumps({"event": "session_started", "pid": 10000 + shard}),
+            json.dumps({"event": "session_finished", "exitstatus": 0}),
+        ]) + "\n")
+        row = {
+            "schema_version": 1, "stage": "exited", "source_sha": "a" * 40,
+            "launcher_pid": 9000 + shard, "child_pid": 10000 + shard,
+            "planned_at": "2026-11-03T01:00:00+00:00",
+            "started_at": "2026-11-03T01:00:01+00:00",
+            "finished_at": "2026-11-03T01:00:02+00:00",
+            "native_returncode": 0, "native_signal": None, "exit_code": 0,
+            "publication_errors": [],
+            "runtime": {"executable": sys.executable,
+                        "resolved": str(Path(sys.executable).resolve()),
+                        "sha256": "2" * 64, "bytes": 1234, "device": 1, "inode": 7},
+        }
+        if shard == 1:
+            if fault == "source":
+                row["source_sha"] = "b" * 40
+            elif fault == "stage":
+                row["stage"] = "started"
+            elif fault == "schema":
+                row["schema_version"] = 2
+            elif fault == "child_pid":
+                row["child_pid"] = 0
+            elif fault == "same_pid":
+                row["child_pid"] = row["launcher_pid"]
+            elif fault == "boolean_pid":
+                row["child_pid"] = True
+            elif fault in {"exit17", "normal139", "negative_signal"}:
+                code = {"exit17": 17, "normal139": 139, "negative_signal": -15}[fault]
+                row.update(native_returncode=code, native_signal=15 if code < 0 else None,
+                           exit_code=143 if code < 0 else code)
+            elif fault == "boolean_return":
+                row["native_returncode"] = False
+            elif fault == "runtime_sha":
+                row["runtime"]["sha256"] = None
+            elif fault == "runtime_missing":
+                row.pop("runtime")
+            elif fault == "runtime_path":
+                row["runtime"]["resolved"] = "python"
+            elif fault == "runtime_boolean_bytes":
+                row["runtime"]["bytes"] = True
+            elif fault == "time_naive":
+                row["finished_at"] = "2026-11-03T01:00:02"
+            elif fault == "time_order":
+                row["planned_at"] = "2026-11-03T01:00:03+00:00"
+            elif fault == "publication":
+                row["publication_errors"] = ["started"]
+            elif fault == "unknown_key":
+                row["unreviewed"] = "unexpected"
+        if shard != 1 or fault != "missing":
+            (tmp_path / f"postgres-native-exit-{shard}.json").write_text(json.dumps(row))
+    if fault == "extra":
+        (tmp_path / "postgres-native-exit-33.json").write_text(json.dumps(row))
+    journal = tmp_path / "postgres-shard-1.jsonl"
+    if fault == "journal_pid":
+        journal.write_text(journal.read_text().replace('"pid": 10001', '"pid": 10002'))
+    elif fault == "journal_missing":
+        journal.unlink()
+    elif fault == "journal_incomplete":
+        journal.write_text(journal.read_text().splitlines()[0] + "\n")
+    elif fault == "journal_boolean_exit":
+        journal.write_text(journal.read_text().replace('"exitstatus": 0', '"exitstatus": false'))
+    expected_source = "a" * 40
+    if fault == "source_missing":
+        expected_source = None
+        monkeypatch.delenv("GITHUB_SHA", raising=False)
+    if fault is None:
+        result = verify_reports(tmp_path, 32, require_native_exit=True, source_sha=expected_source)
+        assert result == {"status": "passed", "shards": 32, "collected": 64, "skipped": 0,
+                          "native_exit_receipts": 32, "source_sha": "a" * 40}
+    else:
+        with pytest.raises(ValueError, match="native"):
+            verify_reports(tmp_path, 32, require_native_exit=True, source_sha=expected_source)
 
 
 @pytest.mark.parametrize("total", [4, 8, 16, 24, 32])
