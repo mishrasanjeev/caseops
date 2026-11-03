@@ -3,11 +3,12 @@
 import {
   expect,
   request,
-  test,
   type APIRequestContext,
   type APIResponse,
   type Page,
 } from "@playwright/test";
+import { test } from "./support/prod-diagnostic-test";
+import { noPaidProviderHeaders } from "./support/cost-controls";
 
 const WEB = (process.env.PROD_BASE_URL ?? "https://caseops.ai").trim();
 const API = (process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai").trim();
@@ -230,7 +231,7 @@ test("IPLF-057B production proves UJ-35 and every Madrid exception", async ({
 
   const session = await authenticate(page);
   const headers = { Authorization: `Bearer ${session.access_token}` };
-  const api = await request.newContext();
+  const api = await request.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
   const runId = `${Date.now()}`;
 
   const readinessResponse = await api.get(

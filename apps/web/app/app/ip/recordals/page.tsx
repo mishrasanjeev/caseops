@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
 import { IpListMore } from "@/components/ip/IpListMore";
+import { showIpListError } from "@/components/ip/ip-list-query-state";
 import { RecordalInstrumentUpload } from "@/components/ip/RecordalInstrumentUpload";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -246,6 +247,7 @@ export default function RecordalsPage() {
 
   const recordals = useInfiniteQuery({
     queryKey: ["ip", "recordals", statusFilter, typeFilter],
+    retry: false,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       fetchIpRecordals({
@@ -339,7 +341,7 @@ export default function RecordalsPage() {
           <Skeleton className="h-80" />
           <Skeleton className="h-[560px]" />
         </div>
-      ) : recordals.isError ? (
+      ) : showIpListError(recordals) ? (
         <QueryErrorState error={recordals.error} onRetry={refresh} />
       ) : (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -347,7 +349,7 @@ export default function RecordalsPage() {
             <RecordalList rows={rows} selectedId={selectedId} onSelect={setSelectedId} />
             <IpListMore
               shown={rows.length}
-              total={recordals.data.pages.at(-1)?.total ?? 0}
+              total={recordals.data?.pages.at(-1)?.total ?? 0}
               noun="recordals"
               hasMore={recordals.hasNextPage}
               loading={recordals.isFetchingNextPage}

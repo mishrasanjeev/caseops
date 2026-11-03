@@ -1,5 +1,118 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 2 B4-ADJ-28 Browser Selector: Focused Replay Passed
+
+Partially fixed/NO-GO. CI41469295739 on1a4 has742browser passes,21explicit
+skips and2failures, zero retries/global errors. Both failed before IR101 in the
+new four-case module: an exact wrapping-label lookup missed the correctly named
+combobox. Both page contexts and a native Chromium two-viewport probe preserve
+the diagnosis. Use an exact named-role selector, retain all deeper assertions
+and run all four actual changed journeys before full CI/Docker freeze. All four
+passed actual built1a4 Docker with native JSON/XML/progress reconciliation,
+zero skips/retries and unchanged timeouts. E2E typecheck also passed. Preserve
+the first two infrastructure-only attempts separately (reporter binding, then
+missing canonical public proxy); neither reached the selector. Full09 is
+intentionally interrupted/reaped with699complete PG passes/2097passed phases,
+zero failed phases and all765 full-gate browsers unexecuted. The
+complete backend gates passed10997API cases/3665explicit skips and3654PG cases;
+those source-bound components do not make the failed whole CI green. Preserve
+the incomplete local native run, all failures and setup errors. No runtime,
+permission, timeout, retry or Mac/app/0008 change is justified by this defect.
+
+## November 2 B4-ADJ-27 Offline Governance Fixture: Acceptance Pending
+
+Partially fixed/NO-GO. Hosted286 CI retained126 failed calls in the complete
+deployment-hardening module. The fake Git commit adopted the real enabled policy
+but declared none of its evidence committed, so unrelated guard tests stopped
+early. Keep the original74 explicit/11 truncated evidence rejections,29 missing
+fixture outputs and12 stderr mismatches; replacement must execute all siblings.
+Use an explicit synthetic baseline and independently prove the real committed
+state/evidence path, with all existing invalid-state and drift guards unchanged.
+Docker08 stopped intentionally after62 complete PostgreSQL passes/186phases;
+the rest of3654 and all765 browsers remain unexecuted, not green or skipped.
+Complete network-disabled replacement passed300/300 and900phases, preserving all
+298originals and126former failures with0skips/retries. Parent native XML/journal
+reconciliation passed. Fresh CI/Docker/main/live and both Excel updates pending.
+
+## November 2 B4-ADJ-26 Mandatory Public Case Identity: Acceptance Pending
+
+Partially fixed/NO-GO. Exact00bfb QA41428563260's Oct13 role retained54actual
+passes and54unexecuted Batch4 obligations, not54skips or failed assertions.
+Independent reporter/checker query tokens and UUID redaction disagreed on two
+route-bearing titles; discovery exited0 but mandatory inventory refused before
+execution. Keep both redactors/privacy fences and all36/14/2/2 role obligations.
+Use stable public workflow labels for the two reported routes without changing
+their input URLs, add collection-time privacy rejection and inventory regression,
+then prove real reporter discovery and all original production cases on the final
+release. Do not waive missing/extra/substituted/skipped/retried evidence.
+
+Targeted IP component01 retained126P/8F, with the entire foreign-associate module
+unexecuted after a worker-start timeout. Component02 collected all five modules:
+158P/1F, the unchanged instrument-payload setup exceeding15s. New pagination,
+denial and parent101 assertions passed there; no full acceptance is inferred.
+Correct accessible casing, fill pending options deterministically, and use real
+focus/paste input for text fixture values while retaining every payload assertion
+and the original deadline. Complete replacement module/Docker/live gates pending.
+
+## November 2 B4-ADJ-25 Combined Pagination: NO-GO Until Acceptance
+
+Partially fixed. Integrated PR572391908db locally before freezing another long
+gate. Two00bfb tester failures remain source-bound historical findings, not a
+proven HTTP root cause. Review reproduced an adjacent next-page503 causing the
+query to report isError while retaining data; prior page-wide guards hid that
+data and its retry control. The Parent IR picker also lacked continuation beyond
+100. Correct both with explicit bounded read continuation and transient-only
+cache retention; authorization/policy/unknown failures stay closed. New unit
+and browser regressions and privacy-safe dated diagnostics are in progress.
+No full-Docker, merged-main, deployed or final-workbook promotion yet.
+
+## November 2 Independent CodeQL Alert811: Release-Gated
+
+Partially fixed/NO-GO. Actions CI41413848035 succeeded on BEFA, but its separate
+CodeQL check125173071409 failed with one complete annotation at the conditional
+test target. This check was missed before the long local gate. The corrected
+fixture uses one unconditional expected relative target, with original reparse
+rejection and outside evidence assertions unchanged. No scanner suppression.
+Retain BEFA's completed457-case native group and all partial/interrupted evidence
+without treating them as acceptance of the corrected tree. Fresh native test,
+all hosted checks, full Docker, merge and exact-serving replay remain required.
+
+## November 2 Specialist Prefix And Reused-Journey Contract: NO-GO
+
+DB092 CI41407189368 PG6/8 retained two actual global-index work failures,
+11205/10680>2048; each shard151passed/1failedcall, all152setups/teardowns pass.
+PG13/14 separately fail the direct stale-team journey call after its statistics
+argument changed. This was missed caller propagation, not another DB defect.
+Retain all four complete native artifacts and inspect the aggregate failure
+separately; no blanket timeout or flaky classification. Runtime prefix fix
+passes4controlled20k profiles/12phases on frozen WIP; caller matrix now4cases.
+Original budgets, negative policy checks and SQLite path remain unchanged.
+Final-source full Docker/CI/main/live and paired Excel publication still open.
+
+## November 2 Disclosure Loading: Partially Fixed, NO-GO
+
+Docker02/1c failed the fresh-mixed physical-work case after successful setup:
+disclosure hydration, not outer family selection, repeatedly scans tenant
+versions under custom/auto planning. Raw first/cursor plans, exact SQL/bindings
+and valid-index catalogue are preserved. Runtime tenant-key reuse and a new
+default-join fresh-mixed profile are candidate changes, not verified fixes.
+Original bounds, complete unique predicates, negative integrity and all other
+profiles remain. Require focused PostgreSQL and full replacement Docker/CI/
+main/live plus actual paired Excel publication. No Mac/app/0008 work included.
+
+November2 integration: B5 focused2+14 cases passed, but new canonical00bfb7fc
+requires replacement combined-source acceptance. Earlier Docker03 stopped at a
+Docker image-inspection timeout before builds/native/browser cases; discovery
+alone is not a pass. No production or workbook verdict is promoted from B5.
+
+Combined-tree review adds analyzed/unrefreshed specialist profiles rather than
+warming away the prior risk, and rejects fixture-root junctions before alias
+cleanup. Frozen WIP adverse20k-row hidden-next-page case1/1 passed; Windows
+helper60actual=54passed/6symlink-privilege skips/0failures. The actual root
+junction ordinary-entry case passed; unavailable aliases remain unverified.
+Full final-source Docker/current CI/main/live proof and Excel publication remain
+pending. This does not close the retained earlier-source specialist failure.
+
 ## QA30 — Native fixture host completion, November 1, 2026
 
 Verdict: **Partially fixed**. J20/M22/US-MOB-01..08. Existing V1 and queue/privacy

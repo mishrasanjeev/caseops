@@ -1,5 +1,47 @@
 # CaseOps agent instructions
 
+- Execute every new or changed Playwright journey against the current built
+  local app before freezing an expensive full gate. Discovery and jsdom tests
+  do not prove browser locator semantics. A wrapping select label can include
+  its option text in exact-label lookup while the combobox's accessible name
+  is correct; verify the named role instead of bypassing accessibility checks.
+- A focused Docker browser replay must use the image's configured public API
+  proxy, not its direct container port. Start the canonical loopback proxy and
+  verify marked API, proxy and web identities before login. Preserve failed
+  setup evidence separately from application workflow failures.
+
+- Offline deployment fixtures must declare their synthetic release policy,
+  not inherit the current rollout file while omitting its committed evidence.
+  Separately replay the actual committed policy and exact evidence blob; retain
+  disabled/enabled, missing-evidence, expiry and migration rejection coverage.
+  Run the complete changed offline rehearsal before another full Docker freeze.
+
+- Mandatory browser case titles must name a stable public workflow, never a
+  query value, retained record ID or personal address. Keep exact input routes
+  separate from titles. Prove real reporter discovery agrees with the mandatory
+  inventory before execution; two independent redactors are not one identity
+  contract. Preserve native IDs, complete role counts and every negative guard.
+- Reconcile every requested Vitest module against the native result as well as
+  pytest inventories. A worker-start failure can omit a whole requested module;
+  its cases are unexecuted, not passed. Keep failed reports and unchanged time
+  budgets; fixture typing speed must not replace payload/permission assertions.
+
+- Pagination must reach every eligible picker option as well as every list row.
+  Prove an older parent beyond the first100, its selected identity and bounded
+  per-page reads. A latest-N note is not a continuation control. Preserve loaded
+  rows only after positively identified transient next-page failures; first-page,
+  authorization, policy and unknown errors must still hide cached private data.
+- A redacted production assertion cannot establish a network root cause. Attach
+  bounded allowlisted route/status/timing evidence to the exact dated journey,
+  keep bodies, credentials, record IDs and queries excluded, and retain all old
+  incomplete diagnostics. Never relabel a source-based hypothesis as measured.
+
+- A scheduled all-refs secret scan can fail on later unmerged commits even
+  when the serving tree and release PR range passed. Reconcile the actual
+  selected DAG and every immutable origin/span before classifying it. Review
+  deterministic fixture labels narrowly; never exclude a branch, test folder
+  or rule to obtain green. Prove an unmerged secret still blocks the gate.
+
 - Empty Expo permission lists do not remove permissions inherited from native
   libraries. Prove reviewed removals through the actual manifest projection and
   a fresh APK; preserve unrelated permissions. Match the production iOS minimum
@@ -3887,3 +3929,31 @@ requirements when using the fallback.
   and regress changed bytes, new origins and the complete all-refs boundary.
   Historical review tests must not require unselected deleted-branch objects
   forever; report selection separately and reject any missing selected blob.
+- Exact composite-key equality does not alone prove bounded disclosure loading.
+  Reconcile every later hydration plan under custom, generic and automatic
+  planning with fresh/skewed and stale tenant statistics. Retain actual keys,
+  catalogue/index validity and raw work; a valid composite index may still lose
+  to a repeated company-only scan. Keep original tuple/buffer limits and all
+  missing-key, current-version, tenant and source-integrity rejection paths.
+- An owned Windows CTRL-C may leave an outer PowerShell exit code of zero.
+  Keep the interruption receipt and require the complete native inventory,
+  canonical completion evidence and final PASS before accepting a Docker gate;
+  an outer zero cannot override an interrupted child or retained call failure.
+- Do not replace post-bulk performance coverage with unconditional ANALYZE.
+  Retain analyzed and controlled unrefreshed profiles, deterministic lower-ID
+  foreign noise, original work/deadline bounds and raw plans. Change statistics
+  options only in an independently migrated disposable database and restore
+  their prior values; a warm-plan pass cannot certify the unrefreshed state.
+- A pre-inventory fixture cleanup must reject reparse roots before scanning
+  or unlinking. Windows junctions are not ordinary symlinks; test a real root
+  junction without requiring symbolic-link privileges, preserve outside bytes,
+  and keep unavailable relative-alias cases explicitly unverified.
+- Parameterizing a reused test journey changes its direct-call contract as
+  well as pytest discovery. Inventory every caller and propagate the controlled
+  fixture and profile explicitly; do not hide missing coverage behind a default
+  argument. Reconcile all collected identities, including the caller matrix.
+- A successful CodeQL Actions workflow does not prove its independent code-
+  scanning check is green. Inspect the exact head's check-runs and all native
+  annotations before freezing a long candidate. Keep fixture expectations
+  initialized on every path and preserve the scanner instead of suppressing a
+  test-code finding. Earlier source-bound gates remain historical evidence.

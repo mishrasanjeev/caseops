@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,7 +57,7 @@ vi.mock("@/lib/api/endpoints", async () => {
 });
 
 import MadridPage from "@/app/app/ip/madrid/page";
-import { ApiError } from "@/lib/api/config";
+import { ApiError, NetworkError } from "@/lib/api/config";
 
 const IR = {
   id: "ir-1",
@@ -131,6 +131,23 @@ const EU = {
   source_url: "https://www.wipo.int/madrid/monitor/1888001/EM",
 };
 
+const PARENT_IRS = Array.from({ length: 100 }, (_, index) => ({
+  ...IR,
+  id: `parent-${index + 1}`,
+  mark_name: `Parent mark ${index + 1}`,
+  ir_number: String(1888100 + index),
+}));
+
+const OLDER_PARENT_IR = {
+  ...IR,
+  id: "parent101",
+  mark_name: "Older parent 101",
+  ir_number: "1888200",
+  direction: "inbound" as const,
+  basic_application_id: null,
+  office_of_origin: "USPTO",
+};
+
 const CANDIDATE = {
   id: "event-candidate-1",
   event_kind: "madrid_action",
@@ -166,11 +183,17 @@ const WORKSPACE = {
   provider_activation_blockers: ["provider_contract_not_approved"],
 };
 
-function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function wrapper(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+  return { promise, resolve, reject };
 }
 
 // Mutation tests query only inside their own render container. If a test ever
@@ -193,6 +216,19 @@ async function enterText(user: UserEvent, field: HTMLElement, value: string) {
   expect(field).toHaveDisplayValue(value);
 }
 
+async function fillDesignationForm(user: UserEvent, form: ReturnType<typeof within>) {
+  await enterText(user, form.getByLabelText("Docket title"), "Inbound designation");
+  await enterText(user, form.getByLabelText("Mark"), "DESIGNATED MARK");
+  await enterText(user, form.getByLabelText("Holder"), "Aster Labs");
+  await enterText(user, form.getByLabelText("WIPO reference"), "WIPO-IN-101");
+  await enterText(user, form.getByLabelText("Member code"), "IN");
+  await enterText(user, form.getByLabelText("Designated office"), "Trade Marks Registry India");
+  await user.type(form.getByLabelText("Designation date"), "2026-03-03");
+  await enterText(user, form.getByLabelText("Source URL"), "https://www.wipo.int/madrid/monitor/1888200/IN");
+  await enterText(user, form.getByLabelText("Source reference"), "wipo:in:101");
+  await enterText(user, form.getByLabelText("Class 9 goods/services"), "software");
+}
+
 // The page stamps these times from the wall clock; bound them to the test run.
 function expectTimestampWithin(value: unknown, startedAt: number) {
   expect(typeof value).toBe("string");
@@ -206,7 +242,7 @@ describe("Madrid portfolio", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capabilityMock.mockReturnValue(true);
-    recordsMock.mockResolvedValue({ items: [IR], total: 1, limit: 100, offset: 0 });
+    recordsMock.mockReset().mockResolvedValue({ items: [IR], total: 1, limit: 100, offset: 0 });
     workspaceMock.mockResolvedValue(WORKSPACE);
     docketsMock.mockResolvedValue({ dockets: [], count: 0, has_more: false, next_cursor: null, total_count: 0 });
     coreMock.mockResolvedValue({ applications: [], identifiers: [] });
@@ -237,6 +273,263 @@ describe("Madrid portfolio", () => {
     expect(recordsMock.mock.calls[1]?.[1]).toMatchObject({ offset: 1 });
     expect(screen.getByText("Showing 2 of 2 Madrid records")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: "HTTP 503", error: new ApiError(503, "Temporarily unavailable", {}) },
+    { name: "network failure", error: new NetworkError("Connection lost", new TypeError("Failed to fetch")) },
+  ])("keeps the first Madrid page after a next-page $name and retries only on request", async ({ error }) => {
+    const user = userEvent.setup();
+    const older = { ...IR, id: "ir-older", mark_name: "Older Madrid mark" };
+    const secondPage = { items: [older], total: 2, limit: 100, offset: 1 };
+    const next = deferred<typeof secondPage>();
+    const retry = deferred<typeof secondPage>();
+    recordsMock
+      .mockResolvedValueOnce({ items: [IR], total: 2, limit: 100, offset: 0 })
+      .mockReturnValueOnce(next.promise)
+      .mockReturnValueOnce(retry.promise);
+    // The page must opt out even when its client normally retries reads.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 2, retryDelay: 0 } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByText("Showing 1 of 2 Madrid records");
+      await page.findByRole("heading", { name: IR.mark_name });
+      expect(recordsMock).toHaveBeenCalledTimes(1);
+      await user.click(page.getByRole("button", { name: "Load more Madrid records" }));
+      const busy = page.getByRole("button", { name: "Load more Madrid records" });
+      await waitFor(() => expect(busy).toHaveAttribute("aria-busy", "true"));
+      expect(busy).toBeDisabled();
+      await user.click(busy);
+      expect(recordsMock).toHaveBeenCalledTimes(2);
+      await act(async () => { next.reject(error); });
+      expect(await page.findByRole("alert")).toHaveTextContent(/Could not load more Madrid records/);
+      expect(page.getByRole("heading", { name: IR.mark_name })).toBeVisible();
+      expect(page.getByText("Showing 1 of 2 Madrid records")).toBeVisible();
+      expect(page.queryByTestId("query-error-retry")).not.toBeInTheDocument();
+      const more = page.getByRole("button", { name: "Load more Madrid records" });
+      expect(more).toBeEnabled();
+      expect(more).toHaveAttribute("aria-busy", "false");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(recordsMock).toHaveBeenCalledTimes(2);
+      await user.click(more);
+      await waitFor(() => expect(page.getByRole("button", { name: "Load more Madrid records" })).toHaveAttribute("aria-busy", "true"));
+      expect(recordsMock).toHaveBeenCalledTimes(3);
+      await act(async () => { retry.resolve(secondPage); });
+      expect(await page.findByText("Older Madrid mark")).toBeVisible();
+      expect(page.getByText("Showing 2 of 2 Madrid records")).toBeVisible();
+      expect(page.queryByRole("alert")).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
+      expect(recordsMock.mock.calls.map((call) => call[1].offset)).toEqual([0, 1, 1]);
+      expect(workspaceMock).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([401, 403, 404, 409, "unknown"] as const)("hides cached Madrid rows after a next-page %s failure", async (status) => {
+    recordsMock
+      .mockResolvedValueOnce({ items: [IR], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValueOnce(status === "unknown" ? new Error("Unexpected response") : new ApiError(status, "Read refused", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("heading", { name: IR.mark_name });
+      await userEvent.setup().click(page.getByRole("button", { name: "Load more Madrid records" }));
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryByText(IR.mark_name)).not.toBeInTheDocument();
+      expect(page.queryByText(IR.holder_name)).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip", "madrid", "records"])).toMatchObject({ pages: [{ items: [IR] }] });
+      expect(recordsMock).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it("blocks a failed first-page Madrid refresh even while its private rows remain cached", async () => {
+    recordsMock
+      .mockResolvedValueOnce({ items: [IR], total: 2, limit: 100, offset: 0 })
+      .mockRejectedValue(new ApiError(503, "Temporarily unavailable", {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await page.findByRole("heading", { name: IR.mark_name });
+      await act(async () => { await client.refetchQueries({ queryKey: ["ip", "madrid", "records"], exact: true }); });
+      expect(await page.findByTestId("query-error-retry")).toBeVisible();
+      expect(page.queryByText(IR.mark_name)).not.toBeInTheDocument();
+      expect(page.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip", "madrid", "records"])).toMatchObject({ pages: [{ items: [IR] }] });
+      expect(recordsMock.mock.calls.map((call) => call[1].offset)).toEqual([0, 0]);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([
+    new ApiError(503, "Temporarily unavailable", {}),
+    new NetworkError("Connection lost", new TypeError("Failed to fetch")),
+  ])("keeps a first-page Madrid failure blocking (%s)", async (error) => {
+    recordsMock.mockRejectedValue(error);
+    render(<MadridPage />, { wrapper: wrapper() });
+    expect(await screen.findByTestId("query-error-retry")).toBeVisible();
+    expect(screen.queryByText(IR.mark_name)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more Madrid records" })).not.toBeInTheDocument();
+    expect(recordsMock).toHaveBeenCalledTimes(1);
+    expect(workspaceMock).not.toHaveBeenCalled();
+  });
+
+  it("loads parent IR 101 only on request and creates with that parent's id and direction", async () => {
+    const user = userEvent.setup();
+    const secondPage = { items: [OLDER_PARENT_IR], total: 101, limit: 100, offset: 100 };
+    const next = deferred<typeof secondPage>();
+    recordsMock.mockImplementation((filters, options) => {
+      if (filters?.recordKind !== "international_registration") return Promise.resolve({ items: [IR], total: 1, limit: 100, offset: 0 });
+      return options?.offset ? next.promise : Promise.resolve({ items: PARENT_IRS, total: 101, limit: 100, offset: 0 });
+    });
+    const parentCalls = () => recordsMock.mock.calls.filter(([filters]) => filters?.recordKind === "international_registration");
+    createMock.mockResolvedValue({ ...INDIA, id: "designation-parent101", parent_registration_id: OLDER_PARENT_IR.id, direction: OLDER_PARENT_IR.direction });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      expect(parentCalls()).toHaveLength(0);
+      await user.click(await page.findByRole("button", { name: "New record" }));
+      const form = within(page.getByRole("button", { name: "Create record" }).closest("form")!);
+      expect(parentCalls()).toHaveLength(0);
+      await user.selectOptions(form.getByLabelText("Record type"), "international_designation");
+      const select = form.getByRole<HTMLSelectElement>("combobox", { name: "Parent IR" });
+      await waitFor(() => expect(select.options).toHaveLength(101));
+      expect(Array.from(select.options, (option) => option.value)).toEqual(["", ...PARENT_IRS.map((row) => row.id)]);
+      expect(form.queryByRole("option", { name: /Older parent 101/ })).not.toBeInTheDocument();
+      await fillDesignationForm(user, form);
+      expect(parentCalls()).toHaveLength(1);
+      await user.click(form.getByRole("button", { name: "Load more parent IRs" }));
+      const busy = form.getByRole("button", { name: "Load more parent IRs" });
+      await waitFor(() => expect(busy).toHaveAttribute("aria-busy", "true"));
+      expect(busy).toBeDisabled();
+      await user.click(busy);
+      expect(parentCalls()).toHaveLength(2);
+      await act(async () => { next.resolve(secondPage); });
+      expect(await form.findByRole("option", { name: /Older parent 101/ })).toHaveValue("parent101");
+      await user.selectOptions(select, "parent101");
+      expect(select).toHaveValue("parent101");
+      expect(select.options).toHaveLength(102);
+      expect(form.queryByRole("button", { name: "Load more parent IRs" })).not.toBeInTheDocument();
+      expect(parentCalls().map((call) => call[1].offset)).toEqual([0, 100]);
+      await user.click(form.getByRole("button", { name: "Create record" }));
+      await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+      expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
+        recordKind: "international_designation",
+        parentRegistrationId: "parent101",
+        direction: "inbound",
+        basicApplicationId: null,
+        designatedMemberCode: "IN",
+        designatedOffice: "Trade Marks Registry India",
+        designationEffectiveDate: "2026-03-03",
+        classes: [9],
+        goodsServices: { "9": "software" },
+      }));
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([
+    { name: "HTTP 503", error: new ApiError(503, "Temporarily unavailable", {}) },
+    { name: "network failure", error: new NetworkError("Connection lost", new TypeError("Failed to fetch")) },
+  ])("retains the selected parent IR after a next-page $name and an explicit retry", async ({ error }) => {
+    const user = userEvent.setup();
+    const secondPage = { items: [OLDER_PARENT_IR], total: 101, limit: 100, offset: 100 };
+    const retry = deferred<typeof secondPage>();
+    let nextCalls = 0;
+    recordsMock.mockImplementation((filters, options) => {
+      if (filters?.recordKind !== "international_registration") return Promise.resolve({ items: [IR], total: 1, limit: 100, offset: 0 });
+      if (!options?.offset) return Promise.resolve({ items: PARENT_IRS, total: 101, limit: 100, offset: 0 });
+      nextCalls += 1;
+      return nextCalls === 1 ? Promise.reject(error) : retry.promise;
+    });
+    const parentCalls = () => recordsMock.mock.calls.filter(([filters]) => filters?.recordKind === "international_registration");
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 2, retryDelay: 0 } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await user.click(await page.findByRole("button", { name: "New record" }));
+      const form = within(page.getByRole("button", { name: "Create record" }).closest("form")!);
+      await user.selectOptions(form.getByLabelText("Record type"), "international_designation");
+      const select = form.getByRole<HTMLSelectElement>("combobox", { name: "Parent IR" });
+      await waitFor(() => expect(select.options).toHaveLength(101));
+      await user.selectOptions(select, "parent-50");
+      expect(parentCalls()).toHaveLength(1);
+      await user.click(form.getByRole("button", { name: "Load more parent IRs" }));
+      expect(await form.findByRole("alert")).toHaveTextContent(/Could not load more parent IRs/);
+      expect(select).toBeEnabled();
+      expect(select).toHaveValue("parent-50");
+      expect(Array.from(select.options, (option) => option.value)).toEqual(["", ...PARENT_IRS.map((row) => row.id)]);
+      const more = form.getByRole("button", { name: "Load more parent IRs" });
+      expect(more).toBeEnabled();
+      expect(more).toHaveAttribute("aria-busy", "false");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+      expect(parentCalls()).toHaveLength(2);
+      await user.click(more);
+      await waitFor(() => expect(form.getByRole("button", { name: "Load more parent IRs" })).toHaveAttribute("aria-busy", "true"));
+      expect(select).toHaveValue("parent-50");
+      expect(parentCalls()).toHaveLength(3);
+      await act(async () => { retry.resolve(secondPage); });
+      expect(await form.findByRole("option", { name: /Older parent 101/ })).toHaveValue("parent101");
+      expect(select).toHaveValue("parent-50");
+      expect(form.queryByRole("alert")).not.toBeInTheDocument();
+      expect(parentCalls().map((call) => call[1].offset)).toEqual([0, 100, 100]);
+      expect(createMock).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+    }
+  });
+
+  it.each([401, 403])("hides cached parent options and refuses create after a next-page HTTP %i", async (status) => {
+    const user = userEvent.setup();
+    const initialPage = { items: PARENT_IRS, total: 101, limit: 100, offset: 0 };
+    const initial = deferred<typeof initialPage>();
+    recordsMock.mockImplementation((filters, options) => {
+      if (filters?.recordKind !== "international_registration") return Promise.resolve({ items: [IR], total: 1, limit: 100, offset: 0 });
+      return options?.offset
+        ? Promise.reject(new ApiError(status, "Parent registrations are no longer accessible.", {}))
+        : initial.promise;
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<MadridPage />, { wrapper: wrapper(client) });
+    const page = within(view.container);
+    try {
+      await user.click(await page.findByRole("button", { name: "New record" }));
+      const form = within(page.getByRole("button", { name: "Create record" }).closest("form")!);
+      await user.selectOptions(form.getByLabelText("Record type"), "international_designation");
+      const select = form.getByRole<HTMLSelectElement>("combobox", { name: "Parent IR" });
+      await fillDesignationForm(user, form);
+      await act(async () => { initial.resolve(initialPage); });
+      await waitFor(() => expect(select.options).toHaveLength(101));
+      await user.selectOptions(select, "parent-50");
+      await user.click(form.getByRole("button", { name: "Load more parent IRs" }));
+      expect(await form.findByRole("alert")).toHaveTextContent("Parent registrations are no longer accessible.");
+      expect(select).toBeDisabled();
+      expect(Array.from(select.options, (option) => option.value)).toEqual([""]);
+      expect(form.queryByRole("option", { name: /Parent mark/ })).not.toBeInTheDocument();
+      expect(form.queryByRole("button", { name: "Load more parent IRs" })).not.toBeInTheDocument();
+      expect(client.getQueryData(["ip", "madrid", "records", "international_registration"])).toMatchObject({ pages: [{ items: PARENT_IRS }] });
+      await user.click(form.getByRole("button", { name: "Create record" }));
+      expect(await form.findByText("International registrations could not be loaded. Retry before creating a designation.")).toBeVisible();
+      expect(createMock).not.toHaveBeenCalled();
+      expect(recordsMock.mock.calls.filter(([filters]) => filters?.recordKind === "international_registration").map((call) => call[1].offset)).toEqual([0, 100]);
+    } finally {
+      view.unmount();
+      client.clear();
+    }
   });
 
   it("BUG-015 picks the basic mark docket through the picker and offers only the validator's Indian applications", async () => {
@@ -319,7 +612,7 @@ describe("Madrid portfolio", () => {
     expect(form.getByLabelText("Class 42 goods/services")).toBeVisible();
     await waitFor(() => expect(form.getByLabelText("Parent IR")).toBeEnabled());
     // Parent options come from the server's international-registration filter.
-    expect(recordsMock).toHaveBeenCalledWith({ recordKind: "international_registration" });
+    expect(recordsMock).toHaveBeenCalledWith({ recordKind: "international_registration" }, expect.objectContaining({ offset: 0 }));
     await user.selectOptions(form.getByLabelText("Parent IR"), IR.id);
     await enterText(user, form.getByLabelText("Docket title"), "ASTER EU");
     await enterText(user, form.getByLabelText("Mark"), "ASTER");

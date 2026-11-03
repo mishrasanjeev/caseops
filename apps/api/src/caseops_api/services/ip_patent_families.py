@@ -666,7 +666,9 @@ def list_patent_families(
         picked_version = (
             select(IpPatentFamilyVersion)
             .where(
-                IpPatentFamilyVersion.company_id == context.company.id,
+                # Keep this tenant runtime-bound too: fresh skewed statistics
+                # can favor a company-only index for every admitted version.
+                IpPatentFamilyVersion.company_id == company_key,
                 IpPatentFamilyVersion.family_id == wanted_versions.c.family_id,
                 IpPatentFamilyVersion.version == wanted_versions.c.version,
             )

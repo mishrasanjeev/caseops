@@ -29,6 +29,44 @@ See `docs/mobile/HOST_TOOLING_SECURITY_2026-10-28.md` and QA18 in the enterprise
 
 # CaseOps  - Work To Be Done
 
+## November 2 Four-Case Browser Preflight Passed; Full Replacement Required
+
+NO-GO on1a4: only two new IR101 cases failed, before their pagination assertions,
+while742browser cases passed/21skipped and the complete backend gates passed.
+The exact wrapping-label selector was not equivalent to the accessible combobox
+name in Chromium. Fix only that lookup, execute all four changed journeys on
+built Docker through its canonical public proxy (all4nowpassed; zero retries,
+skips/failures; native identities/JSON/XML/progress reconciled), then freeze a fresh complete
+CI/Docker/main/deployed acceptance. Discovery and unit mocks were insufficient
+preflight. Preserve the intentionally superseded native evidence and every
+failed focused setup; do not relabel old components as a new full pass. Full09
+was gracefully interrupted/reaped with699complete PG passes/2097passed phases,
+no failed phases; all765 full-gate browser cases remain unexecuted. Its source
+was unchanged and only its own stack was cleaned. Canonical main independently
+advanced through PR571 during this run; integrate and revalidate before freezing.
+
+## November 2 Deployment Rehearsal Replacement Pending
+
+NO-GO on286: CI41450975514 retained126 deployment-hardening failures after a
+synthetic commit inherited enabled rollout state without its evidence blob.
+Production correctly rejected it. Isolate fixture policy, separately replay the
+actual committed state and exact evidence. The full changed offline module
+passed300/300,900phases,0skips/retries with all298original cases preserved and
+all126failed calls passing. Fresh CI/full Docker/release still required. Retain62
+PostgreSQL passes/186phases
+from intentionally stopped Docker08; remaining native/browser inventory is not
+complete. Current green scanner/CodeQL components are not green whole CI, merge,
+deployment or final Excel proof. Leave MacBook/app/readthrough0008 untouched.
+
+## November 2 Disclosure Work Replacement Pending
+
+NO-GO:1c Docker02 retained a real fresh-mixed disclosure-loading failure and
+was deliberately stopped for repair; its remaining inventory is unverified.
+Keep all original plans and incomplete evidence. Prove runtime-bound tenant
+lookup and controlled fresh-mixed/default-join profile against actual PostgreSQL
+before full fresh-image Docker/current CI/main/live/cadence and both Excel
+publications. No threshold increase, fixture dilution or Mac/app/0008 change.
+
 ## October 31 Native Replacement and Fresh Dependency Gate
 
 J20/M22 remains **Partially implemented; release NO-GO**. PR #558's

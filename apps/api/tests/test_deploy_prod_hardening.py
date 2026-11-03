@@ -2140,6 +2140,16 @@ def _security_gate_payloads() -> dict:
     }
 
 
+def _disabled_governance_state() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "enabled": False,
+        "rollout_expires_at": None,
+        "approved_by": None,
+        "evidence": None,
+    }
+
+
 def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
@@ -2176,8 +2186,8 @@ def _run_deploy_with_fakes(
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     gcloud_log = tmp_path / "gcloud.log"
-    # The release reads the state from its own commit; by default that is the
-    # checked-in file. The live service starts from the given governance values.
+    # Keep the synthetic commit independent of ambient rollout state. The actual
+    # committed policy has a separate positive replay with its exact evidence.
     (tmp_path / "live-governance-flag").write_text(live_governance_flag, encoding="utf-8")
     if live_governance_expiry is not None:
         (tmp_path / "live-governance-expiry").write_text(
@@ -2902,20 +2912,12 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
-            "FAKE_GOVERNANCE_STATE": (
-                _read_repo_text(_GOVERNANCE_STATE_FILE)
+            "FAKE_GOVERNANCE_STATE": json.dumps(
+                _disabled_governance_state()
                 if governance_state is None
-                else json.dumps(governance_state)
+                else governance_state
             ),
-            # The checked-in state names evidence that the real release commit carries.
-            "FAKE_COMMITTED_FILES": "\n".join(
-                committed_files
-                if governance_state is not None
-                else (
-                    *committed_files,
-                    json.loads(_read_repo_text(_GOVERNANCE_STATE_FILE)).get("evidence") or "",
-                )
-            ),
+            "FAKE_COMMITTED_FILES": "\n".join(committed_files),
             "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
             "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
             "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
@@ -4036,7 +4038,7 @@ def test_deploy_prod_fails_closed_on_api_traffic_or_config_drift(
 ) -> None:
     # A disabled release, so an enabled live flag is drift whatever the repo state says.
     result = _run_deploy_with_fakes(
-        tmp_path, traffic_mode=traffic_mode, governance_state=_DISABLED_GOVERNANCE_STATE
+        tmp_path, traffic_mode=traffic_mode, governance_state=_disabled_governance_state()
     )
 
     assert result.returncode != 0, result.stdout + result.stderr
@@ -4064,13 +4066,6 @@ def test_deploy_prod_fails_closed_on_unhealthy_api(
 
 
 _GOVERNANCE_EVIDENCE = "docs/ip-implementation/evidence/m2/IPLF-027B/a2-enable-offline.json"
-_DISABLED_GOVERNANCE_STATE: dict[str, object] = {
-    "schema_version": 1,
-    "enabled": False,
-    "rollout_expires_at": None,
-    "approved_by": None,
-    "evidence": None,
-}
 
 
 def _utc_in(days: float) -> str:
@@ -4095,13 +4090,68 @@ def _api_deploy_call(tmp_path: Path) -> str:
     return deploy.split(" --container ")[1]
 
 
+def test_deploy_prod_offline_default_does_not_read_ambient_governance_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read_repo_text = _read_repo_text
+
+    def reject_ambient_policy(relative_path: str) -> str:
+        assert relative_path != _GOVERNANCE_STATE_FILE, (
+            "An unrelated deployment rehearsal must declare its own policy"
+        )
+        return read_repo_text(relative_path)
+
+    monkeypatch.setattr(sys.modules[__name__], "_read_repo_text", reject_ambient_policy)
+    result = _run_deploy_with_fakes(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|" in _api_deploy_call(tmp_path)
+    assert "DONE abcdef1" in result.stdout
+
+
+def test_deploy_prod_replays_actual_committed_governance_policy(tmp_path: Path) -> None:
+    state_result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "show", f"HEAD:{_GOVERNANCE_STATE_FILE}"],
+        capture_output=True, text=True, timeout=10, check=True,
+    )
+    state = json.loads(state_result.stdout)
+    committed: tuple[str, ...] = ()
+    if state["enabled"]:
+        evidence = state["evidence"]
+        assert isinstance(evidence, str)
+        kind = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "cat-file", "-t", f"HEAD:{evidence}"],
+            capture_output=True, text=True, timeout=10, check=True,
+        )
+        assert kind.stdout.strip() == "blob"
+        committed = (evidence,)
+
+    result = _run_deploy_with_fakes(
+        tmp_path, governance_state=state, committed_files=committed,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    enabled = str(state["enabled"]).lower()
+    api = _api_deploy_call(tmp_path)
+    assert f"|CASEOPS_IP_RULE_GOVERNANCE_ENABLED={enabled}|" in api
+    if state["enabled"]:
+        assert (
+            f"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT={state['rollout_expires_at']}|"
+        ) in api
+        assert "--remove-env-vars" not in api
+    else:
+        assert " --remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT " in api
+    assert f"rule governance explicitly {enabled}" in result.stdout
+    assert "DONE abcdef1" in result.stdout
+
+
 def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
     tmp_path: Path,
 ) -> None:
     # The live service still carries an earlier A2 configuration.
     result = _run_deploy_with_fakes(
         tmp_path,
-        governance_state=_DISABLED_GOVERNANCE_STATE,
+        governance_state=_disabled_governance_state(),
         live_governance_flag="true",
         live_governance_expiry=_utc_in(10),
     )
@@ -4121,7 +4171,7 @@ def test_deploy_prod_disabled_readback_rejects_a_lingering_expiry(tmp_path: Path
     result = _run_deploy_with_fakes(
         tmp_path,
         traffic_mode="governance-expiry-stale",
-        governance_state=_DISABLED_GOVERNANCE_STATE,
+        governance_state=_disabled_governance_state(),
     )
 
     assert result.returncode != 0, result.stdout + result.stderr
