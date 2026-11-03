@@ -3,13 +3,28 @@ Set-StrictMode -Version Latest
 $clock = [Diagnostics.Stopwatch]::StartNew()
 function Check { if ($clock.ElapsedMilliseconds -ge 10000) { throw 'COMMAND_FIELD_DEADLINE' } }
 
+function CheckSourceExtent([long] $sourceLength) {
+    if ($sourceLength -le 0 -or $sourceLength -gt 131072) { throw 'COMMAND_FIELD_SOURCE_BOUND' }
+}
+# This cap bounds this fixture's growing pinned source file, not native admission.
+# Exercise the same guard before it admits the real FileStream length.
+CheckSourceExtent 1
+CheckSourceExtent 131072
+foreach ($sourceLength in @(-1, 0, 131073)) {
+    $sourceFailure = $null
+    try { CheckSourceExtent $sourceLength } catch { $sourceFailure = $_ }
+    if ($null -eq $sourceFailure -or $sourceFailure.Exception.Message -ne 'COMMAND_FIELD_SOURCE_BOUND') {
+        throw 'COMMAND_FIELD_SOURCE_BOUND_CONTROL'
+    }
+}
+
 # Execute the production field validator with independent literal ABI fixtures.
 # This tests PowerShell arithmetic/guards; it never calls a Windows API or an
 # ACL setter and does not establish native Windows handle acceptance.
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'host-node-trust-ci.mjs'))
 $stream = [IO.FileStream]::new($source, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try {
-    if ($stream.Length -le 0 -or $stream.Length -gt 65536) { throw 'COMMAND_FIELD_SOURCE_BOUND' }
+    CheckSourceExtent $stream.Length
     $bytes = [byte[]]::new([int]$stream.Length + 1)
     $n = 0
     while ($n -lt $bytes.Length) {

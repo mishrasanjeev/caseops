@@ -1,5 +1,11 @@
 # Exact-Release Production Verification Budget Recovery
 
+> November3 supersession: serving identities and budget/layout conclusions
+> below describe the dated release. The current candidate uses four serial
+> October13A/October13B/Batch3/Batch4 jobs with unchanged38-minute limits; see
+> [the strict bug ledger](STRICT_BUG_TASKLIST_2026-04-22.md). Complete current
+> source and deployed acceptance remain pending. Historical receipts stay intact.
+
 ## Scope And Current Truth
 
 This is an operational acceptance correction for ARCH-OPS-23/QG-SEC-004 and

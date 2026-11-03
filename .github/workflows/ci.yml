@@ -407,7 +407,7 @@ jobs:
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
             -o faulthandler_timeout=60
-        run: uv run python -m pytest -q -m postgres
+        run: uv run python ../../scripts/pytest_native_receipt.py "postgres-native-exit-${{ matrix.shard }}.json" -- -q -m postgres
 
       - name: Upload exact PostgreSQL collection and results
         if: always()
@@ -418,6 +418,7 @@ jobs:
             apps/api/postgres-shard-${{ matrix.shard }}.json
             apps/api/postgres-shard-${{ matrix.shard }}.xml
             apps/api/postgres-shard-${{ matrix.shard }}.jsonl
+            apps/api/postgres-native-exit-${{ matrix.shard }}.json
             apps/api/postgres-shard-${{ matrix.shard }}-native/*.jsonl
             apps/api/postgres-shard-${{ matrix.shard }}-readthrough/
             apps/api/postgres-shard-${{ matrix.shard }}-query-plans/
@@ -447,7 +448,9 @@ jobs:
           merge-multiple: true
       - name: Reconcile complete PostgreSQL acceptance
         working-directory: apps/api
-        run: uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence --total 32
+        run: >-
+          uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence
+          --total 32 --require-native-exit
 
   web:
     name: Web (typecheck + vitest + build)
@@ -576,17 +579,19 @@ jobs:
         timeout-minutes: 12
         run: docker build --pull --target builder --file apps/web/Dockerfile --tag "caseops-web-builder:${{ github.sha }}" .
 
-  e2e:
-    name: Playwright app suite
+  e2e-projects:
+    name: Playwright app suite (${{ matrix.project }})
     runs-on: ubuntu-24.04
-    # The complete inventory is intentionally serial: it includes the dated
-    # browser journeys and the 4,496-row statute-source proof. The prior
-    # 30-minute ceiling canceled a still-progressing run and misreported the
-    # resulting cascade as a product failure. Keep a bounded budget that is
-    # above the observed full-run time while still failing a genuinely hung
-    # browser job.
+    # Keep each project serial and its stack isolated. The original 60-minute
+    # whole job completed 762/766 rows before cancellation; Chromium's complete
+    # 713 and mobile's separate 53 now retain that same per-job bound.
     timeout-minutes: 60
     needs: [api, web, postgres-validation]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        project: [app-chromium, app-mobile]
     steps:
       - uses: actions/checkout@v4
 
@@ -723,8 +728,9 @@ jobs:
           CASEOPS_RELEASE_SHA: ${{ github.sha }}
         run: >-
           uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
-          run --invocation ci-app -- --config=playwright.app.config.ts
-          --workers=1 --retries=0 --reporter=list --output=test-results/app
+          run --invocation ci-${{ matrix.project }} -- --config=playwright.app.config.ts
+          --project=${{ matrix.project }} --workers=1 --retries=0 --reporter=list
+          --output=test-results/${{ matrix.project }}
 
       - name: Reconcile app native Playwright evidence
         if: always() && steps.app-playwright.outcome != 'skipped'
@@ -732,7 +738,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
         run: >-
           uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
-          validate --required ci-app
+          validate --required ci-${{ matrix.project }}
 
       # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
       # `failure()` and `!cancelled()` skip this step - verified on run
@@ -745,12 +751,66 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: |
             playwright-report/
             test-results/
-            test-results/prod-native-evidence/ci-app/
+            test-results/prod-native-evidence/ci-${{ matrix.project }}/
           retention-days: 7
+
+      # Upload only this invocation's native files as a separate artifact.
+      # Full reports remain isolated; their shared fixture paths are never merged.
+      - name: Upload App native evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-native-${{ matrix.project }}
+          path: test-results/prod-native-evidence/ci-${{ matrix.project }}/
+          retention-days: 7
+          if-no-files-found: error
+
+  e2e:
+    name: Playwright app suite
+    runs-on: ubuntu-24.04
+    needs: [api, web, postgres-validation, e2e-projects]
+    if: always() && !cancelled()
+    timeout-minutes: 5
+    steps:
+      - name: Require successful App projects
+        env:
+          APP_PROJECT_RESULT: ${{ needs['e2e-projects'].result }}
+        run: test "$APP_PROJECT_RESULT" = success
+
+      - uses: actions/checkout@v4
+
+      - name: Download Chromium native evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-native-app-chromium
+          path: test-results/prod-native-evidence/ci-app-chromium
+
+      - name: Download mobile native evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-native-app-mobile
+          path: test-results/prod-native-evidence/ci-app-mobile
+
+      - name: Reconcile complete App project union
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          python3 -B scripts/prod_playwright_evidence.py validate
+          --required ci-app-chromium ci-app-mobile --app-project-union
+          > app-project-union.json
+
+      - name: Retain App union receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-app-union
+          path: app-project-union.json
+          retention-days: 7
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # Staging deploy skeleton (Sprint 14 / BG-044).
