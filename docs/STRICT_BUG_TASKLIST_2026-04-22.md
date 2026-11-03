@@ -1,5 +1,74 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 3 Native Observer CodeQL Repair: Final Acceptance Pending
+
+**Partially fixed; native release remains NO-GO.** The3dfa candidate's
+CodeQL workflow succeeded, but independent check125846714795 retained14
+actual Python findings on merge9a652/treeae8671: two implicit string-list
+concatenations, eleven BaseException handlers and one empty handler. All14
+remain historical evidence. No rule, exception registry or suppression changed.
+The two intended shell strings now use explicit+; the complete module's
+constant-folded AST and command values are identical.
+
+The native observer now gives publication and child resources explicit owners,
+classifies errors/interrupts/exits/other controls separately, and preserves the
+first observer failure and any already-observed nonzero native exit. Persistent
+clock errors cannot bypass stop attempts. An unavailable scheduling clock grants
+zero wait allowance, and a stop alone never claims reaping. Original4-second
+cleanup and12-minute CI limits, raw streams, CLI, UV activation and runtime
+identity checks remain. Independent Source02 review found no remaining material
+source issue; fresh native CodeQL and its separate alert verdict are still required.
+
+Source02 retains all original59 tests byte-for-byte and adds120 controls.
+Windows ran176 passes plus three original POSIX-only skips across179 cases/534
+phases; Linux ran179 passes/537 phases without skips. The integrated Windows
+inventory ran508 cases:505 passes, the same three skips and1521 complete phases
+(179 helper,119 sharding,58 finalizer,152 workflow). Ruff on seven distinct files
+passed; all3984 source byte/metadata bookends matched. All328 deployment cases
+were collected in exact prior order, but their bodies have not yet run here.
+
+The integrated controller exited1 after these native commands exited0: its new
+reader confused declaration order with sorted shard membership in seven shards.
+Retain that observer failure. Separate read-only reconciliation verified every
+508 phase/JUnit identity and both ordering contracts without a subject replay.
+Both platforms' real32 launcher fixtures prove64 disjoint cases/192 phases and
+32 source/PID/runtime-bound native0 receipts. Linux's real uv0.13.7 controls
+separately retain numeric139, deliberate SIGSEGV and refused-scope exits. Root
+checked487 retained payload pins and current named process dispositions. See
+native-exit-integrated508-readback01/ROOT-RECONCILIATION.json and
+native-exit-linux179-02/MANIFEST.json.
+
+The first Linux attempt refused before all target bodies because the retained
+owned diagnostic PostgreSQL service shared its namespace. Root stopped only that
+exact isolated service cleanly and retained its volume/data; protected55463 was
+untouched. The fresh namespace02 replay passed with no listener, SQL, install or
+external network. Keep setup-refusal01 as zero-case incomplete evidence.
+
+Current3dfa's full frontend passed286 files/2614 tests, type checks, coverage and
+production build under shipping Linux Node22.23.4. Its PG21 ran all124 cases/372
+phases with native exit0, including the formerly interrupted fresh projection.
+That call's79.019s includes seeding; the measured query was0.709002s under the
+unchanged10-second assertion. This does not identify or erase the old exit139.
+See ci-3dfa-web-review01 and pg21-3dfa-success-review01. Current3dfa Security8/8
+and Mobile5/5 also passed, including the corrected18-step/171-command consumer.
+These scoped passes do not clear3dfa's14 CodeQL findings or certify its successor.
+
+Privacy9a's separate legacy job125811827031 completed41 passes, one BUG015
+failure and three skips across45 cases. Its failed provider-code assertion does
+not retain the actual redacted409 body/code; do not infer a particular guard.
+The current operational-Matter selector remains pending exact-serving whole-file
+acceptance. The three skipped UI boundaries likewise remain unverified; their
+banner/trigger/snippet predicates do not establish data or capability causes.
+See privacy9a-legacy-failure-review01. No old product cause is claimed from a
+different local fixture pass.
+
+Fresh final-source CI/Security/Mobile/CodeQL, all328 actual rehearsal bodies,
+exact-main canonical deployment, complete exact-serving QA, and two later clean
+serial maintenance executions remain required. Private cadence remains held.
+The owned venv's literal-home qualification is not yet executed. Actual APK,
+emulator/device sign-in and store distribution remain separate acceptance.
+
+
 ## November 3 Adjacent Workflow Consumers: Retain the Rejected Candidate
 
 **Partially fixed; replacement acceptance pending.** After0fbcbe5b was frozen,

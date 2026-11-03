@@ -1,5 +1,44 @@
 # Strict Enterprise Gap Tasklist
 
+## November 3 Native CodeQL Findings and Replacement Component Proof
+
+**Partially fixed; native release remains NO-GO.** Successful3dfa workflow jobs
+did not clear independent CodeQL's14 actual findings. The repair makes two
+intentional strings explicit without changing their complete values/AST, and
+uses typed failure outcomes plus explicit publication/child owners. No broad
+catch alias, suppression, rule waiver, production budget or retry change was
+introduced. Earliest observer failure, nonzero native-exit priority, original
+runtime/UV/CLI contracts and four-second cleanup remain. Unknown clock budget
+is zero; uncertain reaping remains honestly unavailable.
+
+Complete replacement component proof: integrated508 cases/1521 phases equals
+505 Windows passes plus three original POSIX skips; separate179-case Linux
+module passed all537 phases. Both actual32-launcher fixtures prove64 cases/192
+phases/32 native0 receipts; real LinuxUV numeric139/SIGSEGV/refused-scope controls
+retain distinct native statuses. All3984 source bookends and Ruff7 matched.
+Root independently read487 pinned payloads. Retain the integrated controller's
+postprocessing exit1 separately: corrected read-only evidence proves native
+results and declaration order/membership without rerunning subjects. Retain the
+Linux initial zero-body listener refusal and its separately isolated replacement.
+The owned diagnostic PG volume/data and protected55463 remain preserved.
+
+Current3dfa frontend286/2614, PG21 complete124/372/native0, Security8/8 and
+Mobile5/5 are scoped passes. The fresh projection's0.709002s measured query is
+separate from79.019s including seeding; the historical139 cause is unidentified.
+Privacy9a legacy's41pass/1fail/3skip result still needs exact-serving BUG015
+replacement acceptance. Redacted provider-code failure and skipped UI predicates
+do not establish their underlying product/data/capability causes.
+
+See the matching November3 strict bug-ledger entry,
+native-exit-integrated508-readback01/ROOT-RECONCILIATION.json,
+native-exit-linux179-02/MANIFEST.json and pg21-3dfa-success-review01. Current328
+collection is not body execution. Final-source complete gates, fresh CodeQL
+analysis and separate alert verdict, actual328 rehearsal, exact-main deploy,
+whole serving QA and two later serial clean maintenance runs remain pending;
+private cadence stays held. Venv home pin, actual APK/device and store readiness
+are not certified. M15/NFT-016;J20/M22.
+
+
 ## November 3 Workflow Consumer Reconciliation Still Requires Acceptance
 
 **Partially implemented; native release NO-GO.** The0fbcbe5b candidate omitted

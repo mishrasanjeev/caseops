@@ -1459,14 +1459,18 @@ def test_capacity_split_keeps_exact_oct13_commands_and_independent_batch_routes(
     lines = [line.strip() for line in step["run"].splitlines()
              if line.strip().startswith('bash "$RUNNER_TEMP/caseops-prod-playwright" ')]
     assert lines == [
-        'bash "$RUNNER_TEMP/caseops-prod-playwright" '
-        'test-legal-write-oct13-a --config=playwright.prod-ram.config.ts '
-        '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
-        '--reporter=list --output=test-results/test-legal-write-oct13-a ;;',
-        'bash "$RUNNER_TEMP/caseops-prod-playwright" '
-        'test-legal-write-oct13-b --config=playwright.prod-ram.config.ts '
-        '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
-        '--reporter=list --output=test-results/test-legal-write-oct13-b ;;',
+        (
+            'bash "$RUNNER_TEMP/caseops-prod-playwright" '
+            + 'test-legal-write-oct13-a --config=playwright.prod-ram.config.ts '
+            + '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
+            + '--reporter=list --output=test-results/test-legal-write-oct13-a ;;'
+        ),
+        (
+            'bash "$RUNNER_TEMP/caseops-prod-playwright" '
+            + 'test-legal-write-oct13-b --config=playwright.prod-ram.config.ts '
+            + '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
+            + '--reporter=list --output=test-results/test-legal-write-oct13-b ;;'
+        ),
     ]
     assert '*) echo "::error::Unreviewed October13 partition."; exit 1 ;;' in step["run"]
     assert _shard_step(

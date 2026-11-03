@@ -686,3 +686,588 @@ def test_directory_fsync_retains_published_state_and_does_not_mask_primary(
             native.os.fstat(descriptor)
     assert json.loads(path.read_text()) == {"owned": True}
     assert list(tmp_path.glob(path.name + ".*")) == []
+
+
+# Control requests are distinct from operational failures, including direct
+# control subclasses that are outside Exception/KeyboardInterrupt/SystemExit.
+class OwnedDirectControl(BaseException):
+    pass
+
+
+CONTROL_LABELS = ("keyboard", "system-exit", "generator-exit", "direct-base")
+
+
+def _owned_control(label):
+    if label not in CONTROL_LABELS:
+        raise ValueError("Unsupported owned control label")
+    if label == "keyboard":
+        return KeyboardInterrupt("private-control-value")
+    if label == "system-exit":
+        return SystemExit(0)
+    if label == "generator-exit":
+        return GeneratorExit("private-control-value")
+    return OwnedDirectControl("private-control-value")
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("phase", [
+    "pid", "started_clock", "started_publication", "wrapped_publication", "wait",
+])
+def test_owned_child_controls_keep_handle_through_identity_clock_publication_and_wait(
+    tmp_path, monkeypatch, label, phase,
+):
+    if phase not in {"pid", "started_clock", "started_publication", "wrapped_publication", "wait"}:
+        raise ValueError("Unsupported owned child control phase")
+    control, children, waits, reads, live_at_fault = _owned_control(label), [], [], [], []
+    path = tmp_path / "receipt.json"
+    clock, interrupted = native._utc, []
+    original_dump = native.json.dump
+
+    def dump(value, *args, **kwargs):
+        if phase == "wrapped_publication" and value["stage"] == "started":
+            live_at_fault.append(children[0].poll())
+            raise control
+        return original_dump(value, *args, **kwargs)
+
+    def utc():
+        if phase == "started_clock" and children and not interrupted:
+            interrupted.append(True)
+            live_at_fault.append(children[0].poll())
+            raise control
+        return clock()
+
+    class Child:
+        @property
+        def pid(self):
+            reads.append(True)
+            if phase == "pid":
+                live_at_fault.append(children[0].poll())
+                raise control
+            return children[0].pid
+
+        def wait(self, timeout=None):
+            waits.append(timeout)
+            if timeout is None and phase == "wait":
+                live_at_fault.append(children[0].poll())
+                raise control
+            return children[0].wait(timeout=timeout)
+
+        def terminate(self):
+            children[0].terminate()
+
+        def kill(self):
+            children[0].kill()
+
+    def popen(command):
+        children.append(subprocess.Popen(command))
+        return Child()
+
+    def publish(target, row, **kwargs):
+        if phase == "started_publication" and row["stage"] == "started":
+            live_at_fault.append(children[0].poll())
+            raise control
+        native._publish(target, row, **kwargs)
+
+    monkeypatch.setattr(native, "_utc", utc)
+    monkeypatch.setattr(native.json, "dump", dump)
+    try:
+        result = _contained_run([sys.executable, "-c", "import time;time.sleep(30)"], path,
+                                popen=popen, publish=publish)
+        row = json.loads(path.read_text())
+        completed = children[0].poll() if children else None
+        cleanup_waits = [timeout for timeout in waits if timeout is not None]
+        assert result == (130 if label == "keyboard" else 1)
+        assert len(children) == 1 and completed is not None
+        assert reads == [True]
+        assert live_at_fault == [None]
+        assert row["child_pid"] == (None if phase == "pid" else children[0].pid)
+        assert row["error_type"] == type(control).__name__
+        assert row["stage"] == ("wait_failed" if phase == "wait" else "observer_failed")
+        assert row["native_returncode"] is None and row["native_signal"] is None
+        assert row["exit_code"] is None and row["native_exit_observed_before_failure"] is False
+        assert row["cleanup"]["reaped"] is True and row["cleanup"]["budget_seconds"] == 4
+        assert 1 <= len(cleanup_waits) <= 2 and all(0 <= timeout <= 2 for timeout in cleanup_waits)
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=2)
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("code", [0, 17])
+def test_completed_native_status_precedes_every_final_publication_control(
+    tmp_path, capsys, label, code,
+):
+    path, calls, control = tmp_path / "receipt.json", [], _owned_control(label)
+
+    def publish(target, row, **kwargs):
+        calls.append(row["stage"])
+        if row["stage"] == "exited":
+            raise control
+        native._publish(target, row, **kwargs)
+
+    result = _contained_run([sys.executable, "-c", f"raise SystemExit({code})"], path,
+                            publish=publish)
+    logged = json.loads(capsys.readouterr().err.splitlines()[-1])
+    retained = json.loads(path.read_text())
+    assert result == (17 if code else 130 if label == "keyboard" else 1)
+    assert calls == ["planned", "started", "exited"]
+    assert logged["native_returncode"] == code and logged["cleanup"] is None
+    assert logged["error_type"] == type(control).__name__
+    assert retained["stage"] == "started"
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("code", [0, 17])
+def test_observed_native_failure_survives_exit_record_clock_controls(
+    tmp_path, monkeypatch, label, code,
+):
+    path, completed, actions, children = tmp_path / "receipt.json", [], [], []
+    clock, control, interrupted = native._utc, _owned_control(label), []
+
+    def utc():
+        if completed and not interrupted:
+            interrupted.append(True)
+            raise control
+        return clock()
+
+    def popen(command):
+        child = subprocess.Popen(command)
+        children.append(child)
+
+        def wait(timeout=None):
+            value = child.wait(timeout=timeout)
+            completed.append(value)
+            return value
+
+        return SimpleNamespace(pid=child.pid, wait=wait,
+                               terminate=lambda: actions.append("terminate"),
+                               kill=lambda: actions.append("kill"))
+
+    monkeypatch.setattr(native, "_utc", utc)
+    try:
+        result = _contained_run([sys.executable, "-c", f"raise SystemExit({code})"], path,
+                                popen=popen)
+        row = json.loads(path.read_text())
+        native_status = children[0].poll()
+        assert result == (17 if code else 130 if label == "keyboard" else 1)
+        assert completed == [code] and actions == [] and native_status == code
+        assert row["stage"] == "observer_failed" and row["error_type"] == type(control).__name__
+        assert row["native_returncode"] == code and row["exit_code"] == code
+        assert row["native_exit_observed_before_failure"] is True and row["cleanup"] is None
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=2)
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+def test_publication_controls_retain_primary_then_close_and_unlink_failures(
+    tmp_path, monkeypatch, label,
+):
+    control, closed_control = _owned_control(label), SystemExit(7)
+    unlink_control = OwnedDirectControl("private-unlink")
+    path, descriptors = tmp_path / "receipt.json", []
+    factory, unlink = native.tempfile.NamedTemporaryFile, Path.unlink
+
+    def create(**kwargs):
+        stream = factory(**kwargs)
+        descriptors.append(stream.fileno())
+        close = stream.close
+
+        def closed():
+            close()
+            raise closed_control
+
+        stream.close = closed
+        return stream
+
+    def dump(*_args, **_kwargs):
+        raise control
+
+    def remove(target, *args, **kwargs):
+        unlink(target, *args, **kwargs)
+        raise unlink_control
+
+    monkeypatch.setattr(native.tempfile, "NamedTemporaryFile", create)
+    monkeypatch.setattr(native.json, "dump", dump)
+    monkeypatch.setattr(Path, "unlink", remove)
+    with pytest.raises(native.PublicationError) as caught:
+        native._publish(path, {"owned": True}, initial=True)
+    error = caught.value
+    assert error.primary is control and error.__cause__ is control and error.published is False
+    assert error.failures == [
+        {"stage": "serialize", "error_type": type(control).__name__},
+        {"stage": "file_close", "error_type": "SystemExit"},
+        {"stage": "temporary_unlink", "error_type": "OwnedDirectControl"},
+    ]
+    retained_exists = path.exists()
+    assert len(descriptors) == 1 and not retained_exists
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            native.os.fstat(descriptor)
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("phase", ["terminate", "terminate_wait"])
+def test_cleanup_control_is_secondary_and_original_wait_failure_stays_first(
+    tmp_path, monkeypatch, label, phase,
+):
+    if phase not in {"terminate", "terminate_wait"}:
+        raise ValueError("Unsupported cleanup control phase")
+    path, waits, actions, control = tmp_path / "receipt.json", [], [], _owned_control(label)
+    monkeypatch.setattr(native.time, "monotonic", lambda: 100.0)
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        if timeout is None:
+            raise ChildProcessError("private-first-wait")
+        if len(waits) == 2 and phase == "terminate_wait":
+            raise control
+        return 0
+
+    def terminate():
+        actions.append("terminate")
+        if phase == "terminate":
+            raise control
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait, terminate=terminate,
+                            kill=lambda: actions.append("kill"))
+    result = _contained_run([], path, popen=lambda _: child)
+    row = json.loads(path.read_text())
+    assert result == 1 and row["error_type"] == "ChildProcessError"
+    assert row["native_returncode"] is None and row["exit_code"] is None
+    assert row["cleanup"]["reaped"] is True and row["cleanup"]["returncode_after_cleanup"] == 0
+    assert row["cleanup"]["budget_seconds"] == 4
+    assert row["cleanup"]["errors"] == [{"stage": phase, "error_type": type(control).__name__}]
+    assert waits == ([None, 2] if phase == "terminate" else [None, 2, 2])
+    assert actions == (["terminate"] if phase == "terminate" else ["terminate", "kill"])
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+def test_diagnostic_sink_reports_each_control_as_undelivered_without_raising(monkeypatch, label):
+    control = _owned_control(label)
+
+    class Sink:
+        def write(self, _value):
+            raise control
+
+        def flush(self):
+            raise control
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(native.sys, "stderr", Sink())
+        result = native._error("owned-control", OSError("private-primary"))
+    expected = {"keyboard": "interrupt", "system-exit": "exit",
+                "generator-exit": "other_control", "direct-base": "other_control"}
+    assert result == {"delivered": False, "failure_kind": expected[label],
+                      "error_type": type(control).__name__}
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("phase", ["prelaunch", "constructor"])
+def test_prechild_controls_propagate_without_claiming_or_constructing_an_owned_child(
+    tmp_path, label, phase,
+):
+    if phase not in {"prelaunch", "constructor"}:
+        raise ValueError("Unsupported prechild control phase")
+    path, calls, control = tmp_path / "receipt.json", [], _owned_control(label)
+
+    def publish(target, row, **kwargs):
+        if phase == "prelaunch":
+            raise control
+        native._publish(target, row, **kwargs)
+
+    def popen(_command):
+        calls.append(True)
+        raise control
+
+    with pytest.raises(type(control)) as caught:
+        native.run([], path, popen=popen, publish=publish)
+    retained_exists = path.exists()
+    retained = json.loads(path.read_text()) if retained_exists else None
+    assert caught.value is control
+    assert calls == ([] if phase == "prelaunch" else [True])
+    assert not retained_exists if phase == "prelaunch" else retained["child_pid"] is None
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+def test_child_ownership_entry_control_happens_before_any_popen(tmp_path, monkeypatch, label):
+    control, calls = _owned_control(label), []
+
+    def enter(_self):
+        raise control
+
+    monkeypatch.setattr(native.ChildObservation, "__enter__", enter)
+    with pytest.raises(type(control)) as caught:
+        native.run([], tmp_path / "receipt.json", popen=lambda _: calls.append(True))
+    assert caught.value is control and calls == []
+
+
+@pytest.mark.parametrize("invalid", [None, "0"])
+def test_missing_native_wait_status_still_cleans_owned_child_without_promoting_cleanup_zero(
+    tmp_path, invalid,
+):
+    waits, actions = [], []
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        return invalid if timeout is None else 0
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait,
+                            terminate=lambda: actions.append("terminate"),
+                            kill=lambda: actions.append("kill"))
+    path = tmp_path / "receipt.json"
+    result = _contained_run([], path, popen=lambda _: child)
+    row = json.loads(path.read_text())
+    assert result == 1 and row["error_type"] == "RuntimeError"
+    assert row["native_returncode"] is None and row["exit_code"] is None
+    assert row["cleanup"]["returncode_after_cleanup"] == 0
+    assert waits[0] is None and len(waits) == 2 and actions == ["terminate"]
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+def test_internal_prelaunch_publication_controls_close_resources_and_never_construct_child(
+    tmp_path, monkeypatch, label,
+):
+    control, calls, descriptors = _owned_control(label), [], []
+    path = tmp_path / "receipt.json"
+    factory = native.tempfile.NamedTemporaryFile
+
+    def create(**kwargs):
+        stream = factory(**kwargs)
+        descriptors.append(stream.fileno())
+        return stream
+
+    def dump(*_args, **_kwargs):
+        raise control
+
+    monkeypatch.setattr(native.tempfile, "NamedTemporaryFile", create)
+    monkeypatch.setattr(native.json, "dump", dump)
+    result = _contained_run([], path, popen=lambda _: calls.append(True))
+    exists = path.exists()
+    temporary_paths = list(tmp_path.glob(path.name + ".*"))
+    assert result == 1 and calls == [] and not exists and temporary_paths == []
+    assert len(descriptors) == 1
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            native.os.fstat(descriptor)
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+def test_persistent_timestamp_controls_cannot_prevent_real_owned_child_cleanup(
+    tmp_path, monkeypatch, label,
+):
+    control, children, first_live = _owned_control(label), [], []
+    path, clock = tmp_path / "receipt.json", native._utc
+
+    def utc():
+        if children:
+            if not first_live:
+                first_live.append(children[0].poll())
+            raise control
+        return clock()
+
+    def popen(command):
+        child = subprocess.Popen(command)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(native, "_utc", utc)
+    try:
+        result = _contained_run([sys.executable, "-c", "import time;time.sleep(30)"], path,
+                                popen=popen)
+        row = json.loads(path.read_text())
+        completed = children[0].poll()
+        assert result == (130 if label == "keyboard" else 1) and first_live == [None]
+        assert completed is not None and row["error_type"] == type(control).__name__
+        assert row["native_returncode"] is None
+        assert row["native_exit_observed_before_failure"] is False
+        assert row["finished_at"] is None and row["cleanup"]["reaped"] is True
+        assert row["cleanup"]["budget_seconds"] == 4
+        assert row["cleanup"]["started_at"] is None and row["cleanup"]["finished_at"] is None
+        assert row["cleanup"]["errors"] == [
+            {"stage": "started_timestamp", "error_type": type(control).__name__},
+            {"stage": "finished_timestamp", "error_type": type(control).__name__},
+        ]
+        assert row["observer_secondary_errors"] == [
+            {"stage": "failure_timestamp", "error_type": type(control).__name__},
+        ]
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=2)
+
+
+@pytest.mark.parametrize("label", CONTROL_LABELS)
+@pytest.mark.parametrize("clock_phase", ["deadline", "remaining"])
+def test_unavailable_cleanup_clock_uses_no_invented_wait_allowance(
+    tmp_path, monkeypatch, label, clock_phase,
+):
+    if clock_phase not in {"deadline", "remaining"}:
+        raise ValueError("Unsupported scheduling-clock failure phase")
+    control, reads, waits, actions = _owned_control(label), [], [], []
+
+    def monotonic():
+        reads.append(True)
+        if clock_phase == "deadline" or len(reads) > 1:
+            raise control
+        return 100.0
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        if timeout is None:
+            raise ChildProcessError("private-first-wait")
+        return 0
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait,
+                            terminate=lambda: actions.append("terminate"),
+                            kill=lambda: actions.append("kill"))
+    path = tmp_path / "receipt.json"
+    with monkeypatch.context() as scoped:
+        scoped.setattr(native.time, "monotonic", monotonic)
+        result = _contained_run([], path, popen=lambda _: child)
+    row = json.loads(path.read_text())
+    assert result == 1 and row["error_type"] == "ChildProcessError"
+    assert row["native_returncode"] is None and row["exit_code"] is None
+    assert actions == ["terminate"] and waits == [None, 0]
+    assert row["cleanup"]["reaped"] is True and row["cleanup"]["returncode_after_cleanup"] == 0
+    assert row["cleanup"]["budget_seconds"] == 4
+    assert row["cleanup"]["errors"] == [{
+        "stage": "deadline_clock" if clock_phase == "deadline" else "remaining_clock",
+        "error_type": type(control).__name__,
+    }]
+
+
+@pytest.mark.parametrize("clock_value", [None, float("nan"), float("inf")])
+def test_invalid_cleanup_clock_never_creates_a_positive_wait_budget(
+    tmp_path, monkeypatch, clock_value,
+):
+    waits, actions = [], []
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        if timeout is None:
+            raise ChildProcessError("private-first-wait")
+        return 0
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait,
+                            terminate=lambda: actions.append("terminate"),
+                            kill=lambda: actions.append("kill"))
+    path = tmp_path / "receipt.json"
+    with monkeypatch.context() as scoped:
+        scoped.setattr(native.time, "monotonic", lambda: clock_value)
+        result = _contained_run([], path, popen=lambda _: child)
+    row = json.loads(path.read_text())
+    assert result == 1 and waits == [None, 0] and actions == ["terminate"]
+    assert row["error_type"] == "ChildProcessError" and row["native_returncode"] is None
+    assert row["cleanup"]["errors"] == [{"stage": "deadline_clock", "error_type": "RuntimeError"}]
+
+
+@pytest.mark.parametrize("first_label", [*CONTROL_LABELS, "error"])
+@pytest.mark.parametrize("final_label", ["keyboard", "error", "direct-base"])
+@pytest.mark.parametrize("closed_stderr", [False, True])
+def test_first_observer_failure_wins_later_publication_and_diagnostic_failures(
+    tmp_path, monkeypatch, first_label, final_label, closed_stderr,
+):
+    if (first_label not in {*CONTROL_LABELS, "error"}
+            or final_label not in {"keyboard", "error", "direct-base"}):
+        raise ValueError("Unsupported combined first/final failure fixture")
+    first = (ChildProcessError("private-first") if first_label == "error"
+             else _owned_control(first_label))
+    final = (PermissionError("private-final") if final_label == "error"
+             else _owned_control(final_label))
+    calls, actions, captured = [], [], []
+    path = tmp_path / "receipt.json"
+
+    def wait(timeout=None):
+        calls.append(timeout)
+        if timeout is None:
+            raise first
+        return 0
+
+    def publish(target, row, **kwargs):
+        if row["stage"] == "wait_failed":
+            captured.append(json.loads(json.dumps(row)))
+            raise final
+        native._publish(target, row, **kwargs)
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait,
+                            terminate=lambda: actions.append("terminate"),
+                            kill=lambda: actions.append("kill"))
+    with monkeypatch.context() as scoped:
+        if closed_stderr:
+            sink = io.StringIO()
+            sink.close()
+            scoped.setattr(native.sys, "stderr", sink)
+        result = _contained_run([], path, popen=lambda _: child, publish=publish)
+    assert result == (130 if first_label == "keyboard" else 1)
+    assert len(captured) == 1 and captured[0]["error_type"] == type(first).__name__
+    assert captured[0]["native_returncode"] is None and captured[0]["exit_code"] is None
+    assert captured[0]["cleanup"]["reaped"] is True
+    assert captured[0]["cleanup"]["returncode_after_cleanup"] == 0
+    assert actions == ["terminate"] and calls[0] is None and len(calls) == 2
+
+
+@pytest.mark.parametrize("code", [0, 17])
+@pytest.mark.parametrize("closed_stderr", [False, True])
+def test_recoverable_started_failure_stays_first_over_later_interrupt(
+    tmp_path, monkeypatch, code, closed_stderr,
+):
+    path, stages = tmp_path / "receipt.json", []
+
+    def publish(target, row, **kwargs):
+        stages.append(row["stage"])
+        if row["stage"] == "started":
+            raise PermissionError("private-first-started")
+        if row["stage"] == "exited":
+            raise KeyboardInterrupt("private-late-interrupt")
+        native._publish(target, row, **kwargs)
+
+    with monkeypatch.context() as scoped:
+        if closed_stderr:
+            sink = io.StringIO()
+            sink.close()
+            scoped.setattr(native.sys, "stderr", sink)
+        result = _contained_run([sys.executable, "-c", f"raise SystemExit({code})"], path,
+                                publish=publish)
+    retained = json.loads(path.read_text())
+    assert result == (17 if code else 1)
+    assert stages == ["planned", "started", "exited"] and retained["stage"] == "planned"
+
+
+def test_stop_calls_with_unavailable_clock_do_not_claim_reaping_or_native_completion(
+    tmp_path, monkeypatch,
+):
+    actions, waits = [], []
+
+    def clock():
+        raise OwnedDirectControl("private-clock")
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        if timeout is None:
+            raise ChildProcessError("private-first-wait")
+        raise subprocess.TimeoutExpired("private-owned-child", timeout)
+
+    child = SimpleNamespace(pid=os.getpid() + 1, wait=wait,
+                            terminate=lambda: actions.append("terminate"),
+                            kill=lambda: actions.append("kill"))
+    path = tmp_path / "receipt.json"
+    with monkeypatch.context() as scoped:
+        scoped.setattr(native.time, "monotonic", clock)
+        result = _contained_run([], path, popen=lambda _: child)
+    row = json.loads(path.read_text())
+    assert result == 1 and row["error_type"] == "ChildProcessError"
+    assert actions == ["terminate", "kill"] and waits == [None, 0, 0]
+    assert row["native_returncode"] is None and row["native_signal"] is None
+    assert row["exit_code"] is None
+    assert row["cleanup"]["reaped"] is False and row["cleanup"]["returncode_after_cleanup"] is None
+    assert row["cleanup"]["errors"] == [
+        {"stage": "deadline_clock", "error_type": "OwnedDirectControl"},
+        {"stage": "terminate_wait", "error_type": "TimeoutExpired"},
+        {"stage": "kill_wait", "error_type": "TimeoutExpired"},
+    ]
