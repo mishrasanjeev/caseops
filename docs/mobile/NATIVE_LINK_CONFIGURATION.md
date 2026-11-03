@@ -1,6 +1,7 @@
 # Native HTTPS callback configuration
 
-Status: source support; production native sign-in remains disabled and unverified.
+Status: source support and production release wiring; production native sign-in
+remains disabled and unverified until the production input is committed.
 No final domain, application identifier prefix, package/bundle ID or signing
 certificate is supplied by this document. Organization enrollment and platform
 association/signing remain owner prerequisites.
@@ -25,6 +26,7 @@ The complete schema (no additional keys) is:
 | `kind` | `caseops-native-links` |
 | `syntheticDataOnly` | Boolean; production consumers require `false` |
 | `redirectUri` | Canonical HTTPS URL, exact path `/native/oauth/callback`, no credentials, port, query, fragment or wildcard |
+| `ios` | Optional. Absent for an Android-only release: no AASA is served and an iOS native project is refused (`IOS_NATIVE_LINK_CONFIG_REQUIRED`). When present it holds exactly the two fields below |
 | `ios.bundleIdentifier` | Owner-selected registered bundle identifier |
 | `ios.applicationIdentifierPrefix` | Actual application identifier prefix from the signed app/profile; do not infer or invent a Team ID |
 | `android.packageName` | Owner-selected registered application ID |
@@ -71,6 +73,47 @@ association files or declares the platform association verified.
 
 The source CI production exports will require real configuration once the earlier
 unwaived dependency audit can pass. There is no source-only production bypass.
+
+## Production release wiring
+
+The production input is the committed file `apps/web/native-links/production.json`
+(Git keeps its bytes unconverted, so the released hash is identical on every
+checkout platform). It is absent until the owner supplies the Apple application
+identifier prefix, so production native sign-in is disabled.
+
+`scripts/deploy-prod.sh` decides from the release commit itself:
+
+- **File absent:** every release removes `CASEOPS_NATIVE_AUTH_ENABLED`,
+  `CASEOPS_NATIVE_SIGNING_ENABLED` and `CASEOPS_NATIVE_REDIRECT_URIS` from the
+  API and `CASEOPS_NATIVE_LINK_CONFIG_FILE`/`_SHA256` from the web service. The
+  API keeps refusing native issuance and both `/.well-known` association routes
+  return 404.
+- **File present:** `scripts/mobile/native-link-release.cjs` admits the exact
+  committed bytes through the shared reader (synthetic, placeholder or malformed
+  input stops the release before any cloud call). Before the API deploy the
+  release requires an enabled latest version of the Secret Manager secret
+  `caseops-native-signing-secret`, then sets both enablement flags, the projected
+  redirect registry and the signing secret on the API, and points the web
+  runtime at the image copy `/app/apps/web/native-links/production.json` with
+  its digest. The web then serves `/.well-known/assetlinks.json` and
+  `/.well-known/apple-app-site-association` from that same input.
+
+Provision the signing secret once, before the first enabled release, with a
+CSPRNG value distinct from `caseops-auth-secret`, and grant only the API runtime
+identity access:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32), end='')" \
+  | gcloud secrets create caseops-native-signing-secret --project perfect-period-305406 --data-file=-
+gcloud secrets add-iam-policy-binding caseops-native-signing-secret --project perfect-period-305406 \
+  --member serviceAccount:caseops-runtime@perfect-period-305406.iam.gserviceaccount.com \
+  --role roles/secretmanager.secretAccessor
+```
+
+The released file must list every certificate that signs installed apps. A
+locally signed upload-key APK and a Google Play App Signing build have different
+certificates; include the Play app-signing digest before distributing through
+Play. Enabling the wiring does not establish the readiness proof below.
 
 ## Required actual readiness proof
 

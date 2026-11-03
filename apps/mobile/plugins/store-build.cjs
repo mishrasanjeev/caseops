@@ -65,7 +65,8 @@ function androidBuild(value, zero = false) {
 }
 function identities(value, links) {
   shape(value, ['iosBundleIdentifier', 'androidPackageName'], 'STORE_IDENTITIES_REQUIRED');
-  if (value.iosBundleIdentifier !== links.config.ios.bundleIdentifier || value.androidPackageName !== links.config.android.packageName) fail('STORE_LINK_IDENTITIES_MISMATCH');
+  // An Android-only link input has no iOS identity; the store build must say so explicitly.
+  if (value.iosBundleIdentifier !== (links.config.ios ? links.config.ios.bundleIdentifier : null) || value.androidPackageName !== links.config.android.packageName) fail('STORE_LINK_IDENTITIES_MISMATCH');
 }
 function validateStoreBuild(build, baseline, links, { allowSynthetic = false } = {}) {
   shape(build, ['schemaVersion', 'kind', 'syntheticDataOnly', 'nativeLinkConfigSha256', 'identities', 'version', 'iosBuildNumber', 'androidVersionCode', 'baseline'], 'STORE_BUILD_SCHEMA_REQUIRED');
