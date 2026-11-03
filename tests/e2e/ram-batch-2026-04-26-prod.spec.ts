@@ -148,6 +148,42 @@ async function allMatterIds(page: Page): Promise<string[]> {
   return (body?.matters ?? []).map((m: { id: string }) => m.id);
 }
 
+type MatterListRow = { id: string; status: string; is_active: boolean };
+
+// Mirrors matter_is_operational: a disposed (or legacy inactive) Matter is
+// refused with 409 before any provider is reached, and the production QA
+// tenant retains disposed Matters, so list order alone cannot pick one.
+function isOperationalMatter(matter: MatterListRow): boolean {
+  return matter.is_active === true && ["intake", "active", "on_hold"].includes(matter.status);
+}
+
+async function operationalMatterId(page: Page, preferredId: string): Promise<string> {
+  const cookies = await page.context().cookies();
+  const cookieHeader = cookies
+    .filter((c) => c.domain.includes("caseops.ai"))
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+  // The preferred Matter only while it is operational, else any active one.
+  const lookups: Array<[string, (matter: MatterListRow) => boolean]> = [
+    [`id=${encodeURIComponent(preferredId)}`, (matter) => matter.id === preferredId],
+    ["status=active", () => true],
+  ];
+  for (const [query, accept] of lookups) {
+    const resp = await page.context().request.get(
+      `${PROD_API_BASE_URL}/api/matters/?${query}`,
+      { headers: { Cookie: cookieHeader, Accept: "application/json" } },
+    );
+    await expectApiOk(resp, `GET /api/matters/?${query}`);
+    const body = (await resp.json()) as { matters?: MatterListRow[] };
+    const matter = (body.matters ?? []).find((row) => accept(row) && isOperationalMatter(row));
+    if (matter) return matter.id;
+  }
+  throw new Error(
+    "BUG-015 needs an operational (not disposed) Matter in the QA tenant; " +
+      "GET /api/matters/?status=active listed none.",
+  );
+}
+
 test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () => {
   test("AUTH-001 (user-reported 2026-04-26 PM): expired session redirects to /sign-in, not raw 401", async ({
     page,
@@ -190,16 +226,10 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     request,
   }) => {
     test.setTimeout(240_000); // LLM call takes 30-60s warm; allow headroom
-    const matterIds = await allMatterIds(page);
-    if (matterIds.length === 0) {
-      test.skip(true, "Tenant has no matters via API.");
-      return;
-    }
-    // Use the matter most likely to succeed end-to-end (Salman Khan
-    // has a rich description that gives retrieval enough to ground on).
-    const matterId =
-      matterIds.find((m) => m === "9fcf975a-3dbc-482d-9d4a-8f196916bcc4") ??
-      matterIds[0];
+    // Prefer the matter most likely to succeed end-to-end (Salman Khan
+    // has a rich description that gives retrieval enough to ground on),
+    // but never a disposed one: that 409 is a correct refusal, not BUG-015.
+    const matterId = await operationalMatterId(page, "9fcf975a-3dbc-482d-9d4a-8f196916bcc4");
 
     const cookies = await page.context().cookies();
     const cookieHeader = cookies

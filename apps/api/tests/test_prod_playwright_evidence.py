@@ -2159,7 +2159,7 @@ def test_verified_tester_union_is_fail_closed(verified_tester_union, damage):
 def _assert_native_manifest(workflow):
     for job_name in (
         "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-        "scheduled-statute-verification",
+        "prod-test-legal-batch4", "scheduled-statute-verification",
     ):
         job = workflow["jobs"][job_name]
         steps = {step.get("name"): step for step in job["steps"]}
