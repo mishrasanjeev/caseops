@@ -46,7 +46,9 @@ def _metadata(value):
 
 def _source_bytes(path, maximum):
     """Bound the fixed test-source input; never load a PYC or import the API."""
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    # O_BINARY: a Windows text-mode read shortens a CRLF checkout below st_size.
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_NONBLOCK", 0)
     fd = os.open(path, flags)
     try:
         before = os.fstat(fd)
@@ -142,6 +144,7 @@ class _TrackedIo:
 
 def _changed(value, **changes):
     values = {key: getattr(value, key) for key in FIELDS}
+    values["st_birthtime_ns"] = getattr(value, "st_birthtime_ns", 0)
     values.update(changes)
     return SimpleNamespace(**values)
 
@@ -387,12 +390,13 @@ class FrozenReadthroughPageAdmissionTests(unittest.TestCase):
     def test_simulated_windows_named_device_zero_keeps_all_other_metadata(self):
         actual = self.path.stat()
         named = _changed(actual, st_dev=0)
-        opened = _changed(actual, st_dev=actual.st_dev or 7)
+        # A Windows handle reports change time as st_ctime; a path reports creation.
+        opened = _changed(actual, st_dev=actual.st_dev or 7, st_ctime_ns=actual.st_ctime_ns + 1)
         same = self.namespace["_same_named_descriptor"]
         self.assertTrue(same(named, opened, windows=True))
         self.assertFalse(same(named, opened, windows=False))
-        for field in FIELDS:
-            if field == "st_dev":
+        for field in (*FIELDS, "st_birthtime_ns"):
+            if field in ("st_dev", "st_ctime_ns"):
                 continue
             changed = _changed(opened, **{field: getattr(opened, field) + 1})
             self.assertFalse(same(named, changed, windows=True), field)
