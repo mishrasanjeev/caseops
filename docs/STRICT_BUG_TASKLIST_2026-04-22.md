@@ -1,5 +1,48 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 5 Production Run On 38bdc754: B4-ADJ-32, 34 Proven; B4-ADJ-35..36
+
+Prod-verify 41891854452 (release 38bdc754, #584): every role passed except
+tester (82 of 83, IPLF-063B) and Batch4 desktop (35 of 36, BUG-002), so mobile
+and governance did not run. The test-legal grant job succeeded (receipt
+operation 27b15edb, full_ip, audit event d108f302); only the deploy script's
+receipt readback timed out, as on f49e0390.
+
+- B4-ADJ-32 Status: Properly fixed, production-proven on 38bdc754. Every
+  `BUG-015 controls on ... are usable or explain themselves` crawl case passed,
+  including `/app/ip/specialist`.
+- B4-ADJ-34 Status: Properly fixed, production-proven on 38bdc754. IPLF-026A
+  passed in the tester role; the tester's `GET /api/ip/documents` was served in
+  0.13 s (504 after 120 s on f49e0390).
+- B4-ADJ-35 Status: Partially fixed. Batch4 `BUG-002 Ram's Documents
+  Classification is provisioned...` failed at "Controlled name preview": the
+  naming preview returned 200, but its preflight reached the API 8 ms after
+  the document list GET, which was still in flight. The preview's freshness key
+  includes every existing document name, so a preview computed against the
+  empty, still-loading list was discarded when the list arrived, and the user
+  saw nothing; the conflict check had also run against no names. Preview
+  controlled name is now disabled, with a loading or retry hint, until the
+  document list has loaded. vitest `B4-ADJ-35 keeps the name preview disabled
+  until existing document names load` fails on the old component and passes on
+  the fix. Production proof waits for the next release's Batch4 role.
+- B4-ADJ-36 Status: Not fixed (tracked). Tester `IPLF-063B production proves
+  the exact UJ-18 release` failed when its queue-readiness probe,
+  `GET /api/private-retrieval/integrity` with a 10 s request budget, took
+  9.8 s. The first call on every release since 00507 took 7.5 to 9.8 s and
+  later calls 1 to 2.7 s: `inspect_private_index_integrity` counts and hashes
+  every live projection and runs the orphan-scope anti-joins on each call, and
+  the production QA tenant retains every run. The probe budget is not raised
+  (that would hide a latency still rising); the endpoint's full scan needs a
+  bounded design. Not a Ram defect; adjacent, found by this audit.
+
+Docker acceptance on f49e0390: 3,977 tests collected, none skipped, 3,972
+passed; the 5 failures are Windows host-interpreter caveats in
+`test_matter_readthrough_20261028_postgres`: four `PLAN_EVIDENCE_CHANGED`
+(Windows `lstat`/`fstat` ctime) and one `RecursionError` on an 8,000-deep
+JSON array (Windows CPython's C recursion limit is under 3,000; a Linux
+`python:3.13-slim` parses the deepest array the 16,384-character bound
+allows).
+
 ## November 4 Production Run On f49e0390: B4-ADJ-32..34
 
 Prod-verify 41813028426 (release f49e0390, #583): every role passed except

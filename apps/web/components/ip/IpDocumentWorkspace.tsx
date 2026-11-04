@@ -183,6 +183,9 @@ export function IpDocumentWorkspace({
     ...existingDisplayNames,
   ]);
   const hasCurrentPreview = namePreview?.inputKey === currentPreviewKey;
+  // The conflict check compares against every existing name, so a preview
+  // waits for the list; one sent earlier would be checked against no names.
+  const existingNamesLoaded = documents.isSuccess;
   const uploadRequirements = [
     !file ? "the original file" : null,
     !documentTaxonomyKey ? "a classification" : null,
@@ -192,9 +195,13 @@ export function IpDocumentWorkspace({
     ? null
     : uploadRequirements.length
       ? `Choose ${formatList(uploadRequirements)} before upload.`
-      : !hasCurrentPreview
-        ? "Preview the controlled name before upload."
-        : null;
+      : documents.isError
+        ? "Existing document names did not load. Retry the document list before the name preview."
+        : !existingNamesLoaded
+          ? "Loading existing document names before the name preview."
+          : !hasCurrentPreview
+            ? "Preview the controlled name before upload."
+            : null;
   const uploadDescription =
     taxonomyDescription ?? (uploadHint ? UPLOAD_REQUIREMENTS_ID : undefined);
   const aliases = aliasText
@@ -582,7 +589,9 @@ export function IpDocumentWorkspace({
                 type="button"
                 variant="secondary"
                 onClick={() => previewName.mutate(currentPreviewKey)}
-                disabled={!file || !documentTaxonomyKey || previewName.isPending}
+                disabled={
+                  !file || !documentTaxonomyKey || !existingNamesLoaded || previewName.isPending
+                }
                 aria-describedby={uploadDescription}
               >
                 Preview controlled name
