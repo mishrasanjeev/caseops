@@ -16,18 +16,25 @@ from caseops_api.services import pdf_fonts, pdf_layout
 from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted
 
 
-def clear_caches() -> None:
-    pdf_layout.safe_pdf_class.cache_clear()
-    pdf_fonts.unicode_pdf_class.cache_clear()
-    pdf_fonts._font_bytes.cache_clear()
-    pdf_fonts._manifest.cache_clear()
+def clear_caches(cached_callables) -> None:
+    for cached in cached_callables:
+        cached.cache_clear()
 
 
 @pytest.fixture(autouse=True)
 def font_cache_lifecycle():
-    clear_caches()
-    yield
-    clear_caches()
+    # Canonical autouse fixtures set monkeypatch up before this fixture. Its
+    # teardown therefore runs while body replacements are still installed.
+    # Keep the real cached callables, not mutable module-attribute lookups.
+    originals = (
+        pdf_layout.safe_pdf_class,
+        pdf_fonts.unicode_pdf_class,
+        pdf_fonts._font_bytes,
+        pdf_fonts._manifest,
+    )
+    clear_caches(originals)
+    yield originals
+    clear_caches(originals)
 
 
 @pytest.fixture
@@ -287,3 +294,28 @@ def test_same_id_size_hash_but_mismatched_path_fd_mtime_is_refused(owned_fonts, 
     with pytest.raises(HTTPException) as refused:
         pdf_fonts._read_pinned("LiberationSans-Regular.ttf", expected)
     assert refused.value.status_code == 503
+
+
+def test_cache_cleanup_clears_originals_while_body_replacements_remain_installed(
+    font_cache_lifecycle, monkeypatch,
+):
+    originals = font_cache_lifecycle
+    document()
+    assert all(cached.cache_info().currsize > 0 for cached in originals)
+
+    def replacement(*_args, **_kwargs):
+        raise AssertionError("Cache cleanup called a body replacement")
+
+    assert not hasattr(replacement, "cache_clear")
+    for module, name in (
+        (pdf_layout, "safe_pdf_class"),
+        (pdf_fonts, "unicode_pdf_class"),
+        (pdf_fonts, "_font_bytes"),
+        (pdf_fonts, "_manifest"),
+    ):
+        monkeypatch.setattr(module, name, replacement)
+    # Keep all replacements installed through this body and into canonical
+    # fixture teardown. The same cleanup must also work without conftest.
+    clear_caches(originals)
+    assert all(cached.cache_info().currsize == 0 for cached in originals)
+    assert pdf_fonts._font_bytes is replacement
