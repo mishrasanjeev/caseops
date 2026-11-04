@@ -1,5 +1,31 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 4 Batch4 Production Run On 07f56ebc: B4-ADJ-32..33
+
+Prod-verify 41773534542 (release 07f56ebc, #580 and #577's base): every other
+role passed, including legacy and batch3. Batch4 desktop passed 34 and failed 2,
+so mobile and governance did not run.
+
+- B4-ADJ-33 Status: Partially fixed. BUG-014 on production: the journal capture
+  returned 409 "Backdated events require acknowledgement of the recalculation
+  preview" (API request log, 06:57:05 UTC). A watch hit records its review
+  candidate at the journal date; confirming any hit into the client report
+  records an event dated now, so every later capture for that docket was
+  "backdated", and the capture form cannot acknowledge. A backdated event now
+  needs the recalculation review only when it can change something: a target
+  application or proceeding phase, or a deadline. The preview and the record
+  share `_backdated_needs_recalculation_review`; the row keeps `backdated`.
+  `test_bug_014_capture_after_a_later_docket_event_records_a_review_candidate`
+  and `test_backdated_review_candidate_without_a_target_needs_no_recalculation_review`
+  reproduce the 409 on the old code. Production proof waits for the next
+  release's Batch4 role.
+- B4-ADJ-32 Status: Inconclusive. BUG-015 on /app/ip/specialist failed again
+  at the offender assertion (5.4 s), the second release in a row, while it
+  passes in isolated replays. Native evidence keeps neither the error text nor
+  attachments, so the crawl now records each offender and each API 5xx as a
+  bounded `control-crawl-offender` / `control-crawl-api-5xx` annotation by
+  workflow label with ids removed. Fix after the next run names the offender.
+
 ## November 3 Batch4 Production Run On 9a29a74a: B4-ADJ-29..32
 
 Prod-verify 41627245115 (release 9a29a74a, its own Batch4 job from #578):
