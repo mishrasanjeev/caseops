@@ -498,8 +498,18 @@ def list_ip_documents(
     rows = list(
         session.scalars(statement.order_by(IpDocument.updated_at.desc(), IpDocument.id)).all()
     )
+    # Every acceptance path below ends in the docket visibility check, which
+    # audits and commits each denial. Drop documents on a docket the viewer
+    # cannot see with the batched form of that rule first: a list read is not
+    # an access attempt per hidden row, and one commit per hidden document
+    # timed a restricted member's list out (504 after 120 s on production).
+    accessible = get_accessible_ip_document_ids(
+        session, context=context, document_ids={row.id for row in rows}
+    )
     visible: list[IpDocumentRecord] = []
     for row in rows:
+        if row.id not in accessible:
+            continue
         closed_record = False
         try:
             if include_history:

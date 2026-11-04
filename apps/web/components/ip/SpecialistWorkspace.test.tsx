@@ -78,6 +78,24 @@ describe("Specialist IP typed intake", () => {
     expect(screen.getByRole("link", { name: "Add or reactivate one in Clients" })).toHaveAttribute("href", "/app/clients");
   });
 
+  it("BUG-015 says the client list is loading while the intake form waits for it", async () => {
+    const original = mocks.api.getMockImplementation()!;
+    let release: (value: unknown) => void = () => undefined;
+    mocks.api.mockImplementation((path, options) => path === "/api/clients/"
+      ? new Promise((resolve) => { release = resolve; })
+      : original(path, options));
+    mount(<SpecialistIndex />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New intake" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "New intake" }));
+    const client = await screen.findByLabelText("Client");
+    expect(client).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Loading clients…" })).toBeInTheDocument();
+    release({ clients: [{ id: clientId, name: "Client applicant", is_active: true }] });
+    await waitFor(() => expect(client).toBeEnabled());
+    expect(screen.getByRole("option", { name: "Select a client" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Client applicant" })).toBeInTheDocument();
+  });
+
   it("keeps unavailable intake disabled without hiding retained records", async () => {
     const original = mocks.api.getMockImplementation()!;
     mocks.api.mockImplementation((path, options) => path === "/api/ip/specialist/contracts" ? Promise.resolve([{ ...contract, intake_available: false }]) : original(path, options));
