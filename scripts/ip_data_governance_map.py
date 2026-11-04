@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from collections import Counter
@@ -125,6 +126,7 @@ RISKY_SOURCE_PATTERN = re.compile(
 # prose that made bare-word matching noisy in source files, so the original form
 # is still the right one here.
 _CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+_PDF_FONT_ASSET_ROOT = "apps/api/src/caseops_api/assets/pdf_fonts/"
 RISKY_MANIFEST_PATTERN = re.compile(
     rf"\b(?:{_RISKY_MODULES}|storage\.Client|OTLPSpanExporter|cloud.?tasks)\b",
     re.IGNORECASE,
@@ -148,7 +150,7 @@ def _load(path: Path) -> dict[str, Any]:
 def _write(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+        json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8", newline="\n"
     )
 
 
@@ -2182,6 +2184,127 @@ def _default_base() -> str:
     return "HEAD"
 
 
+class _FontAssetReviewError(ValueError):
+    """A binary exception needs its exact reviewed software-asset identity."""
+
+
+def _asset_version(row: os.stat_result) -> tuple[int, ...]:
+    return (
+        row.st_dev,
+        row.st_ino,
+        row.st_mode,
+        row.st_nlink,
+        row.st_size,
+        row.st_mtime_ns,
+        row.st_ctime_ns,
+        getattr(row, "st_file_attributes", 0),
+    )
+
+
+def _asset_parent_chain(path: Path) -> list[tuple[int, ...]]:
+    current = REPO_ROOT
+    parents = [current]
+    for part in path.relative_to(REPO_ROOT).parts[:-1]:
+        current /= part
+        parents.append(current)
+    identities = []
+    for parent in parents:
+        row = parent.lstat()
+        if not stat.S_ISDIR(row.st_mode) or getattr(row, "st_file_attributes", 0) & 0x400:
+            raise _FontAssetReviewError("redirected asset parent")
+        identities.append((row.st_dev, row.st_ino, stat.S_IFMT(row.st_mode)))
+    return identities
+
+
+def _regular_asset_bytes(path: Path, expected_size: int | None = None) -> bytes:
+    """Verify and read the same regular file; retain each stat API's version."""
+    parents = _asset_parent_chain(path)
+    named = path.lstat()
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor_fd = os.open(path, flags)
+    try:
+        stream = os.fdopen(descriptor_fd, "rb")
+    except BaseException:
+        os.close(descriptor_fd)
+        raise
+    with stream:
+        descriptor = os.fstat(stream.fileno())
+        for row in (named, descriptor):
+            if (
+                not stat.S_ISREG(row.st_mode)
+                or row.st_nlink != 1
+                or getattr(row, "st_file_attributes", 0) & 0x400
+                or row.st_size > (32 * 1024**2 if expected_size is not None else 4 * 1024**2)
+                or (expected_size is not None and row.st_size != expected_size)
+            ):
+                raise _FontAssetReviewError("unreviewed asset file")
+        # Windows pathname and descriptor mode/ctime can differ. Compare their
+        # common identity, and full before/after versions independently below.
+        def identity(row: os.stat_result) -> tuple[int, ...]:
+            return (
+                row.st_dev, row.st_ino, stat.S_IFMT(row.st_mode), row.st_size, row.st_mtime_ns
+            )
+
+        if identity(named) != identity(descriptor):
+            raise _FontAssetReviewError("asset identity changed")
+        content = stream.read(descriptor.st_size + 1)
+        if (
+            len(content) != descriptor.st_size
+            or _asset_version(descriptor) != _asset_version(os.fstat(stream.fileno()))
+            or _asset_version(named) != _asset_version(path.lstat())
+            or parents != _asset_parent_chain(path)
+        ):
+            raise _FontAssetReviewError("asset changed during read")
+    return content
+
+
+def _reviewed_pdf_font_asset(path: str) -> bool:
+    """Only the existing, byte-pinned PDF font class is non-text source."""
+    if not (path.startswith(_PDF_FONT_ASSET_ROOT) and path.endswith(".ttf")):
+        return False
+    name = path.removeprefix(_PDF_FONT_ASSET_ROOT)
+    if not name or Path(name).name != name or "/" in name or "\\" in name:
+        raise _FontAssetReviewError("unreviewed font path")
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise _FontAssetReviewError("duplicate font declaration")
+            result[key] = value
+        return result
+
+    raw = _regular_asset_bytes(REPO_ROOT / _PDF_FONT_ASSET_ROOT / "manifest.json")
+    try:
+        manifest = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise _FontAssetReviewError("unreadable font declaration") from exc
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("schema")) is not int
+        or manifest["schema"] != 1
+    ):
+        raise _FontAssetReviewError("unsupported font declaration")
+    assets = manifest.get("assets")
+    asset = assets.get(name) if isinstance(assets, dict) else None
+    if (
+        not isinstance(asset, dict)
+        or set(asset) != {"bytes", "sha256"}
+        or type(asset.get("bytes")) is not int
+        or asset["bytes"] <= 0
+        or not isinstance(asset.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", asset["sha256"]) is None
+    ):
+        raise _FontAssetReviewError("unreviewed font declaration")
+    content = _regular_asset_bytes(REPO_ROOT / path, asset["bytes"])
+    if (
+        content[:4] not in (b"\x00\x01\x00\x00", b"OTTO")
+        or hashlib.sha256(content).hexdigest() != asset["sha256"]
+    ):
+        raise _FontAssetReviewError("font bytes differ from reviewed declaration")
+    return True
+
+
 def check_change(base: str | None = None) -> list[str]:
     """Run the Definition-of-Ready diff gate against a Git base revision."""
 
@@ -2211,8 +2334,10 @@ def check_change(base: str | None = None) -> list[str]:
         candidate = REPO_ROOT / normalized
         if candidate.is_file():
             try:
+                if _reviewed_pdf_font_asset(normalized):
+                    continue
                 source_by_path[normalized] = candidate.read_text(encoding="utf-8")
-            except (OSError, UnicodeError) as exc:
+            except (OSError, UnicodeError, _FontAssetReviewError) as exc:
                 read_errors.append(
                     f"cannot read governed source {normalized}: {type(exc).__name__}"
                 )
