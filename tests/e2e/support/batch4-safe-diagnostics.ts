@@ -1,7 +1,6 @@
 /** Closed, opt-in NONRELEASE diagnostics. No legal text, URLs, IDs or credentials. */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { types } from "node:util";
 
 export type Batch4SafeDiagnostic =
@@ -13,7 +12,7 @@ export type Batch4SafeDiagnostic =
       raw_match: boolean; typography_candidate_match: boolean; nfkc_match: boolean;
       has_non_latin1: boolean; typography_change_count: number; expected_sha256: string; pdf_compact_sha256: string };
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const ROOT = process.env.GITHUB_WORKSPACE ?? "";
 const DIRECTORY = path.join(ROOT, "test-results", "batch4-safe");
 const MAIN = "bdd1480699222712475372690334659088629429";
 const BRANCH = "refs/heads/codex/prod-batch4-diagnostics-20261104";
@@ -43,6 +42,7 @@ function context() {
     && process.env.CASEOPS_BATCH4_DIAGNOSTIC_MODE === "scoped-failure-diagnostics"
     && /^[1-9][0-9]{0,19}$/.test(process.env.GITHUB_RUN_ID ?? "")
     && /^[1-9][0-9]{0,5}$/.test(process.env.GITHUB_RUN_ATTEMPT ?? "")
+    && path.isAbsolute(ROOT) && path.normalize(ROOT) === ROOT && path.resolve(ROOT) === ROOT
     && path.resolve(process.cwd()) === ROOT);
   return { schema: 1, release_sha: MAIN, run_id: process.env.GITHUB_RUN_ID!, attempt: process.env.GITHUB_RUN_ATTEMPT! };
 }
