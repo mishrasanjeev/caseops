@@ -76,6 +76,7 @@ COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-release-identity.ts
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
+COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 

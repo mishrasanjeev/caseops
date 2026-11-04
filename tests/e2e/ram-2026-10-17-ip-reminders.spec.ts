@@ -7,6 +7,7 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv, repoRoot } from "./support/env";
 import { createIp15ManualTrademark, prepareIp15Workspace, type Ip15Workspace } from "./support/ip15-workspace";
+import { RUN_ID } from "./support/run-id";
 
 test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
   if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
@@ -49,7 +50,7 @@ async function assertSavedPolicy(card: Locator, policy: { offsets_hours: number[
 
 function deliverOwnLocalReceipt(workspace: Ip15Workspace, docketId: string, sourceId: string, intentId: string) {
   if (!workspace.local || ![workspace.web, workspace.api].every(url => ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-    || !/^ip15-[a-f0-9-]{36}$/.test(workspace.actor.company.slug)
+    || !workspace.actor.company.slug.startsWith("ip15-") || !RUN_ID.test(workspace.actor.company.slug.slice(5))
     || ![docketId, sourceId, intentId].every(id => /^[a-f0-9-]{36}$/.test(id))) throw new Error("Local delivery fixture identity rejected.");
   const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot, "apps/api/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
   const relative = path.relative(path.join(repoRoot, "apps/api/.venv"), path.resolve(python));

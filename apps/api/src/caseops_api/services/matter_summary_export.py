@@ -214,33 +214,10 @@ def _pdf_section(pdf, heading: str, items: list[str], *, bullet: bool = False) -
 
 
 def _ascii_safe(text: str) -> str:
-    """fpdf2's built-in Helvetica is a WinAnsi font — non-Latin code
-    points blow up the PDF writer. For Q7's first PDF slice we flatten
-    to an ASCII-biased fallback; Hindi / Tamil / etc bodies still ship
-    through the DOCX path unchanged, and a future pass can add a
-    TrueType font subset for the PDF path."""
-    if not text:
-        return ""
-    # Replace typographic dashes / ellipses / quotes with ASCII
-    # equivalents, then best-effort drop anything Helvetica-1252
-    # can't encode.
-    table = {
-        "\u2013": "-",  # en dash
-        "\u2014": "--",  # em dash
-        "\u2018": "'",
-        "\u2019": "'",
-        "\u201c": '"',
-        "\u201d": '"',
-        "\u2026": "...",
-        "\u00a0": " ",  # non-breaking space
-        "•": "*",
-    }
-    out = text.translate({ord(k): v for k, v in table.items()})
-    try:
-        out.encode("latin-1")
-    except UnicodeEncodeError:
-        out = out.encode("ascii", "replace").decode("ascii")
-    return out
+    """Text the PDF core font prints; the one shared mapping in pdf_layout."""
+    from caseops_api.services.pdf_layout import pdf_text
+
+    return pdf_text(text)
 
 
 def _safe_filename(matter_code: str) -> str:

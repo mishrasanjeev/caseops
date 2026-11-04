@@ -181,15 +181,15 @@ def test_cause_list_pdf_with_non_latin_text_downloads(client: TestClient) -> Non
     )
     assert response.status_code == 200, response.text
     text = extract_text(io.BytesIO(response.content))
-    assert '"Quoted"' in text
+    assert "R?mesh — “Quoted” v State ‘Ltd’ …" in text
     assert "INR" in text
 
 
-def test_pdf_text_keeps_latin1_and_replaces_only_unencodable_text() -> None:
+def test_pdf_text_keeps_windows_1252_and_replaces_only_unencodable_text() -> None:
     assert pdf_text(None) == ""
-    assert pdf_text("Café — “A” ‘B’ …") == 'Café -- "A" \'B\' ...'
-    assert pdf_text("₹ 10") == "INR  10"
-    assert pdf_text("राम") == "?"
+    assert pdf_text("Café — “A” ‘B’ … • – €") == "Café — “A” ‘B’ … • – €"
+    assert pdf_text("₹ 10 → x") == "INR  10 -> x"
+    assert pdf_text("राम and सीता") == "? and ?"
 
 
 def test_wrapped_table_rejects_rows_with_the_wrong_column_count() -> None:

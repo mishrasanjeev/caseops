@@ -1252,6 +1252,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
         "tests/e2e/support/public-release-identity.ts",
         "tests/e2e/support/ip-import-acknowledgements.ts",
         "tests/e2e/support/ip-portfolio-export-completion.ts",
+        "tests/e2e/support/run-id.ts",
     } <= required
     _assert_web_builder_inputs(
         _read_repo_text("apps/web/Dockerfile"), _read_repo_text(ignore_path), required,
