@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import builtins
 import errno
 import io
+import runpy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -58,6 +61,63 @@ def reset_storage_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
+@pytest.mark.parametrize("project_id", [None, "caseops-import-regression"])
+def test_document_storage_defers_gcs_import_until_factory_use(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, project_id: str | None
+) -> None:
+    from caseops_api.services import document_storage
+
+    original_import = builtins.__import__
+    phase = "module_and_local_read"
+    sdk_imports = []
+    client_projects = []
+    expected_client = object()
+
+    def client(*, project):
+        client_projects.append(project)
+        return expected_client
+
+    def observe_import(name, *args, **kwargs):
+        fromlist = kwargs.get("fromlist", args[2] if len(args) > 2 else ()) or ()
+        if name == "google.cloud.storage" or (
+            name == "google.cloud" and "storage" in fromlist
+        ):
+            sdk_imports.append(phase)
+            if phase != "gcs_factory":
+                raise AssertionError("Local document storage imported the GCS SDK")
+            return SimpleNamespace(storage=SimpleNamespace(Client=client))
+        return original_import(name, *args, **kwargs)
+
+    settings = SimpleNamespace(
+        document_storage_backend="local",
+        document_storage_path=str(tmp_path / "local"),
+        gcp_project_id=project_id,
+    )
+    local_source = tmp_path / "local" / "tenant" / "fixture.txt"
+    local_source.parent.mkdir(parents=True)
+    local_source.write_bytes(b"unchanged local source")
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "__import__", observe_import)
+        # A fresh namespace executes the actual module even when the canonical
+        # app fixture has already imported it and the SDK elsewhere.
+        namespace = runpy.run_path(
+            document_storage.__file__, run_name="_caseops_document_storage_import_probe"
+        )
+        factory = namespace["_gcs_client"]
+        patch.setitem(factory.__globals__, "get_settings", lambda: settings)
+        actual_local = namespace["resolve_storage_path"]("tenant/fixture.txt")
+        assert actual_local == local_source
+        assert actual_local.read_bytes() == b"unchanged local source"
+        assert sdk_imports == []
+
+        phase = "gcs_factory"
+        actual_client = factory()
+
+    assert actual_client is expected_client
+    assert sdk_imports == ["gcs_factory"]
+    assert client_projects == [project_id]
+
+
 def test_gcs_backend_persists_and_materializes_cached_download(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -70,7 +130,7 @@ def test_gcs_backend_persists_and_materializes_cached_download(
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
     monkeypatch.setenv("CASEOPS_GCP_PROJECT_ID", "caseops-dev")
     monkeypatch.setattr(
-        "caseops_api.services.document_storage.storage.Client",
+        "google.cloud.storage.Client",
         lambda project=None: _FakeStorageClient(objects, project),
     )
 
@@ -107,7 +167,7 @@ def test_gcs_backend_validates_temporary_bytes_before_upload(
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX", "tenant-docs")
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
     monkeypatch.setattr(
-        "caseops_api.services.document_storage.storage.Client",
+        "google.cloud.storage.Client",
         lambda project=None: _FakeStorageClient(objects, project),
     )
 
@@ -143,7 +203,7 @@ def test_gcs_backend_does_not_upload_when_temporary_validation_rejects(
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "gcs")
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET", "caseops-documents")
     monkeypatch.setattr(
-        "caseops_api.services.document_storage.storage.Client",
+        "google.cloud.storage.Client",
         lambda project=None: _FakeStorageClient(objects, project),
     )
 
@@ -179,7 +239,7 @@ def test_delete_stored_document_removes_gcs_blob_and_cache(
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX", "tenant-docs")
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
     monkeypatch.setattr(
-        "caseops_api.services.document_storage.storage.Client",
+        "google.cloud.storage.Client",
         lambda project=None: _FakeStorageClient(objects, project),
     )
 
@@ -403,7 +463,7 @@ def test_gcs_backend_raises_not_found_for_missing_blob(
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX", "tenant-docs")
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
     monkeypatch.setattr(
-        "caseops_api.services.document_storage.storage.Client",
+        "google.cloud.storage.Client",
         lambda project=None: _FakeStorageClient(objects, project),
     )
 

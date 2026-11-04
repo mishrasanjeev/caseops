@@ -66,9 +66,12 @@ def test_uncovered_invoice_text_returns_actionable_api_error_without_partial_pdf
         headers=headers,
     )
     assert response.status_code == 422
-    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-type"].split(";", 1)[0] == "application/problem+json"
     assert not response.content.startswith(b"%PDF-")
-    error = json.dumps(response.json(), ensure_ascii=False)
+    problem = response.json()
+    assert problem["status"] == 422
+    assert problem["type"] == "https://httpstatuses.com/422"
+    error = json.dumps(problem, ensure_ascii=False)
     assert "Contact support" in error
     assert "漢" not in error
     after_response = client.get(f"/api/matters/{matter['id']}/workspace", headers=headers)

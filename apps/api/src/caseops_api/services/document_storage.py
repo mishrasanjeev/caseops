@@ -9,12 +9,14 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import TYPE_CHECKING, BinaryIO
 
 from fastapi import HTTPException, status
-from google.cloud import storage
 
 from caseops_api.core.settings import get_settings
+
+if TYPE_CHECKING:
+    from google.cloud import storage
 
 _FILENAME_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
 _STORAGE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -123,6 +125,8 @@ def _cleanup_temp_file(temp_path: Path, root: Path | None = None) -> None:
 
 
 def _gcs_client() -> storage.Client:
+    from google.cloud import storage
+
     settings = get_settings()
     return storage.Client(project=settings.gcp_project_id)
 

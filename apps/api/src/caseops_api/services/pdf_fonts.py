@@ -48,6 +48,11 @@ _BAD_ATTRIBUTES = 0x400 | 0x1000 | 0x40000 | 0x100000 | 0x400000
 _FORMATTING = frozenset("\n\r\t\u200c\u200d")
 
 
+def _complete_native_cluster_map(clusters: list[int]) -> bool:
+    """Only classify a nonempty, complete prefix with unique ordered clusters."""
+    return bool(clusters) and clusters[0] == 0 and clusters == sorted(set(clusters))
+
+
 def _unavailable() -> Exception:
     from fastapi import HTTPException
 
@@ -211,6 +216,22 @@ def unicode_pdf_class() -> type:
             # original logical fragment for extraction/copy/accessibility.
             rendered = super().render_with_text_shaping(*args, **kwargs)
             if not rendered or not self.string:
+                return rendered
+            # The SDK already maps a unique, increasing HarfBuzz cluster to its
+            # complete logical Unicode sequence, including ligatures/combining
+            # sequences. Keep that native mapping and its physical geometry.
+            # A whole-fragment ActualText span makes PDFium assign every source
+            # character to the first positioned glyph's box. Recovery is only
+            # needed for repeated or reordered clusters (not ordinary Latin).
+            infos, _ = self.font.perform_harfbuzz_shaping(
+                self.string, self.font_size_pt, self.text_shaping_parameters
+            )
+            clusters = [int(info.cluster) for info in infos]
+            # A default-ignorable joiner may have a valid zero-width glyph yet
+            # be discarded by a decoder's native map. Keep its logical source.
+            if _complete_native_cluster_map(clusters) and not any(
+                char in "\u200c\u200d" for char in self.string
+            ):
                 return rendered
             actual = (b"\xfe\xff" + self.string.encode("utf-16-be")).hex().upper()
             return f"/Span <</ActualText <{actual}>>> BDC\n{rendered}\nEMC"

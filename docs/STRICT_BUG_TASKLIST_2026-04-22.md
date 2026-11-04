@@ -54,6 +54,21 @@ true). A real-browser negative/positive contract now covers the auditor repair;
 the original full deployed crawl remains unverified. This new observation is
 separate from the earlier inconclusive replays in B4-ADJ-32 below.
 
+The later local repair retains native ToUnicode geometry for complete ordered
+clusters and uses semantic recovery for reordered/repeated clusters and joiners.
+Physical contrast now measures actual text-object ink against its surrounding
+background; the4.5 threshold remains. The final28-case semantic/contrast module
+passed all84 phases, including mixed Devanagari and a leading joiner. Two separate
+metadata controls passed all6 phases: exact Windows metadata probes are denied
+before process creation, and normal platform metadata uses its real fallback.
+Unknown/subject process, network and database operations remain refused. These
+are focused development results, not full frozen or deployed acceptance. The
+updated PDF inventory is27 original fidelity +82 font/packaging/semantic cases,
+plus2 metadata controls. Complex-script semantic selection geometry remains
+limited. The separate GCS import change defers its SDK until actual GCS use;
+all48 existing storage assertions are retained and2 import regressions added,
+but the complete14-case storage run and41-case reader replacement are pending.
+
 Current local verification on f204ba30 reached all90 focused API cases and
 all270 phases:76 calls passed and14 failed; all setups/teardowns passed. The
 native600-second acceptance also expired, so the combined gate remains failed.
