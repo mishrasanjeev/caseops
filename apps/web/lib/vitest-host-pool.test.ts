@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 
+import { resolve as resolveVitestPath } from "pathe";
+
 import { describe, expect, test } from "vitest";
 import { ForksPoolWorker, type PoolOptions } from "vitest/node";
 
@@ -10,7 +12,9 @@ import { hostTrustedForks, sameHostForkFileIdentity, selectHostForkArguments } f
 
 const root = path.dirname(createRequire(import.meta.url).resolve("vitest/package.json"));
 const warning = path.join(root, "suppress-warnings.cjs");
-const defaults = ["--experimental-import-meta-resolve", "--require", warning,
+// The pinned Vitest resolver uses pathe, including on Windows.
+const warningArgument = resolveVitestPath(root, "./suppress-warnings.cjs");
+const defaults = ["--experimental-import-meta-resolve", "--require", warningArgument,
   "--conditions", "node", "--conditions", "development"];
 
 describe("host trusted Vitest fork constructor", () => {
@@ -40,13 +44,28 @@ describe("host trusted Vitest fork constructor", () => {
     ]);
   });
 
+  test("accepts the real installed Vitest path producer and rejects native Windows substitution", () => {
+    const produced = resolveVitestPath(root, "./suppress-warnings.cjs");
+    expect(defaults[2]).toBe(produced);
+    expect(path.resolve(produced)).toBe(warning);
+    expect(selectHostForkArguments(defaults, warning)).toEqual([
+      defaults[0], "--conditions", "node", "--conditions", "development",
+    ]);
+    if (process.platform === "win32") {
+      expect(produced).not.toBe(warning);
+      expect(() => selectHostForkArguments([
+        ...defaults.slice(0, 2), warning, ...defaults.slice(3),
+      ], warning)).toThrow("VITEST_HOST_FORK_CONSTRUCTOR_REFUSED");
+    }
+  });
+
   const refused: [string, string[]][] = [
     ["missing arguments", []],
     ["missing warning preload", [defaults[0], ...defaults.slice(3)]],
-    ["alternate preload path", [defaults[0], "--require", warning + ".other", ...defaults.slice(3)]],
-    ["equals require syntax", [defaults[0], "--require=" + warning, ...defaults.slice(3)]],
-    ["short require syntax", [defaults[0], "-r", warning, ...defaults.slice(3)]],
-    ["additional require", [...defaults, "--require", warning]],
+    ["alternate preload path", [defaults[0], "--require", warningArgument + ".other", ...defaults.slice(3)]],
+    ["equals require syntax", [defaults[0], "--require=" + warningArgument, ...defaults.slice(3)]],
+    ["short require syntax", [defaults[0], "-r", warningArgument, ...defaults.slice(3)]],
+    ["additional require", [...defaults, "--require", warningArgument]],
     ["additional import", [...defaults, "--import=data:text/javascript,throw 1"]],
     ["additional loader", [...defaults, "--experimental-loader=data:text/javascript,export{}"]],
     ["TLS verification override", [...defaults, "--tls-min-v1.0"]],
@@ -57,6 +76,17 @@ describe("host trusted Vitest fork constructor", () => {
     ["alternate mode condition", [...defaults.slice(0, -1), "unreviewed"]],
     ["reordered arguments", ["--conditions", "node", ...defaults.slice(0, 3), ...defaults.slice(5)]],
     ["duplicate warning preload", [...defaults.slice(0, 3), ...defaults]],
+    ["backslash warning argument", [defaults[0], "--require",
+      warningArgument.replaceAll("/", "\\"), ...defaults.slice(3)]],
+    ["dot-segment warning argument", [defaults[0], "--require",
+      warningArgument.replace("/suppress-warnings.cjs", "/./suppress-warnings.cjs"),
+      ...defaults.slice(3)]],
+    ["parent-segment warning argument", [defaults[0], "--require",
+      warningArgument.replace("/suppress-warnings.cjs", "/../vitest/suppress-warnings.cjs"),
+      ...defaults.slice(3)]],
+    ["duplicate-separator warning argument", [defaults[0], "--require",
+      warningArgument.replace("/suppress-warnings.cjs", "//suppress-warnings.cjs"),
+      ...defaults.slice(3)]],
   ];
   test.each(refused)("refuses %s before a constructor can run", (_name, args) => {
     let constructors = 0;
@@ -99,7 +129,7 @@ describe("host trusted Vitest fork constructor", () => {
   });
 
   test("refuses an extra preload before accessing constructor project", () => {
-    const options = { distPath: path.join(root, "dist"), execArgv: [...defaults, "--require", warning],
+    const options = { distPath: path.join(root, "dist"), execArgv: [...defaults, "--require", warningArgument],
       get project() { throw new Error("CONSTRUCTOR_TOUCHED"); } };
     expect(() => hostTrustedForks.createPoolWorker(options as unknown as PoolOptions))
       .toThrow("VITEST_HOST_FORK_CONSTRUCTOR_REFUSED");

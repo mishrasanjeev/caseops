@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import io
 import json
-import re
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -296,42 +295,10 @@ def render_pdf_bytes(
 
 
 def _ascii_safe(text: str) -> str:
-    """fpdf2's bundled Helvetica is WinAnsi (Latin-1). Drop or remap
-    any non-Latin-1 characters so the PDF writer doesn't blow up.
+    """Text the PDF core font prints; the one shared mapping in pdf_layout."""
+    from caseops_api.services.pdf_layout import pdf_text
 
-    Same approach as ``services.matter_summary_export``. A future pass
-    can subset a TrueType font (Noto Sans Devanagari etc.) to support
-    Hindi / Tamil / Bengali bodies natively in the PDF; today those
-    bodies should be exported as DOCX.
-    """
-    if not text:
-        return ""
-    table = {
-        "–": "-",  # en dash
-        "—": "--",  # em dash
-        "‘": "'",  # left single quote
-        "’": "'",  # right single quote
-        "“": '"',  # left double quote
-        "”": '"',  # right double quote
-        "…": "...",  # ellipsis
-        " ": " ",  # non-breaking space
-        "·": "-",  # middle dot — ASCII fallback
-        "•": "*",  # bullet
-        "→": "->",  # right arrow
-        "₹": "INR ",  # rupee sign
-    }
-    out = text.translate({ord(k): v for k, v in table.items()})
-    try:
-        out.encode("latin-1")
-    except UnicodeEncodeError:
-        # Drop anything Helvetica-1252 can't encode. The DOCX path
-        # remains lossless for non-Latin scripts.
-        out = re.sub(
-            r"[^\x00-\xff]+",
-            "?",
-            out,
-        )
-    return out
+    return pdf_text(text)
 
 
 def _draft_facts(draft: object) -> dict[str, object]:

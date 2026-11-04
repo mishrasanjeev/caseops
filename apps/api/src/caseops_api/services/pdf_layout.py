@@ -18,31 +18,24 @@ or out.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from functools import cache
 from typing import Any
 
-# The core Helvetica font is WinAnsi (Latin-1). Map common typography to
-# readable equivalents first; anything still unencodable becomes "?" instead of
-# failing the whole export. Non-Latin scripts remain lossless in DOCX exports.
+# fpdf2 declares the core fonts with WinAnsiEncoding (Windows-1252), so dashes,
+# curly quotes, the ellipsis and bullets print as typed (2026-11-03: an invoice
+# line "Drafting brief — bail application" printed with "--"). Map the common
+# characters outside it to readable equivalents; anything still unencodable
+# becomes "?" instead of failing the whole export. Non-Latin scripts remain
+# lossless in DOCX exports.
+CORE_FONT_ENCODING = "windows-1252"
 _TYPOGRAPHY = {
-    "–": "-",  # en dash
-    "—": "--",  # em dash
-    "‘": "'",
-    "’": "'",
-    "“": '"',
-    "”": '"',
-    "…": "...",
     " ": " ",  # non-breaking space
-    "·": "-",  # middle dot
-    "•": "*",  # bullet
     "→": "->",
     "₹": "INR ",
 }
 _TRANSLATION = {ord(key): value for key, value in _TYPOGRAPHY.items()}
-_UNENCODABLE = re.compile(r"[^\x00-\xff]+")
 
 # Body text colour for generated PDFs: near-black on the white page.
 TEXT_COLOR = (17, 24, 39)
@@ -56,9 +49,22 @@ def pdf_text(value: object) -> str:
         return ""
     text = str(value).translate(_TRANSLATION)
     try:
-        text.encode("latin-1")
+        text.encode(CORE_FONT_ENCODING)
     except UnicodeEncodeError:
-        text = _UNENCODABLE.sub("?", text)
+        pieces: list[str] = []
+        unencodable = False
+        for char in text:
+            try:
+                char.encode(CORE_FONT_ENCODING)
+            except UnicodeEncodeError:
+                # One "?" per unencodable run, as for a word in another script.
+                if not unencodable:
+                    pieces.append("?")
+                unencodable = True
+            else:
+                pieces.append(char)
+                unencodable = False
+        text = "".join(pieces)
     return text
 
 
@@ -78,6 +84,7 @@ def safe_pdf_class() -> type:
     class SafeCoreFontPDF(FPDF):  # type: ignore[misc]
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
+            self.core_fonts_encoding = CORE_FONT_ENCODING
             # Exports use text and explicitly supplied in-memory image bytes.
             # HTML/SVG must never acquire a local file or make an HTTP request.
             self.resource_access_policy = ResourceAccessPolicy.NONE

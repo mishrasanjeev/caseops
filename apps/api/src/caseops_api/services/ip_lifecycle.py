@@ -475,6 +475,17 @@ def _same_event_duplicate_identity(
             and row.payload_json.get("row_version_before")
             == payload.payload.get("row_version_before")
         )
+    if payload.event_kind == "publication" and (
+        payload.payload.get("watch_hit_id") or row.payload_json.get("watch_hit_id")
+    ):
+        # One journal issue can carry several watched conflicts for a docket.
+        # Each watch hit is its own event: once as the review candidate and
+        # once as the confirmed client-report item, whatever their dates.
+        return row.payload_json.get("watch_hit_id") == payload.payload.get(
+            "watch_hit_id"
+        ) and bool(row.payload_json.get("client_report_item")) == bool(
+            payload.payload.get("client_report_item")
+        )
     if payload.event_kind not in {
         "madrid_action",
         "opposition_applicant_action",

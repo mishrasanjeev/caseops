@@ -31,7 +31,11 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { expectPaidProviderBlocked } from "./support/cost-controls";
+import {
+  expectPaidProviderBlocked,
+  noPaidProviderHeaders,
+} from "./support/cost-controls";
+import { selectOperationalMatterForRecommendations } from "./support/operational-matter-fixture";
 
 // `??` treats empty string as a value; an unset GitHub repo variable
 // materializes as "" in the workflow. Trim + truthy-check.
@@ -190,16 +194,6 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     request,
   }) => {
     test.setTimeout(240_000); // LLM call takes 30-60s warm; allow headroom
-    const matterIds = await allMatterIds(page);
-    if (matterIds.length === 0) {
-      test.skip(true, "Tenant has no matters via API.");
-      return;
-    }
-    // Use the matter most likely to succeed end-to-end (Salman Khan
-    // has a rich description that gives retrieval enough to ground on).
-    const matterId =
-      matterIds.find((m) => m === "9fcf975a-3dbc-482d-9d4a-8f196916bcc4") ??
-      matterIds[0];
 
     const cookies = await page.context().cookies();
     const cookieHeader = cookies
@@ -208,14 +202,22 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       .join("; ");
     const csrfCookie = cookies.find((c) => c.name === "caseops_csrf");
     const headers: Record<string, string> = {
+      ...noPaidProviderHeaders,
       Accept: "application/json",
       "Content-Type": "application/json",
       Cookie: cookieHeader,
     };
     if (csrfCookie) headers["X-CSRF-Token"] = csrfCookie.value;
+    const matterId = await selectOperationalMatterForRecommendations(
+      request,
+      PROD_API_BASE_URL,
+      headers,
+      undefined, // Keep the helper's original setup clock; the hint is optional.
+      "9fcf975a-3dbc-482d-9d4a-8f196916bcc4", // Prefer only if currently visible/operational.
+    );
 
     const resp = await request.post(
-      `${PROD_API_BASE_URL}/api/matters/${matterId}/recommendations`,
+      `${PROD_API_BASE_URL}/api/matters/${encodeURIComponent(matterId)}/recommendations`,
       {
         headers,
         data: { type: "authority" },

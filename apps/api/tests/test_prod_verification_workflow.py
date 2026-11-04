@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -52,13 +53,17 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     selected = [
         step
         for job in workflow["jobs"].values()
-        if "test-legal-write-oct13" in job.get("strategy", {}).get("matrix", {}).get("suite", [])
+        if any(part in job.get("strategy", {}).get("matrix", {}).get("suite", [])
+               for part in ("test-legal-write-oct13-a", "test-legal-write-oct13-b"))
         for step in job.get("steps", [])
         if step.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
     ]
-    assert len(selected) == 1
+    assert len(selected) == 2 and selected[0] == selected[1]
     step = selected[0]
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == (
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
     assert (
@@ -76,7 +81,10 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
     assert len(evidence_step) == 1
-    assert 'tester|tester-catalog|tester-index|test-legal-write-oct13) required=("$SUITE")' in (
+    assert (
+        'tester|tester-catalog|tester-index|test-legal-write-oct13-a|'
+        'test-legal-write-oct13-b) required=("$SUITE")'
+    ) in (
         evidence_step[0]["run"]
     )
 
@@ -100,7 +108,10 @@ def test_notes22_production_case_uses_its_required_tenant_project() -> None:
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == (
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
     assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
 
 
@@ -111,7 +122,7 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     name = "Run release-owned Batch3 client and retained drafting acceptance"
     step = next(item for item in steps if item.get("name") == name)
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == "matrix.suite == 'batch3'"
     assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
     assert "secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD" in step["env"]["CASEOPS_RAM_PROD_PASSWORD"]
     assert (
@@ -181,7 +192,7 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
     ) + 1
     step = steps[names.index(BATCH4_STEP)]
     assert step["id"] == "batch4-tester"
-    assert step["if"] == "matrix.suite == 'test-legal-write-oct13'"
+    assert step["if"] == "matrix.suite == 'batch4'"
     assert step["env"] == {
         "CASEOPS_RAM_PROD_SLUG": "test-legal",
         "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com",
@@ -299,8 +310,11 @@ def _batch4_checkout(tmp_path: Path, *, specs: bool, governance: object) -> Path
 
 def _run_offline_step(
     tmp_path: Path, script: str, root: Path, env: dict[str, str], ancestor: int = 1,
-    live: str = "disabled",
+    live: str = "disabled", head_sha: str = "a" * 40, tracked_specs: str = "",
+    git_error: str = "",
 ) -> tuple[subprocess.CompletedProcess[str], list[list[str]], list[str], list[str]]:
+    if git_error not in {"", "head", "tree"}:
+        raise ValueError("Unsupported offline Git failure boundary")
     runner = tmp_path / "runner"
     runner.mkdir()
     calls = tmp_path / "calls.log"
@@ -311,15 +325,29 @@ def _run_offline_step(
     )
     # Only shell shims run: no Playwright, network, or real git history is touched.
     shims = (
-        'git() { [[ "$*" == "merge-base --is-ancestor HEAD ' + BATCH4_BASE + '" ]] || exit 97; '
-        'return "$CASEOPS_TEST_ANCESTOR"; }\n'
-        'python() { if [[ "${2:-}" == validate ]]; then '
+        'git() { case "$*" in\n'
+        '"merge-base --is-ancestor HEAD ' + BATCH4_BASE + '") '
+        'return "$CASEOPS_TEST_ANCESTOR" ;;\n'
+        '"rev-parse HEAD") [[ "$CASEOPS_TEST_GIT_ERROR" != head ]] || return 1; '
+        'printf \'%s\\n\' "$CASEOPS_TEST_HEAD_SHA" ;;\n'
+        '"ls-tree --name-only HEAD -- tests/e2e/ram-2026-10-31-control-crawl.spec.ts '
+        'tests/e2e/ram-2026-10-31-governance-ui.spec.ts") '
+        '[[ "$CASEOPS_TEST_GIT_ERROR" != tree ]] || return 1; '
+        'printf \'%s\' "$CASEOPS_TEST_TRACKED_SPECS" ;;\n'
+        '*) return 97 ;; esac; }\n'
+        'python() { if [[ "$#" -ge 4 && "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == validate && "${3:-}" == --required ]]; then '
         'printf \'%s\\n\' "${@:4}" > "$CASEOPS_TEST_VALIDATED"; return 0; fi; '
         # The live production probe is replaced: no credentials leave the test.
         'if [[ "${1:-}" == scripts/prod_rule_governance_live.py ]]; then '
         '[[ "$CASEOPS_TEST_LIVE" != fail ]] || return 1; '
         'printf \'%s\\n\' "$CASEOPS_TEST_LIVE"; return 0; fi; '
-        '"$CASEOPS_TEST_PYTHON" "$@"; }\n'
+        'if [[ "$#" == 2 && "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == batch4-governance ]]; then '
+        '"$CASEOPS_TEST_PYTHON" "$@"; return; fi; '
+        'if [[ "$#" == 2 && "${1:-}" == - && "${2:-}" == '
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]]; then '
+        '"$CASEOPS_TEST_PYTHON" "$@"; return; fi; return 98; }\n'
     )
     environment = {
         key: value for key, value in os.environ.items()
@@ -329,7 +357,9 @@ def _run_offline_step(
         "RUNNER_TEMP": runner.as_posix(), "CASEOPS_TEST_CALLS": calls.as_posix(),
         "CASEOPS_TEST_VALIDATED": validated.as_posix(), "CASEOPS_TEST_ANCESTOR": str(ancestor),
         "CASEOPS_TEST_PYTHON": Path(sys.executable).as_posix(), "PYTHONUTF8": "1",
-        "CASEOPS_TEST_LIVE": live, "GITHUB_OUTPUT": outputs.as_posix(), **env,
+        "CASEOPS_TEST_LIVE": live, "CASEOPS_TEST_HEAD_SHA": head_sha,
+        "CASEOPS_TEST_TRACKED_SPECS": tracked_specs, "CASEOPS_TEST_GIT_ERROR": git_error,
+        "GITHUB_OUTPUT": outputs.as_posix(), **env,
     })
     result = subprocess.run(
         [_git_bash(), "-c", shims + script], cwd=root, env=environment,
@@ -463,11 +493,15 @@ def test_batch4_receipts_are_required_exactly_when_the_step_runs_them(
     root = _batch4_checkout(tmp_path, specs=specs, governance=checked_in)
     result, _, required, _ = _run_offline_step(
         tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
-        {"SUITE": "test-legal-write-oct13", "BATCH4_GOVERNANCE": live},
+        {"SUITE": "batch4", "BATCH4_GOVERNANCE": live},
     )
-    assert result.returncode == 0, result.stderr
-    batch3 = ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]
-    assert required == ["test-legal-write-oct13", *(batch3 if specs else []), *batch4]
+    if not specs:
+        # A pre-feature step notice is history, never current mandatory-job proof.
+        assert result.returncode == 1 and required == []
+        assert "Newer serving release is missing Batch4 acceptance." in result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert required == batch4
 
 
 @pytest.mark.parametrize("live", [None, "", "Enabled", "enabled\nenabled", "unknown"])
@@ -475,7 +509,7 @@ def test_batch4_receipts_fail_closed_without_a_recorded_live_state(
     tmp_path: Path, live: str | None,
 ) -> None:
     root = _batch4_checkout(tmp_path, specs=True, governance=True)
-    env = {"SUITE": "test-legal-write-oct13"}
+    env = {"SUITE": "batch4"}
     if live is not None:
         env["BATCH4_GOVERNANCE"] = live
     result, _, required, _ = _run_offline_step(
@@ -743,10 +777,13 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     assert "needs.prod-playwright-shards.result == 'success'" in job["if"]
     assert job["needs"] == [
         "resolve-release", "prod-playwright-shards", "prod-tester-index",
-        "prod-test-legal-write-oct13",
+        "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+        "prod-batch3-tester", "prod-batch4-tester",
     ]
     assert "needs.prod-tester-index.result == 'success'" in job["if"]
-    assert "needs.prod-test-legal-write-oct13.result == 'success'" in job["if"]
+    for name in ("prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+                 "prod-batch3-tester", "prod-batch4-tester"):
+        assert f"needs.{name}.result == 'success'" in job["if"]
     assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer["env"]
     assert "needs.resolve-release.outputs.release_sha" in writer["env"]["SERVING_RELEASE_SHA"]
     assert '--run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in writer["run"]
@@ -767,17 +804,27 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     ]
     for name, predecessor, suite in (
         ("prod-tester-index", "prod-playwright-shards", "tester-index"),
-        ("prod-test-legal-write-oct13", "prod-tester-index", "test-legal-write-oct13"),
+        ("prod-test-legal-write-oct13-a", "prod-tester-index", "test-legal-write-oct13-a"),
+        ("prod-test-legal-write-oct13-b", "prod-test-legal-write-oct13-a",
+         "test-legal-write-oct13-b"),
+        ("prod-batch3-tester", "prod-test-legal-write-oct13-b", "batch3"),
+        ("prod-batch4-tester", "prod-batch3-tester", "batch4"),
     ):
         job = jobs[name]
         assert job["name"] == "Prod Playwright (${{ matrix.suite }})"
         assert job["needs"] == ["resolve-release", predecessor]
         assert "always()" in job["if"] and "!cancelled()" in job["if"]
         assert f"needs.{predecessor}.result == 'failure'" in job["if"]
+        cancelled = f"needs.{predecessor}.result == 'cancelled'"
+        if name in {"prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester"}:
+            assert cancelled in job["if"]
+        else:
+            assert cancelled not in job["if"]
         assert "needs.resolve-release.result == 'success'" in job["if"]
         assert job["strategy"]["matrix"]["suite"] == [suite]
         assert job["steps"] == original["steps"]
-    for name in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13"):
+    for name in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13-a",
+                 "prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester"):
         job = jobs[name]
         assert job["timeout-minutes"] == 38
         assert job["strategy"]["max-parallel"] == 1
@@ -793,7 +840,8 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     assert union_index < writer_index
     assert "--tester-partition-union" in steps[union_index]["run"]
     assert (
-        "--required tester tester-catalog tester-index test-legal-write-oct13"
+        "--required tester tester-catalog tester-index "
+        "test-legal-write-oct13-a test-legal-write-oct13-b"
         in steps[union_index]["run"]
     )
     downloaded = {
@@ -802,7 +850,10 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
     }
     assert downloaded == {
         "prod-playwright-report-tester", "prod-playwright-report-tester-index",
-        "prod-playwright-report-tester-catalog", "prod-playwright-report-test-legal-write-oct13",
+        "prod-playwright-report-tester-catalog",
+        "prod-playwright-report-test-legal-write-oct13-a",
+        "prod-playwright-report-test-legal-write-oct13-b",
+        "prod-playwright-report-batch3", "prod-playwright-report-batch4",
     }
 
 
@@ -814,9 +865,14 @@ def test_tester_budget_split_requires_release_owned_contract_before_either_parti
     assert job["strategy"]["matrix"]["suite"][:2] == ["tester", "tester-catalog"]
     steps = {step.get("name"): step for step in job["steps"]}
     guard = steps["Require release-owned bounded tester partition contract"]
-    assert guard["if"] == "matrix.suite == 'tester' || matrix.suite == 'tester-catalog'"
+    assert guard["if"] == (
+        "matrix.suite == 'tester' || matrix.suite == 'tester-catalog' || "
+        "matrix.suite == 'tester-index' || "
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
     assert guard["run"].strip() == (
-        "python scripts/prod_playwright_evidence.py tester-partition-contract"
+        "python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2"
     )
     assert job["steps"].index(guard) < job["steps"].index(
         steps["Run canonical tester production regressions"]
@@ -832,7 +888,7 @@ def test_tester_budget_split_requires_release_owned_contract_before_either_parti
     )
 
 
-@pytest.mark.parametrize("release_contract", ["current", "old", "missing"])
+@pytest.mark.parametrize("release_contract", ["current", "old", "old_v1", "missing"])
 def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
     tmp_path, release_contract,
 ):
@@ -847,17 +903,23 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
             "s.add_parser('run'); s.add_parser('validate'); p.parse_args()\n"
             "raise AssertionError('No browser execution is permitted')\n"
         )
+    elif release_contract == "old_v1":
+        script.write_text("import argparse\n"
+                          "p=argparse.ArgumentParser();s=p.add_subparsers(required=True)\n"
+                          "s.add_parser('tester-partition-contract');p.parse_args()\n"
+                          "raise AssertionError('No browser execution is permitted')\n")
     result = subprocess.run(
-        [sys.executable, "-B", str(script), "tester-partition-contract"],
+        [sys.executable, "-B", str(script), "tester-partition-contract", "--required-version", "2"],
         cwd=tmp_path, capture_output=True, encoding="utf-8", check=False, timeout=15,
     )
     assert not (tmp_path / "test-results").exists()
     if release_contract == "current":
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {
-            "tester_partition_contract": 1,
+            "tester_partition_contract": 2,
             "partitions": {"tester": 97, "tester-catalog": 18,
-                           "tester-index": 6, "test-legal-write-oct13": 51},
+                           "tester-index": 6, "test-legal-write-oct13-a": 40,
+                           "test-legal-write-oct13-b": 11},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }
     else:
@@ -912,7 +974,7 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     import yaml
 
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
-    steps = {step.get("name"): step for step in workflow["jobs"]["e2e"]["steps"]}
+    steps = {step.get("name"): step for step in workflow["jobs"]["e2e-projects"]["steps"]}
     execute = steps["Playwright (app config)"]
     assert execute["id"] == "app-playwright"
     assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
@@ -920,9 +982,9 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     assert execute["env"]["CASEOPS_WEB_BASE_URL"] == "http://127.0.0.1:3100"
     assert execute["run"].strip() == (
         "uv run --project apps/api --python 3.13 python "
-        "scripts/prod_playwright_evidence.py run --invocation ci-app -- "
-        "--config=playwright.app.config.ts --workers=1 --retries=0 "
-        "--reporter=list --output=test-results/app"
+        "scripts/prod_playwright_evidence.py run --invocation ci-${{ matrix.project }} -- "
+        "--config=playwright.app.config.ts --project=${{ matrix.project }} --workers=1 --retries=0 "
+        "--reporter=list --output=test-results/${{ matrix.project }}"
     )
     reconcile = steps["Reconcile app native Playwright evidence"]
     assert reconcile["if"] == (
@@ -931,17 +993,26 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     assert reconcile["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
     assert reconcile["run"].strip() == (
         "uv run --project apps/api --python 3.13 python "
-        "scripts/prod_playwright_evidence.py validate --required ci-app"
+        "scripts/prod_playwright_evidence.py validate --required ci-${{ matrix.project }}"
     )
     upload = steps["Upload Playwright report"]
     assert upload["if"] == "always()"
     assert "test-results/" in upload["with"]["path"]
-    assert "test-results/prod-native-evidence/ci-app/" in upload["with"]["path"]
+    assert "test-results/prod-native-evidence/ci-${{ matrix.project }}/" in upload["with"]["path"]
+    assert upload["with"]["name"] == "playwright-report-${{ matrix.project }}"
+    native = steps["Upload App native evidence"]
+    assert native["if"] == "always()"
+    assert native["with"] == {
+        "name": "playwright-native-${{ matrix.project }}",
+        "path": "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
+        "retention-days": 7, "if-no-files-found": "error",
+    }
 
 
 @pytest.mark.parametrize("stage", ["execute", "reconcile"])
 @pytest.mark.parametrize("exit_code", [0, 7])
-def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code):
+@pytest.mark.parametrize("project", ["app-chromium", "app-mobile"])
+def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code, project):
     import yaml
 
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
@@ -949,13 +1020,13 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
         "Playwright (app config)" if stage == "execute"
         else "Reconcile app native Playwright evidence"
     )
-    step = next(step for step in workflow["jobs"]["e2e"]["steps"]
+    step = next(step for step in workflow["jobs"]["e2e-projects"]["steps"]
                 if step.get("name") == name)
     assert step["run"].startswith("uv run --project apps/api --python 3.13 python ")
     # A shell function cannot fall through to a real uv or external service.
     script = (
         'uv() { printf "%s\\n" "$@" > native-arguments; return "$OFFLINE_EXIT"; }\n'
-        + step["run"]
+        + step["run"].replace("${{ matrix.project }}", project)
     )
     bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
     assert bash and Path(bash).is_file()
@@ -970,9 +1041,10 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
         "scripts/prod_playwright_evidence.py",
     ]
     assert arguments[7:] == (
-        ["run", "--invocation", "ci-app", "--", "--config=playwright.app.config.ts",
-         "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/app"]
-        if stage == "execute" else ["validate", "--required", "ci-app"]
+        ["run", "--invocation", f"ci-{project}", "--", "--config=playwright.app.config.ts",
+         f"--project={project}", "--workers=1", "--retries=0", "--reporter=list",
+         f"--output=test-results/{project}"]
+        if stage == "execute" else ["validate", "--required", f"ci-{project}"]
     )
 
 
@@ -1246,10 +1318,11 @@ def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
 
 
 BROWSER_WORKFLOW_JOBS = {
-    "ci.yml": ("e2e",),
+    "ci.yml": ("e2e-projects",),
     "prod-verify.yml": (
-        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-        "scheduled-statute-verification",
+        "prod-playwright-shards", "prod-tester-index",
+        "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+        "prod-batch3-tester", "prod-batch4-tester", "scheduled-statute-verification",
     ),
     "release-verify.yml": ("release-playwright",),
     "mobile-source.yml": ("source", "browser-handoff"),
@@ -1337,7 +1410,9 @@ def test_browser_runner_inventory_rejects_unreviewed_direct_or_script_callers(co
         _assert_browser_workflow_runners(workflows, scripts)
 
 
-@pytest.mark.parametrize("job", ["prod-tester-index", "prod-test-legal-write-oct13"])
+@pytest.mark.parametrize("job", ["prod-tester-index", "prod-test-legal-write-oct13-a",
+                                 "prod-test-legal-write-oct13-b", "prod-batch3-tester",
+                                 "prod-batch4-tester"])
 def test_browser_runner_inventory_keeps_both_yaml_anchor_consumers(job: str) -> None:
     workflows, scripts = _browser_workflows()
     del workflows["prod-verify.yml"]["jobs"][job]
@@ -1366,3 +1441,610 @@ def test_browser_runner_inventory_discovers_a_new_workflow_file(tmp_path, monkey
         with pytest.raises(AssertionError, match="Complete browser-job inventory"):
             _assert_browser_workflow_runners(workflows, scripts)
     assert REPO_ROOT is original_root
+
+
+SPLIT_QA_JOBS = (
+    ("prod-test-legal-write-oct13-a", "prod-tester-index", "test-legal-write-oct13-a"),
+    ("prod-test-legal-write-oct13-b", "prod-test-legal-write-oct13-a", "test-legal-write-oct13-b"),
+    ("prod-batch3-tester", "prod-test-legal-write-oct13-b", "batch3"),
+    ("prod-batch4-tester", "prod-batch3-tester", "batch4"),
+)
+
+
+def test_capacity_split_requires_v2_before_all_five_consumers_and_final_union():
+    import yaml
+    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())["jobs"]
+    steps = jobs["prod-playwright-shards"]["steps"]
+    guard = next(
+        step for step in steps
+        if step.get("name") == "Require release-owned bounded tester partition contract"
+    )
+    assert guard["if"] == (
+        "matrix.suite == 'tester' || matrix.suite == 'tester-catalog' || "
+        "matrix.suite == 'tester-index' || "
+        "matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'"
+    )
+    assert guard["run"] == (
+        "python scripts/prod_playwright_evidence.py "
+        "tester-partition-contract --required-version 2"
+    )
+    names = [step.get("name") for step in steps]
+    for name in ("Run canonical tester production regressions",
+                 "Run source-bound September 05 catalog regressions",
+                 "Run retained indexing and Contract AI production regressions",
+                 "Run release-owned test-legal portfolio and Calendar regressions"):
+        assert names.index(guard["name"]) < names.index(name)
+    final = next(step for step in jobs["record-release-evidence"]["steps"]
+                 if step.get("name") == "Require complete source-bound tester partition union")
+    assert final["run"].splitlines()[0] == "set -euo pipefail"
+    assert final["run"].splitlines()[1] == guard["run"]
+    assert (
+        "--required tester tester-catalog tester-index "
+        "test-legal-write-oct13-a test-legal-write-oct13-b"
+    ) in final["run"]
+    assert "--tester-partition-union" in final["run"]
+
+
+def test_capacity_split_keeps_exact_oct13_commands_and_independent_batch_routes():
+    step = _shard_step("Run release-owned test-legal portfolio and Calendar regressions")
+    assert step["if"] == (
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
+    lines = [line.strip() for line in step["run"].splitlines()
+             if line.strip().startswith('bash "$RUNNER_TEMP/caseops-prod-playwright" ')]
+    assert lines == [
+        (
+            'bash "$RUNNER_TEMP/caseops-prod-playwright" '
+            + 'test-legal-write-oct13-a --config=playwright.prod-ram.config.ts '
+            + '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
+            + '--reporter=list --output=test-results/test-legal-write-oct13-a ;;'
+        ),
+        (
+            'bash "$RUNNER_TEMP/caseops-prod-playwright" '
+            + 'test-legal-write-oct13-b --config=playwright.prod-ram.config.ts '
+            + '--project=test-legal-write-prod-chromium --workers=1 --retries=0 '
+            + '--reporter=list --output=test-results/test-legal-write-oct13-b ;;'
+        ),
+    ]
+    assert '*) echo "::error::Unreviewed October13 partition."; exit 1 ;;' in step["run"]
+    assert _shard_step(
+        "Run release-owned Batch3 client and retained drafting acceptance"
+    )["if"] == "matrix.suite == 'batch3'"
+    assert _shard_step(BATCH4_STEP)["if"] == "matrix.suite == 'batch4'"
+
+
+@pytest.mark.parametrize("part", [
+    "test-legal-write-oct13-a", "test-legal-write-oct13-b", "test-legal-write-oct13-c",
+])
+def test_oct13_split_shell_dispatch_is_literal_and_has_no_unknown_fallback(tmp_path, part):
+    root = _batch4_checkout(tmp_path, specs=True, governance=False)
+    for file in ("ram-2026-10-13-hearings.spec.ts", "ram-2026-10-13-ip-portfolio.spec.ts"):
+        (root / "tests/e2e" / file).touch()
+    script = _shard_step("Run release-owned test-legal portfolio and Calendar regressions")["run"]
+    script = script.replace("${{ matrix.suite }}", part)
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, script, root, BATCH4_PRESENT_ENV,
+    )
+    assert required == [] and recorded == []
+    if part.endswith("-c"):
+        assert result.returncode == 1 and invoked == []
+        assert "::error::Unreviewed October13 partition." in result.stdout
+    else:
+        assert result.returncode == 0
+        assert invoked == [[
+            part, "--config=playwright.prod-ram.config.ts",
+            "--project=test-legal-write-prod-chromium",
+            "--workers=1", "--retries=0", "--reporter=list", f"--output=test-results/{part}",
+        ]]
+
+
+@pytest.mark.parametrize("suite,expected", [
+    ("test-legal-write-oct13-a", ["test-legal-write-oct13-a"]),
+    ("test-legal-write-oct13-b", ["test-legal-write-oct13-b"]),
+    ("batch3", ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly"]),
+])
+def test_each_split_suite_owes_only_its_exact_native_receipts(tmp_path, suite, expected):
+    root = _batch4_checkout(tmp_path, specs=True, governance=False)
+    result, invoked, required, _ = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": suite},
+    )
+    assert result.returncode == 0 and invoked == []
+    assert required == expected
+
+
+@pytest.mark.parametrize("governance,extra", [
+    ("disabled", []), ("enabled", ["batch4-governance-desktop", "batch4-governance-mobile"]),
+])
+def test_final_claim_requires_all_owned_batch_roles_and_governance_receipts(
+    tmp_path, governance, extra,
+):
+    import yaml
+    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())["jobs"]
+    claim = jobs["record-release-evidence"]
+    for job, _, _ in SPLIT_QA_JOBS:
+        assert job in claim["needs"] and f"needs.{job}.result == 'success'" in claim["if"]
+    owned = next(step for step in claim["steps"]
+                 if step.get("name") == (
+                     "Require complete release-owned Batch3 and Batch4 role evidence"
+                 ))
+    assert owned["env"]["BATCH4_GOVERNANCE"] == "${{ needs.prod-batch4-tester.outputs.governance }}"
+    assert jobs["prod-batch4-tester"]["outputs"]["governance"] == (
+        "${{ steps.batch4-tester.outputs.governance }}"
+    )
+    root = _batch4_checkout(tmp_path, specs=True, governance=governance == "enabled")
+    result, invoked, required, _ = _run_offline_step(tmp_path, owned["run"], root,
+                                                  {"BATCH4_GOVERNANCE": governance})
+    assert result.returncode == 0 and invoked == []
+    assert required == ["batch3-clients-desktop", "batch3-clients-mobile", "batch3-drafts-readonly",
+                        "batch4-desktop", "batch4-mobile", *extra]
+    names = [step.get("name") for step in claim["steps"]]
+    assert names.index(owned["name"]) < names.index("Record exact-release public-claims evidence")
+
+
+@pytest.mark.parametrize("governance", [None, "", "unknown", "Enabled", "enabled\nenabled"])
+def test_final_claim_has_no_empty_or_unknown_batch4_governance_waiver(tmp_path, governance):
+    import yaml
+    job = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text()
+    )["jobs"]["record-release-evidence"]
+    step = next(step for step in job["steps"]
+                if step.get("name") == (
+                    "Require complete release-owned Batch3 and Batch4 role evidence"
+                ))
+    root = _batch4_checkout(tmp_path, specs=True, governance=False)
+    env = {} if governance is None else {"BATCH4_GOVERNANCE": governance}
+    result, invoked, required, _ = _run_offline_step(tmp_path, step["run"], root, env)
+    assert result.returncode == 1 and invoked == [] and required == []
+
+
+LATE_SPLIT_LINKS = (
+    ("prod-test-legal-write-oct13-b", "prod-test-legal-write-oct13-a"),
+    ("prod-batch3-tester", "prod-test-legal-write-oct13-b"),
+    ("prod-batch4-tester", "prod-batch3-tester"),
+)
+HISTORICAL_BATCH4_CLASSIFIER = (
+    "Reject historical Batch4 markers before current-release certification"
+)
+
+
+def _split_condition(
+    condition: str, predecessor: str, result: str, *, whole_cancelled: bool,
+    resolve: str = "success", event: str = "workflow_dispatch",
+) -> bool:
+    replacements = {
+        "always()": True, "!cancelled()": not whole_cancelled,
+        "github.event_name": event, "needs.resolve-release.result": resolve,
+        f"needs.{predecessor}.result": result,
+    }
+    for token, value in replacements.items():
+        condition = condition.replace(token, repr(value))
+    expression = ast.parse(condition.replace("&&", "and").replace("||", "or"), mode="eval")
+
+    def evaluate(node):
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+        if isinstance(node, ast.Constant) and type(node.value) in {str, bool}:
+            return node.value
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+            values = [evaluate(value) for value in node.values]
+            return all(values) if isinstance(node.op, ast.And) else any(values)
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
+            return evaluate(node.left) == evaluate(node.comparators[0])
+        raise ValueError("Unreviewed production split condition")
+
+    value = evaluate(expression)
+    if type(value) is not bool:
+        raise ValueError("Production split condition did not produce a Boolean")
+    return value
+
+
+@pytest.mark.parametrize("job,predecessor", LATE_SPLIT_LINKS)
+@pytest.mark.parametrize("result", [
+    "success", "failure", "cancelled", "skipped", "queued", "in_progress",
+])
+@pytest.mark.parametrize("whole_cancelled", [False, True])
+def test_late_split_jobs_continue_after_individual_cancellation_but_not_workflow_cancellation(
+    job, predecessor, result, whole_cancelled,
+):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    selected = workflow["jobs"][job]
+    assert selected["needs"] == ["resolve-release", predecessor]
+    actual = _split_condition(selected["if"], predecessor, result,
+                              whole_cancelled=whole_cancelled)
+    assert actual is (not whole_cancelled and result in {"success", "failure", "cancelled"})
+
+
+@pytest.mark.parametrize("job,predecessor", LATE_SPLIT_LINKS)
+@pytest.mark.parametrize("resolve,event", [("failure", "workflow_dispatch"), ("success", "push")])
+def test_late_split_continuation_keeps_resolver_and_manual_dispatch_fences(
+    job, predecessor, resolve, event,
+):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    actual = _split_condition(workflow["jobs"][job]["if"], predecessor, "cancelled",
+                              whole_cancelled=False, resolve=resolve, event=event)
+    assert actual is False
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("specs", [False, True])
+@pytest.mark.parametrize("live", ["", "disabled", "enabled"])
+def test_october13_partition_no_longer_owes_batch4_receipts(tmp_path, part, specs, live):
+    root = _batch4_checkout(tmp_path, specs=specs, governance=live == "enabled")
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": part, "BATCH4_GOVERNANCE": live},
+    )
+    marker_exists = (root / "test-results/prod-native-evidence/batch4-predates.json").exists()
+    assert result.returncode == 0, result.stderr
+    assert invoked == [] and recorded == [] and required == [part]
+    assert marker_exists is False
+
+
+@pytest.mark.parametrize("ancestor,code,message", [
+    (0, 0, "::notice::Serving source predates Batch4 acceptance; no Batch4 receipts are owed."),
+    (1, 1, "::error::Newer serving release is missing Batch4 acceptance."),
+])
+def test_batch4_partition_owes_nothing_only_for_a_release_that_predates_batch4(
+    tmp_path, ancestor, code, message,
+):
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "batch4", "CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40}, ancestor=ancestor,
+    )
+    marker = root / "test-results/prod-native-evidence/batch4-predates.json"
+    marker_bytes = marker.read_bytes() if marker.exists() else None
+    assert result.returncode == code and result.stdout.strip() == message
+    assert invoked == [] and required == [] and recorded == []
+    assert marker_bytes == (
+        b'{"release_sha": "' + b"a" * 40 +
+        b'", "completed": false, "reason": "serving_release_predates_batch4_acceptance"}\n'
+        if code == 0 else None
+    )
+
+
+@pytest.mark.parametrize("fault", [
+    "head_mismatch", "head_unreadable", "tree_contains_spec", "tree_unreadable",
+    "partial_workspace", "partial_control", "malformed_expected_sha", "lineage_unknown",
+])
+def test_batch4_historical_marker_requires_exact_sha_and_both_source_absence_observations(
+    tmp_path, fault,
+):
+    faults = {"head_mismatch", "head_unreadable", "tree_contains_spec", "tree_unreadable",
+              "partial_workspace", "partial_control", "malformed_expected_sha", "lineage_unknown"}
+    if fault not in faults:
+        raise ValueError("Unsupported historical Batch4 source fault")
+    root = _batch4_checkout(tmp_path, specs=False, governance=False)
+    if fault in {"partial_workspace", "partial_control"}:
+        (root / "tests/e2e").mkdir(parents=True)
+        spec = ("ram-2026-10-31-governance-ui.spec.ts" if fault == "partial_workspace"
+                else "ram-2026-10-31-control-crawl.spec.ts")
+        (root / "tests/e2e" / spec).touch()
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "batch4", "CASEOPS_EXPECTED_RELEASE_SHA": (
+            "invalid" if fault == "malformed_expected_sha" else "a" * 40)},
+        ancestor=2 if fault == "lineage_unknown" else 0,
+        head_sha="b" * 40 if fault == "head_mismatch" else "a" * 40,
+        tracked_specs="tests/e2e/ram-2026-10-31-control-crawl.spec.ts"
+        if fault == "tree_contains_spec" else "",
+        git_error={"head_unreadable": "head", "tree_unreadable": "tree"}.get(fault, ""),
+    )
+    marker_exists = (root / "test-results/prod-native-evidence/batch4-predates.json").exists()
+    assert result.returncode == 1 and invoked == [] and required == [] and recorded == []
+    assert marker_exists is False
+    if fault == "partial_workspace":
+        message = "Batch4 historical marker requires both acceptance source files absent."
+    elif fault in {"partial_control", "lineage_unknown"}:
+        message = "Newer serving release is missing Batch4 acceptance."
+    elif fault in {"tree_contains_spec", "tree_unreadable"}:
+        message = "Batch4 acceptance source absence is not proven by the serving tree."
+    else:
+        message = "Batch4 historical marker requires the exact serving SHA."
+    assert message in result.stdout
+
+
+def _historical_classifier_step():
+    import yaml
+
+    job = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text()
+    )["jobs"]["record-release-evidence"]
+    return job, next(step for step in job["steps"]
+                     if step.get("name") == HISTORICAL_BATCH4_CLASSIFIER)
+
+
+@pytest.mark.parametrize("case", [
+    "current", "historical", "newer_missing", "marker_on_current", "missing_marker",
+    "wrong_sha", "wrong_payload", "extra_payload", "tree_contains_spec", "tree_unreadable",
+    "head_mismatch", "head_unreadable", "malformed_expected_sha", "partial_workspace",
+])
+def test_historical_marker_cannot_publish_current_release_claims(tmp_path, case):
+    supported = {"current", "historical", "newer_missing", "marker_on_current", "missing_marker",
+                 "wrong_sha", "wrong_payload", "extra_payload", "tree_contains_spec",
+                 "tree_unreadable", "head_mismatch", "head_unreadable",
+                 "malformed_expected_sha", "partial_workspace"}
+    if case not in supported:
+        raise ValueError("Unsupported historical certification fixture")
+    modern = case in {"current", "marker_on_current"}
+    root = _batch4_checkout(tmp_path, specs=modern, governance=False)
+    if case == "partial_workspace":
+        (root / "tests/e2e").mkdir(parents=True)
+        (root / "tests/e2e/ram-2026-10-31-governance-ui.spec.ts").touch()
+    marker = root / "test-results/prod-native-evidence/batch4-predates.json"
+    if case not in {"current", "missing_marker"}:
+        marker.parent.mkdir(parents=True)
+        payload = {"release_sha": "b" * 40 if case == "wrong_sha" else "a" * 40,
+                   "completed": case == "wrong_payload",
+                   "reason": "serving_release_predates_batch4_acceptance"}
+        if case == "extra_payload":
+            payload["extra"] = True
+        marker.write_bytes((json.dumps(payload) + "\n").encode("ascii"))
+    original_marker = marker.read_bytes() if marker.exists() else None
+    _, step = _historical_classifier_step()
+    writer = tmp_path / "writer-reached"
+    # The sentinel is an owned offline publication stand-in; no live writer may run.
+    script = ('set -euo pipefail\n(\n' + step["run"]
+              + '\n)\nprintf reached > "$CASEOPS_TEST_WRITER"\n')
+    result, invoked, required, recorded = _run_offline_step(
+        tmp_path, script, root,
+        {"CASEOPS_EXPECTED_RELEASE_SHA": (
+            "invalid" if case == "malformed_expected_sha" else "a" * 40),
+         "CASEOPS_TEST_WRITER": writer.as_posix()},
+        ancestor=1 if case == "newer_missing" else 0,
+        head_sha="b" * 40 if case == "head_mismatch" else "a" * 40,
+        tracked_specs="tests/e2e/ram-2026-10-31-control-crawl.spec.ts"
+        if case == "tree_contains_spec" else "",
+        git_error={"tree_unreadable": "tree", "head_unreadable": "head"}.get(case, ""),
+    )
+    writer_reached = writer.exists()
+    retained_marker = marker.read_bytes() if marker.exists() else None
+    assert result.returncode == (0 if case == "current" else 1)
+    assert writer_reached is (case == "current")
+    assert invoked == [] and required == [] and recorded == []
+    assert retained_marker == original_marker
+    if case == "current":
+        writer_bytes = writer.read_bytes()
+        assert writer_bytes == b"reached"
+        return
+    if case == "historical":
+        message = "diagnostic only. Current-release certification is incomplete."
+    elif case in {"newer_missing", "marker_on_current", "partial_workspace"}:
+        message = "Batch4 historical marker does not match a pre-feature serving source."
+    elif case == "missing_marker":
+        message = "Missing Batch4 source has no verified historical marker"
+    elif case in {"tree_contains_spec", "tree_unreadable"}:
+        message = "Batch4 acceptance source absence is not proven by the serving tree."
+    elif case in {"head_mismatch", "head_unreadable", "malformed_expected_sha"}:
+        message = "Batch4 certification requires the exact serving SHA."
+    else:
+        message = "Batch4 historical marker payload does not match the exact serving release."
+    assert message in result.stdout + result.stderr
+
+
+def test_historical_classifier_never_replaces_current_union_roles_or_successful_qa_jobs():
+    job, classifier = _historical_classifier_step()
+    names = [step.get("name") for step in job["steps"]]
+    assert (
+        names.index(classifier["name"])
+        < names.index("Require complete source-bound tester partition union")
+        < names.index("Record exact-release public-claims evidence")
+    )
+    union = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Require complete source-bound tester partition union"
+    )
+    assert "--required-version 2" in union["run"] and "--tester-partition-union" in union["run"]
+    assert (
+        "--required tester tester-catalog tester-index "
+        "test-legal-write-oct13-a test-legal-write-oct13-b"
+    ) in union["run"]
+    for name, _, _ in SPLIT_QA_JOBS:
+        assert f"needs.{name}.result == 'success'" in job["if"]
+    writer = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Record exact-release public-claims evidence"
+    )
+    assert "if" not in writer
+
+
+def _assert_app_project_workflow(workflow):
+    jobs = workflow["jobs"]
+    browser, aggregate = jobs["e2e-projects"], jobs["e2e"]
+    assert browser["strategy"] == {
+        "fail-fast": False,
+        "max-parallel": 2,
+        "matrix": {"project": ["app-chromium", "app-mobile"]},
+    }
+    assert browser["timeout-minutes"] == 60
+    assert browser["runs-on"] == "ubuntu-24.04"
+    assert browser["needs"] == ["api", "web", "postgres-validation"]
+    assert "if" not in browser
+    assert "continue-on-error" not in browser
+    steps = {step.get("name"): step for step in browser["steps"]}
+    execute = steps["Playwright (app config)"]
+    assert "continue-on-error" not in execute and "if" not in execute
+    assert "--project=${{ matrix.project }} --workers=1 --retries=0" in execute["run"]
+    assert "--grep" not in execute["run"] and "--shard" not in execute["run"]
+    assert "--repeat" not in execute["run"]
+    assert execute["env"]["CASEOPS_RELEASE_SHA"] == "${{ github.sha }}"
+    assert execute["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == "${{ github.sha }}"
+    # Same source-owned global setup/separate SQLite stack, credential-free
+    # synthetic tenant and no-paid runtime recipe on each fresh hosted runner.
+    assert any(step.get("uses") == "./.github/actions/node-trust" for step in browser["steps"])
+    assert any(
+        step.get("name") == "Verify local IP fixture protocol and database parity"
+        for step in browser["steps"]
+    )
+    assert not browser.get("services")
+    for step in browser["steps"]:
+        assert "continue-on-error" not in step
+        for key in step.get("env", {}):
+            assert "secrets." not in str(step["env"][key])
+    raw, native = steps["Upload Playwright report"], steps["Upload App native evidence"]
+    assert raw["if"] == native["if"] == "always()"
+    assert raw["with"]["name"] == "playwright-report-${{ matrix.project }}"
+    assert native["with"] == {
+        "name": "playwright-native-${{ matrix.project }}",
+        "path": "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
+        "retention-days": 7,
+        "if-no-files-found": "error",
+    }
+    assert aggregate["name"] == "Playwright app suite"
+    assert aggregate["needs"] == ["api", "web", "postgres-validation", "e2e-projects"]
+    assert aggregate["if"] == "always() && !cancelled()"
+    assert aggregate["timeout-minutes"] == 5
+    assert "continue-on-error" not in aggregate
+    required = aggregate["steps"][0]
+    assert required["env"] == {"APP_PROJECT_RESULT": "${{ needs['e2e-projects'].result }}"}
+    assert required["run"] == 'test "$APP_PROJECT_RESULT" = success'
+    downloads = [
+        step for step in aggregate["steps"] if step.get("uses") == "actions/download-artifact@v4"
+    ]
+    assert [step["with"] for step in downloads] == [
+        {
+            "name": f"playwright-native-{project}",
+            "path": f"test-results/prod-native-evidence/ci-{project}",
+        }
+        for project in ("app-chromium", "app-mobile")
+    ]
+    union = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Reconcile complete App project union"
+    )
+    assert union["env"] == {"CASEOPS_EXPECTED_RELEASE_SHA": "${{ github.sha }}"}
+    assert union["run"].strip() == (
+        "python3 -B scripts/prod_playwright_evidence.py validate "
+        "--required ci-app-chromium ci-app-mobile --app-project-union > app-project-union.json"
+    )
+    assert "if" not in union and "continue-on-error" not in union
+    receipt = aggregate["steps"][-1]
+    assert receipt["if"] == "always()"
+    assert receipt["with"] == {
+        "name": "playwright-app-union",
+        "path": "app-project-union.json",
+        "retention-days": 7,
+        "if-no-files-found": "error",
+    }
+    assert jobs["deploy-staging"]["needs"] == ["api", "web", "e2e"]
+
+
+def test_app_project_matrix_keeps_isolated_original_budgets_and_complete_native_aggregate():
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    _assert_app_project_workflow(workflow)
+    config = (REPO_ROOT / "playwright.app.config.ts").read_text()
+    for policy in (
+        "fullyParallel: false",
+        "workers: 1",
+        "timeout: 120_000",
+        "expect: { timeout: 15_000 }",
+        "globalSetup:",
+        "reuseExistingServer: false",
+        "extraHTTPHeaders: localTransportHeaders(webBaseUrl)",
+    ):
+        assert policy in config
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "omit_project",
+        "duplicate_project",
+        "unknown_project",
+        "fail_fast",
+        "workers",
+        "retry",
+        "skip_browser",
+        "continue",
+        "shared_artifact",
+        "shared_download",
+        "missing_download",
+        "missing_union_role",
+        "skip_union",
+        "wrong_source",
+        "missing_native",
+        "missing_needs",
+    ],
+)
+def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(damage):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    browser, aggregate = workflow["jobs"]["e2e-projects"], workflow["jobs"]["e2e"]
+    steps = {step.get("name"): step for step in browser["steps"]}
+    if damage in {"omit_project", "duplicate_project", "unknown_project"}:
+        browser["strategy"]["matrix"]["project"] = {
+            "omit_project": ["app-chromium"],
+            "duplicate_project": ["app-chromium", "app-chromium"],
+            "unknown_project": ["app-chromium", "app-tablet"],
+        }[damage]
+    elif damage == "fail_fast":
+        browser["strategy"]["fail-fast"] = True
+    elif damage in {"workers", "retry"}:
+        old, new = (
+            ("--workers=1", "--workers=2")
+            if damage == "workers"
+            else ("--retries=0", "--retries=1")
+        )
+        steps["Playwright (app config)"]["run"] = steps["Playwright (app config)"]["run"].replace(
+            old, new
+        )
+    elif damage == "skip_browser":
+        browser["if"] = "false"
+    elif damage == "continue":
+        browser["continue-on-error"] = True
+    elif damage == "shared_artifact":
+        steps["Upload Playwright report"]["with"]["name"] = "playwright-report"
+    elif damage == "missing_native":
+        steps["Upload App native evidence"]["with"]["if-no-files-found"] = "warn"
+    elif damage in {"shared_download", "missing_download"}:
+        downloads = [
+            s for s in aggregate["steps"] if s.get("uses") == "actions/download-artifact@v4"
+        ]
+        if damage == "shared_download":
+            downloads[1]["with"]["path"] = downloads[0]["with"]["path"]
+        else:
+            aggregate["steps"].remove(downloads[1])
+    elif damage == "missing_needs":
+        aggregate["needs"].remove("e2e-projects")
+    else:
+        union = next(
+            s for s in aggregate["steps"] if s.get("name") == "Reconcile complete App project union"
+        )
+        if damage == "skip_union":
+            union["if"] = "false"
+        elif damage == "wrong_source":
+            union["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] = "0" * 40
+        else:
+            union["run"] = union["run"].replace(" ci-app-mobile", "")
+    with pytest.raises(AssertionError):
+        _assert_app_project_workflow(workflow)
+
+
+@pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped", ""])
+def test_app_aggregate_native_guard_rejects_every_non_successful_matrix(tmp_path, result):
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    command = workflow["jobs"]["e2e"]["steps"][0]["run"]
+    bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+    assert bash and Path(bash).is_file()
+    child = subprocess.run(
+        [bash, "-e", "-c", command],
+        cwd=tmp_path,
+        capture_output=True,
+        env={**os.environ, "APP_PROJECT_RESULT": result},
+        timeout=10,
+    )
+    assert (child.returncode == 0) is (result == "success")

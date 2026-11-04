@@ -121,6 +121,38 @@ def test_bug016_issued_gst_invoice_is_legible_complete_and_one_page(client: Test
     assert compact("Status: Issued") in text
 
 
+def test_bug016_invoice_pdf_prints_typed_punctuation_as_typed(client: TestClient) -> None:
+    # Production's reported INVR-2026-028 line reads "Drafting brief — bail
+    # application"; the PDF printed "--" because text was encoded as Latin-1.
+    boot = _bootstrap(client, slug_seed="bug016-typography")
+    token = str(boot["access_token"])
+    matter = _create_matter(client, token, "BUG016-TYPOGRAPHY")
+    _profile(client, token)
+    typed = [
+        "Drafting brief — bail application",
+        "Notes on the “urgent” listing – 2 pages… • the client’s annexure",
+    ]
+    invoice, body = _invoice_pdf(
+        client,
+        token,
+        str(matter["id"]),
+        status="issued",
+        client_gstin="07AAACP0165G1ZR",
+        manual_items=[
+            *({"description": line, "amount_minor": 100000} for line in typed),
+            {"description": "राम fee ₹", "amount_minor": 50000},
+        ],
+    )
+    rendered = assert_legible(body)
+    text = compact(rendered.text)
+    for line in typed:
+        assert compact(line) in text, line
+    assert "--" not in rendered.text
+    # A script the core font lacks still downloads, readably marked.
+    assert compact("? fee INR") in text
+    assert [line["description"] for line in invoice["line_items"]][:2] == typed
+
+
 def test_bug016_draft_without_legal_name_is_marked_draft_and_names_the_firm(
     client: TestClient,
 ) -> None:

@@ -15,7 +15,7 @@ import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEAD
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
-import { resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
+import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
@@ -1391,7 +1391,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
-  let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0;
+  let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
   const values = auth.firefoxUi.locators;
   // Field text as the browser reports it; options.autofill models Firefox prefill.
@@ -1407,7 +1407,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
       clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
     },
     waitUntil: async (callback, settings = {}) => {
-      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll) {
+      // Pending Firefox preparation is observed one click per poll, so it
+      // takes the simulated clock below rather than a single poll.
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && fullBrowser) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1470,7 +1472,8 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
         : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}` && !promptCleared
           && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
-        : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0) : false;
+        : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0)
+          && Number(key.slice('prepare-'.length)) <= preparationShown : false;
       if (!shown) return [];
       const elementId = `unit-firefox-${++fieldSequence}`;
       fields.set(elementId, key);
@@ -1489,6 +1492,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = options.directForm ? 'login' : 'landing';
+          if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
           if (key === 'urlClose') editing = false;
@@ -1510,6 +1514,69 @@ function firefoxDouble(t, foreign = false, options = {}) {
   return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
     elapsed: () => clock };
 }
+
+function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure } = {}) {
+  const recipe = { packageName: 'org.mozilla.firefox', locators: {
+    fullBrowser: { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, urlOpen: { kind: 'id', value: 'ADDRESSBAR_URL_BOX' },
+  }, prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] };
+  let menuOpen = menuInitiallyOpen, full = false, clock = 0;
+  const clicks = [], records = [];
+  const menuQuery = selector('android', 'label', 'More options'), conversionQuery = selector('android', 'label', 'Open in Firefox');
+  const driver = {
+    async getCurrentPackage() { return recipe.packageName; },
+    async elementClick(id) {
+      clicks.push(id);
+      if (dispatchFailure) throw dispatchFailure;
+      if (id === menuQuery) { menuOpen = !menuOpen; if (fullAfterMenu) full = true; }
+      if (id === conversionQuery) full = true;
+    },
+    async $$(query) {
+      const shown = query === selector('android', 'id', 'ADDRESSBAR_TABS_COUNTER') ? full : query === menuQuery ? true
+        : query === conversionQuery ? menuOpen && !full && !missingConversion
+        : query === selector('android', 'id', 'ADDRESSBAR_URL_BOX') ? full : false;
+      return shown ? [{ elementId: query, async isDisplayed() { return true; }, async isEnabled() { return true; },
+        async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); } }] : [];
+    },
+    async waitUntil(predicate, { timeout = 10000, interval = 150, timeoutMsg } = {}) {
+      const start = clock;
+      while (!await predicate()) {
+        if (clock - start >= timeout) throw new Error(timeoutMsg);
+        clock += Math.min(interval, timeout - (clock - start));
+      }
+    },
+    async performActions() { assert.fail('BROWSER_READINESS_MUST_NOT_SCROLL'); },
+  };
+  return { context: { driver, platform: 'android', fixture: { auth: { firefoxUi: recipe } }, record: row => records.push(row) },
+    recipe, clicks, records, elapsed: () => clock };
+}
+
+test('Firefox preparation consumes an already open conversion menu without toggling it closed', async () => {
+  const fake = firefoxPreparation({ menuInitiallyOpen: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'Open in Firefox')]);
+});
+
+test('Firefox preparation observes completed conversion instead of demanding an obsolete menu item', async () => {
+  const fake = firefoxPreparation({ fullAfterMenu: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+});
+
+test('Firefox missing conversion fails within ten seconds without reopening its menu or entering credentials', async () => {
+  const fake = firefoxPreparation({ missingConversion: true });
+  await assert.rejects(prepareFirefox(fake.context, fake.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+  assert.equal(fake.elapsed(), 10000);
+});
+
+test('Firefox preparation retains stale and lost dispatch failures without refetching or replaying a menu action', async () => {
+  for (const message of ['stale element reference', 'native acknowledgement lost']) {
+    const failure = new Error(message), fake = firefoxPreparation({ dispatchFailure: failure });
+    await assert.rejects(prepareFirefox(fake.context, fake.recipe), error => error === failure);
+    assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
+    assert.equal(fake.elapsed(), 0);
+  }
+});
 
 test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
   browserEnvironment(t);
@@ -1741,7 +1808,8 @@ test('Firefox conversion without the full-browser marker fails before entering c
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, customTabUrlShared: true, neverFullBrowser: true,
     prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] });
-  await assert.rejects(() => browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  await assert.rejects(() => browserLogin(fake.context), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.equal(fake.elapsed(), 10000);
   assert.deepEqual(fake.writes, []);
   assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)), []);
   assert.deepEqual(fake.swipes, []);
@@ -2985,7 +3053,7 @@ test('unknown and modified import URIs refuse before preload or application entr
 
 
 import { createRequire as ciTrustCreateRequire, syncBuiltinESMExports } from 'node:module';
-import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand } from './host-node-trust-ci.mjs';
+import { appendCITrustOutputs, prepareCIHostNodeTrust, prepareCIHostNodeTrustWindows, ciTrustFailureCode, reviewCIHostSourceAclOutput, reviewCICommandOwnerResult, hardenCITrustRunnerCommand, reviewCITrustHardenResult, CI_TRUST_HARDEN_RESULT_CODES } from './host-node-trust-ci.mjs';
 const ciTrustYaml = ciTrustCreateRequire(new URL('../../apps/mobile/package.json', import.meta.url))('js-yaml');
 const ciTrustKeys = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256', 'NPM_CONFIG_USERCONFIG', 'NPM_CONFIG_GLOBALCONFIG', 'NPM_CONFIG_STRICT_SSL', 'NPM_CONFIG_REGISTRY'];
 const ciTrustValues = Object.fromEntries(ciTrustKeys.map(key => [key, 'public-fixture-' + key]));
@@ -3105,7 +3173,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  assert.equal(setupCount, 15); assert.equal(commandCount, 111);
+  assert.equal(setupCount, 18); assert.equal(commandCount, 171);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
@@ -5004,10 +5072,23 @@ test('CI-COMMAND-02 hardening refuses missing context foreign command names alia
   });
 });
 test('CI-COMMAND-03 hardening preserves subprocess failures and unsafe postcondition without writing command bytes', async () => {
-  for (const failure of [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, { status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, { status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, { status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, { status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }]) await ciNativeRunnerFixture(async f => {
-    const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
-    assert.equal(refused?.message, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
-    assert.equal(f.commandCalls, 1); assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+  for (const [failure, expected] of [
+    [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: 1, stdout: '', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_PRIVATE' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: 1, stdout: 'x', stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_BOUNDED' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS'],
+    [{ status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT'],
+    [{ status: 0, stdout: 'SECURED\nSYNTHETIC_PRIVATE', stderr: '' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL'],
+    [{ status: 0, stdout: 'SECURED', stderr: 'SYNTHETIC_PRIVATE' }, 'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL'],
+  ]) await ciNativeRunnerFixture(async f => {
+    const trace = ciSourceTrace();
+    try {
+      const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
+      assert.equal(refused?.message, expected);
+      assert.equal(ciTrustFailureCode(refused), expected);
+      assert.equal(f.commandCalls, 1); assert.equal(trace.writes, 0);
+      assert.equal(fs.readFileSync(f.command, 'utf8'), 'EARLIER=retained\n');
+    } finally { trace.restore(); }
+    trace.closed();
   }, { proof: () => failure });
   for (const stage of ['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']) await ciNativeRunnerFixture(async f => {
     const refused = ciHardeningRefusal({ ...f.environment, SystemRoot: process.env.SystemRoot });
@@ -5029,6 +5110,61 @@ test('CI-COMMAND-04 hardening rejects same-byte pathname replacement and changed
     assert.equal(fs.readFileSync(f.command, 'utf8'), replacement ? 'EARLIER=retained\n' : 'CHANGED=retained\n');
     if (replacement) assert.equal(fs.readFileSync(path.join(f.directory, 'retained-command'), 'utf8'), 'EARLIER=retained\n');
   }, { proof: (f) => { if (replacement) { fs.renameSync(f.command, path.join(f.directory, 'retained-command')); fs.writeFileSync(f.command, 'EARLIER=retained\n', { flag: 'wx', mode: 0o600 }); } else fs.writeFileSync(f.command, 'CHANGED=retained\n'); return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
+test('CI-COMMAND-05 pure hardening result decoder exposes only bounded native dispositions', () => {
+  const ok = { status: 0, signal: null, stdout: 'SECURED', stderr: '' };
+  const cases = [
+    ['success', ok, null],
+    ['timeout', { ...ok, status: null, signal: 'SIGTERM', error: { code: 'ETIMEDOUT', message: 'SYNTHETIC_PRIVATE' } }, 'TIMEOUT'],
+    ['late-success-with-timeout', { ...ok, error: { code: 'ETIMEDOUT' } }, 'TIMEOUT'],
+    ['max-buffer', { ...ok, status: null, error: { code: 'ENOBUFS', message: 'SYNTHETIC_PRIVATE' } }, 'OUTPUT_BOUND'],
+    ['other-error', { ...ok, error: { code: 'EACCES', message: 'SYNTHETIC_PRIVATE', path: 'SYNTHETIC_PRIVATE' } }, 'ERROR'],
+    ['sigterm', { ...ok, status: null, signal: 'SIGTERM' }, 'SIGNAL'],
+    ['sigkill', { ...ok, status: null, signal: 'SIGKILL' }, 'SIGNAL'],
+    ['private-signal', { ...ok, status: null, signal: 'SYNTHETIC_PRIVATE' }, 'SIGNAL'],
+    ['no-disposition', { ...ok, status: null }, 'STATUS'],
+    ['nonzero-status', { ...ok, status: 2 }, 'STATUS'],
+    ['boolean-status', { ...ok, status: true }, 'PROTOCOL'],
+    ['null-result', null, 'PROTOCOL'],
+    ['array-result', [], 'PROTOCOL'],
+    ['missing-status', { stdout: 'SECURED', stderr: '' }, 'PROTOCOL'],
+    ['private-stdout', { ...ok, stdout: 'SECURED\nSYNTHETIC_PRIVATE' }, 'PROTOCOL'],
+    ['private-stderr', { ...ok, stderr: 'SYNTHETIC_PRIVATE' }, 'PROTOCOL'],
+    ['false-stage-success', { ...ok, stderr: 'CI_TRUST_COMMAND_HARDEN_REFUSED_ACL' }, 'PROTOCOL'],
+    ['nonstring-signal', { ...ok, signal: true }, 'PROTOCOL'],
+    ['nonstring-stdout', { ...ok, stdout: Buffer.from('SECURED') }, 'PROTOCOL'],
+    ['nonstring-stderr', { ...ok, stderr: null }, 'PROTOCOL'],
+    ['byte-bound', { ...ok, stdout: 'x'.repeat(4097) }, 'OUTPUT_BOUND'],
+    ['utf8-bound', { ...ok, stderr: '\u00e9'.repeat(2049) }, 'OUTPUT_BOUND'],
+    ['false-error-field', { ...ok, error: false }, 'PROTOCOL'],
+  ];
+  for (const [id, result, suffix] of cases) {
+    const before = JSON.stringify(result);
+    if (suffix === null) assert.equal(reviewCITrustHardenResult(result), undefined, id);
+    else assert.throws(() => reviewCITrustHardenResult(result), error => {
+      const expected = 'CI_TRUST_COMMAND_HARDEN_REFUSED_' + suffix;
+      assert.equal(error.message, expected, id);
+      assert.equal(ciTrustFailureCode(error), expected, id);
+      assert.ok(!error.message.includes('SYNTHETIC_PRIVATE'), id); return true;
+    });
+    assert.equal(JSON.stringify(result), before, id);
+  }
+});
+test('CI-COMMAND-06 hardening diagnostic allowlist cannot reflect private output or forged suffixes', () => {
+  const expected = [
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT', 'CI_TRUST_COMMAND_HARDEN_REFUSED_ERROR',
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_SIGNAL', 'CI_TRUST_COMMAND_HARDEN_REFUSED_STATUS',
+    'CI_TRUST_COMMAND_HARDEN_REFUSED_PROTOCOL', 'CI_TRUST_COMMAND_HARDEN_REFUSED_OUTPUT_BOUND',
+  ];
+  assert.deepEqual(CI_TRUST_HARDEN_RESULT_CODES, expected);
+  for (const code of expected) {
+    assert.equal(ciTrustFailureCode(new Error(code)), code);
+    assert.equal(ciTrustFailureCode(new Error(code + '\nSYNTHETIC_PRIVATE')), code);
+    for (const message of [code + '_SYNTHETIC_PRIVATE', code + ' SYNTHETIC_PRIVATE',
+      'SYNTHETIC_PRIVATE ' + code, code.toLowerCase()]) {
+      assert.equal(ciTrustFailureCode(new Error(message)), 'CI_TRUST_PREPARATION_REFUSED');
+    }
+  }
 });
 test('CI native runner output admits only its observed safe Administrators owner and preserves distinct authority', async () => ciNativeRunnerFixture(async ({ environment, command }) => {
   const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.commandFileAuthority, 'native-runner-command-safe-administrators-owner'); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);

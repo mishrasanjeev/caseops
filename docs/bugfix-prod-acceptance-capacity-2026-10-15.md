@@ -1,5 +1,11 @@
 # Production acceptance capacity correction
 
+> November3 supersession: the layout below is dated historical evidence. The
+> current candidate separates October13A, October13B, Batch3 and Batch4 into
+> four serial jobs with unchanged38-minute limits. See the November3 entries
+> in [the strict bug ledger](STRICT_BUG_TASKLIST_2026-04-22.md). Its complete
+> current-source and deployed acceptance remain pending.
+
 Status: Partially fixed. QG-SEC-004 exact-release verification; local workflow
 and evidence-consumer controls only. Fresh joined CI, Docker, canonical release
 and complete deployed acceptance are still required. No production mutation,

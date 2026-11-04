@@ -76,6 +76,7 @@ COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-release-identity.ts
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
+COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 
@@ -98,6 +99,9 @@ RUN addgroup -g 1001 -S nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
 # Keep distributed font and JavaScript copyright/licence notices reachable.
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./public
+# The public native-link input stays root-owned; deploy-prod.sh points the
+# runtime at native-links/production.json only when that file is committed.
+COPY --from=builder /app/apps/web/native-links ./native-links
 # Operator compliance materials are deliberately outside every public asset root.
 COPY --chown=nextjs:nodejs license-policy/reviewed-packages.json /app/third-party-compliance/license-policy/reviewed-packages.json
 COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/license-policy/upstream/

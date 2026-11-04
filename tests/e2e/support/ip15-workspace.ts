@@ -6,6 +6,7 @@ import { expect, type APIRequestContext, type APIResponse, type Page } from "@pl
 import type { IpDocket } from "../../../apps/web/lib/api/endpoints";
 import { localTransportHeaders, noPaidProviderHeaders } from "./cost-controls";
 import { e2eEnv, repoRoot } from "./env";
+import { RUN_ID, runId } from "./run-id";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 type Ip15Actor = {
@@ -62,7 +63,7 @@ function localRuntime() {
 }
 
 function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: string) {
-  if (![web, api].every(loopback) || !slug.startsWith("ip15-") || !uuid.test(slug.slice(5))
+  if (![web, api].every(loopback) || !slug.startsWith("ip15-") || !RUN_ID.test(slug.slice(5))
     || actor.company.slug !== slug || !uuid.test(actor.company.id) || !uuid.test(actor.membership.id)) {
     throw new Error("IP15 entitlement requires the exact newly bootstrapped loopback tenant.");
   }
@@ -112,7 +113,7 @@ export async function prepareIp15Workspace(
     await assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
   };
   await release();
-  const run = randomUUID();
+  const run = runId();
   const credentials = local ? { slug: `ip15-${run}`, email: `owner-${run}@example.com`, password: `Synthetic!${randomUUID()}` }
     : { slug: process.env.CASEOPS_RAM_PROD_SLUG?.trim() || "test-legal", email: required("CASEOPS_RAM_PROD_EMAIL"),
       password: process.env.CASEOPS_RAM_PROD_PASSWORD?.trim() || required("CASEOPS_TEST_LEGAL_PROD_PASSWORD") };

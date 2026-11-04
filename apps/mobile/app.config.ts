@@ -55,9 +55,9 @@ const config: ExpoConfig = {
     ...(storeBuild ? { buildNumber: storeBuild.iosBuildNumber } : {}),
     bundleIdentifier:
       acceptance?.iosBundleIdentifier ||
-      links?.projections.mobile.ios.bundleIdentifier ||
+      links?.projections.mobile.ios?.bundleIdentifier ||
       "ai.caseops.mobile.dev",
-    ...(links
+    ...(links?.projections.mobile.ios
       ? {
           associatedDomains: links.projections.mobile.ios.associatedDomains,
           deploymentTarget: "17.4",
@@ -108,6 +108,10 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/with-local-acceptance.cjs",
+    // An Android-only production link input refuses an iOS native project.
+    ...(links && !links.projections.mobile.ios
+      ? ["./plugins/with-ios-link-required.cjs"]
+      : []),
     [
       "./plugins/with-privacy-policy.cjs",
       privacyPolicy

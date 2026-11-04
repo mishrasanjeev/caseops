@@ -6,6 +6,7 @@ import type { components } from "../../apps/web/lib/api/openapi-types";
 import { expect, request, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders, noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
+import { runId } from "./support/run-id";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 
 type Note = components["schemas"]["MatterNoteRecord"];
@@ -135,7 +136,7 @@ test("NOTES22 newest three of four saved notes persist after reload at 1280px an
   const release = () => assertPublicReleaseIdentity(
     [`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha,
   );
-  const run = randomUUID();
+  const run = runId();
   const credentials = local
     ? { company_slug: `notes22-${run}`, email: `notes22-${run}@example.com`, password: `Notes22!${randomUUID()}` }
     : { company_slug: process.env.CASEOPS_RAM_PROD_SLUG?.trim() || "test-legal",

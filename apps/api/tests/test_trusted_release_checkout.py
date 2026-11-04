@@ -14,7 +14,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 HELPER = ROOT / "scripts/trusted_release_checkout.py"
 CONSUMERS = (
-    "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
+    "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13-a",
+    "prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester",
     "scheduled-statute-verification", "record-release-evidence",
 )
 
@@ -46,6 +47,13 @@ def _checkout_fence(workflow):
 def _execution_fence(workflow):
     resolver = workflow["jobs"]["resolve-release"]["steps"]
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in resolver[1]["run"]
+    assert set(workflow["jobs"]) == {"resolve-release", *CONSUMERS}
+    actual_consumers = {
+        name for name, job in workflow["jobs"].items()
+        if any("scripts/trusted_release_checkout.py" in step.get("run", "")
+               for step in job.get("steps", []))
+    }
+    assert actual_consumers == set(CONSUMERS)
     for name in CONSUMERS:
         steps = workflow["jobs"][name]["steps"]
         guard = steps[1]
@@ -72,6 +80,46 @@ def test_every_release_checkout_starts_from_canonical_control_plane():
 
 def test_release_consumer_runs_trust_guard_before_release_code():
     _execution_fence(_workflow())
+
+
+@pytest.mark.parametrize("consumer", CONSUMERS)
+@pytest.mark.parametrize("damage", ["missing-guard", "wrong-sha", "missing-recheck", "guard-order"])
+def test_each_release_consumer_rejects_its_own_damaged_admission(consumer, damage):
+    if consumer not in CONSUMERS or damage not in {
+        "missing-guard", "wrong-sha", "missing-recheck", "guard-order",
+    }:
+        raise ValueError("Unsupported release-admission fixture input")
+    workflow = copy.deepcopy(_workflow())
+    # YAML shares the canonical step alias. Break only this consumer's alias so
+    # an intact sibling cannot supply its missing or reordered trust boundary.
+    workflow["jobs"][consumer] = copy.deepcopy(workflow["jobs"][consumer])
+    steps = workflow["jobs"][consumer]["steps"]
+    if damage == "missing-guard":
+        del steps[1]
+    elif damage == "wrong-sha":
+        steps[1]["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] = "a" * 40
+    elif damage == "missing-recheck":
+        del steps[2]
+    elif damage == "guard-order":
+        steps[1], steps[2] = steps[2], steps[1]
+    else:
+        raise ValueError("Unsupported release-admission damage")
+    with pytest.raises(AssertionError):
+        _execution_fence(workflow)
+
+
+@pytest.mark.parametrize("with_guard", [True, False])
+def test_unreviewed_release_consumer_is_not_admitted(with_guard):
+    if type(with_guard) is not bool:
+        raise ValueError("Unsupported unreviewed-consumer fixture input")
+    workflow = copy.deepcopy(_workflow())
+    workflow["jobs"]["unreviewed-release-consumer"] = copy.deepcopy(
+        workflow["jobs"]["prod-batch4-tester"],
+    )
+    if not with_guard:
+        del workflow["jobs"]["unreviewed-release-consumer"]["steps"][1]
+    with pytest.raises(AssertionError):
+        _execution_fence(workflow)
 
 
 @pytest.mark.parametrize("damage", ["missing-mode", "write", "override", "npm", "ref", "guard"])

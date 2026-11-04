@@ -1618,6 +1618,125 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     )
 
 
+def test_bug015_operational_fixture_read_contracts(tmp_path, record_property):
+    node = shutil.which("node")
+    assert node, "The standard release evidence contracts require Node.js."
+    # This offline unit owns no network adapter and needs no trust preload or
+    # product credentials. Explicit lookup retains Windows' SystemRoot casing.
+    environment = {
+        name: os.environ[name]
+        for name in ("SystemRoot", "WINDIR", "PATH", "TEMP", "TMP")
+        if name in os.environ
+    }
+    stdout_path = tmp_path / "bug015-operational-fixture.stdout"
+    stderr_path = tmp_path / "bug015-operational-fixture.stderr"
+    with stdout_path.open("xb", buffering=0) as stdout_stream, stderr_path.open(
+        "xb", buffering=0,
+    ) as stderr_stream:
+        # Publish raw stream paths before construction, including timeout/error
+        # paths. Direct files survive TimeoutExpired without decoding or retry.
+        record_property("operational_fixture_stdout", str(stdout_path))
+        record_property("operational_fixture_stderr", str(stderr_path))
+        record_property("operational_fixture_test_count", "34")
+        result = subprocess.run(
+            [
+                node,
+                "--experimental-strip-types",
+                "--test",
+                "--test-reporter=tap",
+                str(ROOT / "scripts/tests/operational-matter-fixture.test.mjs"),
+            ],
+            cwd=ROOT,
+            env=environment,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            check=False,
+            timeout=30,
+        )
+    stdout = stdout_path.read_bytes().decode("utf-8", errors="replace")
+    stderr = stderr_path.read_bytes().decode("utf-8", errors="replace")
+    # Preserve native stderr diagnostics; the exit status determines success.
+    assert result.returncode == 0, stdout + stderr
+    counts = dict(re.findall(
+        r"^# (tests|pass|fail|cancelled|skipped|todo) (\d+)$",
+        stdout,
+        re.MULTILINE,
+    ))
+    assert counts == {
+        "tests": "34",
+        "pass": "34",
+        "fail": "0",
+        "cancelled": "0",
+        "skipped": "0",
+        "todo": "0",
+    }
+
+
+@pytest.mark.parametrize("mode", ["timeout", "constructor", "nonzero", "pass"])
+def test_bug015_launcher_retains_raw_streams_and_original_failure(
+    tmp_path, monkeypatch, mode,
+):
+    stdout_path = tmp_path / "bug015-operational-fixture.stdout"
+    stderr_path = tmp_path / "bug015-operational-fixture.stderr"
+    properties = {}
+    calls = []
+    timeout = subprocess.TimeoutExpired(["offline-node"], 30)
+    constructor_error = OSError("offline constructor refusal")
+    summary = (
+        b"# tests 34\n# pass 34\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n"
+    )
+    partial_stdout = b"partial stdout\xff\n"
+    partial_stderr = b"partial stderr\xfe\n"
+
+    def run(arguments, **options):
+        calls.append((arguments, options))
+        assert stdout_path.is_file() and stderr_path.is_file()
+        assert stdout_path.read_bytes() == stderr_path.read_bytes() == b""
+        assert properties == {
+            "operational_fixture_stdout": str(stdout_path),
+            "operational_fixture_stderr": str(stderr_path),
+            "operational_fixture_test_count": "34",
+        }
+        assert options["timeout"] == 30 and options["check"] is False
+        assert "capture_output" not in options and "encoding" not in options
+        assert "NODE_OPTIONS" not in options["env"]
+        assert Path(options["stdout"].name) == stdout_path
+        assert Path(options["stderr"].name) == stderr_path
+        if mode == "constructor":
+            raise constructor_error
+        options["stdout"].write(partial_stdout if mode == "timeout" else summary)
+        options["stderr"].write(partial_stderr if mode == "timeout" else b"native diagnostic\n")
+        if mode == "timeout":
+            raise timeout
+        return subprocess.CompletedProcess(arguments, 17 if mode == "nonzero" else 0)
+
+    monkeypatch.setattr(shutil, "which", lambda name: "offline-node")
+    monkeypatch.setattr(subprocess, "run", run)
+    if mode == "timeout":
+        with pytest.raises(subprocess.TimeoutExpired) as failure:
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+        assert failure.value is timeout
+    elif mode == "constructor":
+        with pytest.raises(OSError) as failure:
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+        assert failure.value is constructor_error
+    elif mode == "nonzero":
+        with pytest.raises(AssertionError, match="native diagnostic"):
+            test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+    else:
+        test_bug015_operational_fixture_read_contracts(tmp_path, properties.__setitem__)
+    assert len(calls) == 1
+    if mode == "timeout":
+        assert stdout_path.read_bytes() == partial_stdout
+        assert stderr_path.read_bytes() == partial_stderr
+    elif mode == "constructor":
+        assert stdout_path.read_bytes() == stderr_path.read_bytes() == b""
+    else:
+        assert stdout_path.read_bytes() == summary
+        assert stderr_path.read_bytes() == b"native diagnostic\n"
+    assert calls[0][1]["stdout"].closed and calls[0][1]["stderr"].closed
+
+
 @pytest.mark.parametrize("argument", ["--grep=hidden", "--workers=8", "--config=../outside.ts"])
 def test_unreviewed_or_duplicate_invocation_arguments_fail_before_execution(capture, argument):
     capture.args.append(argument)
@@ -1646,7 +1765,7 @@ def _tester_canonical_rows():
         "tester": {"ordinary-prod.spec.ts": 97},
         "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
-        "test-legal-write-oct13": evidence.OCT13_FILES,
+        "test-legal-write-oct13-a": evidence.OCT13_FILES,
     }
     for invocation, files in partitions.items():
         for file, count in files.items():
@@ -1672,7 +1791,7 @@ def _tester_canonical_rows():
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 51,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
@@ -1690,7 +1809,7 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
         "tester": 97, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13": 51,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
 
@@ -1702,7 +1821,7 @@ def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     "parallel_workers", "missing_retry_flag", "boolean_workers",
 ])
 def test_notes22_requires_the_exact_positive_case_in_the_authorized_write_role(execution, damage):
-    invocation = "test-legal-write-oct13"
+    invocation = "test-legal-write-oct13-b"
     project = "test-legal-write-prod-chromium"
     binding = {
         "invocation": invocation, "config": "playwright.prod-ram.config.ts", "project": project,
@@ -1754,7 +1873,7 @@ def test_notes22_requires_the_exact_positive_case_in_the_authorized_write_role(e
 def test_notes22_runtime_evidence_cannot_certify_a_skip_or_an_incomplete_attempt(damage):
     project = "test-legal-write-prod-chromium"
     binding = {
-        "invocation": "test-legal-write-oct13", "config": "playwright.prod-ram.config.ts",
+        "invocation": "test-legal-write-oct13-b", "config": "playwright.prod-ram.config.ts",
         "project": project, "arguments": ["--config=playwright.prod-ram.config.ts",
                                            f"--project={project}", "--workers=1", "--retries=0"],
     }
@@ -1863,7 +1982,7 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["native_spec_id"] += "-substitute"
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
-    project = evidence.TESTER_PARTITIONS["test-legal-write-oct13"]
+    project = evidence.OCT13_PROJECT
     assert sum(row["project_name"] == project for row in rows) == 51
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
@@ -2011,7 +2130,7 @@ def test_tester_canonical_inventory_rejects_dropped_or_overlapping_cases(damage)
         rows = rows[1:]
     elif damage in {"missing_index", "missing_oct13"}:
         project = evidence.TESTER_PARTITIONS[
-            "tester-index" if damage == "missing_index" else "test-legal-write-oct13"
+            "tester-index" if damage == "missing_index" else "test-legal-write-oct13-a"
         ]
         rows.remove(next(row for row in rows if row["project_name"] == project))
     elif damage in {"duplicate_id", "extra_index"}:
@@ -2084,8 +2203,11 @@ def verified_tester_union(tmp_path, monkeypatch):
 def test_verified_tester_union_requires_all_four_envelopes_before_certification(
     verified_tester_union,
 ):
+    # Historical test identity retained; contractv2 now requires allfive envelopes.
     state = verified_tester_union
     required = list(evidence.TESTER_PARTITIONS)
+    assert required == ["tester", "tester-catalog", "tester-index",
+                        "test-legal-write-oct13-a", "test-legal-write-oct13-b"]
     evidence.validate_tester_partition_union(state.root, required, BASE)
     assert state.checked == [(state.root, required, BASE)]
 
@@ -2158,8 +2280,9 @@ def test_verified_tester_union_is_fail_closed(verified_tester_union, damage):
 
 def _assert_native_manifest(workflow):
     for job_name in (
-        "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13",
-        "scheduled-statute-verification",
+        "prod-playwright-shards", "prod-tester-index",
+        "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
+        "prod-batch3-tester", "prod-batch4-tester", "scheduled-statute-verification",
     ):
         job = workflow["jobs"][job_name]
         steps = {step.get("name"): step for step in job["steps"]}
@@ -2216,7 +2339,8 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "tester",
         "tester-catalog",
         "tester-index",
-        "test-legal-write-oct13",
+        "test-legal-write-oct13-a",
+        "test-legal-write-oct13-b",
         "batch3-clients-desktop",
         "batch3-clients-mobile",
         "batch3-drafts-readonly",
@@ -2398,3 +2522,826 @@ def test_workflow_prepare_uses_only_release_owned_capture_or_proven_older_ancest
             marker = json.loads((tmp_path / evidence.EVIDENCE / "legacy.json").read_text())
             assert marker["completed"] is False
             assert marker["release_sha"] == boundary
+
+
+# Independent literals: do not derive the expected split from the production map.
+OCT13_EXPECTED_PARTS = {
+    "test-legal-write-oct13-a": {
+        "ram-2026-10-13-hearings.spec.ts": 2,
+        "ram-2026-10-13-ip-portfolio.spec.ts": 4,
+        "ram-2026-10-15-ip-controls.spec.ts": 34,
+    },
+    "test-legal-write-oct13-b": {
+        "ram-2026-10-15-ip-renewal-tracker.spec.ts": 2,
+        "ram-2026-10-17-calendar-readiness.spec.ts": 2,
+        "ram-2026-10-17-ip-reminders.spec.ts": 4,
+        "ram-2026-10-17-ip-tracker.spec.ts": 2,
+        "ram-2026-10-22-prod.spec.ts": 1,
+    },
+}
+
+
+def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
+    canonical = {"tests": _tester_canonical_rows()}
+    assert evidence.TESTER_PARTITION_CONTRACT == 2
+    assert evidence.OCT13_PROJECT == "test-legal-write-prod-chromium"
+    assert evidence.OCT13_PARTITION_FILES == {
+        part: tuple(files) for part, files in OCT13_EXPECTED_PARTS.items()
+    }
+    old51 = [row for row in canonical["tests"]
+             if row["project_name"] == "test-legal-write-prod-chromium"]
+    assert len(old51) == 51
+    selected = [evidence._tester_selected_rows(canonical, part) for part in OCT13_EXPECTED_PARTS]
+    assert [len(rows) for rows in selected] == [40, 11]
+    for part, rows in zip(OCT13_EXPECTED_PARTS, selected, strict=True):
+        assert Counter(row["file"] for row in rows) == Counter(OCT13_EXPECTED_PARTS[part])
+        assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
+    assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
+    assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
+    assert len(evidence._tester_inventory(canonical)) == 172
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+def test_oct13_source_owned_file_filter_matches_only_its_literal_whole_files(part):
+    binding = {"config": "playwright.prod-ram.config.ts", "invocation": part,
+               "project": "test-legal-write-prod-chromium",
+               "arguments": ["--workers=1", "--retries=0"]}
+    filters = evidence._tester_file_filters(binding)
+    assert len(filters) == 1
+    expected_filter = r"(?:^|[/\\])(?:" + "|".join(
+        re.escape(file) for file in OCT13_EXPECTED_PARTS[part]) + r")$"
+    assert filters == [expected_filter]
+    for files in OCT13_EXPECTED_PARTS.values():
+        for file in files:
+            admitted = file in OCT13_EXPECTED_PARTS[part]
+            for path in (file, "tests/e2e/" + file, "C:\\repo\\tests\\e2e\\" + file):
+                assert bool(re.search(filters[0], path)) is admitted
+            for path in ("prefix-" + file, file + "/other.spec.ts", file + ".bak",
+                         file.replace(".spec.ts", "XspecYts")):
+                assert re.search(filters[0], path) is None
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("damage", ["missing", "extra", "foreign", "reordered", "metadata"])
+def test_each_oct13_part_rejects_noncanonical_or_overlapping_selection(part, damage):
+    canonical = {"tests": _tester_canonical_rows()}
+    selected = copy.deepcopy(evidence._tester_selected_rows(canonical, part))
+    other = copy.deepcopy(evidence._tester_selected_rows(
+        canonical,
+        "test-legal-write-oct13-b" if part.endswith("-a") else "test-legal-write-oct13-a",
+    )[0])
+    if damage == "missing":
+        selected.pop()
+    elif damage == "extra":
+        selected.append(other)
+    elif damage == "foreign":
+        selected[-1] = other
+    elif damage == "reordered":
+        selected.reverse()
+    else:
+        selected[0]["title_path"][-1] += " changed"
+    with pytest.raises(evidence.EvidenceError, match="tester_partition_selection_mismatch"):
+        evidence._check_tester_selection({
+            "config": "playwright.prod-ram.config.ts", "invocation": part,
+            "project": "test-legal-write-prod-chromium",
+            "arguments": ["--workers=1", "--retries=0"],
+        }, {"tests": selected}, canonical)
+
+
+@pytest.mark.parametrize("invocation", [
+    "test-legal-write-oct13", "test-legal-write-oct13-c", "test-legal-write-oct13-aa",
+    "test-legal-write-oct13-a-canonical", "test-legal-write-oct13-b-extra",
+    "test-legal-write-oct13a", "test-legal-write-oct13x", "test-legal-write-oct130",
+])
+def test_old_unsplit_and_unknown_oct13_namespace_refuse_before_any_capture(capture, invocation):
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence.run(capture.root, invocation, capture.args, env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._tester_partition({"invocation": invocation})
+
+
+@pytest.mark.parametrize("argument", [
+    "--grep=case", "--grep-invert=case", "--shard=1/2", "ram-2026-10-13-hearings.spec.ts",
+    "--config=playwright.prod-ram.config.ts", "--workers=1",
+    "--project=test-legal-write-prod-chromium",
+])
+def test_oct13_parts_do_not_admit_caller_filters_or_duplicate_options(capture, argument):
+    args = [
+        "--config=playwright.prod-ram.config.ts", "--project=test-legal-write-prod-chromium",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/oct13-a", argument,
+    ]
+    with pytest.raises(
+        evidence.EvidenceError,
+        match="unreviewed_invocation_argument|duplicate_invocation_option",
+    ):
+        evidence.run(capture.root, "test-legal-write-oct13-a", args,
+                     env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / "test-legal-write-oct13-a").exists()
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("field,value,reason", [
+    ("config", "playwright.offline.config.ts", "tester_partition_config_mismatch"),
+    ("project", "tester-prod-chromium", "tester_partition_project_mismatch"),
+    ("arguments", ["--workers=1"], "tester_partition_serial_zero_retry_required"),
+])
+def test_oct13_part_names_cannot_bypass_project_config_or_zero_retry_binding(
+    part, field, value, reason,
+):
+    binding = {
+        "invocation": part, "config": "playwright.prod-ram.config.ts",
+        "project": "test-legal-write-prod-chromium", "arguments": ["--workers=1", "--retries=0"],
+    }
+    binding[field] = value
+    with pytest.raises(evidence.EvidenceError, match=reason):
+        evidence._tester_partition(binding)
+
+
+@pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
+@pytest.mark.parametrize("damage", ["reordered", "duplicate", "foreign", "missing", "metadata"])
+def test_five_envelope_union_independently_rejects_damaged_oct13_parts(
+    verified_tester_union, part, damage,
+):
+    state = verified_tester_union
+    path = state.directories[part] / "results.json"
+    result = json.loads(path.read_text())
+    other = "test-legal-write-oct13-b" if part.endswith("-a") else "test-legal-write-oct13-a"
+    foreign = json.loads((state.directories[other] / "results.json").read_text())["tests"][0]
+    if damage == "reordered":
+        result["tests"].reverse()
+    elif damage == "duplicate":
+        result["tests"].append(copy.deepcopy(result["tests"][0]))
+    elif damage == "foreign":
+        result["tests"][0] = foreign
+    elif damage == "missing":
+        result["tests"].pop()
+    else:
+        result["tests"][0]["title_path"][-1] += " changed"
+    path.write_text(json.dumps(result))
+    with pytest.raises(
+        evidence.EvidenceError,
+        match="oct13_partition_order_or_union_mismatch|tester_partition_union_mismatch",
+    ):
+        evidence.validate_tester_partition_union(state.root, list(evidence.TESTER_PARTITIONS), BASE)
+
+
+@pytest.mark.parametrize("invocation", [
+    "offline", "ci-app", "oct13-other", "tester", "tester-index",
+])
+@pytest.mark.parametrize("config_name", [
+    "playwright.offline.config.ts", "playwright.prod-ram.config.ts",
+])
+def test_oct13_project_cannot_be_claimed_by_generic_or_other_roles(
+    capture, invocation, config_name,
+):
+    config = capture.root / config_name
+    config.write_text("// owned offline project-admission control\n", encoding="utf-8")
+    args = [
+        f"--config={config_name}", "--project=test-legal-write-prod-chromium",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/unreviewed",
+    ]
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence.run(capture.root, invocation, args, env=capture.env, launch=capture.launch)
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()
+    binding = {"invocation": invocation, "project": "test-legal-write-prod-chromium"}
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._tester_partition(binding)
+    with pytest.raises(evidence.EvidenceError, match="unreviewed_oct13_partition_invocation"):
+        evidence._check_notes22_evidence(binding, {})
+
+
+@pytest.mark.parametrize("invocation,config_name,project", [
+    ("offline", "playwright.offline.config.ts", "offline"),
+    ("ci-app", "playwright.app.config.ts", "chromium"),
+])
+def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, config_name, project):
+    config = capture.root / config_name
+    config.write_text("// owned offline generic-admission control\n", encoding="utf-8")
+    args = [
+        f"--config={config_name}", f"--project={project}",
+        "--workers=1", "--retries=0", "--reporter=list", "--output=test-results/generic",
+    ]
+    binding = evidence._binding(capture.root, invocation, args, capture.env)
+    assert binding["invocation"] == invocation and binding["project"] == project
+    assert evidence._tester_partition(binding) is None
+    assert evidence._tester_file_filters(binding) == []
+    evidence._check_notes22_evidence(binding, {})
+    assert capture.calls == []
+    assert not (capture.root / evidence.EVIDENCE / invocation).exists()
+
+
+APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
+APP_COUNTS = {"app-chromium": 713, "app-mobile": 53}
+
+
+def _app_specs(document):
+    def visit(suites):
+        for suite in suites:
+            yield from suite.get("specs", [])
+            yield from visit(suite.get("suites", []))
+
+    return visit(document["suites"])
+
+
+def test_app_existing_skip_registry_matches_the_retained_native21_identities():
+    # Independent pin of ci-4dea-app-native-review01/SKIPPED_ROWS.json identities,
+    # projected as (project, relative file, full title path) in native order.
+    payload = json.dumps(
+        evidence.APP_EXPECTED_SKIPS, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    assert (
+        hashlib.sha256(payload).hexdigest()
+        == "dc0b6429606c655e67dfe82e8f9cae29a1472a73a67405e2f2021a2c83d1e738"
+    )
+    assert Counter(row[0] for row in evidence.APP_EXPECTED_SKIPS) == {
+        "app-chromium": 20,
+        "app-mobile": 1,
+    }
+
+
+def _app_arguments(project):
+    return [
+        "--config=playwright.app.config.ts",
+        f"--project={project}",
+        "--workers=1",
+        "--retries=0",
+        "--reporter=list",
+        f"--output=test-results/{project}",
+    ]
+
+
+@pytest.mark.parametrize("role,project", APP_ROLES.items())
+@pytest.mark.parametrize(
+    "damage", ["config", "project", "missing", "extra", "duplicate", "workers", "retry", "output"]
+)
+def test_fixed_app_role_rejects_unreviewed_scope_before_native_or_mkdir(
+    capture, role, project, damage
+):
+    state = capture
+    (state.root / "playwright.app.config.ts").touch()
+    arguments = _app_arguments(project)
+    if damage == "missing":
+        arguments.pop()
+    elif damage in {"extra", "duplicate"}:
+        arguments.append("--grep=hidden" if damage == "extra" else "--workers=1")
+    else:
+        index, replacement = {
+            "config": (0, "--config=playwright.offline.config.ts"),
+            "project": (1, "--project=offline"),
+            "workers": (2, "--workers=2"),
+            "retry": (3, "--retries=1"),
+            "output": (5, "--output=test-results/other"),
+        }[damage]
+        arguments[index] = replacement
+    with pytest.raises(evidence.EvidenceError):
+        evidence.run(state.root, role, arguments, env=state.env, launch=state.launch)
+    assert state.calls == []
+    assert not (state.root / evidence.EVIDENCE).exists()
+
+
+@pytest.fixture
+def app_capture(capture):
+    """Full native channels using an offline delegate; no browser/tenant launch."""
+    state = capture
+    config = state.root / "playwright.app.config.ts"
+    config.write_text("// exact offline App source\n", encoding="utf-8")
+    state.app_documents = {}
+    template = copy.deepcopy(state.discovery)
+    template["config"]["configFile"] = str(config)
+    all_suites = []
+    for project, count in APP_COUNTS.items():
+        skips = [item for item in evidence.APP_EXPECTED_SKIPS if item[0] == project]
+        for index in range(count):
+            if index < len(skips):
+                _, file, titles = skips[index]
+            else:
+                file, titles = "offline.spec.ts", ("offline.spec.ts", f"App {project} case {index}")
+            (state.root / file).touch(exist_ok=True)
+            spec = copy.deepcopy(template["suites"][0]["specs"][0])
+            spec.update(id=f"app-{project}-{index}", file=file, title=titles[-1])
+            test = spec["tests"][0]
+            test.update(projectId=project, projectName=project)
+            child = {"title": titles[-2], "specs": [spec]}
+            for title in reversed(titles[:-2]):
+                child = {"title": title, "suites": [child]}
+            all_suites.append(child)
+
+    def document(project=None, runtime=False):
+        doc = copy.deepcopy(template)
+        doc["stats"]["startTime"] = "2026-10-09T00:00:00.000Z"
+        names = [project] if project else list(APP_COUNTS)
+        doc["config"]["projects"] = [
+            {**template["config"]["projects"][0], "id": name, "name": name} for name in APP_COUNTS
+        ]
+        doc["suites"] = copy.deepcopy(all_suites)
+
+        def select(suites):
+            retained = []
+            for suite in suites:
+                suite["specs"] = [
+                    spec
+                    for spec in suite.get("specs", [])
+                    if spec["tests"][0]["projectName"] in names
+                ]
+                suite["suites"] = select(suite.get("suites", []))
+                if suite["specs"] or suite["suites"]:
+                    retained.append(suite)
+            return retained
+
+        doc["suites"] = select(doc["suites"])
+        rows = evidence._inventory(doc, state.env)
+        by_id = {row["native_spec_id"]: row for row in rows}
+        allowed = set(evidence.APP_EXPECTED_SKIPS)
+        skipped = 0
+        if runtime:
+            for spec in _app_specs(doc):
+                native = spec["tests"][0]
+                row = by_id[spec["id"]]
+                is_skip = evidence._app_skip_identity(row) in allowed
+                skipped += int(is_skip)
+                native.update(
+                    status="skipped" if is_skip else "expected",
+                    expectedStatus="skipped" if is_skip else "passed",
+                    # Body-level deadlines can differ from --list unchanged.
+                    timeout=90000,
+                    results=[
+                        {
+                            "status": "skipped" if is_skip else "passed",
+                            "duration": 1,
+                            "retry": 0,
+                            "errors": [],
+                            "annotations": [],
+                        }
+                    ],
+                )
+        doc["stats"].update(
+            expected=len(rows) - skipped if runtime else 0,
+            skipped=skipped if runtime else len(rows),
+        )
+        return doc
+
+    state.app_canonical = document()
+    for project in APP_COUNTS:
+        state.app_documents[project] = (document(project), document(project, runtime=True))
+    base_launch = state.launch
+
+    def launch(command, **kwargs):
+        invocation = kwargs["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"]
+        canonical = invocation.endswith("-canonical")
+        role = invocation.removesuffix("-canonical")
+        project = APP_ROLES[role]
+        saved_discovery, saved_runtime = state.discovery, state.runtime
+        state.path = state.root / evidence.EVIDENCE / role
+        state.junit_count = APP_COUNTS[project]
+        state.discovery, state.runtime = state.app_documents[project]
+        if canonical:
+            assert "--list" in command
+            assert not any(arg.startswith("--project=") for arg in command)
+            state.discovery = state.app_canonical
+        try:
+            return base_launch(command, **kwargs)
+        finally:
+            state.discovery, state.runtime = saved_discovery, saved_runtime
+
+    state.app_launch = launch
+    state.app_run = lambda role: evidence.run(
+        state.root,
+        role,
+        _app_arguments(APP_ROLES[role]),
+        env=state.env,
+        launch=launch,
+    )
+    return state
+
+
+@pytest.fixture
+def app_envelopes(app_capture):
+    state = app_capture
+    codes = [state.app_run(role) for role in APP_ROLES]
+    assert codes == [0, 0]
+    return state
+
+
+def test_app_capture_and_union_bind_all766_native_json_xml_progress_and_preserved21_skips(
+    app_envelopes,
+):
+    state = app_envelopes
+    receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
+    assert receipt["completed"] and receipt["test_count"] == 766
+    assert receipt["expected_skip_count"] == 21
+    assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [
+        ("ci-app-chromium", "app-chromium", 713),
+        ("ci-app-mobile", "app-mobile", 53),
+    ]
+    assert [r["outcomes"] for r in receipt["roles"]] == [
+        {"expected": 693, "skipped": 20},
+        {"expected": 52, "skipped": 1},
+    ]
+    assert receipt["config_sha256"] == evidence._hash(state.root / "playwright.app.config.ts")
+    assert len(receipt["canonical_identity_sha256"]) == 64
+    assert len(state.calls) == 6
+    for role in APP_ROLES:
+        directory = state.root / evidence.EVIDENCE / role
+        completion = evidence._json(directory / "completion.json")
+        assert set(completion["sha256"]) == evidence.REPORT_FILES | evidence.TESTER_CANONICAL_FILES
+        assert all(
+            len(r[key]) == 64
+            for r in receipt["roles"]
+            for key in ("completion_sha256", "exit_sha256")
+        )
+        assert not (state.root / evidence.EVIDENCE / f"{role}-canonical").exists()
+
+
+def test_app_native_known_fields_preserve_sanitized_locations_errors_and_network_metadata(
+    app_capture,
+):
+    document = copy.deepcopy(app_capture.app_documents["app-mobile"][1])
+    document.update(
+        release_sha=BASE, invocation="ci-app-mobile", phase="execution", status="passed"
+    )
+    native = next(iter(_app_specs(document)))["tests"][0]
+    annotation = {
+        "type": "skip",
+        "description": "Explicit source prerequisite",
+        "location": {"file": "tests/e2e/offline.spec.ts", "line": 5, "column": 1},
+    }
+    native["annotations"] = [annotation]
+    attempt = native["results"][0]
+    attempt["annotations"] = [annotation]
+    attempt["errors"] = [
+        {
+            "message": "[redacted native test error; outcome retained]",
+            "location": annotation["location"],
+        }
+    ]
+    attempt["networkEvidence"] = {
+        "status": "retained",
+        "name": "sanitized-network-evidence",
+        "contentType": "application/json",
+        "snapshot": {
+            "schemaVersion": 1,
+            "drainTimedOut": False,
+            "omitted": 0,
+            "records": [
+                {
+                    "route": "auth/session",
+                    "method": "GET",
+                    "startedAt": "2026-11-03T00:00:00.000Z",
+                    "finishedAt": "2026-11-03T00:00:00.001Z",
+                    "outcome": "response_completed",
+                    "status": 200,
+                    "requestId": None,
+                    "problemType": None,
+                }
+            ],
+        },
+    }
+    before = copy.deepcopy(document)
+    evidence._app_native_fields(document)
+    assert document == before
+
+
+@pytest.mark.parametrize("damage", ["missing", "duplicate", "legacy", "unknown"])
+def test_app_union_requires_exact_two_fixed_roles_before_reading_artifacts(tmp_path, damage):
+    required = list(APP_ROLES)
+    if damage == "missing":
+        required.pop()
+    else:
+        required[1] = {"duplicate": required[0], "legacy": "ci-app", "unknown": "ci-app-tablet"}[
+            damage
+        ]
+    with pytest.raises(evidence.EvidenceError, match="missing_or_duplicate_app_project"):
+        evidence.validate_app_project_union(tmp_path, required, BASE)
+
+
+def _app_rewrite(state, name, mutate, role="ci-app-mobile"):
+    directory = state.root / evidence.EVIDENCE / role
+    path = directory / name
+    document = evidence._json(path)
+    mutate(document)
+    path.write_text(json.dumps(document, ensure_ascii=False) + "\n", encoding="utf-8")
+    if name not in {"completion.json", "exit.json"}:
+        completion_path = directory / "completion.json"
+        completion = evidence._json(completion_path)
+        completion["sha256"][name] = evidence._hash(path)
+        completion_path.write_text(json.dumps(completion) + "\n", encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "channel", ["native-discovery.json", "native-results.json", "canonical-native-discovery.json"]
+)
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "sha",
+        "invocation",
+        "phase",
+        "config",
+        "outside",
+        "project",
+        "workers",
+        "missing",
+        "duplicate",
+        "title",
+        "extra_root",
+        "extra_case",
+        "extra_attempt",
+        "stats_extra",
+        "annotation_extra",
+        "location_extra",
+        "global_error_extra",
+        "attempt_error_extra",
+        "network_extra",
+    ],
+)
+def test_app_validation_reparses_every_rehashed_raw_native_channel(app_envelopes, channel, damage):
+    state = app_envelopes
+
+    def mutate(doc):
+        if damage == "stats_extra":
+            doc["stats"]["requestBody"] = "private"
+        elif damage == "global_error_extra":
+            doc["errors"] = [{"message": "redacted", "requestBody": "private"}]
+        elif damage in {
+            "annotation_extra",
+            "location_extra",
+            "attempt_error_extra",
+            "network_extra",
+        }:
+            native = next(iter(_app_specs(doc)))["tests"][0]
+            if damage in {"annotation_extra", "location_extra"}:
+                annotation = {"type": "skip", "requestBody": "private"}
+                if damage == "location_extra":
+                    annotation = {
+                        "type": "skip",
+                        "location": {
+                            "file": "offline.spec.ts",
+                            "line": 1,
+                            "column": 1,
+                            "requestBody": "private",
+                        },
+                    }
+                native["annotations"] = [annotation]
+            else:
+                if not native["results"]:
+                    native["results"] = [{"status": "passed", "retry": 0}]
+                attempt = native["results"][0]
+                if damage == "attempt_error_extra":
+                    attempt["errors"] = [{"message": "redacted", "requestBody": "private"}]
+                else:
+                    attempt["networkEvidence"] = {
+                        "status": "retained",
+                        "name": "sanitized-network-evidence",
+                        "contentType": "application/json",
+                        "snapshot": {
+                            "schemaVersion": 1,
+                            "drainTimedOut": False,
+                            "omitted": 0,
+                            "records": [],
+                            "requestBody": "private",
+                        },
+                    }
+        elif damage == "extra_root":
+            doc["requestBody"] = "unreviewed private channel"
+        elif damage in {"extra_case", "extra_attempt"}:
+            native = next(iter(_app_specs(doc)))["tests"][0]
+            if damage == "extra_case":
+                native["stdout"] = ["unreviewed private channel"]
+            else:
+                native["results"] = [{"attachments": ["unreviewed private channel"]}]
+        elif damage in {"sha", "invocation", "phase"}:
+            doc[{"sha": "release_sha", "invocation": "invocation", "phase": "phase"}[damage]] = (
+                "wrong"
+            )
+        elif damage == "config":
+            doc["config"]["configFile"] = str(state.root / "different.config.ts")
+        elif damage == "outside":
+            doc["config"]["rootDir"] = str(state.root.parent)
+        elif damage == "workers":
+            doc["config"]["workers"] = 2
+        else:
+            specs = list(_app_specs(doc))
+            if damage == "project":
+                specs[0]["tests"][0]["projectName"] = "app-tablet"
+            elif damage == "missing":
+                specs[0]["tests"] = []
+            elif damage == "duplicate":
+                specs[0]["tests"].append(copy.deepcopy(specs[0]["tests"][0]))
+            else:
+                specs[0]["title"] += " changed"
+
+    _app_rewrite(state, channel, mutate)
+    reason = (
+        "app_raw_native_unreviewed_field"
+        if damage.startswith("extra_") or damage.endswith("_extra")
+        else None
+    )
+    with pytest.raises(evidence.EvidenceError, match=reason):
+        evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "unended",
+        "retry",
+        "repeat",
+        "failed",
+        "new_skip",
+        "removed_skip",
+        "missing",
+        "duplicate",
+        "order",
+        "overlap",
+        "source",
+        "artifact",
+        "incomplete",
+        "native_exit",
+        "phase",
+        "canonical_disagreement",
+    ],
+)
+def test_app_union_preserves_all_native_artifact_case_source_and_terminal_fences(
+    app_envelopes, damage
+):
+    state = app_envelopes
+    directory = state.root / evidence.EVIDENCE / "ci-app-mobile"
+    if damage == "source":
+        (state.root / "playwright.app.config.ts").write_text(
+            "// changed source\n", encoding="utf-8"
+        )
+    elif damage == "artifact":
+        (directory / "native-results.xml").unlink()
+    elif damage in {"incomplete", "native_exit", "phase"}:
+
+        def envelope(doc):
+            key, value = {
+                "incomplete": ("completed", False),
+                "native_exit": ("execution_exit", 7),
+                "phase": ("phase", "executing"),
+            }[damage]
+            doc[key] = value
+
+        _app_rewrite(state, "completion.json", envelope)
+    elif damage == "canonical_disagreement":
+        _app_rewrite(
+            state, "canonical-discovery.json", lambda doc: doc["tests"][0].update(line=999)
+        )
+    else:
+
+        def result(doc):
+            rows = doc["tests"]
+            if damage == "unended":
+                rows[-1]["results"] = []
+            elif damage == "retry":
+                rows[-1]["results"][0]["retry"] = 1
+            elif damage == "repeat":
+                rows[-1]["repeat_each_index"] = 1
+            elif damage == "failed":
+                rows[-1]["results"][0]["status"] = "failed"
+            elif damage == "new_skip":
+                rows[-1].update(status="skipped")
+                rows[-1]["results"][0]["status"] = "skipped"
+            elif damage == "removed_skip":
+                rows[0].update(status="expected")
+                rows[0]["results"][0]["status"] = "passed"
+            elif damage == "missing":
+                rows.pop()
+            elif damage == "duplicate":
+                rows[-1] = copy.deepcopy(rows[0])
+            elif damage == "order":
+                rows.reverse()
+            elif damage == "overlap":
+                other = evidence._json(
+                    state.root / evidence.EVIDENCE / "ci-app-chromium/results.json"
+                )
+                rows[0] = other["tests"][0]
+            else:
+                raise AssertionError("unsupported App damage")
+
+        _app_rewrite(state, "results.json", result)
+    with pytest.raises((evidence.EvidenceError, FileNotFoundError)):
+        evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
+
+
+def test_app_union_cli_emits_a_machine_readable_receipt(app_envelopes, monkeypatch, capsys):
+    state = app_envelopes
+    monkeypatch.setattr(evidence, "ROOT", state.root)
+    monkeypatch.setenv("CASEOPS_EXPECTED_RELEASE_SHA", BASE)
+    monkeypatch.setattr(
+        sys, "argv", ["evidence", "validate", "--required", *APP_ROLES, "--app-project-union"]
+    )
+    code = evidence.main()
+    assert code == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["app_project_union"] == 1 and receipt["test_count"] == 766
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "timestamp_object",
+        "duration_bool",
+        "duration_nan",
+        "duration_large_int",
+        "annotation_object",
+        "location_object",
+        "error_object",
+        "network_outcome_object",
+        "network_omitted_large_int",
+        "network_status_object",
+        "title_object",
+    ],
+)
+def test_app_raw_schema_rejects_opaque_or_nonfinite_leaves_after_coherent_rehash(
+    app_envelopes, damage
+):
+    state = app_envelopes
+    role = "ci-app-mobile"
+    directory = state.root / evidence.EVIDENCE / role
+    native = evidence._json(directory / "native-results.json")
+    first = next(iter(_app_specs(native)))
+    test = first["tests"][0]
+    attempt = test["results"][0]
+    if damage == "timestamp_object":
+        native["stats"]["startTime"] = {"private": "opaque"}
+    elif damage.startswith("duration_"):
+        native["stats"]["duration"] = {
+            "duration_bool": True,
+            "duration_nan": float("nan"),
+            "duration_large_int": 10**400,
+        }[damage]
+    elif damage == "annotation_object":
+        test["annotations"] = [{"type": "skip", "description": {"private": "opaque"}}]
+    elif damage == "location_object":
+        test["annotations"] = [{"type": "skip", "location": {"file": {"private": "opaque"}}}]
+    elif damage == "error_object":
+        attempt["errors"] = [{"message": {"private": "opaque"}}]
+    elif damage in {"network_outcome_object", "network_omitted_large_int", "network_status_object"}:
+        row = {
+            "route": "auth/session",
+            "method": "GET",
+            "startedAt": "2026-11-03T00:00:00.000Z",
+            "finishedAt": "2026-11-03T00:00:00.001Z",
+            "outcome": "response_completed",
+            "status": 200,
+            "requestId": None,
+            "problemType": None,
+        }
+        snapshot = {"schemaVersion": 1, "omitted": 0, "drainTimedOut": False, "records": [row]}
+        if damage == "network_outcome_object":
+            row["outcome"] = {"private": "opaque"}
+        elif damage == "network_status_object":
+            row["status"] = {"private": "opaque"}
+        else:
+            snapshot["omitted"] = 10**400
+        attempt["networkEvidence"] = {
+            "status": "retained",
+            "name": "sanitized-network-evidence",
+            "contentType": "application/json",
+            "snapshot": snapshot,
+        }
+    else:
+        first["title"] = {"private": "opaque"}
+    _app_rewrite(state, "native-results.json", lambda doc: (doc.clear(), doc.update(native)))
+    binding = evidence._json(directory / "results.json")["binding"]
+    internal = {**binding, "config_path": str(state.root / binding["config"])}
+    # Recreate exactly the normalization that previously admitted the opaque
+    # raw leaf, then update its completion hash too. This is not a stale-hash test.
+    normalized = evidence._native(directory / "native-results.json", internal, {}, "execution")
+    normalized["binding"] = binding
+    _app_rewrite(state, "results.json", lambda doc: (doc.clear(), doc.update(normalized)))
+    with pytest.raises(evidence.EvidenceError, match="app_raw_native_value_mismatch"):
+        evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
+
+
+def test_app_raw_schema_rejects_non_string_tags_before_normalization(app_capture):
+    document = copy.deepcopy(app_capture.app_documents["app-mobile"][1])
+    document.update(
+        release_sha=BASE, invocation="ci-app-mobile", phase="execution", status="passed"
+    )
+    next(iter(_app_specs(document)))["tags"] = [{"private": "opaque"}]
+    with pytest.raises(evidence.EvidenceError, match="app_raw_native_value_mismatch"):
+        evidence._app_native_fields(document)
+
+
+@pytest.mark.parametrize("damage", ["reordered", "missing", "foreign", "duplicate"])
+def test_app_selected_case_sequence_cannot_be_repaired_by_the_union_checker(app_envelopes, damage):
+    state = app_envelopes
+    directory = state.root / evidence.EVIDENCE / "ci-app-mobile"
+    canonical = evidence._json(directory / "canonical-discovery.json")
+    selected = evidence._json(directory / "discovery.json")
+    if damage == "reordered":
+        selected["tests"].reverse()
+    elif damage == "missing":
+        selected["tests"].pop()
+    elif damage == "foreign":
+        selected["tests"][0] = canonical["tests"][0]
+    else:
+        selected["tests"][-1] = selected["tests"][0]
+    with pytest.raises(evidence.EvidenceError, match="app_project_selection_mismatch"):
+        evidence._check_app_selection(selected["binding"], selected, canonical)

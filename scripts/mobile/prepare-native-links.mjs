@@ -20,7 +20,8 @@ export function prepareNativeLinks({ file, sha256, output, synthetic = false }) 
   // This is a public input; the loader returns its exact canonical byte buffer.
   writeFileSync(path.join(output, 'config-evidence.json'), loaded.bytes, { flag: 'wx', mode: 0o444 });
   const outputs = { 'projections.json': loaded.projections,
-    'apple-app-site-association': loaded.projections.appleAppSiteAssociation,
+    // An Android-only input publishes no iOS association.
+    ...(loaded.projections.appleAppSiteAssociation ? { 'apple-app-site-association': loaded.projections.appleAppSiteAssociation } : {}),
     'assetlinks.json': loaded.projections.assetlinks,
     'api-environment.json': loaded.projections.apiEnvironment };
   for (const [name, value] of Object.entries(outputs)) writeFileSync(path.join(output, name), JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o444 });

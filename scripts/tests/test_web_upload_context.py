@@ -36,7 +36,7 @@ BUILDER_INPUTS = {
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
-        "ip-portfolio-export-completion",
+        "ip-portfolio-export-completion", "run-id",
     )),
     *NPM_TOOLING_INPUTS,
 }

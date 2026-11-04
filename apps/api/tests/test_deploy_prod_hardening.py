@@ -845,11 +845,46 @@ def _assert_complete_postgres_selection(command: str) -> None:
     ), command
 
 
+@pytest.mark.parametrize("shape", ["inline", "folded"])
+def test_ci_rejects_a_second_postgres_command_outside_the_named_job(monkeypatch, shape):
+    original_read = _read_repo_text
+    text = original_read(".github/workflows/ci.yml")
+    command = (
+        "      - run: python -m pytest -q -m postgres tests/test_narrowed.py\n"
+        if shape == "inline" else
+        "      - run: >-\n          python -m pytest -q\n"
+        "          -m postgres tests/test_narrowed.py\n"
+    )
+    changed = text + "\n  extra-pg-probe:\n    runs-on: ubuntu-latest\n    steps:\n" + command
+
+    def read(name):
+        return changed if name == ".github/workflows/ci.yml" else original_read(name)
+
+    monkeypatch.setitem(globals(), "_read_repo_text", read)
+    with pytest.raises(AssertionError):
+        test_all_postgres_marked_modules_are_selected_locally_and_in_ci()
+
+
 def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
-    lines = _read_repo_text(".github/workflows/ci.yml").splitlines()
+    text = _read_repo_text(".github/workflows/ci.yml")
+    lines = text.splitlines()
     commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
     assert len(commands) == 1
-    _assert_complete_postgres_selection(commands[0])
+    workflow = yaml.safe_load(text)
+    steps = workflow["jobs"]["postgres-validation-shards"]["steps"]
+    step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
+    assert commands[0] == "run: " + step["run"]
+    global_pg_steps = [
+        item for job in workflow["jobs"].values() for item in job.get("steps", [])
+        if "pytest" in item.get("run", "") and "-m postgres" in item.get("run", "")
+    ]
+    assert len(global_pg_steps) == 1 and global_pg_steps[0] is step
+    command = shlex.split(step["run"])
+    assert command[:6] == [
+        "uv", "run", "python", "../../scripts/pytest_native_receipt.py",
+        "postgres-native-exit-${{ matrix.shard }}.json", "--",
+    ]
+    _assert_complete_postgres_selection("python -m pytest " + shlex.join(command[6:]))
 
     wrapper = _read_repo_text("scripts/verify-docker.ps1")
     assert wrapper.count("& $ApiPython @NativeArguments") == 1
@@ -1131,7 +1166,7 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
     assert f"IP_RULE_GOVERNANCE_STATE_FILE={_GOVERNANCE_STATE_FILE}" in script
     assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" not in script
     assert "|${IP_RULE_GOVERNANCE_ENV}|" in script
-    assert '"${IP_RULE_GOVERNANCE_REMOVE_FLAGS[@]}"' in script
+    assert '${API_REMOVE_ENV_FLAGS[@]+"${API_REMOVE_ENV_FLAGS[@]}"}' in script
     state = json.loads(_read_repo_text(_GOVERNANCE_STATE_FILE))
     assert set(state) == {
         "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
@@ -1217,6 +1252,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
         "tests/e2e/support/public-release-identity.ts",
         "tests/e2e/support/ip-import-acknowledgements.ts",
         "tests/e2e/support/ip-portfolio-export-completion.ts",
+        "tests/e2e/support/run-id.ts",
     } <= required
     _assert_web_builder_inputs(
         _read_repo_text("apps/web/Dockerfile"), _read_repo_text(ignore_path), required,
@@ -2182,6 +2218,8 @@ def _run_deploy_with_fakes(
     a1_migration: bool = True,
     live_governance_flag: str = "false",
     live_governance_expiry: str | None = None,
+    native_link_config: str | None = None,
+    native_secret_state: str = "ENABLED",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -2245,6 +2283,11 @@ if [[ "$1" == "rev-parse" ]]; then
   exit 0
 fi
 if [[ "$1" == "show" && \
+  "$2" == "abcdef1234567890abcdef1234567890abcdef12:apps/web/native-links/production.json" ]]; then
+  printf '%s' "${FAKE_NATIVE_LINK_CONFIG}"
+  exit 0
+fi
+if [[ "$1" == "show" && \
   "$2" == "abcdef1234567890abcdef1234567890abcdef12:deploy/ip-rule-governance-state.json" ]]; then
   printf '%s\n' "${FAKE_GOVERNANCE_STATE}"
   exit 0
@@ -2288,6 +2331,10 @@ for argument in "$@"; do
   fi
 done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "$*" == "secrets versions describe latest --secret caseops-native-signing-secret "* ]]; then
+  printf '%s\n' "${FAKE_NATIVE_SECRET_STATE}"
+  exit 0
+fi
 if [[ "$*" == "run deploy caseops-api "* ]]; then
   # Apply the api container's governance edits as gcloud does: removals of
   # present keys first (absent keys are ignored), then updates.
@@ -2917,7 +2964,12 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 if governance_state is None
                 else governance_state
             ),
-            "FAKE_COMMITTED_FILES": "\n".join(committed_files),
+            "FAKE_COMMITTED_FILES": "\n".join(
+                committed_files
+                + ((_NATIVE_LINK_SOURCE,) if native_link_config is not None else ())
+            ),
+            "FAKE_NATIVE_LINK_CONFIG": native_link_config or "",
+            "FAKE_NATIVE_SECRET_STATE": native_secret_state,
             "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
             "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
             "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
@@ -4090,6 +4142,139 @@ def _api_deploy_call(tmp_path: Path) -> str:
     return deploy.split(" --container ")[1]
 
 
+_NATIVE_LINK_SOURCE = "apps/web/native-links/production.json"
+_NATIVE_API_KEYS = (
+    "CASEOPS_NATIVE_AUTH_ENABLED", "CASEOPS_NATIVE_SIGNING_ENABLED", "CASEOPS_NATIVE_REDIRECT_URIS",
+)
+_NATIVE_WEB_KEYS = ("CASEOPS_NATIVE_LINK_CONFIG_FILE", "CASEOPS_NATIVE_LINK_CONFIG_SHA256")
+
+
+def _native_link_config(**overrides: object) -> str:
+    return json.dumps({
+        "schemaVersion": 1, "kind": "caseops-native-links", "syntheticDataOnly": False,
+        "redirectUri": "https://caseops.ai/native/oauth/callback",
+        "ios": {
+            "bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "X9Y8Z7W6V5",
+        },
+        "android": {"packageName": "ai.caseops.mobile", "signingCertificateSha256": [
+            "ebf387aaef4a5bf0de29d82bac7f6267988895bc48f63a518d23b1fb4690ec8f"]},
+        **overrides,
+    }, separators=(",", ":"))
+
+
+def _removed_env(call: str) -> set[str]:
+    tokens = call.split(" ")
+    removed = [
+        tokens[index + 1] for index, token in enumerate(tokens) if token == "--remove-env-vars"
+    ]
+    assert len(removed) <= 1, call
+    return set(removed[0].split(",")) if removed else set()
+
+
+def _api_removed_env(api: str) -> set[str]:
+    return _removed_env(api)
+
+
+def _web_deploy_call(tmp_path: Path) -> str:
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    (deploy,) = [call for call in calls if call.startswith("run deploy caseops-web ")]
+    return deploy
+
+
+def test_deploy_prod_without_native_link_input_removes_native_configuration(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "native sign-in disabled" in result.stdout
+    api, web = _api_deploy_call(tmp_path), _web_deploy_call(tmp_path)
+    assert set(_NATIVE_API_KEYS) <= _api_removed_env(api)
+    assert "CASEOPS_NATIVE_SIGNING_SECRET" not in api
+    assert not any(f"{key}=" in api for key in _NATIVE_API_KEYS)
+    assert _removed_env(web) == set(_NATIVE_WEB_KEYS)
+    assert not any(f"{key}=" in web for key in _NATIVE_WEB_KEYS)
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "caseops-native-signing-secret" not in calls
+
+
+def test_deploy_prod_enables_native_sign_in_from_the_committed_link_input(
+    tmp_path: Path,
+) -> None:
+    config = _native_link_config()
+    result = _run_deploy_with_fakes(tmp_path, native_link_config=config)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    digest = hashlib.sha256(config.encode("utf-8")).hexdigest()
+    assert f"native sign-in enabled from {_NATIVE_LINK_SOURCE} ({digest})" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    describe = "secrets versions describe latest --secret caseops-native-signing-secret "
+    secret = next(index for index, call in enumerate(calls) if call.startswith(describe))
+    api_index = next(index for index, call in enumerate(calls)
+                     if call.startswith("run deploy caseops-api "))
+    assert secret < api_index
+    api, web = _api_deploy_call(tmp_path), _web_deploy_call(tmp_path)
+    assert (
+        "|CASEOPS_NATIVE_AUTH_ENABLED=true|CASEOPS_NATIVE_SIGNING_ENABLED=true"
+        '|CASEOPS_NATIVE_REDIRECT_URIS=["https://caseops.ai/native/oauth/callback"] '
+    ) in api
+    assert ",CASEOPS_NATIVE_SIGNING_SECRET=caseops-native-signing-secret:latest " in api
+    assert not _api_removed_env(api) & set(_NATIVE_API_KEYS)
+    assert (
+        ",CASEOPS_NATIVE_LINK_CONFIG_FILE=/app/apps/web/native-links/production.json"
+        f",CASEOPS_NATIVE_LINK_CONFIG_SHA256={digest} "
+    ) in web
+    assert "--remove-env-vars" not in web
+
+
+def test_deploy_prod_admits_an_android_only_native_link_input(tmp_path: Path) -> None:
+    config = json.loads(_native_link_config())
+    del config["ios"]
+    encoded = json.dumps(config, separators=(",", ":"))
+    result = _run_deploy_with_fakes(tmp_path, native_link_config=encoded)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    assert f"CASEOPS_NATIVE_LINK_CONFIG_SHA256={digest} " in _web_deploy_call(tmp_path)
+    assert "|CASEOPS_NATIVE_AUTH_ENABLED=true|" in _api_deploy_call(tmp_path)
+
+
+def test_deploy_prod_refuses_native_sign_in_without_an_enabled_signing_secret(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path, native_link_config=_native_link_config(), native_secret_state="",
+    )
+
+    assert result.returncode == 2
+    assert "native sign-in needs an enabled caseops-native-signing-secret version" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any(call.startswith("run deploy caseops-api ") for call in calls)
+    assert not any(call.startswith("run deploy caseops-web ") for call in calls)
+
+
+@pytest.mark.parametrize("config", [
+    _native_link_config(syntheticDataOnly=True),
+    _native_link_config(
+        ios={"bundleIdentifier": "ai.caseops.mobile", "applicationIdentifierPrefix": "ABCDE12345"},
+    ),
+    _native_link_config(redirectUri="https://caseops.ai/native/oauth/callback?x=1"),
+    "{}",
+])
+def test_deploy_prod_refuses_an_invalid_native_link_input_before_cloud_work(
+    tmp_path: Path, config: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, native_link_config=config)
+
+    assert result.returncode == 2
+    release = "abcdef1234567890abcdef1234567890abcdef12"
+    assert f"{_NATIVE_LINK_SOURCE} at {release} was refused" in result.stdout
+    assert "NATIVE_LINK_RELEASE_REFUSED" in result.stderr
+    log = tmp_path / "gcloud.log"
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    assert not any(call.startswith(("builds ", "run ")) for call in calls)
+
+
 def test_deploy_prod_offline_default_does_not_read_ambient_governance_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4138,9 +4323,9 @@ def test_deploy_prod_replays_actual_committed_governance_policy(tmp_path: Path) 
         assert (
             f"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT={state['rollout_expires_at']}|"
         ) in api
-        assert "--remove-env-vars" not in api
+        assert _api_removed_env(api) == set(_NATIVE_API_KEYS)
     else:
-        assert " --remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT " in api
+        assert "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT" in _api_removed_env(api)
     assert f"rule governance explicitly {enabled}" in result.stdout
     assert "DONE abcdef1" in result.stdout
 
@@ -4159,7 +4344,7 @@ def test_deploy_prod_disabled_state_sets_false_and_removes_a_stale_expiry(
     assert result.returncode == 0, result.stdout + result.stderr
     api = _api_deploy_call(tmp_path)
     assert "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|" in api
-    assert " --remove-env-vars CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT " in api
+    assert "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT" in _api_removed_env(api)
     assert "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT=" not in api
     assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "false"
     assert not (tmp_path / "live-governance-expiry").exists()
@@ -4268,7 +4453,7 @@ def test_deploy_prod_enabled_state_sets_flag_and_expiry_and_reads_both_back(
         "|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=true|"
         f"CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT={state['rollout_expires_at']}|"
     ) in api
-    assert "--remove-env-vars" not in api
+    assert _api_removed_env(api) == set(_NATIVE_API_KEYS)
     assert (tmp_path / "live-governance-flag").read_text(encoding="utf-8") == "true"
     assert (tmp_path / "live-governance-expiry").read_text(encoding="utf-8") == (
         state["rollout_expires_at"]

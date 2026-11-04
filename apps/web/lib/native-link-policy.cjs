@@ -23,11 +23,15 @@ function httpsCallback(value) {
   } catch { return false; }
 }
 function validateNativeLinkConfig(value) {
-  requireValue(keys(value, ['schemaVersion', 'kind', 'syntheticDataOnly', 'redirectUri', 'ios', 'android'])
+  // iOS is optional so an Android-only release can precede Apple enrollment;
+  // without it no iOS association is published and iOS builds are refused.
+  const base = ['schemaVersion', 'kind', 'syntheticDataOnly', 'redirectUri', 'android'];
+  requireValue((keys(value, [...base, 'ios']) || keys(value, base))
     && value.schemaVersion === 1 && value.kind === 'caseops-native-links'
     && typeof value.syntheticDataOnly === 'boolean', 'NATIVE_LINK_CONFIG_SCHEMA_REQUIRED');
   requireValue(httpsCallback(value.redirectUri), 'EXACT_HTTPS_NATIVE_CALLBACK_REQUIRED');
-  requireValue(keys(value.ios, ['bundleIdentifier', 'applicationIdentifierPrefix'])
+  const ios = Object.prototype.hasOwnProperty.call(value, 'ios');
+  if (ios) requireValue(keys(value.ios, ['bundleIdentifier', 'applicationIdentifierPrefix'])
     && typeof value.ios.bundleIdentifier === 'string' && typeof value.ios.applicationIdentifierPrefix === 'string'
     && /^[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+){2,}$/.test(value.ios.bundleIdentifier)
     && /^[A-Z0-9]{10}$/.test(value.ios.applicationIdentifierPrefix), 'EXACT_IOS_APPLICATION_ID_REQUIRED');
@@ -43,10 +47,10 @@ function validateNativeLinkConfig(value) {
     const host = new URL(value.redirectUri).hostname;
     requireValue(!/(?:^|\.)(?:invalid|test|example|localhost)$/.test(host)
       && !/(?:^|\.)example\.(?:com|net|org)$/.test(host)
-      && !/(?:^|\.)(?:dev|localacceptance|simulatoracceptance)(?:\.|$)/i.test(value.ios.bundleIdentifier)
+      && (!ios || !/(?:^|\.)(?:dev|localacceptance|simulatoracceptance)(?:\.|$)/i.test(value.ios.bundleIdentifier))
       && !/(?:^|\.)(?:dev|localacceptance|simulatoracceptance)(?:\.|$)/i.test(value.android.packageName)
-      && !/^(.)\1+$/.test(value.ios.applicationIdentifierPrefix)
-      && !['ABCDE12345', 'FAKETEAMID', 'TEAMID12345'].includes(value.ios.applicationIdentifierPrefix)
+      && (!ios || !/^(.)\1+$/.test(value.ios.applicationIdentifierPrefix))
+      && (!ios || !['ABCDE12345', 'FAKETEAMID', 'TEAMID12345'].includes(value.ios.applicationIdentifierPrefix))
       && value.android.signingCertificateSha256.every(hash => !/^(.)\1+$/.test(hash)), 'PLACEHOLDER_PRODUCTION_LINK_CONFIG_FORBIDDEN');
   }
   return value;
@@ -63,16 +67,16 @@ function allowsNativeRedirect(uri, policy) {
 }
 function nativeLinkProjections(config, sha256) {
   const policy = nativeLinkPolicy(config, sha256), url = new URL(config.redirectUri);
-  const appId = `${config.ios.applicationIdentifierPrefix}.${config.ios.bundleIdentifier}`;
+  const appId = config.ios ? `${config.ios.applicationIdentifierPrefix}.${config.ios.bundleIdentifier}` : null;
   return {
     schemaVersion: 1, configSha256: sha256, syntheticDataOnly: config.syntheticDataOnly,
     policy,
-    mobile: { ios: { bundleIdentifier: config.ios.bundleIdentifier, associatedDomains: [`applinks:${url.hostname}`] },
+    mobile: { ios: config.ios ? { bundleIdentifier: config.ios.bundleIdentifier, associatedDomains: [`applinks:${url.hostname}`] } : null,
       android: { package: config.android.packageName, intentFilters: [{ action: 'VIEW', autoVerify: true,
         category: ['BROWSABLE', 'DEFAULT'], data: [{ scheme: 'https', host: url.hostname, path: CALLBACK_PATH },
           { scheme: 'https', host: url.hostname, pathPrefix: RECORD_PATH_PREFIX }] }] } },
     apiEnvironment: { CASEOPS_NATIVE_REDIRECT_URIS: JSON.stringify([config.redirectUri]) },
-    appleAppSiteAssociation: { applinks: { details: [{ appIDs: [appId], components: [{ '/': CALLBACK_PATH }, { '/': `${RECORD_PATH_PREFIX}*` }] }] } },
+    appleAppSiteAssociation: appId ? { applinks: { details: [{ appIDs: [appId], components: [{ '/': CALLBACK_PATH }, { '/': `${RECORD_PATH_PREFIX}*` }] }] } } : null,
     assetlinks: [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app',
       package_name: config.android.packageName, sha256_cert_fingerprints: config.android.signingCertificateSha256.map(hash => hash.toUpperCase().match(/../g).join(':')) } }],
   };

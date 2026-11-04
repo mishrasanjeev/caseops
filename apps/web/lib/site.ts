@@ -50,6 +50,7 @@ export const siteConfig = {
         { label: "Request a conversation", href: "/demo/guide" },
       ],
       Trust: [
+        { label: "Privacy policy", href: "/privacy" },
         { label: "Security", href: "/#security" },
         { label: "Multi-tenancy", href: "/#security" },
         { label: "AI governance", href: "/#security" },
