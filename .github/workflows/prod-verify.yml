@@ -71,35 +71,108 @@ jobs:
       - name: Prepare finite marked active-production-QA guard
         run: |
           cat > "$RUNNER_TEMP/guard-production-qa.py" <<'PY'
-          import json,os,time,urllib.request
+          import json,os,pathlib,sys,time,urllib.error,urllib.request
           start=time.monotonic()
-          own=int(os.environ['GITHUB_RUN_ID'])
+          PHASES=('initial','pre-route','pre-execution')
+          STATUSES=('queued','in_progress','requested','waiting','pending')
+          PREFIX='CASEOPS_QA_GUARD_V1 '
+          if len(sys.argv)!=2 or sys.argv[1] not in PHASES: raise SystemExit('QA_GUARD_PHASE_REFUSED')
+          phase=sys.argv[1]
+          try: own=int(os.environ['GITHUB_RUN_ID'])
+          except (KeyError,TypeError,ValueError): raise SystemExit('QA_GUARD_INVOCATION_REFUSED') from None
+          if own<=0 or os.environ.get('GITHUB_RUN_ATTEMPT')!='1': raise SystemExit('QA_GUARD_INVOCATION_REFUSED')
+          try:
+              folder=pathlib.Path(os.environ['RUNNER_TEMP'])
+              receipt=folder/f'caseops-qa-guard-{own}-{phase}.jsonl'
+              output=receipt.open('xb')
+          except (KeyError,TypeError,OSError): raise SystemExit('QA_GUARD_RECEIPT_REFUSED') from None
+          row_count=0
+          def safe_total(value): return value if type(value) is int and 0<=value<=1000 else None
+          def safe_http(value): return value if type(value) is int and 100<=value<=599 else None
+          def emit(event,status='none',page=0,*,http_status=None,reported_total=None,expected_total=None,page_count=None,received_count=None,unique_count=None,duplicate_count=None,own_count=None,other_count=None,count_matches=None,pagination_consistent=None,reason='none'):
+              global row_count
+              if event not in ('page','status','refusal','pass') or status not in STATUSES+('none',) or type(page) is not int or not 0<=page<=10: raise SystemExit('QA_GUARD_RECEIPT_SCHEMA_REFUSED')
+              if reason not in ('none','deadline','http_status','response_bound','pagination','active_or_inventory','malformed','transport','unexpected'): raise SystemExit('QA_GUARD_RECEIPT_SCHEMA_REFUSED')
+              counts=(page_count,received_count,unique_count,duplicate_count,own_count,other_count)
+              if any(value is not None and (type(value) is not int or not 0<=value<=4*1024*1024) for value in counts): raise SystemExit('QA_GUARD_RECEIPT_SCHEMA_REFUSED')
+              if any(value is not None and type(value) is not bool for value in (count_matches,pagination_consistent)): raise SystemExit('QA_GUARD_RECEIPT_SCHEMA_REFUSED')
+              row={'schema':1,'phase':phase,'event':event,'status':status,'page':page,'http_status':safe_http(http_status),'reported_total':safe_total(reported_total),'expected_total':safe_total(expected_total),'page_count':page_count,'received_count':received_count,'unique_count':unique_count,'duplicate_count':duplicate_count,'own_count':own_count,'other_count':other_count,'count_matches':count_matches,'pagination_consistent':pagination_consistent,'reason':reason}
+              row_count+=1
+              if row_count>60: raise SystemExit('QA_GUARD_RECEIPT_BOUND_REFUSED')
+              raw=(json.dumps(row,sort_keys=True,separators=(',',':'),allow_nan=False)+'\n').encode()
+              if len(raw)>2048: raise SystemExit('QA_GUARD_RECEIPT_BOUND_REFUSED')
+              try:
+                  if output.write(raw)!=len(raw): raise SystemExit('QA_GUARD_RECEIPT_WRITE_REFUSED')
+                  output.flush();os.fsync(output.fileno())
+                  print(PREFIX+raw.decode().rstrip('\n'),flush=True)
+              except (OSError,ValueError): raise SystemExit('QA_GUARD_RECEIPT_WRITE_REFUSED') from None
           class NoRedirect(urllib.request.HTTPRedirectHandler):
               def redirect_request(self,request,fp,code,msg,headers,newurl): return None
-          opener=urllib.request.build_opener(NoRedirect())
-          for status in ('queued','in_progress','requested','waiting','pending'):
-              total=None;ids=[]
-              for page in range(1,11):
-                  if time.monotonic()-start>=60: raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
-                  url=f'https://api.github.com/repos/mishrasanjeev/caseops/actions/workflows/prod-verify.yml/runs?status={status}&per_page=100&page={page}'
-                  request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','X-CaseOps-Automated-Test':'no-paid-providers'})
-                  with opener.open(request,timeout=10) as response:
-                      if response.status!=200: raise SystemExit('QA_GUARD_HTTP_STATUS_REFUSED')
-                      raw=response.read(4*1024*1024+1)
-                  if len(raw)>4*1024*1024: raise SystemExit('QA_GUARD_RESPONSE_BOUND_REFUSED')
-                  body=json.loads(raw)
-                  if total is None: total=body['total_count']
-                  if type(total) is not int or not 0<=total<=1000 or body['total_count']!=total: raise SystemExit('QA_GUARD_PAGINATION_REFUSED')
-                  ids.extend(row['id'] for row in body['workflow_runs'])
-                  if len(ids)>=total: break
-              if len(ids)!=total or len(set(ids))!=total or any(value!=own for value in ids): raise SystemExit('OTHER_PRODUCTION_QA_ACTIVE_REFUSED')
+          status='none';page=0
+          try:
+              opener=urllib.request.build_opener(NoRedirect())
+              for status in STATUSES:
+                  total=None;ids=[]
+                  for page in range(1,11):
+                      if time.monotonic()-start>=60:
+                          emit('refusal',status,page,reason='deadline')
+                          raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
+                      url=f'https://api.github.com/repos/mishrasanjeev/caseops/actions/workflows/prod-verify.yml/runs?status={status}&per_page=100&page={page}'
+                      request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','X-CaseOps-Automated-Test':'no-paid-providers'})
+                      with opener.open(request,timeout=10) as response:
+                          if response.status!=200:
+                              emit('refusal',status,page,http_status=response.status,reason='http_status')
+                              raise SystemExit('QA_GUARD_HTTP_STATUS_REFUSED')
+                          raw=response.read(4*1024*1024+1)
+                      if len(raw)>4*1024*1024:
+                          emit('refusal',status,page,http_status=200,reason='response_bound')
+                          raise SystemExit('QA_GUARD_RESPONSE_BOUND_REFUSED')
+                      body=json.loads(raw)
+                      if total is None: total=body['total_count']
+                      consistent=type(total) is int and 0<=total<=1000 and body['total_count']==total
+                      emit('page',status,page,http_status=200,reported_total=body['total_count'],expected_total=total,page_count=len(body['workflow_runs']) if type(body['workflow_runs']) is list else None,received_count=len(ids),pagination_consistent=consistent)
+                      if type(total) is not int or not 0<=total<=1000 or body['total_count']!=total:
+                          emit('refusal',status,page,reported_total=body['total_count'],expected_total=total,reason='pagination')
+                          raise SystemExit('QA_GUARD_PAGINATION_REFUSED')
+                      ids.extend(row['id'] for row in body['workflow_runs'])
+                      if len(ids)>=total: break
+                  unique=len(set(ids));duplicates=len(ids)-unique
+                  emit('status',status,page,expected_total=total,received_count=len(ids),unique_count=unique,duplicate_count=duplicates,own_count=sum(value==own for value in ids),other_count=sum(value!=own for value in ids),count_matches=len(ids)==total)
+                  if len(ids)!=total or len(set(ids))!=total or any(value!=own for value in ids):
+                      emit('refusal',status,page,expected_total=total,received_count=len(ids),unique_count=unique,duplicate_count=duplicates,own_count=sum(value==own for value in ids),other_count=sum(value!=own for value in ids),count_matches=len(ids)==total,reason='active_or_inventory')
+                      raise SystemExit('OTHER_PRODUCTION_QA_ACTIVE_REFUSED')
+              if time.monotonic()-start>=60:
+                  emit('refusal',status,page,reason='deadline')
+                  raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
+              emit('pass')
+              if time.monotonic()-start>=60:
+                  emit('refusal',status,page,reason='deadline')
+                  raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
+          except urllib.error.HTTPError as error:
+              emit('refusal',status,page,http_status=error.code,reason='http_status')
+              raise SystemExit('QA_GUARD_HTTP_STATUS_REFUSED') from None
+          except (json.JSONDecodeError,KeyError,TypeError,ValueError,OverflowError):
+              emit('refusal',status,page,reason='malformed')
+              raise SystemExit('QA_GUARD_MALFORMED_REFUSED') from None
+          except (urllib.error.URLError,TimeoutError,OSError):
+              emit('refusal',status,page,reason='transport')
+              raise SystemExit('QA_GUARD_TRANSPORT_REFUSED') from None
+          except Exception:
+              emit('refusal',status,page,reason='unexpected')
+              raise SystemExit('QA_GUARD_UNCLASSIFIED_REFUSED') from None
+          finally:
+              prior_failure=sys.exc_info()[0] is not None
+              try: output.close()
+              except OSError:
+                  if not prior_failure: raise SystemExit('QA_GUARD_RECEIPT_WRITE_REFUSED') from None
+          if time.monotonic()-start>=60: raise SystemExit('QA_GUARD_DEADLINE_REFUSED')
           print('MARKED_FINITE_ACTIVE_PRODUCTION_QA_GUARD_PASS')
           PY
 
       - name: Require no other active production QA
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python "$RUNNER_TEMP/guard-production-qa.py"
+        run: python "$RUNNER_TEMP/guard-production-qa.py" initial
 
       - uses: actions/setup-node@v4
         with:
@@ -138,7 +211,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python "$RUNNER_TEMP/guard-production-qa.py"
+          python "$RUNNER_TEMP/guard-production-qa.py" pre-route
           python scripts/verify_deployed_release.py --expected-sha bdd1480699222712475372690334659088629429 --wait-seconds 30 --interval-seconds 5
           echo ready=true >> "$GITHUB_OUTPUT"
 
@@ -199,7 +272,7 @@ jobs:
           if found!=expected: raise SystemExit('EXACT_ONE_DIAGNOSTIC_CASE_REFUSED')
           # This observation supplements the Root-admitted exclusive QA window;
           # it is not an atomic lock or a claim that another workflow was paused.
-          guard=subprocess.run(['python',str(pathlib.Path(os.environ['RUNNER_TEMP'])/'guard-production-qa.py')],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=70,check=False)
+          guard=subprocess.run(['python',str(pathlib.Path(os.environ['RUNNER_TEMP'])/'guard-production-qa.py'),'pre-execution'],stdin=subprocess.DEVNULL,stdout=None,stderr=subprocess.DEVNULL,timeout=70,check=False)
           if guard.returncode!=0: raise SystemExit('PRE_EXECUTION_QA_WINDOW_REFUSED')
           raise SystemExit(run('execution'))
           PY
