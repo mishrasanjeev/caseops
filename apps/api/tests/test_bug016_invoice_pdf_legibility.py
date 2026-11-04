@@ -148,8 +148,9 @@ def test_bug016_invoice_pdf_prints_typed_punctuation_as_typed(client: TestClient
     for line in typed:
         assert compact(line) in text, line
     assert "--" not in rendered.text
-    # A script the core font lacks still downloads, readably marked.
-    assert compact("? fee INR") in text
+    # The pinned Unicode renderer also preserves this original Hindi/rupee line.
+    assert compact("राम fee ₹") in text
+    assert invoice["line_items"][2]["description"] == "राम fee ₹"
     assert [line["description"] for line in invoice["line_items"]][:2] == typed
 
 
