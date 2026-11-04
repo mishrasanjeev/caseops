@@ -30,7 +30,7 @@ import {
   expectNoPageOverflow, expectOnScreen, json, deadSelects, markPositive, prepareTester, stamp,
   type TesterRuntime,
 } from "./support/ram-bugs4";
-import { recordBatch4Diagnostic, type WatchUuidProvenance } from "./support/batch4-safe-diagnostics";
+import { recordBatch4Diagnostic, type WatchIntakeError, type WatchUuidProvenance } from "./support/batch4-safe-diagnostics";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -41,6 +41,48 @@ const UUID_TEXT = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const JSON_TEXT = /\{\s*"[a-z_]+"\s*:/i;
 
 type WatchUuidReferences = { technical_ids: string[]; business_uuids: string[] };
+
+/** Classify only this visible error's first paragraph; never return its text. */
+function renderedJournalError(): WatchIntakeError["code"] | false {
+  const matches = document.querySelectorAll('[data-testid="journal-intake-error"]');
+  if (matches.length !== 1) return false;
+  const root = matches[0];
+  if (!(root instanceof HTMLElement)) return false;
+  const bounds = root.getBoundingClientRect();
+  const style = window.getComputedStyle(root);
+  if (bounds.width === 0 || bounds.height === 0 || style.visibility === "hidden" || style.display === "none") return false;
+  const paragraph = root.querySelector(":scope > p");
+  const text = paragraph?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+  if (!text || text === "Correct the highlighted fields before recording the entry.") return false;
+  if (text.length > 16384) return "unknown";
+  if (text === "This idempotency key was already used for a different journal payload.") return "idempotency_payload_mismatch";
+  if (text === "No active watch profile can be compared with this journal entry. Create or resume a watch profile, then capture the entry.") return "no_active_profile";
+  if (text === "Journal ingestion conflicted; retry safely.") return "ingestion_conflict";
+  if (text.startsWith("Journal ") && text.endsWith(" is already recorded with different details or evidence. The first capture is kept unchanged. Review the recorded entry; record a correction or re-advertisement only if the journal itself published one.")) return "recorded_entry_differs";
+  return "unknown";
+}
+
+/** Deadline is conservative inside the unchanged original test timeout. No HTTP. */
+async function captureJournalIntakeError(page: Page, diagnosticUntil: number): Promise<WatchIntakeError> {
+  const stop = Math.min(diagnosticUntil, performance.now() + 2000);
+  const remaining = stop - performance.now();
+  if (remaining <= 0) return { kind: "watch_intake_error", code: "unavailable" };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const observation = async () => {
+      const handle = await page.waitForFunction(renderedJournalError, undefined, { timeout: remaining, polling: 50 });
+      try { return await handle.jsonValue(); }
+      finally { await handle.dispose(); }
+    };
+    const code = await Promise.race([
+      observation(),
+      new Promise<WatchIntakeError["code"]>((resolve) => { timer = setTimeout(() => resolve("unavailable"), remaining); }),
+    ]);
+    if (performance.now() >= stop || code === false) return { kind: "watch_intake_error", code: "unavailable" };
+    return { kind: "watch_intake_error", code };
+  } catch { return { kind: "watch_intake_error", code: "unavailable" }; }
+  finally { clearTimeout(timer); }
+}
 
 /** Only named scalar fields from responses already read by the original journey. */
 function watchUuidReferences(
@@ -213,6 +255,7 @@ async function uiJson<T = any>(
   phase: "profile_create" | "journal_intake" | "hit_disposition" | "profile_pause",
   diagnosticFailure: WatchDiagnosticFailure,
   expected = 200,
+  journalFailure?: () => Promise<WatchIntakeError>,
 ): Promise<T> {
   try {
     recordBatch4Diagnostic({ kind: "watch_http", phase, status: response.status() });
@@ -222,7 +265,17 @@ async function uiJson<T = any>(
       diagnosticFailure.error = error;
     }
   }
-  expect(response.status(), `${operation} returned ${response.status()}`).toBe(expected);
+  try {
+    expect(response.status(), `${operation} returned ${response.status()}`).toBe(expected);
+  } catch (statusFailure) {
+    if (phase === "journal_intake" && response.status() === 409 && journalFailure) {
+      try { recordBatch4Diagnostic(await journalFailure()); }
+      catch (error) {
+        if (!diagnosticFailure.failed) { diagnosticFailure.failed = true; diagnosticFailure.error = error; }
+      }
+    }
+    throw statusFailure;
+  }
   return response.json() as Promise<T>;
 }
 
@@ -298,12 +351,12 @@ async function retireLeftovers(request: APIRequestContext, rt: TesterRuntime, cr
 }
 
 async function captureJournalEntry(
-  page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean,
+  page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean, diagnosticUntil: number,
 ) {
   const created: Created = { profileId: null, profilePaused: false, hitId: null, hitRetired: false };
   const diagnosticFailure: WatchDiagnosticFailure = { failed: false, error: undefined };
   try {
-    await journey(page, request, rt, info, mobile, created, diagnosticFailure);
+    await journey(page, request, rt, info, mobile, created, diagnosticFailure, diagnosticUntil);
   } finally {
     await retireLeftovers(request, rt, created);
   }
@@ -312,7 +365,7 @@ async function captureJournalEntry(
 
 async function journey(
   page: Page, request: APIRequestContext, rt: TesterRuntime, info: TestInfo, mobile: boolean, created: Created,
-  diagnosticFailure: WatchDiagnosticFailure,
+  diagnosticFailure: WatchDiagnosticFailure, diagnosticUntil: number,
 ) {
   const checkLayout = async () => { if (mobile) await expectNoPageOverflow(page); };
   const docket = await watchDocket(rt, request);
@@ -406,7 +459,8 @@ async function journey(
   const ingestResponse = page.waitForResponse(response =>
     response.url().endsWith("/api/ip/watch/journal-ingestions") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Record and compare" }).click();
-  const ingested = await uiJson(await ingestResponse, "Record the journal entry through the UI", "journal_intake", diagnosticFailure, 201);
+  const ingested = await uiJson(await ingestResponse, "Record the journal entry through the UI", "journal_intake", diagnosticFailure, 201,
+    () => captureJournalIntakeError(page, diagnosticUntil));
   const entry = ingested.publications[0];
   expect(entry.class_numbers_json).toEqual([45]);
   expect(entry.goods_services_json).toEqual({ "45": ["Legal services"] });
@@ -485,16 +539,20 @@ async function journey(
 
 test("BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
+  // Before this callback the frozen project allows120s. Conservatively reserve it,
+  // so this clock cannot extend the original360s including fixture setup.
+  const diagnosticUntil = info.project.timeout === 120000 ? performance.now() + 239000 : 0;
   const rt = await prepareTester(page, request, baseURL);
-  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, false);
+  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, false, diagnosticUntil);
   await rt.release();
   if (diagnosticFailure.failed) throw diagnosticFailure.error;
 });
 
 test("[mobile] BUG-014 journal capture works at 393px without horizontal page scroll", async ({ page, request, baseURL }, info) => {
   test.setTimeout(6 * 60_000);
+  const diagnosticUntil = info.project.timeout === 120000 ? performance.now() + 239000 : 0;
   const rt = await prepareTester(page, request, baseURL, { width: 393, height: 851 });
-  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, true);
+  const diagnosticFailure = await captureJournalEntry(page, request, rt, info, true, diagnosticUntil);
   await rt.release();
   if (diagnosticFailure.failed) throw diagnosticFailure.error;
 });

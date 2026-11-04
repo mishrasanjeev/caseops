@@ -10,8 +10,13 @@ export type WatchUuidProvenance = {
   queue_mark_only_count: number; profile_name_only_count: number; source_evidence_only_count: number;
   docket_option_only_count: number; labelled_business_only_count: number; multiple_surface_count: number; unknown_surface_count: number;
 };
+export type WatchIntakeError = {
+  kind: "watch_intake_error";
+  code: "idempotency_payload_mismatch" | "no_active_profile" | "recorded_entry_differs" | "ingestion_conflict" | "unknown" | "unavailable";
+};
 
 export type Batch4SafeDiagnostic =
+  | WatchIntakeError
   | WatchUuidProvenance
   | { kind: "specialist_control"; ordinal: number; tag: "select" | "input" | "textarea";
       own_disabled: boolean; effective_disabled: boolean; ancestor_fieldset_disabled: boolean;
@@ -120,6 +125,9 @@ function row(value: unknown): Batch4SafeDiagnostic {
       && (clean.unique_count as number) <= (clean.occurrence_count as number)
       && ((clean.unique_count === 0) === (clean.occurrence_count === 0))
       && sum(valueCounts) === clean.occurrence_count && sum(surfaceCounts) === clean.occurrence_count);
+  } else if (clean.kind === "watch_intake_error") {
+    check(exact(["kind", "code"]) && ["idempotency_payload_mismatch", "no_active_profile", "recorded_entry_differs",
+      "ingestion_conflict", "unknown", "unavailable"].includes(clean.code as string));
   } else if (clean.kind === "invoice_line") {
     check(exact(["kind", "invoice_ordinal", "line_ordinal", "expected_length", "raw_match", "typography_candidate_match",
       "nfkc_match", "has_non_latin1", "typography_change_count", "expected_sha256", "pdf_compact_sha256"])
@@ -195,7 +203,7 @@ export function validateBatch4DiagnosticOutput() {
     check(entries.length >= 2 && entries.length <= MAX_FILES + 1
       && entries.filter((name) => name === ".owner.json").length === 1
       && entries.every((name) => name === ".owner.json" || /^records-[1-9][0-9]{0,10}\.jsonl$/.test(name)));
-    const counts = { specialist_control: 0, watch_http: 0, watch_uuid_provenance: 0, invoice_line: 0 };
+    const counts = { specialist_control: 0, watch_http: 0, watch_uuid_provenance: 0, watch_intake_error: 0, invoice_line: 0 };
     let total = 0; let bytes = 0;
     for (const file of entries.filter((name) => name !== ".owner.json")) {
       const raw = readClosed(path.join(DIRECTORY, file), MAX_BYTES);

@@ -214,7 +214,7 @@ jobs:
           const summary=validateBatch4DiagnosticOutput();
           fs.writeFileSync('test-results/batch4-safe-summary.json',JSON.stringify(summary)+'\n',{flag:'wx'});
           fs.appendFileSync(process.env.GITHUB_OUTPUT,'safe=true\n');
-          if(summary.counts.watch_http===0||summary.counts.watch_uuid_provenance!==1||summary.counts.specialist_control!==0||summary.counts.invoice_line!==0)throw Error('WATCH_PROVENANCE_DIAGNOSTIC_KIND_INCOMPLETE');
+          if(summary.counts.watch_http===0||summary.counts.watch_uuid_provenance+summary.counts.watch_intake_error!==1||summary.counts.specialist_control!==0||summary.counts.invoice_line!==0)throw Error('WATCH_PROVENANCE_DIAGNOSTIC_KIND_INCOMPLETE');
           NODE
       - name: Recheck exact serving M after diagnostics
         if: always() && steps.admitted.outputs.ready == 'true'
