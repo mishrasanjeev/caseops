@@ -4,11 +4,24 @@ import vm from "node:vm";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import { RUN_ID } from "../../../tests/e2e/support/run-id";
-import { localTransportHeaders } from "../../../tests/e2e/support/cost-controls";
 
 const root = path.resolve(__dirname, "../../..");
 const source = readFileSync(path.join(root, "tests/e2e/support/ip15-workspace.ts"), "utf8");
 const publicSource = readFileSync(path.join(root, "tests/e2e/support/public-release-identity.ts"), "utf8");
+const transportSource = readFileSync(path.join(root, "tests/e2e/support/cost-controls.ts"), "utf8");
+const transportAst = ts.createSourceFile("cost-controls.ts", transportSource, ts.ScriptTarget.Latest, true);
+// Evaluate the actual pure header helper without loading Playwright's runner
+// inside Vitest. Keep the independent literal marker expectations below.
+const transportStatements = transportAst.statements.filter(statement =>
+  ts.isFunctionDeclaration(statement) && statement.name?.text === "localTransportHeaders"
+  || ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration =>
+    ts.isIdentifier(declaration.name) && declaration.name.text === "noPaidProviderHeaders"));
+if (transportStatements.length !== 2) throw new Error("Exact transport helper and marker declarations required");
+const transportContext = vm.createContext({ URL, exports: {} });
+vm.runInContext(ts.transpileModule(transportStatements.map(statement => statement.getText(transportAst)).join("\n"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText, transportContext);
+const localTransportHeaders = transportContext.localTransportHeaders as (url: string) => Record<string, string>;
 const companyId = "11111111-1111-4111-8111-111111111111";
 const run = "20261103-120000-a1b2c3";
 const applicationId = "22222222-2222-4222-8222-222222222222";
@@ -81,6 +94,9 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
 
 describe("IP15 shared workspace fixture boundaries", () => {
   it("does not send public identity reads through the authenticated workspace fixture", async () => {
+    expect(localTransportHeaders("http://127.0.0.1:3100")).toEqual({ ...marker, Connection: "close" });
+    expect(localTransportHeaders("https://caseops.ai")).toEqual(marker);
+    expect(() => localTransportHeaders("invalid origin")).toThrow();
     const f = fixture();
     await f.run();
     expect(f.request.get.mock.calls.map(([url]) => new URL(url).pathname)
