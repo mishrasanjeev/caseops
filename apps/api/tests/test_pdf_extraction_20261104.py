@@ -585,8 +585,9 @@ def test_actual_ocr_render_keeps_page_cap_dpi_pixels_and_independent_images(
     original_close = pdfium.PdfBitmap.close
 
     def observe_close(bitmap, *args, **kwargs):
+        was_open = bool(bitmap.raw)
         result = original_close(bitmap, *args, **kwargs)
-        if result:
+        if was_open:
             closed_bitmaps.append(bitmap.raw is None)
         return result
 
