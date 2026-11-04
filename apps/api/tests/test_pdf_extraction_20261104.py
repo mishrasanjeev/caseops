@@ -18,13 +18,16 @@ from pdfminer.pdfdocument import PDFPasswordIncorrect, PDFTextExtractionNotAllow
 from caseops_api.services import pdf_extraction as reader
 
 
-def _ordinary_pdf(*pages: str) -> bytes:
+def _ordinary_pdf(*pages: str, paint_marker: bool = False) -> bytes:
     """Finite public ASCII fixture, parsed by both actual installed engines."""
+    if type(paint_marker) is not bool:
+        raise ValueError("Supported marker flag must be a bool")
     objects = [b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
     page_ids = []
     for source in pages:
         text = source.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        content = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("ascii")
+        marker = "0 g 72 680 40 24 re f\n" if paint_marker else ""
+        content = (marker + f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET").encode("ascii")
         objects.append(
             b"<< /Length "
             + str(len(content)).encode()
@@ -571,16 +574,36 @@ def test_pdfium_lock_is_released_on_exception_for_another_thread():
         assert actual == "entered"
 
 
-def test_actual_ocr_render_keeps_page_cap_dpi_pixels_and_independent_images(tmp_path):
+def test_actual_ocr_render_keeps_page_cap_dpi_pixels_and_independent_images(
+    monkeypatch, tmp_path
+):
+    import pypdfium2 as pdfium
+
     from caseops_api.services import ocr
 
-    body = _ordinary_pdf("First OCR image", "Second remains outside original page cap")
+    closed_bitmaps = []
+    original_close = pdfium.PdfBitmap.close
+
+    def observe_close(bitmap, *args, **kwargs):
+        result = original_close(bitmap, *args, **kwargs)
+        if result:
+            closed_bitmaps.append(bitmap.raw is None)
+        return result
+
+    monkeypatch.setattr(pdfium.PdfBitmap, "close", observe_close)
+    body = _ordinary_pdf(
+        "First OCR image", "Second remains outside original page cap", paint_marker=True
+    )
     path = tmp_path / "render.pdf"
     path.write_bytes(body)
     images, total, truncated = ocr._render_pdf_pages(path, dpi=72, max_pages=1)
     try:
         assert total == 2 and truncated is True and len(images) == 1
         assert images[0].size == (612, 792)
+        assert closed_bitmaps == [True]
+        assert images[0].mode == "RGB"
+        assert images[0].getpixel((80, 96)) == (0, 0, 0)
+        assert images[0].getpixel((10, 10)) == (255, 255, 255)
         assert all(channel == (0, 255) for channel in images[0].getextrema())
         assert path.read_bytes() == body
     finally:
