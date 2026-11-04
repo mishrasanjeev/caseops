@@ -82,6 +82,7 @@ COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
 COPY apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt /app/apps/api/src/caseops_api/assets/pdf_fonts/
 COPY apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json /app/apps/api/vendor/pdf-fonts-20261104/
 COPY apps/api/vendor/uharfbuzz-0.57.0/LICENSE apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING /app/apps/api/vendor/uharfbuzz-0.57.0/
+COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 

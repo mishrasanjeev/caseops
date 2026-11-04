@@ -1723,3 +1723,61 @@ def test_bug_014_profile_with_only_a_jurisdiction_is_refused() -> None:
             }
         )
     assert [error["loc"] for error in classes.value.errors()] == [("class_numbers",)]
+
+
+def test_bug_014_two_hits_from_one_journal_issue_both_record_and_report(
+    client: TestClient,
+) -> None:
+    # Production 2026-11-03: a second journal capture for the same docket and
+    # journal date was refused 409 as a "matching event", because every watch
+    # hit records a same-kind "publication" docket event on its journal date.
+    bootstrap, headers, docket, _ = _fixture(client, "TWOHITS")
+    _profile(
+        client, headers=headers, docket_id=docket["id"], recipient_id=bootstrap["membership"]["id"]
+    )
+    today = datetime.now(UTC).date().isoformat()
+    hits = []
+    for index, number in enumerate(("TM-1111111", "TM-2222222")):
+        publication = _publication(
+            application_id=None, application_number=number, journal_date=today
+        )
+        result = _ingest(
+            client, headers=headers, key=f"bug014-two-hits-000{index}", publication=publication
+        )
+        assert result["run"]["hits_created"] == 1
+        hits.append(result["hits"][0])
+    SessionLocal = get_session_factory()
+    with SessionLocal() as session:
+        candidates = session.scalars(
+            select(IpDocketEvent).where(
+                IpDocketEvent.docket_id == docket["id"],
+                IpDocketEvent.event_kind == "publication",
+            )
+        ).all()
+        assert sorted(row.payload_json["watch_hit_id"] for row in candidates) == sorted(
+            hit["id"] for hit in hits
+        )
+
+    # Confirming one into the client report records its own event the same day.
+    hit = hits[1]
+    review = client.post(
+        f"/api/ip/watch/hits/{hit['id']}/disposition",
+        headers=headers,
+        json={
+            "expected_version": hit["version"],
+            "disposition": "relevant",
+            "reason": "Official journal confirms an overlapping mark and class scope.",
+            "source_confirmed": True,
+        },
+    )
+    assert review.status_code == 200, review.text
+    report = client.post(
+        f"/api/ip/watch/hits/{hit['id']}/handoffs",
+        headers=headers,
+        json={
+            "handoff_kind": "client_report_item",
+            "assignee_membership_id": bootstrap["membership"]["id"],
+        },
+    )
+    assert report.status_code == 201, report.text
+    assert report.json()["target_type"] == "ip_docket_event"

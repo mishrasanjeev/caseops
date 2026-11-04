@@ -11,6 +11,7 @@ import JSZip from "jszip";
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv, repoRoot } from "./support/env";
+import { RUN_ID, runId } from "./support/run-id";
 import { ipImportAcknowledgements } from "./support/ip-import-acknowledgements";
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders, storageState: { cookies: [], origins: [] },
@@ -63,7 +64,7 @@ function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActo
   if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
     && !origin.username && !origin.password)) throw new Error("Fixture grants require loopback origins.");
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-  if (!slug.startsWith("ip13-") || !uuid.test(slug.slice(5)) || actor.company.slug !== slug
+  if (!slug.startsWith("ip13-") || !RUN_ID.test(slug.slice(5)) || actor.company.slug !== slug
     || !uuid.test(actor.company.id)) throw new Error("Fixture grant must match the newly bootstrapped IP13 tenant.");
   const database = process.env.CASEOPS_E2E_DATABASE_URL?.trim() || e2eEnv.CASEOPS_DATABASE_URL;
   if (database.startsWith("postgresql+psycopg://")) {
@@ -111,7 +112,7 @@ function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
   if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
     && !origin.username && !origin.password)) throw new Error("Local delivery requires loopback origins.");
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-  if (!actor.company.slug.startsWith("ip13-") || !uuid.test(actor.company.slug.slice(5))
+  if (!actor.company.slug.startsWith("ip13-") || !RUN_ID.test(actor.company.slug.slice(5))
     || ![actor.company.id, actor.membership.id, docketId, sourceId, intentId].every(id => uuid.test(id))) {
     throw new Error("Local delivery must belong to a fresh isolated IP13 fixture.");
   }
@@ -215,7 +216,7 @@ async function preparePortfolio(page: Page, request: APIRequestContext, baseURL:
     }
     const sha = local ? required("CASEOPS_RELEASE_SHA") : required("CASEOPS_EXPECTED_RELEASE_SHA");
     expect(sha).toMatch(/^[a-f0-9]{40}$/);
-    const run = randomUUID();
+    const run = runId();
     const credentials = local ? {
       slug: `ip13-${run}`, email: `owner-${run}@example.com`, password: `Portfolio!${randomUUID()}`,
     } : {

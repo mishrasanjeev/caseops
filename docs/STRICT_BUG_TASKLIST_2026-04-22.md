@@ -28,11 +28,68 @@ The semantic27 replay later passed; the60-case component retained55passes
 and five post-output PDFContentStream instrumentation TypeErrors, all180 phases
 complete/no skips. The original13 extraction failures now pass in their
 unchanged45-case file. A bounded, actual-SDK stream-inspection test correction
-adds three refusal cases; complete63-case/pixel/parser/production acceptance
-remains pending, with the original failed reports retained.
-Positive native rendering, full caller/packaging/frontend/security
-and original two-invoice deployed acceptance remain pending. No all-Unicode
+adds three refusal cases. The replacement63/189 phases then passed under
+the original120-second bound, and the same three synthetic PDFs produced
+byte-identical rendered pixels. The original PDFjs decoder still fails the
+Hindi/mixed samples with extra controls; its Latin punctuation/rupee sample
+and all amounts pass. CaseOps-owned reader recovery is separately pending.
+Full API caller/build/security and original two-invoice deployed acceptance
+remain pending. Subsequent lint-only formatting preserves every assertion and
+non-import AST; fresh native coverage of the final merged source is pending. No all-Unicode
 or fixed claim is made. See [the bounded repair brief](bugfix-invoice-pdf-unicode-2026-11-04.md).
+
+## November 4 candidate integration with PR580
+
+PR580 merged as `07f56ebc61b46f30980f70930dbeeda1c2132e6b` while this
+candidate was being verified. Its watched-event identity fix, regression tests,
+governance projection and run-ID guard are retained. The current candidate
+extends its PDF punctuation fix using source-preserving Unicode fonts; it does
+not retain the Windows-1252 replacements for rupee, arrows or Indic text.
+The PR580 notes below describe that merged implementation and its evidence,
+not a claim that this newer candidate has been deployed or fully verified.
+
+The later Windows diagnostic41746670644 also observed the specialist select
+inside a disabled fieldset (own disabled property false, effective disabled
+true). A real-browser negative/positive contract now covers the auditor repair;
+the original full deployed crawl remains unverified. This new observation is
+separate from the earlier inconclusive replays in B4-ADJ-32 below.
+
+## November 3 Batch4 Production Run On 9a29a74a: B4-ADJ-29..32
+
+Prod-verify 41627245115 (release 9a29a74a, its own Batch4 job from #578):
+Batch3 passed all three roles; Batch4 desktop passed 33 and failed 3, so mobile
+and governance did not run. Each failure was replayed locally against
+production as the tester.
+
+- B4-ADJ-29 Status: Partially fixed. BUG-016 reopen on production data: the
+  reported INVR-2026-028 line "Drafting brief — bail application" printed with
+  "--". PDF text was encoded as Latin-1 although fpdf2 declares the core fonts
+  WinAnsi, so dashes, curly quotes, ellipses and bullets were rewritten. All
+  PDFs now use Windows-1252 through the one `pdf_text` mapping (the draft and
+  matter-summary copies delegate to it).
+  `test_bug016_invoice_pdf_prints_typed_punctuation_as_typed` is red on the old
+  code. The earlier fixtures used ASCII-only line items. Production proof
+  waits for the next release's Batch4 role.
+- B4-ADJ-30 Status: Partially fixed. BUG-014 on production: a second journal
+  capture for the same docket and journal date returned 409 "A matching event
+  already exists". Every watch hit records a "publication" docket event on its
+  journal date, and the same-day duplicate rule treated any two as one event,
+  so a journal issue with two watched conflicts, or a same-day client-report
+  confirmation, was refused. Each watch hit is now its own event identity
+  (candidate and client-report item); preview and append share the rule.
+  `test_bug_014_two_hits_from_one_journal_issue_both_record_and_report`
+  reproduces the 409 on the old code.
+- B4-ADJ-31 Status: Partially fixed. BUG-014's "hit screen shows no internal
+  id" failed on retained docket titles such as "IP18 <uuid> missing 50": five
+  journeys named retained records after a `randomUUID()` run. They now use
+  `support/run-id.ts`; `apps/web/lib/e2e-run-id-guard.test.ts` refuses a UUID run
+  outside two loopback-only journeys. The check still fails on a bare-id option,
+  any other UUID line or this journey's own ids; it no longer fails on a typed
+  record name that contains one.
+- B4-ADJ-32 Status: Inconclusive. BUG-015 controls on /app/ip/specialist failed
+  in CI at the offender assertion (5.5 s), but passed six isolated and one
+  full-file local replays against the same release. Native evidence keeps no
+  offender detail. Rerun in the next release's Batch4 role before any change.
 
 ## REL-APP-CAPACITY-2026-11-03 — Complete App CI within unchanged job bounds
 

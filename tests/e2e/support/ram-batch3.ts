@@ -5,6 +5,7 @@ import { expect, request, type APIRequestContext, type APIResponse, type Browser
 import type { ClientRecord } from "../../../apps/web/lib/api/endpoints";
 import { localTransportHeaders } from "./cost-controls";
 import { apiBaseUrl, e2eEnv } from "./env";
+import { runId } from "./run-id";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 
 export const batch3QaMarker = "CASEOPS-SYNTHETIC-QA:RAM-BATCH3:CLIENT-CONTACT; not real legal identity evidence";
@@ -190,7 +191,7 @@ export async function prepareBatch3Client(page: Page, baseURL: string | undefine
   }
   const sha = local ? e2eEnv.CASEOPS_RELEASE_SHA : required("CASEOPS_EXPECTED_RELEASE_SHA");
   const release = () => assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
-  const run = randomUUID();
+  const run = runId();
   const credentials: Credentials = local
     ? { company_slug: `batch3-${run}`, email: `batch3-${run}@example.com`, password: `Synthetic!${randomUUID()}aA9` }
     : { company_slug: required("CASEOPS_RAM_PROD_SLUG"), email: required("CASEOPS_RAM_PROD_EMAIL"),

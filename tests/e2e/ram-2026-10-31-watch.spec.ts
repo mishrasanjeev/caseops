@@ -37,6 +37,20 @@ const SOURCE_URL = "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal
 const INTERNAL_FIELD = /\b(?:membership ids?|member ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
 const UUID_TEXT = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 const JSON_TEXT = /\{\s*"[a-z_]+"\s*:/i;
+
+/**
+ * Screen lines that carry a UUID, except a picker option labelled with a typed
+ * record name (words besides the id): the retained test-legal tenant holds
+ * docket titles such as "IP18 <uuid> missing 50" from older journeys. An option
+ * whose title (before the picker's " · " caption parts) is only an id is still
+ * a leak.
+ */
+function leakedIds(text: string, optionLabels: string[]): string[] {
+  const named = new Set(optionLabels.map(label => label.trim())
+    .filter(label => /[a-z]/i.test(label.split(" · ")[0].replace(new RegExp(UUID_TEXT.source, "gi"), ""))));
+  return text.split("\n").map(line => line.trim()).filter(line => UUID_TEXT.test(line) && !named.has(line));
+}
+
 const BLOCKED_CATEGORY: Record<string, string> = {
   incident_kill_switch: "Paused by CaseOps",
   rollout_disabled: "Paused by CaseOps",
@@ -263,7 +277,11 @@ async function journey(
   await expect(similarity).toContainText("Word matches");
   await expect(similarity).toContainText("Class 45");
   const hitText = await page.locator("main").innerText();
-  expect(hitText, "The hit screen shows no internal id").not.toMatch(UUID_TEXT);
+  expect(leakedIds(hitText, await page.locator("main option").allInnerTexts()),
+    "The hit screen shows no internal id").toEqual([]);
+  for (const id of [ownHit.id, entry.id, profile.id, docket.id, rt.actor.membership.id]) {
+    expect(hitText, "The hit screen shows none of this journey's ids").not.toContain(id);
+  }
   expect(hitText, "The hit screen shows no raw JSON").not.toMatch(JSON_TEXT);
   await checkLayout();
   await markPositive(info, mobile ? "bug-014-capture-mobile" : "bug-014-capture", {
