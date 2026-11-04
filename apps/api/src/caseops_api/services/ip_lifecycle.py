@@ -580,11 +580,14 @@ def preview_ip_docket_event(
         duplicate_ids = []
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
     backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
+    needs_recalculation_review = _backdated_needs_recalculation_review(
+        payload, backdated=backdated
+    )
     checklist = _event_checklist(payload)
     unresolved = [row.key for row in checklist if row.required and not row.satisfied]
     if duplicate_ids and payload.reconciles_event_id is None:
         unresolved.append("duplicate_reconciliation_required")
-    if backdated:
+    if needs_recalculation_review:
         unresolved.append("backdated_recalculation_review_required")
     return IpDocketEventPreviewResponse(
         docket_id=docket.id,
@@ -592,10 +595,28 @@ def preview_ip_docket_event(
         current_phase=current_phase,
         proposed_phase=proposed_phase,
         backdated=backdated,
-        recalculation_required=backdated or bool(payload.resulting_deadline_refs),
+        recalculation_required=needs_recalculation_review
+        or bool(payload.resulting_deadline_refs),
         duplicate_candidate_ids=duplicate_ids,
         checklist=checklist,
         unresolved_exception_codes=unresolved,
+    )
+
+
+def _backdated_needs_recalculation_review(
+    payload: IpDocketEventCreateRequest, *, backdated: bool
+) -> bool:
+    # A backdated event is reviewed for recalculation only when it can change
+    # something: a target application or proceeding phase, or a deadline. An
+    # unreviewed candidate with neither (a journal watch hit) changes nothing
+    # until an attorney acts on it, so it records with its backdated flag.
+    if not backdated:
+        return False
+    return not (
+        payload.candidate_status == "candidate"
+        and payload.application_id is None
+        and payload.proceeding_id is None
+        and not payload.resulting_deadline_refs
     )
 
 
@@ -709,7 +730,7 @@ def _append_locked_event(
     )
     backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
     if (
-        backdated
+        _backdated_needs_recalculation_review(payload, backdated=backdated)
         and "backdated_recalculation_review_required" not in payload.acknowledged_exception_codes
     ):
         raise HTTPException(

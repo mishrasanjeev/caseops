@@ -39,8 +39,15 @@ _SCHEMA_METADATA = (
 
 
 def _same_named_descriptor(named, opened, *, windows=False):
-    """Pure portability contract; FD-to-FD device checks remain exact."""
-    fields = tuple(k for k in _SCHEMA_METADATA if not (windows and k == "st_dev"))
+    """Pure portability contract; FD-to-FD device checks remain exact.
+
+    On Windows a path stat reports creation time as st_ctime while a handle
+    stat reports the last metadata change, so creation time stands in there.
+    """
+    skipped = ("st_dev", "st_ctime_ns") if windows else ()
+    fields = tuple(k for k in _SCHEMA_METADATA if k not in skipped)
+    if windows:
+        fields += ("st_birthtime_ns",)
     return (
         stat.S_ISREG(named.st_mode)
         and stat.S_ISREG(opened.st_mode)

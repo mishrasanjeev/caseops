@@ -168,6 +168,19 @@ for (const path of [...ROUTES, ...PROD_ROUTES]) {
     await info.attach("control-crawl-offenders", { body: JSON.stringify(offenders, null, 2), contentType: "application/json" });
     await info.attach("control-crawl-api-5xx", { body: JSON.stringify(failures, null, 2), contentType: "application/json" });
     await markPositive(info, "control-crawl", { path, offenders: offenders.length, local: rt.local });
+    // Native evidence redacts error text and drops attachments; a bounded
+    // annotation names each offender by workflow label, never by record id.
+    const evidence = (text: string) =>
+      text.replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, "[id]").replace(/[{}<>]/g, "").slice(0, 200);
+    for (const failure of failures.slice(0, 20)) {
+      info.annotations.push({ type: "control-crawl-api-5xx", description: evidence(failure) });
+    }
+    for (const offender of offenders.slice(0, 20)) {
+      info.annotations.push({
+        type: "control-crawl-offender",
+        description: evidence(`${offender.kind} :: ${offender.route.replace(path, crawlLabel(path))} :: ${offender.detail}`),
+      });
+    }
     expect(failures, "No API 5xx while a tester browses").toEqual([]);
     expect(offenders, `Dead or misleading controls:\n${offenders.map(o => `${o.route} :: ${o.kind} :: ${o.detail}`).join("\n")}`)
       .toEqual([]);

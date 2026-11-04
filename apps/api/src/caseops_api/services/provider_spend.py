@@ -18,6 +18,11 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory, serialize_sqlite_writer
 from caseops_api.schemas.saas_billing import BillingProviderSpendRow
+from caseops_api.services.billing_entitlements import (
+    _latest_subscription,
+    current_entitlements_for_company,
+    trial_has_ended,
+)
 
 DEFAULT_MONTHLY_LIMIT_MINOR = 100_000
 PROVIDER_KEYS = ("indian-kanoon", "ecourtsindia")
@@ -56,13 +61,6 @@ def _plan_provider_budget_minor(session: Session, *, company_id: str) -> int | N
     (grandfathered, custom enterprise) keeps the default budget. An ended trial
     is read-only, so it funds no paid provider calls.
     """
-
-    # Local import: saas_billing imports this module.
-    from caseops_api.services.saas_billing import (
-        _latest_subscription,
-        current_entitlements_for_company,
-        trial_has_ended,
-    )
 
     subscription = _latest_subscription(session, company_id)
     if subscription is not None and trial_has_ended(subscription):

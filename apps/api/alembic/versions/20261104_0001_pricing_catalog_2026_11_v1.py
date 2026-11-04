@@ -14,8 +14,8 @@ Revises: 20261102_0002
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-LOCK-RISK: acknowledged. Inserts about 200 catalog rows into three
 small reference tables; no DDL, no index build, no rewrite of existing rows.
-MIGRATION-ROLLBACK: restore-forward. Downgrade removes only the 2026.11.v1
-rows and refuses while any subscription references them.
+MIGRATION-ROLLBACK: restore-forward. Subscriptions may reference the new
+catalog rows as soon as it ships, so downgrade refuses; restore the reviewed backup.
 """
 
 from __future__ import annotations
@@ -298,26 +298,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    conn = op.get_bind()
-    referenced = conn.execute(
-        sa.text(
-            "SELECT 1 FROM billing_subscriptions s "
-            "JOIN billing_plan_versions v ON v.id = s.plan_version_id "
-            "WHERE v.version = :version LIMIT 1"
-        ),
-        {"version": CATALOG_VERSION},
-    ).first()
-    if referenced is not None:
-        raise RuntimeError(
-            "Subscriptions reference the 2026.11.v1 catalog; restore forward instead."
-        )
-    plan_ids = "SELECT id FROM billing_plan_versions WHERE version = :version"
-    for table in ("billing_plan_entitlements", "billing_plan_prices"):
-        conn.execute(
-            sa.text(f"DELETE FROM {table} WHERE plan_version_id IN ({plan_ids})"),
-            {"version": CATALOG_VERSION},
-        )
-    conn.execute(
-        sa.text("DELETE FROM billing_plan_versions WHERE version = :version"),
-        {"version": CATALOG_VERSION},
-    )
+    raise RuntimeError("Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup.")
