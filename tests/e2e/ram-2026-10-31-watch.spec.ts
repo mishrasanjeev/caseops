@@ -24,12 +24,13 @@
 import {
   expect, test, type APIRequestContext, type Page, type Response, type TestInfo,
 } from "@playwright/test";
+import { types } from "node:util";
 
 import {
   expectNoPageOverflow, expectOnScreen, json, deadSelects, markPositive, prepareTester, stamp,
   type TesterRuntime,
 } from "./support/ram-bugs4";
-import { recordBatch4Diagnostic } from "./support/batch4-safe-diagnostics";
+import { recordBatch4Diagnostic, type WatchUuidProvenance } from "./support/batch4-safe-diagnostics";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -38,6 +39,158 @@ const SOURCE_URL = "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal
 const INTERNAL_FIELD = /\b(?:membership ids?|member ids?|uuid|sha-?256|raw (?:source )?json|json)\b/i;
 const UUID_TEXT = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 const JSON_TEXT = /\{\s*"[a-z_]+"\s*:/i;
+
+type WatchUuidReferences = { technical_ids: string[]; business_uuids: string[] };
+
+/** Only named scalar fields from responses already read by the original journey. */
+function watchUuidReferences(
+  rt: TesterRuntime, docket: Docket, profile: unknown, ingested: unknown, workspace: unknown,
+): WatchUuidReferences {
+  const technical = new Set<string>();
+  const business = new Set<string>();
+  const reject = (): never => { throw new Error("WATCH_UUID_PROVENANCE_REFUSED"); };
+  const field = (value: unknown, key: string): unknown => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value !== "object" || Array.isArray(value) || types.isProxy(value)
+      || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) reject();
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) return undefined;
+    if (!Object.hasOwn(descriptor, "value") || descriptor.get || descriptor.set) reject();
+    return descriptor.value;
+  };
+  const list = (value: unknown): unknown[] => {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value) || types.isProxy(value) || value.length > 1000) reject();
+    return Array.from({ length: (value as unknown[]).length }, (_, index) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !Object.hasOwn(descriptor, "value") || descriptor.get || descriptor.set) reject();
+      return descriptor!.value;
+    });
+  };
+  const add = (set: Set<string>, value: unknown, technicalValue = false) => {
+    if (value === null || value === undefined) return;
+    if (typeof value !== "string" || value.length > 20000) reject();
+    const found = technicalValue
+      ? new RegExp(`^(?:${UUID_TEXT.source})$`, "i").test(value as string) ? [value as string] : []
+      : Array.from((value as string).matchAll(new RegExp(UUID_TEXT.source, "gi")), (match) => match[0]);
+    for (const token of found) set.add(token.toLowerCase());
+    if (set.size > 10000) reject();
+  };
+  const ids = (value: unknown, names: string[]) => names.forEach((key) => add(technical, field(value, key), true));
+  const texts = (value: unknown, names: string[]) => names.forEach((key) => add(business, field(value, key)));
+  const optionalAnyText = (value: unknown) => {
+    if (types.isProxy(value)) reject();
+    if (typeof value === "string") add(business, value);
+  };
+  const optionalAnyTexts = (value: unknown, names: string[]) =>
+    names.forEach((key) => optionalAnyText(field(value, key)));
+  const optionalAnyList = (value: unknown): unknown[] => {
+    if (types.isProxy(value)) reject();
+    return Array.isArray(value) ? list(value) : [];
+  };
+  const profileFields = (value: unknown) => {
+    ids(value, ["id", "company_id", "docket_id", "created_by_membership_id"]);
+    list(field(value, "recipient_membership_ids_json")).forEach((item) => add(technical, item, true));
+    texts(value, ["name"]);
+    for (const key of ["word_terms_json", "phonetic_terms_json", "proprietor_terms_json"])
+      list(field(value, key)).forEach((item) => add(business, item));
+  };
+  const publicationFields = (value: unknown) => {
+    ids(value, ["id", "company_id", "application_id", "supersedes_publication_id"]);
+    texts(value, ["mark_text", "application_number", "journal_number", "proprietor_name", "source_page", "source_url"]);
+    // A closed whitelist, never recursive traversal of raw_evidence_json.
+    optionalAnyTexts(field(value, "raw_evidence_json"), ["extract_text", "evidence_reference", "notes"]);
+    for (let niceClass = 1; niceClass <= 45; niceClass += 1)
+      list(field(field(value, "goods_services_json"), String(niceClass))).forEach((item) => add(business, item));
+  };
+  const hitFields = (value: unknown) => {
+    ids(value, ["id", "company_id", "profile_id", "publication_id", "duplicate_of_hit_id", "reviewed_by_membership_id"]);
+    optionalAnyTexts(field(value, "candidate_mark_json"), ["mark_text", "application_number"]);
+    const similarity = field(value, "similarity_evidence_json");
+    for (const key of ["word", "phonetic"])
+      optionalAnyList(field(similarity, key)).forEach((item) => {
+        if (types.isProxy(item)) reject();
+        if (item !== null && typeof item === "object" && !Array.isArray(item)) optionalAnyTexts(item, ["term"]);
+      });
+    optionalAnyList(field(similarity, "proprietor_matches")).forEach(optionalAnyText);
+  };
+  ids(rt.actor.company, ["id"]); ids(rt.actor.membership, ["id"]);
+  ids(docket, ["id"]); texts(docket, ["title"]); profileFields(profile);
+  for (const source of [ingested, workspace]) {
+    list(field(source, "profiles")).forEach(profileFields);
+    list(field(source, "hit_profiles")).forEach(profileFields);
+    list(field(source, "publications")).forEach(publicationFields);
+    list(field(source, "hits")).forEach(hitFields);
+    for (const run of [field(source, "run"), ...list(field(source, "ingestion_runs"))]) {
+      ids(run, ["id", "company_id", "requested_by_membership_id"]);
+      for (const key of ["publication_ids_json", "hit_ids_json"])
+        list(field(run, key)).forEach((item) => add(technical, item, true));
+    }
+    for (const handoff of list(field(source, "handoffs")))
+      ids(handoff, ["id", "company_id", "hit_id", "target_id", "created_by_membership_id"]);
+  }
+  return { technical_ids: [...technical], business_uuids: [...business] };
+}
+
+/** One synchronous DOM observation; only row aggregates reach the diagnostic sink. */
+function observeWatchUuidProvenance(root: HTMLElement | SVGElement, references: WatchUuidReferences) {
+  const refuse = (): never => { throw new Error("WATCH_UUID_PROVENANCE_REFUSED"); };
+  if (!(root instanceof HTMLElement) || root.tagName !== "MAIN") refuse();
+  const hitText = (root as HTMLElement).innerText;
+  if (hitText.length > 2_000_000) refuse();
+  const pattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+  const tokens = (text: string) => Array.from(text.matchAll(new RegExp(pattern.source, "gi")), (match) => match[0].toLowerCase());
+  const matches = tokens(hitText);
+  if (matches.length > 10000 || references.technical_ids.length > 10000 || references.business_uuids.length > 10000) refuse();
+  const technical = new Set(references.technical_ids);
+  const business = new Set(references.business_uuids);
+  const surfaces = Array.from({ length: 5 }, () => new Set<string>());
+  const observe = (category: number, element: Element | null | undefined) => {
+    if (!element) return;
+    const text = element instanceof HTMLElement ? element.innerText : element.textContent ?? "";
+    if (text.length > 2_000_000) refuse();
+    for (const token of tokens(text)) surfaces[category].add(token);
+  };
+  root.querySelectorAll('button[data-testid^="watch-hit-"] > strong').forEach((element) => observe(0, element));
+  root.querySelectorAll("span").forEach((label) => {
+    const value = label.nextElementSibling;
+    if (value?.tagName !== "STRONG") return;
+    if (label.textContent?.trim() === "Compared profile") observe(1, value);
+    else if (["Classes", "Proprietor", "Publication scope"].includes(label.textContent?.trim() ?? "")) observe(4, value);
+  });
+  const evidenceLabels = new Set(["Journal entry as published", "Saved page reference", "Capture notes", "Goods and services", "Source page · retrieved"]);
+  root.querySelectorAll("h3").forEach((heading) => {
+    if (heading.textContent?.trim() !== "Official source evidence") return;
+    heading.parentElement?.parentElement?.querySelectorAll("dl > div").forEach((item) => {
+      if (evidenceLabels.has(item.querySelector("dt")?.textContent?.trim() ?? "")) observe(2, item.querySelector("dd"));
+    });
+  });
+  root.querySelectorAll("select#watch-docket > option, p[data-selected-option-value]").forEach((element) => observe(3, element));
+  root.querySelectorAll('h2, [data-testid="similarity-evidence"] dd').forEach((element) => observe(4, element));
+  root.querySelectorAll("h2").forEach((heading) => {
+    if (heading.nextElementSibling?.tagName === "P") observe(4, heading.nextElementSibling);
+  });
+  const row: WatchUuidProvenance = {
+    kind: "watch_uuid_provenance", scope: "whole_main", occurrence_count: matches.length, unique_count: new Set(matches).size,
+    technical_only_count: 0, business_only_count: 0, technical_and_business_count: 0, unknown_value_count: 0,
+    queue_mark_only_count: 0, profile_name_only_count: 0, source_evidence_only_count: 0,
+    docket_option_only_count: 0, labelled_business_only_count: 0, multiple_surface_count: 0, unknown_surface_count: 0,
+  };
+  const surfaceKeys = ["queue_mark_only_count", "profile_name_only_count", "source_evidence_only_count",
+    "docket_option_only_count", "labelled_business_only_count"] as const;
+  for (const token of matches) {
+    if (technical.has(token) && business.has(token)) row.technical_and_business_count += 1;
+    else if (technical.has(token)) row.technical_only_count += 1;
+    else if (business.has(token)) row.business_only_count += 1;
+    else row.unknown_value_count += 1;
+    // Candidate roles are not a claim of exclusive DOM origin when a value repeats.
+    const candidates = surfaces.flatMap((values, index) => values.has(token) ? [index] : []);
+    if (candidates.length === 0) row.unknown_surface_count += 1;
+    else if (candidates.length > 1) row.multiple_surface_count += 1;
+    else row[surfaceKeys[candidates[0]]] += 1;
+  }
+  return { hitText, row };
+}
 const BLOCKED_CATEGORY: Record<string, string> = {
   incident_kill_switch: "Paused by CaseOps",
   rollout_disabled: "Paused by CaseOps",
@@ -281,7 +434,21 @@ async function journey(
   const similarity = page.getByTestId("similarity-evidence");
   await expect(similarity).toContainText("Word matches");
   await expect(similarity).toContainText("Class 45");
-  const hitText = await page.locator("main").innerText();
+  let uuidSnapshot: ReturnType<typeof observeWatchUuidProvenance> | undefined;
+  try {
+    const references = watchUuidReferences(rt, docket, profile, ingested, workspace);
+    uuidSnapshot = await page.locator("main").evaluate(observeWatchUuidProvenance, references);
+  } catch (error) {
+    if (!diagnosticFailure.failed) { diagnosticFailure.failed = true; diagnosticFailure.error = error; }
+  }
+  // A refused diagnostic has no row. The original oracle still runs unchanged.
+  const hitText = uuidSnapshot ? uuidSnapshot.hitText : await page.locator("main").innerText();
+  if (uuidSnapshot) {
+    try { recordBatch4Diagnostic(uuidSnapshot.row); }
+    catch (error) {
+      if (!diagnosticFailure.failed) { diagnosticFailure.failed = true; diagnosticFailure.error = error; }
+    }
+  }
   expect(hitText, "The hit screen shows no internal id").not.toMatch(UUID_TEXT);
   expect(hitText, "The hit screen shows no raw JSON").not.toMatch(JSON_TEXT);
   await checkLayout();

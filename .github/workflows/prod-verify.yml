@@ -1,8 +1,8 @@
-name: NONRELEASE scoped Batch4 failure diagnostics
+name: NONRELEASE watch UUID provenance diagnostic
 
 # Branch-only diagnostic control plane. No deploy, HMAC, fourteen-role verdict,
 # readiness writer or scheduler resume. The watch case mutates only its stamped
-# synthetic QA profile; invoice downloads also create the normal export audit.
+# synthetic QA profile and hit. No invoice or specialist case is selected.
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       diagnostic_ack:
-        description: Enter scoped-owned-qa-mutations-and-export-audit
+        description: Enter scoped-owned-watch-qa-mutations-only
         required: true
         type: string
 
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   scoped-failure-diagnostics:
-    name: NONRELEASE three original Batch4 failures
+    name: NONRELEASE one original watch failure
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -45,7 +45,7 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$GITHUB_REF" = refs/heads/codex/prod-batch4-diagnostics-20261104
           test "$REQUESTED_SHA" = bdd1480699222712475372690334659088629429
-          test "$DIAGNOSTIC_ACK" = scoped-owned-qa-mutations-and-export-audit
+          test "$DIAGNOSTIC_ACK" = scoped-owned-watch-qa-mutations-only
           test "$GITHUB_REPOSITORY" = mishrasanjeev/caseops
 
       - uses: actions/checkout@v4
@@ -152,7 +152,7 @@ jobs:
           test ! -e test-results/prod-native-evidence/batch4-failure-diagnostics
           mkdir -p test-results/prod-native-evidence/batch4-failure-diagnostics
 
-      - name: Run exactly three original failure cases with private stdio suppressed
+      - name: Run exactly one original watch case with private stdio suppressed
         id: native
         env:
           CASEOPS_RAM_PROD_SLUG: test-legal
@@ -166,7 +166,7 @@ jobs:
           import json,os,pathlib,subprocess,time
           root=pathlib.Path.cwd();folder=root/'test-results/prod-native-evidence/batch4-failure-diagnostics'
           if not os.environ.get('CASEOPS_RAM_PROD_PASSWORD','').strip(): raise SystemExit('APPROVED_QA_CREDENTIAL_MISSING')
-          expected=[('ram-2026-10-31-control-crawl.spec.ts','BUG-015 controls on /app/ip/specialist are usable or explain themselves'),('ram-2026-10-31-invoice-pdf.spec.ts','BUG-016 [prod-only] the reported invoices INVR-2026-028 and INVR-2026-068 download legible (read-only)'),('ram-2026-10-31-watch.spec.ts',"BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field")]
+          expected=[('ram-2026-10-31-watch.spec.ts',"BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field")]
           argv=['node','node_modules/@playwright/test/cli.js','test','--config=playwright.batch4-failure-diagnostics.config.ts','--project=batch4-prod-chromium','--workers=1','--retries=0','--repeat-each=1','--output=test-results/batch4-diagnostic-private']
           def run(phase):
               env=dict(os.environ,CASEOPS_PW_EVIDENCE_PHASE=phase,CASEOPS_PW_EVIDENCE_INVOCATION='batch4-failure-diagnostics',CASEOPS_PW_EVIDENCE_JSON_FILE=str(folder/('native-discovery.json' if phase=='discovery' else 'native-results.json')),CASEOPS_PW_EVIDENCE_JUNIT_FILE=str(folder/'native-results.xml'))
@@ -196,7 +196,7 @@ jobs:
               elif isinstance(value,list):
                   for nested in value:visit(nested)
           visit(document.get('suites',[]))
-          if found!=expected: raise SystemExit('EXACT_THREE_DIAGNOSTIC_CASES_REFUSED')
+          if found!=expected: raise SystemExit('EXACT_ONE_DIAGNOSTIC_CASE_REFUSED')
           # This observation supplements the Root-admitted exclusive QA window;
           # it is not an atomic lock or a claim that another workflow was paused.
           guard=subprocess.run(['python',str(pathlib.Path(os.environ['RUNNER_TEMP'])/'guard-production-qa.py')],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=70,check=False)
@@ -214,7 +214,7 @@ jobs:
           const summary=validateBatch4DiagnosticOutput();
           fs.writeFileSync('test-results/batch4-safe-summary.json',JSON.stringify(summary)+'\n',{flag:'wx'});
           fs.appendFileSync(process.env.GITHUB_OUTPUT,'safe=true\n');
-          if(Object.values(summary.counts).some(count=>count===0))throw Error('DIAGNOSTIC_KIND_INCOMPLETE');
+          if(summary.counts.watch_http===0||summary.counts.watch_uuid_provenance!==1||summary.counts.specialist_control!==0||summary.counts.invoice_line!==0)throw Error('WATCH_PROVENANCE_DIAGNOSTIC_KIND_INCOMPLETE');
           NODE
       - name: Recheck exact serving M after diagnostics
         if: always() && steps.admitted.outputs.ready == 'true'

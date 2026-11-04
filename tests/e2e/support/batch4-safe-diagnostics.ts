@@ -3,7 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { types } from "node:util";
 
+export type WatchUuidProvenance = {
+  kind: "watch_uuid_provenance"; scope: "whole_main";
+  occurrence_count: number; unique_count: number;
+  technical_only_count: number; business_only_count: number; technical_and_business_count: number; unknown_value_count: number;
+  queue_mark_only_count: number; profile_name_only_count: number; source_evidence_only_count: number;
+  docket_option_only_count: number; labelled_business_only_count: number; multiple_surface_count: number; unknown_surface_count: number;
+};
+
 export type Batch4SafeDiagnostic =
+  | WatchUuidProvenance
   | { kind: "specialist_control"; ordinal: number; tag: "select" | "input" | "textarea";
       own_disabled: boolean; effective_disabled: boolean; ancestor_fieldset_disabled: boolean;
       real_option_count: number; total_option_count: number; internal_field: boolean }
@@ -100,6 +109,17 @@ function row(value: unknown): Batch4SafeDiagnostic {
     check(exact(["kind", "phase", "status"])
       && ["profile_create", "journal_intake", "hit_disposition", "profile_pause"].includes(clean.phase as string)
       && integer("status", 100, 599));
+  } else if (clean.kind === "watch_uuid_provenance") {
+    const valueCounts = ["technical_only_count", "business_only_count", "technical_and_business_count", "unknown_value_count"];
+    const surfaceCounts = ["queue_mark_only_count", "profile_name_only_count", "source_evidence_only_count",
+      "docket_option_only_count", "labelled_business_only_count", "multiple_surface_count", "unknown_surface_count"];
+    const sum = (names: string[]) => names.reduce((total, name) => total + (clean[name] as number), 0);
+    check(exact(["kind", "scope", "occurrence_count", "unique_count", ...valueCounts, ...surfaceCounts])
+      && clean.scope === "whole_main"
+      && ["occurrence_count", "unique_count", ...valueCounts, ...surfaceCounts].every((name) => integer(name, 0, 10000))
+      && (clean.unique_count as number) <= (clean.occurrence_count as number)
+      && ((clean.unique_count === 0) === (clean.occurrence_count === 0))
+      && sum(valueCounts) === clean.occurrence_count && sum(surfaceCounts) === clean.occurrence_count);
   } else if (clean.kind === "invoice_line") {
     check(exact(["kind", "invoice_ordinal", "line_ordinal", "expected_length", "raw_match", "typography_candidate_match",
       "nfkc_match", "has_non_latin1", "typography_change_count", "expected_sha256", "pdf_compact_sha256"])
@@ -175,7 +195,7 @@ export function validateBatch4DiagnosticOutput() {
     check(entries.length >= 2 && entries.length <= MAX_FILES + 1
       && entries.filter((name) => name === ".owner.json").length === 1
       && entries.every((name) => name === ".owner.json" || /^records-[1-9][0-9]{0,10}\.jsonl$/.test(name)));
-    const counts = { specialist_control: 0, watch_http: 0, invoice_line: 0 };
+    const counts = { specialist_control: 0, watch_http: 0, watch_uuid_provenance: 0, invoice_line: 0 };
     let total = 0; let bytes = 0;
     for (const file of entries.filter((name) => name !== ".owner.json")) {
       const raw = readClosed(path.join(DIRECTORY, file), MAX_BYTES);
