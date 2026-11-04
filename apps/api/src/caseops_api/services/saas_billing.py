@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 from collections.abc import Iterable
@@ -91,8 +92,9 @@ from caseops_api.services.provider_costs import (
 from caseops_api.services.provider_spend import provider_spend_rows
 from caseops_api.services.session_context import SessionContext
 
-CATALOG_VERSION = "2026.05.v1"
+CATALOG_VERSION = "2026.11.v1"
 GRANDFATHERED_PLAN_CODE = "grandfathered_free"
+TRIAL_ENDED_DETAIL = "Your 14-day trial has ended. Choose a plan to keep adding work."
 ACTIVE_SUBSCRIPTION_STATUSES = {
     BillingSubscriptionStatus.ACTIVE,
     BillingSubscriptionStatus.TRIALING,
@@ -136,6 +138,40 @@ def _period_end(start: datetime, interval: str) -> datetime:
     if interval == "one_time":
         return start
     return start + timedelta(days=31)
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _included_credit_window(
+    subscription: BillingSubscription, *, now: datetime
+) -> tuple[str, datetime]:
+    """Return the idempotency key and expiry of the current included-credit grant.
+
+    Included credits are monthly. A billing period longer than a month (annual
+    plans, manual GC contracts) is split into month-long windows anchored on
+    the period start, so an annual subscriber receives a grant every month
+    rather than once per year. Monthly periods keep their original key.
+    """
+
+    period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
+    period_end = _to_aware(subscription.current_period_end) or _period_end(
+        period_start, subscription.billing_interval
+    )
+    window_start, window_end = period_start, period_end
+    if period_end - period_start > timedelta(days=31):
+        moment = min(max(now, period_start), period_end - timedelta(microseconds=1))
+        months = (moment.year - period_start.year) * 12 + moment.month - period_start.month
+        if _add_months(period_start, months) > moment:
+            months -= 1
+        window_start = _add_months(period_start, months)
+        window_end = min(_add_months(period_start, months + 1), period_end)
+    return f"{subscription.id}:{window_start.isoformat()}", window_end
 
 
 def _month_window(value: datetime | None = None) -> tuple[datetime, datetime]:
@@ -380,7 +416,7 @@ def resolve_entitlements(session: Session, subscription: BillingSubscription) ->
                 select(BillingPlanVersion)
                 .options(selectinload(BillingPlanVersion.entitlements))
                 .where(
-                    BillingPlanVersion.version == CATALOG_VERSION,
+                    BillingPlanVersion.version == subscription.plan_version.version,
                     BillingPlanVersion.plan_code.in_(add_on_codes),
                 )
             )
@@ -515,11 +551,7 @@ def _projected_ai_credit_balance(
     now = _now()
     included = int(entitlements.get("ai_credits_monthly") or 0)
     if included > 0:
-        period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
-        period_end = _to_aware(subscription.current_period_end) or _period_end(
-            period_start, subscription.billing_interval
-        )
-        source_id = f"{subscription.id}:{period_start.isoformat()}"
+        source_id, period_end = _included_credit_window(subscription, now=now)
         current_grant_exists = session.scalar(
             select(BillingCreditLedger.id).where(
                 BillingCreditLedger.company_id == company_id,
@@ -648,11 +680,7 @@ def grant_included_monthly_credits(
     included = int(entitlements.get("ai_credits_monthly") or 0)
     if included <= 0:
         return
-    period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
-    period_end = _to_aware(subscription.current_period_end) or _period_end(
-        period_start, subscription.billing_interval
-    )
-    source_id = f"{subscription.id}:{period_start.isoformat()}"
+    source_id, period_end = _included_credit_window(subscription, now=_now())
     existing = session.scalar(
         select(BillingCreditLedger.id).where(
             BillingCreditLedger.company_id == subscription.company_id,
@@ -1404,6 +1432,10 @@ def assert_ai_credits_available(
             # Preserve the established unrestricted behaviour for tenants
             # that have not entered the explicit billing bootstrap workflow.
             return
+        if trial_has_ended(subscription):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=TRIAL_ENDED_DETAIL
+            )
         entitlements = resolve_entitlements(session, subscription)
         if entitlements.get("ai_credits_monthly") is None:
             return
@@ -1526,10 +1558,42 @@ def estimate_ai_credits_for_call(
     return base
 
 
+def trial_has_ended(subscription: BillingSubscription, *, now: datetime | None = None) -> bool:
+    """A trial ends at ``trial_end``; afterwards the workspace is read-only."""
+
+    if subscription.status != BillingSubscriptionStatus.TRIALING:
+        return False
+    trial_end = _to_aware(subscription.trial_end)
+    return trial_end is not None and trial_end <= (now or _now())
+
+
+def _assert_trial_open(
+    session: Session,
+    subscription: BillingSubscription,
+    *,
+    context: SessionContext,
+    target_type: str = "company",
+) -> None:
+    if not trial_has_ended(subscription):
+        return
+    trial_end = _to_aware(subscription.trial_end)
+    record_from_context(
+        session,
+        context,
+        action="billing_limit.trial_ended_blocked",
+        target_type=target_type,
+        target_id=context.company.id if target_type == "company" else None,
+        result=AuditResult.DENIED,
+        metadata={"trial_end": trial_end.isoformat() if trial_end else None},
+    )
+    raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=TRIAL_ENDED_DETAIL)
+
+
 def assert_user_limit(session: Session, *, context: SessionContext, role: MembershipRole) -> None:
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context)
     entitlements = resolve_entitlements(session, subscription)
     internal, viewers = _membership_counts(session, context.company.id)
     if role == MembershipRole.VIEWER:
@@ -1560,6 +1624,7 @@ def assert_matter_limit(session: Session, *, context: SessionContext) -> None:
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context)
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("matters_active_limit"))
     used = _active_matter_count(session, context.company.id)
@@ -1589,6 +1654,8 @@ def tracked_case_remaining_capacity(
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return None
+    if trial_has_ended(subscription):
+        return 0
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("tracked_cases_limit"))
     if limit is None:
@@ -1598,6 +1665,9 @@ def tracked_case_remaining_capacity(
 
 
 def assert_tracked_case_limit(session: Session, *, context: SessionContext) -> None:
+    subscription = _subscription_for_gate(session, context.company)
+    if subscription is not None:
+        _assert_trial_open(session, subscription, context=context, target_type="tracked_case")
     remaining = tracked_case_remaining_capacity(session, context=context)
     if remaining is not None and remaining < 1:
         record_from_context(
@@ -1623,6 +1693,7 @@ def assert_manual_refresh_limit(
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context, target_type="tracked_case")
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("manual_case_refreshes_daily"))
     used = _manual_refreshes_today(session, context.company.id)
@@ -1679,6 +1750,11 @@ def effective_storage_quota(session: Session, *, company: Company) -> int | None
     # request could then wait on those locks before FastAPI had a chance to
     # finalize the read request's session, starving the event loop. Explicit
     # billing and mutation workflows remain responsible for creating state.
+    subscription = _latest_subscription(session, company.id)
+    if subscription is not None and trial_has_ended(subscription):
+        # Read-only after the trial: stored files stay readable, and any new
+        # upload exceeds a zero quota.
+        return 0
     entitlements = current_entitlements_for_company(session, company.id)
     return _coerce_int(entitlements.get("storage_bytes_limit"))
 

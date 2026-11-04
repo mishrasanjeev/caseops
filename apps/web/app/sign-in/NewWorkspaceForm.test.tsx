@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { bootstrapCompanyMock, storeSessionMock, toastSuccess, toastError, routerReplace } =
+const { startTrialWorkspaceMock, storeSessionMock, toastSuccess, toastError, routerReplace } =
   vi.hoisted(() => ({
-    bootstrapCompanyMock: vi.fn(),
+    startTrialWorkspaceMock: vi.fn(),
     storeSessionMock: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
@@ -14,7 +14,7 @@ const { bootstrapCompanyMock, storeSessionMock, toastSuccess, toastError, router
   }));
 
 vi.mock("@/lib/api/auth", () => ({
-  bootstrapCompany: bootstrapCompanyMock,
+  startTrialWorkspace: startTrialWorkspaceMock,
 }));
 
 vi.mock("@/lib/session", () => ({
@@ -47,7 +47,7 @@ function withClient(children: ReactNode) {
 // real flakes.
 describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
   beforeEach(() => {
-    bootstrapCompanyMock.mockReset();
+    startTrialWorkspaceMock.mockReset();
     storeSessionMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -66,7 +66,7 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
     await user.click(screen.getByTestId("new-workspace-submit"));
 
     expect(await screen.findByText(/At least 12 characters/i)).toBeInTheDocument();
-    expect(bootstrapCompanyMock).not.toHaveBeenCalled();
+    expect(startTrialWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid slug regex", async () => {
@@ -83,12 +83,12 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
     expect(
       await screen.findByText(/Lowercase letters, digits, and hyphens only/i),
     ).toBeInTheDocument();
-    expect(bootstrapCompanyMock).not.toHaveBeenCalled();
+    expect(startTrialWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it("submits, stores the session, and routes on success", async () => {
     const user = userEvent.setup();
-    bootstrapCompanyMock.mockResolvedValue({
+    const session = {
       access_token: "t",
       token_type: "bearer",
       user: {
@@ -108,7 +108,8 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
         created_at: "",
       },
       membership: { id: "m1", role: "owner", is_active: true, created_at: "" },
-    });
+    };
+    startTrialWorkspaceMock.mockResolvedValue({ session, trialEnd: "2026-11-18T00:00:00Z" });
 
     render(withClient(<NewWorkspaceForm />));
     await user.type(screen.getByLabelText(/Firm \/ organisation name/i), "Aster Legal");
@@ -118,8 +119,8 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
     await user.type(screen.getByLabelText(/^Password$/i), "StrongPass!234");
     await user.click(screen.getByTestId("new-workspace-submit"));
 
-    await waitFor(() => expect(bootstrapCompanyMock).toHaveBeenCalledTimes(1));
-    expect(bootstrapCompanyMock).toHaveBeenCalledWith({
+    await waitFor(() => expect(startTrialWorkspaceMock).toHaveBeenCalledTimes(1));
+    expect(startTrialWorkspaceMock).toHaveBeenCalledWith({
       companyName: "Aster Legal",
       companySlug: "aster-legal",
       companyType: "law_firm",
@@ -127,7 +128,7 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
       ownerEmail: "priya@aster.in",
       ownerPassword: "StrongPass!234",
     });
-    await waitFor(() => expect(storeSessionMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(storeSessionMock).toHaveBeenCalledWith(session));
     expect(toastSuccess).toHaveBeenCalled();
     expect(routerReplace).toHaveBeenCalledWith("/app");
   });
@@ -135,7 +136,7 @@ describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
   it("surfaces an API error as a toast", async () => {
     const user = userEvent.setup();
     const { ApiError } = await import("@/lib/api/config");
-    bootstrapCompanyMock.mockRejectedValue(
+    startTrialWorkspaceMock.mockRejectedValue(
       new ApiError(409, "Workspace slug already exists.", null),
     );
 

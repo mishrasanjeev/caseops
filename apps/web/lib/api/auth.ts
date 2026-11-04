@@ -30,26 +30,35 @@ export async function signIn(input: {
   });
 }
 
-export async function bootstrapCompany(input: {
+/**
+ * Self-serve sign-up: creates the workspace and starts its 14-day trial.
+ * The API issues session cookies exactly as /api/bootstrap/company does.
+ */
+export async function startTrialWorkspace(input: {
   companyName: string;
   companySlug: string;
   companyType: "law_firm" | "corporate_legal" | "solo";
   ownerFullName: string;
   ownerEmail: string;
   ownerPassword: string;
-}): Promise<AuthSession> {
-  return apiRequest<AuthSession>("/api/bootstrap/company", {
-    method: "POST",
-    body: {
-      company_name: input.companyName,
-      company_slug: input.companySlug,
-      company_type: input.companyType,
-      owner_full_name: input.ownerFullName,
-      owner_email: input.ownerEmail,
-      owner_password: input.ownerPassword,
+}): Promise<{ session: AuthSession; trialEnd: string | null }> {
+  const data = await apiRequest<{ auth: AuthSession; trial_end: string | null }>(
+    "/api/billing/trials",
+    {
+      method: "POST",
+      body: {
+        company_name: input.companyName,
+        company_slug: input.companySlug,
+        company_type: input.companyType,
+        owner_full_name: input.ownerFullName,
+        owner_email: input.ownerEmail,
+        owner_password: input.ownerPassword,
+        source: "sign_in",
+      },
+      token: null,
     },
-    token: null,
-  });
+  );
+  return { session: data.auth, trialEnd: data.trial_end };
 }
 
 export async function fetchAuthContext(

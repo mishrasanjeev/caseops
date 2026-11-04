@@ -69,36 +69,36 @@ def test_billing_plan_catalog_seeded_from_prd(client: TestClient) -> None:
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["version"] == "2026.05.v1"
+    assert payload["version"] == "2026.11.v1"
     plans = {plan["plan_code"]: plan for plan in payload["plans"]}
     add_ons = {plan["plan_code"]: plan for plan in payload["add_ons"]}
 
     expected_firm_plans = {
         "firm_starter": {
             "month": 599900,
-            "year": 6299000,
+            "year": 5999000,
             "users_internal_limit": 5,
             "matters_active_limit": 300,
-            "tracked_cases_limit": 250,
-            "ai_credits_monthly": 300,
+            "tracked_cases_limit": 150,
+            "ai_credits_monthly": 500,
             "storage_bytes_limit": 25 * 1024**3,
         },
         "firm_growth": {
-            "month": 1999900,
-            "year": 20999000,
+            "month": 1799900,
+            "year": 17999000,
             "users_internal_limit": 15,
             "matters_active_limit": 1500,
-            "tracked_cases_limit": 1000,
-            "ai_credits_monthly": 1200,
+            "tracked_cases_limit": 400,
+            "ai_credits_monthly": 1500,
             "storage_bytes_limit": 150 * 1024**3,
         },
         "firm_pro": {
             "month": 4999900,
-            "year": 52499000,
+            "year": 49999000,
             "users_internal_limit": 50,
             "matters_active_limit": 5000,
-            "tracked_cases_limit": 2500,
-            "ai_credits_monthly": 3000,
+            "tracked_cases_limit": 1000,
+            "ai_credits_monthly": 3500,
             "storage_bytes_limit": 500 * 1024**3,
         },
     }
@@ -118,13 +118,12 @@ def test_billing_plan_catalog_seeded_from_prd(client: TestClient) -> None:
         "addon_user_firm": 69900,
         "addon_user_corporate_legal": 150000,
         "addon_viewer": 19900,
-        "addon_cases_500": 249900,
-        "addon_cases_1000": 449900,
+        "addon_cases_500": 499900,
+        "addon_cases_1000": 899900,
         "addon_ai_250": 119900,
         "addon_ai_1000": 399900,
         "addon_ai_5000": 1499900,
         "addon_storage_100gb": 149900,
-        "addon_api_access": 500000,
         "addon_migration_basic": 1000000,
         "addon_migration_firm": 2500000,
         "addon_migration_enterprise": 7500000,

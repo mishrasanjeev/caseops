@@ -49,6 +49,32 @@ def _month_start(now: datetime) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+def _plan_provider_budget_minor(session: Session, *, company_id: str) -> int | None:
+    """Shared account budget funded by the billing plan, or ``None`` for the default.
+
+    An explicit company policy still wins. A plan without the entitlement
+    (grandfathered, custom enterprise) keeps the default budget. An ended trial
+    is read-only, so it funds no paid provider calls.
+    """
+
+    # Local import: saas_billing imports this module.
+    from caseops_api.services.saas_billing import (
+        _latest_subscription,
+        current_entitlements_for_company,
+        trial_has_ended,
+    )
+
+    subscription = _latest_subscription(session, company_id)
+    if subscription is not None and trial_has_ended(subscription):
+        return 0
+    value = current_entitlements_for_company(session, company_id).get(
+        "provider_spend_monthly_minor"
+    )
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
 def resolve_provider_spend_policy(
     session: Session,
     *,
@@ -78,10 +104,15 @@ def resolve_provider_spend_policy(
             )
         )
     )
+    plan_limit = _plan_provider_budget_minor(session, company_id=company.id)
     return ResolvedProviderSpendPolicy(
-        monthly_limit_minor=DEFAULT_MONTHLY_LIMIT_MINOR,
+        monthly_limit_minor=DEFAULT_MONTHLY_LIMIT_MINOR if plan_limit is None else plan_limit,
         currency="INR",
-        source="caseops_default_shared_account_budget_2026_09_04",
+        source=(
+            "caseops_default_shared_account_budget_2026_09_04"
+            if plan_limit is None
+            else "billing_plan_provider_spend_monthly_minor"
+        ),
         budget_scope="account",
         scope_provider_keys=tuple(key for key in PROVIDER_KEYS if key not in explicitly_configured),
     )
