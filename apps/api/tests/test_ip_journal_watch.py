@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -1781,3 +1781,134 @@ def test_bug_014_two_hits_from_one_journal_issue_both_record_and_report(
     )
     assert report.status_code == 201, report.text
     assert report.json()["target_type"] == "ip_docket_event"
+
+
+def test_bug_014_capture_after_a_later_docket_event_records_a_review_candidate(
+    client: TestClient,
+) -> None:
+    # Production 2026-11-04: after one hit was confirmed into the client
+    # report (an event dated now), every later capture for that docket was
+    # refused 409 "Backdated events require acknowledgement": a watch hit is
+    # dated at its journal date, which is earlier, and has nothing to
+    # recalculate. The capture form cannot acknowledge, so it never recorded.
+    bootstrap, headers, docket, _ = _fixture(client, "LATERHIT")
+    member = bootstrap["membership"]["id"]
+    _profile(client, headers=headers, docket_id=docket["id"], recipient_id=member)
+    today = datetime.now(UTC).date()
+    first = _ingest(
+        client,
+        headers=headers,
+        key="bug014-later-0001",
+        publication=_publication(
+            application_id=None, application_number="TM-1111111", journal_date=today.isoformat()
+        ),
+    )["hits"][0]
+    review = client.post(
+        f"/api/ip/watch/hits/{first['id']}/disposition",
+        headers=headers,
+        json={
+            "expected_version": first["version"],
+            "disposition": "relevant",
+            "reason": "Official journal confirms an overlapping mark and class scope.",
+            "source_confirmed": True,
+        },
+    )
+    assert review.status_code == 200, review.text
+    report = client.post(
+        f"/api/ip/watch/hits/{first['id']}/handoffs",
+        headers=headers,
+        json={"handoff_kind": "client_report_item", "assignee_membership_id": member},
+    )
+    assert report.status_code == 201, report.text
+
+    # The same journal issue, and an earlier one, both still record a hit.
+    for key, number, journal_date in (
+        ("bug014-later-0002", "TM-3333333", today),
+        ("bug014-later-0003", "TM-4444444", today - timedelta(days=10)),
+    ):
+        result = _ingest(
+            client,
+            headers=headers,
+            key=key,
+            publication=_publication(
+                application_id=None,
+                application_number=number,
+                journal_date=journal_date.isoformat(),
+            ),
+        )
+        assert result["run"]["hits_created"] == 1
+    SessionLocal = get_session_factory()
+    with SessionLocal() as session:
+        candidates = session.scalars(
+            select(IpDocketEvent)
+            .where(
+                IpDocketEvent.docket_id == docket["id"],
+                IpDocketEvent.event_kind == "publication",
+                IpDocketEvent.candidate_status == "candidate",
+            )
+            .order_by(IpDocketEvent.sequence)
+        ).all()
+        # History still says the later captures were entered out of date order.
+        assert [row.payload_json["backdated"] for row in candidates] == [False, True, True]
+        assert all(row.application_id is None for row in candidates)
+
+
+def test_backdated_review_candidate_without_a_target_needs_no_recalculation_review(
+    client: TestClient,
+) -> None:
+    # The preview and the record share one rule: a backdated event needs a
+    # recalculation review only when it can change a phase or a deadline.
+    bootstrap, headers, docket, _ = _fixture(client, "NORECALC")
+    member = bootstrap["membership"]["id"]
+    later = datetime.now(UTC)
+    earlier = later - timedelta(days=3)
+
+    def event(effective_at: datetime, **overrides) -> dict:
+        return {
+            "expected_lifecycle_version": 0,
+            "event_kind": "publication",
+            "source": "integration",
+            "source_reference": "journal:synthetic-1",
+            "effective_at": effective_at.isoformat(),
+            "responsible_membership_id": member,
+            "reason": "Journal watch candidate requires attorney review.",
+            "evidence_refs": ["https://evidence.example/journal.pdf"],
+            "candidate_status": "candidate",
+            **overrides,
+        }
+
+    first = client.post(
+        f"/api/ip/dockets/{docket['id']}/events", headers=headers, json=event(later)
+    )
+    assert first.status_code == 201, first.text
+    preview = client.post(
+        f"/api/ip/dockets/{docket['id']}/events/preview", headers=headers, json=event(earlier)
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["backdated"] is True
+    assert preview.json()["recalculation_required"] is False
+    assert "backdated_recalculation_review_required" not in preview.json()[
+        "unresolved_exception_codes"
+    ]
+    recorded = client.post(
+        f"/api/ip/dockets/{docket['id']}/events", headers=headers, json=event(earlier)
+    )
+    assert recorded.status_code == 201, recorded.text
+    assert recorded.json()["payload_json"]["backdated"] is True
+
+    # A backdated event that names a deadline still needs the review.
+    with_deadline = event(
+        earlier - timedelta(days=1), resulting_deadline_refs=["candidate:response-deadline-1"]
+    )
+    preview = client.post(
+        f"/api/ip/dockets/{docket['id']}/events/preview", headers=headers, json=with_deadline
+    )
+    assert preview.status_code == 200, preview.text
+    assert "backdated_recalculation_review_required" in preview.json()[
+        "unresolved_exception_codes"
+    ]
+    refused = client.post(
+        f"/api/ip/dockets/{docket['id']}/events", headers=headers, json=with_deadline
+    )
+    assert refused.status_code == 409, refused.text
+    assert "Backdated events require acknowledgement" in refused.text

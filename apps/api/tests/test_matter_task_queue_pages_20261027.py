@@ -471,14 +471,19 @@ def test_windows_named_device_portability_does_not_relax_descriptor_identity(tmp
         st_uid=0,
         st_gid=0,
         st_nlink=1,
+        st_birthtime_ns=5,
     )
-    opened = {**named, "st_dev": 99}
+    # A Windows handle reports change time as st_ctime; a path reports creation.
+    opened = {**named, "st_dev": 99, "st_ctime_ns": 6}
     assert migration._same_named_descriptor(
         SimpleNamespace(**named), SimpleNamespace(**opened), windows=True
     )
     assert not migration._same_named_descriptor(SimpleNamespace(**named), SimpleNamespace(**opened))
     assert not migration._same_named_descriptor(
         SimpleNamespace(**named), SimpleNamespace(**{**opened, "st_ino": 9}), windows=True
+    )
+    assert not migration._same_named_descriptor(
+        SimpleNamespace(**named), SimpleNamespace(**{**opened, "st_birthtime_ns": 9}), windows=True
     )
     path = tmp_path / "closed.py"
     path.write_bytes(migration._schema_path().read_bytes())
