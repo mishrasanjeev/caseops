@@ -415,6 +415,23 @@ def test_complete_release_uses_one_grant_and_separate_readonly_inspection(harnes
     assert "latest" not in deploy[deploy.index("--set-secrets") + 1]
 
 
+def test_receipt_reads_are_bounded_from_their_execution_start(harness):
+    # Unbounded ascending reads scanned Cloud Logging's whole default window
+    # (about 41 s against a 20 s call budget), so every release since
+    # 2026-11-02 failed closed at receipt_readback after a successful grant.
+    before = datetime.now(UTC)
+    evidence = run(harness)
+    after = datetime.now(UTC)
+    assert evidence["status"] == "verified"
+    reads = [argv for argv in harness.state["calls"] if argv[:2] == ["logging", "read"]]
+    assert len(reads) == 2
+    for argv in reads:
+        bounds = [part for part in argv[2].split(" AND ") if part.startswith("timestamp>=")]
+        assert len(bounds) == 1
+        since = datetime.fromisoformat(bounds[0].split('"')[1].replace("Z", "+00:00"))
+        assert before - timedelta(minutes=6) <= since <= after - timedelta(minutes=5)
+
+
 @pytest.mark.parametrize("mode", ["grant", "inspect"])
 def test_operator_args_use_default_comma_without_cmd_metacharacters(harness, mode):
     run(harness)

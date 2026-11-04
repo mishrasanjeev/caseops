@@ -34,6 +34,17 @@ receipt readback timed out, as on f49e0390.
   the production QA tenant retains every run. The probe budget is not raised
   (that would hide a latency still rising); the endpoint's full scan needs a
   bounded design. Not a Ram defect; adjacent, found by this audit.
+- B4-ADJ-37 Status: Partially fixed. Every release since 2026-11-02
+  (6a7463e4, 07f56ebc, f49e0390, 38bdc754, 9f587392) exited 1 with
+  `manual_ip_release_failed_closed` at `receipt_readback` after the
+  test-legal grant execution succeeded. The receipt query read Cloud Logging
+  `--order=asc` with no time bound, which scans the whole default window:
+  timed on production at 41 to 42 s (also with `--freshness=1h`) against a
+  20 s call budget; the same query with a `timestamp>=` floor returns the same
+  single row in 4 s. Each receipt read is now bounded from 5 minutes before
+  its own execution's dispatch. `test_receipt_reads_are_bounded_from_their_
+  execution_start` fails on the old script and passes on the fix. Production
+  proof waits for the next release's deploy exiting 0.
 
 Docker acceptance on f49e0390: 3,977 tests collected, none skipped, 3,972
 passed; the 5 failures are Windows host-interpreter caveats in
