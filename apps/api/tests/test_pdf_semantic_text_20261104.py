@@ -297,3 +297,41 @@ def test_actual_leading_joiner_keeps_original_logical_source():
     body = bytes(pdf.output())
     actual = extracted(body)
     assert source in actual
+
+
+@pytest.mark.parametrize(
+    "core,expected_contrast,legible",
+    (
+        ((19, 26, 41), 17.391789902, True),
+        ((166, 168, 174), 2.377273419, False),
+    ),
+    ids=("dark-dot-cores", "faint-pixels-only"),
+)
+def test_colon_dot_cores_at_physical_bounds_keep_literal_pixel_contrast(
+    core, expected_contrast, legible
+):
+    from PIL import Image, ImageDraw
+
+    from tests.pdf_legibility import MIN_CONTRAST, run_contrast
+
+    native_fill = (19, 26, 41)
+    fringe = (166, 168, 174)
+    white = (255, 255, 255)
+    with Image.new("RGB", (40, 40), white) as image:
+        draw = ImageDraw.Draw(image)
+        # Both dot cores lie outside the old20% vertical inset. The actual
+        # faint fringe remains inside it; the one-pixel outer ring is white.
+        draw.rectangle((12, 10, 17, 14), fill=fringe)
+        draw.rectangle((12, 25, 17, 29), fill=fringe)
+        draw.rectangle((13, 10, 16, 13), fill=core)
+        draw.rectangle((13, 26, 16, 29), fill=core)
+        assert image.getpixel((13, 10)) == core
+        assert image.getpixel((13, 29)) == core
+        with image.crop((11, 14, 19, 26)) as old_inset:
+            assert set(old_inset.get_flattened_data()) == {fringe, white}
+        actual = run_contrast(image, (10, 10, 20, 30), native_fill)
+        # Independent literal ratios from the retained pixel analysis; do not
+        # reuse the helper's luminance/contrast functions as the expected value.
+        assert actual == pytest.approx(expected_contrast, rel=0, abs=1e-9)
+        assert MIN_CONTRAST == 4.5
+        assert (actual >= 4.5) is legible

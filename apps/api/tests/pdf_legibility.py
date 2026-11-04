@@ -89,10 +89,9 @@ def run_contrast(
     if not ring:
         return 1.0
     background = ring.most_common(1)[0][0]
-    inset_x = (right - left) // 10
-    inset_y = (bottom - top) // 5
-    interior = (left + inset_x, top + inset_y, right - inset_x, bottom - inset_y)
-    with image.crop(interior) as pixels:
+    # A colon can place both dark cores at the physical top/bottom bounds.
+    # An inset can retain only their antialiased fringe and misclassify it.
+    with image.crop(box) as pixels:
         colours = set(pixels.get_flattened_data())
     if not colours:
         return 1.0
