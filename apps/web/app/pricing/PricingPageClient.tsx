@@ -179,11 +179,11 @@ export function PricingPageClient() {
             >
               Sign in
             </Link>
-            <Button href="#pricing-request" size="sm" variant="outline" className="hidden sm:inline-flex">
+            <Button href="#pricing-request" size="sm" variant="outline">
               <Mail className="h-4 w-4" aria-hidden />
               Talk to sales
             </Button>
-            <Button href={TRIAL_HREF} size="sm">
+            <Button href={TRIAL_HREF} size="sm" className="hidden sm:inline-flex">
               Start 14-day trial
             </Button>
           </div>
@@ -204,6 +204,9 @@ export function PricingPageClient() {
             tracking, and the limits shown are the limits the product applies.
             Start with a 14-day trial; no card needed.
           </p>
+          <div className="mt-5">
+            <Button href={TRIAL_HREF}>Start 14-day trial</Button>
+          </div>
         </div>
         <div className="grid gap-3 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)] sm:grid-cols-3">
           {SEGMENTS.map((segment) => (
