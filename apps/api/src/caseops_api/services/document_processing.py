@@ -11,7 +11,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from pdfminer.high_level import extract_text as pdf_extract_text
 from sqlalchemy.orm import Session
 
 from caseops_api.core.redaction import redact_provider_error
@@ -26,6 +25,11 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services.document_storage import resolve_storage_path
+from caseops_api.services.pdf_extraction import (
+    copy_pdfium_image,
+    pdfium_operation,
+)
+from caseops_api.services.pdf_extraction import extract_pdf_text as pdf_extract_text
 from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 logger = logging.getLogger(__name__)
@@ -209,6 +213,7 @@ def _extract_scanned_pdf_text(path: Path) -> str:
     return result.text
 
 
+@pdfium_operation()
 def _extract_scanned_pdf_text_via_tesseract(path: Path) -> str:
     """Last-resort tesseract fallback when ocr_pdf returns None.
 
@@ -236,7 +241,7 @@ def _extract_scanned_pdf_text_via_tesseract(path: Path) -> str:
             temp_path: Path | None = None
             try:
                 bitmap = page.render(scale=scale)
-                image = bitmap.to_pil()
+                image = copy_pdfium_image(bitmap)
                 try:
                     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
                         temp_path = Path(temp_file.name)

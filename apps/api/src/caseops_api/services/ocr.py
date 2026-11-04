@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Protocol
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services.pdf_extraction import copy_pdfium_image, pdfium_operation
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class _OcrBackend(Protocol):
         raise NotImplementedError
 
 
+@pdfium_operation()
 def _render_pdf_pages(
     path: Path, *, dpi: int, max_pages: int
 ) -> tuple[list[object], int, bool]:
@@ -75,14 +77,22 @@ def _render_pdf_pages(
 
     scale = dpi / 72
     pdf = pdfium.PdfDocument(str(path))
-    total = len(pdf)
     images: list[object] = []
-    page_count = min(total, max_pages)
-    for idx in range(page_count):
-        page = pdf[idx]
-        bitmap = page.render(scale=scale)
-        images.append(bitmap.to_pil())
-    pdf.close()
+    try:
+        total = len(pdf)
+        page_count = min(total, max_pages)
+        for idx in range(page_count):
+            page = pdf[idx]
+            try:
+                images.append(copy_pdfium_image(page.render(scale=scale)))
+            finally:
+                page.close()
+    except BaseException:
+        for image in images:
+            image.close()
+        raise
+    finally:
+        pdf.close()
     return images, total, page_count < total
 
 

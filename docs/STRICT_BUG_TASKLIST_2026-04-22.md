@@ -1,5 +1,39 @@
 # Strict Bug Task List - 2026-04-22
 
+## BUG-016 — original invoice text lost during PDF export (2026-11-04)
+
+**Not fixed; verification and original production workflow pending.** Canonical
+mapping is J11/M10 billing, US-032/033 and FT-056; the dated report's M11 label
+is mapping drift (M11 is clients/KYC). Production M's first reported invoice
+line failed the raw text assertion and matched only the renderer's typography
+translation in diagnostic run41746670644. The second invoice was unreached.
+The controlled negative baseline reached27call failures/81complete phases,
+zero skips/errors; its earlier hostname setup failure remains separate.
+
+The proposed shared renderer preserves source values, uses fourteen pinned
+licensed Latin/Devanagari faces with real shaping, and refuses unsupported
+glyphs without a partial PDF or data rewrite. Five existing export generators,
+native font integrity, both font licences and both shaping-engine notices are
+in scope. The first positive run reached20passes/seven table-call failures:
+native table headings require the bold face before lazy font selection.
+Registering all four genuine selected-family faces addresses that boundary;
+the original27 are unchanged and12 actual-table profile/style regressions added.
+That four-face replacement later passed27/81, while the adjacent54/162 run
+retained13 mixed-script extraction failures (41passes/zero skips). A bounded
+three-synthetic-PDF diagnostic proved an unmapped continuation CID4 became
+an extra U+0004 in PDFium. The subsequent per-document ActualText
+correction preserves the unchanged rendering operators and original oracles;
+its initial87-case plan retained exact pixel and parser acceptance separately.
+The semantic27 replay later passed; the60-case component retained55passes
+and five post-output PDFContentStream instrumentation TypeErrors, all180 phases
+complete/no skips. The original13 extraction failures now pass in their
+unchanged45-case file. A bounded, actual-SDK stream-inspection test correction
+adds three refusal cases; complete63-case/pixel/parser/production acceptance
+remains pending, with the original failed reports retained.
+Positive native rendering, full caller/packaging/frontend/security
+and original two-invoice deployed acceptance remain pending. No all-Unicode
+or fixed claim is made. See [the bounded repair brief](bugfix-invoice-pdf-unicode-2026-11-04.md).
+
 ## REL-APP-CAPACITY-2026-11-03 — Complete App CI within unchanged job bounds
 
 **Partially fixed; final release remains NO-GO.** This is release verification

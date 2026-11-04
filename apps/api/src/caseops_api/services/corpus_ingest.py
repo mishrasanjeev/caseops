@@ -366,11 +366,10 @@ def _normalize_whitespace(text: str) -> str:
 
 
 def _extract_pdf_text(path: Path) -> str:
-    # pdfminer.six is already a core dependency; use it lazily to keep this
-    # module import-light.
-    from pdfminer.high_level import extract_text
+    # Keep this module import-light; the shared reader retains ordinary output.
+    from caseops_api.services.pdf_extraction import extract_pdf_text
 
-    return extract_text(str(path))
+    return extract_pdf_text(path)
 
 
 # ---------------------------------------------------------------------------

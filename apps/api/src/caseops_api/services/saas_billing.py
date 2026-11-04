@@ -1945,8 +1945,10 @@ def statement_csv(session: Session, *, context: SessionContext) -> bytes:
 
 
 def _ascii_pdf_text(value: object) -> str:
-    text = "" if value is None else str(value)
-    return text.encode("latin-1", errors="replace").decode("latin-1")
+    """Compatibility name; all PDF text now follows the lossless font policy."""
+    from caseops_api.services.pdf_layout import pdf_text
+
+    return pdf_text(value)
 
 
 def _pdf_bytes(title: str, rows: Iterable[tuple[str, object]]) -> bytes:

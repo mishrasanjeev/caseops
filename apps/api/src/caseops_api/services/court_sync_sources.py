@@ -5,15 +5,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import unescape
-from io import BytesIO
 from urllib.parse import urljoin
 
 import httpx
-from pdfminer.high_level import extract_text as pdf_extract_text
 
 from caseops_api.db.models import Matter, MatterForumLevel, utcnow
 from caseops_api.schemas.matters import MatterCauseListSyncItem, MatterCourtOrderSyncItem
 from caseops_api.services.http_retries import request_with_retries
+from caseops_api.services.pdf_extraction import extract_pdf_text as pdf_extract_text
 
 DELHI_CAUSE_LIST_URL = "https://delhihighcourt.nic.in/web/cause-lists/cause-list"
 DELHI_HOME_URL = "https://delhihighcourt.nic.in/"
@@ -266,7 +265,7 @@ def _fetch_bytes(url: str) -> tuple[bytes, str]:
 
 
 def _extract_pdf_text_from_bytes(data: bytes) -> str:
-    return pdf_extract_text(BytesIO(data))
+    return pdf_extract_text(data)
 
 
 def _normalize_text(text: str) -> str:

@@ -181,15 +181,16 @@ def test_cause_list_pdf_with_non_latin_text_downloads(client: TestClient) -> Non
     )
     assert response.status_code == 200, response.text
     text = extract_text(io.BytesIO(response.content))
-    assert '"Quoted"' in text
-    assert "INR" in text
+    assert "“Quoted”" in text
+    assert "₹" in text
+    assert "राम" in text
 
 
-def test_pdf_text_keeps_latin1_and_replaces_only_unencodable_text() -> None:
+def test_pdf_text_preserves_source_characters_with_unicode_fonts() -> None:
     assert pdf_text(None) == ""
-    assert pdf_text("Café — “A” ‘B’ …") == 'Café -- "A" \'B\' ...'
-    assert pdf_text("₹ 10") == "INR  10"
-    assert pdf_text("राम") == "?"
+    assert pdf_text("Café — “A” ‘B’ …") == "Café — “A” ‘B’ …"
+    assert pdf_text("₹ 10") == "₹ 10"
+    assert pdf_text("राम") == "राम"
 
 
 def test_wrapped_table_rejects_rows_with_the_wrong_column_count() -> None:
@@ -306,7 +307,7 @@ def test_every_pdf_generator_builds_documents_through_the_safe_font_class() -> N
     offenders = [
         str(path.relative_to(root))
         for path in root.rglob("*.py")
-        if path.name != "pdf_layout.py"
+        if path.name != "pdf_fonts.py"
         and re.search(r"from fpdf import[^\n]*\bFPDF\b|\bfpdf\.FPDF\b", path.read_text("utf-8"))
     ]
     assert offenders == []

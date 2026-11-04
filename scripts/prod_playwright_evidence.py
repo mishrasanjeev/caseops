@@ -44,7 +44,13 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 713, "app-mobile": 53}
+APP_PROJECT_COUNTS = {"app-chromium": 714, "app-mobile": 53}
+APP_REQUIRED_CASES = (
+    ("app-chromium", "control-crawl-contract.spec.ts", (
+        "control-crawl-contract.spec.ts",
+        "control audit follows fieldset, first-legend and option-group disabled states",
+    )),
+)
 # Exact pre-existing capability/provider skips retained from the complete
 # source-bound partial run; discovery's empty-result status is never a skip.
 APP_EXPECTED_SKIPS = (
@@ -294,6 +300,7 @@ def _app_inventory(canonical):
             ]
             or len(set(APP_EXPECTED_SKIPS)) != 21
             or not set(APP_EXPECTED_SKIPS).issubset({_app_skip_identity(row) for row in rows})
+            or not set(APP_REQUIRED_CASES).issubset({_app_skip_identity(row) for row in rows})
             or any(row["project_id"] != row["project_name"] for row in rows)
             or any(row["retries"] != 0 or row["repeat_each_index"] != 0
                    or row["results"] for row in rows)

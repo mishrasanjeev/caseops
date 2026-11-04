@@ -69,7 +69,7 @@ class CourtFormatProfile:
     margin_right_mm: float = 25.4
     margin_top_mm: float = 25.4
     margin_bottom_mm: float = 25.4
-    body_font: str = "Helvetica"  # fpdf2 builtin (Times not bundled)
+    body_font: str = "Helvetica"  # Mapped to the pinned Unicode Sans family in PDFs.
     body_font_size_pt: int = 11
     body_line_height_mm: float = 5.5  # ~1.2 line spacing at 11pt
     heading_font_size_pt: int = 14

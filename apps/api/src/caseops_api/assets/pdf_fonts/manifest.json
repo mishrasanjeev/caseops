@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "font_domain": "Latin/Greek/Cyrillic coverage of approved Liberation faces plus Devanagari fallback; actual cmap governs, never all Unicode.",
+  "engine": "fpdf2",
+  "engine_version": "2.8.9",
+  "shaper": "uharfbuzz",
+  "shaper_version": "0.57.0",
+  "families": {
+    "helvetica": {
+      "family": "CaseOpsSans",
+      "files": {
+        "": "LiberationSans-Regular.ttf",
+        "B": "LiberationSans-Bold.ttf",
+        "I": "LiberationSans-Italic.ttf",
+        "BI": "LiberationSans-BoldItalic.ttf"
+      }
+    },
+    "times": {
+      "family": "CaseOpsSerif",
+      "files": {
+        "": "LiberationSerif-Regular.ttf",
+        "B": "LiberationSerif-Bold.ttf",
+        "I": "LiberationSerif-Italic.ttf",
+        "BI": "LiberationSerif-BoldItalic.ttf"
+      }
+    },
+    "courier": {
+      "family": "CaseOpsMono",
+      "files": {
+        "": "LiberationMono-Regular.ttf",
+        "B": "LiberationMono-Bold.ttf",
+        "I": "LiberationMono-Italic.ttf",
+        "BI": "LiberationMono-BoldItalic.ttf"
+      }
+    }
+  },
+  "fallback": {
+    "family": "CaseOpsDevanagari",
+    "files": {
+      "": "NotoSansDevanagari-Regular.ttf",
+      "B": "NotoSansDevanagari-Bold.ttf"
+    },
+    "italic_policy": "No genuine Devanagari italic face supplied: preserve bold where requested; use actual upright regular/bold without relabelling an italic font."
+  },
+  "assets": {
+    "LiberationMono-Bold.ttf": {
+      "bytes": 307996,
+      "sha256": "bd62a0672d0b9b6710b01df434c80ad54fa5f0835207eb7b17b7a761463067bb"
+    },
+    "LiberationMono-BoldItalic.ttf": {
+      "bytes": 284068,
+      "sha256": "79451f3c09fe25116098853b7a2ca6e2436220ccc11af022979adbcf195be130"
+    },
+    "LiberationMono-Italic.ttf": {
+      "bytes": 281536,
+      "sha256": "605c01c711b44480a7508d349dfbf3264e81fa43d69e61cfa7d10b86e764c4d1"
+    },
+    "LiberationMono-Regular.ttf": {
+      "bytes": 319508,
+      "sha256": "f2b83c763e8afd21709333370bed4774337fae82267937e2b5aea7e2fbd922c1"
+    },
+    "LiberationSans-Bold.ttf": {
+      "bytes": 414456,
+      "sha256": "788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173"
+    },
+    "LiberationSans-BoldItalic.ttf": {
+      "bytes": 408996,
+      "sha256": "698da70fc191cc5f33ad4d6d3fe830fe4624b898ea2e3169955928b7c491f1ee"
+    },
+    "LiberationSans-Italic.ttf": {
+      "bytes": 415816,
+      "sha256": "e5bae5c4cde31f22142753855f4f8fb86da6ff39955ed3c0a11248b0d16948b0"
+    },
+    "LiberationSans-Regular.ttf": {
+      "bytes": 410712,
+      "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8"
+    },
+    "LiberationSerif-Bold.ttf": {
+      "bytes": 370096,
+      "sha256": "d754ba427cfe0bca54ae052384baa8f842da5bd6550ad4da024ac441e7a7d5ce"
+    },
+    "LiberationSerif-BoldItalic.ttf": {
+      "bytes": 376772,
+      "sha256": "f17db8af71e24d2066b587546021d4f0b296be389512b658dec3c09affeb11a7"
+    },
+    "LiberationSerif-Italic.ttf": {
+      "bytes": 375632,
+      "sha256": "0e3dea9f8d613e006ccfa62201f33e265d19167bd0907725c3e145368b04fc2e"
+    },
+    "LiberationSerif-Regular.ttf": {
+      "bytes": 393576,
+      "sha256": "058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74"
+    },
+    "NotoSansDevanagari-Bold.ttf": {
+      "bytes": 225748,
+      "sha256": "19cc835a064c4af63e3c20feb54f5bf51dc25ffa52c0f493a23904572af8b26e"
+    },
+    "NotoSansDevanagari-Regular.ttf": {
+      "bytes": 219212,
+      "sha256": "385e78e6359a9d88a0f243d53b1209d7548361ba2194e2b9ec779bcaa7e8949d"
+    }
+  },
+  "notices": {
+    "OFL-Liberation.txt": {
+      "bytes": 4414,
+      "sha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b"
+    },
+    "OFL-Noto.txt": {
+      "bytes": 4377,
+      "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"
+    }
+  }
+}

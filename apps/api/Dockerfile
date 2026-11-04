@@ -49,6 +49,9 @@ COPY vendor/fastembed-0.8.0-1caseops1.json ./vendor/
 # API-only LGPL notices and the exact unmodified corresponding source archive.
 # The web/mobile JavaScript notice and exception inventories are separate.
 COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9
+# Exact upstream font sources/OFL notices and shaping-engine notices.
+COPY vendor/pdf-fonts-20261104 /usr/share/doc/caseops-api/third-party/pdf-fonts-20261104
+COPY vendor/uharfbuzz-0.57.0 /usr/share/doc/caseops-api/third-party/uharfbuzz-0.57.0
 # The official dnspython 2.9.0 archives omit their tagged ISC notice.
 COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0
 
@@ -92,6 +95,7 @@ COPY alembic.ini ./
 COPY src ./src
 COPY alembic ./alembic
 RUN uv pip install --system --no-deps . \
+  && python -c "import json; from caseops_api.services.pdf_fonts import verify_package; print(json.dumps(verify_package()))" \
   && python -m compileall -q --invalidation-mode checked-hash \
        /app/src /usr/local/lib/python3.13/site-packages/caseops_api
 
