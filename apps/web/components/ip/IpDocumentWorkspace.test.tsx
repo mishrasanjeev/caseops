@@ -179,6 +179,85 @@ describe("IpDocumentWorkspace", () => {
     expect(screen.queryByText("Controlled name preview")).not.toBeInTheDocument();
   });
 
+  it("B4-ADJ-35 keeps the name preview disabled until existing document names load", async () => {
+    let releaseDocuments: (value: unknown) => void = () => {};
+    fetchIpDocumentsMock.mockReturnValue(new Promise((resolve) => { releaseDocuments = resolve; }));
+    const existingName = "ACME_Trademark_ASTER_evidence_2026-08-09_1.txt";
+    previewIpDocumentNameMock.mockResolvedValue({
+      pattern: "[ClientCode]_[AssetType]_[Mark]_[DocumentType]_[YYYY-MM-DD]_[Version]",
+      requested_name: existingName,
+      resolved_name: "ACME_Trademark_ASTER_evidence_2026-08-09_1_2.txt",
+      conflict_detected: true,
+      conflict_suffix: "_2",
+      sanitized_components: [],
+      omitted_components: [],
+      warnings: [],
+      export_safe_name: "ACME_Trademark_ASTER_evidence_2026-08-09_1_2.txt",
+    });
+    render(withClient(
+      <IpDocumentWorkspace canUpload canManage canReview canConfigure={false} />,
+    ));
+
+    await chooseDocket();
+    fireEvent.change(screen.getByLabelText("Original file"), {
+      target: { files: [new File(["evidence"], "evidence.txt", { type: "text/plain" })] },
+    });
+    const classification = await screen.findByRole("combobox", { name: "Classification" });
+    await waitFor(() => expect(classification).toBeEnabled());
+    fireEvent.change(classification, { target: { value: "evidence" } });
+
+    // The conflict check needs every existing name: no preview against a partial list.
+    const preview = screen.getByRole("button", { name: "Preview controlled name" });
+    expect(preview).toBeDisabled();
+    expect(screen.getByText("Loading existing document names before the name preview.")).toBeVisible();
+    fireEvent.click(preview);
+    expect(previewIpDocumentNameMock).not.toHaveBeenCalled();
+
+    releaseDocuments({
+      items: [{
+        id: "document-1",
+        taxonomy_key: "evidence",
+        taxonomy_label: "Evidence",
+        title: "Evidence affidavit",
+        confidentiality: "internal",
+        is_privileged: false,
+        current_version: 1,
+        created_by_membership_id: "membership-1",
+        created_at: "2026-08-09T00:00:00Z",
+        updated_at: "2026-08-09T00:00:00Z",
+        links: [],
+        versions: [{
+          id: "version-1",
+          version: 1,
+          original_filename: "original evidence.txt",
+          display_name: existingName,
+          content_type: "text/plain",
+          size_bytes: 100,
+          sha256_hex: "a".repeat(64),
+          processing_status: "indexed",
+          extracted_char_count: 100,
+          extraction_error: null,
+          ocr_quality_score: 0.95,
+          low_ocr_quality: false,
+          ai_eligible: true,
+          state: "draft",
+          uploaded_by_membership_id: "membership-1",
+          locked_by_membership_id: null,
+          locked_at: null,
+          created_at: "2026-08-09T00:00:00Z",
+        }],
+      }],
+      total: 1,
+    });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+    expect(await screen.findByText("Controlled name preview")).toBeVisible();
+    expect(screen.getByText("ACME_Trademark_ASTER_evidence_2026-08-09_1_2.txt")).toBeVisible();
+    expect(previewIpDocumentNameMock).toHaveBeenCalledWith(
+      expect.objectContaining({ existingNames: [existingName] }),
+    );
+  });
+
   it("previews and applies a tenant alias import", async () => {
     importIpDocumentAliasesMock
       .mockResolvedValueOnce({
