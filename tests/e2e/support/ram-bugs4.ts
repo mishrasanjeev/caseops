@@ -337,7 +337,8 @@ export async function deadSelects(page: Page, scope?: Locator): Promise<string[]
     const out: string[] = [];
     for (const select of Array.from(element.querySelectorAll<HTMLSelectElement>("select"))) {
       const box = select.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0 || select.disabled) continue;
+      // :disabled also covers a select inside a disabled fieldset (a form still loading).
+      if (box.width === 0 || box.height === 0 || select.matches(":disabled")) continue;
       const real = Array.from(select.options).filter(o => o.value !== "" && !o.disabled);
       if (real.length === 0) {
         const label = select.labels?.[0]?.innerText || select.getAttribute("aria-label") || select.id || select.name || "unlabelled";

@@ -1,5 +1,40 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 4 Production Run On f49e0390: B4-ADJ-32..34
+
+Prod-verify 41813028426 (release f49e0390, #583): every role passed except
+tester (82 of 83, IPLF-026A) and Batch4 desktop (35 of 36), so mobile and
+governance did not run. BUG-014's capture case passed on production.
+
+- B4-ADJ-33 Status: Properly fixed in code, production-proven on f49e0390.
+  `BUG-014 journal capture: 'Class 45' with captured evidence is recorded`
+  passed in the Batch4 role; the backdated 409 no longer occurs.
+- B4-ADJ-32 Status: Partially fixed. The new annotation named the offender:
+  `dead-select :: /app/ip/specialist [New intake] :: Client`. The API log
+  shows the `/api/clients/` GET arriving 4 s after its preflight and served
+  in 60 ms, so the crawl read the intake form while it was still loading.
+  The select was inert (its fieldset is disabled until clients load), but its
+  placeholder still said "Select a client" with no loading cue, and
+  `deadSelects` read `select.disabled`, which is false inside a disabled
+  fieldset. The placeholder now says "Loading clients…" while the list loads
+  (vitest `BUG-015 says the client list is loading while the intake form waits
+  for it`, failing on the old component), and `deadSelects` uses `:disabled`.
+  Production proof waits for the next release's Batch4 role.
+- B4-ADJ-34 Status: Partially fixed. IPLF-026A on production: a restricted
+  member's `GET /api/ip/documents` returned 504 after 120 s (the run before
+  took 112 s and passed). `list_ip_documents` ran the per-document access
+  check on every document in the tenant, and each hidden one ended in
+  `assert_ip_docket_access`, which audits and commits an `access_denied` row.
+  test-legal retains every run's restricted canaries, so one list read wrote
+  thousands of denial audits. The list now drops documents on a docket the
+  viewer cannot see with `get_accessible_ip_document_ids` (the batched form of
+  the same all-linked-targets rule) before the unchanged per-document check;
+  a direct document read still audits its denial.
+  `test_restricted_member_document_list_hides_rows_without_per_row_denials`
+  fails on the old code (six denial audits from two list reads, statement
+  count growing with hidden rows) and passes on the fix. Production proof
+  waits for the next release's tester role.
+
 ## November 4 Batch4 Production Run On 07f56ebc: B4-ADJ-32..33
 
 Prod-verify 41773534542 (release 07f56ebc, #580 and #577's base): every other

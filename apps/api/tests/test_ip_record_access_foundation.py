@@ -5,8 +5,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from caseops_api.db.models import (
+    AuditEvent,
     CompanyMembership,
     EthicalWall,
     IpDocketRecord,
@@ -15,7 +17,7 @@ from caseops_api.db.models import (
     Team,
     TeamMembership,
 )
-from caseops_api.db.session import get_session_factory
+from caseops_api.db.session import get_engine, get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -369,6 +371,102 @@ def test_restricted_ip_policy_is_shared_across_list_document_source_and_audit(
     assert client.get(
         f"/api/ip/dockets/{docket_id}", headers=owner_headers
     ).status_code == 404
+
+
+def _restricted_document(client: TestClient, headers: dict[str, str], index: int) -> str:
+    docket = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": f"Restricted LIST{index}",
+            "restricted": True,
+            "particulars": _particulars(f"LIST{index}"),
+        },
+    )
+    assert docket.status_code == 201, docket.text
+    seeded = client.post("/api/ip/document-taxonomy/seed", headers=headers)
+    assert seeded.status_code == 200, seeded.text
+    response = client.post(
+        "/api/ip/documents/upload",
+        headers=headers,
+        data={
+            "metadata_json": json.dumps(
+                {
+                    "taxonomy_key": "evidence",
+                    "title": f"Restricted list evidence {index}",
+                    "confidentiality": "restricted",
+                    "is_privileged": True,
+                    "client_code": "LIST",
+                    "asset_type": "Trademark",
+                    "mark": f"LIST{index}",
+                    "jurisdiction": "IN",
+                    "application_no": f"LIST-{index}",
+                    "document_date": "2026-11-04",
+                    "links": [{"target_type": "docket", "target_id": docket.json()["id"]}],
+                }
+            )
+        },
+        files={
+            "upload": (
+                f"restricted-list-{index}.txt",
+                f"Restricted list evidence {index} for the hidden-row list read.".encode(),
+                "text/plain",
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    return str(response.json()["document"]["id"])
+
+
+def test_restricted_member_document_list_hides_rows_without_per_row_denials(
+    client: TestClient,
+) -> None:
+    """Production 2026-11-04: a restricted member's GET /api/ip/documents
+    audited and committed one denial per hidden document and returned 504
+    after 120 s. The list hides those rows in constant query work without a
+    denial audit per row; a direct read of one still audits its denial."""
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    company_id = str(bootstrap["company"]["id"])
+    _member_id, member_headers = _invite_member(client, owner_token)
+    engine = get_engine()
+
+    def hidden_list_statements() -> int:
+        statements: list[str] = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many) -> None:
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            response = client.get("/api/ip/documents", headers=member_headers)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        assert response.status_code == 200, response.text
+        assert response.json() == {"items": [], "total": 0}
+        return len(statements)
+
+    def denials() -> int:
+        with get_session_factory()() as session:
+            return (
+                session.query(AuditEvent)
+                .filter_by(company_id=company_id, action="access_denied")
+                .count()
+            )
+
+    document_ids = [_restricted_document(client, owner_headers, 0)]
+    before = denials()
+    one_hidden = hidden_list_statements()
+    document_ids += [_restricted_document(client, owner_headers, index) for index in range(1, 5)]
+    five_hidden = hidden_list_statements()
+
+    assert denials() == before
+    assert five_hidden == one_hidden
+    assert client.get(
+        f"/api/ip/documents/{document_ids[0]}", headers=member_headers
+    ).status_code == 404
+    assert denials() > before
 
 
 @pytest.mark.parametrize("subject", ["membership", "team"])
