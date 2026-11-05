@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from collections.abc import Iterator
 from typing import Annotated
 
@@ -33,6 +35,7 @@ from caseops_api.services.private_retrieval_jobs import inspect_private_index_in
 from caseops_api.services.qa_document_quiescence import pending_document_jobs
 from caseops_api.services.session_context import SessionContext
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 PrivateSearchUser = Annotated[
     SessionContext,
@@ -243,10 +246,25 @@ def get_private_retrieval_integrity(
     context: PrivateIntegrityUser,
     session: DbSession,
 ) -> PrivateRetrievalIntegrityResponse:
+    started = time.perf_counter()
     activation = private_retrieval_activation(session, context=context)
+    activated = time.perf_counter()
     report = inspect_private_index_integrity(
         session,
         company_id=context.company.id,
+    )
+    scanned = time.perf_counter()
+    document_processing_pending = pending_document_jobs(session, (context.company.id,))
+    finished = time.perf_counter()
+    # Splits the handler's time so a slow first call names its part (B4-ADJ-36);
+    # time spent before the handler shows as the request latency minus total_ms.
+    logger.info(
+        "private_integrity_request_timing activation_ms=%d scan_ms=%d "
+        "document_jobs_ms=%d total_ms=%d",
+        round((activated - started) * 1000),
+        round((scanned - activated) * 1000),
+        round((finished - scanned) * 1000),
+        round((finished - started) * 1000),
     )
     blockers = list(report.blockers)
     if not activation.available:
@@ -259,7 +277,7 @@ def get_private_retrieval_integrity(
         tombstoned_projection_count=report.tombstoned_projection_count,
         pending_event_count=report.pending_event_count,
         failed_event_count=report.failed_event_count,
-        document_processing_pending=pending_document_jobs(session, (context.company.id,)),
+        document_processing_pending=document_processing_pending,
         oldest_pending_lag_seconds=report.oldest_pending_lag_seconds,
         orphan_scope_count=report.orphan_scope_count,
         stale_source_count=report.stale_source_count,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -2160,6 +2161,58 @@ def test_integrity_scan_never_selects_projection_payloads(
         for columns in select_lists
         if "content_text" in columns or "embedding_json" in columns
     ] == []
+
+
+def test_integrity_request_logs_its_phase_timings_without_identifiers(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # B4-ADJ-36: production's first integrity call stayed at 8.75 s after the
+    # payload columns left the scan, and Cloud SQL has no per-query insight, so
+    # each call names where its time went: the handler's parts and the scan's
+    # phases. Milliseconds and counts only; the tenant, generation and source
+    # identifiers must never reach the log line.
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    title = "B4-ADJ-36-TIMING"
+    matter = _matter(client, token, title)
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    # Alembic's fileConfig in earlier tests disables loggers that already
+    # existed; enable these two so their records reach caplog through root.
+    for name in (
+        "caseops_api.services.private_retrieval_jobs",
+        "caseops_api.api.routes.private_retrieval",
+    ):
+        monkeypatch.setattr(logging.getLogger(name), "disabled", False)
+        caplog.set_level(logging.INFO, logger=name)
+    response = client.get("/api/private-retrieval/integrity", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    messages = [record.getMessage() for record in caplog.records]
+    scan = [line for line in messages if "private_integrity_scan_timing" in line]
+    request = [line for line in messages if "private_integrity_request_timing" in line]
+    assert len(scan) == 1 and len(request) == 1
+    scan_fields = dict(part.split("=", 1) for part in scan[0].split()[1:])
+    assert set(scan_fields) == {
+        "generation_ms", "manifest_ms", "events_ms", "scopes_ms", "sources_ms",
+        "tombstones_ms", "repair_ms", "total_ms", "live", "tombstoned",
+        "scanned_sources", "state",
+    }
+    assert int(scan_fields["live"]) == body["live_projection_count"] >= 1
+    assert scan_fields["state"] == "ready"
+    request_fields = dict(part.split("=", 1) for part in request[0].split()[1:])
+    assert set(request_fields) == {"activation_ms", "scan_ms", "document_jobs_ms", "total_ms"}
+    assert all(int(value) >= 0 for value in request_fields.values())
+    assert int(request_fields["total_ms"]) >= int(request_fields["scan_ms"])
+    for line in scan + request:
+        for identifier in (company_id, str(matter["id"]), str(body["active_generation_id"])):
+            assert identifier not in line
 
 
 def test_private_embedding_provider_has_a_hard_deadline(
