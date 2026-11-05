@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -57,6 +58,8 @@ from caseops_api.services.private_retrieval import (
     private_source_projection_text,
     private_source_version,
 )
+
+logger = logging.getLogger(__name__)
 
 # Production had 9,820 eligible rows for one tenant on 2026-09-01. Keep the
 # rebuild bounded, but size the bound from observed tenant volume with enough
@@ -941,12 +944,24 @@ def inspect_private_index_integrity(
     """Return safe aggregate integrity state; never return source identifiers."""
 
     current = now or datetime.now(UTC)
+    # Per-phase wall time, logged once per scan, so production names its own
+    # slow phase (B4-ADJ-36). Counts and milliseconds only, never identifiers.
+    phase_ms: dict[str, int] = {}
+    scan_started = phase_started = time.perf_counter()
+
+    def mark(phase: str) -> None:
+        nonlocal phase_started
+        now_counter = time.perf_counter()
+        phase_ms[phase] = round((now_counter - phase_started) * 1000)
+        phase_started = now_counter
+
     generation = session.scalar(
         select(PrivateIndexGeneration).where(
             PrivateIndexGeneration.company_id == company_id,
             PrivateIndexGeneration.state == "active",
         )
     )
+    mark("generation")
     active_generation_id = generation.id if generation is not None else ""
     live_count = 0
     tombstoned_count = 0
@@ -991,6 +1006,7 @@ def inspect_private_index_integrity(
             and generation.verified_projection_count == live_count
             and generation.verification_sha256 == digest
         )
+    mark("manifest")
 
     pending_count = int(
         session.scalar(
@@ -1020,6 +1036,7 @@ def inspect_private_index_integrity(
     if oldest is not None:
         normalized_oldest = oldest.replace(tzinfo=UTC) if oldest.tzinfo is None else oldest
         oldest_lag = max(0, int((current - normalized_oldest).total_seconds()))
+    mark("events")
 
     orphan_scope_count = int(
         session.scalar(
@@ -1092,6 +1109,7 @@ def inspect_private_index_integrity(
         or 0
     )
     orphan_scope_count += unscoped
+    mark("scopes")
     # Read only the columns the currentness check compares. Whole projection
     # rows carry every chunk's text and embedding JSON, which made this the
     # slowest query of the scan.
@@ -1191,6 +1209,7 @@ def inspect_private_index_integrity(
         )
         for row in live_sources
     )
+    mark("sources")
     unsafe_tombstones = int(
         session.scalar(
             select(func.count(PrivateIndexProjection.id)).where(
@@ -1204,6 +1223,7 @@ def inspect_private_index_integrity(
         )
         or 0
     )
+    mark("tombstones")
     blockers: list[str] = []
     if generation is None:
         blockers.append("missing_active_generation")
@@ -1255,7 +1275,25 @@ def inspect_private_index_integrity(
             0,
             int((current - normalized_repair_started_at).total_seconds()),
         )
+    mark("repair")
     state = "blocked" if blockers else "ready"
+    logger.info(
+        "private_integrity_scan_timing generation_ms=%d manifest_ms=%d events_ms=%d "
+        "scopes_ms=%d sources_ms=%d tombstones_ms=%d repair_ms=%d total_ms=%d "
+        "live=%d tombstoned=%d scanned_sources=%d state=%s",
+        phase_ms["generation"],
+        phase_ms["manifest"],
+        phase_ms["events"],
+        phase_ms["scopes"],
+        phase_ms["sources"],
+        phase_ms["tombstones"],
+        phase_ms["repair"],
+        round((time.perf_counter() - scan_started) * 1000),
+        live_count,
+        tombstoned_count,
+        len(live_sources),
+        state,
+    )
     return PrivateIntegrityReport(
         company_id=company_id,
         state=state,
