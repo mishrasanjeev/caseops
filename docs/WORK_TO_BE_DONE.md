@@ -1,3 +1,13 @@
+## 2026-11-04 — private invalidation assertion ownership
+
+**Partially fixed; candidate PostgreSQL and CI verification pending.** Three
+effectful private-invalidation calls now execute before their result assertions.
+The two complete affected files pass seven non-PostgreSQL cases/21 phases;
+two PostgreSQL cases were explicitly deselected and remain unverified. Whole-file
+AST equivalence after recombining the three new assignments preserves the
+original checks. See [the scoped repair](BUGFIX_PRIVATE_INVALIDATION_ASSERTIONS_2026-11-04.md).
+This does not close the existing production or competitive-gap acceptance work.
+
 ## 2026-11-01 — actual mobile builds and remaining acceptance
 
 J20/M22 remains **Partially implemented; release NO-GO**. PR558 revision17113fbc

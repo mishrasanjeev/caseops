@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 from collections.abc import Iterable
@@ -75,6 +76,16 @@ from caseops_api.schemas.saas_billing import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.billing_demo import admit_demo
+from caseops_api.services.billing_entitlements import (
+    ACTIVE_SUBSCRIPTION_STATUSES,
+    _coerce_int,
+    _latest_subscription,
+    _plan_entitlements,
+    _to_aware,
+    current_entitlements_for_company,
+    resolve_entitlements,
+    trial_has_ended,
+)
 from caseops_api.services.csv_security import csv_bytes
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
@@ -91,14 +102,9 @@ from caseops_api.services.provider_costs import (
 from caseops_api.services.provider_spend import provider_spend_rows
 from caseops_api.services.session_context import SessionContext
 
-CATALOG_VERSION = "2026.05.v1"
+CATALOG_VERSION = "2026.11.v1"
 GRANDFATHERED_PLAN_CODE = "grandfathered_free"
-ACTIVE_SUBSCRIPTION_STATUSES = {
-    BillingSubscriptionStatus.ACTIVE,
-    BillingSubscriptionStatus.TRIALING,
-    BillingSubscriptionStatus.GRACE,
-    BillingSubscriptionStatus.MANUAL_ACTIVE,
-}
+TRIAL_ENDED_DETAIL = "Your 14-day trial has ended. Choose a plan to keep adding work."
 TERMINAL_ORDER_STATUSES = {
     BillingPaymentOrderStatus.PAID,
     BillingPaymentOrderStatus.CANCELLED,
@@ -122,20 +128,46 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_aware(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value
-
-
 def _period_end(start: datetime, interval: str) -> datetime:
     if interval == "year":
         return start + timedelta(days=365)
     if interval == "one_time":
         return start
     return start + timedelta(days=31)
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _included_credit_window(
+    subscription: BillingSubscription, *, now: datetime
+) -> tuple[str, datetime]:
+    """Return the idempotency key and expiry of the current included-credit grant.
+
+    Included credits are monthly. A billing period longer than a month (annual
+    plans, manual GC contracts) is split into month-long windows anchored on
+    the period start, so an annual subscriber receives a grant every month
+    rather than once per year. Monthly periods keep their original key.
+    """
+
+    period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
+    period_end = _to_aware(subscription.current_period_end) or _period_end(
+        period_start, subscription.billing_interval
+    )
+    window_start, window_end = period_start, period_end
+    if period_end - period_start > timedelta(days=31):
+        moment = min(max(now, period_start), period_end - timedelta(microseconds=1))
+        months = (moment.year - period_start.year) * 12 + moment.month - period_start.month
+        if _add_months(period_start, months) > moment:
+            months -= 1
+        window_start = _add_months(period_start, months)
+        window_end = min(_add_months(period_start, months + 1), period_end)
+    return f"{subscription.id}:{window_start.isoformat()}", window_end
 
 
 def _month_window(value: datetime | None = None) -> tuple[datetime, datetime]:
@@ -146,40 +178,6 @@ def _month_window(value: datetime | None = None) -> tuple[datetime, datetime]:
     else:
         end = datetime(current.year, current.month + 1, 1, tzinfo=UTC)
     return start, end
-
-
-def _coerce_int(value: object) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def _plan_entitlements(plan: BillingPlanVersion | None) -> dict[str, Any]:
-    if plan is None:
-        return {}
-    values: dict[str, Any] = {}
-    for entitlement in plan.entitlements:
-        values[entitlement.entitlement_key] = entitlement.value_json
-    return values
-
-
-def _merge_entitlements(base: dict[str, Any], delta: dict[str, Any], *, quantity: int = 1) -> None:
-    for key, value in delta.items():
-        if key == "expires_after_months":
-            continue
-        if isinstance(value, bool):
-            base[key] = bool(base.get(key)) or value
-            continue
-        int_value = _coerce_int(value)
-        if int_value is not None:
-            base[key] = int(base.get(key) or 0) + int_value * quantity
-            continue
-        base[key] = value
 
 
 def _plan_record(row: BillingPlanVersion) -> BillingPlanRecord:
@@ -298,29 +296,6 @@ def ensure_billing_account(session: Session, company: Company) -> BillingAccount
     return account
 
 
-def _latest_subscription(session: Session, company_id: str) -> BillingSubscription | None:
-    rows = list(
-        session.scalars(
-            select(BillingSubscription)
-            .options(
-                selectinload(BillingSubscription.items),
-                selectinload(BillingSubscription.plan_version).selectinload(
-                    BillingPlanVersion.entitlements
-                ),
-                selectinload(BillingSubscription.plan_version).selectinload(
-                    BillingPlanVersion.prices
-                ),
-            )
-            .where(BillingSubscription.company_id == company_id)
-            .order_by(BillingSubscription.created_at.desc())
-        )
-    )
-    for row in rows:
-        if row.status in ACTIVE_SUBSCRIPTION_STATUSES:
-            return row
-    return rows[0] if rows else None
-
-
 def ensure_grandfathered_subscription(session: Session, company: Company) -> BillingSubscription:
     account = ensure_billing_account(session, company)
     subscription = _latest_subscription(session, company.id)
@@ -362,53 +337,6 @@ def _subscription_for_gate(session: Session, company: Company) -> BillingSubscri
     """Resolve existing entitlements without creating billing state on a gate read."""
 
     return _latest_subscription(session, company.id)
-
-
-def resolve_entitlements(session: Session, subscription: BillingSubscription) -> dict[str, Any]:
-    entitlements = _plan_entitlements(subscription.plan_version)
-    active_items = [item for item in subscription.items if item.status == "active"]
-    add_on_codes = {
-        item.item_code
-        for item in active_items
-        if item.item_type == "add_on" and item.item_code != subscription.plan_version.plan_code
-    }
-    add_on_rows: dict[str, BillingPlanVersion] = {}
-    if add_on_codes:
-        add_on_rows = {
-            row.plan_code: row
-            for row in session.scalars(
-                select(BillingPlanVersion)
-                .options(selectinload(BillingPlanVersion.entitlements))
-                .where(
-                    BillingPlanVersion.version == CATALOG_VERSION,
-                    BillingPlanVersion.plan_code.in_(add_on_codes),
-                )
-            )
-        }
-    for item in active_items:
-        if item.item_type != "add_on":
-            continue
-        row = add_on_rows.get(item.item_code)
-        if row is not None:
-            _merge_entitlements(entitlements, _plan_entitlements(row), quantity=item.quantity)
-    if subscription.entitlement_overrides_json:
-        entitlements.update(subscription.entitlement_overrides_json)
-    return entitlements
-
-
-def current_entitlements_for_company(session: Session, company_id: str) -> dict[str, Any]:
-    """Resolve existing effective entitlements without creating billing state.
-
-    Authorization/readiness checks must be side-effect free. A company without
-    an existing subscription therefore has no entitlements and fails closed;
-    the explicit billing bootstrap/current-state workflow remains the owner of
-    grandfathered subscription creation.
-    """
-
-    subscription = _latest_subscription(session, company_id)
-    if subscription is None or subscription.status not in ACTIVE_SUBSCRIPTION_STATUSES:
-        return {}
-    return resolve_entitlements(session, subscription)
 
 
 def _storage_used_bytes(session: Session, company_id: str) -> int:
@@ -515,11 +443,7 @@ def _projected_ai_credit_balance(
     now = _now()
     included = int(entitlements.get("ai_credits_monthly") or 0)
     if included > 0:
-        period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
-        period_end = _to_aware(subscription.current_period_end) or _period_end(
-            period_start, subscription.billing_interval
-        )
-        source_id = f"{subscription.id}:{period_start.isoformat()}"
+        source_id, period_end = _included_credit_window(subscription, now=now)
         current_grant_exists = session.scalar(
             select(BillingCreditLedger.id).where(
                 BillingCreditLedger.company_id == company_id,
@@ -648,11 +572,7 @@ def grant_included_monthly_credits(
     included = int(entitlements.get("ai_credits_monthly") or 0)
     if included <= 0:
         return
-    period_start = _to_aware(subscription.current_period_start) or _month_window()[0]
-    period_end = _to_aware(subscription.current_period_end) or _period_end(
-        period_start, subscription.billing_interval
-    )
-    source_id = f"{subscription.id}:{period_start.isoformat()}"
+    source_id, period_end = _included_credit_window(subscription, now=_now())
     existing = session.scalar(
         select(BillingCreditLedger.id).where(
             BillingCreditLedger.company_id == subscription.company_id,
@@ -1404,6 +1324,10 @@ def assert_ai_credits_available(
             # Preserve the established unrestricted behaviour for tenants
             # that have not entered the explicit billing bootstrap workflow.
             return
+        if trial_has_ended(subscription):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=TRIAL_ENDED_DETAIL
+            )
         entitlements = resolve_entitlements(session, subscription)
         if entitlements.get("ai_credits_monthly") is None:
             return
@@ -1526,10 +1450,33 @@ def estimate_ai_credits_for_call(
     return base
 
 
+def _assert_trial_open(
+    session: Session,
+    subscription: BillingSubscription,
+    *,
+    context: SessionContext,
+    target_type: str = "company",
+) -> None:
+    if not trial_has_ended(subscription):
+        return
+    trial_end = _to_aware(subscription.trial_end)
+    record_from_context(
+        session,
+        context,
+        action="billing_limit.trial_ended_blocked",
+        target_type=target_type,
+        target_id=context.company.id if target_type == "company" else None,
+        result=AuditResult.DENIED,
+        metadata={"trial_end": trial_end.isoformat() if trial_end else None},
+    )
+    raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=TRIAL_ENDED_DETAIL)
+
+
 def assert_user_limit(session: Session, *, context: SessionContext, role: MembershipRole) -> None:
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context)
     entitlements = resolve_entitlements(session, subscription)
     internal, viewers = _membership_counts(session, context.company.id)
     if role == MembershipRole.VIEWER:
@@ -1560,6 +1507,7 @@ def assert_matter_limit(session: Session, *, context: SessionContext) -> None:
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context)
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("matters_active_limit"))
     used = _active_matter_count(session, context.company.id)
@@ -1589,6 +1537,8 @@ def tracked_case_remaining_capacity(
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return None
+    if trial_has_ended(subscription):
+        return 0
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("tracked_cases_limit"))
     if limit is None:
@@ -1598,6 +1548,9 @@ def tracked_case_remaining_capacity(
 
 
 def assert_tracked_case_limit(session: Session, *, context: SessionContext) -> None:
+    subscription = _subscription_for_gate(session, context.company)
+    if subscription is not None:
+        _assert_trial_open(session, subscription, context=context, target_type="tracked_case")
     remaining = tracked_case_remaining_capacity(session, context=context)
     if remaining is not None and remaining < 1:
         record_from_context(
@@ -1623,6 +1576,7 @@ def assert_manual_refresh_limit(
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    _assert_trial_open(session, subscription, context=context, target_type="tracked_case")
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("manual_case_refreshes_daily"))
     used = _manual_refreshes_today(session, context.company.id)
@@ -1679,6 +1633,11 @@ def effective_storage_quota(session: Session, *, company: Company) -> int | None
     # request could then wait on those locks before FastAPI had a chance to
     # finalize the read request's session, starving the event loop. Explicit
     # billing and mutation workflows remain responsible for creating state.
+    subscription = _latest_subscription(session, company.id)
+    if subscription is not None and trial_has_ended(subscription):
+        # Read-only after the trial: stored files stay readable, and any new
+        # upload exceeds a zero quota.
+        return 0
     entitlements = current_entitlements_for_company(session, company.id)
     return _coerce_int(entitlements.get("storage_bytes_limit"))
 

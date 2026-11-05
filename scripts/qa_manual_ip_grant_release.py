@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
@@ -572,11 +572,22 @@ def _no_scheduler() -> None:
         _require(targeted is None, "unexpected_scheduler")
 
 
-def _receipt(name: str, request: dict, *, mode: str = "grant", fingerprint: str = "") -> dict:
+def _log_floor() -> str:
+    """Earliest log time for an execution started now, with clock-skew slack."""
+    return (datetime.now(UTC) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _receipt(
+    name: str, request: dict, *, since: str, mode: str = "grant", fingerprint: str = ""
+) -> dict:
+    # An execution's logs cannot predate its dispatch. Without this bound an
+    # ascending read scans Logging's whole default window (about 41 s on
+    # production against the 20 s call budget) and the readback fails closed.
     query = (
         f'resource.type="cloud_run_job" AND resource.labels.job_name="{JOB}" AND '
         f'labels."run.googleapis.com/execution_name"="{name}" AND '
         f'logName="projects/{PROJECT}/logs/run.googleapis.com%2Fstdout" AND '
+        f'timestamp>="{since}" AND '
         '(jsonPayload:* OR textPayload:"schema_version")'
     )
     deadline = time.monotonic() + 45
@@ -879,6 +890,7 @@ def execute(
             )
             evidence["execute_attempted"] = True
             record()
+            grant_floor = _log_floor()
             response = _cloud(
                 ["run", "jobs", "execute", JOB, "--async", "--quiet", *_flags()],
                 stage="grant_execution",
@@ -908,12 +920,13 @@ def execute(
                 and str(after["latest"]).rsplit("/", 1)[-1] == name,
                 "execution_uniqueness",
             )
-            evidence["receipt"] = _receipt(name, request)
+            evidence["receipt"] = _receipt(name, request, since=grant_floor)
             record()
             assert_current_main(release)
             inspect_args = _inspect_args(request)
             evidence["inspection_execute_attempted"] = True
             record()
+            inspection_floor = _log_floor()
             inspection = _cloud(
                 [
                     "run",
@@ -942,6 +955,7 @@ def execute(
             evidence["inspection"] = _receipt(
                 inspected_name,
                 request,
+                since=inspection_floor,
                 mode="inspect",
                 fingerprint=evidence["receipt"]["after_sha256"],
             )

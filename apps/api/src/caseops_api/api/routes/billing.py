@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
-from caseops_api.core.rate_limit import limiter
+from caseops_api.core.cookies import issue_session_cookies
+from caseops_api.core.rate_limit import bootstrap_rate_limit, limiter
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import BillingEnrollment, Company
 from caseops_api.schemas.companies import BootstrapCompanyRequest
 from caseops_api.schemas.saas_billing import (
@@ -291,7 +293,14 @@ def create_add_on_checkout(
 
 
 @router.post("/trials")
-def start_trial(payload: TrialStartRequest, session: DbSession) -> dict[str, object]:
+@limiter.limit(bootstrap_rate_limit)
+def start_trial(
+    request: Request,
+    response: Response,
+    payload: TrialStartRequest,
+    session: DbSession,
+) -> dict[str, object]:
+    """Self-serve sign-up: create the workspace and start its 14-day trial."""
     assert_trial_start_allowed(session, payload)
     auth = register_company_owner(
         session,
@@ -328,6 +337,15 @@ def start_trial(payload: TrialStartRequest, session: DbSession) -> dict[str, obj
         )
     )
     session.commit()
+    # Same cookie issuance as /api/bootstrap/company so the web client lands
+    # in the new workspace without an extra sign-in round-trip.
+    settings = get_settings()
+    issue_session_cookies(
+        response,
+        access_token=auth.access_token,
+        ttl_seconds=settings.access_token_ttl_minutes * 60,
+        env=settings.env,
+    )
     return {
         "auth": auth.model_dump(mode="json"),
         "subscription_id": subscription.id,

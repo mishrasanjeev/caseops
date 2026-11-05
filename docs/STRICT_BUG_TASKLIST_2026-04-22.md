@@ -1,5 +1,79 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 5 Production Run On 2aae2367: B4-ADJ-35, 37 Proven; B4-ADJ-36, 38, 39 Open
+
+Prod-verify 41971095146 (release 2aae2367, #587 and #588) succeeded in every
+role: Batch4 desktop 36/36, mobile 14/14, governance 2/2 and 2/2, no skips,
+and exact-release evidence was recorded. deploy-prod.sh exited 1 at the
+test-legal grant receipt (B4-ADJ-39) after every earlier gate passed and
+`caseops-api-00516-hnk` was serving 2aae2367, so prod-verify was dispatched
+manually for the same SHA; dispatch was the only step the failure skipped.
+
+Ram's Batch4 rows, counting only assertions production executed:
+
+- Properly fixed on 2aae2367, desktop and mobile: BUG-001, BUG-002, BUG-005,
+  BUG-007, BUG-008, BUG-009, BUG-012, BUG-013, BUG-014, BUG-016 (including the
+  `[prod-only]` reported invoices INVR-2026-028 and INVR-2026-068) and ENH-017.
+- Partially fixed: BUG-015. The control crawl passed on 22 routes plus the
+  Madrid and client-portal journeys; the row asks for autonomous
+  full-application testing, which the crawl (FT-099) is narrower than.
+- Inconclusive: BUG-003 and BUG-004 (the pickers equal the server-eligible
+  lists and are never dead selects, but the run does not record whether an
+  active governed rule or calendar existed, so production may only have shown
+  the explained, disabled state); BUG-006 (production never submits a rule);
+  BUG-010 (the Matter assignment stays disabled on the production record;
+  linking and assigning is `[local-only]`); BUG-011 (test-legal has no
+  accepted portal instruction, so that picker is never populated). Each
+  populated path is proven only by its `[local-only]` journey.
+
+- B4-ADJ-35 Status: Properly fixed, production-proven on 9f587392 and
+  2aae2367: `BUG-002 Ram's Documents Classification is provisioned, never
+  seeded, and previews a classified name` passed in both Batch4 roles.
+- B4-ADJ-36 Status: Not fixed. The narrower currentness query shipped, and
+  IPLF-063B passed, but the endpoint's first call after the release took
+  8.75 s on 00516 (8.08 s on 00515) against the probe's 10 s budget; later
+  calls took 1.1 to 1.4 s (1.3 to 1.5 s before). The instance had served many
+  requests just before, so this is not container start: it is the first scan
+  in about five hours against a cold database cache. The bench's dominant
+  query is not production's. Cloud SQL Query Insights is off on `caseops-db`,
+  so production per-query timing needs either scan-phase timing in the
+  endpoint's logs or Insights enabled.
+- B4-ADJ-37 Status: Properly fixed, production-proven on 2aae2367: the bounded
+  read returned execution `caseops-test-legal-manual-ip-grant-2gpnn`'s receipt
+  within its budget (five releases before timed out at 41 to 42 s).
+- B4-ADJ-38 Status: Not fixed (Cloud Run platform start latency; tracked by
+  owner decision). The same test passed on 2aae2367.
+  Tester `ram-2026-10-10-prod.spec.ts` "upload and two distinct reindexes
+  complete without losing bytes after reload" failed on 9f587392 (prod-verify
+  41934282576, contract case) at its 90-second index budget. The upload
+  returned 200 at 00:50:52 and dispatched `caseops-document-processing-4zgpx`;
+  Cloud Run's `Started` condition reads "Started deployed execution in
+  1m30.5s" (cadence execution `vfmdd`: 1m20.08s). Both, and the normal
+  execution `f55nd`, started at 00:52:23.6-.9; the worker then ran its usual
+  10-15 s and `vfmdd` indexed the file. Across 1,000 executions
+  (2026-11-04 10:14 to 2026-11-05 01:30) start latency is p50 5.5 s, p90 7.3 s,
+  p99 10.7 s, with four outliers: 2rd82 58.8 s, 5fwwm 74.5 s, vfmdd 80.1 s,
+  4zgpx 90.5 s (0.4%), each released together with the executions waiting
+  beside it. Ruled out: database locks (worker `lock_timeout` 5 s and
+  `statement_timeout` 60 s would raise, and every run succeeded), connection
+  stalls (`connect_timeout` 10 s), SQL Admin API throttling (all
+  `GenerateEphemeralCert`/`GetConnectSettings` calls 200), and image import
+  (`ContainerReady` within 1.2 s). The job runs the gen2 execution
+  environment. Not a CaseOps code defect and not a Ram defect; the 90 s budget
+  is not raised. A real fix removes the per-execution start from the upload
+  path (for example, a continuously polling worker), which is an
+  infrastructure and cost decision for the owner.
+- B4-ADJ-39 Status: Not fixed. deploy-prod.sh on 2aae2367 failed closed with
+  `grant_receipt_mismatch`. Every release since 2026-11-01 reused one grant
+  input (operation 27b15edb). One of the earlier, timed-out runs applied the
+  grant, so execution 2gpnn returned a replay receipt (`replayed: true`, after
+  fingerprint 22ca52e6). The job returns a replay only when the stored audit
+  event matches, test-legal still holds full_ip and the current fingerprint
+  equals the recorded after fingerprint. The release script accepts only
+  `replayed: false`, so a grant whose receipt was lost can never be verified
+  under its own operation id. test-legal holds full_ip; later releases omit
+  the grant input until the replay rule is decided.
+
 ## BUG-016 — original invoice text lost during PDF export (2026-11-04)
 
 **Not fixed; verification and original production workflow pending.** Canonical
@@ -128,7 +202,7 @@ receipt readback timed out, as on f49e0390.
   document list has loaded. vitest `B4-ADJ-35 keeps the name preview disabled
   until existing document names load` fails on the old component and passes on
   the fix. Production proof waits for the next release's Batch4 role.
-- B4-ADJ-36 Status: Not fixed (tracked). Tester `IPLF-063B production proves
+- B4-ADJ-36 Status: Partially fixed (awaits production proof). Tester `IPLF-063B production proves
   the exact UJ-18 release` failed when its queue-readiness probe,
   `GET /api/private-retrieval/integrity` with a 10 s request budget, took
   9.8 s. The first call on every release since 00507 took 7.5 to 9.8 s and
@@ -137,6 +211,32 @@ receipt readback timed out, as on f49e0390.
   the production QA tenant retains every run. The probe budget is not raised
   (that would hide a latency still rising); the endpoint's full scan needs a
   bounded design. Not a Ram defect; adjacent, found by this audit.
+  Root cause, measured on a local PostgreSQL 17 bench (8,000 live
+  projections with 1,024-dimension embeddings, 2,000 tombstones, 5 retained
+  generations, 60,000 rows): the source-currentness check selected whole
+  live projection rows, chunk text and embedding JSON included, to compare
+  four short columns. That one query took 1.4 to 2.6 s of a 2.4 to 4.0 s
+  warm scan; every other query took under 0.2 s. It now selects only source
+  type, id, version and content hash: 0.035 s, whole scan 0.72 s. PostgreSQL
+  17 `EXPLAIN (ANALYZE, BUFFERS, SERIALIZE)`: about 30,000 pages read (28,025
+  of them TOAST) and 106 MB sent before, 2,013 pages and 1 MB after, so a
+  cold first call no longer reads the embeddings from disk. Production on
+  9f587392 (00515): first call 8.08 s, later calls 1.3 to 1.5 s. pytest
+  `test_integrity_scan_never_selects_projection_payloads` fails on the old
+  code (the full-row select) and passes on the fix. Production proof:
+  IPLF-063B passes on the next release, and API request logs show the
+  endpoint's first call after the release under its 10 s budget.
+- B4-ADJ-37 Status: Partially fixed. Every release since 2026-11-02
+  (6a7463e4, 07f56ebc, f49e0390, 38bdc754, 9f587392) exited 1 with
+  `manual_ip_release_failed_closed` at `receipt_readback` after the
+  test-legal grant execution succeeded. The receipt query read Cloud Logging
+  `--order=asc` with no time bound, which scans the whole default window:
+  timed on production at 41 to 42 s (also with `--freshness=1h`) against a
+  20 s call budget; the same query with a `timestamp>=` floor returns the same
+  single row in 4 s. Each receipt read is now bounded from 5 minutes before
+  its own execution's dispatch. `test_receipt_reads_are_bounded_from_their_
+  execution_start` fails on the old script and passes on the fix. Production
+  proof waits for the next release's deploy exiting 0.
 
 Docker acceptance on f49e0390: 3,977 tests collected, none skipped, 3,972
 passed; the 5 failures are Windows host-interpreter caveats in

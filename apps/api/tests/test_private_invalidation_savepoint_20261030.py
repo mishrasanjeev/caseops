@@ -98,7 +98,7 @@ def test_cached_invalidation_reverts_with_its_savepoint(
                         collect_sources=True,
                     )
                     assert (count, sources) == (1, {("matter", matter_id)})
-                    assert _apply_private_invalidation(
+                    output_result = _apply_private_invalidation(
                         session, model=PrivateSavedOutputAccess,
                         predicate=and_(
                             PrivateSavedOutputAccess.company_id == company_id,
@@ -109,7 +109,8 @@ def test_cached_invalidation_reverts_with_its_savepoint(
                             "locked_at": now, "access_policy_generation": 1,
                             "tombstone_generation": 1, "updated_at": now,
                         },
-                    ) == (1, set())
+                    )
+                    assert output_result == (1, set())
                     assert cached.is_tombstoned and cached.content_text == ""
                     assert output.state == "locked" and output.locked_reason == "source_revoked"
                     if flush_before_rollback:
