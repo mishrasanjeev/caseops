@@ -25,7 +25,7 @@ receipt readback timed out, as on f49e0390.
   document list has loaded. vitest `B4-ADJ-35 keeps the name preview disabled
   until existing document names load` fails on the old component and passes on
   the fix. Production proof waits for the next release's Batch4 role.
-- B4-ADJ-36 Status: Not fixed (tracked). Tester `IPLF-063B production proves
+- B4-ADJ-36 Status: Partially fixed (awaits production proof). Tester `IPLF-063B production proves
   the exact UJ-18 release` failed when its queue-readiness probe,
   `GET /api/private-retrieval/integrity` with a 10 s request budget, took
   9.8 s. The first call on every release since 00507 took 7.5 to 9.8 s and
@@ -34,6 +34,21 @@ receipt readback timed out, as on f49e0390.
   the production QA tenant retains every run. The probe budget is not raised
   (that would hide a latency still rising); the endpoint's full scan needs a
   bounded design. Not a Ram defect; adjacent, found by this audit.
+  Root cause, measured on a local PostgreSQL 17 bench (8,000 live
+  projections with 1,024-dimension embeddings, 2,000 tombstones, 5 retained
+  generations, 60,000 rows): the source-currentness check selected whole
+  live projection rows, chunk text and embedding JSON included, to compare
+  four short columns. That one query took 1.4 to 2.6 s of a 2.4 to 4.0 s
+  warm scan; every other query took under 0.2 s. It now selects only source
+  type, id, version and content hash: 0.035 s, whole scan 0.72 s. PostgreSQL
+  17 `EXPLAIN (ANALYZE, BUFFERS, SERIALIZE)`: about 30,000 pages read (28,025
+  of them TOAST) and 106 MB sent before, 2,013 pages and 1 MB after, so a
+  cold first call no longer reads the embeddings from disk. Production on
+  9f587392 (00515): first call 8.08 s, later calls 1.3 to 1.5 s. pytest
+  `test_integrity_scan_never_selects_projection_payloads` fails on the old
+  code (the full-row select) and passes on the fix. Production proof:
+  IPLF-063B passes on the next release, and API request logs show the
+  endpoint's first call after the release under its 10 s budget.
 - B4-ADJ-37 Status: Partially fixed. Every release since 2026-11-02
   (6a7463e4, 07f56ebc, f49e0390, 38bdc754, 9f587392) exited 1 with
   `manual_ip_release_failed_closed` at `receipt_readback` after the
