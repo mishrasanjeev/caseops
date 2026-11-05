@@ -1,0 +1,336 @@
+{
+  "schema": 1,
+  "liberation_commit": "4b0192046158094654e865245832c66d2104219e",
+  "noto_commit": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+  "official_sources": [
+    {
+      "path": "liberation-2.1.5-LICENSE",
+      "bytes": 4414,
+      "sha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b",
+      "official_source": "https://raw.githubusercontent.com/liberationfonts/liberation-fonts/4b0192046158094654e865245832c66d2104219e/LICENSE",
+      "git_blob": null,
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "noto-OFL-LICENSE",
+      "bytes": 4377,
+      "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/LICENSE",
+      "git_blob": null,
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "liberation-fonts-ttf-2.1.5.tar.gz",
+      "bytes": 2385008,
+      "sha256": "7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0",
+      "official_source": "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz",
+      "git_blob": null,
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "liberation-fonts-source-4b01920.tar.gz",
+      "bytes": 5106369,
+      "sha256": "fa7bdde21ad476b24786f5563b468fd0dd4c5dd4b9ecf48a20f17b13d84f26a8",
+      "official_source": "https://codeload.github.com/liberationfonts/liberation-fonts/tar.gz/4b0192046158094654e865245832c66d2104219e",
+      "git_blob": null,
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansDevanagari-Regular.ttf",
+      "bytes": 219212,
+      "sha256": "385e78e6359a9d88a0f243d53b1209d7548361ba2194e2b9ec779bcaa7e8949d",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf",
+      "git_blob": "d9167f632b699b82eb81e0e0ad1ddb89bcdbd6c3",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansDevanagari-Bold.ttf",
+      "bytes": 225748,
+      "sha256": "19cc835a064c4af63e3c20feb54f5bf51dc25ffa52c0f493a23904572af8b26e",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf",
+      "git_blob": "6fdb1c1a31ae8cebadb3ca02878cfdacf75ddfe4",
+      "external_preobserved_SHA256": null
+    }
+  ],
+  "font_metadata": {
+    "LiberationSerif-BoldItalic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 3,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Serif",
+        "2": "Bold Italic",
+        "4": "Liberation Serif Bold Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationSerif-BoldItalic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSerif-Italic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 2,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Serif",
+        "2": "Italic",
+        "4": "Liberation Serif Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationSerif-Italic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSerif-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Serif",
+        "2": "Bold",
+        "4": "Liberation Serif Bold",
+        "5": "Version 2.1.5",
+        "6": "LiberationSerif-Bold",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSerif-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Serif",
+        "2": "Regular",
+        "4": "Liberation Serif",
+        "5": "Version 2.1.5",
+        "6": "LiberationSerif",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSans-BoldItalic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 3,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Sans",
+        "2": "Bold Italic",
+        "4": "Liberation Sans Bold Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationSans-BoldItalic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSans-Italic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 2,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Sans",
+        "2": "Italic",
+        "4": "Liberation Sans Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationSans-Italic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSans-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Sans",
+        "2": "Bold",
+        "4": "Liberation Sans Bold",
+        "5": "Version 2.1.5",
+        "6": "LiberationSans-Bold",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationSans-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation. \nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Sans",
+        "2": "Regular",
+        "4": "Liberation Sans",
+        "5": "Version 2.1.5",
+        "6": "LiberationSans",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationMono-BoldItalic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 3,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Mono",
+        "2": "Bold Italic",
+        "4": "Liberation Mono Bold Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationMono-BoldItalic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationMono-Italic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 2,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Mono",
+        "2": "Italic",
+        "4": "Liberation Mono Italic",
+        "5": "Version 2.1.5",
+        "6": "LiberationMono-Italic",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationMono-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Mono",
+        "2": "Bold",
+        "4": "Liberation Mono Bold",
+        "5": "Version 2.1.5",
+        "6": "LiberationMono-Bold",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "LiberationMono-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "names": {
+        "0": "Digitized data copyright (c) 2010 Google Corporation.\nCopyright (c) 2012 Red Hat, Inc.",
+        "1": "Liberation Mono",
+        "2": "Regular",
+        "4": "Liberation Mono",
+        "5": "Version 2.1.5",
+        "6": "LiberationMono",
+        "13": "Licensed under the SIL Open Font License, Version 1.1",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "NotoSansDevanagari-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "names": {
+        "0": "Copyright 2015-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Devanagari",
+        "2": "Regular",
+        "4": "Noto Sans Devanagari Regular",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D deva -f none -a qsq -X \"\"",
+        "6": "NotoSansDevanagari-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "NotoSansDevanagari-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "names": {
+        "0": "Copyright 2015-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Devanagari",
+        "2": "Bold",
+        "4": "Noto Sans Devanagari Bold",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D deva -f none -a qsq -X \"\"",
+        "6": "NotoSansDevanagari-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      },
+      "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    }
+  },
+  "corresponding_liberation_source_SFDs": [
+    {
+      "name": "LiberationMono-Bold.sfd",
+      "bytes": 1862196,
+      "sha256": "1378e1a601cf41dd7b33820fd84bba5131b6945dad58a349634b843e469a648b"
+    },
+    {
+      "name": "LiberationMono-BoldItalic.sfd",
+      "bytes": 1740362,
+      "sha256": "7d184e32fb4ea192d98d094fc2afc955d1edac99315da5ac0f0ed268a26951f4"
+    },
+    {
+      "name": "LiberationMono-Italic.sfd",
+      "bytes": 1737256,
+      "sha256": "6cb2d1c4780ebdfe0cdb2f586ce1a7e1418a84f4680fb990b53db4645ff9f3fe"
+    },
+    {
+      "name": "LiberationMono-Regular.sfd",
+      "bytes": 1927317,
+      "sha256": "cd6b6507bc6796e257140a4a1b03284ed209e3b1d743a79a6eb128e177a5fd4d"
+    },
+    {
+      "name": "LiberationSans-Bold.sfd",
+      "bytes": 2539144,
+      "sha256": "fcc78a95f3e415567c911a4a985cb14b99bace532f9d74a202a0eda272d269dc"
+    },
+    {
+      "name": "LiberationSans-BoldItalic.sfd",
+      "bytes": 2524160,
+      "sha256": "0cd7fd05fe41094d82ba876a5a996ceadf825d1e6304c2f2220e8d2d355aa0a7"
+    },
+    {
+      "name": "LiberationSans-Italic.sfd",
+      "bytes": 2577048,
+      "sha256": "b0356784f4092eccb71e412c7500034d9d50e65649f65f6cecd5c96b24febc1f"
+    },
+    {
+      "name": "LiberationSans-Regular.sfd",
+      "bytes": 2535322,
+      "sha256": "8689f7b50551ad2f6522b250b87bda7abb701668d86720089bcdc8b722487b16"
+    },
+    {
+      "name": "LiberationSerif-Bold.sfd",
+      "bytes": 2222917,
+      "sha256": "729c5236d5c082e04e552c7f638d564ba7fa9f6510e9402fb297559e1a74d859"
+    },
+    {
+      "name": "LiberationSerif-BoldItalic.sfd",
+      "bytes": 2251154,
+      "sha256": "6e8ad2826b888e6a2db21086f6bd214119f1778e011638530fb8d9ab990924c5"
+    },
+    {
+      "name": "LiberationSerif-Italic.sfd",
+      "bytes": 2264937,
+      "sha256": "e01f8ce41a37ae40498e4414777fcf4d14f92e76124fcb7697daedf57fd8ebda"
+    },
+    {
+      "name": "LiberationSerif-Regular.sfd",
+      "bytes": 2363741,
+      "sha256": "3aafa9d7714870be9c19df281efb8e918631b311139f510bb737e097d7266a0a"
+    }
+  ],
+  "licenses": "OFL1.1 retained unmodified with copyrights/RFNs; original font bytes unmodified; generated documents are not relicensed as font software.",
+  "binary_source_limit": "Official publisher-linked release archive; first observed SHA256 retained. Not a claim of deterministic SFD-to-TTF reconstruction.",
+  "glyph_shaping_raster_or_positive_tests_executed": false,
+  "runtime_manifest_pin": {
+    "bytes": 3773,
+    "sha256": "a42bb856e26770f31de0d47c46dc038a4e946bea61fcf1079a9c2a22dafc7670"
+  }
+}

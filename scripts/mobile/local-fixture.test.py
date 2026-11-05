@@ -462,7 +462,13 @@ class BootstrapTests(unittest.TestCase):
             relative = Path(path)
             self.assertTrue(any(relative == scope or relative.is_relative_to(scope) for scope in scopes), path)
         for omitted in ("scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
-                        "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz"):
+                        "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+                        "apps/api/pyproject.toml", "apps/api/uv.lock",
+                        "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
+                        "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",
+                        "apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json",
+                        "apps/api/vendor/uharfbuzz-0.57.0/LICENSE",
+                        "apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING"):
             reduced = [scope for scope in scopes if scope != Path(omitted)]
             self.assertFalse(any(Path(omitted) == scope or Path(omitted).is_relative_to(scope) for scope in reduced))
 

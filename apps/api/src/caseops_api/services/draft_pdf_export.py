@@ -295,7 +295,7 @@ def render_pdf_bytes(
 
 
 def _ascii_safe(text: str) -> str:
-    """Text the PDF core font prints; the one shared mapping in pdf_layout."""
+    """Compatibility name; preserve the original text with pinned PDF fonts."""
     from caseops_api.services.pdf_layout import pdf_text
 
     return pdf_text(text)

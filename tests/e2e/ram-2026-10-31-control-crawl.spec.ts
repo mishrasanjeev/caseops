@@ -67,7 +67,7 @@ async function inspect(route: string, offenders: Offender[]) {
     const re = new RegExp(pattern, "i");
     const out: string[] = [];
     for (const field of Array.from(root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))) {
-      if (field.type === "hidden" || field.disabled || field.getBoundingClientRect().width === 0) continue;
+      if (field.type === "hidden" || field.matches(":disabled") || field.getBoundingClientRect().width === 0) continue;
       const label = field.labels?.[0]?.innerText || field.getAttribute("aria-label") || field.placeholder || "";
       if (re.test(label)) out.push(label.trim().split("\n")[0]);
     }

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "ip_data_governance_map.py"
@@ -19,6 +23,36 @@ def _map() -> dict:
 
 def test_committed_data_governance_map_covers_current_repository_inventory() -> None:
     assert ip_data_governance_map.validate(_map()) == []
+
+
+def test_map_writer_uses_canonical_lf_bytes_on_every_platform(tmp_path: Path) -> None:
+    payload = {"review": "Reviewed software assets", "approved": False}
+    target = tmp_path / "DATA_GOVERNANCE_MAP.yaml"
+    ip_data_governance_map._write(target, payload)
+    assert target.read_bytes() == (
+        b'{\n  "review": "Reviewed software assets",\n  "approved": false\n}\n'
+    )
+
+
+def test_pdf_runtime_review_retains_unapproved_policy_and_existing_data_classes() -> None:
+    data = _map()
+    for field in ("current_change_note", "latest_change_note"):
+        note = data[field]
+        assert "2026-11-05 reviewed PDF-runtime" in note
+        for boundary in (
+            "corpus_ingest.py", "court_sync_sources.py", "document_storage.py",
+            "apps/web/Dockerfile",
+        ):
+            assert boundary in note
+        assert "No SQL schema, data-class admission" in note
+        assert "whole-document PDFium recovery" in note
+        assert "vendor archives are not copied to the web runner" in note
+    assert data["status"] == "repository_inventory_snapshot_policy_unapproved"
+    assert data["policy_status"] == "pending_named_human_approval"
+    rows = {row["id"]: row for row in data["non_sql_data_classes"]}
+    for name in ("document-object-prefix-and-version", "document-materialization-cache"):
+        assert rows[name]["disposition_handler_id"] == "registry_fail_closed"
+        assert rows[name]["status"] == "inventory_registered_runtime_policy_unapproved"
 
 
 def test_native_auth_credentials_have_restricted_fail_closed_governance() -> None:
@@ -480,3 +514,162 @@ def test_committed_change_gate_rejects_unreadable_governed_source(
 
     errors = ip_data_governance_map.check_change("origin/main")
     assert errors == [f"cannot read governed source {source}: UnicodeDecodeError"]
+
+
+def _reviewed_pdf_fonts(tmp_path: Path, monkeypatch) -> tuple[list[str], Path]:
+    relative = "apps/api/src/caseops_api/assets/pdf_fonts"
+    source_root = REPO_ROOT / relative
+    manifest = json.loads((source_root / "manifest.json").read_bytes())
+    target = tmp_path / relative
+    target.mkdir(parents=True)
+    paths = []
+    for name in manifest["assets"]:
+        (target / name).write_bytes((source_root / name).read_bytes())
+        paths.append(f"{relative}/{name}")
+    manifest_path = target / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        ip_data_governance_map, "MAP_PATH",
+        tmp_path / "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+    )
+    return paths, manifest_path
+
+
+def test_committed_gate_reads_all14_reviewed_font_pins_without_bypassing_data_controls(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    fonts, _ = _reviewed_pdf_fonts(tmp_path, monkeypatch)
+    assert len(fonts) == 14
+    provider = "apps/api/src/caseops_api/services/new_provider.py"
+    migration = "apps/api/alembic/versions/new_data.py"
+    for path, source in (
+        (provider, "from google.cloud import storage\n"),
+        (migration, "def upgrade(): pass\n"),
+    ):
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source, encoding="utf-8")
+    monkeypatch.setattr(
+        ip_data_governance_map, "_git_output",
+        lambda *args: "\n".join([*fonts, provider, migration]),
+    )
+    errors = ip_data_governance_map.check_change("origin/main")
+    assert len(errors) == 2
+    assert "DATA_GOVERNANCE_MAP.yaml update" in errors[0]
+    assert provider in errors[0] and migration in errors[0]
+    assert "missing required marker" in errors[1]
+    (tmp_path / migration).write_text(
+        f"# {ip_data_governance_map.MIGRATION_MARKER}\ndef upgrade(): pass\n", encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        ip_data_governance_map, "_git_output",
+        lambda *args: "\n".join(
+            [*fonts, provider, migration, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"]
+        ),
+    )
+    assert ip_data_governance_map.check_change("origin/main") == []
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["unknown", "wrong-size", "wrong-sha", "changed-bytes", "source-in-font",
+     "bool-size", "wrong-schema", "bool-schema", "wrong-assets", "extra-pin-key",
+     "non-object-manifest", "malformed-manifest", "duplicate-manifest", "missing-manifest",
+     "linked-font", "linked-manifest"],
+)
+def test_committed_gate_refuses_unreviewed_or_changed_font_assets(
+    tmp_path: Path, monkeypatch, fault: str,
+) -> None:
+    fonts, manifest_path = _reviewed_pdf_fonts(tmp_path, monkeypatch)
+    font = fonts[0]
+    name = Path(font).name
+    manifest = json.loads(manifest_path.read_bytes())
+    if fault == "unknown":
+        del manifest["assets"][name]
+    elif fault == "wrong-size":
+        manifest["assets"][name]["bytes"] += 1
+    elif fault == "wrong-sha":
+        manifest["assets"][name]["sha256"] = "0" * 64
+    elif fault == "bool-size":
+        manifest["assets"][name]["bytes"] = True
+    elif fault == "wrong-schema":
+        manifest["schema"] = 2
+    elif fault == "bool-schema":
+        manifest["schema"] = True
+    elif fault == "wrong-assets":
+        manifest["assets"] = []
+    elif fault == "extra-pin-key":
+        manifest["assets"][name]["unreviewed"] = True
+    elif fault == "changed-bytes":
+        content = bytearray((tmp_path / font).read_bytes())
+        content[-1] ^= 1
+        (tmp_path / font).write_bytes(content)
+    elif fault == "source-in-font":
+        content = b"from google.cloud import storage\n"
+        (tmp_path / font).write_bytes(content)
+        manifest["assets"][name] = {
+            "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(),
+        }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    if fault == "non-object-manifest":
+        manifest_path.write_text("[]", encoding="utf-8")
+    elif fault == "malformed-manifest":
+        manifest_path.write_text("{", encoding="utf-8")
+    elif fault == "duplicate-manifest":
+        manifest_path.write_text(
+            json.dumps(manifest).replace('"schema": 1', '"schema": 1, "schema": 1'),
+            encoding="utf-8",
+        )
+    elif fault == "missing-manifest":
+        manifest_path.unlink()
+    elif fault in {"linked-font", "linked-manifest"}:
+        original = tmp_path / font if fault == "linked-font" else manifest_path
+        os.link(original, original.with_suffix(".unreviewed-link"))
+    monkeypatch.setattr(ip_data_governance_map, "_git_output", lambda *args: font)
+    errors = ip_data_governance_map.check_change("origin/main")
+    assert len(errors) == 1
+    assert errors[0].startswith(f"cannot read governed source {font}: ")
+
+
+def test_reviewed_font_exception_keeps_source_and_other_binary_failures_closed(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _reviewed_pdf_fonts(tmp_path, monkeypatch)
+    source = "apps/api/src/caseops_api/assets/pdf_fonts/provider.ttf.py"
+    other = "apps/api/src/caseops_api/assets/unknown.ttf"
+    (tmp_path / source).write_text("from google.cloud import storage\n", encoding="utf-8")
+    (tmp_path / other).write_bytes(b"\xff")
+    monkeypatch.setattr(
+        ip_data_governance_map, "_git_output", lambda *args: "\n".join((source, other)),
+    )
+    errors = ip_data_governance_map.check_change("origin/main")
+    assert errors == [
+        f"cannot read governed source {other}: UnicodeDecodeError",
+        f"data-bearing changes require DATA_GOVERNANCE_MAP.yaml update: {source}",
+    ]
+
+
+def test_asset_reader_closes_original_descriptor_when_buffer_creation_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    target = tmp_path / "asset.bin"
+    target.write_bytes(b"actual owned bytes")
+    monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
+    closed = []
+    original_close = os.close
+
+    def close(descriptor):
+        closed.append(descriptor)
+        original_close(descriptor)
+
+    def fail_buffer(*args):
+        raise RuntimeError("Synthetic buffer creation failure")
+
+    monkeypatch.setattr(ip_data_governance_map.os, "close", close)
+    monkeypatch.setattr(ip_data_governance_map.os, "fdopen", fail_buffer)
+    with pytest.raises(RuntimeError, match="^Synthetic buffer creation failure$"):
+        ip_data_governance_map._regular_asset_bytes(target)
+    assert len(closed) == 1
+    with pytest.raises(OSError):
+        os.fstat(closed[0])

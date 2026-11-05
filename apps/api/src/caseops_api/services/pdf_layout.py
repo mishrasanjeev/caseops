@@ -23,78 +23,25 @@ from contextlib import contextmanager
 from functools import cache
 from typing import Any
 
-# fpdf2 declares the core fonts with WinAnsiEncoding (Windows-1252), so dashes,
-# curly quotes, the ellipsis and bullets print as typed (2026-11-03: an invoice
-# line "Drafting brief — bail application" printed with "--"). Map the common
-# characters outside it to readable equivalents; anything still unencodable
-# becomes "?" instead of failing the whole export. Non-Latin scripts remain
-# lossless in DOCX exports.
-CORE_FONT_ENCODING = "windows-1252"
-_TYPOGRAPHY = {
-    " ": " ",  # non-breaking space
-    "→": "->",
-    "₹": "INR ",
-}
-_TRANSLATION = {ord(key): value for key, value in _TYPOGRAPHY.items()}
-
 # Body text colour for generated PDFs: near-black on the white page.
 TEXT_COLOR = (17, 24, 39)
 HEADING_FILL = (236, 239, 244)
 
 
 def pdf_text(value: object) -> str:
-    """Return text the core PDF font can encode, without raising."""
+    """Keep source text unchanged; the pinned Unicode font policy renders it."""
 
     if value is None:
         return ""
-    text = str(value).translate(_TRANSLATION)
-    try:
-        text.encode(CORE_FONT_ENCODING)
-    except UnicodeEncodeError:
-        pieces: list[str] = []
-        unencodable = False
-        for char in text:
-            try:
-                char.encode(CORE_FONT_ENCODING)
-            except UnicodeEncodeError:
-                # One "?" per unencodable run, as for a word in another script.
-                if not unencodable:
-                    pieces.append("?")
-                unencodable = True
-            else:
-                pieces.append(char)
-                unencodable = False
-        text = "".join(pieces)
-    return text
+    return str(value)
 
 
 @cache
 def safe_pdf_class() -> type:
-    """FPDF subclass that cannot fail an export on text the core fonts lack.
+    """All application PDFs use lossless pinned fonts and forbid external I/O."""
+    from caseops_api.services.pdf_fonts import unicode_pdf_class
 
-    fpdf2 passes every string through ``normalize_text`` before drawing it and
-    raises for characters outside the core-font encoding, so one non-Latin
-    client, party or matter name turned a download into a server error. Every
-    PDF generator builds its document from this class (enforced by a test).
-    Imported lazily so PDF support stays off the application start-up path.
-    """
-
-    from fpdf import FPDF, ResourceAccessPolicy  # type: ignore[import-not-found]
-
-    class SafeCoreFontPDF(FPDF):  # type: ignore[misc]
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, **kwargs)
-            self.core_fonts_encoding = CORE_FONT_ENCODING
-            # Exports use text and explicitly supplied in-memory image bytes.
-            # HTML/SVG must never acquire a local file or make an HTTP request.
-            self.resource_access_policy = ResourceAccessPolicy.NONE
-
-        def normalize_text(self, text: str) -> str:
-            if not self.is_ttf_font:
-                text = pdf_text(text)
-            return super().normalize_text(text)
-
-    return SafeCoreFontPDF
+    return unicode_pdf_class()
 
 
 @contextmanager
@@ -127,7 +74,7 @@ def write_wrapped_table(
         raise ValueError("Every table row must have one value per column.")
     from fpdf.fonts import FontFace  # type: ignore[import-not-found]
 
-    pdf.set_font("Helvetica", "", font_size)
+    pdf.set_font(pdf.font_family or "Helvetica", "", font_size)
     with neutral_table_state(pdf), pdf.table(
         col_widths=tuple(weights),
         width=pdf.epw,
@@ -163,7 +110,7 @@ def write_wrapped_pairs(
     width = len(rows[0])
     if any(len(row) != width for row in rows):
         raise ValueError("Every pair row must have the same number of columns.")
-    pdf.set_font("Helvetica", "", font_size)
+    pdf.set_font(pdf.font_family or "Helvetica", "", font_size)
     with neutral_table_state(pdf), pdf.table(
         col_widths=tuple(1 for _ in range(width)),
         width=pdf.epw,

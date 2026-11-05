@@ -1,0 +1,5 @@
+uharfbuzz 0.57.0 and bundled HarfBuzz 15.0.0
+
+The Python binding is distributed under Apache License 2.0; LICENSE retains the exact upstream text. The bundled HarfBuzz native engine uses the original terms and copyright notices in harfbuzz-COPYING (Old MIT). Both are retained separately; the binding licence alone does not replace the native engine notice.
+
+Immutable upstream commits, release artifact SHA256 values and original notice origins are recorded in provenance.json. CaseOps has not modified either library. The application font-loading adapter is separate application code. No font or shaping library is acquired from a network at PDF-render time. Public notice copies do not add these API dependencies to the JavaScript dependency registry.

@@ -225,8 +225,8 @@ def test_render_summary_pdf_produces_valid_pdf_bytes() -> None:
     assert body.startswith(b"%PDF-"), "fpdf2 must emit a real PDF"
     assert filename.endswith(".pdf")
     assert "CR-001-2026" in filename
-    # Helvetica cannot encode em-dashes / smart quotes; the _ascii_safe
-    # helper flattens those — verify no encoding crash emitted bytes.
+    # The pinned Unicode font policy preserves source characters without
+    # changing the caller's summary sections or export filename.
     assert len(body) > 500
 
 

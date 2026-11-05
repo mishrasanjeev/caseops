@@ -171,7 +171,7 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
 
 type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
   Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
-const appSourceProjects = { "app-chromium": 713, "app-mobile": 53 };
+const appSourceProjects = { "app-chromium": 714, "app-mobile": 53 };
 
 function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
   return suites.flatMap(suite => {
@@ -188,7 +188,7 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
 }
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
-  // New766-case metadata scope:15s constructor/20s new hooks and units. The
+  // New767-case metadata scope:15s constructor/20s new hooks and units. The
   // established production collector above keeps its literal8s bound unchanged.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
@@ -257,15 +257,20 @@ describe("complete independent App CI project inventory", () => {
       .flatMap(project => canonicalAppProject(canonical, project));
   }, 20_000);
 
-  it("keeps all766 canonical identities, original project order and zero retry/repeat", () => {
-    expect(canonical).toHaveLength(766);
+  it("keeps all767 canonical identities, original project order and zero retry/repeat", () => {
+    expect(canonical).toHaveLength(767);
     expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
     expect(wholeByDeclaration.map(row => row.project)).toEqual([
-      ...Array<string>(713).fill("app-chromium"), ...Array<string>(53).fill("app-mobile"),
+      ...Array<string>(714).fill("app-chromium"), ...Array<string>(53).fill("app-mobile"),
     ]);
-    expect(new Set(canonical.map(row => row.id)).size).toBe(766);
+    expect(new Set(canonical.map(row => row.id)).size).toBe(767);
     expect(canonical.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(canonical.every(row => !path.isAbsolute(row.file) && !row.file.split("/").includes(".."))).toBe(true);
+    expect(canonical.filter(row => row.file === "control-crawl-contract.spec.ts")
+      .map(row => [row.project, row.titles])).toEqual([
+      ["app-chromium", ["control-crawl-contract.spec.ts",
+        "control audit follows fieldset, first-legend and option-group disabled states"]],
+    ]);
   });
 
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
@@ -277,7 +282,7 @@ describe("complete independent App CI project inventory", () => {
     }, 20_000);
   }
 
-  it("forms an exact disjoint713+53 ordered union with the original mobile tag boundary", () => {
+  it("forms an exact disjoint714+53 ordered union with the original mobile tag boundary", () => {
     const chromium = canonicalAppProject(canonical, "app-chromium");
     const mobile = canonicalAppProject(canonical, "app-mobile");
     expect(chromium.every(row => !row.titles.join(" ").includes("[mobile]"))).toBe(true);

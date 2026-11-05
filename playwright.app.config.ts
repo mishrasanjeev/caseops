@@ -29,6 +29,7 @@ export default defineConfig({
     /public-content\.spec\.ts/,
     /seo_demo_\d{8}\.spec\.ts$/,
     /prod-failure-diagnostics\.spec\.ts$/,
+    /control-crawl-contract\.spec\.ts$/,
     /ip-list-pagination-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /release-identity-transport\.spec\.ts$/,
     /app-spine\.spec\.ts/,

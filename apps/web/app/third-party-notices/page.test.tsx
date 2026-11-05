@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, seven named components and all nine original full notices", () => {
+  it("renders one heading, ten named components and thirteen full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(7);
-    expect(article.querySelectorAll("details")).toHaveLength(9);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(10);
+    expect(article.querySelectorAll("details")).toHaveLength(13);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -70,8 +70,18 @@ describe("third-party license notices", () => {
       ["pako", "1.0.11"],
       ["qrcode.react", "4.2.0"],
       ["node", "22.23.4"],
+      ["liberation-fonts", "2.1.5"],
+      ["NotoSansDevanagari", "2.002"],
+      ["uharfbuzz", "0.57.0"],
     ]);
+    const apiVersions: Record<string, string> = {
+      "liberation-fonts": "2.1.5", NotoSansDevanagari: "2.002", uharfbuzz: "0.57.0",
+    };
     for (const component of notices.components) {
+      if (Object.hasOwn(apiVersions, component.packageName)) {
+        expect(component.version).toBe(apiVersions[component.packageName]);
+        continue;
+      }
       if (component.packageName === "node") {
         expect(readFileSync(path.join(webRoot, "Dockerfile"), "utf8")).toContain("FROM node:22.23.4-alpine AS trusted-base");
         continue;
@@ -129,9 +139,40 @@ describe("third-party license notices", () => {
     expect(component.notices[0].text).toBe(original.toString("utf8"));
   });
 
+  it("pins PDF fonts and both shaping-engine licences to separate original API sources", () => {
+    const expected = [
+      ["liberation-fonts", "OFL-1.1", "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b"],
+      ["NotoSansDevanagari", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["uharfbuzz", "Apache-2.0", "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"],
+      ["uharfbuzz", "Old MIT", "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"],
+    ];
+    for (const [packageName, license, digest] of expected) {
+      const component = notices.components.find((item) => item.packageName === packageName)!;
+      const notice = component.notices.find((item) => item.license === license)!;
+      expect(notice.sha256).toBe(digest);
+      expect("retainedSource" in notice).toBe(true);
+      const retained = "retainedSource" in notice ? notice.retainedSource : undefined;
+      if (typeof retained !== "string") throw Error("Missing independent retained source");
+      const source = readFileSync(path.join(repoRoot, retained));
+      expect(sha256(source)).toBe(digest);
+      expect(notice.text).toBe(source.toString("utf8"));
+    }
+    const project = readFileSync(path.join(repoRoot, "apps/api/pyproject.toml"), "utf8");
+    const lock = readFileSync(path.join(repoRoot, "apps/api/uv.lock"), "utf8");
+    expect(project).toContain('"uharfbuzz==0.57.0"');
+    expect(lock).toMatch(/name = "uharfbuzz"\s+version = "0\.57\.0"/);
+    const fonts = JSON.parse(readFileSync(path.join(repoRoot, "apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json"), "utf8"));
+    expect(fonts.liberation_commit).toBe("4b0192046158094654e865245832c66d2104219e");
+    expect(fonts.noto_commit).toBe("ffebf8c1ee449e544955a7e813c54f9b73848eac");
+    expect(Object.keys(fonts.font_metadata)).toHaveLength(14);
+  });
+
   for (const { component, notice } of allNotices) {
     it(`${component.packageName} ${notice.license} preserves original bytes, authors and full text`, () => {
-      const installed = component.packageName === "node"
+      const retained = "retainedSource" in notice ? notice.retainedSource : undefined;
+      const installed = typeof retained === "string"
+        ? readFileSync(path.join(repoRoot, retained))
+        : component.packageName === "node"
         ? readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.4/LICENSE"))
         : component.packageName === "qrcode.react" && notice.license === "MIT"
         ? readFileSync(path.join(repoRoot, "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"))

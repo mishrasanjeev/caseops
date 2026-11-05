@@ -27,6 +27,12 @@ CORE_SCREEN_READS = frozenset({"GET /api/auth/native/sessions", "GET /api/accoun
                                "GET /api/matter-work-queue"})
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
+             "apps/api/pyproject.toml", "apps/api/uv.lock",
+             "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
+             "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",
+             "apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json",
+             "apps/api/vendor/uharfbuzz-0.57.0/LICENSE",
+             "apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING",
              "tests/fixtures/statutes/structured-schedule-api.json",
              "tests/fixtures/node-default-tls-probe.cjs", ".dockerignore", ".gcloudignore",
              "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",

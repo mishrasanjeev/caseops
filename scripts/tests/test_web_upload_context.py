@@ -27,6 +27,20 @@ NPM_TOOLING_INPUTS = {
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
 }
+PDF_ATTRIBUTION_INPUTS = {
+    "apps/api/pyproject.toml", "apps/api/uv.lock",
+    "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
+    "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",
+    "apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json",
+    "apps/api/vendor/uharfbuzz-0.57.0/LICENSE",
+    "apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING",
+}
+PDF_PUBLIC_NOTICES = {
+    "apps/web/public/third-party-notices/liberation-fonts-2.1.5-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-devanagari-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/uharfbuzz-0.57.0-APACHE-LICENSE.txt",
+    "apps/web/public/third-party-notices/harfbuzz-15.0.0-OldMIT-COPYING.txt",
+}
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
@@ -39,11 +53,20 @@ BUILDER_INPUTS = {
         "ip-portfolio-export-completion", "run-id",
     )),
     *NPM_TOOLING_INPUTS,
+    *PDF_ATTRIBUTION_INPUTS,
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
 SIBLING_CANARIES = {
     "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/src/private-sibling.txt",
     "apps/api/tests/private-sibling.txt", "apps/other-private/canary.txt",
+    "apps/api/src/caseops_api/private-sibling.txt",
+    "apps/api/src/caseops_api/assets/private-sibling.txt",
+    "apps/api/src/caseops_api/assets/pdf_fonts/private-sibling.txt",
+    "apps/api/src/caseops_api/assets/pdf_fonts/LiberationSans-Regular.ttf",
+    "apps/api/vendor/private-sibling.txt",
+    "apps/api/vendor/pdf-fonts-20261104/private-sibling.txt",
+    "apps/api/vendor/pdf-fonts-20261104/liberation-fonts-ttf-2.1.5.tar.gz",
+    "apps/api/vendor/uharfbuzz-0.57.0/private-sibling.txt",
     "apps/other-private/deep/canary.txt", "tests/auth/canary.json",
     "tests/auth/deep/state.json", "tests/e2e/.auth/fake-state.json",
     "tests/e2e/support/deep/unlisted-helper.ts", "tests/e2e/support/unlisted-helper.ts",
@@ -81,10 +104,10 @@ class NativeUploadTests(unittest.TestCase):
         if self.evidence:
             self.evidence.mkdir(parents=True, exist_ok=False)
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
-        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *(
+        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *PDF_PUBLIC_NOTICES, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 67)
+        self.assertEqual(len(self.required), 71)
 
     def files(self, paths):
         for relative in paths:
@@ -200,8 +223,23 @@ class NativeUploadTests(unittest.TestCase):
         self.files(safe | SIBLING_CANARIES)
         original = (ROOT / ".dockerignore").read_text(encoding="utf-8")
         controls = {
-            "apps/**": {name for name in SIBLING_CANARIES if name.startswith((
-                "apps/api/", "apps/other-private/"))},
+            "apps/**": {name for name in SIBLING_CANARIES if name.startswith("apps/other-private/")},
+            "apps/api/**": {
+                "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/tests/private-sibling.txt",
+            },
+            "apps/api/src/**": {"apps/api/src/private-sibling.txt"},
+            "apps/api/src/caseops_api/**": {"apps/api/src/caseops_api/private-sibling.txt"},
+            "apps/api/src/caseops_api/assets/**": {"apps/api/src/caseops_api/assets/private-sibling.txt"},
+            "apps/api/src/caseops_api/assets/pdf_fonts/**": {
+                "apps/api/src/caseops_api/assets/pdf_fonts/private-sibling.txt",
+                "apps/api/src/caseops_api/assets/pdf_fonts/LiberationSans-Regular.ttf",
+            },
+            "apps/api/vendor/**": {"apps/api/vendor/private-sibling.txt"},
+            "apps/api/vendor/pdf-fonts-20261104/**": {
+                "apps/api/vendor/pdf-fonts-20261104/private-sibling.txt",
+                "apps/api/vendor/pdf-fonts-20261104/liberation-fonts-ttf-2.1.5.tar.gz",
+            },
+            "apps/api/vendor/uharfbuzz-0.57.0/**": {"apps/api/vendor/uharfbuzz-0.57.0/private-sibling.txt"},
             "apps/mobile/**": {"apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt"},
             "apps/mobile/vendor/**": {
                 "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",

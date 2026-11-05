@@ -74,6 +74,109 @@ Ram's Batch4 rows, counting only assertions production executed:
   under its own operation id. test-legal holds full_ip; later releases omit
   the grant input until the replay rule is decided.
 
+## BUG-016 — original invoice text lost during PDF export (2026-11-04)
+
+**Not fixed; verification and original production workflow pending.** Canonical
+mapping is J11/M10 billing, US-032/033 and FT-056; the dated report's M11 label
+is mapping drift (M11 is clients/KYC). Production M's first reported invoice
+line failed the raw text assertion and matched only the renderer's typography
+translation in diagnostic run41746670644. The second invoice was unreached.
+The controlled negative baseline reached27call failures/81complete phases,
+zero skips/errors; its earlier hostname setup failure remains separate.
+
+The proposed shared renderer preserves source values, uses fourteen pinned
+licensed Latin/Devanagari faces with real shaping, and refuses unsupported
+glyphs without a partial PDF or data rewrite. Five existing export generators,
+native font integrity, both font licences and both shaping-engine notices are
+in scope. The first positive run reached20passes/seven table-call failures:
+native table headings require the bold face before lazy font selection.
+Registering all four genuine selected-family faces addresses that boundary;
+the original27 are unchanged and12 actual-table profile/style regressions added.
+That four-face replacement later passed27/81, while the adjacent54/162 run
+retained13 mixed-script extraction failures (41passes/zero skips). A bounded
+three-synthetic-PDF diagnostic proved an unmapped continuation CID4 became
+an extra U+0004 in PDFium. The subsequent per-document ActualText
+correction preserves the unchanged rendering operators and original oracles;
+its initial87-case plan retained exact pixel and parser acceptance separately.
+The semantic27 replay later passed; the60-case component retained55passes
+and five post-output PDFContentStream instrumentation TypeErrors, all180 phases
+complete/no skips. The original13 extraction failures now pass in their
+unchanged45-case file. A bounded, actual-SDK stream-inspection test correction
+adds three refusal cases. The replacement63/189 phases then passed under
+the original120-second bound, and the same three synthetic PDFs produced
+byte-identical rendered pixels. The original PDFjs decoder still fails the
+Hindi/mixed samples with extra controls; its Latin punctuation/rupee sample
+and all amounts pass. CaseOps-owned reader recovery is separately pending.
+Full API caller/build/security and original two-invoice deployed acceptance
+remain pending. Subsequent lint-only formatting preserves every assertion and
+non-import AST; fresh native coverage of the final merged source is pending. No all-Unicode
+or fixed claim is made. See [the bounded repair brief](bugfix-invoice-pdf-unicode-2026-11-04.md).
+
+## November 4 candidate integration with PR580
+
+PR580 merged as `07f56ebc61b46f30980f70930dbeeda1c2132e6b` while this
+candidate was being verified. Its watched-event identity fix, regression tests,
+governance projection and run-ID guard are retained. The current candidate
+extends its PDF punctuation fix using source-preserving Unicode fonts; it does
+not retain the Windows-1252 replacements for rupee, arrows or Indic text.
+The PR580 notes below describe that merged implementation and its evidence,
+not a claim that this newer candidate has been deployed or fully verified.
+
+The later Windows diagnostic41746670644 also observed the specialist select
+inside a disabled fieldset (own disabled property false, effective disabled
+true). A real-browser negative/positive contract now covers the auditor repair;
+the original full deployed crawl remains unverified. This new observation is
+separate from the earlier inconclusive replays in B4-ADJ-32 below.
+
+The later local repair retains native ToUnicode geometry for complete ordered
+clusters and uses semantic recovery for reordered/repeated clusters and joiners.
+Physical contrast now measures actual text-object ink against its surrounding
+background; the4.5 threshold remains. The final28-case semantic/contrast module
+passed all84 phases, including mixed Devanagari and a leading joiner. Two separate
+metadata controls passed all6 phases: exact Windows metadata probes are denied
+before process creation, and normal platform metadata uses its real fallback.
+Unknown/subject process, network and database operations remain refused. These
+are focused development results, not full frozen or deployed acceptance. The
+updated PDF inventory is27 original fidelity +82 font/packaging/semantic cases,
+plus2 metadata controls. Complex-script semantic selection geometry remains
+limited. The separate GCS import change defers its SDK until actual GCS use;
+all48 existing storage assertions are retained and2 import regressions added,
+but the complete14-case storage run and41-case reader replacement are pending.
+
+Current local verification on f204ba30 reached all90 focused API cases and
+all270 phases:76 calls passed and14 failed; all setups/teardowns passed. The
+native600-second acceptance also expired, so the combined gate remains failed.
+Thirteen failures are PDF legibility checks and one is a new test's incorrect
+expectation of application/json instead of the canonical application/problem+json.
+An offline exact-renderer reproduction found whole-fragment ActualText collapsing
+39 heading characters into the first glyph's rectangle. A separate tight-box
+background heuristic also misclassifies narrow black I/l glyphs. Both geometry
+and independent contrast acceptance remain under repair; the4.5 threshold stays.
+The current five frontend modules passed76 cases, and full component/E2E
+TypeScript projects compiled. The reader41 gate reached40 passes/one failed
+OCR pixel fixture; that fixture now has explicit black/white pixels and closed
+native bitmap evidence, but replacement41 is pending. A strict two-case diagnostic
+identified a denied urllib3 IPv6 socket constructor during eager cloud-storage
+SDK import; no connection was admitted. Original failures and timed-out gates
+remain retained. PR577 and PR583 are now being integrated before a fresh freeze.
+
+## November 4 local integration with PR584 (38bdc754)
+
+The BUG-016 narrative above retains its earlier failures and incomplete
+boundaries. Later local commit233293 passed176 affected cases (PDF84 and
+four API files92); its production renderer is unchanged by the two-file
+colon-bbox test correction. The earlier50bd targeted242 remain scoped to
+that source. PDFjs compatibility and the original deployed two-invoice
+workflow remain open. This local integration is unpublished and has not
+yet passed fresh UI/full-suite acceptance.
+
+The PR584 handover below records its production findings. The retained
+Windows f49 tester report has83 passes, one failure and13 declared skips;
+its IPLF-026A failure does not retain an HTTP status. The handover
+reported504 is a separate source statement, not independently verified
+response evidence from that retained Windows report. Later mobile and
+governance steps were unreached.
+
 ## November 5 Production Run On 38bdc754: B4-ADJ-32, 34 Proven; B4-ADJ-35..36
 
 Prod-verify 41891854452 (release 38bdc754, #584): every role passed except

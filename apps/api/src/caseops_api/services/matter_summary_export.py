@@ -214,7 +214,7 @@ def _pdf_section(pdf, heading: str, items: list[str], *, bullet: bool = False) -
 
 
 def _ascii_safe(text: str) -> str:
-    """Text the PDF core font prints; the one shared mapping in pdf_layout."""
+    """Compatibility name; preserve source text with the pinned PDF font set."""
     from caseops_api.services.pdf_layout import pdf_text
 
     return pdf_text(text)

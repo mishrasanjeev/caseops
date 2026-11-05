@@ -1,0 +1,48 @@
+{
+  "name": "uharfbuzz",
+  "version": "0.57.0",
+  "upstream_commit": "59c2acb676ffdd0ffeae6ad9e718bce87523abe0",
+  "bundled_harfbuzz": {
+    "version": "15.0.0",
+    "commit": "35f656a1a2bab548ea7f54a6dd3fba2b09680d14",
+    "notice": "harfbuzz-COPYING"
+  },
+  "source_sdist_sha256": "55136df18a9dd09fec36d1ceb77965f3108de6d86c338b3825feedb0730d84b7",
+  "official_wheels": {
+    "uharfbuzz-0.57.0-cp311-abi3-win_amd64.whl": "0448bc4ab92a9c65a8526fa743452c2313314d1d9675d308cf989da99ace8e04",
+    "uharfbuzz-0.57.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl": "72b5251e81fbde5e398ecd5d618c521be8cfde42f281d569e47ab9c9a5e669fe"
+  },
+  "notices": [
+    {
+      "path": "LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "official_source": "https://raw.githubusercontent.com/harfbuzz/uharfbuzz/59c2acb676ffdd0ffeae6ad9e718bce87523abe0/LICENSE",
+      "HTTP": {
+        "status": 200,
+        "marker": "no-paid-providers",
+        "default_TLS": true,
+        "redirect": "manual",
+        "auth": "none",
+        "timeout_ms": 30000,
+        "elapsed_ms": 417
+      }
+    },
+    {
+      "path": "harfbuzz-COPYING",
+      "bytes": 1971,
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+      "official_source": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/35f656a1a2bab548ea7f54a6dd3fba2b09680d14/COPYING",
+      "HTTP": {
+        "status": 200,
+        "marker": "no-paid-providers",
+        "default_TLS": true,
+        "redirect": "manual",
+        "auth": "none",
+        "timeout_ms": 30000,
+        "elapsed_ms": 339
+      }
+    }
+  ],
+  "policy": "Unmodified upstream wheel and native library. This records exact original notices, not a dependency installation or vulnerability verdict."
+}
