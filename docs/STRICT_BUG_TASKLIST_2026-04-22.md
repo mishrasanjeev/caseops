@@ -1,5 +1,79 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 5 Production Run On 2aae2367: B4-ADJ-35, 37 Proven; B4-ADJ-36, 38, 39 Open
+
+Prod-verify 41971095146 (release 2aae2367, #587 and #588) succeeded in every
+role: Batch4 desktop 36/36, mobile 14/14, governance 2/2 and 2/2, no skips,
+and exact-release evidence was recorded. deploy-prod.sh exited 1 at the
+test-legal grant receipt (B4-ADJ-39) after every earlier gate passed and
+`caseops-api-00516-hnk` was serving 2aae2367, so prod-verify was dispatched
+manually for the same SHA; dispatch was the only step the failure skipped.
+
+Ram's Batch4 rows, counting only assertions production executed:
+
+- Properly fixed on 2aae2367, desktop and mobile: BUG-001, BUG-002, BUG-005,
+  BUG-007, BUG-008, BUG-009, BUG-012, BUG-013, BUG-014, BUG-016 (including the
+  `[prod-only]` reported invoices INVR-2026-028 and INVR-2026-068) and ENH-017.
+- Partially fixed: BUG-015. The control crawl passed on 22 routes plus the
+  Madrid and client-portal journeys; the row asks for autonomous
+  full-application testing, which the crawl (FT-099) is narrower than.
+- Inconclusive: BUG-003 and BUG-004 (the pickers equal the server-eligible
+  lists and are never dead selects, but the run does not record whether an
+  active governed rule or calendar existed, so production may only have shown
+  the explained, disabled state); BUG-006 (production never submits a rule);
+  BUG-010 (the Matter assignment stays disabled on the production record;
+  linking and assigning is `[local-only]`); BUG-011 (test-legal has no
+  accepted portal instruction, so that picker is never populated). Each
+  populated path is proven only by its `[local-only]` journey.
+
+- B4-ADJ-35 Status: Properly fixed, production-proven on 9f587392 and
+  2aae2367: `BUG-002 Ram's Documents Classification is provisioned, never
+  seeded, and previews a classified name` passed in both Batch4 roles.
+- B4-ADJ-36 Status: Not fixed. The narrower currentness query shipped, and
+  IPLF-063B passed, but the endpoint's first call after the release took
+  8.75 s on 00516 (8.08 s on 00515) against the probe's 10 s budget; later
+  calls took 1.1 to 1.4 s (1.3 to 1.5 s before). The instance had served many
+  requests just before, so this is not container start: it is the first scan
+  in about five hours against a cold database cache. The bench's dominant
+  query is not production's. Cloud SQL Query Insights is off on `caseops-db`,
+  so production per-query timing needs either scan-phase timing in the
+  endpoint's logs or Insights enabled.
+- B4-ADJ-37 Status: Properly fixed, production-proven on 2aae2367: the bounded
+  read returned execution `caseops-test-legal-manual-ip-grant-2gpnn`'s receipt
+  within its budget (five releases before timed out at 41 to 42 s).
+- B4-ADJ-38 Status: Not fixed (Cloud Run platform start latency; tracked by
+  owner decision). The same test passed on 2aae2367.
+  Tester `ram-2026-10-10-prod.spec.ts` "upload and two distinct reindexes
+  complete without losing bytes after reload" failed on 9f587392 (prod-verify
+  41934282576, contract case) at its 90-second index budget. The upload
+  returned 200 at 00:50:52 and dispatched `caseops-document-processing-4zgpx`;
+  Cloud Run's `Started` condition reads "Started deployed execution in
+  1m30.5s" (cadence execution `vfmdd`: 1m20.08s). Both, and the normal
+  execution `f55nd`, started at 00:52:23.6-.9; the worker then ran its usual
+  10-15 s and `vfmdd` indexed the file. Across 1,000 executions
+  (2026-11-04 10:14 to 2026-11-05 01:30) start latency is p50 5.5 s, p90 7.3 s,
+  p99 10.7 s, with four outliers: 2rd82 58.8 s, 5fwwm 74.5 s, vfmdd 80.1 s,
+  4zgpx 90.5 s (0.4%), each released together with the executions waiting
+  beside it. Ruled out: database locks (worker `lock_timeout` 5 s and
+  `statement_timeout` 60 s would raise, and every run succeeded), connection
+  stalls (`connect_timeout` 10 s), SQL Admin API throttling (all
+  `GenerateEphemeralCert`/`GetConnectSettings` calls 200), and image import
+  (`ContainerReady` within 1.2 s). The job runs the gen2 execution
+  environment. Not a CaseOps code defect and not a Ram defect; the 90 s budget
+  is not raised. A real fix removes the per-execution start from the upload
+  path (for example, a continuously polling worker), which is an
+  infrastructure and cost decision for the owner.
+- B4-ADJ-39 Status: Not fixed. deploy-prod.sh on 2aae2367 failed closed with
+  `grant_receipt_mismatch`. Every release since 2026-11-01 reused one grant
+  input (operation 27b15edb). One of the earlier, timed-out runs applied the
+  grant, so execution 2gpnn returned a replay receipt (`replayed: true`, after
+  fingerprint 22ca52e6). The job returns a replay only when the stored audit
+  event matches, test-legal still holds full_ip and the current fingerprint
+  equals the recorded after fingerprint. The release script accepts only
+  `replayed: false`, so a grant whose receipt was lost can never be verified
+  under its own operation id. test-legal holds full_ip; later releases omit
+  the grant input until the replay rule is decided.
+
 ## November 5 Production Run On 38bdc754: B4-ADJ-32, 34 Proven; B4-ADJ-35..36
 
 Prod-verify 41891854452 (release 38bdc754, #584): every role passed except
