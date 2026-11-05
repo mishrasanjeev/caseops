@@ -58,7 +58,7 @@ export function Pricing() {
         <SectionHeader
           eyebrow="Pricing"
           title="One versioned rate card."
-          description="The pricing page is the canonical plan catalog for solos, firms, and legal teams. Activation remains assisted while production payments complete UAT and founder signoff."
+          description="The pricing page is the canonical plan catalog for solos, firms, and legal teams. Plans are activated by the CaseOps team, with a 14-day trial to start."
         />
 
         <div className="mt-14 grid gap-6 md:grid-cols-3">

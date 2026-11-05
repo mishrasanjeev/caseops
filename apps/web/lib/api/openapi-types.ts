@@ -2536,7 +2536,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start Trial */
+        /**
+         * Start Trial
+         * @description Self-serve sign-up: create the workspace and start its 14-day trial.
+         */
         post: operations["start_trial_api_billing_trials_post"];
         delete?: never;
         options?: never;

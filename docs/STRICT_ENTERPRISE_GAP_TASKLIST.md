@@ -1,5 +1,19 @@
 # Strict Enterprise Gap Tasklist
 
+## BILL-PLAN-ENFORCEMENT-2026-11-04 — Plan entitlements versus pricing claims
+
+**Partially implemented.** Recorded during the 2026-11-04 pricing review
+(`docs/PRICING_COMPETITIVE_REVIEW_2026-11-04.md`, sections 4, 8 and 9). Catalog
+`2026.11.v1` now publishes only enforced limits, grants included credits monthly on
+annual periods, funds provider budgets per plan, and makes an ended trial block new
+work; web sign-up starts the trial. Still open, each a fail-open billing control:
+`POST /api/bootstrap/company` yields an unlimited grandfathered workspace; gates pass
+when no subscription row exists and ignore suspended/cancelled status; employee
+creation, user reactivation, intake promotion and matter reopen bypass limits;
+included-credit expiry can consume purchased top-ups; coupons and overage policies are
+never applied; `billing_limit.*` denial audit rows roll back with the refused request.
+Not deployed; no production verification yet.
+
 ## REL-APP-CAPACITY-2026-11-03 — Source-bound App project capacity
 
 **Partially implemented; release NO-GO.** QG-REL-005/QG-REL-008. The original

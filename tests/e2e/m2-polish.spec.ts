@@ -16,7 +16,8 @@ async function bootstrapWorkspace(page: import("@playwright/test").Page): Promis
 }> {
   const suffix = uniqueId("m2").slice(-8);
   const slug = `m2-${suffix}`;
-  const email = `owner-${suffix}@example.com`;
+  // Sign-up starts a trial, limited to one per e-mail domain.
+  const email = `owner@${slug}.example.com`;
 
   await page.goto("/sign-in");
   await page.getByRole("tab", { name: /New workspace/i }).click();

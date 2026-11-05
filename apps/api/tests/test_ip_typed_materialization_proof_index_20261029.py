@@ -282,7 +282,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
         assert str(refused.value) == (
-            "Gemini/mobile migration merge is restore-forward; restore the reviewed backup."
+            "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting

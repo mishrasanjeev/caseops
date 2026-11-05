@@ -14,7 +14,8 @@ test.describe("New cockpit — bootstrap + document upload", () => {
   }) => {
     const suffix = uniqueId("bg010").slice(-8);
     const slug = `bg010-${suffix}`;
-    const email = `owner-${suffix}@example.com`;
+    // Sign-up starts a trial, limited to one per e-mail domain.
+    const email = `owner@${slug}.example.com`;
     const password = "FoundersPass123!";
 
     await page.goto("/sign-in");

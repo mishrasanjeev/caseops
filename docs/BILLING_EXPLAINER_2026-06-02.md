@@ -1,7 +1,9 @@
 # CaseOps Billing - End-to-End Explainer
 
 **Status:** Reviewed against implementation on 2026-06-02
-**Catalog version:** `2026.05.v1`
+**Catalog version:** `2026.05.v1` (superseded for new subscriptions by `2026.11.v1` on 2026-11-04;
+see `docs/PRICING_COMPETITIVE_REVIEW_2026-11-04.md` and the amendment at the top of
+`docs/PRD_CASEOPS_PRICING_BILLING_PLURAL_ADMIN_2026-05-31.md`)
 **Currency:** INR only. Monetary values are stored in minor units (paisa).
 **Payment rail:** Pine Labs Plural V2, currently safe by configuration when `pine_labs_env=disabled`.
 

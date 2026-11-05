@@ -7,6 +7,27 @@ Owner: CaseOps product/admin
 Primary users: Solo lawyers, Indian law firms, corporate General Counsel teams, CaseOps platform operators
 Related PRD: `docs/PRD_CASEOPS_AI_ENHANCEMENTS_2026-05-26.md`
 
+## 0.0 Catalog 2026.11.v1 Amendment - 2026-11-04
+
+Catalog `2026.11.v1` supersedes the prices and limits in sections 7.2-7.6 and the
+tracked-case add-on prices in 8.1 for new subscriptions. Existing subscriptions keep
+`2026.05.v1`. Owner decisions, competitor evidence, cost basis and margin model:
+`docs/PRICING_COMPETITIVE_REVIEW_2026-11-04.md`.
+
+- Prices: Solo unchanged; Firm Starter Rs 5,999, Firm Growth Rs 17,999, Firm Pro Rs 49,999
+  per month + GST; every monthly plan's annual price is ten months; GC prices unchanged.
+- Tracked cases cut to what the eCourtsIndia refresh ceiling (Rs 1.65 per call in code) can
+  fund: Solo 15/40/120, Firm 150/400/1,000, GC 750/1,500/4,000. Case packs: 500 for
+  Rs 4,999/mo, 1,000 for Rs 8,999/mo.
+- New entitlement `provider_spend_monthly_minor` funds each plan's shared Indian Kanoon +
+  eCourtsIndia budget (replaces the flat Rs 1,000 default for plans that carry it).
+- Unenforced keys `case_refresh_cadence`, `api_access_enabled`, `audit_export_enabled` and
+  `sso_enabled` are omitted, and the API access add-on is not offered, until each is enforced.
+- Included AI credits are granted monthly within annual periods (section 8.2 rule now holds
+  for annual plans).
+- Trial (section 7.2): 50 credits; self-serve web sign-up starts it; after `trial_end` new
+  work is blocked and existing work stays readable.
+
 ## 0. Current Production Status - 2026-06-02
 
 - Pricing page, SaaS billing APIs, tenant billing UI, tenant usage/downloads,

@@ -77,6 +77,34 @@ INDEXES = {
 }
 
 
+# Migration 20261104_0001 seeds catalog 2026.11.v1 into three reference
+# tables. Those added rows are the only original-table change allowed between
+# the named head and the current head; every retained row must still match.
+CATALOG_SEED_VERSION = "2026.11.v1"
+CATALOG_SEED_KEYS = {
+    "billing_plan_versions": "id",
+    "billing_plan_prices": "plan_version_id",
+    "billing_plan_entitlements": "plan_version_id",
+}
+
+
+def without_current_head_catalog_seed(engine, rows):
+    with engine.connect() as connection:
+        seeded = set(
+            connection.scalars(
+                text("SELECT id FROM billing_plan_versions WHERE version = :version"),
+                {"version": CATALOG_SEED_VERSION},
+            )
+        )
+    assert seeded, "Current head must carry the 2026.11.v1 catalog seed"
+    schema = inspect(engine)
+    result = dict(rows)
+    for table, column in CATALOG_SEED_KEYS.items():
+        index = [c["name"] for c in schema.get_columns(table)].index(column)
+        result[table] = [row for row in rows[table] if row[index] not in seeded]
+    return result
+
+
 def preserved_catalog(before, after):
     """Every old catalog value survives; only literal 0008 objects are added."""
     assert set(after["tables"]) == set(before["tables"]) | NEW_TABLES
@@ -277,7 +305,7 @@ def test_named_0008_waits_for_acknowledged_historical_source_writer_before_curre
         # Current-head work starts only after both historical Futures returned.
         command.upgrade(config, captured_head)
         current_rows, current_catalog = _rows(engine, original_names), _catalog(engine)
-        assert current_rows == after
+        assert without_current_head_catalog_seed(engine, current_rows) == after
         actual_outboxes = _rows(engine, OUTBOXES)
         assert actual_outboxes == outboxes
         require_physical(engine, scope, rows)

@@ -5,7 +5,7 @@ import { PricingPageClient } from "./PricingPageClient";
 export const metadata: Metadata = {
   title: "Pricing for Indian legal teams",
   description:
-    "Explore CaseOps plans for solo advocates, law firms, and in-house legal teams in India. Compare current plan limits and request assisted activation.",
+    "Published INR plans for solo advocates, law firms, and in-house legal teams in India. Research, drafting, matters, and court tracking in every plan, with a 14-day trial and no card.",
   alternates: { canonical: "/pricing" },
 };
 

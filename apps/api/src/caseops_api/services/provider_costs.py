@@ -26,7 +26,7 @@ from caseops_api.schemas.provider_costs import (
     ProviderCostProfileUpdateRequest,
 )
 
-CATALOG_VERSION = "2026.05.v1"
+CATALOG_VERSION = "2026.11.v1"
 CASE_REFRESH_WARNING_MINOR = 10
 MONEY_COST_CATEGORIES = {
     ProviderCostCategory.CASE_REFRESH,

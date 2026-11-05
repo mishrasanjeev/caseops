@@ -550,7 +550,7 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
         assert current
         # The merge refuses before either parent's version or catalog can change.
         expected_refusal = (
-            "Gemini/mobile migration merge is restore-forward; restore the reviewed backup."
+            "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )
         command.upgrade(config, "head")
         scope, _, rows, _ = seed_old(engine)

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { bootstrapCompany } from "@/lib/api/auth";
+import { startTrialWorkspace } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
 
@@ -39,9 +39,9 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 /**
- * In-app company bootstrap (BG-010). On success the API returns an
- * `AuthSession` identical to /login; we store it and push the owner
- * straight into the new workspace.
+ * Self-serve sign-up (BG-010). Creating a workspace starts its 14-day
+ * trial; the API returns an `AuthSession` identical to /login, which we
+ * store before pushing the owner straight into the new workspace.
  */
 export function NewWorkspaceForm() {
   const router = useRouter();
@@ -58,8 +58,8 @@ export function NewWorkspaceForm() {
   });
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) => bootstrapCompany(values),
-    onSuccess: (session) => {
+    mutationFn: (values: FormValues) => startTrialWorkspace(values),
+    onSuccess: ({ session }) => {
       storeSession(session);
       toast.success(`Workspace created — welcome, ${session.user.full_name.split(" ")[0]}.`);
       router.replace("/app");
@@ -200,6 +200,10 @@ export function NewWorkspaceForm() {
           "Create workspace"
         )}
       </Button>
+      <p className="text-xs text-[var(--color-mute-2)]">
+        Starts a 14-day trial. No card needed. After 14 days the workspace stays
+        readable until a plan is activated.
+      </p>
     </form>
   );
 }
