@@ -2121,6 +2121,47 @@ def test_integrity_ignores_stale_retired_generations(
         assert report.generation_manifest_matches is True
 
 
+def test_integrity_scan_never_selects_projection_payloads(
+    client: TestClient,
+) -> None:
+    # B4-ADJ-36: the currentness check loaded every live projection with its
+    # chunk text and embedding JSON, and the readiness probe on the retained
+    # production QA tenant ran out its 10 s budget. Payload columns may appear
+    # in a predicate (the unsafe-tombstone check), never in a select list.
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    _matter(client, token, "B4-ADJ-36-PAYLOAD")
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    select_lists: list[str] = []
+
+    def capture(_conn, _cursor, statement, *_args) -> None:
+        normalized = " ".join(statement.split())
+        if normalized.upper().startswith("SELECT"):
+            select_lists.append(normalized.split(" FROM ", 1)[0])
+
+    engine = get_engine()
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with get_session_factory()() as session:
+            report = inspect_private_index_integrity(session, company_id=company_id)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert report.state == "ready"
+    assert report.live_projection_count >= 1
+    assert report.stale_source_count == 0
+    assert select_lists
+    assert [
+        columns
+        for columns in select_lists
+        if "content_text" in columns or "embedding_json" in columns
+    ] == []
+
+
 def test_private_embedding_provider_has_a_hard_deadline(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

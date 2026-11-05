@@ -1092,9 +1092,17 @@ def inspect_private_index_integrity(
         or 0
     )
     orphan_scope_count += unscoped
+    # Read only the columns the currentness check compares. Whole projection
+    # rows carry every chunk's text and embedding JSON, which made this the
+    # slowest query of the scan.
     live_sources = list(
-        session.scalars(
-            select(PrivateIndexProjection)
+        session.execute(
+            select(
+                PrivateIndexProjection.source_type,
+                PrivateIndexProjection.source_id,
+                PrivateIndexProjection.source_version,
+                PrivateIndexProjection.content_sha256,
+            )
             .where(
                 PrivateIndexProjection.company_id == company_id,
                 PrivateIndexProjection.generation_id == active_generation_id,
