@@ -7,6 +7,12 @@ October 31 Ram Batch 4.
 
 ## Verdicts
 
+Production, 2026-11-05 (release 2aae2367, prod-verify 41971095146): eleven
+rows are `Properly fixed`, BUG-015 is `Partially fixed`, and BUG-003, BUG-004,
+BUG-006, BUG-010 and BUG-011 are `Inconclusive` because production never
+reaches their populated selection (mechanisms 2 and 4 below). The ledger
+entry of that date gives each reason. Before deployment (2026-10-31):
+
 Every row is `Inconclusive - complete local proof; production verification as
 the reporting tester pending`. Nothing is deployed. BUG-003..006 also need the
 IPLF-027B A1 release and the A2 governance enable before Ram can reach them.
