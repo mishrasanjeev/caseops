@@ -1,4 +1,4 @@
-import type { IpWatchWorkspace } from "@/lib/api/endpoints";
+import type { IpWatchHit, IpWatchProfile, IpWatchWorkspace } from "@/lib/api/endpoints";
 
 /** The loaded watch pages as one workspace, with each list's server total. */
 export type MergedWatchWorkspace = IpWatchWorkspace & {
@@ -32,6 +32,26 @@ export function mergeWatchPages(pages: IpWatchWorkspace[]): MergedWatchWorkspace
     ingestion_runs: pages[0].ingestion_runs,
     hasMore: nextWatchOffset(pages) !== undefined,
   };
+}
+
+/** Rows a mutation's response just returned, as the server stored them. */
+export type ConfirmedWatchRows = { profile?: IpWatchProfile; hit?: IpWatchHit };
+
+/**
+ * Writes rows the server just confirmed into every loaded page. A workspace
+ * read takes seconds on a large tenant, so without this the screen kept the
+ * old status (and the old version a next action must send) until the slower
+ * refetch returned (BUG-014: "paused" stayed "active" for about 12 s).
+ */
+export function withConfirmedRows(pages: IpWatchWorkspace[], rows: ConfirmedWatchRows): IpWatchWorkspace[] {
+  const swap = <T extends { id: string }>(list: T[], row: T | undefined) =>
+    row ? list.map((item) => (item.id === row.id ? row : item)) : list;
+  return pages.map((page) => ({
+    ...page,
+    profiles: swap(page.profiles, rows.profile),
+    hit_profiles: swap(page.hit_profiles, rows.profile),
+    hits: swap(page.hits, rows.hit),
+  }));
 }
 
 /** The next offset to read, or undefined when every list is read to its total. */

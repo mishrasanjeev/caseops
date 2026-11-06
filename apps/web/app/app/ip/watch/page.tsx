@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type InfiniteData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -60,6 +60,7 @@ import {
   type IpWatchHandoff,
   type IpWatchHit,
   type IpWatchProfile,
+  type IpWatchWorkspace,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import {
@@ -73,7 +74,7 @@ import {
 } from "@/lib/ip/journal-capture";
 import { parseJurisdictions } from "@/lib/ip/jurisdictions";
 import { parseNiceClasses } from "@/lib/ip/nice-classes";
-import { mergeWatchPages, nextWatchOffset, watchCountText } from "@/lib/ip/watch-pages";
+import { type ConfirmedWatchRows, mergeWatchPages, nextWatchOffset, watchCountText, withConfirmedRows } from "@/lib/ip/watch-pages";
 import { useSession } from "@/lib/use-session";
 
 const DATE = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -220,6 +221,17 @@ export default function IpJournalWatchPage() {
     await queryClient.invalidateQueries({ queryKey: ["ip", "watch"] });
   }
 
+  // Show what the server confirmed now, then refetch in the background. The
+  // refetch discards any read begun before the change, so older rows never land
+  // on top; the confirmed row carries the new version, so the next action need
+  // not wait for the slower read.
+  async function applyConfirmed(rows: ConfirmedWatchRows) {
+    queryClient.setQueryData<InfiniteData<IpWatchWorkspace, number>>(["ip", "watch", docketId], (current) =>
+      current ? { ...current, pages: withConfirmedRows(current.pages, rows) } : current,
+    );
+    void refresh();
+  }
+
   if (!canRead) {
     return (
       <div className="flex flex-col gap-6">
@@ -306,6 +318,7 @@ export default function IpJournalWatchPage() {
           membershipId={session.context?.membership.id ?? ""}
           canManage={canManage}
           onChanged={refresh}
+          onConfirmed={applyConfirmed}
         />
       ) : view === "ingest" ? (
         <JournalIntake
@@ -346,6 +359,7 @@ export default function IpJournalWatchPage() {
           membershipId={session.context?.membership.id ?? ""}
           canManage={canManage}
           onChanged={refresh}
+          onConfirmed={applyConfirmed}
         />
       )}
     </div>
@@ -548,6 +562,7 @@ function ProfilesView({
   membershipId,
   canManage,
   onChanged,
+  onConfirmed,
 }: {
   profiles: IpWatchProfile[];
   profileTotal: number;
@@ -556,6 +571,7 @@ function ProfilesView({
   membershipId: string;
   canManage: boolean;
   onChanged: () => Promise<void>;
+  onConfirmed: (rows: ConfirmedWatchRows) => Promise<void>;
 }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -576,7 +592,7 @@ function ProfilesView({
   });
   const status = useMutation({
     mutationFn: updateIpWatchProfileStatus,
-    onSuccess: async () => { toast.success("Watch profile status updated."); await onChanged(); },
+    onSuccess: async (profile) => { toast.success("Watch profile status updated."); await onConfirmed({ profile }); },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update watch profile.")),
   });
   const [profileDocketId, setProfileDocketId] = useState(scopeDocketId);
@@ -1242,7 +1258,7 @@ function CapturedEvidence({ publication }: { publication: IpJournalPublication }
   );
 }
 
-function HitsView({ hits, hitTotal, more, profiles, publication, selectedHit, selectedProfile, selectedHitId, setSelectedHitId, handoffs, core, membershipId, canManage, onChanged }: {
+function HitsView({ hits, hitTotal, more, profiles, publication, selectedHit, selectedProfile, selectedHitId, setSelectedHitId, handoffs, core, membershipId, canManage, onChanged, onConfirmed }: {
   hits: IpWatchHit[];
   hitTotal: number;
   more: MoreRows;
@@ -1257,6 +1273,7 @@ function HitsView({ hits, hitTotal, more, profiles, publication, selectedHit, se
   membershipId: string;
   canManage: boolean;
   onChanged: () => Promise<void>;
+  onConfirmed: (rows: ConfirmedWatchRows) => Promise<void>;
 }) {
   if (hits.length === 0) return <EmptyState title="No watch hits" description={profiles.length ? "No journal evidence matches the selected docket profiles. Recorded journal entries are listed under Journal intake." : "Create a watch profile, then record official journal evidence."} />;
   return (
@@ -1280,7 +1297,7 @@ function HitsView({ hits, hitTotal, more, profiles, publication, selectedHit, se
             <div className="flex gap-3 border-l-2 border-[var(--color-brand-500)] pl-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>AI assistance is advisory.</strong><p className="mt-1 text-[var(--color-mute)]">{selectedHit.advisory_notice}</p></div></div>
           </CardContent>
         </Card>
-        {canManage ? <ReviewPanel hit={selectedHit} onChanged={onChanged} /> : null}
+        {canManage ? <ReviewPanel hit={selectedHit} onConfirmed={onConfirmed} /> : null}
         {canManage && ["relevant", "client_instruction", "enforcement_opened"].includes(selectedHit.disposition) ? <HandoffPanel hit={selectedHit} publication={publication} core={core} membershipId={membershipId} handoffs={handoffs.filter((item) => item.hit_id === selectedHit.id)} onChanged={onChanged} /> : null}
       </div> : <EmptyState title="Select a hit" description="Choose a journal candidate to inspect source and similarity evidence." />}
     </div>
@@ -1354,11 +1371,11 @@ function scopeLabel(scope: Record<string, unknown>) {
   return "Not supplied";
 }
 
-function ReviewPanel({ hit, onChanged }: { hit: IpWatchHit; onChanged: () => Promise<void> }) {
+function ReviewPanel({ hit, onConfirmed }: { hit: IpWatchHit; onConfirmed: (rows: ConfirmedWatchRows) => Promise<void> }) {
   const [disposition, setDisposition] = useState<IpWatchDisposition>(hit.disposition);
   const [reason, setReason] = useState(hit.disposition_reason ?? "");
   const [sourceConfirmed, setSourceConfirmed] = useState(false);
-  const mutation = useMutation({ mutationFn: decideIpWatchHit, onSuccess: async () => { toast.success("Attorney review recorded."); await onChanged(); }, onError: (error) => toast.error(apiErrorMessage(error, "Could not record the review.")) });
+  const mutation = useMutation({ mutationFn: decideIpWatchHit, onSuccess: async (decided) => { toast.success("Attorney review recorded."); await onConfirmed({ hit: decided }); }, onError: (error) => toast.error(apiErrorMessage(error, "Could not record the review.")) });
   return <Card><CardHeader><CardTitle as="h2">Attorney disposition</CardTitle></CardHeader><CardContent><form className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_auto] lg:items-end" onSubmit={(event) => { event.preventDefault(); mutation.mutate({ hitId: hit.id, expectedVersion: hit.version, disposition, reason, sourceConfirmed }); }}><div><Label htmlFor="hit-disposition">Disposition</Label><select id="hit-disposition" className={SELECT_CLASS} value={disposition} onChange={(event) => setDisposition(event.target.value as IpWatchDisposition)}>{["new", "reviewing", "relevant", "not_relevant", "monitor", "client_instruction", "enforcement_opened", "closed"].map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></div><div><Label htmlFor="disposition-reason">Reason</Label><Input id="disposition-reason" value={reason} onChange={(event) => setReason(event.target.value)} required /></div><Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Record review</Button><label className="flex items-center gap-2 text-sm lg:col-span-3"><input type="checkbox" checked={sourceConfirmed} onChange={(event) => setSourceConfirmed(event.target.checked)} />I opened and confirmed the official journal source for this decision.</label></form></CardContent></Card>;
 }
 

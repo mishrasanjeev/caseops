@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { IpWatchWorkspace } from "@/lib/api/endpoints";
-import { mergeWatchPages, nextWatchOffset, watchCountText } from "@/lib/ip/watch-pages";
+import { mergeWatchPages, nextWatchOffset, watchCountText, withConfirmedRows } from "@/lib/ip/watch-pages";
 
 function page(offset: number, ids: { profiles: string[]; hits: string[]; publications: string[] }, totals = { profile: 12, hit: 12, publication: 3 }): IpWatchWorkspace {
   return {
@@ -57,5 +57,33 @@ describe("watch workspace pages", () => {
     expect(watchCountText(1, 1, ["profile", "profiles"])).toBe("1 profile.");
     expect(watchCountText(0, 0, ["hit", "hits"])).toBe("0 hits.");
     expect(mergeWatchPages([])).toBeUndefined();
+  });
+
+  it("shows a confirmed pause and hit review on every loaded page without waiting for the refetch", () => {
+    const pages = [
+      page(0, { profiles: ["p0", "p1"], hits: ["h0"], publications: [] }),
+      page(5, { profiles: ["p5"], hits: ["h5"], publications: [] }),
+    ];
+    pages[0].profiles = [
+      { id: "p0", poll_status: "active", version: 3 } as never,
+      { id: "p1", poll_status: "active", version: 1 } as never,
+    ];
+    pages[1].hit_profiles = [{ id: "p0", poll_status: "active", version: 3 } as never];
+    pages[1].hits = [{ id: "h5", disposition: "new", version: 2 } as never];
+    const paused = { id: "p0", poll_status: "paused", version: 4 } as never;
+    const reviewed = { id: "h5", disposition: "not_relevant", version: 3 } as never;
+
+    const next = withConfirmedRows(pages, { profile: paused, hit: reviewed });
+    const merged = mergeWatchPages(next)!;
+    // The badge and the version the next Resume sends come from the server's reply.
+    expect(merged.profiles.find((row) => row.id === "p0")).toBe(paused);
+    expect(merged.hit_profiles.find((row) => row.id === "p0")).toBe(paused);
+    expect(merged.hits.find((row) => row.id === "h5")).toBe(reviewed);
+    // Other rows, order and totals are untouched, and the input pages are not mutated.
+    expect(merged.profiles.map((row) => row.id)).toEqual(["p0", "p1", "p5"]);
+    expect(merged.profiles[1]).toBe(pages[0].profiles[1]);
+    expect(merged.profile_total).toBe(12);
+    expect((pages[0].profiles[0] as { poll_status: string }).poll_status).toBe("active");
+    expect(withConfirmedRows(pages, {})).toEqual(pages);
   });
 });
