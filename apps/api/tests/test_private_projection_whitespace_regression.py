@@ -254,10 +254,28 @@ def test_legacy_versions_reuse_vectors_without_rewriting_saved_or_retired_eviden
         assert current.embedding_dimensions == 2
         old = session.get(PrivateIndexProjection, projection_id)
         assert old is not None
+        # B4-ADJ-40: retirement blanks the payload (label, text, vector) and
+        # its updated_at; every evidence column, including the legacy version,
+        # content hash and embedding identity, stays byte-identical.
+        payload_columns = {
+            "label",
+            "content_text",
+            "embedding_json",
+            "embedding_dimensions",
+            "updated_at",
+        }
         assert {
             column.name: getattr(old, column.name)
             for column in PrivateIndexProjection.__table__.columns
-        } == retained
+            if column.name not in payload_columns
+        } == {key: value for key, value in retained.items() if key not in payload_columns}
+        assert (old.label, old.content_text, old.embedding_json, old.embedding_dimensions) == (
+            "",
+            "",
+            None,
+            None,
+        )
+        assert retained["content_text"] and retained["embedding_json"] == "[0.25,0.75]"
         assert json.dumps(saved, sort_keys=True) == frozen_saved
         assert not private_retrieval.private_saved_source_manifest_is_current(
             session, context=context, manifest=saved

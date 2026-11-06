@@ -284,7 +284,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         # SQLite cannot roll back an index drop, so the head's index migration
         # refuses first there; PostgreSQL rolls the whole downgrade back.
         assert str(refused.value) == (
-            "SQLite tombstone index downgrade requires exact immediate parent."
+            "SQLite retained-payload index downgrade requires exact immediate parent."
             if kind == "sqlite"
             else "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )

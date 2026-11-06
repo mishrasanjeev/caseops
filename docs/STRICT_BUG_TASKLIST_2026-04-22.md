@@ -1,5 +1,59 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 6 Adjacent Defect: B4-ADJ-40 Retired Private Generations Kept Deleted Sources
+
+Found while fixing B4-ADJ-36 (PR #591). Customer-data retention defect in
+tenant-private retrieval, separate from that performance fix.
+
+- B4-ADJ-40 Status: Inconclusive (fixed locally, not deployed; no production
+  evidence yet). Each tenant rebuild retires the previous
+  `private_index_generations` row and keeps its projections (about 150 per
+  tenant since September). A projection event (deletion, Matter disposal,
+  client archive, access change) tombstoned rows only in the generation that
+  was active when it applied, so every retired generation kept the full chunk
+  text and embedding of sources deleted afterwards, and every tombstone kept
+  its source's label (client name, Matter code and title, filename). The
+  integrity scan never looked. Reproduced on 58cec133 by
+  `apps/api/tests/test_private_retired_generation_payload_20261106.py`
+  (`test_deleted_source_leaves_no_text_or_vector_in_any_retained_generation`
+  for a direct document tombstone and a Matter-scope tombstone, and
+  `test_archived_client_text_is_gone_from_every_retained_generation` through
+  the real `DELETE /api/clients/{id}` route): the retired row still held text
+  and vector, `('retired', False, True, True)`.
+  Fix: activation blanks label, text and vector of every row in a retired or
+  failed generation (`purge_retained_private_payloads`, run under the rebuild
+  lease and by each maintenance pass in SKIP LOCKED 500-row batches, at most
+  50,000 rows per call); event tombstones also blank the label. Identity,
+  version, hash, scope, epoch and tombstone evidence stay, because saved-output
+  proofs compare only those and the event ledger still fences them; no read
+  path used the removed payload. The integrity scan reports
+  `retained_private_payload` with `retained_payload_count` until nothing
+  remains. That count stops at 100 (`retained_payload_count_capped` marks
+  "at least"), and the purge's drained check reads one row: right after
+  release every retired row still holds a payload and maintenance is paused,
+  so an exact count would heap-read the whole backlog inside the integrity
+  request and its 10 s budget (review finding on #593). Migration `20261106_0002` adds the partial index
+  `ix_private_projection_retained_payload` so the purge and the count seek
+  only rows that still hold a payload.
+  Local proof: the reproduction tests, saved-manifest and embedding-reuse
+  preservation, per-tenant purge isolation, the pre-fix tombstone-label
+  backlog, and maintenance reporting pass on SQLite and replay on
+  PostgreSQL; `test_private_projection_retained_payload_index_20261106.py`
+  bounds the scan's and the purge's own statements under analyzed, never
+  analyzed and stale statistics with the index built before and after the
+  rows, for a residual and a full pre-fix backlog (40 generations x 1,500
+  rows), with the former uncapped `count(id)` as a negative control, proves SKIP LOCKED never waits on a held row, and recovers an
+  interrupted concurrent build.
+  Release consequence: the first maintenance runs after release report
+  `retained_private_payload` (status blocked) until the pre-fix backlog
+  drains, about 50,000 rows per tenant per run. Drain it with
+  `python -m caseops_api.scripts.private_projection_integrity --mode purge
+  --company-id <tenant>` until `retained_payload_drained` is true before
+  scheduler-resume certification. Closure needs the exact-release integrity
+  read returning no `retained_private_payload` blocker for every tenant.
+  Retained generation metadata rows are still never deleted; how long to keep
+  them is an owner decision (`PRIV-RETENTION-2026-11-06`).
+
 ## November 5 Production Run On 2aae2367: B4-ADJ-35, 37 Proven; B4-ADJ-36, 38, 39 Open
 
 Prod-verify 41971095146 (release 2aae2367, #587 and #588) succeeded in every

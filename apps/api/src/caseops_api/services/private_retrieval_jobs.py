@@ -19,7 +19,18 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, delete, exists, func, or_, select, text
+from sqlalchemy import (
+    and_,
+    delete,
+    exists,
+    false,
+    func,
+    literal_column,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -89,6 +100,19 @@ PRIVATE_REBUILD_STALE_SHADOW_FAILURE_CODE = "stale_rebuild_recovered"
 PRIVATE_REBUILD_PENDING_EVENTS_DETAIL = (
     "Private rebuild requires every projection event to reach a terminal applied state."
 )
+# B4-ADJ-40: retired generations and tombstones keep identity and hash metadata
+# for saved outputs, never a label, text or vector. One call blanks at most
+# 50,000 rows in separately committed 500-row batches; a larger pre-fix backlog
+# drains over several maintenance runs while the integrity scan reports it.
+MAX_PRIVATE_RETAINED_PURGE_BATCH = 500
+MAX_PRIVATE_RETAINED_PURGE_BATCHES = 100
+PRIVATE_RETAINED_PAYLOAD_STATES = ("retired", "failed")
+RETAINED_PRIVATE_PAYLOAD_BLOCKER = "retained_private_payload"
+# The integrity scan reports "at least this many" rows. Until the pre-fix
+# backlog drains, every row of every retired generation still holds a payload
+# (about 150 generations per tenant), so an exact count would heap-read all of
+# them inside the integrity request.
+MAX_RETAINED_PAYLOAD_REPORT = 100
 
 
 @contextmanager
@@ -155,6 +179,192 @@ class PrivateRebuildSummary:
     provider_text_count: int
     activated: bool
     recovered_stale_shadow_count: int = 0
+    retained_payload_purged_count: int = 0
+    retained_payload_drained: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateRetainedPayloadPurge:
+    company_id: str
+    purged_count: int
+    batch_count: int
+    drained: bool
+
+
+def _holds_private_payload():
+    """A label, text or vector: ix_private_projection_retained_payload's predicate.
+
+    Literal empty strings, not bound parameters: PostgreSQL proves a partial
+    index predicate only against constants, so a generic plan with a parameter
+    would read every retained row of the tenant instead.
+    """
+
+    return or_(
+        PrivateIndexProjection.content_text != literal_column("''"),
+        PrivateIndexProjection.embedding_json.is_not(None),
+        PrivateIndexProjection.label != literal_column("''"),
+    )
+
+
+def _retained_payload_conditions(company_id: str):
+    """The two disjoint row sets that must hold no payload, each one index seek.
+
+    A tombstone in any generation, and any row of a retired or failed
+    generation. Retrieval opens only the active generation, embedding reuse
+    reads the generation active when a rebuild starts, and saved-output proofs
+    compare only the identity and hash columns kept here.
+    """
+
+    retained_generations = select(PrivateIndexGeneration.id).where(
+        PrivateIndexGeneration.company_id == company_id,
+        PrivateIndexGeneration.state.in_(PRIVATE_RETAINED_PAYLOAD_STATES),
+    )
+    tenant = (PrivateIndexProjection.company_id == company_id, _holds_private_payload())
+    return (
+        # "IS true", not "= true": PostgreSQL still seeks the is_tombstoned key
+        # column with it, but never proves ix_private_projection_tombstoned's
+        # predicate from it. With "= true" the planner chose that index and
+        # heap-read every tombstone the tenant retains (2,082 blocks for 6,000
+        # tombstones in the B4-ADJ-40 plan test) to find the few with a label.
+        and_(*tenant, PrivateIndexProjection.is_tombstoned.is_(True)),
+        and_(
+            *tenant,
+            PrivateIndexProjection.is_tombstoned == false(),
+            PrivateIndexProjection.generation_id.in_(retained_generations),
+        ),
+    )
+
+
+def _retained_payload_reads(company_id: str):
+    """Each condition with the order its bounded read must follow.
+
+    The tombstone read is ordered by the index key. With fresh statistics the
+    planner treats the payload columns as independent of ``is_tombstoned`` and
+    expects most tombstones to hold a payload (5,966 estimated, 80 actual in
+    the B4-ADJ-40 plan test), so under a LIMIT it chose a sequential scan that
+    read the whole table (4,151 blocks). The key order makes a sequential scan
+    also sort every row, so the index scan wins. The retired read already seeks
+    each retired generation and stops at its limit.
+    """
+
+    tombstones, retired = _retained_payload_conditions(company_id)
+    return (
+        (
+            tombstones,
+            (
+                PrivateIndexProjection.company_id,
+                PrivateIndexProjection.is_tombstoned,
+                PrivateIndexProjection.generation_id,
+            ),
+        ),
+        (retired, ()),
+    )
+
+
+def count_retained_private_payload(
+    session: Session,
+    *,
+    company_id: str,
+    limit: int = MAX_RETAINED_PAYLOAD_REPORT,
+) -> int:
+    """Rows of one tenant that hold a payload no read path may use, capped at ``limit``.
+
+    Each condition reads at most the rows still needed to reach the cap, so
+    the work is bounded however large the backlog is. A result equal to
+    ``limit`` means "at least ``limit``"; zero is exact.
+    """
+
+    bounded = max(1, int(limit))
+    found = 0
+    for condition, order in _retained_payload_reads(company_id):
+        if found >= bounded:
+            break
+        capped = (
+            select(PrivateIndexProjection.id)
+            .where(condition)
+            .order_by(*order)
+            .limit(bounded - found)
+            .subquery()
+        )
+        found += int(session.scalar(select(func.count()).select_from(capped)) or 0)
+    return found
+
+
+def purge_retained_private_payloads(
+    session: Session,
+    *,
+    company_id: str,
+    batch_size: int = MAX_PRIVATE_RETAINED_PURGE_BATCH,
+    max_batches: int = MAX_PRIVATE_RETAINED_PURGE_BATCHES,
+) -> PrivateRetainedPayloadPurge:
+    """Blank the label, text and vector of one tenant's unreadable rows.
+
+    Each rebuild retires the previous generation and keeps its rows, and an
+    event tombstones only the generation active when it applies. Before
+    B4-ADJ-40 every retired generation therefore kept the full text and vector
+    of every source it had projected, deleted sources included, and every
+    tombstone kept its source's name. The identity, version and hash columns
+    stay: saved-output proofs read only those, and the event ledger still
+    fences them.
+
+    Rows are claimed with ``SKIP LOCKED`` so this never waits on a concurrent
+    tenant disposition or event; a skipped row stays visible to the integrity
+    scan and the next run. Every batch commits on its own.
+    """
+
+    if session.new or session.dirty or session.deleted:
+        raise PrivateRetrievalInvariantError(
+            "Private payload purge requires a clean worker session; it commits each batch."
+        )
+    bounded_batch = max(1, min(int(batch_size), MAX_PRIVATE_RETAINED_PURGE_BATCH))
+    bounded_batches = max(1, min(int(max_batches), MAX_PRIVATE_RETAINED_PURGE_BATCHES))
+    table = PrivateIndexProjection.__table__
+    purged = 0
+    batches = 0
+    for condition, order in _retained_payload_reads(company_id):
+        while batches < bounded_batches:
+            ids = list(
+                session.scalars(
+                    select(PrivateIndexProjection.id)
+                    .where(condition)
+                    .order_by(*order)
+                    .limit(bounded_batch)
+                    .with_for_update(skip_locked=True, of=PrivateIndexProjection)
+                ).all()
+            )
+            if not ids:
+                break
+            result = session.execute(
+                update(table)
+                .where(table.c.id.in_(ids), condition)
+                .values(
+                    label="",
+                    content_text="",
+                    embedding_json=None,
+                    embedding_dimensions=None,
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            purged += max(int(result.rowcount or 0), 0)
+            batches += 1
+            session.commit()
+            if len(ids) < bounded_batch:
+                break
+    # Existence only: one row is enough to say the tenant is not drained.
+    remaining = count_retained_private_payload(session, company_id=company_id, limit=1)
+    session.commit()
+    logger.info(
+        "retained_payload_purge purged=%d batches=%d remaining=%d",
+        purged,
+        batches,
+        remaining,
+    )
+    return PrivateRetainedPayloadPurge(
+        company_id=company_id,
+        purged_count=purged,
+        batch_count=batches,
+        drained=remaining == 0,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +383,8 @@ class PrivateIntegrityReport:
     unsafe_tombstone_count: int
     generation_manifest_matches: bool
     blockers: tuple[str, ...]
+    retained_payload_count: int = 0
+    retained_payload_count_capped: bool = False
 
     @property
     def release_blocked(self) -> bool:
@@ -858,7 +1070,17 @@ def rebuild_private_index(
         # the session-level lease so the next rebuild owner cannot observe the
         # predecessor generation as active.
         session.commit()
-        return summary
+        if not activate:
+            return summary
+        # The predecessor is now retired and unreadable. Blank its payload
+        # while this worker still owns the tenant lease; a crash here leaves the
+        # rows to the next maintenance run, which the integrity scan enforces.
+        purge = purge_retained_private_payloads(session, company_id=company_id)
+        return replace(
+            summary,
+            retained_payload_purged_count=purge.purged_count,
+            retained_payload_drained=purge.drained,
+        )
 
 
 def process_pending_private_projection_events(
@@ -1226,6 +1448,7 @@ def inspect_private_index_integrity(
         )
         or 0
     )
+    retained_payload = count_retained_private_payload(session, company_id=company_id)
     mark("tombstones")
     blockers: list[str] = []
     if generation is None:
@@ -1246,13 +1469,18 @@ def inspect_private_index_integrity(
         blockers.append("stale_or_ineligible_sources")
     if unsafe_tombstones:
         blockers.append("unsafe_tombstone_payload")
+    if retained_payload:
+        blockers.append(RETAINED_PRIVATE_PAYLOAD_BLOCKER)
     repairable_blockers = {
         "active_generation_manifest_mismatch",
         "orphan_or_stale_scopes",
         "stale_or_ineligible_sources",
     }
     oldest_repair_lag = None
-    if generation is not None and blockers and set(blockers) <= repairable_blockers:
+    # Retained payload is drained by the purge, not a rebuild (B4-ADJ-40); a
+    # stale active generation still has a repair age while that backlog drains.
+    repair_blockers = set(blockers) - {RETAINED_PRIVATE_PAYLOAD_BLOCKER}
+    if generation is not None and repair_blockers and repair_blockers <= repairable_blockers:
         generation_started_at = generation.activated_at or generation.created_at
         repair_started_at = session.scalar(
             select(func.min(PrivateProjectionEvent.applied_at)).where(
@@ -1312,6 +1540,8 @@ def inspect_private_index_integrity(
         unsafe_tombstone_count=unsafe_tombstones,
         generation_manifest_matches=manifest_matches,
         blockers=tuple(blockers),
+        retained_payload_count=retained_payload,
+        retained_payload_count_capped=retained_payload >= MAX_RETAINED_PAYLOAD_REPORT,
     )
 
 
@@ -1330,10 +1560,15 @@ __all__ = [
     "PRIVATE_REBUILD_LIMIT_DETAIL",
     "PRIVATE_REBUILD_PENDING_EVENTS_DETAIL",
     "PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL",
+    "MAX_RETAINED_PAYLOAD_REPORT",
+    "RETAINED_PRIVATE_PAYLOAD_BLOCKER",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",
+    "PrivateRetainedPayloadPurge",
+    "count_retained_private_payload",
     "inspect_private_index_integrity",
     "list_private_maintenance_companies",
     "process_pending_private_projection_events",
+    "purge_retained_private_payloads",
     "rebuild_private_index",
 ]

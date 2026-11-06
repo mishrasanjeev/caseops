@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## PRIV-RETENTION-2026-11-06 — Retired private-index generations retain customer data
+
+**Partially implemented.** B4-ADJ-40 in the strict bug list. Retired
+generations and tombstones no longer keep label, text or embedding after the
+fix (blanked at activation and by bounded maintenance, enforced by the
+`retained_private_payload` integrity blocker, migration `20261106_0002`). Still
+open: not deployed; the pre-fix backlog must drain before the integrity scan is
+clean; retired generation and projection metadata rows (identity, version,
+hash, scopes) are kept indefinitely, about 150 generations per tenant since
+September, with no approved retention period or purge of whole generations.
+Deleting them would also unlock saved outputs whose proofs read those rows, so
+the retention length is an owner decision, not an implementation default.
+
 ## BILL-PLAN-ENFORCEMENT-2026-11-04 — Plan entitlements versus pricing claims
 
 **Partially implemented.** Recorded during the 2026-11-04 pricing review

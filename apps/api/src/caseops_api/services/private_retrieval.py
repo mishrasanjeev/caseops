@@ -2358,6 +2358,9 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
         model=PrivateIndexProjection,
         predicate=projection_predicate,
         values={
+            # The label is the source's name or title (B4-ADJ-40); nothing
+            # reads a tombstone's label, so it goes with the text and vector.
+            "label": "",
             "content_text": "",
             "embedding_json": None,
             "embedding_dimensions": None,

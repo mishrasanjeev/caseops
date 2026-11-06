@@ -196,7 +196,13 @@ def test_integrity_tombstone_count_reads_only_the_partial_index(
         statements = []
 
         def capture(conn, cursor, statement, parameters, context, executemany):
-            if "is_tombstoned" in statement and "content_text !=" in statement:
+            # B4-ADJ-40's retained-payload counts also name these columns; this
+            # test owns the unsafe-tombstone count, the one without a label.
+            if (
+                "is_tombstoned" in statement
+                and "content_text !=" in statement
+                and "label" not in statement
+            ):
                 statements.append((statement, parameters))
 
         event.listen(engine, "before_cursor_execute", capture)

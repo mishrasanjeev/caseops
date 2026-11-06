@@ -18,9 +18,11 @@ from caseops_api.services.private_retrieval_jobs import (
     DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS,
     MAX_PRIVATE_MAINTENANCE_COMPANIES,
     PRIVATE_REBUILD_LIMIT_DETAIL,
+    RETAINED_PRIVATE_PAYLOAD_BLOCKER,
     inspect_private_index_integrity,
     list_private_maintenance_companies,
     process_pending_private_projection_events,
+    purge_retained_private_payloads,
     rebuild_private_index,
 )
 
@@ -74,6 +76,8 @@ def _integrity_payload(report) -> dict[str, object]:
         "orphan_scope_count": report.orphan_scope_count,
         "stale_source_count": report.stale_source_count,
         "unsafe_tombstone_count": report.unsafe_tombstone_count,
+        "retained_payload_count": report.retained_payload_count,
+        "retained_payload_count_capped": report.retained_payload_count_capped,
         "generation_manifest_matches": report.generation_manifest_matches,
         "release_blocked": report.release_blocked,
         "blockers": list(report.blockers),
@@ -102,9 +106,18 @@ def _maintain(
         "orphan_or_stale_scopes",
         "stale_or_ineligible_sources",
     }
+
+    def repair_blockers(report) -> set[str]:
+        # B4-ADJ-40: retained payload stays release-blocking, but it is drained
+        # by the purge, not by a rebuild, and must not stop a stale active
+        # generation from being rebuilt while a pre-fix backlog drains.
+        return set(report.blockers) - {RETAINED_PRIVATE_PAYLOAD_BLOCKER}
+
     for company_id in candidates.company_ids:
         applied: tuple[str, ...] = ()
         rebuilt = False
+        retained_payload_purged = 0
+        retained_payload_drained = False
         breached_before_recovery = False
         oldest_pending_lag_seconds_before: int | None = None
         try:
@@ -125,6 +138,12 @@ def _maintain(
                     commit_after_each_event=True,
                 )
                 session.commit()
+                # B4-ADJ-40: blank payloads that no read path may use (retired
+                # generations, tombstone labels) in bounded batches. A backlog
+                # larger than one run stays a release blocker until drained.
+                purge = purge_retained_private_payloads(session, company_id=company_id)
+                retained_payload_purged = purge.purged_count
+                retained_payload_drained = purge.drained
                 after = inspect_private_index_integrity(
                     session,
                     company_id=company_id,
@@ -134,8 +153,8 @@ def _maintain(
                 repair_deferred_reason: str | None = None
                 recovered_stale_shadow_count = 0
                 if (
-                    after.blockers
-                    and set(after.blockers) <= repairable_blockers
+                    repair_blockers(after)
+                    and repair_blockers(after) <= repairable_blockers
                     and rebuild_count < max_rebuilds
                 ):
                     for rebuild_attempt in range(2):
@@ -149,6 +168,12 @@ def _maintain(
                             )
                             recovered_stale_shadow_count += int(
                                 getattr(rebuild_summary, "recovered_stale_shadow_count", 0)
+                            )
+                            retained_payload_purged += int(
+                                getattr(rebuild_summary, "retained_payload_purged_count", 0)
+                            )
+                            retained_payload_drained = bool(
+                                getattr(rebuild_summary, "retained_payload_drained", True)
                             )
                         except Exception as exc:
                             if not _is_retryable_rebuild_conflict(exc):
@@ -170,9 +195,9 @@ def _maintain(
                                 company_id=company_id,
                                 event_lag_slo_seconds=event_lag_slo_seconds,
                             )
-                            if not after.blockers:
+                            if not repair_blockers(after):
                                 break
-                            if not set(after.blockers) <= repairable_blockers:
+                            if not repair_blockers(after) <= repairable_blockers:
                                 raise
                             if rebuild_attempt:
                                 # The active generation remains fail-closed and
@@ -197,9 +222,9 @@ def _maintain(
                             company_id=company_id,
                             event_lag_slo_seconds=event_lag_slo_seconds,
                         )
-                        if not after.blockers:
+                        if not repair_blockers(after):
                             break
-                        if not set(after.blockers) <= repairable_blockers:
+                        if not repair_blockers(after) <= repairable_blockers:
                             break
                         if rebuild_attempt:
                             break
@@ -219,9 +244,9 @@ def _maintain(
                             company_id=company_id,
                             event_lag_slo_seconds=event_lag_slo_seconds,
                         )
-                        if not after.blockers:
+                        if not repair_blockers(after):
                             break
-                        if not set(after.blockers) <= repairable_blockers:
+                        if not repair_blockers(after) <= repairable_blockers:
                             break
                         continue
                     after = inspect_private_index_integrity(
@@ -255,6 +280,11 @@ def _maintain(
                         "applied_event_count": len(applied),
                         "rebuilt": rebuilt,
                         "recovered_stale_shadow_count": recovered_stale_shadow_count,
+                        "retained_payload_purged_count": retained_payload_purged,
+                        "retained_payload_drained": retained_payload_drained,
+                        "retained_payload_count_after": getattr(
+                            after, "retained_payload_count", 0
+                        ),
                         "lag_slo_breached_before_recovery": breached_before_recovery,
                         "oldest_pending_lag_seconds_before": oldest_pending_lag_seconds_before,
                         "pending_event_count_after": after.pending_event_count,
@@ -363,7 +393,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--company-id")
     parser.add_argument(
         "--mode",
-        choices=("integrity", "events", "rebuild", "maintain"),
+        choices=("integrity", "events", "rebuild", "maintain", "purge"),
         default="integrity",
     )
     parser.add_argument("--activate", action="store_true")
@@ -413,6 +443,21 @@ def main(argv: Iterable[str] | None = None) -> int:
                         "company_id": args.company_id,
                         "applied_event_count": len(applied),
                     }
+                elif args.mode == "purge":
+                    # One bounded call (at most 50,000 rows); repeat until
+                    # drained to clear a pre-B4-ADJ-40 backlog before release.
+                    purge = purge_retained_private_payloads(
+                        session,
+                        company_id=args.company_id,
+                    )
+                    payload = {
+                        "status": "ok" if purge.drained else "blocked",
+                        "release_blocked": not purge.drained,
+                        "company_id": purge.company_id,
+                        "retained_payload_purged_count": purge.purged_count,
+                        "retained_payload_batch_count": purge.batch_count,
+                        "retained_payload_drained": purge.drained,
+                    }
                 elif args.mode == "rebuild":
                     summary = rebuild_private_index(
                         session,
@@ -429,6 +474,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                         "projection_count": summary.projection_count,
                         "provider_batch_count": summary.provider_batch_count,
                         "activated": summary.activated,
+                        "retained_payload_purged_count": summary.retained_payload_purged_count,
+                        "retained_payload_drained": summary.retained_payload_drained,
                     }
                 else:
                     report = inspect_private_index_integrity(
