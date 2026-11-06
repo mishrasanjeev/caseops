@@ -16,6 +16,17 @@ from __future__ import annotations
 
 from sqlalchemy.engine import make_url
 
+# JIT is chosen per statement from the planner's cost estimate. The
+# policy-scoped IP portfolio reads compile to tens of KB of SQL, so a
+# statistics refresh that pushes the estimate past ``jit_*_above_cost`` adds
+# compile time to every read. On 2026-11-06 the test-legal portfolio reads
+# went from ~1 s to the 60 s statement timeout after an autoanalyze; forcing
+# those thresholds locally slowed the same reads 20-40x while ``jit=off`` kept
+# them under 0.2 s. Request and export reads are short OLTP work, so their
+# engines append this after every other option: neither the server default
+# nor URL options can re-enable JIT.
+DISABLE_JIT_OPTION = "-c jit=off"
+
 
 def postgres_timeout_options(
     *,

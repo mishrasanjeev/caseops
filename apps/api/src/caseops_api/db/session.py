@@ -15,7 +15,11 @@ from sqlalchemy.sql.selectable import SelectBase
 from caseops_api.core.settings import get_settings
 from caseops_api.db import models
 from caseops_api.db.base import Base
-from caseops_api.db.connection_safety import postgres_timeout_options, postgres_url_options
+from caseops_api.db.connection_safety import (
+    DISABLE_JIT_OPTION,
+    postgres_timeout_options,
+    postgres_url_options,
+)
 from caseops_api.db.statement_clock import StatementUtc
 
 if models.__name__ != "caseops_api.db.models":
@@ -251,11 +255,16 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "keepalives_count": 5,
                 "connect_timeout": settings.db_connect_timeout_seconds,
             }
-            connect_args["options"] = postgres_timeout_options(
-                statement_timeout_ms=settings.db_statement_timeout_ms,
-                lock_timeout_ms=settings.db_lock_timeout_ms,
-                idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
-                existing_options=postgres_url_options(resolved_url),
+            # JIT goes last (see DISABLE_JIT_OPTION): request reads must not
+            # pay a cost-threshold compile that the server default enables.
+            connect_args["options"] = (
+                postgres_timeout_options(
+                    statement_timeout_ms=settings.db_statement_timeout_ms,
+                    lock_timeout_ms=settings.db_lock_timeout_ms,
+                    idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
+                    existing_options=postgres_url_options(resolved_url),
+                )
+                + f" {DISABLE_JIT_OPTION}"
             )
             # pool_pre_ping costs one lightweight SELECT 1 per checkout
             # but turns an already-dead pooled connection into a clean
