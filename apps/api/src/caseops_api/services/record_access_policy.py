@@ -273,7 +273,6 @@ def _active_ip_subject_match(
             or_(candidate.c.expires_at.is_(None), candidate.c.expires_at > now),
         )
         .correlate(IpDocketRecord, *correlated)
-        .scalar_subquery()
     )
 
 
@@ -333,24 +332,30 @@ def visible_ip_dockets_filter(
     membership_id = context.membership.id
     now = datetime.now(UTC)
     active_teams = active_actor_team_ids(company_id=context.company.id, membership_id=membership_id)
+    # Test each seek with [NOT] EXISTS, never as a scalar compared with NULL.
+    # PostgreSQL estimates "(subquery) IS NULL" at 0.5%, so an almost entirely
+    # unwalled portfolio was planned as ~1 visible docket and joined by a
+    # sequential scan per docket: quadratic in tenant width (60 s production
+    # timeouts on 2026-11-06). EXISTS keeps the same per-docket seek and lets
+    # the planner join visible dockets by hash.
     member_wall = _active_ip_subject_match(
         EthicalWall, EthicalWall.excluded_membership_id, membership_id, now
-    )
+    ).exists()
     team_wall = _active_ip_subject_match(
         EthicalWall, EthicalWall.excluded_team_id, active_teams.c.team_id, now, active_teams
-    )
+    ).exists()
     member_grant = _active_ip_subject_match(
         MatterAccessGrant, MatterAccessGrant.membership_id, membership_id, now
-    )
+    ).exists()
     team_grant = _active_ip_subject_match(
         MatterAccessGrant, MatterAccessGrant.team_id, active_teams.c.team_id, now, active_teams
-    )
+    ).exists()
     return and_(
-        member_wall.is_(None),
-        ~exists(select(active_teams.c.team_id).where(team_wall.is_not(None))),
+        ~member_wall,
+        ~exists(select(active_teams.c.team_id).where(team_wall)),
         or_(
             IpDocketRecord.restricted.is_(False),
-            member_grant.is_not(None),
-            exists(select(active_teams.c.team_id).where(team_grant.is_not(None))),
+            member_grant,
+            exists(select(active_teams.c.team_id).where(team_grant)),
         ),
     )

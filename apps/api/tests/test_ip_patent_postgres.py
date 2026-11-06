@@ -1983,7 +1983,9 @@ def test_ip_subject_seek_rejects_present_wrong_subject_and_target_successors(pg_
 
                 def lookup(target_id, subject, model=model, column=column):
                     return session.scalar(
-                        select(_active_ip_subject_match(model, column, subject, now))
+                        select(
+                            _active_ip_subject_match(model, column, subject, now).scalar_subquery()
+                        )
                         .select_from(IpDocketRecord)
                         .where(IpDocketRecord.id == target_id)
                     )
