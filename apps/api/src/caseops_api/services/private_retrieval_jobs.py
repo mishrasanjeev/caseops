@@ -108,6 +108,11 @@ MAX_PRIVATE_RETAINED_PURGE_BATCH = 500
 MAX_PRIVATE_RETAINED_PURGE_BATCHES = 100
 PRIVATE_RETAINED_PAYLOAD_STATES = ("retired", "failed")
 RETAINED_PRIVATE_PAYLOAD_BLOCKER = "retained_private_payload"
+# The integrity scan reports "at least this many" rows. Until the pre-fix
+# backlog drains, every row of every retired generation still holds a payload
+# (about 150 generations per tenant), so an exact count would heap-read all of
+# them inside the integrity request.
+MAX_RETAINED_PAYLOAD_REPORT = 100
 
 
 @contextmanager
@@ -230,13 +235,29 @@ def _retained_payload_conditions(company_id: str):
     )
 
 
-def count_retained_private_payload(session: Session, *, company_id: str) -> int:
-    """Rows of one tenant that hold a payload no read path may use."""
+def count_retained_private_payload(
+    session: Session,
+    *,
+    company_id: str,
+    limit: int = MAX_RETAINED_PAYLOAD_REPORT,
+) -> int:
+    """Rows of one tenant that hold a payload no read path may use, capped at ``limit``.
 
-    return sum(
-        int(session.scalar(select(func.count(PrivateIndexProjection.id)).where(condition)) or 0)
-        for condition in _retained_payload_conditions(company_id)
-    )
+    Each condition reads at most the rows still needed to reach the cap, so
+    the work is bounded however large the backlog is. A result equal to
+    ``limit`` means "at least ``limit``"; zero is exact.
+    """
+
+    bounded = max(1, int(limit))
+    found = 0
+    for condition in _retained_payload_conditions(company_id):
+        if found >= bounded:
+            break
+        capped = (
+            select(PrivateIndexProjection.id).where(condition).limit(bounded - found).subquery()
+        )
+        found += int(session.scalar(select(func.count()).select_from(capped)) or 0)
+    return found
 
 
 def purge_retained_private_payloads(
@@ -298,7 +319,8 @@ def purge_retained_private_payloads(
             session.commit()
             if len(ids) < bounded_batch:
                 break
-    remaining = count_retained_private_payload(session, company_id=company_id)
+    # Existence only: one row is enough to say the tenant is not drained.
+    remaining = count_retained_private_payload(session, company_id=company_id, limit=1)
     session.commit()
     logger.info(
         "retained_payload_purge purged=%d batches=%d remaining=%d",
@@ -331,6 +353,7 @@ class PrivateIntegrityReport:
     generation_manifest_matches: bool
     blockers: tuple[str, ...]
     retained_payload_count: int = 0
+    retained_payload_count_capped: bool = False
 
     @property
     def release_blocked(self) -> bool:
@@ -1487,6 +1510,7 @@ def inspect_private_index_integrity(
         generation_manifest_matches=manifest_matches,
         blockers=tuple(blockers),
         retained_payload_count=retained_payload,
+        retained_payload_count_capped=retained_payload >= MAX_RETAINED_PAYLOAD_REPORT,
     )
 
 
@@ -1505,6 +1529,7 @@ __all__ = [
     "PRIVATE_REBUILD_LIMIT_DETAIL",
     "PRIVATE_REBUILD_PENDING_EVENTS_DETAIL",
     "PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL",
+    "MAX_RETAINED_PAYLOAD_REPORT",
     "RETAINED_PRIVATE_PAYLOAD_BLOCKER",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",

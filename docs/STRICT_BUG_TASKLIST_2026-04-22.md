@@ -28,7 +28,11 @@ tenant-private retrieval, separate from that performance fix.
   proofs compare only those and the event ledger still fences them; no read
   path used the removed payload. The integrity scan reports
   `retained_private_payload` with `retained_payload_count` until nothing
-  remains. Migration `20261106_0002` adds the partial index
+  remains. That count stops at 100 (`retained_payload_count_capped` marks
+  "at least"), and the purge's drained check reads one row: right after
+  release every retired row still holds a payload and maintenance is paused,
+  so an exact count would heap-read the whole backlog inside the integrity
+  request and its 10 s budget (review finding on #593). Migration `20261106_0002` adds the partial index
   `ix_private_projection_retained_payload` so the purge and the count seek
   only rows that still hold a payload.
   Local proof: the reproduction tests, saved-manifest and embedding-reuse
@@ -37,7 +41,8 @@ tenant-private retrieval, separate from that performance fix.
   PostgreSQL; `test_private_projection_retained_payload_index_20261106.py`
   bounds the scan's and the purge's own statements under analyzed, never
   analyzed and stale statistics with the index built before and after the
-  rows, proves SKIP LOCKED never waits on a held row, and recovers an
+  rows, for a residual and a full pre-fix backlog (40 generations x 1,500
+  rows), with the former uncapped `count(id)` as a negative control, proves SKIP LOCKED never waits on a held row, and recovers an
   interrupted concurrent build.
   Release consequence: the first maintenance runs after release report
   `retained_private_payload` (status blocked) until the pre-fix backlog

@@ -340,13 +340,21 @@ def test_integrity_blocks_retained_retired_payload_until_purged_per_tenant(
     other_injected = _inject_retired_payload(second_id)
     assert injected >= 3 and other_injected >= 1
 
-    from caseops_api.services.private_retrieval_jobs import purge_retained_private_payloads
+    from caseops_api.services.private_retrieval_jobs import (
+        count_retained_private_payload,
+        purge_retained_private_payloads,
+    )
 
     with get_session_factory()() as session:
         report = inspect_private_index_integrity(session, company_id=first_id)
         assert report.retained_payload_count == injected
+        assert report.retained_payload_count_capped is False
         assert RETIRED_BLOCKER in report.blockers
         assert report.release_blocked
+        # The count stops at its cap ("at least"), so the integrity request's
+        # work never grows with the backlog; the purge asks only for one row.
+        assert count_retained_private_payload(session, company_id=first_id, limit=2) == 2
+        assert count_retained_private_payload(session, company_id=first_id, limit=1) == 1
 
         # A bounded purge stops at its budget and says so.
         partial = purge_retained_private_payloads(

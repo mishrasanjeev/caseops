@@ -77,6 +77,7 @@ def _integrity_payload(report) -> dict[str, object]:
         "stale_source_count": report.stale_source_count,
         "unsafe_tombstone_count": report.unsafe_tombstone_count,
         "retained_payload_count": report.retained_payload_count,
+        "retained_payload_count_capped": report.retained_payload_count_capped,
         "generation_manifest_matches": report.generation_manifest_matches,
         "release_blocked": report.release_blocked,
         "blockers": list(report.blockers),

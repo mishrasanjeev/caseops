@@ -9,13 +9,16 @@ from pathlib import Path
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import event, inspect, text
+from sqlalchemy import event, func, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from alembic import command
+from caseops_api.db.models import PrivateIndexProjection
 from caseops_api.services.private_retrieval_jobs import (
+    MAX_RETAINED_PAYLOAD_REPORT,
+    _retained_payload_conditions,
     count_retained_private_payload,
     purge_retained_private_payloads,
 )
@@ -194,17 +197,41 @@ def _walk(node):
         yield from _walk(child)
 
 
+def _exact_retained(engine, company_id):
+    """Independent oracle: every row the purge must still blank, uncapped."""
+    with engine.connect() as connection:
+        return connection.execute(
+            text(
+                f"SELECT count(*) FROM {TABLE} p WHERE p.company_id = :company "
+                "AND (p.content_text <> '' OR p.embedding_json IS NOT NULL OR p.label <> '') "
+                "AND (p.is_tombstoned OR p.generation_id IN (SELECT g.id FROM "
+                "private_index_generations g WHERE g.company_id = :company "
+                "AND g.state IN ('retired', 'failed')))"
+            ),
+            {"company": company_id},
+        ).scalar_one()
+
+
+def _blocks(plan):
+    return plan["Shared Hit Blocks"] + plan["Shared Read Blocks"]
+
+
 @pytest.mark.postgres
+@pytest.mark.parametrize("backlog", ["residual", "full"])
 @pytest.mark.parametrize("statistics", ["analyzed", "never_analyzed", "stale_empty"])
 @pytest.mark.parametrize("index_built", ["before_seed", "after_seed"])
 def test_retained_payload_reads_only_the_partial_index(
-    statistics, index_built, tmp_path, monkeypatch, record_property
+    backlog, statistics, index_built, tmp_path, monkeypatch, record_property
 ):
     """EXPLAINs the scan's and the purge's own statements over retained generations.
 
-    Production plans these right after a rebuild, before autovacuum has analyzed
-    the new rows, so the bound must hold without fresh statistics and whether
-    the index predates the rows or was built over them.
+    ``full`` is production right after release: every row of every retired
+    generation still holds text, a vector and a label, and maintenance is
+    paused. ``residual`` is a nearly drained tenant. Production plans these
+    right after a rebuild, before autovacuum has analyzed the new rows, so the
+    bound must hold without fresh statistics and whether the index predates the
+    rows or was built over them. The integrity request polls this count with a
+    10 s budget, so it must not grow with the backlog.
     """
     with fresh_engine("postgres", tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
@@ -217,7 +244,7 @@ def test_retained_payload_reads_only_the_partial_index(
             engine,
             generations=40,
             rows=1500,
-            retained_every=499,
+            retained_every=1 if backlog == "full" else 499,
             tombstone_every=10,
             label_every=750,
         )
@@ -235,6 +262,11 @@ def test_retained_payload_reads_only_the_partial_index(
             ).scalar_one()
         assert analyzed == (1 if statistics == "analyzed" else 0)
 
+        exact = _exact_retained(engine, company_id)
+        # 39 retired generations x 1,350 (full) or 3 (residual) non-tombstone
+        # rows, plus 2 labelled tombstones of the 150 in each of 40 generations.
+        assert exact == 39 * (1350 if backlog == "full" else 3) + 40 * 2
+
         statements = []
 
         def capture(conn, cursor, statement, parameters, context, executemany):
@@ -247,9 +279,8 @@ def test_retained_payload_reads_only_the_partial_index(
                 retained = count_retained_private_payload(session, company_id=company_id)
         finally:
             event.remove(engine, "before_cursor_execute", capture)
-        # 39 retired generations x 3 backlog rows (n = 499, 998, 1497), plus 2
-        # labelled tombstones (n = 750, 1500) of the 150 in each of 40 generations.
-        assert retained == 39 * 3 + 40 * 2
+        assert retained == min(exact, MAX_RETAINED_PAYLOAD_REPORT)
+        # The tombstone count alone reaches 80; the retired count reads the rest.
         assert len(statements) == 2
 
         def explain(statement, parameters):
@@ -264,9 +295,30 @@ def test_retained_payload_reads_only_the_partial_index(
             return plan
 
         plans = [explain(*captured) for captured in statements]
+
+        # Negative control: the uncapped count(id) this scan used before the
+        # cap. It reads every retained row, so against the full backlog it must
+        # exceed the same bound the capped statements stay under.
+        with Session(engine) as session:
+            dialect = session.get_bind().dialect
+            uncapped = [
+                str(
+                    select(func.count(PrivateIndexProjection.id))
+                    .where(condition)
+                    .compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+                )
+                for condition in _retained_payload_conditions(company_id)
+            ]
+        uncapped_plans = [explain(statement, None) for statement in uncapped]
         record_property(
             "retained_payload_plans",
-            {"statistics": statistics, "index_built": index_built, "plans": plans},
+            {
+                "backlog": backlog,
+                "statistics": statistics,
+                "index_built": index_built,
+                "plans": plans,
+                "uncapped_negative_control_plans": uncapped_plans,
+            },
         )
         for plan in plans:
             nodes = list(_walk(plan))
@@ -282,9 +334,12 @@ def test_retained_payload_reads_only_the_partial_index(
             assert projection_indexes == {NAME}, projection_indexes
             assert not [node for node in nodes if node["Node Type"] == "Seq Scan"]
             # 40 x 1,500 retained rows and 6,000 tombstones: the prefilter or
-            # tombstone index read 2,082 blocks here. This index reads a few
-            # blocks per retired generation plus each row that still holds data.
-            assert plan["Shared Hit Blocks"] + plan["Shared Read Blocks"] < 400, plan
+            # tombstone index read 2,082 blocks for the residual backlog alone.
+            # Capped, each statement reads at most its remaining cap of rows.
+            assert _blocks(plan) < 400, plan
+        if backlog == "full":
+            retired_uncapped = uncapped_plans[1]
+            assert _blocks(retired_uncapped) > 2_000, retired_uncapped
 
         # The purge claims through the same index and drains the whole backlog.
         purge_statements = []
@@ -293,14 +348,19 @@ def test_retained_payload_reads_only_the_partial_index(
             if statement.lstrip().upper().startswith("SELECT") and "FOR UPDATE" in statement:
                 purge_statements.append((statement, parameters))
 
+        purged, calls, drained = 0, 0, False
         event.listen(engine, "before_cursor_execute", capture_purge)
         try:
-            with Session(engine) as session:
-                purge = purge_retained_private_payloads(session, company_id=company_id)
+            while not drained and calls < 3:
+                with Session(engine) as session:
+                    purge = purge_retained_private_payloads(session, company_id=company_id)
+                purged, calls, drained = purged + purge.purged_count, calls + 1, purge.drained
         finally:
             event.remove(engine, "before_cursor_execute", capture_purge)
-        assert (purge.purged_count, purge.drained) == (retained, True)
+        # One call blanks at most 50,000 rows; the full backlog needs a second.
+        assert (purged, drained, calls) == (exact, True, 2 if exact > 50_000 else 1)
         assert purge_statements
+        assert _exact_retained(engine, company_id) == 0
         with Session(engine) as session:
             assert count_retained_private_payload(session, company_id=company_id) == 0
             # The active generation's live rows keep every payload.
