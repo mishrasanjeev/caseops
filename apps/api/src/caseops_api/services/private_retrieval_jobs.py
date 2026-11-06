@@ -235,6 +235,32 @@ def _retained_payload_conditions(company_id: str):
     )
 
 
+def _retained_payload_reads(company_id: str):
+    """Each condition with the order its bounded read must follow.
+
+    The tombstone read is ordered by the index key. With fresh statistics the
+    planner treats the payload columns as independent of ``is_tombstoned`` and
+    expects most tombstones to hold a payload (5,966 estimated, 80 actual in
+    the B4-ADJ-40 plan test), so under a LIMIT it chose a sequential scan that
+    read the whole table (4,151 blocks). The key order makes a sequential scan
+    also sort every row, so the index scan wins. The retired read already seeks
+    each retired generation and stops at its limit.
+    """
+
+    tombstones, retired = _retained_payload_conditions(company_id)
+    return (
+        (
+            tombstones,
+            (
+                PrivateIndexProjection.company_id,
+                PrivateIndexProjection.is_tombstoned,
+                PrivateIndexProjection.generation_id,
+            ),
+        ),
+        (retired, ()),
+    )
+
+
 def count_retained_private_payload(
     session: Session,
     *,
@@ -250,11 +276,15 @@ def count_retained_private_payload(
 
     bounded = max(1, int(limit))
     found = 0
-    for condition in _retained_payload_conditions(company_id):
+    for condition, order in _retained_payload_reads(company_id):
         if found >= bounded:
             break
         capped = (
-            select(PrivateIndexProjection.id).where(condition).limit(bounded - found).subquery()
+            select(PrivateIndexProjection.id)
+            .where(condition)
+            .order_by(*order)
+            .limit(bounded - found)
+            .subquery()
         )
         found += int(session.scalar(select(func.count()).select_from(capped)) or 0)
     return found
@@ -291,12 +321,13 @@ def purge_retained_private_payloads(
     table = PrivateIndexProjection.__table__
     purged = 0
     batches = 0
-    for condition in _retained_payload_conditions(company_id):
+    for condition, order in _retained_payload_reads(company_id):
         while batches < bounded_batches:
             ids = list(
                 session.scalars(
                     select(PrivateIndexProjection.id)
                     .where(condition)
+                    .order_by(*order)
                     .limit(bounded_batch)
                     .with_for_update(skip_locked=True, of=PrivateIndexProjection)
                 ).all()

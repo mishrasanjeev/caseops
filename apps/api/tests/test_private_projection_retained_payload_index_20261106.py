@@ -332,7 +332,14 @@ def test_retained_payload_reads_only_the_partial_index(
                 and not node["Index Name"].startswith("uq_private_index_generation")
             }
             assert projection_indexes == {NAME}, projection_indexes
-            assert not [node for node in nodes if node["Node Type"] == "Seq Scan"]
+            # With fresh statistics the planner may scan the small generations
+            # table; the projections table must never be scanned. The block
+            # bound below covers both.
+            assert not [
+                node
+                for node in nodes
+                if node["Node Type"] == "Seq Scan" and node.get("Relation Name") == TABLE
+            ]
             # 40 x 1,500 retained rows and 6,000 tombstones: the prefilter or
             # tombstone index read 2,082 blocks for the residual backlog alone.
             # Capped, each statement reads at most its remaining cap of rows.
