@@ -158,7 +158,7 @@ def test_postgres_engine_passes_keepalive_connect_args(
         "connect_timeout": 10,
         "options": (
             "-c statement_timeout=60000 -c lock_timeout=5000 "
-            "-c idle_in_transaction_session_timeout=60000"
+            "-c idle_in_transaction_session_timeout=60000 -c jit=off"
         ),
     }
 
@@ -183,7 +183,7 @@ def test_postgres_engine_passes_finite_database_deadlines(
     assert captured["connect_args"]["connect_timeout"] == 7
     assert captured["connect_args"]["options"] == (
         "-c statement_timeout=60000 -c lock_timeout=5000 "
-        "-c idle_in_transaction_session_timeout=60000"
+        "-c idle_in_transaction_session_timeout=60000 -c jit=off"
     )
 
 
@@ -209,7 +209,7 @@ def test_postgres_engine_preserves_url_options_before_enforced_deadlines(
     assert captured["connect_args"]["options"] == (
         "-c search_path=tenant_schema -c lock_timeout=0 "
         "-c statement_timeout=60000 -c lock_timeout=5000 "
-        "-c idle_in_transaction_session_timeout=60000"
+        "-c idle_in_transaction_session_timeout=60000 -c jit=off"
     )
 
 

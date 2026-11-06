@@ -25,7 +25,7 @@ from sqlalchemy.pool import NullPool
 
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
-from caseops_api.db.connection_safety import migration_connect_args
+from caseops_api.db.connection_safety import DISABLE_JIT_OPTION, migration_connect_args
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
@@ -694,15 +694,17 @@ def _export_session(deadline: float) -> Iterator[Session]:
                 settings = get_settings()
                 # No shared-pool checkout/reconnect tail outside the HTTP budget.
                 # Keep the normal Session class and canonical URL/TLS/options.
+                connect_args = migration_connect_args(
+                    bind.url.render_as_string(hide_password=False),
+                    connect_timeout_seconds=max(1, min(EXPORT_CONNECT_SECONDS, int(remaining))),
+                    statement_timeout_ms=max(1, int(remaining * 1000)),
+                    lock_timeout_ms=max(1, min(5000, int(remaining * 1000))),
+                    idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
+                )
+                # Export pages run the same portfolio SQL as requests.
+                connect_args["options"] = f"{connect_args['options']} {DISABLE_JIT_OPTION}"
                 owned_engine = create_engine(
-                    bind.url, poolclass=NullPool,
-                    connect_args=migration_connect_args(
-                        bind.url.render_as_string(hide_password=False),
-                        connect_timeout_seconds=max(1, min(EXPORT_CONNECT_SECONDS, int(remaining))),
-                        statement_timeout_ms=max(1, int(remaining * 1000)),
-                        lock_timeout_ms=max(1, min(5000, int(remaining * 1000))),
-                        idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
-                    ),
+                    bind.url, poolclass=NullPool, connect_args=connect_args
                 )
                 session.bind = owned_engine
             connection = session.connection()
