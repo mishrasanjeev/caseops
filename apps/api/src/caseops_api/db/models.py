@@ -21814,6 +21814,20 @@ class PrivateIndexProjection(Base):
             postgresql_where=text("is_tombstoned"),
             sqlite_where=text("is_tombstoned"),
         ),
+        # B4-ADJ-40: only rows that still hold a label, text or a vector.
+        # Retired generations and tombstones are blanked, so the purge and the
+        # integrity scan seek their few remaining entries instead of reading
+        # every retained row; the active generation's live rows are the rest.
+        Index(
+            "ix_private_projection_retained_payload",
+            "company_id",
+            "is_tombstoned",
+            "generation_id",
+            postgresql_where=text(
+                "content_text <> '' OR embedding_json IS NOT NULL OR label <> ''"
+            ),
+            sqlite_where=text("content_text <> '' OR embedding_json IS NOT NULL OR label <> ''"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

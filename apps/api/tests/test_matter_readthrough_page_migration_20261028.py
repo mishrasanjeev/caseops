@@ -552,7 +552,7 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
         # cannot roll back an index drop, so the head's index migration refuses
         # first there; PostgreSQL rolls the whole downgrade back.
         expected_refusal = (
-            "SQLite tombstone index downgrade requires exact immediate parent."
+            "SQLite retained-payload index downgrade requires exact immediate parent."
             if kind == "sqlite"
             else "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )

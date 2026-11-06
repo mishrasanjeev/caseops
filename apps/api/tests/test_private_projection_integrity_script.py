@@ -40,6 +40,26 @@ def _operational_error(sqlstate: str, detail: str = "database detail"):
     )
 
 
+@pytest.fixture(autouse=True)
+def _drained_retained_payload(monkeypatch):
+    """These tests drive fake sessions; the real purge is proven in B4-ADJ-40's suites.
+
+    Each maintenance pass calls the purge once per tenant before its final
+    inspection. Record those calls so the tests here still see that order.
+    """
+
+    calls: list[str] = []
+
+    def purge(_session, *, company_id, **_kwargs):
+        calls.append(company_id)
+        return SimpleNamespace(
+            company_id=company_id, purged_count=0, batch_count=0, drained=True
+        )
+
+    monkeypatch.setattr(private_projection_integrity, "purge_retained_private_payloads", purge)
+    return calls
+
+
 def test_maintenance_releases_projection_locks_after_each_event(monkeypatch) -> None:
     sessions: list[_WorkerSession] = []
     process_calls: list[dict[str, object]] = []
@@ -180,6 +200,9 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
                 "applied_event_count": 0,
                 "rebuilt": False,
                 "recovered_stale_shadow_count": 0,
+                "retained_payload_purged_count": 0,
+                "retained_payload_drained": True,
+                "retained_payload_count_after": 0,
                 "lag_slo_breached_before_recovery": False,
             "oldest_pending_lag_seconds_before": None,
             "pending_event_count_after": 0,
