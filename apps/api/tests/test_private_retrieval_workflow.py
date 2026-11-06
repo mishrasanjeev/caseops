@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 
+from caseops_api.core.observability import JsonLogFormatter
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AssistantSessionScope,
@@ -2194,9 +2195,13 @@ def test_integrity_request_logs_its_phase_timings_without_identifiers(
     assert response.status_code == 200, response.text
     body = response.json()
 
-    messages = [record.getMessage() for record in caplog.records]
-    scan = [line for line in messages if "private_integrity_scan_timing" in line]
-    request = [line for line in messages if "private_integrity_request_timing" in line]
+    # Read the lines as production emits them. Its redactor replaces any
+    # identifier of 24+ characters, which turned 9a61cc18's longer event names
+    # into "[token-redacted]" in Cloud Logging.
+    formatter = JsonLogFormatter()
+    messages = [json.loads(formatter.format(record))["message"] for record in caplog.records]
+    scan = [line for line in messages if line.startswith("integrity_scan_timing ")]
+    request = [line for line in messages if line.startswith("integrity_http_timing ")]
     assert len(scan) == 1 and len(request) == 1
     scan_fields = dict(part.split("=", 1) for part in scan[0].split()[1:])
     assert set(scan_fields) == {

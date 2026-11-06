@@ -21808,6 +21808,12 @@ class PrivateIndexProjection(Base):
             "access_policy_generation",
             "tombstone_generation",
         ),
+        Index(
+            "ix_private_projection_tombstoned",
+            "company_id",
+            postgresql_where=text("is_tombstoned"),
+            sqlite_where=text("is_tombstoned"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

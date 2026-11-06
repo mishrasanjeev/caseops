@@ -548,9 +548,13 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
         assert current
-        # The merge refuses before either parent's version or catalog can change.
+        # The head refuses before any version or catalog can change. SQLite
+        # cannot roll back an index drop, so the head's index migration refuses
+        # first there; PostgreSQL rolls the whole downgrade back.
         expected_refusal = (
-            "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
+            "SQLite tombstone index downgrade requires exact immediate parent."
+            if kind == "sqlite"
+            else "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )
         command.upgrade(config, "head")
         scope, _, rows, _ = seed_old(engine)

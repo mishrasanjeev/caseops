@@ -281,8 +281,12 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
+        # SQLite cannot roll back an index drop, so the head's index migration
+        # refuses first there; PostgreSQL rolls the whole downgrade back.
         assert str(refused.value) == (
-            "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
+            "SQLite tombstone index downgrade requires exact immediate parent."
+            if kind == "sqlite"
+            else "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
         )
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting
