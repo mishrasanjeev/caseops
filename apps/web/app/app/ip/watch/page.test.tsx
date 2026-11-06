@@ -17,6 +17,7 @@ const {
   ingestMock,
   readinessMock,
   searchMock,
+  statusMock,
   toastError,
   toastSuccess,
   usersMock,
@@ -32,6 +33,7 @@ const {
   ingestMock: vi.fn(),
   readinessMock: vi.fn(),
   searchMock: vi.fn(),
+  statusMock: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   usersMock: vi.fn(),
@@ -65,7 +67,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   ingestIpJournal: ingestMock,
   listCompanyUsers: usersMock,
   searchIpJournalPublications: searchMock,
-  updateIpWatchProfileStatus: vi.fn(),
+  updateIpWatchProfileStatus: statusMock,
 }));
 
 import IpJournalWatchPage from "@/app/app/ip/watch/page";
@@ -566,6 +568,54 @@ describe("IP journal watch page", () => {
     expect(within(card).getByText("Last journal entry compared")).toBeVisible();
     expect(within(card).queryByText("Next check")).not.toBeInTheDocument();
     expect(within(card).queryByText("Last checked")).not.toBeInTheDocument();
+  });
+
+  it("BUG-014 shows a confirmed review and pause at once, ignores a read begun before the pause, and resumes with the returned version", async () => {
+    // Production: a workspace read takes about 5 s, and a read started by the
+    // review finished after the pause with the profile still active, so the
+    // card said "active" for about 12 s after the server had paused it.
+    const user = userEvent.setup();
+    const hit = { ...HIT, source_status: "available" };
+    const loaded = { ...WORKSPACE, hits: [hit], publications: [{ ...PUBLICATION, source_status: "available" }] };
+    let finishReadBegunBeforePause: (value: unknown) => void = () => {};
+    workspaceMock
+      .mockResolvedValueOnce(loaded)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishReadBegunBeforePause = resolve; }))
+      .mockImplementation(() => new Promise(() => {}));
+    decideHitMock.mockResolvedValue({ ...hit, disposition: "not_relevant", disposition_reason: "Different goods.", version: 3 });
+    const paused = { ...PROFILE, poll_status: "paused", pause_reason: "Paused by an authorized journal-watch operator.", version: 2 };
+    statusMock
+      .mockResolvedValueOnce(paused)
+      .mockResolvedValueOnce({ ...paused, poll_status: "active", pause_reason: null, version: 3 });
+    const page = renderWatchPage();
+
+    await user.selectOptions(await page.findByLabelText("Disposition"), "not_relevant");
+    await user.clear(page.getByLabelText("Reason"));
+    await enterText(user, page.getByLabelText("Reason"), "Different goods.");
+    await user.click(page.getByLabelText(/I opened and confirmed/));
+    await user.click(page.getByRole("button", { name: "Record review" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Attorney review recorded."));
+    expect(within(page.getByTestId(`watch-hit-${HIT.id}`)).getByText("not relevant")).toBeVisible();
+    expect(workspaceMock).toHaveBeenCalledTimes(2);
+
+    await user.click(page.getByRole("button", { name: "Profiles" }));
+    const card = await page.findByTestId("watch-profile-profile-1");
+    await user.click(within(card).getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(within(card).getByText("paused", { exact: true })).toBeVisible());
+    expect(statusMock.mock.calls[0][0]).toMatchObject({ profileId: PROFILE.id, expectedVersion: 1, pollStatus: "paused" });
+
+    // The read begun before the pause now returns the profile as active; it must not land.
+    finishReadBegunBeforePause(loaded);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(within(card).getByText("paused", { exact: true })).toBeVisible();
+    expect(within(card).queryByText("active", { exact: true })).not.toBeInTheDocument();
+
+    // Resume is enabled at once and sends the version the server returned.
+    await user.click(within(card).getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(statusMock).toHaveBeenCalledTimes(2));
+    expect(statusMock.mock.calls[1][0]).toMatchObject({ profileId: PROFILE.id, expectedVersion: 2, pollStatus: "active" });
+    await waitFor(() => expect(within(card).getByText("active", { exact: true })).toBeVisible());
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("creates criteria, frequency, recipients chosen by name, and cost policy", async () => {
