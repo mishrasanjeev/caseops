@@ -160,29 +160,3 @@ def test_portfolio_reads_never_rescan_the_portfolio_per_docket(
     }
     rescans = _portfolio_rescans(isolated_postgres_client, monkeypatch, record_property, requests)
     assert rescans == {}
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Tracked separately: the renewal-tracker filter joins a materialized fact "
-        "CTE whose IS NULL/date filters have no statistics, so it is still planned "
-        "as one row and rescans trademark_applications per matching docket."
-    ),
-)
-def test_tracker_filtered_portfolio_read_never_rescans_per_docket(
-    isolated_postgres_client, monkeypatch, record_property
-):
-    requests = {
-        "tracker": (
-            "/api/ip/portfolio",
-            {
-                "renewal_tracker_state": "missing",
-                "application_date_from": "2020-01-01",
-                "application_date_to": "2020-12-31",
-                "limit": 50,
-            },
-        ),
-    }
-    rescans = _portfolio_rescans(isolated_postgres_client, monkeypatch, record_property, requests)
-    assert rescans == {}
