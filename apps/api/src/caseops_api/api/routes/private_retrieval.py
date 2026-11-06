@@ -259,7 +259,7 @@ def get_private_retrieval_integrity(
     # Splits the handler's time so a slow first call names its part (B4-ADJ-36);
     # time spent before the handler shows as the request latency minus total_ms.
     logger.info(
-        "private_integrity_request_timing activation_ms=%d scan_ms=%d "
+        "integrity_http_timing activation_ms=%d scan_ms=%d "
         "document_jobs_ms=%d total_ms=%d",
         round((activated - started) * 1000),
         round((scanned - activated) * 1000),

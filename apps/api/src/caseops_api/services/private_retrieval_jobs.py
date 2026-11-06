@@ -1214,7 +1214,10 @@ def inspect_private_index_integrity(
         session.scalar(
             select(func.count(PrivateIndexProjection.id)).where(
                 PrivateIndexProjection.company_id == company_id,
-                PrivateIndexProjection.is_tombstoned.is_(True),
+                # The bare column matches ix_private_projection_tombstoned's
+                # predicate; PostgreSQL never uses that index for "IS true",
+                # and this count then reads every retained generation (B4-ADJ-36).
+                PrivateIndexProjection.is_tombstoned,
                 or_(
                     PrivateIndexProjection.content_text != "",
                     PrivateIndexProjection.embedding_json.is_not(None),
@@ -1278,7 +1281,7 @@ def inspect_private_index_integrity(
     mark("repair")
     state = "blocked" if blockers else "ready"
     logger.info(
-        "private_integrity_scan_timing generation_ms=%d manifest_ms=%d events_ms=%d "
+        "integrity_scan_timing generation_ms=%d manifest_ms=%d events_ms=%d "
         "scopes_ms=%d sources_ms=%d tombstones_ms=%d repair_ms=%d total_ms=%d "
         "live=%d tombstoned=%d scanned_sources=%d state=%s",
         phase_ms["generation"],
