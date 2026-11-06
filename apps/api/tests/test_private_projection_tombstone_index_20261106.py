@@ -1,6 +1,8 @@
 """B4-ADJ-36: the integrity scan's tombstone count reads only tombstoned rows."""
 
 import importlib.util
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,6 +10,8 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import event, inspect, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -25,6 +29,7 @@ PATH = (
 TABLE = "private_index_projections"
 NAME = "ix_private_projection_tombstoned"
 EXPECTED = ((TABLE, NAME, ["company_id"]),)
+BUILDING = f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {NAME} %"
 STAMP = datetime(2026, 11, 6, 1, 2, 3, tzinfo=UTC)
 
 
@@ -155,14 +160,38 @@ def test_conflicting_shape_refuses_without_ddl(kind, wrong, tmp_path, monkeypatc
 
 
 @pytest.mark.postgres
-def test_integrity_tombstone_count_reads_only_the_partial_index(tmp_path, monkeypatch):
-    """Runs the scan's own statement, not a copy of it, against retained generations."""
+@pytest.mark.parametrize("statistics", ["analyzed", "never_analyzed", "stale_empty"])
+@pytest.mark.parametrize("index_built", ["before_seed", "after_seed"])
+def test_integrity_tombstone_count_reads_only_the_partial_index(
+    statistics, index_built, tmp_path, monkeypatch, record_property
+):
+    """Runs the scan's own statement, not a copy of it, against retained generations.
+
+    Production plans this count right after a rebuild, before autovacuum has
+    analyzed the new rows, so the bound must hold without fresh statistics and
+    whether the index predates the rows or was built over them.
+    """
     with fresh_engine("postgres", tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
-        command.upgrade(config, "head")
-        company_id = seed_generations(engine, generations=40, rows=1500, tombstone_every=500)
+        command.upgrade(config, HEAD if index_built == "before_seed" else PARENT)
         with engine.begin() as connection:
-            connection.exec_driver_sql(f"ANALYZE {TABLE}")
+            connection.exec_driver_sql(f"ALTER TABLE {TABLE} SET (autovacuum_enabled = false)")
+            if statistics == "stale_empty":
+                connection.exec_driver_sql(f"ANALYZE {TABLE}")
+        company_id = seed_generations(engine, generations=40, rows=1500, tombstone_every=500)
+        if index_built == "after_seed":
+            command.upgrade(config, HEAD)
+        with engine.begin() as connection:
+            if statistics == "analyzed":
+                connection.exec_driver_sql(f"ANALYZE {TABLE}")
+            analyzed = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_stats WHERE tablename = :table "
+                    "AND attname = 'is_tombstoned'"
+                ),
+                {"table": TABLE},
+            ).scalar_one()
+        assert analyzed == (1 if statistics == "analyzed" else 0)
 
         statements = []
 
@@ -185,14 +214,144 @@ def test_integrity_tombstone_count_reads_only_the_partial_index(tmp_path, monkey
             with raw.cursor() as cursor:
                 cursor.execute("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement, parameters)
                 plan = cursor.fetchone()[0][0]["Plan"]
+        record_property(
+            "tombstone_count_plan",
+            {"statistics": statistics, "index_built": index_built, "plan": plan},
+        )
 
         def walk(node):
             yield node
             for child in node.get("Plans", ()):
                 yield from walk(child)
 
-        scans = [node for node in walk(plan) if "Index Name" in node or "Relation Name" in node]
-        assert [node.get("Index Name") for node in scans] == [NAME]
+        nodes = list(walk(plan))
+        # With statistics the planner reads the index directly; without them it
+        # drives a bitmap heap scan from the same index. Both read only it.
+        assert [node["Index Name"] for node in nodes if "Index Name" in node] == [NAME]
+        assert {node["Node Type"] for node in nodes} <= {
+            "Aggregate",
+            "Index Scan",
+            "Bitmap Index Scan",
+            "Bitmap Heap Scan",
+        }
         # 40 generations x 1,500 rows hold 120 tombstones; the prefilter index
         # alone would read every generation's entries for the tenant.
         assert plan["Shared Hit Blocks"] + plan["Shared Read Blocks"] < 200
+
+
+def _index_row(engine):
+    with engine.connect() as connection:
+        return connection.execute(
+            text(
+                "SELECT i.indexrelid AS oid, i.indisvalid, i.indisready FROM pg_index i "
+                "WHERE i.indexrelid = to_regclass(:name)"
+            ),
+            {"name": NAME},
+        ).first()
+
+
+def _projection_rows(engine):
+    with engine.connect() as connection:
+        return connection.execute(
+            text(f"SELECT id, md5(CAST(p AS text)) FROM {TABLE} p ORDER BY id")
+        ).all()
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize("phase", ["writers", "snapshots"])
+def test_cancelled_concurrent_build_recovers_on_second_upgrade(
+    phase, tmp_path, monkeypatch, record_property
+):
+    """A deploy interrupted mid-build leaves an invalid index; the next upgrade rebuilds it."""
+    with fresh_engine("postgres", tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, PARENT)
+        company_id = seed_generations(engine, generations=2, rows=6, tombstone_every=3)
+        parent = schema_catalog(engine)
+        rows = _projection_rows(engine)
+        held, observed = [], {}
+
+        def before_build(connection, cursor, statement, parameters, context, executemany):
+            if (
+                connection.engine.url.database != engine.url.database
+                or not statement.startswith(BUILDING[:-1])
+                or held
+            ):
+                return
+            for setting in ("lock_timeout", "statement_timeout"):
+                observed[setting] = connection.exec_driver_sql("SHOW " + setting).scalar_one()
+            blocker = engine.connect().execution_options(isolation_level="REPEATABLE READ")
+            held.append(blocker)
+            if phase == "writers":
+                # An uncommitted tombstoning write holds the table while the build starts.
+                blocker.execute(
+                    text(
+                        f"UPDATE {TABLE} SET updated_at = updated_at "
+                        "WHERE company_id = :company AND is_tombstoned"
+                    ),
+                    {"company": company_id},
+                )
+            else:
+                blocker.execute(text(f"SELECT count(*) FROM {TABLE}")).scalar_one()
+
+        event.listen(Engine, "before_cursor_execute", before_build)
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(command.upgrade, config, HEAD)
+                try:
+                    deadline, cancelled = time.monotonic() + 30, False
+                    while time.monotonic() < deadline and not future.done():
+                        state = _index_row(engine)
+                        if (
+                            state is not None
+                            and not state.indisvalid
+                            and state.indisready == (phase == "snapshots")
+                        ):
+                            with engine.connect().execution_options(
+                                isolation_level="AUTOCOMMIT"
+                            ) as monitor:
+                                pid = monitor.scalar(
+                                    text(
+                                        "SELECT pid FROM pg_stat_activity "
+                                        "WHERE datname = :database AND state = 'active' "
+                                        "AND query LIKE :query AND wait_event_type = 'Lock' "
+                                        "AND wait_event = 'virtualxid'"
+                                    ),
+                                    {"database": engine.url.database, "query": BUILDING},
+                                )
+                                if pid is not None:
+                                    assert monitor.scalar(
+                                        text("SELECT pg_cancel_backend(:pid)"), {"pid": pid}
+                                    )
+                                    cancelled = True
+                                    break
+                        time.sleep(0.02)
+                    assert cancelled, "The real concurrent-build wait was not observed"
+                    with pytest.raises(DBAPIError) as error:
+                        future.result(timeout=10)
+                    assert error.value.orig.sqlstate == "57014"
+                finally:
+                    for blocker in held:
+                        blocker.rollback()
+                        blocker.close()
+                    held.clear()
+        finally:
+            event.remove(Engine, "before_cursor_execute", before_build)
+
+        failed = _index_row(engine)
+        assert failed is not None and not failed.indisvalid
+        assert failed.indisready == (phase == "snapshots")
+        require_revision(engine, PARENT)
+        assert observed == {"lock_timeout": "5s", "statement_timeout": "15min"}
+        assert _projection_rows(engine) == rows
+
+        command.upgrade(config, HEAD)
+        shape(engine)
+        assert _index_row(engine).oid != failed.oid
+        require_index_additions(parent, schema_catalog(engine), EXPECTED)
+        require_revision(engine, HEAD)
+        assert _projection_rows(engine) == rows
+        record_property(
+            "native_interruption",
+            {"phase": phase, "sqlstate": "57014", "failed_indisready": failed.indisready},
+        )
