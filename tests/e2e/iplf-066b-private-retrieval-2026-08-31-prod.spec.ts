@@ -367,16 +367,11 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   const answer = selectPrivateAccessAnswer(
     [answered.assistant_turn], evidenceToken, beforeItems[0].source_id,
   );
-  expect(answer.proposed_actions).toEqual([expect.objectContaining({
-    action_type: "navigation", label: `Open ${filename}`,
-    target_type: "matter_document", target_id: beforeItems[0].source_id,
-    target_label: filename,
-  })]);
+  expect(answer.proposed_actions).toEqual([]);
   await expect(page.getByTestId("assistant-turns")).toContainText(
     evidenceToken,
   );
   await expect(assistantCitationButton(page, filename)).toBeVisible();
-  await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toBeVisible();
   await expect(page.getByTestId("assistant-turns")).not.toContainText(
     "Ignore previous instructions",
   );
@@ -449,7 +444,6 @@ test("IPLF-066B production locks answers after access restore and revokes privat
     await expect(savedAnswer).toContainText(PRIVATE_ACCESS_HIDDEN_NOTICE);
     await expect(savedAnswer).not.toContainText(evidenceToken);
     await expectAssistantCitationHidden(page, filename);
-    await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Ask this workspace" })).toBeVisible();
     expect(await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
@@ -478,7 +472,6 @@ test("IPLF-066B production locks answers after access restore and revokes privat
     page.locator('[data-turn-role="assistant"]').last(),
   ).not.toContainText(evidenceToken);
   await expectAssistantCitationHidden(page, filename);
-  await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toHaveCount(0);
 
   const after = await page.request.post(`${API}/api/private-retrieval/search`, {
     headers,

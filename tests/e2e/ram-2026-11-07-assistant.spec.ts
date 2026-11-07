@@ -257,35 +257,31 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
   const fixture = await signIn(page, baseURL);
   await page.getByRole("button", { name: fixture.history.title, exact: true }).click();
   await expect.poll(() => visibleTurnIds(page)).toEqual(fixture.first.items.map((turn) => turn.id));
-  const expected = [...fixture.first.items];
-  let cursor = fixture.first;
-  for (let index = 0; cursor.has_more && index < 3; index += 1) {
-    const offset = cursor.offset + cursor.items.length;
-    cursor = await fixture.turns(fixture.history.id, offset);
-    expect(cursor.offset).toBe(offset);
-    expect(cursor.limit).toBe(50);
-    expect(cursor.items.length).toBeGreaterThan(0);
-    expect(cursor.items.length).toBeLessThanOrEqual(50);
-    const response = page.waitForResponse((value) => {
-      const url = new URL(value.url());
-      return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`)
-        && url.searchParams.get("offset") === String(offset);
-    });
-    await page.getByRole("button", { name: "Load more messages", exact: true }).click();
-    expect((await response).status()).toBe(200);
-    expected.push(...cursor.items);
-    await expect.poll(() => visibleTurnIds(page)).toEqual(expected.map((turn) => turn.id));
-  }
-  expect(cursor.has_more, "retained session stays within its 200-turn bound").toBe(false);
+  const response = page.waitForResponse((value) => {
+    const url = new URL(value.url());
+    return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`)
+      && url.searchParams.get("snapshot") === "true";
+  });
+  await page.getByRole("button", { name: "Load more messages", exact: true }).click();
+  const snapshot = await response;
+  expect(snapshot.status()).toBe(200);
+  const { items: expected, limit, offset, has_more } = await snapshot.json() as AssistantTurnPage;
+  expect({ limit, offset, has_more }).toEqual({ limit: 200, offset: 0, has_more: false });
+  expect(expected.length).toBeLessThanOrEqual(200);
+  expect(expected.slice(0, 50).map((turn) => turn.id)).toEqual(fixture.first.items.map((turn) => turn.id));
+  await expect.poll(() => visibleTurnIds(page)).toEqual(expected.map((turn) => turn.id));
   expect(expected.length).toBeGreaterThanOrEqual(52);
   expect(new Set(expected.map((turn) => turn.id)).size).toBe(expected.length);
   await expect(page.getByRole("button", { name: "Load more messages", exact: true })).toHaveCount(0);
   const citedTurn = expected.find((turn) => turn.render_status === "visible" && turn.citations.length > 0);
   expect(citedTurn, "retained fixture requires an authorized factual answer with a citation").toBeTruthy();
   const citation = citedTurn!.citations[0];
+  expect(citedTurn!.proposed_actions.some((action) => action.action_type === "navigation")).toBe(false);
+  const citedArticle = page.locator(`[data-turn-id="${citedTurn!.id}"]`);
+  await expect(citedArticle.getByRole("link", { name: /^Open / })).toHaveCount(0);
   const opened = page.waitForResponse((response) => response.request().method() === "POST"
     && new URL(response.url()).pathname.endsWith(`/sessions/${fixture.history.id}/citations/${citation.id}/open`));
-  await page.locator(`[data-turn-id="${citedTurn!.id}"]`).getByRole("button", { name: `Open source: ${citation.label}`, exact: true }).click();
+  await citedArticle.getByRole("button", { name: `Open source: ${citation.label}`, exact: true }).click();
   const openResponse = await opened;
   expect(openResponse.status(), "real audited citation opening").toBe(200);
   expect(openResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
@@ -327,7 +323,7 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
       expect((await persisted.json()).title).toBe(title);
       const next = page.waitForResponse((response) => {
         const url = new URL(response.url());
-        return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`) && url.searchParams.get("offset") === "50";
+        return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`) && url.searchParams.get("snapshot") === "true";
       });
       await page.getByRole("button", { name: "Load more messages", exact: true }).click();
       const continuation = await next;
@@ -336,7 +332,9 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
       expect(fresh.items.some((turn) => turn.role === "assistant" && turn.render_status === "permission_changed"
         && turn.citations.length === 0 && turn.proposed_actions.length === 0)).toBe(true);
       await expect.poll(() => visibleTurnIds(page)).toEqual(fresh.items.map((turn) => turn.id));
-      await expect(page.locator(`[data-turn-id="${citedTurn!.id}"]`)).toHaveCount(0);
+      const redacted = fresh.items.find((turn) => turn.id === citedTurn!.id);
+      expect(redacted?.render_status).toBe("permission_changed");
+      await expect(page.locator(`[data-turn-id="${citedTurn!.id}"]`)).toContainText("This answer is hidden");
       await expect(page.getByText(citedTurn!.content, { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: /^Open source:/ })).toHaveCount(0);
       await expect(page.getByRole("main").getByRole("alert")).toContainText("sources or permissions changed");
@@ -365,7 +363,7 @@ test("a delayed real history page cannot contaminate another retained session", 
   // Hold the real request; no UI response or provider result is fabricated.
   await page.route(`**/api/workspace-assistant/sessions/${fixture.history.id}/turns?*`, async (route) => {
     const url = new URL(route.request().url());
-    if (url.searchParams.get("offset") !== "50") return route.continue();
+    if (url.searchParams.get("snapshot") !== "true") return route.continue();
     try {
       captured();
       await hold;
@@ -387,7 +385,7 @@ test("a delayed real history page cannot contaminate another retained session", 
     const resumed = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`)
-        && url.searchParams.get("offset") === "50";
+        && url.searchParams.get("snapshot") === "true";
     });
     release();
     await complete;

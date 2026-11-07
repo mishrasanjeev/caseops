@@ -33,6 +33,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     ModelRun,
+    PrivateIndexGeneration,
     PrivateSavedOutputAccess,
     TenantAIPolicy,
     TrademarkApplication,
@@ -73,6 +74,7 @@ from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import (
     ResolvedAIPolicy,
@@ -87,6 +89,7 @@ MAX_SOURCE_TEXT_CHARS = 1600
 MAX_SESSION_TURNS = 200
 MAX_TURN_LIST_LIMIT = 50
 MAX_CITATIONS_PER_TURN = 5
+ABSTENTION_SUGGESTION = "Search verified legal sources or narrow the workspace scope"
 
 
 class _AssistantLLMResponse(BaseModel):
@@ -157,7 +160,7 @@ def _current_assistant_context(
         .where(
             Company.id == context.company.id,
             Company.is_active.is_(True),
-        )
+        ).execution_options(populate_existing=True)
     ).one_or_none()
     if actor is None:
         return None
@@ -172,14 +175,35 @@ def _current_assistant_context(
     )
 
 
-def _assistant_capability_is_current(
+def _final_assistant_context(
     session: Session,
     *,
     context: SessionContext,
-) -> bool:
-    """Recheck the actor boundary after any provider wait."""
+) -> SessionContext:
+    lock_matter_private_authority(session, company_id=context.company.id)
+    current = _current_assistant_context(session, context=context)
+    if current is None:
+        session.rollback()
+        raise ProblemHTTPException(
+            status_code=409,
+            problem_type="assistant_access_changed",
+            detail="Workspace Assistant access changed while the question was running.",
+        )
+    return current
 
-    return _current_assistant_context(session, context=context) is not None
+
+def _assistant_source_epochs(session: Session, *, company_id: str) -> tuple[str, int, int] | None:
+    row = session.execute(
+        select(
+            PrivateIndexGeneration.id,
+            PrivateIndexGeneration.access_policy_generation,
+            PrivateIndexGeneration.tombstone_generation,
+        ).where(
+            PrivateIndexGeneration.company_id == company_id,
+            PrivateIndexGeneration.state == "active",
+        )
+    ).one_or_none()
+    return (row[0], row[1], row[2]) if row is not None else None
 
 
 def _scope_access_denied(
@@ -277,19 +301,21 @@ def _resolve_scope_versions(
                 Client.company_id == company_id,
                 Client.id.in_(client_ids),
                 Client.is_active.is_(True),
-            )
+            ).execution_options(populate_existing=True)
         ).all()
         resolved.update({("client", row.id): _resource_version(row) for row in rows})
 
     matter_ids = set(grouped.get("matter", set()))
-    matter_documents: dict[str, MatterAttachment] = {}
+    matter_documents: dict[str, tuple[str, str]] = {}
     matter_document_ids = grouped.get("matter_document", set())
     if matter_document_ids:
-        attachments = session.scalars(
-            select(MatterAttachment).where(MatterAttachment.id.in_(matter_document_ids))
-        ).all()
-        matter_documents = {row.id: row for row in attachments}
-        matter_ids.update(row.matter_id for row in attachments)
+        attachments = session.execute(
+            select(MatterAttachment.id, MatterAttachment.matter_id, MatterAttachment.sha256_hex)
+            .join(Matter, Matter.id == MatterAttachment.matter_id)
+            .where(Matter.company_id == company_id, MatterAttachment.id.in_(matter_document_ids))
+        )
+        matter_documents = {row.id: (row.matter_id, row.sha256_hex) for row in attachments}
+        matter_ids.update(matter_id for matter_id, _sha256 in matter_documents.values())
     visible_matters: dict[str, Matter] = {}
     if matter_ids:
         rows = session.scalars(
@@ -298,16 +324,16 @@ def _resolve_scope_versions(
                 Matter.id.in_(matter_ids),
                 Matter.is_active.is_(True),
                 visible_matters_filter(session, context=context),
-            )
+            ).execution_options(populate_existing=True)
         ).all()
         visible_matters = {row.id: row for row in rows}
         for scope_id in grouped.get("matter", set()):
             row = visible_matters.get(scope_id)
             if row is not None:
                 resolved[("matter", scope_id)] = _resource_version(row)
-        for scope_id, attachment in matter_documents.items():
-            if attachment.matter_id in visible_matters:
-                resolved[("matter_document", scope_id)] = attachment.sha256_hex
+        for scope_id, (matter_id, sha256) in matter_documents.items():
+            if matter_id in visible_matters:
+                resolved[("matter_document", scope_id)] = sha256
 
     docket_ids = set(grouped.get("ip_docket", set()))
     typed_ip_rows: dict[tuple[str, str], object] = {}
@@ -321,7 +347,9 @@ def _resolve_scope_versions(
         if not target_ids:
             continue
         rows = session.scalars(
-            select(model).where(model.company_id == company_id, model.id.in_(target_ids))
+            select(model)
+            .where(model.company_id == company_id, model.id.in_(target_ids))
+            .execution_options(populate_existing=True)
         ).all()
         for row in rows:
             typed_ip_rows[(scope_type, row.id)] = row
@@ -336,7 +364,7 @@ def _resolve_scope_versions(
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
                 general_ip_disclosure_filter(),
                 visible_ip_dockets_filter(session, context=context),
-            )
+            ).execution_options(populate_existing=True)
         ).all()
         visible_dockets = {row.id: row for row in rows}
         for scope_id in grouped.get("ip_docket", set()):
@@ -353,7 +381,7 @@ def _resolve_scope_versions(
             select(IpDocument).where(
                 IpDocument.company_id == company_id,
                 IpDocument.id.in_(ip_document_ids),
-            )
+            ).execution_options(populate_existing=True)
         ).all()
         document_ids = {document.id for document in documents}
         if require_ip_document_ai_retrieval:
@@ -985,6 +1013,10 @@ def search_assistant_scopes(
     )
 
 
+def _bounded_source_text(text: str) -> str:
+    return " ".join(text.split())[:MAX_SOURCE_TEXT_CHARS]
+
+
 def _source(
     *,
     scope_type: str,
@@ -1001,7 +1033,7 @@ def _source(
         source_id=scope_id,
         source_version=version or "1",
         label=label[:255],
-        text=" ".join(text.split())[:MAX_SOURCE_TEXT_CHARS],
+        text=_bounded_source_text(text),
         href=href,
         private_retrieved=private_retrieved,
         private_projection_ids=private_projection_ids,
@@ -1420,7 +1452,6 @@ def _proposed_actions(
     abstained: bool,
 ) -> list[AssistantProposedAction]:
     normalized = question.casefold()
-    read_target = candidates[0] if candidates else None
     actions: list[AssistantProposedAction] = []
 
     def write_target(
@@ -1444,13 +1475,13 @@ def _proposed_actions(
         )
 
     def append(
-        action_type: Literal["navigation", "search", "draft", "task", "field_update"],
+        action_type: Literal["search", "draft", "task", "field_update"],
         label: str,
         *,
         href: str | None = None,
         write: bool = False,
     ) -> None:
-        target = write_target(action_type) if write else read_target
+        target = None if action_type == "search" else write_target(action_type)
         unavailable_reason = None
         if write and target is None:
             unavailable_reason = (
@@ -1479,15 +1510,14 @@ def _proposed_actions(
             )
         )
 
-    if read_target is not None and any(term in normalized for term in ("open", "show", "go to")):
-        append("navigation", f"Open {read_target.label}", href=read_target.href)
-    if any(term in normalized for term in ("draft", "prepare", "write a reply")):
-        append("draft", "Prepare a draft proposal", write=True)
-    if any(term in normalized for term in ("task", "remind", "schedule", "assign")):
-        append("task", "Prepare a task proposal", write=True)
-    if any(term in normalized for term in ("update", "change", "set status", "record ")):
-        append("field_update", "Prepare a field-change proposal", write=True)
-    if abstained or _asks_for_legal_proposition(question):
+    if not abstained:
+        if any(term in normalized for term in ("draft", "prepare", "write a reply")):
+            append("draft", "Prepare a draft proposal", write=True)
+        if any(term in normalized for term in ("task", "remind", "schedule", "assign")):
+            append("task", "Prepare a task proposal", write=True)
+        if any(term in normalized for term in ("update", "change", "set status", "record ")):
+            append("field_update", "Prepare a field-change proposal", write=True)
+    if abstained:
         append(
             "search",
             "Search verified legal sources",
@@ -1610,16 +1640,34 @@ def _model_metadata(row: ModelRun | None) -> AssistantModelMetadata | None:
     )
 
 
-def _manifest_actions(payload: dict) -> list[AssistantProposedAction]:
+def _manifest_actions(payload: dict, *, abstained: bool) -> list[AssistantProposedAction]:
     raw = payload.get("proposed_actions", [])
     if not isinstance(raw, list):
         return []
     actions: list[AssistantProposedAction] = []
     for item in raw[:5]:
         try:
-            actions.append(AssistantProposedAction.model_validate(item))
+            action = AssistantProposedAction.model_validate(item)
         except (TypeError, ValueError):
             continue
+        # Retained source links must use the audited citation endpoint. The
+        # legacy research link was based on the user's question, but inherited
+        # the first source's metadata and proposal identity.
+        if action.action_type == "navigation":
+            continue
+        if action.action_type == "search":
+            if not action.href or not action.href.startswith("/app/research?query="):
+                continue
+            action = AssistantProposedAction(
+                proposal_id=hashlib.sha256(action.href.encode("utf-8")).hexdigest()[:32],
+                action_type="search",
+                label="Search verified legal sources",
+                href=action.href,
+                requires_confirmation=False,
+            )
+        elif abstained:
+            continue
+        actions.append(action)
     return actions
 
 
@@ -1755,8 +1803,20 @@ def _serialize_turns(
                     for citation in visible_citations
                 ],
                 model=_model_metadata(models_by_id.get(turn.model_run_id)),
-                suggested_searches=[] if changed else _manifest_suggestions(manifest),
-                proposed_actions=[] if changed else _manifest_actions(manifest),
+                suggested_searches=(
+                    []
+                    if changed
+                    else [ABSTENTION_SUGGESTION]
+                    if turn.status == AssistantTurnStatus.ABSTAINED
+                    else _manifest_suggestions(manifest)
+                ),
+                proposed_actions=(
+                    []
+                    if changed
+                    else _manifest_actions(
+                        manifest, abstained=turn.status == AssistantTurnStatus.ABSTAINED
+                    )
+                ),
                 created_at=turn.created_at,
             )
         )
@@ -1922,6 +1982,7 @@ def ask_workspace_assistant(
             .order_by(AssistantSessionScope.ordinal.asc())
         ).all()
     )
+    starting_source_epochs = _assistant_source_epochs(session, company_id=context.company.id)
     candidates = _sources_for_scopes(
         session,
         context=context,
@@ -1940,7 +2001,7 @@ def ask_workspace_assistant(
             answer="I do not have enough permitted, verified evidence to answer that safely.",
             confidence="insufficient",
             used_source_ids=[],
-            suggested_searches=["Search verified legal sources or narrow the workspace scope"],
+            suggested_searches=[ABSTENTION_SUGGESTION],
         )
     else:
         messages = _assistant_messages(question=question, candidates=candidates)
@@ -1963,6 +2024,7 @@ def ask_workspace_assistant(
             )
         except LLMProviderError as exc:
             session.rollback()
+            context = _final_assistant_context(session, context=context)
             locked_policy = _locked_assistant_policy(session, context=context)
             locked = _session_or_404(
                 session,
@@ -2026,15 +2088,19 @@ def ask_workspace_assistant(
                 detail="The workspace assistant could not complete this question. Try again.",
             ) from exc
 
-    if completion is not None and not _assistant_capability_is_current(
-        session,
-        context=context,
+    if completion is not None:
+        # Persist provider accounting before taking the tenant authority lock.
+        # No answer, model run, or answer audit has been staged yet.
+        session.commit()
+    context = _final_assistant_context(session, context=context)
+    if completion is not None and starting_source_epochs != _assistant_source_epochs(
+        session, company_id=context.company.id
     ):
         session.rollback()
         raise ProblemHTTPException(
             status_code=409,
-            problem_type="assistant_access_changed",
-            detail="Workspace Assistant access changed while the question was running.",
+            problem_type="assistant_sources_changed",
+            detail="Workspace sources changed while the question was running. Ask again.",
         )
     private_candidates = [row for row in candidates if row.private_retrieved]
     if completion is not None and private_candidates:
@@ -2059,8 +2125,8 @@ def ask_workspace_assistant(
             for candidate in private_candidates
             for projection_id in candidate.private_projection_ids
         }
-        hydrated_projection_ids = {
-            row.projection_id
+        hydrated = {
+            row.projection_id: row
             for row in hydrate_private_projection_results(
                 session,
                 context=context,
@@ -2069,7 +2135,17 @@ def ask_workspace_assistant(
                 limit=MAX_RETRIEVAL_SOURCES,
             )
         }
-        if hydrated_projection_ids != expected_projection_ids:
+        if hydrated.keys() != expected_projection_ids or any(
+            any(
+                (row.source_type, row.source_id, row.source_version)
+                != (source.source_type, source.source_id, source.source_version)
+                for row in (hydrated[key] for key in source.private_projection_ids)
+            )
+            or _bounded_source_text(
+                " ".join(hydrated[key].content for key in source.private_projection_ids)
+            ) != source.text
+            for source in private_candidates
+        ):
             session.rollback()
             raise ProblemHTTPException(
                 status_code=409,
@@ -2121,9 +2197,13 @@ def ask_workspace_assistant(
     provider_sources_current = [
         current[candidate.key] for candidate in candidates if candidate.key in current
     ]
-    provider_sources_changed = completion is not None and (
-        len(provider_sources_current) != len(candidates)
-    )
+    if completion is not None and len(provider_sources_current) != len(candidates):
+        session.rollback()
+        raise ProblemHTTPException(
+            status_code=409,
+            problem_type="assistant_sources_changed",
+            detail="Workspace sources changed while the question was running. Ask again.",
+        )
     cited: list[_SourceCandidate] = []
     seen_source_ids: set[str] = set()
     for source_id in parsed.used_source_ids:
@@ -2136,17 +2216,17 @@ def ask_workspace_assistant(
         cited.append(source)
         if len(cited) >= MAX_CITATIONS_PER_TURN:
             break
-    answered = parsed.status == "answered" and bool(cited) and not provider_sources_changed
+    answered = parsed.status == "answered" and bool(cited)
     answer = (
         parsed.answer
         if answered
         else ("I do not have enough permitted, verified evidence to answer that safely.")
     )
-    suggested = parsed.suggested_searches if not answered else []
+    suggested = [] if answered else [ABSTENTION_SUGGESTION]
     proposals = _proposed_actions(
         session_id=locked.id,
         question=question,
-        candidates=list(current.values()),
+        candidates=provider_sources_current if answered else [],
         abstained=not answered,
     )
     model_run = None
@@ -2199,7 +2279,7 @@ def ask_workspace_assistant(
         metadata={
             "question_sha256": _content_hash(question),
             "answer_status": "completed" if answered else "abstained",
-            "citation_count": len(cited),
+            "citation_count": len(cited) if answered else 0,
             "source_count": len(candidates),
             "model_run_id": model_run.id if model_run is not None else None,
             "policy_version": locked_policy.policy_version,
@@ -2226,9 +2306,15 @@ def list_assistant_turns(
     session_id: str,
     limit: int,
     offset: int,
+    snapshot: bool = False,
 ) -> AssistantTurnListResponse:
     row = _session_or_404(session, context=context, session_id=session_id)
-    bounded_limit = min(limit, MAX_TURN_LIST_LIMIT)
+    if snapshot and offset != 0:
+        raise HTTPException(status_code=422, detail="A history snapshot must start at offset zero.")
+    bounded_limit = MAX_SESSION_TURNS if snapshot else min(limit, MAX_TURN_LIST_LIMIT)
+    starting_epochs = (
+        _assistant_source_epochs(session, company_id=context.company.id) if snapshot else None
+    )
     turns = list(
         session.scalars(
             select(AssistantTurn)
@@ -2242,12 +2328,23 @@ def list_assistant_turns(
         ).all()
     )
     has_more = len(turns) > bounded_limit
+    if snapshot and has_more:
+        raise HTTPException(
+            status_code=409, detail="Conversation history exceeds its retained limit."
+        )
+    items = _serialize_turns(session, context=context, turns=turns[:bounded_limit])
+    if snapshot and starting_epochs != _assistant_source_epochs(
+        session, company_id=context.company.id
+    ):
+        raise ProblemHTTPException(
+            status_code=409,
+            problem_type="assistant_sources_changed",
+            detail=(
+                "Conversation sources changed while history was loading. Reopen the conversation."
+            ),
+        )
     return AssistantTurnListResponse(
-        items=_serialize_turns(
-            session,
-            context=context,
-            turns=turns[:bounded_limit],
-        ),
+        items=items,
         limit=bounded_limit,
         offset=offset,
         has_more=has_more,

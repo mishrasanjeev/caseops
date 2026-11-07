@@ -75,16 +75,16 @@ function mergeTurns(current: AssistantTurn[], incoming: AssistantTurn[]) {
   return [...byId.values()].sort((a, b) => a.sequence - b.sequence);
 }
 
-function nextHistoryPage(page: AssistantTurnPage, expectedOffset = 0) {
+function validateHistory(page: AssistantTurnPage, snapshot = false) {
   if (!page || !Array.isArray(page.items)
-    || !Number.isInteger(page.limit) || page.limit < 1 || page.limit > 50
-    || !Number.isInteger(page.offset) || page.offset < 0 || page.offset > 10000
-    || page.offset !== expectedOffset
+    || !Number.isInteger(page.limit) || page.limit < 1
+    || (snapshot ? page.limit !== 200 || page.has_more : page.limit > 50)
+    || page.offset !== 0
     || page.items.length > page.limit || typeof page.has_more !== "boolean"
     || (page.has_more && page.items.length === 0)) {
     throw new Error("Conversation history could not be read safely. Reopen the conversation.");
   }
-  return page.has_more ? { limit: page.limit, offset: page.offset + page.items.length } : null;
+  return page.has_more;
 }
 
 const SCOPE_LABELS: Record<AssistantScopeInput["scope_type"], string> = {
@@ -133,7 +133,7 @@ export function WorkspaceAssistant() {
   const [busy, setBusy] = useState<"scope" | "session" | "ask" | "export" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [policyDisabled, setPolicyDisabled] = useState(false);
-  const [historyPage, setHistoryPage] = useState<{ limit: number; offset: number } | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [openingCitation, setOpeningCitation] = useState<string | null>(null);
   const readEpoch = useRef(0);
@@ -168,7 +168,7 @@ export function WorkspaceAssistant() {
     setLoadingHistory(false);
     setOpeningCitation(null);
     setBusy(null);
-    setHistoryPage(null);
+    setHasMoreHistory(false);
     setTurns([]);
     setActionReview(null);
     setQuestion("");
@@ -184,7 +184,7 @@ export function WorkspaceAssistant() {
 
   function replaceCachedHistory(
     freshTurns: AssistantTurn[],
-    nextPage: typeof historyPage,
+    hasMore: boolean,
     freshSession?: AssistantSessionRecord,
   ) {
     const epoch = resetConversationReads();
@@ -192,7 +192,7 @@ export function WorkspaceAssistant() {
     setSelected(freshSession ? freshSession.scopes.map(fallbackScopeOption) : []);
     if (freshSession) setActive(freshSession);
     setTurns(mergeTurns([], freshTurns));
-    setHistoryPage(nextPage);
+    setHasMoreHistory(hasMore);
     setError(SOURCE_ACCESS_CHANGED);
     return epoch;
   }
@@ -279,11 +279,11 @@ export function WorkspaceAssistant() {
     try {
       const updated = await replaceAssistantScopes(active.id, active.version, selected);
       const history = await listAssistantTurns(updated.id);
-      const nextPage = nextHistoryPage(history);
+      const hasMore = validateHistory(history);
       if (readEpoch.current !== epoch) return;
       setActive(updated);
       setTurns(mergeTurns([], history.items));
-      setHistoryPage(nextPage);
+      setHasMoreHistory(hasMore);
       setSessions((current) => current.map((row) => (row.id === updated.id ? updated : row)));
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
@@ -306,11 +306,11 @@ export function WorkspaceAssistant() {
         getAssistantSession(summary.id),
         listAssistantTurns(summary.id),
       ]);
-      const nextPage = nextHistoryPage(history);
+      const hasMore = validateHistory(history);
       if (readEpoch.current !== epoch) return;
       setActive(sessionRecord);
       setTurns(mergeTurns([], history.items));
-      setHistoryPage(nextPage);
+      setHasMoreHistory(hasMore);
       setSelected(sessionRecord.scopes.map(fallbackScopeOption));
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
@@ -321,24 +321,28 @@ export function WorkspaceAssistant() {
   }
 
   async function loadMoreHistory() {
-    if (!active || !historyPage || historyPending.current) return;
+    if (!active || !hasMoreHistory || historyPending.current) return;
     const epoch = readEpoch.current;
     historyPending.current = true;
     setLoadingHistory(true);
     setError(null);
     try {
-      const page = await listAssistantTurns(active.id, historyPage);
-      const nextPage = nextHistoryPage(page, historyPage.offset);
+      // A later clean page cannot authorize an earlier cached answer.
+      const page = await listAssistantTurns(active.id, { snapshot: true });
+      validateHistory(page, true);
       if (readEpoch.current !== epoch) return;
       if (hasChangedSourceAccess(page.items)) {
-        replaceCachedHistory(page.items, nextPage);
+        replaceCachedHistory(page.items, false);
         return;
       }
-      setTurns((current) => mergeTurns(current, page.items));
-      setHistoryPage(nextPage);
+      setTurns(mergeTurns([], page.items));
+      setHasMoreHistory(false);
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
-      if (!isTransientHistoryError(caught)) hideConversation();
+      // The prefix was not reauthorized. Keep a retry for transient failures,
+      // but never leave the old private messages or scope labels on screen.
+      if (isTransientHistoryError(caught)) replaceCachedHistory([], true);
+      else hideConversation();
       setError(apiErrorMessage(caught, "Could not load more conversation messages."));
     } finally {
       if (readEpoch.current === epoch) {
@@ -381,7 +385,7 @@ export function WorkspaceAssistant() {
       if (readEpoch.current !== epoch) return;
       const incoming = [response.user_turn, response.assistant_turn];
       if (response.session.scope_state === "permission_changed" || hasChangedSourceAccess(incoming)) {
-        replaceCachedHistory(incoming, historyPage, response.session);
+        replaceCachedHistory(incoming, hasMoreHistory, response.session);
       } else {
         setActive(response.session);
         setTurns((current) => mergeTurns(current, incoming));
@@ -430,7 +434,7 @@ export function WorkspaceAssistant() {
       const exported = await exportAssistantSession(active.id);
       if (readEpoch.current !== epoch) return;
       if (exported.session.scope_state === "permission_changed" || hasChangedSourceAccess(exported.turns)) {
-        epoch = replaceCachedHistory(exported.turns, null, exported.session);
+        epoch = replaceCachedHistory(exported.turns, false, exported.session);
       }
       const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
       const href = URL.createObjectURL(blob);
@@ -696,7 +700,7 @@ export function WorkspaceAssistant() {
                   ))
                 )}
               </div>
-              {historyPage ? (
+              {hasMoreHistory ? (
                 <button
                   type="button"
                   onClick={() => void loadMoreHistory()}
@@ -761,6 +765,13 @@ export function WorkspaceAssistant() {
   );
 }
 
+function isRenderableAction(action: AssistantProposedAction) {
+  if (action.action_type === "search") {
+    return !action.requires_confirmation && action.href?.startsWith("/app/research?query=") === true;
+  }
+  return action.action_type !== "navigation" && action.requires_confirmation;
+}
+
 function TurnView({
   turn,
   sessionId,
@@ -803,16 +814,16 @@ function TurnView({
               ))}
             </ol>
           ) : null}
-          {turn.proposed_actions.length > 0 ? (
+          {turn.proposed_actions.some(isRenderableAction) ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              {turn.proposed_actions.map((action) =>
-                action.href && !action.requires_confirmation ? (
+              {turn.proposed_actions.filter(isRenderableAction).map((action) =>
+                action.action_type === "search" && action.href ? (
                   <a
                     key={action.proposal_id}
                     href={action.href}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
                   >
-                    {action.label} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    Search verified legal sources <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </a>
                 ) : (
                   <button

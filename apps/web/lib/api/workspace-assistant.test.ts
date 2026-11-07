@@ -23,6 +23,15 @@ describe("assistant history and citation contracts", () => {
     expect(request).toHaveBeenCalledExactlyOnceWith("/api/workspace-assistant/sessions/session-1/turns?limit=50&offset=0");
   });
 
+  it("requests an explicit bounded snapshot from the start of history", async () => {
+    const page = { items: [], limit: 200, offset: 0, has_more: false };
+    request.mockResolvedValue(page);
+    expect(await listAssistantTurns("session-1", { snapshot: true })).toBe(page);
+    expect(request).toHaveBeenCalledExactlyOnceWith(
+      "/api/workspace-assistant/sessions/session-1/turns?limit=50&offset=0&snapshot=true",
+    );
+  });
+
   it.each([{ limit: 51 }, { limit: 0 }, { limit: 1.5 }, { offset: -1 }, { offset: 10001 }, { offset: NaN }])(
     "rejects invalid page arguments before requesting: %j", (options) => {
       expect(() => listAssistantTurns("session-1", options)).toThrow("Invalid assistant history page.");

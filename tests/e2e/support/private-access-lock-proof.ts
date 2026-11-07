@@ -12,11 +12,16 @@ export function assistantCitationButton(page: Page, label: string) {
   });
 }
 
+export async function expectNoAssistantDirectSourceLinks(page: Page, label: string): Promise<void> {
+  const turns = page.getByTestId("assistant-turns");
+  for (const name of [label, `Open ${label}`]) {
+    await expect(turns.getByRole("link", { name, exact: true })).toHaveCount(0);
+  }
+}
+
 export async function expectAssistantCitationHidden(page: Page, label: string): Promise<void> {
   await expect(assistantCitationButton(page, label)).toHaveCount(0);
-  await expect(page.getByTestId("assistant-turns").getByRole("link", {
-    name: label, exact: true,
-  })).toHaveCount(0);
+  await expectNoAssistantDirectSourceLinks(page, label);
 }
 
 export async function expectAuthorizedAssistantCitationOpen(
@@ -24,6 +29,7 @@ export async function expectAuthorizedAssistantCitationOpen(
   { label, sessionId, citationId }: { label: string; sessionId: string; citationId: string },
 ): Promise<void> {
   const origin = new URL(page.url()).origin;
+  await expectNoAssistantDirectSourceLinks(page, label);
   const opened = page.waitForResponse((response) =>
     response.request().method() === "POST" &&
     new URL(response.url()).pathname === `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
@@ -84,6 +90,7 @@ export function selectPrivateAccessAnswer(
   expect(answer.citations).toHaveLength(1);
   expect(answer.citations[0].source_type).toBe("matter_document");
   expect(answer.citations[0].source_id).toBe(documentId);
+  expect(answer.proposed_actions).not.toContainEqual(expect.objectContaining({ action_type: "navigation" }));
   return answer;
 }
 

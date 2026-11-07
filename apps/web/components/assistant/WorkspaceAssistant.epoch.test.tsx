@@ -122,8 +122,8 @@ const REDACTED_PAGE: AssistantTurnPage = {
       render_status: "permission_changed",
     },
   ],
-  limit: 50,
-  offset: 50,
+  limit: 200,
+  offset: 0,
   has_more: false,
 };
 const B_ANSWER = "Currently authorized conversation B";
@@ -217,7 +217,7 @@ async function beginConfirmation(user: ReturnType<typeof userEvent.setup>) {
 function holdContinuation() {
   const page = deferred<AssistantTurnPage>();
   api.listAssistantTurns.mockImplementation((id, options) => {
-    if (id === SESSION_A.id && options?.offset === 50) return page.promise;
+    if (id === SESSION_A.id && options?.snapshot) return page.promise;
     if (id === SESSION_A.id && !options?.offset) return Promise.resolve(FIRST_PAGE);
     if (id === SESSION_B.id && !options?.offset) return Promise.resolve(B_PAGE);
     throw new Error("Unexpected history identity or cursor.");
@@ -309,7 +309,7 @@ describe("WorkspaceAssistant asynchronous epoch isolation", () => {
     api.confirmAssistantAction.mockReturnValue(confirmation.promise);
     await openA(user);
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { limit: 50, offset: 50 });
+    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { snapshot: true });
     await beginConfirmation(user);
     await finishRedaction(page);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -372,7 +372,7 @@ describe("WorkspaceAssistant asynchronous epoch isolation", () => {
     api.askWorkspaceAssistant.mockReturnValue(answer.promise);
     await openA(user);
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { limit: 50, offset: 50 });
+    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { snapshot: true });
     await user.click(screen.getByRole("button", { name: "Clear scope" }));
     expect(api.archiveAssistantSession).toHaveBeenCalledExactlyOnceWith(SESSION_A.id, 7);
     expect(screen.getByRole("button", { name: SESSION_B.title })).toBeDisabled();
@@ -399,7 +399,7 @@ describe("WorkspaceAssistant asynchronous epoch isolation", () => {
     api.askWorkspaceAssistant.mockReturnValue(answer.promise);
     await openA(user);
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { limit: 50, offset: 50 });
+    expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION_A.id, { snapshot: true });
     await user.click(screen.getByRole("button", { name: "Delete conversation" }));
     expect(api.deleteAssistantSession).toHaveBeenCalledExactlyOnceWith(SESSION_A.id);
     expect(screen.getByRole("button", { name: SESSION_B.title })).toBeDisabled();

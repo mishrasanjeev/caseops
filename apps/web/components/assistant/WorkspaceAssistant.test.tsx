@@ -136,6 +136,10 @@ function historyTurns(count: number, first = 1) {
   }));
 }
 
+function historySnapshot(items: AssistantTurn[]): AssistantTurnPage {
+  return { items, limit: 200, offset: 0, has_more: false };
+}
+
 function hiddenTurn(sequence = 52): AssistantTurn {
   return {
     ...ASSISTANT_TURN, id: `hidden-${sequence}`, sequence,
@@ -441,28 +445,59 @@ describe("WorkspaceAssistant", () => {
     expect(api.openAssistantCitation).toHaveBeenCalledTimes(1);
   });
 
-  it("continues past 50 retained turns in API sequence order and stops at the last page", async () => {
+  it("never renders a legacy source Open href alongside the audited citation", async () => {
+    const user = userEvent.setup();
+    const legacy = {
+      ...ASSISTANT_TURN,
+      proposed_actions: [
+        {
+          ...ASSISTANT_TURN.proposed_actions[0],
+          proposal_id: "legacy-open", action_type: "navigation" as const,
+          label: "Open private source", href: "/app/matters/matter-1",
+          requires_confirmation: false,
+        },
+        {
+          ...ASSISTANT_TURN.proposed_actions[0],
+          proposal_id: "safe-search", action_type: "search" as const,
+          href: "/app/research?query=review", requires_confirmation: false,
+        },
+      ],
+    };
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN, legacy], limit: 50, offset: 0, has_more: false });
+    await openStoredConversation(user);
+    expect(screen.queryByText("Open private source")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open source: TM-42 · Aster mark" })).not.toHaveAttribute("href");
+    expect(screen.getByRole("link", { name: "Search verified legal sources" })).toHaveAttribute(
+      "href", "/app/research?query=review",
+    );
+  });
+
+  it("continues past 50 retained turns using one bounded reauthorized snapshot", async () => {
     const user = userEvent.setup();
     const turns = historyTurns(52);
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
     api.listAssistantTurns.mockResolvedValueOnce({ items: turns.slice(0, 50), limit: 50, offset: 0, has_more: true })
-      .mockResolvedValueOnce({ items: turns.slice(50), limit: 50, offset: 50, has_more: false });
+      .mockResolvedValueOnce(historySnapshot(turns));
     await openStoredConversation(user);
     expect(screen.queryByText("Private message 52")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
     expect(await screen.findByText("Private message 52")).toBeVisible();
-    expect(api.listAssistantTurns).toHaveBeenNthCalledWith(2, SESSION.id, { limit: 50, offset: 50 });
+    expect(api.listAssistantTurns).toHaveBeenNthCalledWith(2, SESSION.id, { snapshot: true });
     expect([...screen.getByTestId("assistant-turns").querySelectorAll("article")].map((row) => row.getAttribute("data-turn-id")))
       .toEqual(turns.map((turn) => turn.id));
     expect(screen.queryByRole("button", { name: "Load more messages" })).not.toBeInTheDocument();
   });
 
-  it("invalidates all 50 cached turns when a successful continuation reports changed source access", async () => {
+  it("replaces a revoked prefix even when later turns concern an independent source", async () => {
     const user = userEvent.setup();
     const first = [USER_TURN, ASSISTANT_TURN, ...historyTurns(48, 3)];
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
     api.listAssistantTurns.mockResolvedValueOnce({ items: first, limit: 50, offset: 0, has_more: true })
-      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "turn-51", sequence: 51 }, hiddenTurn()], limit: 50, offset: 50, has_more: false })
+      .mockResolvedValueOnce(historySnapshot([
+        USER_TURN, hiddenTurn(2), ...first.slice(2),
+        ...historyTurns(2, 51),
+      ]))
       .mockResolvedValueOnce({ items: [hiddenTurn()], limit: 50, offset: 0, has_more: false });
     await openStoredConversation(user);
     expect(screen.getByText("Private message 50")).toBeVisible();
@@ -470,7 +505,8 @@ describe("WorkspaceAssistant", () => {
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/sources or permissions changed/i);
     expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
-    expect(screen.queryByText("Private message 50")).not.toBeInTheDocument();
+    expect(screen.getByText("Private message 50")).toBeVisible();
+    expect(screen.getByText("Private message 52")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Prepare a task proposal" })).not.toBeInTheDocument();
     expect(screen.getByText(hiddenTurn().content)).toBeVisible();
@@ -480,23 +516,7 @@ describe("WorkspaceAssistant", () => {
     await user.click(screen.getByRole("button", { name: SESSION.title }));
     expect(await screen.findByText(hiddenTurn().content)).toBeVisible();
     expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
-    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { limit: 50, offset: 50 }], [SESSION.id]]);
-  });
-
-  it("continues beyond a redacted page without restoring the discarded cached prefix", async () => {
-    const user = userEvent.setup();
-    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
-    api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN, ASSISTANT_TURN], limit: 2, offset: 0, has_more: true })
-      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "user-3", sequence: 3 }, hiddenTurn(4)], limit: 2, offset: 2, has_more: true })
-      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "user-5", sequence: 5, content: "Current permitted question" }, { ...hiddenTurn(6), render_status: "visible", status: "abstained", content: "Fresh permitted history" }], limit: 2, offset: 4, has_more: false });
-    await openStoredConversation(user);
-    await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    expect(await screen.findByText(hiddenTurn().content)).toBeVisible();
-    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    expect(await screen.findByText("Fresh permitted history")).toBeVisible();
-    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
-    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { limit: 2, offset: 2 }], [SESSION.id, { limit: 2, offset: 4 }]]);
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { snapshot: true }], [SESSION.id]]);
   });
 
   it.each(["session", "user", "assistant"] as const)("invalidates cached turns for a successful ask with a changed %s", async (changed) => {
@@ -528,7 +548,7 @@ describe("WorkspaceAssistant", () => {
       await user.click(screen.getByRole("button", { name: "Load more messages" }));
       await user.click(screen.getByRole("button", { name: "Export conversation" }));
       expect(api.exportAssistantSession).toHaveBeenCalledWith(SESSION.id);
-      await act(async () => page.resolve({ items: [hiddenTurn(3)], limit: 2, offset: 2, has_more: false }));
+      await act(async () => page.resolve(historySnapshot([USER_TURN, hiddenTurn()])));
       await act(async () => exported.resolve({ schema_version: 1, exported_at: SESSION.updated_at, session: SESSION, turns: [USER_TURN, ASSISTANT_TURN], retention_disposition: "retained" }));
       expect(download.create).not.toHaveBeenCalled();
     } finally { download.restore(); }
@@ -583,57 +603,38 @@ describe("WorkspaceAssistant", () => {
     await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "TM-42");
     await user.click(screen.getByRole("button", { name: "Find permitted records" }));
     expect(api.searchAssistantScopes).toHaveBeenCalledOnce();
-    await act(async () => page.resolve({ items: [hiddenTurn(3)], limit: 2, offset: 2, has_more: false }));
+    await act(async () => page.resolve(historySnapshot([USER_TURN, hiddenTurn()])));
     await act(async () => search.resolve({ query: "TM-42", items: [{ ...SCOPE, scope_id: "late-private", label: "Late private source" }], truncated: false }));
     expect(screen.queryByRole("button", { name: "Add Late private source" })).not.toBeInTheDocument();
   });
 
-  it("uses response page cursors rather than the deduplicated visible row count", async () => {
-    const user = userEvent.setup();
-    const turns = historyTurns(5);
-    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
-    api.listAssistantTurns.mockResolvedValueOnce({ items: [turns[0], turns[1]], limit: 2, offset: 0, has_more: true })
-      .mockResolvedValueOnce({ items: [turns[1], turns[2]], limit: 2, offset: 2, has_more: true })
-      .mockResolvedValueOnce({ items: [turns[3], turns[4]], limit: 2, offset: 4, has_more: false });
-    await openStoredConversation(user);
-    await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    await screen.findByText("Private message 3");
-    await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    await screen.findByText("Private message 5");
-    expect(api.listAssistantTurns).toHaveBeenNthCalledWith(3, SESSION.id, { limit: 2, offset: 4 });
-    expect(screen.getAllByText("Private message 2")).toHaveLength(1);
-  });
-
-  it("keeps the 50-row per-request bound through all 200 retained turns", async () => {
+  it("starts with 50 and reaches all 200 retained turns in one continuation", async () => {
     const user = userEvent.setup();
     const turns = historyTurns(200);
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
-    for (const offset of [0, 50, 100, 150]) {
-      api.listAssistantTurns.mockResolvedValueOnce({ items: turns.slice(offset, offset + 50), limit: 50, offset, has_more: offset < 150 });
-    }
+    api.listAssistantTurns.mockResolvedValueOnce({ items: turns.slice(0, 50), limit: 50, offset: 0, has_more: true })
+      .mockResolvedValueOnce(historySnapshot(turns));
     await openStoredConversation(user);
-    for (const offset of [50, 100, 150]) {
-      await user.click(screen.getByRole("button", { name: "Load more messages" }));
-      await screen.findByText(`Private message ${offset + 50}`);
-      expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION.id, { limit: 50, offset });
-    }
+    await user.click(screen.getByRole("button", { name: "Load more messages" }));
+    await screen.findByText("Private message 200");
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { snapshot: true }]]);
     expect(screen.getByTestId("assistant-turns").querySelectorAll("article")).toHaveLength(200);
     expect(screen.queryByRole("button", { name: "Load more messages" })).not.toBeInTheDocument();
   });
 
-  it("deduplicates new answers against later history without advancing the saved cursor", async () => {
+  it("replaces rather than duplicating new answers when expanding history", async () => {
     const user = userEvent.setup();
     const turns = historyTurns(4);
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
     api.listAssistantTurns.mockResolvedValueOnce({ items: turns.slice(0, 2), limit: 2, offset: 0, has_more: true })
-      .mockResolvedValueOnce({ items: turns.slice(2), limit: 2, offset: 2, has_more: false });
+      .mockResolvedValueOnce(historySnapshot(turns));
     api.askWorkspaceAssistant.mockResolvedValue({ session: { ...SESSION, version: 2 }, user_turn: turns[2], assistant_turn: turns[3] });
     await openStoredConversation(user);
     await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "A follow-up question");
     await user.click(screen.getByRole("button", { name: "Ask" }));
     await screen.findByText("Private message 4");
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
-    await waitFor(() => expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION.id, { limit: 2, offset: 2 }));
+    await waitFor(() => expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION.id, { snapshot: true }));
     expect(screen.getByTestId("assistant-turns").querySelectorAll("article")).toHaveLength(4);
     expect(screen.getAllByText("Private message 4")).toHaveLength(1);
   });
@@ -693,7 +694,7 @@ describe("WorkspaceAssistant", () => {
     await user.click(screen.getByRole("button", { name: other.title }));
     await screen.findByText("Private B only");
     await act(async () => {
-      if (outcome === "resolve") oldPage.resolve({ items: [{ ...USER_TURN, id: "late-a", content: "Late private A" }], limit: 1, offset: 1, has_more: false });
+      if (outcome === "resolve") oldPage.resolve(historySnapshot([{ ...USER_TURN, id: "late-a", content: "Late private A" }]));
       else oldPage.reject(new ApiError(403, "Old-session denial", null));
     });
     expect(screen.getByText("Private B only")).toBeVisible();
@@ -705,20 +706,21 @@ describe("WorkspaceAssistant", () => {
   it.each([
     new ApiError(503, "History temporarily unavailable.", null),
     new NetworkError("Connection lost while loading history.", null),
-  ])("retains old rows only for a transient next-page $message and retries the same cursor", async (error) => {
+  ])("clears an unverified prefix on transient $message and allows a fresh retry", async (error) => {
     const user = userEvent.setup();
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
     api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN], limit: 1, offset: 0, has_more: true })
       .mockRejectedValueOnce(error)
-      .mockResolvedValueOnce({ items: [ASSISTANT_TURN], limit: 1, offset: 1, has_more: false });
+      .mockResolvedValueOnce(historySnapshot([USER_TURN, ASSISTANT_TURN]));
     await openStoredConversation(user);
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
     expect((await screen.findByRole("alert")).textContent).toBe(error.message);
-    expect(screen.getByText(USER_TURN.content)).toBeVisible();
+    expect(screen.queryByText(USER_TURN.content)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
     await screen.findByText(ASSISTANT_TURN.content);
+    expect(screen.getByText(USER_TURN.content)).toBeVisible();
     expect(api.listAssistantTurns.mock.calls.slice(1)).toEqual([
-      [SESSION.id, { limit: 1, offset: 1 }], [SESSION.id, { limit: 1, offset: 1 }],
+      [SESSION.id, { snapshot: true }], [SESSION.id, { snapshot: true }],
     ]);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
-import { assistantCitationButton, expectAssistantCitationHidden } from "./support/private-access-lock-proof";
+import { assistantCitationButton, expectAssistantCitationHidden, expectNoAssistantDirectSourceLinks } from "./support/private-access-lock-proof";
 import { verifyRetainedPrivateRevocation } from "./support/private-release-fixtures";
 
 function pythonExecutable(): string {
@@ -132,6 +132,7 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(page.getByTestId("assistant-turns")).toContainText(secret);
   await expect(assistantCitationButton(page, "066B evidence.txt")).toBeVisible();
+  await expectNoAssistantDirectSourceLinks(page, "066B evidence.txt");
   await expect(page.getByTestId("assistant-turns")).not.toContainText(
     "Ignore previous instructions",
   );
