@@ -15,18 +15,20 @@ import {
 } from "@/components/ui/Dialog";
 import { Label } from "@/components/ui/Label";
 import { PersonPicker } from "@/components/ui/PersonPicker";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   addTeamMember,
   listCompanyUsers,
   removeTeamMember,
+  updateTeamMemberLead,
   type Team,
   type TeamListResult,
 } from "@/lib/api/endpoints";
 
 type MembershipChange =
-  | { action: "add" | "lead"; membershipId: string; isLead: boolean }
-  | { action: "remove"; membershipId: string };
+  | { action: "add"; membershipId: string; isLead: boolean }
+  | { action: "lead"; teamMembershipId: string; isLead: boolean }
+  | { action: "remove"; membershipId: string; teamMembershipId: string };
 
 export function TeamMembersDialog({ team }: { team: Team }) {
   const queryClient = useQueryClient();
@@ -34,7 +36,7 @@ export function TeamMembersDialog({ team }: { team: Team }) {
   const [membershipId, setMembershipId] = useState("");
   const [isLead, setIsLead] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
-  const [leadIntent, setLeadIntent] = useState<{ membershipId: string; isLead: boolean } | null>(null);
+  const [leadIntent, setLeadIntent] = useState<{ teamMembershipId: string; isLead: boolean } | null>(null);
   const fieldId = `team-member-${team.id}`;
   const directory = useQuery({
     queryKey: ["company-users"],
@@ -46,14 +48,25 @@ export function TeamMembersDialog({ team }: { team: Team }) {
     !team.members.some((member) => member.membership_id === user.membership_id),
   );
   const change = useMutation({
-    mutationFn: (input: MembershipChange) =>
-      input.action === "remove"
-        ? removeTeamMember({ teamId: team.id, membershipId: input.membershipId })
-        : addTeamMember({
+    retry: false,
+    mutationFn: (input: MembershipChange) => {
+      switch (input.action) {
+        case "remove":
+          return removeTeamMember({
             teamId: team.id,
             membershipId: input.membershipId,
+            expectedTeamMembershipId: input.teamMembershipId,
+          });
+        case "lead":
+          return updateTeamMemberLead({
+            teamId: team.id,
+            teamMembershipId: input.teamMembershipId,
             isLead: input.isLead,
-          }),
+          });
+        case "add":
+          return addTeamMember({ teamId: team.id, membershipId: input.membershipId, isLead: input.isLead });
+      }
+    },
     onSuccess: async (updated, input) => {
       queryClient.setQueryData<TeamListResult>(["teams", "list"], (current) =>
         current
@@ -67,9 +80,20 @@ export function TeamMembersDialog({ team }: { team: Team }) {
       setRemoveId(null);
       await queryClient.invalidateQueries({ queryKey: ["teams", "list"] });
     },
+    onError: async (error, input) => {
+      setLeadIntent(null);
+      if (
+        input.action !== "add" && isApiErrorShape(error) &&
+        (error.status === 409 || error.status === 404)
+      ) {
+        setRemoveId(null);
+        await queryClient.invalidateQueries({ queryKey: ["teams", "list"] });
+      }
+    },
     onSettled: () => setLeadIntent(null),
   });
   const busy = change.isPending || leadIntent !== null;
+  const writesDisabled = busy || !team.is_active;
 
   return (
     <Dialog
@@ -106,7 +130,7 @@ export function TeamMembersDialog({ team }: { team: Team }) {
             className="flex min-w-0 flex-col gap-3"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!selectedIsValid || busy) return;
+              if (!selectedIsValid || writesDisabled) return;
               change.mutate({ action: "add", membershipId, isLead });
             }}
           >
@@ -118,15 +142,15 @@ export function TeamMembersDialog({ team }: { team: Team }) {
                 onChange={setMembershipId}
                 excludeMembershipIds={team.members.map((member) => member.membership_id)}
                 emptyText="All active colleagues are already members."
-                disabled={busy}
+                disabled={writesDisabled}
               />
             </div>
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={isLead} disabled={busy} onChange={(event) => setIsLead(event.target.checked)} />
+                <input type="checkbox" checked={isLead} disabled={writesDisabled} onChange={(event) => setIsLead(event.target.checked)} />
                 Team lead
               </label>
-              <Button type="submit" className="w-full sm:w-auto" disabled={!selectedIsValid || busy}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={!selectedIsValid || writesDisabled}>
                 {busy && change.variables?.action === "add" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <UserPlus className="h-4 w-4" aria-hidden />}
                 Add member
               </Button>
@@ -144,28 +168,28 @@ export function TeamMembersDialog({ team }: { team: Team }) {
                     <label className="inline-flex min-w-0 items-center gap-2 text-sm">
                       <input
                         type="checkbox"
-                        checked={leadIntent?.membershipId === member.membership_id ? leadIntent.isLead : member.is_lead}
-                        disabled={busy}
+                        checked={leadIntent?.teamMembershipId === member.id ? leadIntent.isLead : member.is_lead}
+                        disabled={writesDisabled}
                         aria-label={`Team lead for ${member.member_name}`}
                         onChange={(event) => {
-                          if (busy) return;
+                          if (writesDisabled) return;
                           const isLead = event.target.checked;
-                          setLeadIntent({ membershipId: member.membership_id, isLead });
-                          change.mutate({ action: "lead", membershipId: member.membership_id, isLead });
+                          setLeadIntent({ teamMembershipId: member.id, isLead });
+                          change.mutate({ action: "lead", teamMembershipId: member.id, isLead });
                         }}
                       />
                       Team lead
                     </label>
-                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setRemoveId(member.membership_id)} aria-label={`Remove ${member.member_name} from team`}>
+                    <Button type="button" variant="ghost" size="sm" disabled={writesDisabled} onClick={() => setRemoveId(member.id)} aria-label={`Remove ${member.member_name} from team`}>
                       <Trash2 className="h-4 w-4" aria-hidden />
                       Remove
                     </Button>
                   </div>
-                  {removeId === member.membership_id ? (
+                  {removeId === member.id ? (
                     <div role="group" aria-label={`Confirm removal of ${member.member_name}`} className="flex min-w-0 flex-col gap-2">
                       <p className="text-sm">Remove {member.member_name} from {team.name}?</p>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" disabled={busy} onClick={() => change.mutate({ action: "remove", membershipId: member.membership_id })}>Remove member</Button>
+                        <Button type="button" size="sm" disabled={writesDisabled} onClick={() => change.mutate({ action: "remove", membershipId: member.membership_id, teamMembershipId: member.id })}>Remove member</Button>
                         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRemoveId(null)}>Cancel</Button>
                       </div>
                     </div>

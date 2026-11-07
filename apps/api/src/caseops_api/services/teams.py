@@ -94,6 +94,24 @@ def _assert_active_locked_actor(
     return actor
 
 
+def _lock_team_company(session: Session, *, company_id: str) -> None:
+    # Take Company before Membership/User/Team. NO KEY UPDATE serializes
+    # scoping and team writers without blocking other writers' FK checks.
+    active = session.scalar(
+        select(Company.is_active)
+        .where(Company.id == company_id)
+        .with_for_update(of=Company, key_share=True)
+    )
+    if active is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Company not found."
+        )
+    if not active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Company is inactive."
+        )
+
+
 def _load_team(
     session: Session,
     *,
@@ -343,6 +361,7 @@ def _lock_whole_team_access_fence(
         company_id=context.company.id,
         membership_scope=membership_scope,
     )
+    _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -390,6 +409,7 @@ def _lock_single_team_member_access_fence(
     context: SessionContext,
     team_id: str,
     membership_id: str,
+    expected_team_membership_id: str | None,
 ) -> tuple[
     Team,
     TeamMembership,
@@ -406,17 +426,28 @@ def _lock_single_team_member_access_fence(
             TeamMembership.membership_id == membership_id,
         )
     ).one_or_none()
-    if advisory_row is None:
+    if (
+        advisory_row is not None
+        and expected_team_membership_id is not None
+        and advisory_row.id != expected_team_membership_id
+    ):
+        advisory_row = None
+    if advisory_row is None and expected_team_membership_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Member is not on this team.",
         )
     membership_scope = {membership_id}
-    expected = _operational_ip_role_fence_snapshot(
-        session,
-        company_id=context.company.id,
-        membership_scope=membership_scope,
+    expected = (
+        _operational_ip_role_fence_snapshot(
+            session,
+            company_id=context.company.id,
+            membership_scope=membership_scope,
+        )
+        if advisory_row is not None
+        else {}
     )
+    _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -429,6 +460,8 @@ def _lock_single_team_member_access_fence(
         team_id=team_id,
         for_update=True,
     )
+    if advisory_row is None:
+        raise _team_membership_changed()
     if _team_mutation_snapshot(team) != team_snapshot:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -445,6 +478,8 @@ def _lock_single_team_member_access_fence(
         .execution_options(populate_existing=True)
     )
     if row is None:
+        if expected_team_membership_id is not None:
+            raise _team_membership_changed()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Team membership changed; retry the team update.",
@@ -546,6 +581,7 @@ def create_team(
     context: SessionContext,
     payload: TeamCreateRequest,
 ) -> TeamRecord:
+    _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -602,6 +638,7 @@ def update_team(
             )
         )
     else:
+        _lock_team_company(session, company_id=context.company.id)
         memberships = lock_company_memberships_for_assignment(
             session,
             company_id=context.company.id,
@@ -683,6 +720,32 @@ def delete_team(
     session.flush()
 
 
+def _set_team_member_lead(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: TeamMembership,
+    is_lead: bool,
+) -> None:
+    if row.is_lead == is_lead:
+        return
+    previous_is_lead = row.is_lead
+    row.is_lead = is_lead
+    record_from_context(
+        session,
+        context,
+        action="team_membership.updated",
+        target_type="team_membership",
+        target_id=row.id,
+        metadata={
+            "team_id": row.team_id,
+            "membership_id": row.membership_id,
+            "before": {"is_lead": previous_is_lead},
+            "after": {"is_lead": is_lead},
+        },
+    )
+
+
 def add_team_member(
     session: Session,
     *,
@@ -691,6 +754,7 @@ def add_team_member(
     membership_id: str,
     is_lead: bool = False,
 ) -> TeamRecord:
+    _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
@@ -723,24 +787,8 @@ def add_team_member(
         .execution_options(populate_existing=True)
     )
     if row is not None:
-        # Allow is_lead toggling on re-add without raising.
-        if row.is_lead != is_lead:
-            previous_is_lead = row.is_lead
-            row.is_lead = is_lead
-            record_from_context(
-                session,
-                context,
-                action="team_membership.updated",
-                target_type="team_membership",
-                target_id=row.id,
-                metadata={
-                    "team_id": team.id,
-                    "membership_id": membership_id,
-                    "before": {"is_lead": previous_is_lead},
-                    "after": {"is_lead": is_lead},
-                },
-            )
-            session.flush()
+        # Preserve legacy add/upsert callers. The checkbox uses update only.
+        _set_team_member_lead(session, context=context, row=row, is_lead=is_lead)
         return _team_record(session, team)
 
     row = TeamMembership(
@@ -762,12 +810,71 @@ def add_team_member(
     return _team_record(session, team)
 
 
+def update_team_member_lead(
+    session: Session,
+    *,
+    context: SessionContext,
+    team_id: str,
+    team_membership_id: str,
+    is_lead: bool,
+) -> TeamRecord:
+    company_id = context.company.id
+    _lock_team_company(session, company_id=company_id)
+    # Discover the participant without locking a child before Membership/User.
+    identity = (
+        TeamMembership.id == team_membership_id,
+        TeamMembership.team_id == team_id,
+    )
+    membership_id = session.scalar(
+        select(TeamMembership.membership_id)
+        .join(Team, Team.id == TeamMembership.team_id)
+        .where(*identity, Team.company_id == company_id)
+    )
+    memberships = lock_company_memberships_for_assignment(
+        session,
+        company_id=company_id,
+        membership_ids={context.membership.id, membership_id},
+    )
+    _assert_active_locked_actor(session, memberships, context=context)
+    team = _load_team(session, context=context, team_id=team_id, for_update=True)
+    membership = memberships.get(membership_id) if membership_id is not None else None
+    if (
+        not team.is_active
+        or membership is None
+        or not membership.is_active
+        or membership.user is None
+        or not membership.user.is_active
+    ):
+        raise _team_membership_changed()
+    row = session.scalar(
+        select(TeamMembership)
+        .where(*identity, TeamMembership.membership_id == membership_id)
+        .with_for_update(of=TeamMembership)
+        .execution_options(populate_existing=True)
+    )
+    if row is None:
+        raise _team_membership_changed()
+    _set_team_member_lead(session, context=context, row=row, is_lead=is_lead)
+    return _team_record(session, team)
+
+
+def _team_membership_changed() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "team_membership_changed",
+            "message": "This team membership changed. Review the current team before editing.",
+        },
+    )
+
+
 def remove_team_member(
     session: Session,
     *,
     context: SessionContext,
     team_id: str,
     membership_id: str,
+    expected_team_membership_id: str | None = None,
 ) -> TeamRecord:
     team, row, memberships, role_fence, _matters, dockets = (
         _lock_single_team_member_access_fence(
@@ -775,6 +882,7 @@ def remove_team_member(
             context=context,
             team_id=team_id,
             membership_id=membership_id,
+            expected_team_membership_id=expected_team_membership_id,
         )
     )
     session.delete(row)
@@ -808,18 +916,10 @@ def set_team_scoping(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Company not found."
         )
-    if bool(discovered_enabled) == enabled:
-        memberships = lock_company_memberships_for_assignment(
-            session,
-            company_id=context.company.id,
-            membership_ids={context.membership.id},
-        )
-        _assert_active_locked_actor(session, memberships, context=context)
-        return enabled
     role_fence: dict[str, _IpRoleFenceEntry] = {}
-    memberships: dict[str, CompanyMembership] = {}
+    role_membership_ids: set[str] = set()
     dockets: list[IpDocketRecord] = []
-    if enabled:
+    if enabled and not discovered_enabled:
         role_fence = _operational_ip_role_fence_snapshot(
             session,
             company_id=context.company.id,
@@ -835,19 +935,16 @@ def set_team_scoping(
     # Serialize the mutation before locking memberships and parent records.
     # The advisory snapshot intentionally precedes this lock so a role
     # committed while the request waited is reported as a stale fence.
-    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
+    _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,
-        membership_ids={*role_membership_ids, context.membership.id}
-        if enabled
-        else {context.membership.id},
+        membership_ids={*role_membership_ids, context.membership.id},
     )
     _assert_active_locked_actor(session, memberships, context=context)
     company = session.scalar(
         select(Company)
         .where(Company.id == context.company.id)
-        .with_for_update(of=Company)
         .execution_options(populate_existing=True)
     )
     if company is None:
@@ -859,6 +956,8 @@ def set_team_scoping(
             status_code=status.HTTP_409_CONFLICT,
             detail="Team scoping changed; retry the update.",
         )
+    if bool(company.team_scoping_enabled) == enabled:
+        return enabled
     if enabled:
         _assert_fence_unchanged_before_parent_locks(
             session,
@@ -906,4 +1005,5 @@ __all__ = [
     "remove_team_member",
     "set_team_scoping",
     "update_team",
+    "update_team_member_lead",
 ]

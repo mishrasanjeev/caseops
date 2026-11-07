@@ -3,11 +3,12 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/config";
 import type { Team, TeamListResult } from "@/lib/api/endpoints";
 
 const mocks = vi.hoisted(() => ({
   listTeams: vi.fn(), listCompanyUsers: vi.fn(), addTeamMember: vi.fn(),
-  removeTeamMember: vi.fn(), capability: vi.fn(),
+  updateTeamMemberLead: vi.fn(), removeTeamMember: vi.fn(), capability: vi.fn(),
 }));
 vi.mock("@/lib/api/endpoints", () => ({
   ...mocks, createTeam: vi.fn(), deleteTeam: vi.fn(), setTeamScoping: vi.fn(),
@@ -84,14 +85,15 @@ describe("Team membership administration", () => {
     expect(within(dialog).getByRole("combobox", { name: "Colleague" })).toHaveValue("");
   });
 
-  it("saves a lead change using the same member identity", async () => {
+  it("updates the exact team membership row without calling add", async () => {
     const { user } = setup();
     const dialog = await open(user);
     const updated = { ...team, members: [{ ...alice, is_lead: true }] };
-    mocks.addTeamMember.mockResolvedValue(updated);
+    mocks.updateTeamMemberLead.mockResolvedValue(updated);
     mocks.listTeams.mockResolvedValue({ teams: [updated], team_scoping_enabled: false });
     await user.click(within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" }));
-    await waitFor(() => expect(mocks.addTeamMember).toHaveBeenCalledExactlyOnceWith({ teamId: "team-1", membershipId: "alice", isLead: true }));
+    await waitFor(() => expect(mocks.updateTeamMemberLead).toHaveBeenCalledExactlyOnceWith({ teamId: "team-1", teamMembershipId: alice.id, isLead: true }));
+    expect(mocks.addTeamMember).not.toHaveBeenCalled();
     await waitFor(() => expect(within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" })).toBeChecked());
   });
 
@@ -107,7 +109,9 @@ describe("Team membership administration", () => {
     mocks.removeTeamMember.mockResolvedValue(updated);
     mocks.listTeams.mockResolvedValue({ teams: [updated], team_scoping_enabled: false });
     await user.click(within(dialog).getByRole("button", { name: /^Remove member$/ }));
-    await waitFor(() => expect(mocks.removeTeamMember).toHaveBeenCalledExactlyOnceWith({ teamId: "team-1", membershipId: "alice" }));
+    await waitFor(() => expect(mocks.removeTeamMember).toHaveBeenCalledExactlyOnceWith({
+      teamId: "team-1", membershipId: "alice", expectedTeamMembershipId: alice.id,
+    }));
     await waitFor(() => expect(within(dialog).queryByRole("checkbox", { name: "Team lead for Alice Counsel" })).not.toBeInTheDocument());
   });
 
@@ -144,7 +148,7 @@ describe("Team membership administration", () => {
 
   it("blocks sibling membership commands while a lead change is pending", async () => {
     let finish!: (value: Team) => void;
-    mocks.addTeamMember.mockReturnValue(new Promise<Team>((resolve) => { finish = resolve; }));
+    mocks.updateTeamMemberLead.mockReturnValue(new Promise<Team>((resolve) => { finish = resolve; }));
     const { user, client } = setup();
     const dialog = await open(user);
     await user.click(within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" }));
@@ -159,7 +163,7 @@ describe("Team membership administration", () => {
 
   it("restores the persisted lead state when the single pending change is rejected", async () => {
     let reject!: (error: Error) => void;
-    mocks.addTeamMember.mockReturnValue(new Promise<Team>((_resolve, refuse) => { reject = refuse; }));
+    mocks.updateTeamMemberLead.mockReturnValue(new Promise<Team>((_resolve, refuse) => { reject = refuse; }));
     const { user } = setup();
     const dialog = await open(user);
     const checkbox = within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" });
@@ -170,6 +174,62 @@ describe("Team membership administration", () => {
     expect(await within(dialog).findByRole("alert")).toBeVisible();
     await waitFor(() => expect(checkbox).not.toBeChecked());
     expect(checkbox).toBeEnabled();
-    expect(mocks.addTeamMember).toHaveBeenCalledExactlyOnceWith({ teamId: "team-1", membershipId: "alice", isLead: true });
+    expect(mocks.updateTeamMemberLead).toHaveBeenCalledExactlyOnceWith({ teamId: "team-1", teamMembershipId: alice.id, isLead: true });
+    expect(mocks.addTeamMember).not.toHaveBeenCalled();
+  });
+
+  it.each(["removed", "replaced"] as const)("refreshes a %s row on conflict without replay", async (kind) => {
+    const { user } = setup();
+    const dialog = await open(user);
+    const checkbox = within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" });
+    const replacement = { ...alice, id: "tm-alice-new" };
+    const members = kind === "removed" ? [] : [replacement];
+    const current = { ...team, members, member_count: members.length };
+    let finish!: (value: TeamListResult) => void;
+    mocks.listTeams.mockReturnValueOnce(new Promise<TeamListResult>((resolve) => { finish = resolve; }));
+    const detail = "This team membership changed. Review the current team before editing.";
+    mocks.updateTeamMemberLead.mockRejectedValueOnce(new ApiError(409, detail, { code: "team_membership_changed" }));
+    await user.click(checkbox);
+    await waitFor(() => expect(mocks.listTeams).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(checkbox).toBeDisabled();
+    await act(async () => { finish({ teams: [current], team_scoping_enabled: false }); });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(detail);
+    expect(checkbox).not.toBeInTheDocument();
+    expect(mocks.updateTeamMemberLead).toHaveBeenCalledExactlyOnceWith({
+      teamId: "team-1", teamMembershipId: alice.id, isLead: true,
+    });
+    expect(mocks.addTeamMember).not.toHaveBeenCalled();
+    if (kind === "removed") {
+      expect(within(dialog).getByText("No members yet.")).toBeVisible();
+    } else {
+      const next = within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" });
+      expect(next).not.toBeChecked();
+      expect(next).toBeEnabled();
+      const updated = { ...current, members: [{ ...replacement, is_lead: true }] };
+      mocks.updateTeamMemberLead.mockResolvedValueOnce(updated);
+      mocks.listTeams.mockResolvedValueOnce({ teams: [updated], team_scoping_enabled: false });
+      await user.click(next);
+      await waitFor(() => expect(mocks.updateTeamMemberLead).toHaveBeenLastCalledWith({
+        teamId: "team-1", teamMembershipId: replacement.id, isLead: true,
+      }));
+    }
+  });
+
+  it("discards a stale removal confirmation when the replacement is loaded", async () => {
+    const { user } = setup();
+    const dialog = await open(user);
+    const remove = within(dialog).getByRole("button", { name: "Remove Alice Counsel from team" });
+    await user.click(remove);
+    const replacement = { ...team, members: [{ ...alice, id: "tm-alice-new", is_lead: true }] };
+    mocks.removeTeamMember.mockRejectedValueOnce(new ApiError(409, "This team membership changed.", {}));
+    mocks.listTeams.mockResolvedValueOnce({ teams: [replacement], team_scoping_enabled: false });
+    await user.click(within(dialog).getByRole("button", { name: /^Remove member$/ }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("This team membership changed.");
+    expect(within(dialog).getByRole("checkbox", { name: "Team lead for Alice Counsel" })).toBeChecked();
+    expect(within(dialog).queryByRole("button", { name: /^Remove member$/ })).not.toBeInTheDocument();
+    expect(mocks.removeTeamMember).toHaveBeenCalledExactlyOnceWith({
+      teamId: "team-1", membershipId: "alice", expectedTeamMembershipId: alice.id,
+    });
   });
 });

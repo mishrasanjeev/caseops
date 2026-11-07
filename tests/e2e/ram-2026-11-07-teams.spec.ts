@@ -83,22 +83,30 @@ for (const mobile of [false, true]) {
       let dialog = page.getByRole("dialog", { name: `Members of ${teamName}` });
       const colleague = dialog.getByRole("combobox", { name: "Colleague" });
       await colleague.selectOption(actor.membership.id);
-      const saved = () => page.waitForResponse((response) => new URL(response.url()).pathname === `/api/teams/${teamId}/members` && response.request().method() === "POST");
-      let response = saved();
+      const membersPath = `/api/teams/${teamId}/members`;
+      const removalPath = `${membersPath}/${actor.membership.id}`;
+      const saved = (path: string, method: string) => page.waitForResponse(
+        (response) => new URL(response.url()).pathname === path && response.request().method() === method,
+      );
+      const readRowId = async (response: { json(): Promise<unknown> }) =>
+        (await response.json() as { members: [{ id: string }] }).members[0].id;
+      let response = saved(membersPath, "POST");
       await dialog.getByRole("button", { name: "Add member", exact: true }).click();
-      expect((await response).status(), "Add through membership UI").toBe(200);
+      const add = await response;
+      expect(add.status(), "Add through membership UI").toBe(200);
+      const originalId = await readRowId(add);
+      const leadPath = (rowId: string) => `${membersPath}/${rowId}/lead`;
       const leadName = `Team lead for ${self!.full_name}`;
       await expect(dialog.getByRole("checkbox", { name: leadName })).not.toBeChecked();
-      response = saved();
+      response = saved(leadPath(originalId), "PATCH");
       await dialog.getByRole("checkbox", { name: leadName }).check();
       expect((await response).status(), "Promote through membership UI").toBe(200);
       await expect(dialog.getByRole("checkbox", { name: leadName })).toBeChecked();
       await expect(dialog.getByRole("checkbox", { name: leadName })).toBeEnabled();
-      response = saved();
+      response = saved(leadPath(originalId), "PATCH");
       await dialog.getByRole("checkbox", { name: leadName }).uncheck();
       expect((await response).status(), "Demote through membership UI").toBe(200);
-      const replay = await request.post(`${api.origin}/api/teams/${teamId}/members`, { headers,
-        data: { membership_id: actor.membership.id, is_lead: false } });
+      const replay = await request.patch(`${api.origin}${leadPath(originalId)}`, { headers, data: { is_lead: false } });
       expect(replay.status(), "Identical membership replay").toBe(200);
       await page.reload();
       await page.getByRole("button", { name: `Manage members of ${teamName}` }).click();
@@ -112,17 +120,83 @@ for (const mobile of [false, true]) {
         expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
       }
       const auditParams = new URLSearchParams({ action: "team_membership.updated", since: started, limit: "50", format: "jsonl" });
-      const auditResponse = await request.get(`${api.origin}/api/admin/audit/export?${auditParams}`, { headers });
-      expect(auditResponse.status(), "Read persisted membership audit").toBe(200);
-      const audits = (await auditResponse.text()).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
-        .filter((event) => event.metadata?.team_id === teamId);
+      const readLeadAudits = async () => {
+        const result = await request.get(`${api.origin}/api/admin/audit/export?${auditParams}`, { headers });
+        expect(result.status(), "Read persisted membership audit").toBe(200);
+        return (await result.text()).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+          .filter((event) => event.metadata?.team_id === teamId);
+      };
+      const audits = await readLeadAudits();
       expect(audits.map((event) => [event.metadata.before.is_lead, event.metadata.after.is_lead])).toEqual([[false, true], [true, false]]);
       expect(audits.every((event) => event.actor_membership_id === actor.membership.id)).toBe(true);
-      await dialog.getByRole("button", { name: `Remove ${self!.full_name} from team` }).click();
-      await expect(dialog.getByRole("group", { name: `Confirm removal of ${self!.full_name}` })).toBeVisible();
-      const removed = page.waitForResponse((result) => new URL(result.url()).pathname === `/api/teams/${teamId}/members/${actor.membership.id}` && result.request().method() === "DELETE");
+
+      const removeElsewhere = async () => {
+        const result = await request.delete(`${api.origin}${removalPath}`, { headers });
+        expect(result.status(), "Concurrent removal via legacy DELETE").toBe(200);
+        expect((await result.json()).members).toEqual([]);
+      };
+      const addElsewhere = async () => {
+        const result = await request.post(`${api.origin}${membersPath}`, {
+          headers, data: { membership_id: actor.membership.id, is_lead: false },
+        });
+        expect(result.status(), "Concurrent replacement via add").toBe(200);
+        return readRowId(result);
+      };
+      const rejectStaleLead = async (rowId: string) => {
+        const checkbox = dialog.getByRole("checkbox", { name: leadName });
+        await expect(checkbox).not.toBeChecked();
+        const stale = saved(leadPath(rowId), "PATCH");
+        // check() requires a checked final state, but this stale command must roll back.
+        await checkbox.press("Space");
+        const result = await stale;
+        expect(result.request().postDataJSON()).toEqual({ is_lead: true });
+        expect(result.status(), "Stale lead change is update-only").toBe(409);
+        expect((await result.json()).code).toBe("team_membership_changed");
+        await expect(dialog.getByRole("alert")).toContainText("This team membership changed.");
+      };
+      await removeElsewhere();
+      await rejectStaleLead(originalId);
+      await expect(dialog.getByText("No members yet.", { exact: true })).toBeVisible();
+
+      await dialog.getByRole("combobox", { name: "Colleague" }).selectOption(actor.membership.id);
+      response = saved(membersPath, "POST");
+      await dialog.getByRole("button", { name: "Add member", exact: true }).click();
+      const readded = await response;
+      expect(readded.status()).toBe(200);
+      const observedId = await readRowId(readded);
+      expect(observedId).not.toBe(originalId);
+      await expect(dialog.getByRole("checkbox", { name: leadName })).toBeEnabled();
+      await removeElsewhere();
+      const replacementId = await addElsewhere();
+      expect(replacementId).not.toBe(observedId);
+      await rejectStaleLead(observedId);
+      await expect(dialog.getByRole("checkbox", { name: leadName })).not.toBeChecked();
+
+      const promptRemoval = async () => {
+        await dialog.getByRole("button", { name: `Remove ${self!.full_name} from team` }).click();
+        await expect(dialog.getByRole("group", { name: `Confirm removal of ${self!.full_name}` })).toBeVisible();
+      };
+      await promptRemoval();
+      await removeElsewhere();
+      const finalId = await addElsewhere();
+      expect(finalId).not.toBe(replacementId);
+      response = saved(removalPath, "DELETE");
       await dialog.getByRole("button", { name: "Remove member", exact: true }).click();
-      expect((await removed).status(), "Confirmed membership removal").toBe(200);
+      const staleRemoval = await response;
+      expect(new URL(staleRemoval.url()).searchParams.get("expected_team_membership_id")).toBe(replacementId);
+      expect(staleRemoval.status(), "Old confirmation cannot delete the replacement").toBe(409);
+      expect((await staleRemoval.json()).code).toBe("team_membership_changed");
+      await expect(dialog.getByRole("button", { name: "Remove member", exact: true })).toHaveCount(0);
+      await expect(dialog.getByRole("alert")).toContainText("This team membership changed.");
+      await expect(dialog.getByRole("checkbox", { name: leadName })).not.toBeChecked();
+      expect(await readLeadAudits()).toEqual(audits);
+
+      await promptRemoval();
+      const removed = saved(removalPath, "DELETE");
+      await dialog.getByRole("button", { name: "Remove member", exact: true }).click();
+      const confirmedRemoval = await removed;
+      expect(new URL(confirmedRemoval.url()).searchParams.get("expected_team_membership_id")).toBe(finalId);
+      expect(confirmedRemoval.status(), "Confirmed membership removal").toBe(200);
       await expect(dialog.getByRole("checkbox", { name: leadName })).toHaveCount(0);
       await page.reload();
       await page.getByRole("button", { name: `Manage members of ${teamName}` }).click();
