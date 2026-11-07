@@ -73,17 +73,52 @@ Releases since the November 5 run, all deployed with deploy-prod.sh from
   statement-timeout cancellation and no API 5xx since the revision started
   (2026-11-06 23:02 UTC). `-c jit=off` stays harmless; its comment in
   `connection_safety.py` still claims the JIT cause (follow-up).
-- B4-ADJ-42 Status: Not fixed (tracked). Found by the same reproduction: a
-  portfolio read filtered by `renewal_tracker_state` plus an application date
-  range joins the MATERIALIZED fact CTE `ip_tracker_stopped`
-  (`ip_renewal_tracker_read.py`). Its `stop_reason IS NULL`,
-  `renewal_due_on IS NULL` and date filters have no statistics, so the planner
-  estimates one row and rescans `trademark_applications` per matching docket.
-  The PostgreSQL CI acceptance rejects skipped and xfail nodes, so the strict
-  xfail written for it was removed from #595; reproduce with the #595 test's
-  `_portfolio_rescans` helper and the request
-  `renewal_tracker_state=missing&application_date_from=2020-01-01&application_date_to=2020-12-31`.
-  No production timeout is attributed to it yet.
+- B4-ADJ-42 Status: Fixed in code (fix/b4-adj-42-tracker-estimate, PR #598);
+  production verification pending. A portfolio read filtered by
+  `renewal_tracker_state` or by an application/renewal date range joined the
+  MATERIALIZED fact CTEs (`ip_tracker_stopped`, `ip_date_validated`) and
+  filtered their columns directly. Those columns have no statistics, so each
+  `IS NULL` or date range was estimated at 0.5% and the planner expected one
+  docket. At 1,000 dockets that made three reads quadratic:
+  - the tracker page rescanned `trademark_applications` per docket;
+  - tracker families re-read a materialized fact row set per docket (999,000
+    join-filter rejections);
+  - the date-only read rescanned `ip_assets` per docket.
+  An independent review measured the tracker page at 25.1 s and families at
+  6.3 s on main at 5,000 dockets. The same predicates are now evaluated as one
+  boolean per docket in a materialized `ip_portfolio_fact_match` stage, and
+  the outer read filters that boolean, which PostgreSQL estimates at 50%. NULL
+  still excludes a docket exactly as the WHERE clause did. The stage must stay
+  MATERIALIZED: inlined, the boolean is pushed back onto the fact columns.
+  Evidence:
+  - `test_fact_filtered_portfolio_reads_never_rescan_per_docket` covers the
+    tracker page, tracker families and the date-only read on 1,000 dockets
+    with 400 revoked walls and grants, analyzed. It fails on main and passes
+    on the fix.
+  - Its detector also flags any plan node doing at least WIDTH^2/4 row work,
+    so a Materialize or join-filter form is caught, not only a rescanned Seq
+    Scan. The first version saw only Seq Scans and missed the families form.
+  - On a restored copy of the seeded database, EXPLAIN ANALYZE fell from
+    776-1,475 ms to 113 ms (tracker page) and from 330-904 ms to 99 ms (date
+    filter). At 5,000 dockets the review measured 0.32 s and 0.48 s on the
+    branch.
+  - 76 PostgreSQL and 146 SQLite portfolio/tracker tests pass.
+  - The review's lenses (result equivalence including multiplicity, tenant
+    and ACL isolation, SQL rendering for PostgreSQL and SQLite in every caller
+    form, plan robustness) found no product defect.
+  Not changed: the renewal tracker's own page read still seeks
+  `ip_docket_records` by sequential scan for each of its 51 rows (linear in
+  tenant width, page-bounded; production p50 0.66 s on 00520); tracked as an
+  observation, not a defect.
+- B4-ADJ-44 Status: Not fixed (tracked; found by the B4-ADJ-42 review,
+  predates it). The portfolio filter Registry freshness: Unavailable
+  (`registry_sync_state=unavailable`, `ip_portfolio.py`
+  `_registry_state_predicate`) tests `max(ip_docket_events.entered_at)` as
+  `(scalar subquery) IS NULL`. That is the same 0.5% estimate class as
+  B4-ADJ-41. On the 1,000-docket lab copy it rescanned `ip_assets` per docket;
+  on a 5,000-docket copy it planned linearly, so it depends on statistics. The
+  fix shape is `NOT EXISTS` over the same seek. No production timeout is
+  attributed to it.
 - B4-ADJ-43 Status: Properly fixed, production-proven on 9b48edc5 and
   d2a172f7 (batch4 BUG-014 desktop and mobile). On 9a61cc18 the watch Pause
   badge changed about 12 s after the server paused the profile, because the
