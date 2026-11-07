@@ -681,7 +681,7 @@ describe("WorkspaceAssistant", () => {
 
   it.each(["resolve", "reject"] as const)("ignores an old-session next-page %s after switching", async (outcome) => {
     const user = userEvent.setup();
-    const oldPage = deferred<{ items: typeof USER_TURN[]; limit: number; offset: number; has_more: boolean }>();
+    const oldPage = deferred<AssistantTurnPage>();
     const other = { ...SESSION, id: "session-2", title: "Conversation B" };
     api.listAssistantSessions.mockResolvedValue({ items: [SESSION, other] });
     api.getAssistantSession.mockImplementation(async (id) => id === other.id ? other : SESSION);
