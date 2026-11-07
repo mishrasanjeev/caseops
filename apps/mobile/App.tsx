@@ -79,6 +79,8 @@ export default function App() {
   );
   const foreground = useRef(isForeground);
   const loginInFlight = useRef(false);
+  const welcomePrivacyInFlight = useRef(false);
+  const [welcomePrivacyOpening, setWelcomePrivacyOpening] = useState(false);
   const signOutInFlight = useRef(false);
   const localLock = useRef<LocalUnlockController | null>(null);
   const [, setLockRevision] = useState(0);
@@ -700,13 +702,32 @@ export default function App() {
     publishUnlocked(await lock.enable(), lock, expectedEpoch);
   }
 
+  function canOpenWelcomeBrowser() {
+    return (
+      !loginInFlight.current &&
+      !signOutInFlight.current &&
+      !welcomePrivacyInFlight.current &&
+      currentUiCommand(uiCommand)
+    );
+  }
+
+  async function openWelcomePrivacyPolicy(url: string) {
+    if (!canOpenWelcomeBrowser()) throw Error("Browser action unavailable");
+    welcomePrivacyInFlight.current = true;
+    setWelcomePrivacyOpening(true);
+    try {
+      await Linking.openURL(url);
+    } finally {
+      welcomePrivacyInFlight.current = false;
+      if (alive.current) setWelcomePrivacyOpening(false);
+    }
+  }
+
   async function signIn() {
     if (
-      loginInFlight.current ||
-      signOutInFlight.current ||
+      !canOpenWelcomeBrowser() ||
       localStoreFailed ||
       !runtime.compatibility.supported ||
-      !currentUiCommand(uiCommand) ||
       !localLock.current ||
       localLock.current.required ||
       localLock.current.busy ||
@@ -899,6 +920,9 @@ export default function App() {
           busy={busy}
           error={error || localLock.current?.getSnapshot().message || null}
           onContinue={() => void signIn()}
+          privacyOpening={welcomePrivacyOpening}
+          canOpenBrowser={canOpenWelcomeBrowser}
+          openPrivacyPolicy={openWelcomePrivacyPolicy}
         />
       ) : (
         <View style={styles.cover} accessibilityLabel="CaseOps locked">

@@ -1,13 +1,24 @@
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeButton, NativeProgress } from "./NativeControls";
+import { PrivacyPolicyLink } from "./PrivacyPolicyLink";
 import { colors, styles } from "./theme";
 export type SignInPanelProps = {
   busy: boolean;
   error: string | null;
   onContinue: () => void;
+  privacyOpening: boolean;
+  canOpenBrowser: () => boolean;
+  openPrivacyPolicy: (url: string) => Promise<unknown>;
 };
-export function SignInPanel({ busy, error, onContinue }: SignInPanelProps) {
+export function SignInPanel({
+  busy,
+  error,
+  onContinue,
+  privacyOpening,
+  canOpenBrowser,
+  openPrivacyPolicy,
+}: SignInPanelProps) {
   return (
     <SafeAreaView
       testID={busy ? "session-loading" : "signed-out"}
@@ -35,12 +46,22 @@ export function SignInPanel({ busy, error, onContinue }: SignInPanelProps) {
           </Text>
         ) : null}
         {busy ? <NativeProgress /> : null}
-        <NativeButton
-          label={busy ? "Opening secure sign-in" : "Continue to sign in"}
-          onPress={onContinue}
-          disabled={busy}
-          testID="sign-in"
-        />
+        <View style={{ gap: 8 }}>
+          <NativeButton
+            label={busy ? "Opening secure sign-in" : "Continue to sign in"}
+            onPress={() => {
+              if (!busy && canOpenBrowser()) onContinue();
+            }}
+            disabled={busy || privacyOpening}
+            testID="sign-in"
+          />
+          <PrivacyPolicyLink
+            disabled={busy}
+            canOpen={canOpenBrowser}
+            openUrl={openPrivacyPolicy}
+            hideUnconfigured
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
