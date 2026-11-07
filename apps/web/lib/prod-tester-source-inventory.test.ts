@@ -13,7 +13,7 @@ type Case = { id: string; file: string; titles: string[]; project: string; repea
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 115,
+  "tester-prod-chromium": 119,
   "tester-index-prod-chromium": 6,
   "test-legal-write-prod-chromium": 51,
 };
@@ -171,7 +171,7 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
 
 type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
   Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
-const appSourceProjects = { "app-chromium": 714, "app-mobile": 53 };
+const appSourceProjects = { "app-chromium": 719, "app-mobile": 55 };
 
 function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
   return suites.flatMap(suite => {
@@ -188,7 +188,7 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
 }
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
-  // New767-case metadata scope:15s constructor/20s new hooks and units. The
+  // Exact774-case metadata scope:15s constructor/20s new hooks and units. The
   // established production collector above keeps its literal8s bound unchanged.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
@@ -257,19 +257,24 @@ describe("complete independent App CI project inventory", () => {
       .flatMap(project => canonicalAppProject(canonical, project));
   }, 20_000);
 
-  it("keeps all767 canonical identities, original project order and zero retry/repeat", () => {
-    expect(canonical).toHaveLength(767);
+  it("keeps all774 canonical identities, original project order and zero retry/repeat", () => {
+    expect(canonical).toHaveLength(774);
     expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
     expect(wholeByDeclaration.map(row => row.project)).toEqual([
-      ...Array<string>(714).fill("app-chromium"), ...Array<string>(53).fill("app-mobile"),
+      ...Array<string>(719).fill("app-chromium"), ...Array<string>(55).fill("app-mobile"),
     ]);
-    expect(new Set(canonical.map(row => row.id)).size).toBe(767);
+    expect(new Set(canonical.map(row => row.id)).size).toBe(774);
     expect(canonical.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(canonical.every(row => !path.isAbsolute(row.file) && !row.file.split("/").includes(".."))).toBe(true);
     expect(canonical.filter(row => row.file === "control-crawl-contract.spec.ts")
       .map(row => [row.project, row.titles])).toEqual([
       ["app-chromium", ["control-crawl-contract.spec.ts",
         "control audit follows fieldset, first-legend and option-group disabled states"]],
+    ]);
+    expect(canonical.filter(row => row.file === "watch-acl-query-states.spec.ts")
+      .map(row => [row.project, row.titles])).toEqual([
+      ["app-chromium", ["watch-acl-query-states.spec.ts",
+        "Watch removes revoked source evidence from the workspace and report after reload"]],
     ]);
   });
 
@@ -282,7 +287,7 @@ describe("complete independent App CI project inventory", () => {
     }, 20_000);
   }
 
-  it("forms an exact disjoint714+53 ordered union with the original mobile tag boundary", () => {
+  it("forms an exact disjoint719+55 ordered union with the original mobile tag boundary", () => {
     const chromium = canonicalAppProject(canonical, "app-chromium");
     const mobile = canonicalAppProject(canonical, "app-mobile");
     expect(chromium.every(row => !row.titles.join(" ").includes("[mobile]"))).toBe(true);
@@ -360,9 +365,9 @@ describe("reviewed production tester source inventory", () => {
 
   beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects the independent reviewed115+6+51 exact partition before production", () => {
+  it("collects the independent reviewed119+6+51 exact partition before production", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(172);
+    expect(cases).toHaveLength(176);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
       .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{

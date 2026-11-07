@@ -72,8 +72,18 @@ test("IPLF-UJ-23 runs scoped answers, abstention, and write-proposal exceptions"
     .getByRole("textbox", { name: "Ask this workspace" })
     .fill("What is this matter's status and practice area?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
-  const source = page.getByRole("link", { name: new RegExp(`AI-${runId}`, "i") });
-  await expect(source).toHaveAttribute("href", `/app/matters/${matterRecord.id}`);
+  const source = page.getByRole("button", { name: new RegExp(`AI-${runId}`, "i") });
+  const opened = page.waitForResponse((response) =>
+    /\/api\/workspace-assistant\/sessions\/[^/]+\/citations\/[^/]+\/open$/.test(new URL(response.url()).pathname)
+    && response.request().method() === "POST");
+  const destination = new URL(`/app/matters/${matterRecord.id}`, page.url()).href;
+  await source.click();
+  const openResponse = await opened;
+  expect(openResponse.status(), "Source opening must reauthorize and audit").toBe(200);
+  expect((await openResponse.json()).source_url).toBe(`/app/matters/${matterRecord.id}`);
+  await expect(page).toHaveURL(destination);
+  await page.goBack();
+  await page.getByRole("button", { name: new RegExp(`Ask.*Aster assistant ${runId}`) }).click();
   await expect(page.getByText(/mock · caseops-mock-1/)).toBeVisible();
 
   await page

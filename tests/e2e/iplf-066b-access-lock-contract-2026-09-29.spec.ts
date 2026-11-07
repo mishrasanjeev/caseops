@@ -79,6 +79,7 @@ test("IPLF-066B access proof requires an actual offline answer to the exact docu
     [{ ...answer, citations: [] }],
     [{ ...answer, citations: [{ ...answer.citations[0], source_id: "other-document" }] }],
     [{ ...answer, citations: [{ ...answer.citations[0], source_type: "matter" }] }],
+    [{ ...answer, proposed_actions: [{ action_type: "navigation", href: "/app/matters/private" }] }],
   ]) expect(() => selectPrivateAccessAnswer(turns, evidence, "document-1")).toThrow();
 });
 

@@ -12,12 +12,35 @@ a cleaned DOCX" flow; for now the UI just displays what's there.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lxml.etree import _Element
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_W14_NS = "{http://schemas.microsoft.com/office/word/2010/wordml}"
+_PARAGRAPH_TAG = f"{_W_NS}p"
+_CHANGE_KINDS = {
+    f"{_W_NS}ins": "insertion",
+    f"{_W_NS}del": "deletion",
+    f"{_W_NS}rPrChange": "formatting",
+}
+_TEXT_TAGS = frozenset(f"{_W_NS}{name}" for name in ("t", "delText", "instrText"))
+_UNSUPPORTED_REVISION_TAGS = (
+    *(f"{_W_NS}{name}" for name in (
+        "moveFrom", "moveTo", "pPrChange", "sectPrChange", "tblGridChange", "tblPrChange",
+        "tblPrExChange", "tcPrChange", "trPrChange",
+    )),
+    f"{_W14_NS}conflictIns",
+    f"{_W14_NS}conflictDel",
+)
+_PARAGRAPH_BOUNDARIES = frozenset((_PARAGRAPH_TAG, *_UNSUPPORTED_REVISION_TAGS))
+_REVISION_BOUNDARIES = _PARAGRAPH_BOUNDARIES.union(_CHANGE_KINDS)
 
 
 @dataclass
@@ -70,6 +93,7 @@ def parse_redline_docx(
     """
     try:
         from docx import Document  # type: ignore[import-not-found]
+        from docx.text.paragraph import Paragraph  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(
             "python-docx is not installed; run `uv sync` to restore the "
@@ -88,28 +112,27 @@ def parse_redline_docx(
     result = RedlineParseResult(attachment_name=attachment_name)
 
     change_index = 0
-    for para_idx, paragraph in enumerate(document.paragraphs):
+    # XML order includes nested tables once, without merged-cell aliases.
+    body = document._element.body  # noqa: SLF001
+    for para_idx, element in enumerate(body.iter(_PARAGRAPH_TAG)):
         result.paragraph_count += 1
-        element = paragraph._element  # noqa: SLF001 — python-docx exposes XML here
+        # Keep paragraph indices stable even inside revisions we do not interpret.
+        if next(element.iterancestors(*_UNSUPPORTED_REVISION_TAGS), None) is not None:
+            continue
+        paragraph = Paragraph(element, document._body)  # noqa: SLF001
         paragraph_text = paragraph.text
-        for child in element.iter():
-            tag = child.tag
-            if tag == f"{_W_NS}ins":
-                kind = "insertion"
-            elif tag == f"{_W_NS}del":
-                kind = "deletion"
-            elif tag == f"{_W_NS}rPrChange":
-                kind = "formatting"
-            else:
+        for child in _scoped_descendants(element, boundaries=_PARAGRAPH_BOUNDARIES):
+            kind = _CHANGE_KINDS.get(child.tag)
+            if kind is None:
                 continue
 
-            text_pieces: list[str] = []
-            for run_text in child.iter(
-                f"{_W_NS}t", f"{_W_NS}delText", f"{_W_NS}instrText"
-            ):
-                if run_text.text:
-                    text_pieces.append(run_text.text)
-            text = "".join(text_pieces).strip()
+            # Text belongs to its nearest revision within this paragraph, not
+            # to a wrapping change outside it (such as an inserted text box).
+            text = "".join(
+                token.text
+                for token in _scoped_descendants(child, boundaries=_REVISION_BOUNDARIES)
+                if token.tag in _TEXT_TAGS and token.text
+            ).strip()
             if not text and kind != "formatting":
                 continue
 
@@ -144,6 +167,20 @@ def parse_redline_docx(
                 result.author_counts[author] = result.author_counts.get(author, 0) + 1
 
     return result
+
+
+def _scoped_descendants(
+    element: _Element, *, boundaries: frozenset[str],
+) -> Iterator[_Element]:
+    from lxml.etree import iterwalk
+
+    walk = iterwalk(element, events=("start",))
+    next(walk)  # The root defines this scope; only descendants can end it.
+    for _, child in walk:
+        if child.tag in boundaries:
+            walk.skip_subtree()
+        else:
+            yield child
 
 
 def _context_window(paragraph_text: str, change_text: str, *, radius: int = 120) -> tuple[str, str]:

@@ -483,6 +483,7 @@ def preview_assistant_action(
         proposal_id=payload.proposal_id,
     )
     capabilities = _required_capabilities(proposal)
+    lock_matter_private_authority(session, company_id=context.company.id)
     context = _locked_actor_context(session, context=context, capabilities=capabilities)
     policy = _locked_assistant_policy(session, context=context)
     assistant_session = _session_or_404(

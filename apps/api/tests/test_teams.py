@@ -1,7 +1,16 @@
 """Teams + team-scoped visibility regression (Sprint 8c BG-026)."""
 from __future__ import annotations
 
+import json
+
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from caseops_api.db.models import AuditEvent, TeamMembership
+from caseops_api.db.session import get_session_factory
+from caseops_api.services import teams as team_service
+from caseops_api.services.activity_reports import MEANINGFUL_ACTIVITY_ACTIONS
 
 
 def _bootstrap(client: TestClient, slug: str) -> dict[str, str]:
@@ -17,6 +26,8 @@ def _bootstrap(client: TestClient, slug: str) -> dict[str, str]:
         },
     )
     assert resp.status_code == 200, resp.text
+    # These journeys select explicit Bearer principals; a login cookie wins in production.
+    client.cookies.clear()
     return resp.json()
 
 
@@ -26,6 +37,7 @@ def _login(client: TestClient, email: str, password: str, slug: str) -> str:
         json={"email": email, "password": password, "company_slug": slug},
     )
     assert resp.status_code == 200, resp.text
+    client.cookies.clear()
     return resp.json()["access_token"]
 
 
@@ -48,6 +60,297 @@ def _invite_member(
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+def _membership_state(
+    team_membership_id: str,
+) -> tuple[TeamMembership, list[AuditEvent]]:
+    factory = get_session_factory()
+    with factory() as session:
+        membership = session.get(TeamMembership, team_membership_id)
+        assert membership is not None
+        events = list(
+            session.scalars(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.target_type == "team_membership",
+                    AuditEvent.target_id == team_membership_id,
+                )
+                .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
+            )
+        )
+        return membership, events
+
+
+@pytest.mark.parametrize("initial_is_lead", [False, True], ids=["promote", "demote"])
+@pytest.mark.parametrize("writer", ["update_only", "legacy_upsert"])
+def test_team_lead_change_persists_and_audits_once(
+    client: TestClient, initial_is_lead: bool, writer: str,
+) -> None:
+    assert_team_lead_change_persists_and_audits_once(client, initial_is_lead, writer)
+
+
+def assert_team_lead_change_persists_and_audits_once(
+    client: TestClient, initial_is_lead: bool, writer: str,
+) -> None:
+    slug = "teams-lead-audit"
+    boot = _bootstrap(client, slug)
+    token = boot["access_token"]
+    headers = _headers(token)
+    member = _invite_member(client, token, slug, f"member-{slug}@example.com")
+    membership_id = member["membership_id"]
+    actor_id = boot["membership"]["id"]
+    assert membership_id != actor_id
+    create = client.post(
+        "/api/teams/", headers=headers,
+        json={"name": "Lead audit", "slug": "lead-audit"},
+    )
+    assert create.status_code == 201, create.text
+    team_id = create.json()["id"]
+    url = f"/api/teams/{team_id}/members"
+    add = client.post(
+        url, headers=headers,
+        json={"membership_id": membership_id, "is_lead": initial_is_lead},
+    )
+    assert add.status_code == 200, add.text
+    team_membership_id = add.json()["members"][0]["id"]
+    persisted, events = _membership_state(team_membership_id)
+    assert persisted.is_lead is initial_is_lead
+    assert len(events) == 1
+    added = events[0]
+    assert added.action == "team_membership.added"
+    assert added.company_id == boot["company"]["id"]
+    assert added.actor_membership_id == actor_id
+    assert added.actor_type == "human"
+    assert added.result == "success"
+    assert json.loads(added.metadata_json) == {
+        "team_id": team_id, "membership_id": membership_id,
+        "is_lead": initial_is_lead,
+    }
+
+    new_is_lead = not initial_is_lead
+    if writer == "update_only":
+        method = "PATCH"
+        lead_url = f"{url}/{team_membership_id}/lead"
+        payload = {"is_lead": new_is_lead}
+    else:
+        method = "POST"
+        lead_url = url
+        payload = {"membership_id": membership_id, "is_lead": new_is_lead}
+    changed = client.request(method, lead_url, headers=headers, json=payload)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["member_count"] == 1
+    assert changed.json()["members"][0]["id"] == team_membership_id
+    assert changed.json()["members"][0]["is_lead"] is new_is_lead
+    persisted, events = _membership_state(team_membership_id)
+    assert persisted.team_id == team_id
+    assert persisted.membership_id == membership_id
+    assert persisted.is_lead is new_is_lead
+    assert len(events) == 2
+    assert events[0].id == added.id
+    updated = events[1]
+    assert updated.action == "team_membership.updated"
+    assert updated.action in MEANINGFUL_ACTIVITY_ACTIONS
+    assert updated.company_id == boot["company"]["id"]
+    assert updated.actor_membership_id == actor_id
+    assert updated.actor_type == "human"
+    assert updated.result == "success"
+    assert json.loads(updated.metadata_json) == {
+        "team_id": team_id, "membership_id": membership_id,
+        "before": {"is_lead": initial_is_lead},
+        "after": {"is_lead": new_is_lead},
+    }
+
+    replay = client.request(method, lead_url, headers=headers, json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["member_count"] == 1
+    assert replay.json()["members"][0]["id"] == team_membership_id
+    persisted, replay_events = _membership_state(team_membership_id)
+    assert persisted.is_lead is new_is_lead
+    assert [event.id for event in replay_events] == [event.id for event in events]
+
+
+@pytest.mark.parametrize(
+    ("attempt", "expected_status"),
+    [
+        ("non_manager", 403), ("foreign_team", 404), ("foreign_member", 400),
+        ("patch_non_manager", 403), ("patch_foreign_team", 404),
+        ("patch_foreign_row", 409), ("patch_company_membership_id", 409),
+    ],
+)
+def test_team_lead_change_denials_preserve_membership_and_audit(
+    client: TestClient, attempt: str, expected_status: int,
+) -> None:
+    assert_team_lead_change_denials_preserve_membership_and_audit(client, attempt, expected_status)
+
+
+def assert_team_lead_change_denials_preserve_membership_and_audit(
+    client: TestClient, attempt: str, expected_status: int,
+) -> None:
+    slug = "teams-lead-boundary"
+    boot = _bootstrap(client, slug)
+    token = boot["access_token"]
+    headers = _headers(token)
+    email = f"member-{slug}@example.com"
+    member = _invite_member(client, token, slug, email)
+    create = client.post(
+        "/api/teams/", headers=headers,
+        json={"name": "Lead boundary", "slug": "lead-boundary"},
+    )
+    assert create.status_code == 201, create.text
+    team_id = create.json()["id"]
+    membership_id = member["membership_id"]
+    add = client.post(
+        f"/api/teams/{team_id}/members", headers=headers,
+        json={"membership_id": membership_id, "is_lead": False},
+    )
+    assert add.status_code == 200, add.text
+    team_membership_id = add.json()["members"][0]["id"]
+    _, before_events = _membership_state(team_membership_id)
+    assert len(before_events) == 1
+
+    attempt_headers = headers
+    attempt_company = boot["company"]["id"]
+    attempt_actor = boot["membership"]["id"]
+    row_id = team_membership_id
+    if attempt.endswith("non_manager"):
+        member_token = _login(client, email, "MemberPass123!", slug)
+        attempt_headers = _headers(member_token)
+        attempt_actor = membership_id
+    elif attempt == "patch_company_membership_id":
+        row_id = membership_id
+    else:
+        other = _bootstrap(client, "teams-lead-other")
+        membership_id = other["membership"]["id"]
+        if attempt.endswith("foreign_team"):
+            attempt_headers = _headers(other["access_token"])
+            attempt_company = other["company"]["id"]
+            attempt_actor = membership_id
+        elif attempt == "patch_foreign_row":
+            other_headers = _headers(other["access_token"])
+            other_team = client.post(
+                "/api/teams/", headers=other_headers,
+                json={"name": "Other team", "slug": "other-team"},
+            )
+            assert other_team.status_code == 201, other_team.text
+            other_add = client.post(
+                f"/api/teams/{other_team.json()['id']}/members", headers=other_headers,
+                json={"membership_id": membership_id},
+            )
+            assert other_add.status_code == 200, other_add.text
+            row_id = other_add.json()["members"][0]["id"]
+
+    principal = client.get("/api/auth/me", headers=attempt_headers)
+    assert principal.status_code == 200, principal.text
+    assert "cookie" not in principal.request.headers
+    assert principal.json()["company"]["id"] == attempt_company
+    assert principal.json()["membership"]["id"] == attempt_actor
+
+    if attempt.startswith("patch_"):
+        rejected = client.patch(
+            f"/api/teams/{team_id}/members/{row_id}/lead", headers=attempt_headers,
+            json={"is_lead": True},
+        )
+    else:
+        rejected = client.post(
+            f"/api/teams/{team_id}/members", headers=attempt_headers,
+            json={"membership_id": membership_id, "is_lead": True},
+        )
+    assert "cookie" not in rejected.request.headers
+    assert rejected.status_code == expected_status, rejected.text
+    persisted, after_events = _membership_state(team_membership_id)
+    assert persisted.is_lead is False
+    assert persisted.team_id == team_id
+    assert persisted.membership_id == member["membership_id"]
+    assert [event.id for event in after_events] == [event.id for event in before_events]
+    read_back = client.get("/api/teams/", headers=headers)
+    assert read_back.status_code == 200, read_back.text
+    assert "cookie" not in read_back.request.headers
+    team = next(row for row in read_back.json()["teams"] if row["id"] == team_id)
+    assert team["member_count"] == 1
+    assert team["members"][0]["id"] == team_membership_id
+    assert team["members"][0]["is_lead"] is False
+
+
+def test_team_lead_and_audit_roll_back_together(client: TestClient, monkeypatch) -> None:
+    boot = _bootstrap(client, "team-lead-rollback")
+    headers = _headers(boot["access_token"])
+    create = client.post(
+        "/api/teams/", headers=headers, json={"name": "Rollback", "slug": "rollback"},
+    )
+    assert create.status_code == 201, create.text
+    url = f"/api/teams/{create.json()['id']}/members"
+    add = client.post(url, headers=headers, json={"membership_id": boot["membership"]["id"]})
+    assert add.status_code == 200, add.text
+    row_id = add.json()["members"][0]["id"]
+    _, before_events = _membership_state(row_id)
+    record = team_service.record_from_context
+
+    def fail_after_flush(*args, **kwargs):
+        record(*args, **kwargs)
+        raise RuntimeError("abort before commit")
+
+    monkeypatch.setattr(team_service, "record_from_context", fail_after_flush)
+    with pytest.raises(RuntimeError, match="abort before commit"):
+        client.patch(f"{url}/{row_id}/lead", headers=headers, json={"is_lead": True})
+
+    persisted, after_events = _membership_state(row_id)
+    assert persisted.is_lead is False
+    assert [event.id for event in after_events] == [event.id for event in before_events]
+
+
+def test_stale_team_membership_commands_preserve_replacement(client: TestClient) -> None:
+    boot = _bootstrap(client, "team-stale-row")
+    headers = _headers(boot["access_token"])
+    member_id = boot["membership"]["id"]
+    create = client.post(
+        "/api/teams/", headers=headers, json={"name": "Stale row", "slug": "stale-row"},
+    )
+    assert create.status_code == 201, create.text
+    team_id = create.json()["id"]
+    members = f"/api/teams/{team_id}/members"
+    removal = f"/api/teams/{team_id}/members/{member_id}"
+    original = client.post(members, headers=headers, json={"membership_id": member_id})
+    assert original.status_code == 200, original.text
+    old_id = original.json()["members"][0]["id"]
+    removed = client.delete(removal, headers=headers)
+    assert removed.status_code == 200 and removed.json()["members"] == []
+    stale_lead = f"/api/teams/{team_id}/members/{old_id}/lead"
+    for replaced in (False, True):
+        if replaced:
+            added = client.post(members, headers=headers, json={"membership_id": member_id})
+            assert added.status_code == 200, added.text
+            new_id = added.json()["members"][0]["id"]
+            assert new_id != old_id
+        for rejected in (
+            client.patch(stale_lead, headers=headers, json={"is_lead": True}),
+            client.delete(removal, headers=headers, params={"expected_team_membership_id": old_id}),
+        ):
+            assert rejected.status_code == 409, rejected.text
+            assert rejected.json()["code"] == "team_membership_changed"
+        read_back = client.get("/api/teams/", headers=headers)
+        assert read_back.status_code == 200, read_back.text
+        rows = read_back.json()["teams"][0]["members"]
+        if replaced:
+            assert [(row["id"], row["is_lead"]) for row in rows] == [(new_id, False)]
+        else:
+            assert rows == []
+
+    for payload in ({}, {"is_lead": "true"}, {"is_lead": True, "membership_id": member_id}):
+        rejected = client.patch(
+            f"/api/teams/{team_id}/members/{new_id}/lead", headers=headers, json=payload,
+        )
+        assert rejected.status_code == 422, rejected.text
+    persisted, events = _membership_state(new_id)
+    assert persisted.is_lead is False
+    assert [event.action for event in events] == ["team_membership.added"]
+    with get_session_factory()() as session:
+        assert session.get(TeamMembership, old_id) is None
+        assert list(session.scalars(
+            select(AuditEvent.action)
+            .where(AuditEvent.target_type == "team_membership", AuditEvent.target_id == old_id)
+            .order_by(AuditEvent.created_at, AuditEvent.id)
+        )) == ["team_membership.added", "team_membership.removed"]
 
 
 def test_team_crud_and_membership(client: TestClient) -> None:

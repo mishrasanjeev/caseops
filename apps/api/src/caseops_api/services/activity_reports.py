@@ -52,7 +52,7 @@ MEANINGFUL_ACTIVITY_ACTIONS = (
     "employee.login", "employee.created", "employee.updated", "employee.deactivated",
     "employee.offboarding.previewed", "employee.offboarding.committed",
     "team.created", "team.updated", "team.deleted", "team_membership.added",
-    "team_membership.removed", "team_scoping.toggled",
+    "team_membership.updated", "team_membership.removed", "team_scoping.toggled",
     "matter.created", "matter.claim_amount.updated", "matter.forum.updated",
     "matter_task.created", "matter_task.updated", "matter_task.completed",
     "matter_task.cancelled", "matter_task.reopened",

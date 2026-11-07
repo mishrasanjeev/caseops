@@ -82,6 +82,8 @@ export default defineConfig({
     // fresh test-legal-shaped tenant and in prod-ram against test-legal.
     /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
     /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
+    /ram-2026-11-07-(?:assistant|contracts|teams)\.spec\.ts$/,
+    /watch-acl-query-states\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -162,6 +164,8 @@ export default defineConfig({
         /platform-leads-2026-10-21\.spec\.ts$/,
         /ram-2026-10-31-[a-z0-9-]+\.spec\.ts$/,
         /ram-2026-11-01-[a-z0-9-]+\.spec\.ts$/,
+        /ram-2026-11-07-teams\.spec\.ts$/,
+        /ram-2026-11-07-contracts\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

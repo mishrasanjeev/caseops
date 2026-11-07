@@ -43,9 +43,19 @@ export function readableCode(value: string): string {
 
 /** A report cell in words: stored codes read as words, never raw JSON. */
 export function displayCell(value: unknown): string {
+  if (looksLikeInternalId(value)) return "Not available";
   if (typeof value === "string" && value) return readableCode(value);
-  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-    return value.length ? value.map((item) => readableCode(item as string)).join(", ") : "None";
+  if (Array.isArray(value)) {
+    const visible = value.filter((item) => !looksLikeInternalId(item));
+    return visible.length ? visible.map(displayCell).join(", ") : "None";
+  }
+  if (value !== null && typeof value === "object") {
+    const visible = Object.entries(value).filter(([key, item]) =>
+      !isInternalIdKey(key) && !looksLikeInternalId(item),
+    );
+    return visible.length
+      ? visible.map(([key, item]) => `${fieldLabel(key)}: ${displayCell(item)}`).join("; ")
+      : "None";
   }
   return displayValue(value);
 }

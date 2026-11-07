@@ -62,9 +62,13 @@ def test_iplf_req_report_01_operational_reports_are_honest(client: TestClient) -
     watch = _preview(client, headers, "watch")
     assert watch.status_code == 200, watch.text
     watch_body = watch.json()
-    assert watch_body["summary"]["available"] is False
+    assert watch_body["summary"]["available"] is True
+    assert watch_body["summary"]["automated_coverage_available"] is False
+    assert watch_body["summary"]["total"] == 0
+    assert watch_body["summary"]["counts_are_complete"] is True
+    assert "No retained journal-watch records" in watch_body["summary"]["reason"]
     assert watch_body["rows"] == []
-    assert watch_body["freshness"]["status"] == "unavailable"
+    assert watch_body["freshness"]["status"] == "mixed"
     assert watch_body["freshness"]["unavailable_sources"] == ["ip_watch_provider"]
 
     integration = _preview(client, headers, "integration_freshness", row_limit=2)

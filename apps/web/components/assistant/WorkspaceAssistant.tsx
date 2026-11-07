@@ -20,7 +20,8 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantActionDialog } from "@/components/assistant/AssistantActionDialog";
 import { AIFeedbackControls } from "@/components/ai/AIFeedbackControls";
@@ -33,7 +34,9 @@ import {
   getAssistantSession,
   listAssistantSessions,
   listAssistantTurns,
+  openAssistantCitation,
   replaceAssistantScopes,
+  safeAssistantCitationHref,
   searchAssistantScopes,
   type AssistantScopeInput,
   type AssistantScopeOption,
@@ -42,8 +45,47 @@ import {
   type AssistantSessionRecord,
   type AssistantSessionSummary,
   type AssistantTurn,
+  type AssistantTurnPage,
 } from "@/lib/api/workspace-assistant";
-import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape, isNetworkError } from "@/lib/api/config";
+
+const TRANSIENT_HISTORY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const TRANSIENT_HISTORY_PROBLEMS = new Set([
+  "request_timeout", "rate_limited", "too_many_requests", "internal_server_error",
+  "bad_gateway", "service_unavailable", "gateway_timeout",
+]);
+const SOURCE_ACCESS_CHANGED = "Conversation sources or permissions changed. Cached messages and scope labels were cleared. Reload this conversation to recheck earlier messages.";
+
+function hasChangedSourceAccess(turns: AssistantTurn[]) {
+  return turns.some((turn) => turn.render_status === "permission_changed");
+}
+
+function isTransientHistoryError(error: unknown) {
+  if (isNetworkError(error)) return true;
+  if (!isApiErrorShape(error) || !TRANSIENT_HISTORY_STATUSES.has(error.status)) return false;
+  const type = error.problemType;
+  if (type != null && typeof type !== "string") return false;
+  const problem = type?.split("/").pop()?.replaceAll("-", "_");
+  return !problem || problem === String(error.status) || TRANSIENT_HISTORY_PROBLEMS.has(problem);
+}
+
+function mergeTurns(current: AssistantTurn[], incoming: AssistantTurn[]) {
+  const byId = new Map(current.map((turn) => [turn.id, turn]));
+  for (const turn of incoming) byId.set(turn.id, turn);
+  return [...byId.values()].sort((a, b) => a.sequence - b.sequence);
+}
+
+function validateHistory(page: AssistantTurnPage, snapshot = false) {
+  if (!page || !Array.isArray(page.items)
+    || !Number.isInteger(page.limit) || page.limit < 1
+    || (snapshot ? page.limit !== 200 || page.has_more : page.limit > 50)
+    || page.offset !== 0
+    || page.items.length > page.limit || typeof page.has_more !== "boolean"
+    || (page.has_more && page.items.length === 0)) {
+    throw new Error("Conversation history could not be read safely. Reopen the conversation.");
+  }
+  return page.has_more;
+}
 
 const SCOPE_LABELS: Record<AssistantScopeInput["scope_type"], string> = {
   tenant: "Workspace",
@@ -80,6 +122,7 @@ function formatDate(value: string) {
 }
 
 export function WorkspaceAssistant() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<AssistantSessionSummary[]>([]);
   const [active, setActive] = useState<AssistantSessionRecord | null>(null);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
@@ -90,24 +133,69 @@ export function WorkspaceAssistant() {
   const [busy, setBusy] = useState<"scope" | "session" | "ask" | "export" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [policyDisabled, setPolicyDisabled] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [openingCitation, setOpeningCitation] = useState<string | null>(null);
+  const readEpoch = useRef(0);
+  const historyPending = useRef(false);
+  const citationPending = useRef(false);
   const [actionReview, setActionReview] = useState<{
     turnId: string;
     action: AssistantProposedAction;
+    epoch: number;
   } | null>(null);
 
   useEffect(() => {
     let live = true;
+    const epoch = readEpoch.current;
     void listAssistantSessions()
       .then((response) => {
-        if (live) setSessions(response.items);
+        if (live && readEpoch.current === epoch) setSessions(response.items);
       })
       .catch(() => {
-        if (live) setSessions([]);
+        if (live && readEpoch.current === epoch) setSessions([]);
       });
     return () => {
       live = false;
+      readEpoch.current += 1;
     };
   }, []);
+
+  function resetConversationReads() {
+    readEpoch.current += 1;
+    historyPending.current = false;
+    citationPending.current = false;
+    setLoadingHistory(false);
+    setOpeningCitation(null);
+    setBusy(null);
+    setHasMoreHistory(false);
+    setTurns([]);
+    setActionReview(null);
+    setQuestion("");
+    return readEpoch.current;
+  }
+
+  function hideConversation() {
+    resetConversationReads();
+    setActive(null);
+    setSelected([]);
+    setScopeResults([]);
+  }
+
+  function replaceCachedHistory(
+    freshTurns: AssistantTurn[],
+    hasMore: boolean,
+    freshSession?: AssistantSessionRecord,
+  ) {
+    const epoch = resetConversationReads();
+    setScopeResults([]);
+    setSelected(freshSession ? freshSession.scopes.map(fallbackScopeOption) : []);
+    if (freshSession) setActive(freshSession);
+    setTurns(mergeTurns([], freshTurns));
+    setHasMoreHistory(hasMore);
+    setError(SOURCE_ACCESS_CHANGED);
+    return epoch;
+  }
 
   const selectionChanged = useMemo(() => {
     if (!active) return false;
@@ -122,21 +210,26 @@ export function WorkspaceAssistant() {
       setError("Enter at least two characters.");
       return;
     }
+    const epoch = readEpoch.current;
     setBusy("scope");
     setError(null);
     setPolicyDisabled(false);
     try {
       const response = await searchAssistantScopes(normalized);
+      if (readEpoch.current !== epoch) return;
       setScopeResults(response.items);
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      if (!isTransientHistoryError(caught)) hideConversation();
       if (isApiErrorShape(caught) && caught.problemType === "workspace_assistant_disabled") {
         setPolicyDisabled(true);
+        setSessions([]);
         setScopeResults([]);
       } else {
         setError(apiErrorMessage(caught, "Could not search the permitted workspace records."));
       }
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
@@ -154,6 +247,7 @@ export function WorkspaceAssistant() {
       setError("Select at least one workspace scope.");
       return;
     }
+    const epoch = resetConversationReads();
     setBusy("session");
     setError(null);
     try {
@@ -161,13 +255,16 @@ export function WorkspaceAssistant() {
         `Ask · ${selected[0]?.label ?? "Workspace"}`,
         selected,
       );
+      if (readEpoch.current !== epoch) return;
       setActive(created);
       setTurns([]);
       setSessions((current) => [created, ...current.filter((row) => row.id !== created.id)]);
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      hideConversation();
       setError(apiErrorMessage(caught, "Could not start the workspace conversation."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
@@ -176,20 +273,32 @@ export function WorkspaceAssistant() {
       setError("Select at least one workspace scope.");
       return;
     }
+    const epoch = resetConversationReads();
     setBusy("session");
     setError(null);
     try {
       const updated = await replaceAssistantScopes(active.id, active.version, selected);
+      const history = await listAssistantTurns(updated.id);
+      const hasMore = validateHistory(history);
+      if (readEpoch.current !== epoch) return;
       setActive(updated);
+      setTurns(mergeTurns([], history.items));
+      setHasMoreHistory(hasMore);
       setSessions((current) => current.map((row) => (row.id === updated.id ? updated : row)));
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      hideConversation();
       setError(apiErrorMessage(caught, "Could not update the active scope."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
   async function openSession(summary: AssistantSessionSummary) {
+    const epoch = resetConversationReads();
+    setActive(null);
+    setSelected([]);
+    setScopeResults([]);
     setBusy("session");
     setError(null);
     try {
@@ -197,38 +306,106 @@ export function WorkspaceAssistant() {
         getAssistantSession(summary.id),
         listAssistantTurns(summary.id),
       ]);
+      const hasMore = validateHistory(history);
+      if (readEpoch.current !== epoch) return;
       setActive(sessionRecord);
-      setTurns(history.items);
+      setTurns(mergeTurns([], history.items));
+      setHasMoreHistory(hasMore);
       setSelected(sessionRecord.scopes.map(fallbackScopeOption));
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
       setError(apiErrorMessage(caught, "Could not open that conversation."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
+    }
+  }
+
+  async function loadMoreHistory() {
+    if (!active || !hasMoreHistory || historyPending.current) return;
+    const epoch = readEpoch.current;
+    historyPending.current = true;
+    setLoadingHistory(true);
+    setError(null);
+    try {
+      // A later clean page cannot authorize an earlier cached answer.
+      const page = await listAssistantTurns(active.id, { snapshot: true });
+      validateHistory(page, true);
+      if (readEpoch.current !== epoch) return;
+      if (hasChangedSourceAccess(page.items)) {
+        replaceCachedHistory(page.items, false);
+        return;
+      }
+      setTurns(mergeTurns([], page.items));
+      setHasMoreHistory(false);
+    } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      // The prefix was not reauthorized. Keep a retry for transient failures,
+      // but never leave the old private messages or scope labels on screen.
+      if (isTransientHistoryError(caught)) replaceCachedHistory([], true);
+      else hideConversation();
+      setError(apiErrorMessage(caught, "Could not load more conversation messages."));
+    } finally {
+      if (readEpoch.current === epoch) {
+        historyPending.current = false;
+        setLoadingHistory(false);
+      }
+    }
+  }
+
+  async function openCitation(citationId: string) {
+    if (!active || citationPending.current) return;
+    const epoch = readEpoch.current;
+    citationPending.current = true;
+    setOpeningCitation(citationId);
+    setError(null);
+    try {
+      const opened = await openAssistantCitation(active.id, citationId);
+      if (readEpoch.current !== epoch) return;
+      router.push(safeAssistantCitationHref(opened.source_url));
+    } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      hideConversation();
+      setError(apiErrorMessage(caught, "Could not open this citation. Reopen the conversation and try again."));
+    } finally {
+      if (readEpoch.current === epoch) {
+        citationPending.current = false;
+        setOpeningCitation(null);
+      }
     }
   }
 
   async function submitQuestion() {
     const normalized = question.trim();
-    if (!active || normalized.length < 2) return;
+    if (!active || normalized.length < 2 || historyPending.current) return;
+    const epoch = readEpoch.current;
     setBusy("ask");
     setError(null);
     try {
       const response = await askWorkspaceAssistant(active.id, active.version, normalized);
-      setActive(response.session);
-      setTurns((current) => [...current, response.user_turn, response.assistant_turn]);
-      setQuestion("");
+      if (readEpoch.current !== epoch) return;
+      const incoming = [response.user_turn, response.assistant_turn];
+      if (response.session.scope_state === "permission_changed" || hasChangedSourceAccess(incoming)) {
+        replaceCachedHistory(incoming, hasMoreHistory, response.session);
+      } else {
+        setActive(response.session);
+        setTurns((current) => mergeTurns(current, incoming));
+        setQuestion("");
+      }
       setSessions((current) =>
         current.map((row) => (row.id === response.session.id ? response.session : row)),
       );
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      hideConversation();
       setError(apiErrorMessage(caught, "The workspace assistant could not answer."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
   async function archiveAndClear() {
     if (!active) return;
+    const epoch = readEpoch.current;
     setBusy("session");
     setError(null);
     try {
@@ -236,25 +413,29 @@ export function WorkspaceAssistant() {
         active.status === "archived"
           ? active
           : await archiveAssistantSession(active.id, active.version);
+      if (readEpoch.current !== epoch) return;
       setSessions((current) => current.map((row) => (row.id === archived.id ? archived : row)));
-      setActive(null);
-      setTurns([]);
-      setSelected([]);
-      setScopeResults([]);
+      hideConversation();
       setScopeQuery("");
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
       setError(apiErrorMessage(caught, "Could not archive the conversation."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
   async function downloadExport() {
     if (!active) return;
+    let epoch = readEpoch.current;
     setBusy("export");
     setError(null);
     try {
       const exported = await exportAssistantSession(active.id);
+      if (readEpoch.current !== epoch) return;
+      if (exported.session.scope_state === "permission_changed" || hasChangedSourceAccess(exported.turns)) {
+        epoch = replaceCachedHistory(exported.turns, false, exported.session);
+      }
       const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -263,27 +444,32 @@ export function WorkspaceAssistant() {
       anchor.click();
       URL.revokeObjectURL(href);
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
+      if (!isTransientHistoryError(caught)) hideConversation();
       setError(apiErrorMessage(caught, "Could not export the conversation."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
   async function requestDeletion() {
     if (!active) return;
+    const epoch = readEpoch.current;
     setBusy("session");
     setError(null);
     try {
       await deleteAssistantSession(active.id);
     } catch (caught) {
+      if (readEpoch.current !== epoch) return;
       setError(apiErrorMessage(caught, "Deletion is not available for this retained conversation."));
     } finally {
-      setBusy(null);
+      if (readEpoch.current === epoch) setBusy(null);
     }
   }
 
   function actionConfirmed(preview: AssistantActionPreview) {
-    if (!active || preview.resulting_session_version === null) return;
+    if (!active || !actionReview || actionReview.epoch !== readEpoch.current
+      || preview.resulting_session_version === null) return;
     const version = preview.resulting_session_version;
     setActive((current) => (current ? { ...current, version } : current));
     setSessions((current) =>
@@ -506,12 +692,25 @@ export function WorkspaceAssistant() {
                       key={turn.id}
                       turn={turn}
                       sessionId={active.id}
+                      openingCitation={openingCitation}
+                      onOpenCitation={openCitation}
                       onSuggestion={setQuestion}
-                      onAction={(action) => setActionReview({ turnId: turn.id, action })}
+                      onAction={(action) => setActionReview({ turnId: turn.id, action, epoch: readEpoch.current })}
                     />
                   ))
                 )}
               </div>
+              {hasMoreHistory ? (
+                <button
+                  type="button"
+                  onClick={() => void loadMoreHistory()}
+                  disabled={busy !== null || loadingHistory}
+                  className="mt-3 inline-flex h-9 items-center justify-center gap-2 self-start rounded-md border border-[var(--color-line)] px-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {loadingHistory ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
+                  Load more messages
+                </button>
+              ) : null}
               <form
                 className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
                 onSubmit={(event) => {
@@ -531,7 +730,7 @@ export function WorkspaceAssistant() {
                 </label>
                 <button
                   type="submit"
-                  disabled={busy !== null || question.trim().length < 2 || selectionChanged}
+                  disabled={busy !== null || loadingHistory || question.trim().length < 2 || selectionChanged}
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-md bg-[var(--color-ink)] px-4 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
                 >
                   {busy === "ask" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -556,7 +755,9 @@ export function WorkspaceAssistant() {
           sessionVersion={active.version}
           turnId={actionReview.turnId}
           action={actionReview.action}
-          onClose={() => setActionReview(null)}
+          onClose={() => {
+            if (readEpoch.current === actionReview.epoch) setActionReview(null);
+          }}
           onConfirmed={actionConfirmed}
         />
       ) : null}
@@ -564,20 +765,31 @@ export function WorkspaceAssistant() {
   );
 }
 
+function isRenderableAction(action: AssistantProposedAction) {
+  if (action.action_type === "search") {
+    return !action.requires_confirmation && action.href?.startsWith("/app/research?query=") === true;
+  }
+  return action.action_type !== "navigation" && action.requires_confirmation;
+}
+
 function TurnView({
   turn,
   sessionId,
+  openingCitation,
+  onOpenCitation,
   onSuggestion,
   onAction,
 }: {
   turn: AssistantTurn;
   sessionId: string;
+  openingCitation: string | null;
+  onOpenCitation: (citationId: string) => void;
   onSuggestion: (value: string) => void;
   onAction: (action: AssistantProposedAction) => void;
 }) {
   const assistant = turn.role === "assistant";
   return (
-    <article className={assistant ? "pr-4" : "pl-4 sm:pl-16"} data-turn-role={turn.role}>
+    <article className={assistant ? "pr-4" : "pl-4 sm:pl-16"} data-turn-role={turn.role} data-turn-id={turn.id}>
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${assistant ? "bg-[var(--color-brand-50)] text-[var(--color-brand-700)]" : "bg-[var(--color-ink)] text-white"}`}>
           {assistant ? <Bot className="h-4 w-4" aria-hidden /> : <MessageSquareText className="h-4 w-4" aria-hidden />}
@@ -588,27 +800,30 @@ function TurnView({
             <ol className="mt-3 flex flex-wrap gap-2" aria-label="Answer sources">
               {turn.citations.map((citation) => (
                 <li key={citation.id}>
-                  <a
-                    href={citation.source_url ?? "#"}
-                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs font-semibold text-[var(--color-brand-700)] hover:border-[var(--color-brand-600)]"
+                  <button
+                    type="button"
+                    onClick={() => onOpenCitation(citation.id)}
+                    disabled={openingCitation !== null}
+                    aria-label={`Open source: ${citation.label}`}
+                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs font-semibold text-[var(--color-brand-700)] hover:border-[var(--color-brand-600)] disabled:opacity-50"
                   >
                     <span className="max-w-56 truncate">{citation.label}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
-                  </a>
+                    {openingCitation === citation.id ? <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" aria-hidden /> : <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />}
+                  </button>
                 </li>
               ))}
             </ol>
           ) : null}
-          {turn.proposed_actions.length > 0 ? (
+          {turn.proposed_actions.some(isRenderableAction) ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              {turn.proposed_actions.map((action) =>
-                action.href && !action.requires_confirmation ? (
+              {turn.proposed_actions.filter(isRenderableAction).map((action) =>
+                action.action_type === "search" && action.href ? (
                   <a
                     key={action.proposal_id}
                     href={action.href}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
                   >
-                    {action.label} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    Search verified legal sources <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </a>
                 ) : (
                   <button

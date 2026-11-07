@@ -84,7 +84,14 @@ test("Docker's exact runtime tool-absence program rejects files, dangling launch
     if (mode === "file" || mode === "dangling-link") {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       if (mode === "file") fs.writeFileSync(target, "synthetic retained tool");
-      else fs.symlinkSync(path.join(root, "missing-owned-target"), target);
+      else {
+        const missing = path.join(root, "missing-owned-target");
+        // Windows junctions exercise the same real dangling-entry refusal
+        // without requiring the developer's symlink-administration privilege.
+        fs.symlinkSync(missing, target, process.platform === "win32" ? "junction" : "file");
+        expect(fs.lstatSync(target).isSymbolicLink()).toBe(true);
+        expect(fs.existsSync(target)).toBe(false);
+      }
     }
     const prelude = `const actualFs=require('node:fs'), actualPath=require('node:path');
       const originalStat=actualFs.lstatSync;
