@@ -580,15 +580,11 @@ def test_watch_report_excludes_closed_dockets_without_mutating_retained_evidence
         assert session.get(IpDocketRecord, docket["id"]).status == "closed"
 
 
-@pytest.mark.parametrize(
-    "client_fixture",
-    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
-    ids=["sqlite", "postgres"],
-)
-def test_watch_report_bounds_hydration_and_queries_beyond_row_limit(
-    request: pytest.FixtureRequest, client_fixture: str,
-) -> None:
-    client = request.getfixturevalue(client_fixture)
+def test_watch_report_bounds_hydration_and_queries_beyond_row_limit(client: TestClient) -> None:
+    assert_watch_report_bounds_hydration_and_queries_beyond_row_limit(client)
+
+
+def assert_watch_report_bounds_hydration_and_queries_beyond_row_limit(client: TestClient) -> None:
     _bootstrap, headers, _docket_row, profile, captured = _seed(client)
     with get_session_factory()() as session:
         original_profile = session.get(IpWatchProfile, profile["id"])

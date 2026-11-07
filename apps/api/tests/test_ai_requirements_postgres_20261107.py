@@ -50,7 +50,7 @@ def test_terminal_watch_docket_postgres(isolated_postgres_client: TestClient) ->
 
 
 def test_watch_hydration_query_bound_postgres(isolated_postgres_client: TestClient) -> None:
-    watch.test_watch_report_bounds_hydration_and_queries_beyond_row_limit(isolated_postgres_client)
+    watch.assert_watch_report_bounds_hydration_and_queries_beyond_row_limit(isolated_postgres_client)
 
 
 @pytest.mark.parametrize("initial_is_lead", [False, True])
