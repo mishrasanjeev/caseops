@@ -26,6 +26,14 @@
   Reconcile added case IDs and both independent source-inventory and evidence
   writer guards before freezing the release candidate.
 
+- Retained evidence readers must validate, bound and hash bytes from the same
+  open descriptor. Checking a pathname and then reopening it permits replacement
+  after admission; regress leaf replacement and growth, not just digest mismatch.
+- An additional audit action in a cross-account report changes data lineage even
+  without a schema change. Update its governance entry, render both generated
+  views and exercise the actual aggregation without changing recipients,
+  permissions or retention.
+
 - Execute every new or changed Playwright journey against the current built
   local app before freezing an expensive full gate. Discovery and jsdom tests
   do not prove browser locator semantics. A wrapping select label can include

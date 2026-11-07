@@ -162,6 +162,31 @@ Fourteen PostgreSQL counterparts now use the connection-disabled migrated
 template fixture and are discovered; none is relabelled as a local pass before
 execution. No native/mobile tooling or MacBook workflow was modified.
 
+## First Hosted CI And Docker Preflight
+
+Draft PR #597's original `dce01cf3` source did not pass hosted gates. The
+API lint job reached the governance change check and correctly refused an
+unrecorded addition to the activity-report action allowlist. The governed
+lineage now names the authenticated actor action, in-tenant metadata and
+unchanged recipients, retention and source access. A real activity aggregation
+test covers the added action; the reviewed YAML and generated view agree.
+
+CodeQL correctly rejected the retained-evidence helper's path check followed
+by a separate pathname read. The replacement binds the regular non-reparse
+leaf to one open descriptor, caps allocation and reads, checks stable metadata
+and hashes those exact bytes before parsing. It tests actual path replacement
+and growth, wrong/oversized input and platform link refusal. The dedicated
+production history role still needs genuine retained proof. No security guard
+is waived. A separate unchanged mobile-source test returned a null worker exit
+code on the first hosted run; retain that failure for the MacBook owner without
+editing native code or claiming native acceptance.
+
+The exact original candidate's canonical Docker admission failed before build
+with 31.3 GiB available versus the 64 GiB floor. Its owned probe cleaned up.
+No PostgreSQL or Docker Playwright case ran; no pruning, retry or lower threshold
+was applied. A replacement full Docker run is still required for the new source
+after capacity is restored. None of this is production certification.
+
 ## Release And Reviewer Gates
 
 Claude owns the preceding release closeout and must independently review this

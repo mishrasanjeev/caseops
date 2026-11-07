@@ -9,6 +9,7 @@ import type { AssistantCitation, AssistantSessionRecord, AssistantTurnPage } fro
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { requireFixtureDatabaseUrl } from "./support/fixture-database";
+import { readRetainedAssistantEvidence } from "./support/retained-assistant-evidence";
 import { runId } from "./support/run-id";
 
 // Local: one fresh synthetic tenant, 52 history turns, no model calls.
@@ -63,12 +64,7 @@ function localRuntime() {
 function retainedEvidence(): Evidence {
   const file = required("CASEOPS_ASSISTANT_QA_MANIFEST_PATH");
   const expected = required("CASEOPS_ASSISTANT_QA_MANIFEST_SHA256");
-  const metadata = fs.lstatSync(file);
-  if (!/^[a-f0-9]{64}$/.test(expected) || !metadata.isFile() || metadata.isSymbolicLink()
-    || metadata.size < 1 || metadata.size > 131072) throw new Error("Invalid retained assistant evidence file.");
-  const bytes = fs.readFileSync(file);
-  if (bytes.length < 1 || bytes.length > 131072) throw new Error("Retained assistant evidence exceeded its read bound.");
-  expect(sha256(bytes), "retained evidence edition").toBe(expected);
+  const bytes = readRetainedAssistantEvidence(file, expected);
   const evidence = JSON.parse(bytes.toString("utf8")) as Evidence;
   expect(evidence.fixture_kind, "production must not relabel local synthetic history").toBe("retained_qa");
   return evidence;
@@ -190,6 +186,9 @@ async function signIn(page: Page, baseURL: string | undefined) {
   expect(evidence.membership_id).toBe(identity.membership.id);
   const historyId = evidence.history_session_id;
   const otherId = evidence.other_session_id;
+  for (const id of [historyId, otherId, evidence.matter_id]) {
+    expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+  }
   expect(historyId).not.toBe(otherId);
   for (const id of [historyId, otherId]) {
     const proof = evidence.sessions[id];
