@@ -4029,6 +4029,13 @@ requirements when using the fallback.
 - Report rows, totals and freshness cutoffs must share one authorization
   snapshot. Verify a permission change across the count/page boundary and
   cover adjacent detail, source and mutation paths, not only the report UI.
+  In a redacted report, prove source identities and source-value cells, not
+  generic row text: a retained search criterion can repeat the restricted
+  candidate's label without authorizing that candidate's record.
+- A browser ACL mutation probe must prove its effective actor and satisfy
+  the existing CSRF boundary before asserting a resource-level denial. Use
+  the shared valid local colleague fixture rather than inventing an email
+  domain that fails admission. Preserve those fixture failures separately.
 - Tracked DOCX text belongs to its nearest paragraph and revision. Test a
   nested deletion inside an inserted table-cell text box and preserve the
   original downloadable bytes and authors without duplicating text.

@@ -131,8 +131,16 @@ test("Watch removes revoked source evidence from the workspace and report after 
     expect(response.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
     const report = await json(response, "Render Watch report without revoked source");
     expect(report.summary).toMatchObject({ hit_total: 1, total: 1, automated_coverage_available: false });
-    await expect(page.getByRole("row").filter({ hasText: publicMark })).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: privateMark })).toHaveCount(0);
+    expect(report.rows).toMatchObject([{
+      hit_id: publicHit.id, publication_id: permitted.publications[0].id,
+      candidate_mark: { mark_text: publicMark, application_number: "watch-acl-public" },
+    }]);
+    expect(JSON.stringify(report)).not.toContain(hit.id);
+    expect(JSON.stringify(report)).not.toContain(restricted.publications[0].id);
+    // The visible profile may still list privateMark as a matching criterion.
+    await expect(page.getByRole("cell", { name: /Mark text: QXY PUBLIC MARK;.*Application number: watch-acl-public/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /Mark text: ZQX PRIVATE MARK;.*Application number: watch-acl-private/ })).toHaveCount(0);
+    await expect(page.getByText(evidence, { exact: true })).toHaveCount(0);
   } finally {
     await rt.release();
   }
