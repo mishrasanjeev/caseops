@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { json, prepareTester, signIn, type TesterRuntime } from "./support/ram-bugs4";
+import { addLocalColleague, json, prepareTester, signIn, type TesterRuntime } from "./support/ram-bugs4";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 
@@ -32,12 +32,7 @@ test("Watch removes revoked source evidence from the workspace and report after 
   const api = `${rt.api.origin}/api`;
   const owner = { headers: rt.headers };
   try {
-    const credentials = { slug: rt.credentials.slug, email: "watch-reviewer@example.test", password: "WatchReviewer123!" };
-    const reviewer = await json(await request.post(`${api}/companies/current/users`, {
-      ...owner, data: {
-        email: credentials.email, password: credentials.password, role: "admin", full_name: "Watch reviewer",
-      },
-    }), "Create independent Watch reviewer");
+    const reviewer = await addLocalColleague(rt, request, "admin", "Watch reviewer");
     const open = await docket(request, rt, "Open Watch Docket", false);
     const source = await docket(request, rt, "Restricted Source Docket", true);
     const privateMark = "ZQX PRIVATE MARK";
@@ -80,12 +75,15 @@ test("Watch removes revoked source evidence from the workspace and report after 
         ...owner, data: { ...data, preview_token: preview.preview_token },
       }), "Apply source ACL");
     };
+    const sourcePanel = await json<{ access_policy_version: number }>(await request.get(
+      `${api}/ip/dockets/${source.docket.id}/access`, owner,
+    ), "Read source access policy before granting");
     const granted = await access({
-      action: "grant", expected_access_policy_version: 1, subject_type: "membership",
-      subject_id: reviewer.membership_id, reason: "Allow the reviewer to inspect the synthetic source.",
+      action: "grant", expected_access_policy_version: sourcePanel.access_policy_version, subject_type: "membership",
+      subject_id: reviewer.membershipId, reason: "Allow the reviewer to inspect the synthetic source.",
     });
     await page.context().clearCookies();
-    await signIn(page, rt, credentials);
+    await signIn(page, rt, reviewer.credentials);
     await page.goto(`${rt.web.origin}/app/ip/watch`);
     await page.getByRole("button", { name: "Hits", exact: true }).click();
     await page.getByTestId(`watch-hit-${hit.id}`).click();
@@ -94,7 +92,8 @@ test("Watch removes revoked source evidence from the workspace and report after 
     await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute("href", SOURCE);
     await expect(page.getByRole("button", { name: "Record review" })).toBeVisible();
 
-    const grant = granted.panel.grants.find((row: { subject_id: string }) => row.subject_id === reviewer.membership_id);
+    const grant = granted.panel.grants.find((row: { subject_id: string }) => row.subject_id === reviewer.membershipId);
+    expect(grant, "The positive fixture must have an actual persisted source grant").toBeDefined();
     await access({
       action: "revoke_grant", grant_id: grant.id,
       expected_access_policy_version: granted.panel.access_policy_version,
