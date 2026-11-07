@@ -595,7 +595,9 @@ def _scoped_query(
         # IS NULL or date range) and planned per-docket rescans of the portfolio.
         # Evaluate the same predicates as one boolean per docket instead; an
         # unanalyzed boolean filter is estimated at 50%, keeping the join linear.
-        # NULL still excludes a docket exactly as the WHERE clause did.
+        # NULL still excludes a docket exactly as the WHERE clause did. The stage
+        # must stay MATERIALIZED: PostgreSQL inlines a CTE referenced once and
+        # would push the boolean back down onto the unanalyzed fact columns.
         matched = (
             select(facts.c.docket_id, and_(*conditions).label("fact_filters_match"))
             .select_from(match_source)

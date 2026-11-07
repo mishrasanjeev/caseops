@@ -28,12 +28,26 @@ pytestmark = pytest.mark.postgres
 WIDTH = 1000
 REVOKED_POLICY_ROWS = 400
 REPEATED_TABLES = {"ip_docket_records", "trademark_applications", "ip_assets"}
+# A linear read touches at most a few thousand rows in any plan node here; a
+# per-docket rescan touches about WIDTH * WIDTH, whatever node carries it: a
+# rescanned Seq Scan, a Materialize or CTE Scan read once per outer row, or a
+# Nested Loop discarding WIDTH * WIDTH pairs in its join filter.
+QUADRATIC_WORK = WIDTH * WIDTH // 4
 
 
 def _nodes(node):
     yield node
     for child in node.get("Plans", []):
         yield from _nodes(child)
+
+
+def _work(node):
+    # EXPLAIN ANALYZE reports rows and filter removals per loop.
+    return (node.get("Actual Loops", 1) or 1) * (
+        node.get("Actual Rows", 0)
+        + node.get("Rows Removed by Filter", 0)
+        + node.get("Rows Removed by Join Filter", 0)
+    )
 
 
 def _seed(client):
@@ -119,15 +133,20 @@ def _portfolio_rescans(client, monkeypatch, record_property, requests):
             ).scalar_one()[0]["Plan"]
             offending = False
             for node in _nodes(plan):
+                work = _work(node)
                 if (
                     node["Node Type"] == "Seq Scan"
                     and node.get("Relation Name") in REPEATED_TABLES
                     and node.get("Actual Loops", 1) > 1
-                ):
-                    rescans[f"{label}-{index}"] = (
-                        node["Relation Name"],
-                        node["Actual Loops"],
-                        node.get("Actual Rows"),
+                ) or work >= QUADRATIC_WORK:
+                    rescans.setdefault(
+                        f"{label}-{index}",
+                        (
+                            node.get("Relation Name") or node["Node Type"],
+                            node.get("Actual Loops"),
+                            node.get("Actual Rows"),
+                            work,
+                        ),
                     )
                     offending = True
             if offending:
@@ -167,8 +186,9 @@ def test_fact_filtered_portfolio_reads_never_rescan_per_docket(
 ):
     # B4-ADJ-42: the renewal-tracker and date filters join a materialized fact
     # CTE. Its IS NULL and date filters carry no statistics, so the planner took
-    # one matching docket and rescanned trademark_applications (tracker) or
-    # ip_assets (date range only) per docket.
+    # one matching docket and rescanned trademark_applications (tracker page),
+    # a materialized fact row set (tracker families) or ip_assets (date range
+    # only) once per docket.
     tracker = {
         "renewal_tracker_state": "missing",
         "application_date_from": "2020-01-01",
