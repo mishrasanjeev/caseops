@@ -44,11 +44,15 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 718, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
         "control audit follows fieldset, first-legend and option-group disabled states",
+    )),
+    ("app-chromium", "watch-acl-query-states.spec.ts", (
+        "watch-acl-query-states.spec.ts",
+        "Watch removes revoked source evidence from the workspace and report after reload",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete

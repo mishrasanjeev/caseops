@@ -171,7 +171,7 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
 
 type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
   Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
-const appSourceProjects = { "app-chromium": 718, "app-mobile": 55 };
+const appSourceProjects = { "app-chromium": 719, "app-mobile": 55 };
 
 function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
   return suites.flatMap(suite => {
@@ -188,7 +188,7 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
 }
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
-  // Exact773-case metadata scope:15s constructor/20s new hooks and units. The
+  // Exact774-case metadata scope:15s constructor/20s new hooks and units. The
   // established production collector above keeps its literal8s bound unchanged.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
@@ -257,19 +257,24 @@ describe("complete independent App CI project inventory", () => {
       .flatMap(project => canonicalAppProject(canonical, project));
   }, 20_000);
 
-  it("keeps all773 canonical identities, original project order and zero retry/repeat", () => {
-    expect(canonical).toHaveLength(773);
+  it("keeps all774 canonical identities, original project order and zero retry/repeat", () => {
+    expect(canonical).toHaveLength(774);
     expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
     expect(wholeByDeclaration.map(row => row.project)).toEqual([
-      ...Array<string>(718).fill("app-chromium"), ...Array<string>(55).fill("app-mobile"),
+      ...Array<string>(719).fill("app-chromium"), ...Array<string>(55).fill("app-mobile"),
     ]);
-    expect(new Set(canonical.map(row => row.id)).size).toBe(773);
+    expect(new Set(canonical.map(row => row.id)).size).toBe(774);
     expect(canonical.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(canonical.every(row => !path.isAbsolute(row.file) && !row.file.split("/").includes(".."))).toBe(true);
     expect(canonical.filter(row => row.file === "control-crawl-contract.spec.ts")
       .map(row => [row.project, row.titles])).toEqual([
       ["app-chromium", ["control-crawl-contract.spec.ts",
         "control audit follows fieldset, first-legend and option-group disabled states"]],
+    ]);
+    expect(canonical.filter(row => row.file === "watch-acl-query-states.spec.ts")
+      .map(row => [row.project, row.titles])).toEqual([
+      ["app-chromium", ["watch-acl-query-states.spec.ts",
+        "Watch removes revoked source evidence from the workspace and report after reload"]],
     ]);
   });
 
@@ -282,7 +287,7 @@ describe("complete independent App CI project inventory", () => {
     }, 20_000);
   }
 
-  it("forms an exact disjoint718+55 ordered union with the original mobile tag boundary", () => {
+  it("forms an exact disjoint719+55 ordered union with the original mobile tag boundary", () => {
     const chromium = canonicalAppProject(canonical, "app-chromium");
     const mobile = canonicalAppProject(canonical, "app-mobile");
     expect(chromium.every(row => !row.titles.join(" ").includes("[mobile]"))).toBe(true);
