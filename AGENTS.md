@@ -1,5 +1,31 @@
 # CaseOps agent instructions
 
+- A target-state specification is not a reproduced bug inventory. Preserve its
+  exact source edition and acceptance IDs, distinguish headings/data fields from
+  issue rows, and classify existing capability, enhancement, software defect and
+  external dependency separately. A visible tab or passing API cannot close its
+  workflow, and a safe legal-source abstention cannot be removed to manufacture
+  success. Carry each original criterion into persisted desktop/mobile proof;
+  never relabel proposed scenarios or mapped tests as executed acceptance.
+
+- A Vitest setup hook must not implicitly return a mock while resetting it.
+  Returned functions are cleanup callbacks, so `beforeEach(() => mock.mockReset())`
+  can invoke the mock during teardown and turn an expected rejection into a
+  misleading failure. Use a block returning void; retain the original exact-error
+  assertion and inspect setup/call/cleanup evidence before changing product code.
+
+- A server-backed checkbox must reflect the requested value while its single
+  mutation is pending, disable sibling writes, and restore the persisted value
+  after rejection. A jsdom click with an immediate mock cannot prove the real
+  native checkbox interaction; retain deferred-response/rollback tests and the
+  browser's check/uncheck assertions instead of replacing them with blind clicks.
+
+- Standalone Playwright preflights need a unique output directory for each
+  invocation, not just unique JSON/XML filenames. The default results cleanup
+  can discard a prior failure's DOM context even when its native report survives.
+  Reconcile added case IDs and both independent source-inventory and evidence
+  writer guards before freezing the release candidate.
+
 - Execute every new or changed Playwright journey against the current built
   local app before freezing an expensive full gate. Discovery and jsdom tests
   do not prove browser locator semantics. A wrapping select label can include

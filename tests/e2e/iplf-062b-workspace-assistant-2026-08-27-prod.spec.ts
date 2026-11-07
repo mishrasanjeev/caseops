@@ -117,9 +117,16 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({
       .getByRole("textbox", { name: "Ask this workspace" })
       .fill("What is this matter's status and practice area?");
     await page.getByRole("button", { name: "Ask", exact: true }).click();
-    await expect(
-      page.getByRole("link", { name: new RegExp(`AI-PROD-${runId}`, "i") }),
-    ).toHaveAttribute("href", `/app/matters/${matterRecord.id}`);
+    const opened = page.waitForResponse((response) =>
+      /\/api\/workspace-assistant\/sessions\/[^/]+\/citations\/[^/]+\/open$/.test(new URL(response.url()).pathname)
+      && response.request().method() === "POST");
+    await page.getByRole("button", { name: new RegExp(`AI-PROD-${runId}`, "i") }).click();
+    const openResponse = await opened;
+    expect(openResponse.status(), "Production source opening must reauthorize and audit").toBe(200);
+    expect((await openResponse.json()).source_url).toBe(`/app/matters/${matterRecord.id}`);
+    await expect(page).toHaveURL(`${WEB}/app/matters/${matterRecord.id}`);
+    await page.goBack();
+    await page.getByRole("button", { name: new RegExp(`Ask.*Production assistant ${runId}`) }).click();
     await expect(page.getByText(/tokens$/)).toBeVisible();
 
     await page.setViewportSize({ width: 360, height: 800 });

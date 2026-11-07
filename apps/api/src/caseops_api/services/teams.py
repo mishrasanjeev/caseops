@@ -725,7 +725,21 @@ def add_team_member(
     if row is not None:
         # Allow is_lead toggling on re-add without raising.
         if row.is_lead != is_lead:
+            previous_is_lead = row.is_lead
             row.is_lead = is_lead
+            record_from_context(
+                session,
+                context,
+                action="team_membership.updated",
+                target_type="team_membership",
+                target_id=row.id,
+                metadata={
+                    "team_id": team.id,
+                    "membership_id": membership_id,
+                    "before": {"is_lead": previous_is_lead},
+                    "after": {"is_lead": is_lead},
+                },
+            )
             session.flush()
         return _team_record(session, team)
 

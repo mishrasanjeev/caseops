@@ -44,7 +44,7 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 714, "app-mobile": 53}
+APP_PROJECT_COUNTS = {"app-chromium": 718, "app-mobile": 55}
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -106,7 +106,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6,
+    "tester": 101, "tester-catalog": 18, "tester-index": 6,
     "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.

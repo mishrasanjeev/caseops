@@ -70,6 +70,7 @@ def parse_redline_docx(
     """
     try:
         from docx import Document  # type: ignore[import-not-found]
+        from docx.text.paragraph import Paragraph  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(
             "python-docx is not installed; run `uv sync` to restore the "
@@ -88,9 +89,11 @@ def parse_redline_docx(
     result = RedlineParseResult(attachment_name=attachment_name)
 
     change_index = 0
-    for para_idx, paragraph in enumerate(document.paragraphs):
+    # XML order includes nested tables once, without merged-cell aliases.
+    body = document._element.body  # noqa: SLF001
+    for para_idx, element in enumerate(body.iter(f"{_W_NS}p")):
         result.paragraph_count += 1
-        element = paragraph._element  # noqa: SLF001 — python-docx exposes XML here
+        paragraph = Paragraph(element, document._body)  # noqa: SLF001
         paragraph_text = paragraph.text
         for child in element.iter():
             tag = child.tag
@@ -101,6 +104,10 @@ def parse_redline_docx(
             elif tag == f"{_W_NS}rPrChange":
                 kind = "formatting"
             else:
+                continue
+
+            # A text box can contain a paragraph with its own tracked changes.
+            if next(child.iterancestors(f"{_W_NS}p"), None) is not element:
                 continue
 
             text_pieces: list[str] = []

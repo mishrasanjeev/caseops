@@ -7,8 +7,19 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.db.models import (
+    IpDocketRecord,
+    IpJournalPublication,
+    IpWatchHit,
+    IpWatchProfile,
+    Matter,
+    MatterStatus,
+    TrademarkApplication,
+)
 from caseops_api.schemas.ip_reports import (
     IpReportDefinitionRecord,
     IpReportFoundationContract,
@@ -18,9 +29,14 @@ from caseops_api.schemas.ip_reports import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.connector_health import read_tenant_connector_health
+from caseops_api.services.ip_lifecycle import (
+    TERMINAL_APPLICATION_PHASES,
+    TERMINAL_IP_DOCKET_STATUSES,
+)
 from caseops_api.services.ip_operations import ip_daily_docket, ip_docket_control_report
 from caseops_api.services.ip_portfolio import list_ip_portfolio
 from caseops_api.services.ip_renewals import list_renewal_portfolio
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
 _DEFINITIONS = (
@@ -77,7 +93,7 @@ _DEFINITIONS = (
     IpReportDefinitionRecord(
         key="watch",
         schema_version="ip-watch-report-v1",
-        canonical_sources=["ip_watch_provider"],
+        canonical_sources=["ip_watch_profiles", "ip_watch_hits", "ip_journal_publications"],
     ),
     IpReportDefinitionRecord(
         key="workload",
@@ -327,26 +343,191 @@ def _data_quality_payload(
     return generated_at, counts, visible, len(rows) > len(visible), freshness
 
 
-def _watch_payload() -> tuple[
-    datetime, dict[str, Any], list[dict[str, Any]], bool, IpReportFreshness
-]:
+def _watch_payload(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpReportPreviewRequest,
+) -> tuple[datetime, dict[str, Any], list[dict[str, Any]], bool, IpReportFreshness]:
     generated_at = datetime.now(UTC)
+    visible_dockets = (
+        select(IpDocketRecord.id, IpDocketRecord.title)
+        .outerjoin(
+            Matter,
+            (Matter.id == IpDocketRecord.matter_id)
+            & (Matter.company_id == IpDocketRecord.company_id),
+        )
+        .where(
+            IpDocketRecord.company_id == context.company.id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            or_(
+                IpDocketRecord.matter_id.is_(None),
+                Matter.is_active.is_(True)
+                & Matter.status.in_(
+                    (MatterStatus.INTAKE, MatterStatus.ACTIVE, MatterStatus.ON_HOLD)
+                ),
+            ),
+            visible_ip_dockets_filter(session, context=context),
+        )
+        .cte("watch_report_visible_dockets")
+    )
+    visible_applications = select(TrademarkApplication.id).where(
+        TrademarkApplication.company_id == context.company.id,
+        TrademarkApplication.docket_id.in_(select(visible_dockets.c.id)),
+        TrademarkApplication.is_active.is_(True),
+        TrademarkApplication.filing_phase.notin_(TERMINAL_APPLICATION_PHASES),
+    )
+    visible_publications = (
+        select(IpJournalPublication.id)
+        .where(
+            IpJournalPublication.company_id == context.company.id,
+            or_(
+                IpJournalPublication.application_id.is_(None),
+                IpJournalPublication.application_id.in_(visible_applications),
+            ),
+        )
+        .correlate(None)
+    )
+    # Authorize both the watched docket and any linked source application.
+    # Filtering hits in the join preserves a visible zero-hit profile without
+    # disclosing whether it also has hits whose source is now inaccessible.
+    statement = (
+        select(
+            IpWatchProfile,
+            IpWatchHit,
+            visible_dockets.c.title,
+            IpJournalPublication.source_retrieved_at,
+            IpJournalPublication.provider_key,
+        )
+        .join(visible_dockets, visible_dockets.c.id == IpWatchProfile.docket_id)
+        .outerjoin(
+            IpWatchHit,
+            (IpWatchHit.profile_id == IpWatchProfile.id)
+            & (IpWatchHit.company_id == IpWatchProfile.company_id)
+            & IpWatchHit.publication_id.in_(visible_publications),
+        )
+        .outerjoin(
+            IpJournalPublication,
+            (IpJournalPublication.id == IpWatchHit.publication_id)
+            & (IpJournalPublication.company_id == IpWatchHit.company_id),
+        )
+        .where(IpWatchProfile.company_id == context.company.id)
+    )
+    records = statement.with_only_columns(
+        IpWatchProfile.id.label("profile_id"),
+        IpWatchProfile.updated_at.label("profile_updated_at"),
+        IpWatchHit.id.label("hit_id"),
+        IpWatchHit.updated_at.label("hit_updated_at"),
+        IpWatchHit.disposition,
+        IpWatchHit.reviewed_at,
+        IpJournalPublication.source_retrieved_at,
+    ).subquery()
+    totals = session.execute(
+        select(
+            func.count().label("total"),
+            func.count(func.distinct(records.c.profile_id)).label("profile_total"),
+            func.count(records.c.hit_id).label("hit_total"),
+            func.count(case((records.c.disposition == "new", 1))).label("new_hits"),
+            func.count(case((records.c.disposition == "relevant", 1))).label("relevant_hits"),
+            func.count(records.c.reviewed_at).label("reviewed_hits"),
+            func.count(
+                case((records.c.disposition.in_(("new", "reviewing")), 1))
+            ).label("pending_assessment"),
+            func.max(records.c.profile_updated_at).label("profiles_cutoff"),
+            func.max(records.c.hit_updated_at).label("hits_cutoff"),
+            func.max(records.c.source_retrieved_at).label("capture_cutoff"),
+        )
+    ).one()
+    rows = []
+    for profile, hit, title, retrieved_at, provider_key in session.execute(
+        statement.order_by(
+            IpWatchHit.hit_date.desc().nulls_last(),
+            IpWatchHit.created_at.desc().nulls_last(),
+            IpWatchHit.id.desc().nulls_last(),
+            IpWatchProfile.updated_at.desc(),
+            IpWatchProfile.id.desc(),
+        ).limit(payload.row_limit)
+    ):
+        rows.append(
+            {
+                "docket_title": title,
+                "watch_name": profile.name,
+                "watch_criteria": {
+                    "word_terms": profile.word_terms_json,
+                    "phonetic_terms": profile.phonetic_terms_json,
+                    "device_references": profile.device_references_json,
+                    "classes": profile.class_numbers_json,
+                    "proprietors": profile.proprietor_terms_json,
+                    "jurisdictions": profile.jurisdictions_json,
+                },
+                "profile_status": profile.poll_status,
+                "compared_mark": hit.compared_mark_json if hit else None,
+                "candidate_mark": hit.candidate_mark_json if hit else None,
+                "assessment": {
+                    "disposition": hit.disposition,
+                    "reason": hit.disposition_reason,
+                    "reviewed_at": hit.reviewed_at,
+                    "decision": hit.reviewer_decision_json,
+                } if hit else None,
+                "source": {
+                    "provider": provider_key,
+                    "url": hit.source_url,
+                    "status": hit.source_status,
+                    "hit_date": hit.hit_date,
+                    "captured_at": retrieved_at,
+                    "stale_source_alert": hit.stale_source_alert,
+                    "deadline_confirmation_state": hit.deadline_confirmation_state,
+                } if hit else None,
+                "classes_goods": hit.classes_goods_json if hit else None,
+                "similarity_evidence": {
+                    "evidence": hit.similarity_evidence_json,
+                    "ai_advisory": hit.ai_advisory,
+                    "notice": hit.advisory_notice,
+                } if hit else None,
+                "profile_id": profile.id,
+                "docket_id": profile.docket_id,
+                "hit_id": hit.id if hit else None,
+                "publication_id": hit.publication_id if hit else None,
+                "source_snapshot": hit.source_snapshot_json if hit else None,
+                "profile_version": profile.version,
+                "hit_version": hit.version if hit else None,
+            }
+        )
+    rows = jsonable_encoder(rows)
+    summary = {
+        "available": True,
+        "reason": (
+            "Only retained journal-watch records are included; automated journal coverage "
+            "is unavailable."
+            if totals.profile_total
+            else "No retained journal-watch records match your access; automated journal "
+            "coverage is unavailable."
+        ),
+        "automated_coverage_available": False,
+        "total": totals.total,
+        "returned": len(rows),
+        "profile_total": totals.profile_total,
+        "hit_total": totals.hit_total,
+        "new_hits": totals.new_hits,
+        "relevant_hits": totals.relevant_hits,
+        "reviewed_hits": totals.reviewed_hits,
+        "pending_assessment": totals.pending_assessment,
+        "counts_are_complete": True,
+    }
     freshness = IpReportFreshness(
-        status="unavailable",
+        status="mixed",
         generated_at=generated_at,
-        source_cutoffs={"ip_watch_provider": None},
+        source_cutoffs={
+            "watch_profiles": totals.profiles_cutoff,
+            "watch_hits": totals.hits_cutoff,
+            "journal_capture": totals.capture_cutoff,
+            "ip_watch_provider": None,
+        },
         unavailable_sources=["ip_watch_provider"],
     )
-    return (
-        generated_at,
-        {
-            "available": False,
-            "reason": "IP watch operations are not activated for this workspace.",
-        },
-        [],
-        False,
-        freshness,
-    )
+    return generated_at, summary, rows, totals.total > len(rows), freshness
 
 
 def _workload_payload(
@@ -444,7 +625,9 @@ def preview_ip_report(
             session, context=context, payload=payload
         )
     elif payload.report_kind == "watch":
-        generated_at, summary, rows, truncated, freshness = _watch_payload()
+        generated_at, summary, rows, truncated, freshness = _watch_payload(
+            session, context=context, payload=payload
+        )
     elif payload.report_kind == "workload":
         generated_at, summary, rows, truncated, freshness = _workload_payload(
             session, context=context

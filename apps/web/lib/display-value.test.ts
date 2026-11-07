@@ -42,4 +42,21 @@ describe("internal identifiers", () => {
     expect(displayCell(["word_mark", "TM / 2026 / 1"])).toBe("Word mark, TM / 2026 / 1");
     expect(displayCell("Downloadable legal software")).toBe("Downloadable legal software");
   });
+
+  it("reads nested report states and object arrays without changing original free text", () => {
+    expect(displayCell({ assessment: { disposition: "not_relevant", reason: "Confirmed by counsel" },
+      history: [{ source_status: "source_pending", captured_on: "2026-11-07" }] }))
+      .toBe("Assessment: Disposition: Not relevant; Reason: Confirmed by counsel; History: Source status: Source pending; Captured on: 2026-11-07");
+  });
+
+  it("omits internal identities and hashes inside report objects and mixed arrays", () => {
+    const id = "0b9c4c1e-6f1d-4a3e-9d55-2f1f6c1e7a10";
+    const hash = "a".repeat(64);
+    const text = displayCell({ source: { application_id: id, source_sha256: hash,
+      alias: id, application_number: "TM-421", disposition: "not_relevant" }, items: [id, "TM-422"] });
+    expect(text).toBe("Source: Application number: TM-421; Disposition: Not relevant; Items: TM-422");
+    expect(text).not.toContain(id);
+    expect(text).not.toContain(hash);
+    expect(displayCell({ hit_id: id })).toBe("None");
+  });
 });

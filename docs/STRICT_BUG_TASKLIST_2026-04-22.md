@@ -1,5 +1,26 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 7 Requirements Triage And Bounded Candidates
+
+**Inconclusive; new production acceptance pending.** The owner-supplied v2.1
+specification is a target-state baseline, not 767 bugs. AI-B01..04 identify
+team-lead audit omission, table-cell redline omission, cached assistant citation
+opening and first-50 history truncation; AI-E01 adds missing team membership
+controls. AI-B05 connects the retained Watch report under current record access;
+the pinned baseline fails the retained-summary reproduction and 19 candidate
+report cases pass. AI-B06 recursively renders report cells without machine
+states or internal identity/hash fields. Broader
+enhancement and legal/provider dependencies stay separate. Current component
+evidence is 79 API cases (8 Teams/35 contracts/17 lifecycle/19 reports), all
+2,728 frontend cases and 655 evidence controls. Browser run01 failed four;
+run02 passed three/failed one; run03 passed six; run04 passed six/failed two
+at nested report rendering; run05 passed eight and run06 passed all ten. These
+are built-app SQLite preflights. No Docker, deployed fix or complete
+requirement closure is inferred.
+See [the complete evaluation](AI_REQUIREMENTS_TRIAGE_2026-11-07.md). Preserve all
+earlier failed UI/setup receipts and existing lifecycle fences. Claude quality
+review is blocked by expired OAuth, not completed or waived.
+
 ## November 6 Adjacent Defect: B4-ADJ-40 Retired Private Generations Kept Deleted Sources
 
 Found while fixing B4-ADJ-36 (PR #591). Customer-data retention defect in

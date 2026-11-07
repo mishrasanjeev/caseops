@@ -313,6 +313,39 @@ async function journey(
   await expectOnScreen(stillListed, "The recorded entry is still listed after the profile is paused");
   await expect(stillListed).toContainText(`Application ${applicationNumber}`);
   await checkLayout();
+
+  // AI-R0585: a paused manual profile's reviewed evidence still belongs in
+  // the internal report; it must not imply an operational automated feed.
+  await page.goto(`${rt.web.origin}/app/ip/reports`);
+  const generateWatch = async () => {
+    await page.getByRole("combobox", { name: "Report", exact: true }).selectOption("watch");
+    await page.getByRole("spinbutton", { name: "Row limit" }).fill("200");
+    const pending = page.waitForResponse(response =>
+      new URL(response.url()).pathname === "/api/ip/reports/preview" && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Generate", exact: true }).click();
+    const response = await pending;
+    expect(response.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+    const report = await uiJson(response, "Report retained manual Watch evidence");
+    expect(report.summary.automated_coverage_available).toBe(false);
+    expect(report.freshness.unavailable_sources).toContain("ip_watch_provider");
+    const retained = report.rows.find((row: { hit_id: string }) => row.hit_id === ownHit.id);
+    expect(retained, "The new reviewed capture is in the bounded current report").toBeTruthy();
+    expect(retained.profile_id).toBe(profile.id);
+    expect(retained.profile_status).toBe("paused");
+    expect(retained.assessment.disposition).toBe("not_relevant");
+    expect(retained.assessment.reason).toBe(`BUG-014 journey ${label} retired`);
+    expect(retained.source_snapshot).toEqual(ownHit.source_snapshot_json);
+    await expect(page.getByRole("row").filter({ hasText: mark })).toContainText("Not relevant");
+    await expect(page.getByText("Only retained journal-watch records are included; automated journal coverage is unavailable.")).toBeVisible();
+    await checkLayout();
+  };
+  await generateWatch();
+  await page.reload();
+  await generateWatch();
+  await markPositive(info, mobile ? "ai-b05-report-mobile" : "ai-b05-report", {
+    local: rt.local, hit_id: ownHit.id, profile_id: profile.id, reviewed_after_reload: true,
+    automated_coverage_available: false,
+  });
 }
 
 test("BUG-014 journal capture: 'Class 45' with captured evidence is recorded, listed and shown on the hit; a bad class token is refused at its field", async ({ page, request, baseURL }, info) => {
