@@ -200,3 +200,43 @@ built-Docker journeys, full canonical Docker and CI/security, protected main,
 guarded exact-SHA deployment, production replay, required maintenance/resume
 and honest workbook update. No source candidate, prior-release QA or green
 unit component bypasses those gates. MacBook app work stays separate.
+
+## Candidate Reopen Analysis
+
+The candidate itself exposed avoidable gaps in my first verification pass:
+the API governance companion check, independent CodeQL annotations, the
+container's finite test-helper import closure, and one Python consumer of the
+expanded browser inventory were not all covered by the initially selected
+local components. Passing checkout tests was insufficient. The strict guards
+caught these before merge; their failed receipts are retained. The inventory
+repair keeps the literal version-2 contract, proves the four added identities,
+and reruns the entire 257-case workflow module rather than deleting the check.
+
+Independent integration review also found a real security defect in the new
+history continuation: HTTP 200 can contain permission-changed rows. Merging
+those rows left previously loaded private answers visible. The corrected
+client invalidates the cached prefix, old scope labels and pending callbacks
+and renders only the freshly authorized/redacted response. It does not solve
+this by making old history or legitimate redacted exports permanently unusable.
+The same boundary covers successful asks/exports and late scope/export/action
+callbacks. A real loopback source-version mutation is included in the dated
+browser journey; the immutable retained production fixture is not mutated.
+
+The first proposed export tests were revised because rejecting every redacted
+export would itself block a supported safe workflow. Preserve both early
+proposals and the corrected baseline, which reproduced nine failures with
+36 existing/positive passes. New focused passes are component evidence only;
+they invalidate any suggestion that the older 0743d484 browser build verifies
+this later runtime change. A fresh full build, browser replay, PostgreSQL,
+canonical Docker, current CI, independent Claude review and production proof
+remain required before any finding is described as properly fixed.
+
+Two hosted PostgreSQL denials exposed a test-client isolation error, not a
+production authorization defect: bootstrap persisted tenant B's cookie, which
+correctly outranks tenant A's explicit Bearer header. The shared team journey
+now isolates its cookies and asserts the effective company/member before the
+denial and the unchanged owner readback/audit. Separately shard 16 exited 139
+with only a partial native inventory and no complete fault stack. The last
+active tracker case and the generated SQLAlchemy traversal snapshot are
+diagnostic clues, not a proven crash cause. Preserve the native failure and
+require a complete replacement; do not disable the tracker test or its limits.

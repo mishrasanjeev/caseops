@@ -25,6 +25,8 @@ def _bootstrap(client: TestClient, slug: str) -> dict[str, str]:
         },
     )
     assert resp.status_code == 200, resp.text
+    # These journeys select explicit Bearer principals; a login cookie wins in production.
+    client.cookies.clear()
     return resp.json()
 
 
@@ -34,6 +36,7 @@ def _login(client: TestClient, email: str, password: str, slug: str) -> str:
         json={"email": email, "password": password, "company_slug": slug},
     )
     assert resp.status_code == 200, resp.text
+    client.cookies.clear()
     return resp.json()["access_token"]
 
 
@@ -182,19 +185,31 @@ def test_team_lead_change_denials_preserve_membership_and_audit(
     assert len(before_events) == 1
 
     attempt_headers = headers
+    attempt_company = boot["company"]["id"]
+    attempt_actor = boot["membership"]["id"]
     if attempt == "non_manager":
         member_token = _login(client, email, "MemberPass123!", slug)
         attempt_headers = _headers(member_token)
+        attempt_actor = membership_id
     else:
         other = _bootstrap(client, "teams-lead-other")
         membership_id = other["membership"]["id"]
         if attempt == "foreign_team":
             attempt_headers = _headers(other["access_token"])
+            attempt_company = other["company"]["id"]
+            attempt_actor = membership_id
+
+    principal = client.get("/api/auth/me", headers=attempt_headers)
+    assert principal.status_code == 200, principal.text
+    assert "cookie" not in principal.request.headers
+    assert principal.json()["company"]["id"] == attempt_company
+    assert principal.json()["membership"]["id"] == attempt_actor
 
     rejected = client.post(
         f"/api/teams/{team_id}/members", headers=attempt_headers,
         json={"membership_id": membership_id, "is_lead": True},
     )
+    assert "cookie" not in rejected.request.headers
     assert rejected.status_code == expected_status, rejected.text
     persisted, after_events = _membership_state(team_membership_id)
     assert persisted.is_lead is False
@@ -203,6 +218,7 @@ def test_team_lead_change_denials_preserve_membership_and_audit(
     assert [event.id for event in after_events] == [event.id for event in before_events]
     read_back = client.get("/api/teams/", headers=headers)
     assert read_back.status_code == 200, read_back.text
+    assert "cookie" not in read_back.request.headers
     team = next(row for row in read_back.json()["teams"] if row["id"] == team_id)
     assert team["member_count"] == 1
     assert team["members"][0]["id"] == team_membership_id

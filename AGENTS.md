@@ -3995,3 +3995,18 @@ requirements when using the fallback.
   type-check input. Admit its finite import closure in Docker and Cloud Build
   ignore files and explicit builder COPY inputs, while excluding it from the
   runtime image. Checkout-only tests/builds cannot prove that upload contract.
+- A successful paginated response can carry an authorization change through
+  redacted rows rather than an HTTP error. Invalidate the earlier cached
+  private prefix and pending callbacks, retain only freshly authorized data,
+  and keep redacted history and exports usable. Prove the real source change,
+  continuation, old-export/search races and persisted reload; an error-only
+  regression cannot cover this boundary.
+- Browser inventory changes must update every independent release-contract
+  consumer, including Python CLI negative controls, not just Vitest manifests.
+  Reconcile the exact added identities and complete consumer suites; retain
+  literal contract/version assertions and missing/older-version refusals.
+- A cross-tenant Bearer regression must not reuse a higher-priority auth
+  cookie left by another fixture actor. Clear the owned cookie jar after
+  bootstrap/login, verify the effective principal before the denial, and
+  preserve the original status, persisted state, audit and owner readback.
+  Do not change production authentication precedence to repair the test.

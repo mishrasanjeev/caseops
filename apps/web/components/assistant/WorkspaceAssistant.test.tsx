@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, NetworkError } from "@/lib/api/config";
+import type { AssistantSessionExport, AssistantTurn, AssistantTurnPage } from "@/lib/api/workspace-assistant";
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -133,6 +134,40 @@ function historyTurns(count: number, first = 1) {
     role: (first + index) % 2 ? "user" as const : "assistant" as const,
     content: `Private message ${first + index}`,
   }));
+}
+
+function hiddenTurn(sequence = 52): AssistantTurn {
+  return {
+    ...ASSISTANT_TURN, id: `hidden-${sequence}`, sequence,
+    render_status: "permission_changed", content: "This answer is hidden because source access changed.",
+    citations: [], proposed_actions: [], suggested_searches: [], model: null,
+  };
+}
+
+function downloadSpies() {
+  const prior = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+  const priorRevoke = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+  const create = vi.fn((_blob: Blob) => "blob:assistant-export");
+  const revoke = vi.fn();
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: create });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revoke });
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  return { create, revoke, restore() {
+    click.mockRestore();
+    if (prior) Object.defineProperty(URL, "createObjectURL", prior);
+    else Reflect.deleteProperty(URL, "createObjectURL");
+    if (priorRevoke) Object.defineProperty(URL, "revokeObjectURL", priorRevoke);
+    else Reflect.deleteProperty(URL, "revokeObjectURL");
+  } };
+}
+
+async function blobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
 }
 
 async function openStoredConversation(user: ReturnType<typeof userEvent.setup>) {
@@ -308,6 +343,20 @@ describe("WorkspaceAssistant", () => {
     );
   });
 
+  it("removes cached history and session labels when a later scope search reports disabled policy", async () => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    await openStoredConversation(user);
+    expect(screen.getByText(ASSISTANT_TURN.content)).toBeVisible();
+    api.searchAssistantScopes.mockRejectedValue(new ApiError(403, "Assistant disabled by policy.", null, "workspace_assistant_disabled"));
+    await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "workspace");
+    await user.click(screen.getByRole("button", { name: "Find permitted records" }));
+    expect(await screen.findByText(/Workspace AI policy has not enabled this assistant/)).toBeVisible();
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: SESSION.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
+  });
+
   it("shows permission-changed history and clears the active scope through archival", async () => {
     const user = userEvent.setup();
     const changed = { ...SESSION, scope_state: "permission_changed" as const, scopes: [] };
@@ -406,6 +455,137 @@ describe("WorkspaceAssistant", () => {
     expect([...screen.getByTestId("assistant-turns").querySelectorAll("article")].map((row) => row.getAttribute("data-turn-id")))
       .toEqual(turns.map((turn) => turn.id));
     expect(screen.queryByRole("button", { name: "Load more messages" })).not.toBeInTheDocument();
+  });
+
+  it("invalidates all 50 cached turns when a successful continuation reports changed source access", async () => {
+    const user = userEvent.setup();
+    const first = [USER_TURN, ASSISTANT_TURN, ...historyTurns(48, 3)];
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.listAssistantTurns.mockResolvedValueOnce({ items: first, limit: 50, offset: 0, has_more: true })
+      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "turn-51", sequence: 51 }, hiddenTurn()], limit: 50, offset: 50, has_more: false })
+      .mockResolvedValueOnce({ items: [hiddenTurn()], limit: 50, offset: 0, has_more: false });
+    await openStoredConversation(user);
+    expect(screen.getByText("Private message 50")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open source: TM-42 · Aster mark" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Load more messages" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sources or permissions changed/i);
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(screen.queryByText("Private message 50")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Prepare a task proposal" })).not.toBeInTheDocument();
+    expect(screen.getByText(hiddenTurn().content)).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "A new question");
+    expect(screen.getByRole("button", { name: "Ask" })).toBeDisabled();
+    api.getAssistantSession.mockResolvedValue({ ...SESSION, scope_state: "permission_changed", scopes: [] });
+    await user.click(screen.getByRole("button", { name: SESSION.title }));
+    expect(await screen.findByText(hiddenTurn().content)).toBeVisible();
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { limit: 50, offset: 50 }], [SESSION.id]]);
+  });
+
+  it("continues beyond a redacted page without restoring the discarded cached prefix", async () => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN, ASSISTANT_TURN], limit: 2, offset: 0, has_more: true })
+      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "user-3", sequence: 3 }, hiddenTurn(4)], limit: 2, offset: 2, has_more: true })
+      .mockResolvedValueOnce({ items: [{ ...USER_TURN, id: "user-5", sequence: 5, content: "Current permitted question" }, { ...hiddenTurn(6), render_status: "visible", status: "abstained", content: "Fresh permitted history" }], limit: 2, offset: 4, has_more: false });
+    await openStoredConversation(user);
+    await user.click(screen.getByRole("button", { name: "Load more messages" }));
+    expect(await screen.findByText(hiddenTurn().content)).toBeVisible();
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more messages" }));
+    expect(await screen.findByText("Fresh permitted history")).toBeVisible();
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { limit: 2, offset: 2 }], [SESSION.id, { limit: 2, offset: 4 }]]);
+  });
+
+  it.each(["session", "user", "assistant"] as const)("invalidates cached turns for a successful ask with a changed %s", async (changed) => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.askWorkspaceAssistant.mockResolvedValue({
+      session: { ...SESSION, version: 2, scope_state: changed === "session" ? "permission_changed" : "current" },
+      user_turn: { ...USER_TURN, id: "followup-user", sequence: 3, content: "A fresh follow-up question", render_status: changed === "user" ? "permission_changed" : "visible" },
+      assistant_turn: { ...hiddenTurn(4), render_status: changed === "assistant" ? "permission_changed" : "visible", status: "abstained", content: changed === "assistant" ? hiddenTurn().content : "Fresh authorized abstention" },
+    });
+    await openStoredConversation(user);
+    await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "A follow-up question");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sources or permissions changed/i);
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
+  });
+
+  it("does not download an older export after a continuation revokes cached source access", async () => {
+    const user = userEvent.setup();
+    const page = deferred<AssistantTurnPage>();
+    const exported = deferred<AssistantSessionExport>();
+    const download = downloadSpies();
+    try {
+      api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+      api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN, ASSISTANT_TURN], limit: 2, offset: 0, has_more: true }).mockReturnValueOnce(page.promise);
+      api.exportAssistantSession.mockReturnValue(exported.promise);
+      await openStoredConversation(user);
+      await user.click(screen.getByRole("button", { name: "Load more messages" }));
+      await user.click(screen.getByRole("button", { name: "Export conversation" }));
+      expect(api.exportAssistantSession).toHaveBeenCalledWith(SESSION.id);
+      await act(async () => page.resolve({ items: [hiddenTurn(3)], limit: 2, offset: 2, has_more: false }));
+      await act(async () => exported.resolve({ schema_version: 1, exported_at: SESSION.updated_at, session: SESSION, turns: [USER_TURN, ASSISTANT_TURN], retention_disposition: "retained" }));
+      expect(download.create).not.toHaveBeenCalled();
+    } finally { download.restore(); }
+  });
+
+  it.each(["session", "turn"] as const)("replaces cached turns with the current redacted export when %s access changed", async (changed) => {
+    const user = userEvent.setup();
+    const download = downloadSpies();
+    try {
+      api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+      const exported: AssistantSessionExport = {
+        schema_version: 1, exported_at: SESSION.updated_at, retention_disposition: "retained",
+        session: { ...SESSION, scopes: [], scope_state: changed === "session" ? "permission_changed" : "current" },
+        turns: changed === "turn" ? [hiddenTurn()] : [{ ...USER_TURN, content: "Current permitted question" }],
+      };
+      api.exportAssistantSession.mockResolvedValue(exported);
+      await openStoredConversation(user);
+      await user.click(screen.getByRole("button", { name: "Export conversation" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(/sources or permissions changed/i);
+      expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+      expect(download.create).toHaveBeenCalledOnce();
+      expect(JSON.parse(await blobText(download.create.mock.calls[0][0]))).toEqual(exported);
+      expect(download.revoke).toHaveBeenCalledWith("blob:assistant-export");
+    } finally { download.restore(); }
+  });
+
+  it("keeps a currently authorized export usable", async () => {
+    const user = userEvent.setup();
+    const download = downloadSpies();
+    const exported: AssistantSessionExport = { schema_version: 1, exported_at: SESSION.updated_at, session: SESSION, turns: [USER_TURN, ASSISTANT_TURN], retention_disposition: "retained" };
+    try {
+      api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+      api.exportAssistantSession.mockResolvedValue(exported);
+      await openStoredConversation(user);
+      await user.click(screen.getByRole("button", { name: "Export conversation" }));
+      expect(download.create).toHaveBeenCalledOnce();
+      expect(JSON.parse(await blobText(download.create.mock.calls[0][0]))).toEqual(exported);
+      expect(screen.getByText(ASSISTANT_TURN.content)).toBeVisible();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally { download.restore(); }
+  });
+
+  it("does not restore private scope labels from a search pending across source invalidation", async () => {
+    const user = userEvent.setup();
+    const page = deferred<AssistantTurnPage>();
+    const search = deferred<{ query: string; items: typeof SCOPE[]; truncated: boolean }>();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.listAssistantTurns.mockResolvedValueOnce({ items: [USER_TURN, ASSISTANT_TURN], limit: 2, offset: 0, has_more: true }).mockReturnValueOnce(page.promise);
+    api.searchAssistantScopes.mockReturnValue(search.promise);
+    await openStoredConversation(user);
+    await user.click(screen.getByRole("button", { name: "Load more messages" }));
+    await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "TM-42");
+    await user.click(screen.getByRole("button", { name: "Find permitted records" }));
+    expect(api.searchAssistantScopes).toHaveBeenCalledOnce();
+    await act(async () => page.resolve({ items: [hiddenTurn(3)], limit: 2, offset: 2, has_more: false }));
+    await act(async () => search.resolve({ query: "TM-42", items: [{ ...SCOPE, scope_id: "late-private", label: "Late private source" }], truncated: false }));
+    expect(screen.queryByRole("button", { name: "Add Late private source" })).not.toBeInTheDocument();
   });
 
   it("uses response page cursors rather than the deduplicated visible row count", async () => {

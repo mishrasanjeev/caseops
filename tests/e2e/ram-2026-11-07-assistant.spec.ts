@@ -244,7 +244,7 @@ async function signIn(page: Page, baseURL: string | undefined) {
       expect((await response.json()).release_sha).toBe(sha);
     }
   };
-  return { api, headers, history, other, first, turns, release };
+  return { api, headers, history, other, first, turns, release, local, matterId: evidence.matter_id };
 }
 
 async function visibleTurnIds(page: Page) {
@@ -298,6 +298,55 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
   await page.getByRole("button", { name: fixture.history.title, exact: true }).click();
   await expect.poll(() => visibleTurnIds(page)).toEqual(fixture.first.items.map((turn) => turn.id));
   await expect(page.getByRole("button", { name: "Load more messages", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 393, height: 851 });
+  const more = page.getByRole("button", { name: "Load more messages", exact: true });
+  await more.scrollIntoViewIfNeeded();
+  await expect(more).toBeInViewport();
+  const control = await more.boundingBox();
+  expect(control).not.toBeNull();
+  expect(control!.width).toBeGreaterThanOrEqual(44);
+  expect(control!.x).toBeGreaterThanOrEqual(0);
+  expect(control!.x + control!.width).toBeLessThanOrEqual(393);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
+  if (fixture.local) {
+    await test.step("real loopback source-version change invalidates the cached prefix", async () => {
+      const before = await page.request.get(`${fixture.api}/api/matters/${fixture.matterId}`, { headers: fixture.headers });
+      expect(before.status()).toBe(200);
+      const matter = await before.json();
+      expect(matter.id).toBe(fixture.matterId);
+      expect(matter.title).toContain("Synthetic assistant Matter");
+      expect(typeof matter.updated_at).toBe("string");
+      const token = /(?:Z|[+-]\d{2}:\d{2})$/.test(matter.updated_at) ? matter.updated_at : `${matter.updated_at}Z`;
+      const title = `Synthetic changed source ${runId()}`;
+      const changed = await page.request.patch(`${fixture.api}/api/matters/${fixture.matterId}`, {
+        headers: fixture.headers, data: { title, expected_updated_at: token },
+      });
+      expect(changed.status(), "one version-checked mutation of this fresh synthetic source; no retry").toBe(200);
+      const persisted = await page.request.get(`${fixture.api}/api/matters/${fixture.matterId}`, { headers: fixture.headers });
+      expect(persisted.status()).toBe(200);
+      expect((await persisted.json()).title).toBe(title);
+      const next = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname.endsWith(`/sessions/${fixture.history.id}/turns`) && url.searchParams.get("offset") === "50";
+      });
+      await page.getByRole("button", { name: "Load more messages", exact: true }).click();
+      const continuation = await next;
+      expect(continuation.status(), "successful-but-redacted real history response").toBe(200);
+      const fresh = await continuation.json() as AssistantTurnPage;
+      expect(fresh.items.some((turn) => turn.role === "assistant" && turn.render_status === "permission_changed"
+        && turn.citations.length === 0 && turn.proposed_actions.length === 0)).toBe(true);
+      await expect.poll(() => visibleTurnIds(page)).toEqual(fresh.items.map((turn) => turn.id));
+      await expect(page.locator(`[data-turn-id="${citedTurn!.id}"]`)).toHaveCount(0);
+      await expect(page.getByText(citedTurn!.content, { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^Open source:/ })).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("sources or permissions changed");
+      await page.reload();
+      await page.getByRole("button", { name: fixture.history.title, exact: true }).click();
+      await expect.poll(() => visibleTurnIds(page)).toEqual(fixture.first.items.map((turn) => turn.id));
+      await expect(page.getByText(citedTurn!.content, { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^Open source:/ })).toHaveCount(0);
+    });
+  }
   await fixture.release();
 });
 
