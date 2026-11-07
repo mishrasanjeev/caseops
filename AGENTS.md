@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- When a direct citation link becomes an audited action, update every dated
+  local and production journey together. Prove the named button, the actual
+  authorization request and same-origin destination, and that both the new
+  action and any legacy citation link disappear after revocation. A Next.js
+  runtime API override cannot replace the browser bundle's build-time origin.
+
 - A target-state specification is not a reproduced bug inventory. Preserve its
   exact source edition and acceptance IDs, distinguish headings/data fields from
   issue rows, and classify existing capability, enhancement, software defect and

@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
+import { assistantCitationButton, expectAssistantCitationHidden } from "./support/private-access-lock-proof";
 
 // Until 2026-09-28 an access change marked a saved Workspace Assistant answer
 // for reauthorization, and a document-only answer was served again once its
@@ -155,7 +156,7 @@ test("IPLF-066B an access change and its restore keep a saved assistant answer l
     .fill(`What does the evidence say about ${secret}?`);
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(page.getByTestId("assistant-turns")).toContainText(secret);
-  await expect(page.getByRole("link", { name: filename })).toBeVisible();
+  await expect(assistantCitationButton(page, filename)).toBeVisible();
 
   // The document-only answer, its citation and its session, as the API holds
   // them. The tenant is new, so its only session is the one just started.
@@ -209,7 +210,7 @@ test("IPLF-066B an access change and its restore keep a saved assistant answer l
   await page.getByRole("button", { name: `Ask · ${filename}`, exact: true }).click();
   await expect(page.getByTestId("assistant-turns")).toContainText(HIDDEN_NOTICE);
   await expect(page.locator('[data-turn-role="assistant"]').last()).not.toContainText(secret);
-  await expect(page.getByRole("link", { name: filename })).toHaveCount(0);
+  await expectAssistantCitationHidden(page, filename);
 
   // Every read path makes the same decision, and repeating it changes nothing.
   for (const label of ["first read after the restore", "second read after the restore"]) {
@@ -235,9 +236,11 @@ test("IPLF-066B an access change and its restore keep a saved assistant answer l
   await page.reload();
   await page.getByRole("button", { name: `Ask · ${filename}`, exact: true }).click();
   await expect(page.getByTestId("assistant-turns")).toContainText(HIDDEN_NOTICE);
+  await expectAssistantCitationHidden(page, filename);
 
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(page.getByTestId("assistant-turns")).toContainText(HIDDEN_NOTICE);
+  await expectAssistantCitationHidden(page, filename);
   await expect(page.getByRole("textbox", { name: "Ask this workspace" })).toBeVisible();
   expect(
     await page.evaluate(

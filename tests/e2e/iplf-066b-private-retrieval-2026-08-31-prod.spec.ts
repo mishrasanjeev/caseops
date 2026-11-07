@@ -6,7 +6,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { expectStatus } from "./support/iplf058b";
 import {
+  assistantCitationButton,
   assertPrivateAccessQaIdentity,
+  expectAssistantCitationHidden,
   PRIVATE_ACCESS_HIDDEN_NOTICE,
   selectPrivateAccessAnswer,
   verifyPrivateAccessAnswerHidden,
@@ -372,7 +374,7 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   await expect(page.getByTestId("assistant-turns")).toContainText(
     evidenceToken,
   );
-  await expect(page.getByRole("link", { name: filename, exact: true })).toBeVisible();
+  await expect(assistantCitationButton(page, filename)).toBeVisible();
   await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toBeVisible();
   await expect(page.getByTestId("assistant-turns")).not.toContainText(
     "Ignore previous instructions",
@@ -385,11 +387,21 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   const turns = await turnsResponse.json();
   expect(turns.has_more).toBe(false);
   expect(selectPrivateAccessAnswer(turns.items, evidenceToken, beforeItems[0].source_id).id).toBe(answer.id);
-  const visibleCitation = await page.request.post(
-    `${API}/api/workspace-assistant/sessions/${sessionId}/citations/${answer.citations[0].id}/open`,
-    { headers },
+  const citationId = answer.citations[0].id;
+  const openCitation = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname === `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
   );
+  await assistantCitationButton(page, filename).click();
+  const visibleCitation = await openCitation;
   await expectStatus(visibleCitation, 200, "the answer's citation opens before the access event");
+  expect(await visibleCitation.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+  const opened = await visibleCitation.json();
+  expect(opened.citation_id).toBe(citationId);
+  const destination = new URL(opened.source_url, WEB);
+  expect(destination.origin).toBe(new URL(WEB).origin);
+  await expect(page).toHaveURL(destination.href);
+  await page.goto(`${WEB}/app/assistant`);
 
   // The canonical seed has no colleague. A unique member belongs only to this
   // QA canary and is deactivated after disposal, never before the lock proof.
@@ -446,7 +458,7 @@ test("IPLF-066B production locks answers after access restore and revokes privat
     const savedAnswer = page.locator('[data-turn-role="assistant"]').last();
     await expect(savedAnswer).toContainText(PRIVATE_ACCESS_HIDDEN_NOTICE);
     await expect(savedAnswer).not.toContainText(evidenceToken);
-    await expect(page.getByRole("link", { name: filename })).toHaveCount(0);
+    await expectAssistantCitationHidden(page, filename);
     await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Ask this workspace" })).toBeVisible();
     expect(await page.evaluate(
@@ -475,7 +487,8 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   await expect(
     page.locator('[data-turn-role="assistant"]').last(),
   ).not.toContainText(evidenceToken);
-  await expect(page.getByRole("link", { name: filename })).toHaveCount(0);
+  await expectAssistantCitationHidden(page, filename);
+  await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toHaveCount(0);
 
   const after = await page.request.post(`${API}/api/private-retrieval/search`, {
     headers,

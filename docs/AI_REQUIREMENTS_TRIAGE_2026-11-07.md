@@ -240,3 +240,21 @@ with only a partial native inventory and no complete fault stack. The last
 active tracker case and the generated SQLAlchemy traversal snapshot are
 diagnostic clues, not a proven crash cause. Preserve the native failure and
 require a complete replacement; do not disable the tracker test or its limits.
+
+## Dated citation journeys
+
+Hosted run 42342947659 collected all 718 desktop cases (696 passed, 20
+explicit skips, two failed). Both retained DOM reports showed the new audited
+citation button while the old IPLF-066B journeys waited for a direct link.
+The matching-port local reproduction reached the same two failures. A prior
+wrong-port attempt stopped at scope discovery and does not count as that
+reproduction. Preserve the original run and all distinct failure evidence.
+
+The dated local and production specs now assert the named citation button
+and the disappearance of both it and any direct citation link after access
+changes. Production acceptance must click the real button, observe the
+marked authorization request, and reach the same-origin destination before
+proving that the saved answer and citation stay locked. Keep the separate
+proposed navigation action and immutable evidence checks in place. This is a
+test-contract correction, not a deployed result. Fresh Docker, CI and
+exact-release browser acceptance remain required.

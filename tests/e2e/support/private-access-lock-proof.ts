@@ -1,10 +1,23 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./cost-controls";
 import { expectStatus } from "./iplf058b";
 
 export const PRIVATE_ACCESS_HIDDEN_NOTICE =
   "This answer is hidden because access to one or more cited workspace records changed.";
+
+export function assistantCitationButton(page: Page, label: string) {
+  return page.getByTestId("assistant-turns").getByRole("button", {
+    name: `Open source: ${label}`, exact: true,
+  });
+}
+
+export async function expectAssistantCitationHidden(page: Page, label: string): Promise<void> {
+  await expect(assistantCitationButton(page, label)).toHaveCount(0);
+  await expect(page.getByTestId("assistant-turns").getByRole("link", {
+    name: label, exact: true,
+  })).toHaveCount(0);
+}
 
 type QaIdentity = {
   company: { id: string; slug: string; tenant_key: string; is_active: boolean };

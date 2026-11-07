@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
+import { assistantCitationButton, expectAssistantCitationHidden } from "./support/private-access-lock-proof";
 import { verifyRetainedPrivateRevocation } from "./support/private-release-fixtures";
 
 function pythonExecutable(): string {
@@ -130,7 +131,7 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
     .fill(`What does the evidence say about ${secret}?`);
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(page.getByTestId("assistant-turns")).toContainText(secret);
-  await expect(page.getByRole("link", { name: "066B evidence.txt" })).toBeVisible();
+  await expect(assistantCitationButton(page, "066B evidence.txt")).toBeVisible();
   await expect(page.getByTestId("assistant-turns")).not.toContainText(
     "Ignore previous instructions",
   );
@@ -157,7 +158,7 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
     "This answer is hidden because access to one or more cited workspace records changed.",
   );
   await expect(page.locator('[data-turn-role="assistant"]').last()).not.toContainText(secret);
-  await expect(page.getByRole("link", { name: "066B evidence.txt" })).toHaveCount(0);
+  await expectAssistantCitationHidden(page, "066B evidence.txt");
 
   const currentResponse = await page.request.get(`${apiBaseUrl}/api/matters/${matterRecord.id}`, { headers });
   await expectStatus(currentResponse, 200, "read lifecycle before recurring proof");
