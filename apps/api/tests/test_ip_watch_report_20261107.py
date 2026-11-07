@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select
+from sqlalchemy import event, select, update
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -247,14 +247,15 @@ def test_watch_report_rechecks_source_and_profile_access_without_hidden_counts_o
     # to that source's retained snapshot.
     asset = _asset(client, headers, private_id, "PRIVATE WATCH SOURCE")
     application = _application(client, headers, private_id, asset["id"])
+    private_entry = _publication(
+        application_id=application["id"], application_number="TM-PRIVATE-AIB05",
+        journal_number="TMJ-PRIVATE-AIB05",
+    )
     private_capture = _ingest(
         client,
         headers=headers,
         key="ai-b05-private-capture-0001",
-        publication=_publication(
-            application_id=application["id"], application_number="TM-PRIVATE-AIB05",
-            journal_number="TMJ-PRIVATE-AIB05",
-        ),
+        publication=private_entry,
         cost_minor=0,
     )
     assert len(private_capture["hits"]) == 2
@@ -274,6 +275,10 @@ def test_watch_report_rechecks_source_and_profile_access_without_hidden_counts_o
     assert visible["summary"]["profile_total"] == 2
     assert visible["summary"]["hit_total"] == 3
     assert private_profile["id"] in {row["profile_id"] for row in visible["rows"]}
+    marker = colleague | {"X-CaseOps-Automated-Test": "no-paid-providers"}
+    workspace = client.get("/api/ip/watch", headers=marker)
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["hit_total"] == 3
     denial_payload = {
         "action": denial,
         "expected_access_policy_version": granted["panel"]["access_policy_version"],
@@ -319,6 +324,234 @@ def test_watch_report_rechecks_source_and_profile_access_without_hidden_counts_o
     assert _report(client, headers)["summary"]["profile_total"] == 2
     assert docket["id"] not in json.dumps(isolated)
 
+    workspace = client.get("/api/ip/watch", headers=marker)
+    assert workspace.status_code == 200, workspace.text
+    body = workspace.json()
+    assert body["hit_total"] == body["publication_total"] == 1
+    assert [row["id"] for row in body["hits"]] == [captured["hits"][0]["id"]]
+    assert private_capture["publications"][0]["id"] not in workspace.text
+    for hit in private_capture["hits"]:
+        assert hit["id"] not in workspace.text
+    search = client.get("/api/ip/watch/publications", params={"q": "TM-PRIVATE-AIB05"},
+                        headers=marker)
+    assert search.status_code == 200 and search.json()["publications"] == []
+    open_hit = next(
+        hit for hit in private_capture["hits"] if hit["profile_id"] != private_profile["id"]
+    )
+    for path, data in (
+        ("disposition", {
+            "expected_version": open_hit["version"], "disposition": "not_relevant",
+            "reason": "Attempt to dismiss a revoked source.", "source_confirmed": True,
+        }),
+        ("handoffs", {"handoff_kind": "task", "title": "Attempt revoked source handoff"}),
+    ):
+        response = client.post(
+            f"/api/ip/watch/hits/{open_hit['id']}/{path}", headers=marker, json=data
+        )
+        assert response.status_code == 404, response.text
+    replay = client.post("/api/ip/watch/journal-ingestions", headers=marker, json={
+        "idempotency_key": "ai-b05-private-capture-0001", "provider_key": "ipindia-journal-manual",
+        "external_call": False, "cost_minor": 0, "currency": "INR",
+        "publications": [private_entry],
+    })
+    assert replay.status_code == 404, replay.text
+    new_capture = client.post("/api/ip/watch/journal-ingestions", headers=marker, json={
+        "idempotency_key": "ai-b05-private-recapture-0002",
+        "provider_key": "ipindia-journal-manual",
+        "publications": [private_entry | {"journal_number": "TMJ-PRIVATE-RECAPTURE"}],
+    })
+    assert new_capture.status_code == 404, new_capture.text
+    with get_session_factory()() as session:
+        persisted = session.get(IpWatchHit, open_hit["id"])
+        assert persisted.version == open_hit["version"] and persisted.disposition == "new"
+
+    public = _ingest(
+        client, headers=marker, key="ai-b05-public-sibling", cost_minor=0,
+        publication=_publication(
+            application_id=None, application_number="TM-PUBLIC-AIB05",
+            journal_number="TMJ-PUBLIC-AIB05",
+        ),
+    )
+    public_hit = public["hits"][0]
+    assert public_hit["source_url"]
+    public_search = client.get(
+        "/api/ip/watch/publications", params={"q": "TM-PUBLIC-AIB05"}, headers=marker
+    )
+    assert [row["id"] for row in public_search.json()["publications"]] == [
+        public["publications"][0]["id"]
+    ]
+    dismissed = client.post(
+        f"/api/ip/watch/hits/{public_hit['id']}/disposition", headers=marker, json={
+            "expected_version": public_hit["version"], "disposition": "not_relevant",
+            "reason": "The public journal source was reviewed.", "source_confirmed": True,
+        },
+    )
+    assert dismissed.status_code == 200, dismissed.text
+
+
+def _cross_docket_hit(client: TestClient) -> tuple[dict, str, dict]:
+    bootstrap, headers, docket, _ = _fixture(client)
+    profile = _word_profile(
+        client, headers, docket_id=docket["id"], word="ASTER",
+        recipient=bootstrap["membership"]["id"],
+    )
+    source = client.post("/api/ip/dockets", headers=headers, json={
+        "title": "Watch snapshot source", "restricted": False,
+        "particulars": _particulars("Watch snapshot source"),
+    })
+    assert source.status_code == 201, source.text
+    source_id = source.json()["id"]
+    asset = _asset(client, headers, source_id, "ASTER")
+    application = _application(client, headers, source_id, asset["id"])
+    captured = _ingest(
+        client, headers=headers, key="watch-read-committed", cost_minor=0,
+        publication=_publication(application_id=application["id"]),
+    )
+    hit = captured["hits"][0]
+    assert hit["profile_id"] == profile["id"]
+    return headers | {"X-CaseOps-Automated-Test": "no-paid-providers"}, source_id, hit
+
+
+@pytest.mark.postgres
+def test_watch_report_uses_one_read_committed_snapshot_when_source_access_changes(
+    isolated_postgres_client: TestClient,
+) -> None:
+    client = isolated_postgres_client
+    headers, source_id, hit = _cross_docket_hit(client)
+    engine = get_engine()
+    reads = []
+
+    def revoke_after_first_watch_read(connection, _cursor, sql, _params, _execution, _many):
+        is_read = sql.lstrip().upper().startswith(("WITH", "SELECT"))
+        if not is_read or "ip_watch_profiles" not in sql:
+            return
+        reads.append(sql)
+        if len(reads) == 1:
+            assert connection.get_isolation_level() == "READ COMMITTED"
+            with engine.begin() as writer:
+                writer.execute(update(IpDocketRecord).where(IpDocketRecord.id == source_id)
+                               .values(restricted=True))
+
+    event.listen(engine, "after_cursor_execute", revoke_after_first_watch_read)
+    try:
+        in_flight = _report(client, headers, limit=1)
+    finally:
+        event.remove(engine, "after_cursor_execute", revoke_after_first_watch_read)
+    assert in_flight["rows"][0]["hit_id"] == hit["id"]
+    assert in_flight["summary"]["hit_total"] == 1
+    assert in_flight["freshness"]["source_cutoffs"]["journal_capture"]
+    assert len(reads) == 1
+    after = _report(client, headers, limit=1)
+    assert after["rows"][0]["hit_id"] is None
+    assert after["summary"]["hit_total"] == 0
+    assert after["freshness"]["source_cutoffs"]["watch_hits"] is None
+    assert after["freshness"]["source_cutoffs"]["journal_capture"] is None
+    workspace = client.get("/api/ip/watch", headers=headers)
+    assert workspace.status_code == 200, workspace.text
+    body = workspace.json()
+    assert body["hit_total"] == body["publication_total"] == body["ingestion_run_total"] == 0
+    assert body["profile_total"] == 1
+
+
+@pytest.mark.postgres
+def test_watch_dismiss_rechecks_source_after_locking_the_hit(
+    isolated_postgres_client: TestClient,
+) -> None:
+    client = isolated_postgres_client
+    headers, source_id, hit = _cross_docket_hit(client)
+    engine = get_engine()
+    revoked = False
+
+    def revoke_after_hit_lock(connection, _cursor, sql, _params, _execution, _many):
+        nonlocal revoked
+        if "FOR UPDATE OF ip_watch_hits" in sql and not revoked:
+            revoked = True
+            assert connection.get_isolation_level() == "READ COMMITTED"
+            with engine.begin() as writer:
+                writer.execute(update(IpDocketRecord).where(IpDocketRecord.id == source_id)
+                               .values(restricted=True))
+
+    event.listen(engine, "after_cursor_execute", revoke_after_hit_lock)
+    try:
+        response = client.post(
+            f"/api/ip/watch/hits/{hit['id']}/disposition", headers=headers, json={
+                "expected_version": hit["version"], "disposition": "not_relevant",
+                "reason": "Source became inaccessible during review.", "source_confirmed": True,
+            },
+        )
+    finally:
+        event.remove(engine, "after_cursor_execute", revoke_after_hit_lock)
+    assert revoked
+    assert response.status_code == 404, response.text
+    with get_session_factory()() as session:
+        assert session.get(IpWatchHit, hit["id"]).version == hit["version"]
+
+
+def test_watch_workspace_preserves_historical_source_while_report_stays_operational(
+    client: TestClient,
+) -> None:
+    headers, source_id, hit = _cross_docket_hit(client)
+    with get_session_factory()() as session:
+        source = session.get(IpDocketRecord, source_id)
+        version = source.lifecycle_version
+    closed = client.post(
+        f"/api/ip/dockets/{source_id}/lifecycle",
+        headers=headers,
+        json={
+            "expected_lifecycle_version": version,
+            "to_status": "closed", "effective_at": datetime.now(UTC).isoformat(),
+            "reason": "Historical source evidence must remain readable after closing its docket.",
+            "outcome": "closed", "source": "lawyer_review",
+            "evidence_ref": "fixture:historical-watch-source", "linked_matter_handling": "reviewed",
+        },
+    )
+    assert closed.status_code == 200, closed.text
+    assert _report(client, headers)["summary"]["hit_total"] == 0
+    workspace = client.get("/api/ip/watch", headers=headers)
+    assert workspace.status_code == 200, workspace.text
+    assert [row["id"] for row in workspace.json()["hits"]] == [hit["id"]]
+    assert [row["id"] for row in workspace.json()["publications"]] == [hit["publication_id"]]
+
+
+def test_watch_visible_correction_does_not_disclose_or_update_revoked_predecessor(
+    client: TestClient,
+) -> None:
+    headers, source_id, original = _cross_docket_hit(client)
+    correction = _ingest(
+        client, headers=headers, key="watch-public-correction", cost_minor=0,
+        publication=_publication(
+            application_id=None, publication_kind="correction",
+            journal_number="TMJ-WATCH-CORRECTION",
+            supersedes_publication_id=original["publication_id"],
+            correction_reason="The public journal reissued the description.",
+        ),
+    )
+    hit = correction["hits"][0]
+    assert hit["duplicate_of_hit_id"] == original["id"]
+    with get_engine().begin() as writer:
+        writer.execute(update(IpDocketRecord).where(IpDocketRecord.id == source_id)
+                       .values(restricted=True))
+    workspace = client.get("/api/ip/watch", headers=headers)
+    assert workspace.status_code == 200, workspace.text
+    assert [row["id"] for row in workspace.json()["hits"]] == [hit["id"]]
+    assert original["id"] not in workspace.text and original["publication_id"] not in workspace.text
+    snapshot = _report(client, headers)["rows"][0]["source_snapshot"]
+    assert snapshot["supersedes_publication_id"] is None
+    search = client.get("/api/ip/watch/publications", headers=headers)
+    assert search.status_code == 200, search.text
+    assert search.json()["publications"][0]["supersedes_publication_id"] is None
+    disposition = client.post(
+        f"/api/ip/watch/hits/{hit['id']}/disposition", headers=headers, json={
+            "expected_version": hit["version"], "disposition": "relevant",
+            "reason": "Confirm only the available correction.", "source_confirmed": True,
+        },
+    )
+    assert disposition.status_code == 200, disposition.text
+    assert disposition.json()["duplicate_of_hit_id"] is None
+    with get_session_factory()() as session:
+        assert session.get(IpWatchHit, original["id"]).version == original["version"]
+        assert session.get(IpWatchHit, hit["id"]).duplicate_of_hit_id == original["id"]
+
 
 def test_watch_report_excludes_closed_dockets_without_mutating_retained_evidence(
     client: TestClient,
@@ -347,9 +580,15 @@ def test_watch_report_excludes_closed_dockets_without_mutating_retained_evidence
         assert session.get(IpDocketRecord, docket["id"]).status == "closed"
 
 
+@pytest.mark.parametrize(
+    "client_fixture",
+    ["client", pytest.param("isolated_postgres_client", marks=pytest.mark.postgres)],
+    ids=["sqlite", "postgres"],
+)
 def test_watch_report_bounds_hydration_and_queries_beyond_row_limit(
-    client: TestClient,
+    request: pytest.FixtureRequest, client_fixture: str,
 ) -> None:
+    client = request.getfixturevalue(client_fixture)
     _bootstrap, headers, _docket_row, profile, captured = _seed(client)
     with get_session_factory()() as session:
         original_profile = session.get(IpWatchProfile, profile["id"])
@@ -363,7 +602,7 @@ def test_watch_report_bounds_hydration_and_queries_beyond_row_limit(
             column.name: getattr(original_hit, column.name)
             for column in IpWatchHit.__table__.columns if column.name not in {"id", "profile_id"}
         }
-        extra_ids = [str(uuid4()) for _ in range(1000)]
+        extra_ids = [str(uuid4()) for _ in range(10_000)]
         session.add_all(IpWatchProfile(id=identity, **profile_values) for identity in extra_ids)
         session.flush()
         session.add_all(IpWatchHit(profile_id=identity, **hit_values) for identity in extra_ids)
@@ -387,20 +626,18 @@ def test_watch_report_bounds_hydration_and_queries_beyond_row_limit(
     finally:
         event.remove(Session, "loaded_as_persistent", observe_load)
         event.remove(engine, "before_cursor_execute", observe)
-    assert body["summary"]["profile_total"] == body["summary"]["hit_total"] == 1001
-    assert body["summary"]["total"] == 1001
-    assert body["summary"]["new_hits"] == body["summary"]["pending_assessment"] == 1001
+    assert body["summary"]["profile_total"] == body["summary"]["hit_total"] == 10_001
+    assert body["summary"]["total"] == 10_001
+    assert body["summary"]["new_hits"] == body["summary"]["pending_assessment"] == 10_001
     assert body["summary"]["returned"] == body["row_count"] == 7
     assert body["truncated"] is True
     watch_selects = [(sql, compiled) for sql, compiled in statements if "ip_watch_profiles" in sql]
-    assert len(watch_selects) == 2, [sql for sql, _ in statements]
+    assert len(watch_selects) == 1, [sql for sql, _ in statements]
     assert len(loaded) == 14
     assert loaded.count(IpWatchProfile) == loaded.count(IpWatchHit) == 7
     assert IpJournalPublication not in loaded
     assert not any("ip_watch_handoffs" in sql or "ip_journal_ingestion_runs" in sql
                    for sql, _ in statements)
-    limits = [
-        getattr(getattr(compiled.statement, "_limit_clause", None), "value", None)
-        for _sql, compiled in watch_selects
-    ]
-    assert limits.count(7) == 1 and limits.count(None) == 1
+    sql, compiled = watch_selects[0]
+    assert "watch_report_candidates" in sql and "watch_report_page" in sql
+    assert "limit" in sql and 7 in compiled.params.values()

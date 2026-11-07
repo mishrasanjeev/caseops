@@ -8,17 +8,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, select, true
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
-    IpDocketRecord,
     IpJournalPublication,
     IpWatchHit,
     IpWatchProfile,
-    Matter,
-    MatterStatus,
-    TrademarkApplication,
 )
 from caseops_api.schemas.ip_reports import (
     IpReportDefinitionRecord,
@@ -29,14 +25,10 @@ from caseops_api.schemas.ip_reports import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.connector_health import read_tenant_connector_health
-from caseops_api.services.ip_lifecycle import (
-    TERMINAL_APPLICATION_PHASES,
-    TERMINAL_IP_DOCKET_STATUSES,
-)
 from caseops_api.services.ip_operations import ip_daily_docket, ip_docket_control_report
 from caseops_api.services.ip_portfolio import list_ip_portfolio
 from caseops_api.services.ip_renewals import list_renewal_portfolio
-from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.ip_watch import watch_source_access, watch_visible_dockets
 from caseops_api.services.session_context import SessionContext
 
 _DEFINITIONS = (
@@ -350,57 +342,34 @@ def _watch_payload(
     payload: IpReportPreviewRequest,
 ) -> tuple[datetime, dict[str, Any], list[dict[str, Any]], bool, IpReportFreshness]:
     generated_at = datetime.now(UTC)
-    visible_dockets = (
-        select(IpDocketRecord.id, IpDocketRecord.title)
-        .outerjoin(
-            Matter,
-            (Matter.id == IpDocketRecord.matter_id)
-            & (Matter.company_id == IpDocketRecord.company_id),
-        )
-        .where(
-            IpDocketRecord.company_id == context.company.id,
-            IpDocketRecord.is_active.is_(True),
-            IpDocketRecord.status.notin_(TERMINAL_IP_DOCKET_STATUSES),
-            IpDocketRecord.archived_by_matter_disposal.is_(False),
-            or_(
-                IpDocketRecord.matter_id.is_(None),
-                Matter.is_active.is_(True)
-                & Matter.status.in_(
-                    (MatterStatus.INTAKE, MatterStatus.ACTIVE, MatterStatus.ON_HOLD)
-                ),
-            ),
-            visible_ip_dockets_filter(session, context=context),
-        )
-        .cte("watch_report_visible_dockets")
-    )
-    visible_applications = select(TrademarkApplication.id).where(
-        TrademarkApplication.company_id == context.company.id,
-        TrademarkApplication.docket_id.in_(select(visible_dockets.c.id)),
-        TrademarkApplication.is_active.is_(True),
-        TrademarkApplication.filing_phase.notin_(TERMINAL_APPLICATION_PHASES),
-    )
+    visible_dockets = watch_visible_dockets(session, context=context, operational=True)
     visible_publications = (
         select(IpJournalPublication.id)
         .where(
             IpJournalPublication.company_id == context.company.id,
-            or_(
-                IpJournalPublication.application_id.is_(None),
-                IpJournalPublication.application_id.in_(visible_applications),
-            ),
+            watch_source_access(context.company.id, visible_dockets, operational=True),
         )
         .correlate(None)
     )
     # Authorize both the watched docket and any linked source application.
     # Filtering hits in the join preserves a visible zero-hit profile without
     # disclosing whether it also has hits whose source is now inaccessible.
-    statement = (
+    records = (
         select(
-            IpWatchProfile,
-            IpWatchHit,
+            IpWatchProfile.id.label("profile_id"),
+            IpWatchProfile.updated_at.label("profile_updated_at"),
+            IpWatchHit.id.label("hit_id"),
+            IpWatchHit.updated_at.label("hit_updated_at"),
+            IpWatchHit.hit_date,
+            IpWatchHit.created_at.label("hit_created_at"),
+            IpWatchHit.disposition,
+            IpWatchHit.reviewed_at,
             visible_dockets.c.title,
             IpJournalPublication.source_retrieved_at,
             IpJournalPublication.provider_key,
+            IpJournalPublication.supersedes_publication_id,
         )
+        .select_from(IpWatchProfile)
         .join(visible_dockets, visible_dockets.c.id == IpWatchProfile.docket_id)
         .outerjoin(
             IpWatchHit,
@@ -414,42 +383,69 @@ def _watch_payload(
             & (IpJournalPublication.company_id == IpWatchHit.company_id),
         )
         .where(IpWatchProfile.company_id == context.company.id)
+        .cte("watch_report_candidates")
     )
-    records = statement.with_only_columns(
-        IpWatchProfile.id.label("profile_id"),
-        IpWatchProfile.updated_at.label("profile_updated_at"),
-        IpWatchHit.id.label("hit_id"),
-        IpWatchHit.updated_at.label("hit_updated_at"),
-        IpWatchHit.disposition,
-        IpWatchHit.reviewed_at,
-        IpJournalPublication.source_retrieved_at,
+    # Keep stats and page in the same READ COMMITTED statement snapshot.
+    # Only hydrate the bounded page; the aggregate reads narrow candidate rows.
+    totals_query = select(
+        func.count().label("total"),
+        func.count(func.distinct(records.c.profile_id)).label("profile_total"),
+        func.count(records.c.hit_id).label("hit_total"),
+        func.count(case((records.c.disposition == "new", 1))).label("new_hits"),
+        func.count(case((records.c.disposition == "relevant", 1))).label("relevant_hits"),
+        func.count(records.c.reviewed_at).label("reviewed_hits"),
+        func.count(
+            case((records.c.disposition.in_(("new", "reviewing")), 1))
+        ).label("pending_assessment"),
+        func.max(records.c.profile_updated_at).label("profiles_cutoff"),
+        func.max(records.c.hit_updated_at).label("hits_cutoff"),
+        func.max(records.c.source_retrieved_at).label("capture_cutoff"),
     ).subquery()
-    totals = session.execute(
+    ordering = (
+        records.c.hit_date.desc().nulls_last(),
+        records.c.hit_created_at.desc().nulls_last(),
+        records.c.hit_id.desc().nulls_last(),
+        records.c.profile_updated_at.desc(),
+        records.c.profile_id.desc(),
+    )
+    page = select(records).order_by(*ordering).limit(payload.row_limit).cte("watch_report_page")
+    visible_predecessor = (
+        visible_publications.where(IpJournalPublication.id == page.c.supersedes_publication_id)
+        .correlate(page)
+        .exists()
+    )
+    results = session.execute(
         select(
-            func.count().label("total"),
-            func.count(func.distinct(records.c.profile_id)).label("profile_total"),
-            func.count(records.c.hit_id).label("hit_total"),
-            func.count(case((records.c.disposition == "new", 1))).label("new_hits"),
-            func.count(case((records.c.disposition == "relevant", 1))).label("relevant_hits"),
-            func.count(records.c.reviewed_at).label("reviewed_hits"),
-            func.count(
-                case((records.c.disposition.in_(("new", "reviewing")), 1))
-            ).label("pending_assessment"),
-            func.max(records.c.profile_updated_at).label("profiles_cutoff"),
-            func.max(records.c.hit_updated_at).label("hits_cutoff"),
-            func.max(records.c.source_retrieved_at).label("capture_cutoff"),
+            totals_query,
+            IpWatchProfile,
+            IpWatchHit,
+            page.c.title,
+            page.c.source_retrieved_at,
+            page.c.provider_key,
+            case((visible_predecessor, page.c.supersedes_publication_id)),
         )
-    ).one()
+        .select_from(totals_query)
+        .outerjoin(page, true())
+        .outerjoin(IpWatchProfile, IpWatchProfile.id == page.c.profile_id)
+        .outerjoin(IpWatchHit, IpWatchHit.id == page.c.hit_id)
+        .order_by(
+            page.c.hit_date.desc().nulls_last(),
+            page.c.hit_created_at.desc().nulls_last(),
+            page.c.hit_id.desc().nulls_last(),
+            page.c.profile_updated_at.desc(),
+            page.c.profile_id.desc(),
+        )
+        .execution_options(populate_existing=True)
+    ).all()
+    totals = results[0]  # Aggregate row survives even if there are no candidates.
     rows = []
-    for profile, hit, title, retrieved_at, provider_key in session.execute(
-        statement.order_by(
-            IpWatchHit.hit_date.desc().nulls_last(),
-            IpWatchHit.created_at.desc().nulls_last(),
-            IpWatchHit.id.desc().nulls_last(),
-            IpWatchProfile.updated_at.desc(),
-            IpWatchProfile.id.desc(),
-        ).limit(payload.row_limit)
-    ):
+    for result in results:
+        profile, hit, title, retrieved_at, provider_key, predecessor_id = result[-6:]
+        if profile is None:
+            continue
+        source_snapshot = hit.source_snapshot_json if hit else None
+        if source_snapshot and "supersedes_publication_id" in source_snapshot:
+            source_snapshot = {**source_snapshot, "supersedes_publication_id": predecessor_id}
         rows.append(
             {
                 "docket_title": title,
@@ -490,7 +486,7 @@ def _watch_payload(
                 "docket_id": profile.docket_id,
                 "hit_id": hit.id if hit else None,
                 "publication_id": hit.publication_id if hit else None,
-                "source_snapshot": hit.source_snapshot_json if hit else None,
+                "source_snapshot": source_snapshot,
                 "profile_version": profile.version,
                 "hit_version": hit.version if hit else None,
             }
