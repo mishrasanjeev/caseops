@@ -87,6 +87,12 @@ def _membership_state(
 def test_team_lead_change_persists_and_audits_once(
     client: TestClient, initial_is_lead: bool, writer: str,
 ) -> None:
+    assert_team_lead_change_persists_and_audits_once(client, initial_is_lead, writer)
+
+
+def assert_team_lead_change_persists_and_audits_once(
+    client: TestClient, initial_is_lead: bool, writer: str,
+) -> None:
     slug = "teams-lead-audit"
     boot = _bootstrap(client, slug)
     token = boot["access_token"]
@@ -173,6 +179,12 @@ def test_team_lead_change_persists_and_audits_once(
     ],
 )
 def test_team_lead_change_denials_preserve_membership_and_audit(
+    client: TestClient, attempt: str, expected_status: int,
+) -> None:
+    assert_team_lead_change_denials_preserve_membership_and_audit(client, attempt, expected_status)
+
+
+def assert_team_lead_change_denials_preserve_membership_and_audit(
     client: TestClient, attempt: str, expected_status: int,
 ) -> None:
     slug = "teams-lead-boundary"

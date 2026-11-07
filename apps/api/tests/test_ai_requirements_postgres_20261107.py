@@ -57,16 +57,31 @@ def test_watch_hydration_query_bound_postgres(isolated_postgres_client: TestClie
 def test_team_lead_audit_postgres(
     isolated_postgres_client: TestClient, initial_is_lead: bool,
 ) -> None:
-    teams.test_team_lead_change_persists_and_audits_once(isolated_postgres_client, initial_is_lead)
+    teams.assert_team_lead_change_persists_and_audits_once(
+        isolated_postgres_client, initial_is_lead, writer="legacy_upsert",
+    )
+
+
+@pytest.mark.parametrize("initial_is_lead", [False, True], ids=["promote", "demote"])
+def test_team_update_only_lead_audit_postgres(
+    isolated_postgres_client: TestClient, initial_is_lead: bool,
+) -> None:
+    teams.assert_team_lead_change_persists_and_audits_once(
+        isolated_postgres_client, initial_is_lead, writer="update_only",
+    )
 
 
 @pytest.mark.parametrize(
     ("attempt", "expected_status"),
-    [("non_manager", 403), ("foreign_team", 404), ("foreign_member", 400)],
+    [
+        ("non_manager", 403), ("foreign_team", 404), ("foreign_member", 400),
+        ("patch_non_manager", 403), ("patch_foreign_team", 404),
+        ("patch_foreign_row", 409), ("patch_company_membership_id", 409),
+    ],
 )
 def test_team_lead_denials_postgres(
     isolated_postgres_client: TestClient, attempt: str, expected_status: int,
 ) -> None:
-    teams.test_team_lead_change_denials_preserve_membership_and_audit(
+    teams.assert_team_lead_change_denials_preserve_membership_and_audit(
         isolated_postgres_client, attempt, expected_status,
     )
