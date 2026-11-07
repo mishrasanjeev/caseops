@@ -1,12 +1,102 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 7 Production Run On d2a172f7: B4-ADJ-36, 41, 43 Proven; B4-ADJ-40, 42 Open
+
+Releases since the November 5 run, all deployed with deploy-prod.sh from
+`main` without the test-legal grant input (B4-ADJ-39):
+
+- 9b48edc5 (#591 integrity tombstone index, #592 watch confirmed rows),
+  `caseops-api-00518`. Prod-verify failed only test-legal-write-oct13-a/b, on
+  the portfolio timeouts below; batch3 and batch4 passed.
+- b876c23d (#593 retired-generation purge, migration `20261106_0002`; #594
+  `jit=off`), `caseops-api-00519-sn9`. The first deploy failed at the
+  monitoring alert reconcile on a Cloud Logging "Control requests per minute"
+  quota error (HTTP 500), after the migration and job updates and before the
+  services rolled; the idempotent rerun passed. Prod-verify 42216512296 failed
+  oct13-a, oct13-b and batch4 BUG-012, all on the same portfolio 504s.
+- d2a172f7 (#595 IP policy EXISTS seeks), `caseops-api-00520-csl`,
+  `caseops-web-00495-qsx`. Prod-verify 42311071636 succeeded in every group
+  (tester, tester-index, tester-catalog, test-legal-readonly,
+  test-legal-write-oct13-a/b, batch3, batch4, public-pages, supporting,
+  patent-statute, legacy) and recorded exact-release evidence.
+
+- B4-ADJ-36 Status: Properly fixed, production-proven on 9b48edc5 and
+  d2a172f7. Scan-phase timing on 00518: the first integrity call after release
+  took 1.16 s (scan 1.11 s, tombstones 182 ms; 8.75 s on 00516 before), warm
+  calls 0.85 to 0.89 s, tombstone count 7 ms warm (335 to 385 ms on 00517).
+  On 00520 the first call took 5.67 s (scopes 3.93 s cold, tombstones 327 ms),
+  inside the 10 s budget, then 0.76 to 0.89 s. The integrity state reads
+  `blocked` on 00517, 00518 and 00520; it predates these releases, and on
+  b876c23d onward it is expected until the B4-ADJ-40 backlog is drained.
+- B4-ADJ-41 Status: Properly fixed, production-proven on d2a172f7. Since about
+  08:30 UTC on 2026-11-06 every test-legal `GET /api/ip/portfolio` and
+  `/api/ip/portfolio/families` hit the 60 s statement timeout (54 to 89 s or
+  504), after three days at 1 to 2 s. First diagnosis was wrong: #594 turned
+  JIT off on request and export connections on a local hypothesis, and the
+  504s persisted on 00519. Real cause, reproduced locally:
+  `visible_ip_dockets_filter` tested each per-docket wall and grant seek as
+  `(scalar subquery) IS [NOT] NULL`, which PostgreSQL estimates at a fixed
+  0.5%. Once `ethical_walls` and `matter_access_grants` hold rows (test-legal
+  retains every run's revoked ones), the planner expects about one visible
+  docket and joins `trademark_applications` and `ip_assets` by a sequential
+  scan per docket: quadratic in tenant width. Fix (#595): the same seeks wrapped
+  in `[NOT] EXISTS`, the form the Matter policy uses.
+  `test_ip_portfolio_policy_estimate_postgres_20261106.py` seeds 1,000
+  dockets and 400 revoked walls and grants, analyzes, and rejects any
+  repeated sequential scan of the three tables in the page, query and
+  families reads; on the old policy it found 7 rescans, on the fix none. The
+  seek-successor tests in `test_ip_patent_postgres.py` still pass. Production
+  on 00520: 110 portfolio reads p50 0.50 s, max 2.04 s; 12 family reads p50
+  0.95 s, max 2.58 s; renewal tracker p50 0.66 s, max 3.49 s; no Cloud SQL
+  statement-timeout cancellation and no API 5xx since the revision started
+  (2026-11-06 23:02 UTC). `-c jit=off` stays harmless; its comment in
+  `connection_safety.py` still claims the JIT cause (follow-up).
+- B4-ADJ-42 Status: Not fixed (tracked). Found by the same reproduction: a
+  portfolio read filtered by `renewal_tracker_state` plus an application date
+  range joins the MATERIALIZED fact CTE `ip_tracker_stopped`
+  (`ip_renewal_tracker_read.py`). Its `stop_reason IS NULL`,
+  `renewal_due_on IS NULL` and date filters have no statistics, so the planner
+  estimates one row and rescans `trademark_applications` per matching docket.
+  The PostgreSQL CI acceptance rejects skipped and xfail nodes, so the strict
+  xfail written for it was removed from #595; reproduce with the #595 test's
+  `_portfolio_rescans` helper and the request
+  `renewal_tracker_state=missing&application_date_from=2020-01-01&application_date_to=2020-12-31`.
+  No production timeout is attributed to it yet.
+- B4-ADJ-43 Status: Properly fixed, production-proven on 9b48edc5 and
+  d2a172f7 (batch4 BUG-014 desktop and mobile). On 9a61cc18 the watch Pause
+  badge changed about 12 s after the server paused the profile, because the
+  pause refetch queued behind a 4.6 to 6.7 s workspace read; #592 applies the
+  mutation's returned row to every loaded page at once. The slow read itself
+  measures p50 0.33 s, max 0.51 s on 00520 (17 reads); the earlier latency is
+  plausibly the B4-ADJ-41 policy estimate, which is unproven.
+- B4-ADJ-40 Status: Inconclusive (deployed on b876c23d and d2a172f7; drain not
+  run). The retired-generation backlog cannot drain while private maintenance
+  is paused (since 2026-11-02), and the per-tenant `--mode purge` drain
+  permanently blanks production payloads, so it waits for the owner. Prod-verify
+  keeps no integrity response, so the exact `retained_payload_count` is not
+  recorded.
+
+Operational caveats from these runs:
+
+- The private maintenance scheduler stays paused; deploy-prod.sh holds it
+  until prod-verify succeeds, followed by one clean rebuild execution and a
+  second no-rebuild execution, and B4-ADJ-40 adds the drain before
+  certification.
+- PR #595 Postgres shard 16 hit its 12-minute job limit once after the test
+  removal moved the shard partition; the rerun passed in 9 m 43 s. That shard
+  runs close to its limit.
+- The Windows mobile dependency audit failed three times on 2026-11-06 with
+  `NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED` (runner npm cache
+  permissions); reruns passed.
+- B4-ADJ-39 is still open for the owner.
+
 ## November 6 Adjacent Defect: B4-ADJ-40 Retired Private Generations Kept Deleted Sources
 
 Found while fixing B4-ADJ-36 (PR #591). Customer-data retention defect in
 tenant-private retrieval, separate from that performance fix.
 
-- B4-ADJ-40 Status: Inconclusive (fixed locally, not deployed; no production
-  evidence yet). Each tenant rebuild retires the previous
+- B4-ADJ-40 Status: Inconclusive (deployed on b876c23d and d2a172f7; the
+  drain and the clean integrity read are pending; see November 7). Each tenant rebuild retires the previous
   `private_index_generations` row and keeps its projections (about 150 per
   tenant since September). A projection event (deletion, Matter disposal,
   client archive, access change) tombstoned rows only in the generation that
