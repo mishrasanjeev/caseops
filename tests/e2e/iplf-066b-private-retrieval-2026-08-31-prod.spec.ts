@@ -9,6 +9,7 @@ import {
   assistantCitationButton,
   assertPrivateAccessQaIdentity,
   expectAssistantCitationHidden,
+  expectAuthorizedAssistantCitationOpen,
   PRIVATE_ACCESS_HIDDEN_NOTICE,
   selectPrivateAccessAnswer,
   verifyPrivateAccessAnswerHidden,
@@ -387,20 +388,9 @@ test("IPLF-066B production locks answers after access restore and revokes privat
   const turns = await turnsResponse.json();
   expect(turns.has_more).toBe(false);
   expect(selectPrivateAccessAnswer(turns.items, evidenceToken, beforeItems[0].source_id).id).toBe(answer.id);
-  const citationId = answer.citations[0].id;
-  const openCitation = page.waitForResponse((response) =>
-    response.request().method() === "POST" &&
-    new URL(response.url()).pathname === `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
-  );
-  await assistantCitationButton(page, filename).click();
-  const visibleCitation = await openCitation;
-  await expectStatus(visibleCitation, 200, "the answer's citation opens before the access event");
-  expect(await visibleCitation.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
-  const opened = await visibleCitation.json();
-  expect(opened.citation_id).toBe(citationId);
-  const destination = new URL(opened.source_url, WEB);
-  expect(destination.origin).toBe(new URL(WEB).origin);
-  await expect(page).toHaveURL(destination.href);
+  await expectAuthorizedAssistantCitationOpen(page, {
+    label: filename, sessionId, citationId: answer.citations[0].id,
+  });
   await page.goto(`${WEB}/app/assistant`);
 
   // The canonical seed has no colleague. A unique member belongs only to this

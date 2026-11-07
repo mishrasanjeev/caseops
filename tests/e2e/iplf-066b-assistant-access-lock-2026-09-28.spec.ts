@@ -6,7 +6,11 @@ import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
-import { assistantCitationButton, expectAssistantCitationHidden } from "./support/private-access-lock-proof";
+import {
+  assistantCitationButton,
+  expectAssistantCitationHidden,
+  expectAuthorizedAssistantCitationOpen,
+} from "./support/private-access-lock-proof";
 
 // Until 2026-09-28 an access change marked a saved Workspace Assistant answer
 // for reauthorization, and a document-only answer was served again once its
@@ -184,6 +188,8 @@ test("IPLF-066B an access change and its restore keep a saved assistant answer l
   expect(answered[0].citations).toHaveLength(1);
   const answerId = answered[0].id;
   const citationId = answered[0].citations[0].id;
+  await expectAuthorizedAssistantCitationOpen(page, { label: filename, sessionId, citationId });
+  await page.goto("/app/assistant");
 
   // An access change on the answer's Matter, then its restore. The owner who
   // asked never loses access; the wall excludes a colleague and is removed.

@@ -19,6 +19,27 @@ export async function expectAssistantCitationHidden(page: Page, label: string): 
   })).toHaveCount(0);
 }
 
+export async function expectAuthorizedAssistantCitationOpen(
+  page: Page,
+  { label, sessionId, citationId }: { label: string; sessionId: string; citationId: string },
+): Promise<void> {
+  const origin = new URL(page.url()).origin;
+  const opened = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname === `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
+  );
+  await assistantCitationButton(page, label).click();
+  const response = await opened;
+  await expectStatus(response, 200, "open the authorized answer citation from the browser");
+  expect(await response.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+  const citation = await response.json();
+  expect(citation.citation_id).toBe(citationId);
+  expect(typeof citation.source_url).toBe("string");
+  const destination = new URL(citation.source_url, origin);
+  expect(destination.origin).toBe(origin);
+  await expect(page).toHaveURL(destination.href);
+}
+
 type QaIdentity = {
   company: { id: string; slug: string; tenant_key: string; is_active: boolean };
   user: { email: string; is_active: boolean };
