@@ -3991,3 +3991,7 @@ requirements when using the fallback.
   annotations before freezing a long candidate. Keep fixture expectations
   initialized on every path and preserve the scanner instead of suppressing a
   test-code finding. Earlier source-bound gates remain historical evidence.
+- A colocated frontend unit test's external helper is also a production image
+  type-check input. Admit its finite import closure in Docker and Cloud Build
+  ignore files and explicit builder COPY inputs, while excluding it from the
+  runtime image. Checkout-only tests/builds cannot prove that upload contract.
