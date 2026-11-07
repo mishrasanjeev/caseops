@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 Portfolio Import Resume Gate
+
+**Inconclusive; production not changed.** IPLF-032/UJ-02/NFT-005
+within existing J14/M14 scope. Exact #597 `591eb82b` had a local Docker
+call failure before the retained-width tracker could read: fixture import
+resume took 92.761 seconds against the existing 90-second limit. The
+interrupted gate retained three complete groups and a partial fourth:
+1,898 passed, one failed, later native and browser cases unexecuted.
+Hosted green on the earlier tree does not override that result.
+
+IMP-REM-01 reproduces the unnecessary current-version read with no
+renewal date and preserves locked write denial. The candidate moves
+only the absent-date return after docket authorization. The PostgreSQL
+materialization profile still proves actual import, readback, provenance
+and replay and now also checks zero undated reminder-provenance reads
+and no reminder intent. Dated and corrected source checks are unchanged.
+The structural work reduction is not yet an elapsed-time diagnosis;
+the original 1,345-record test, full replacement gate and exact-serving
+browser proof remain required.
+
 ## November 7 Requirements Triage And Bounded Candidates
 
 **Inconclusive; new production acceptance pending.** The owner-supplied v2.1

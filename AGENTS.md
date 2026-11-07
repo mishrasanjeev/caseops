@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- An undated portfolio import row cannot schedule a source-date reminder.
+  Preserve the locked docket write check, then skip current-version and
+  source-provenance hydration for the absent date only. Dated and corrected
+  reminders still revalidate their canonical facts. Distinguish fixture import
+  latency from tracker latency and keep the original 90-second request budget.
+
 - When a direct citation link becomes an audited action, update every dated
   local and production journey together. Prove the named button, the actual
   authorization request and same-origin destination, and that both the new

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from caseops_api.db.models import (
@@ -33,6 +34,41 @@ _PRIVATE = "FAKE_INTERNAL_REMARK_DO_NOT_NOTIFY"
 def reminder_clock(monkeypatch):
     monkeypatch.setattr(ip_renewals, "_now", lambda: _NOW)
     monkeypatch.setattr(notification_delivery, "_now", lambda: _NOW)
+
+
+@pytest.mark.parametrize("can_write", [True, False], ids=["authorized", "denied"])
+def test_undated_reminder_checks_write_access_without_loading_source(monkeypatch, can_write):
+    docket = SimpleNamespace(id=str(uuid4()), current_version=1)
+    context = SimpleNamespace(company=SimpleNamespace(id=str(uuid4())))
+    authorization = []
+    reads = []
+
+    class Session:
+        def scalar(self, statement):
+            reads.append(statement)
+            return None
+
+    session = Session()
+
+    def locked_docket(observed_session, observed_context, docket_id, *, write):
+        authorization.append((observed_session, observed_context, docket_id, write))
+        if not can_write:
+            raise HTTPException(status_code=404, detail="Docket not found.")
+        return docket
+
+    monkeypatch.setattr(ip_renewals, "_docket", locked_docket)
+    payload = {
+        "context": context, "docket_id": docket.id, "row_id": str(uuid4()),
+        "normalized": {"renewal_due_date": None},
+    }
+    if can_write:
+        assert ip_renewals.schedule_imported_renewal_reminder(session, **payload) is None
+    else:
+        with pytest.raises(HTTPException) as denied:
+            ip_renewals.schedule_imported_renewal_reminder(session, **payload)
+        assert denied.value.status_code == 404
+    assert authorization == [(session, context, docket.id, True)]
+    assert reads == [], "An undated import row cannot schedule a source-date reminder."
 
 
 @pytest.mark.parametrize("facts", ["current", "empty", "nontext-mark"])
