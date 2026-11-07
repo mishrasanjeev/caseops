@@ -664,6 +664,94 @@ def test_parse_redline_docx_nested_paragraph_owns_its_changes() -> None:
     ]
 
 
+def test_parse_redline_docx_table_insertion_does_not_capture_text_box_paragraph() -> None:
+    payload = _redline_docx_with_body("""
+    <w:tbl><w:tr><w:tc><w:p>
+      <w:ins w:id="1" w:author="Buyer"><w:r><w:t xml:space="preserve">Added </w:t></w:r>
+        <w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>
+          <w:txbxContent><w:p>
+            <w:r><w:t>Unchanged text box text.</w:t></w:r>
+            <w:del w:id="2" w:author="Seller"><w:r><w:delText>Removed from text box</w:delText></w:r></w:del>
+          </w:p></w:txbxContent>
+        </v:textbox></v:shape></w:pict></w:r>
+        <w:r><w:t>fee</w:t></w:r>
+      </w:ins>
+    </w:p></w:tc></w:tr></w:tbl>
+    """)
+    source = BytesIO(payload)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Added fee"),
+        (2, 1, "deletion", "Seller", "Removed from text box"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (2, 1, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1}
+    assert source.getvalue() == payload
+
+
+def test_parse_redline_docx_same_paragraph_tokens_belong_to_nearest_revision() -> None:
+    source = _redline_docx_with_body("""
+    <w:p>
+      <w:ins w:id="1" w:author="Buyer">
+        <w:smartTag><w:r><w:t xml:space="preserve">Added </w:t></w:r></w:smartTag>
+        <w:del w:id="2" w:author="Seller"><w:r><w:delText>Removed</w:delText></w:r></w:del>
+        <w:r><w:rPr><w:rPrChange w:id="3" w:author="Style"><w:rPr/></w:rPrChange></w:rPr>
+          <w:instrText>FIELD</w:instrText><w:t> result</w:t>
+        </w:r>
+      </w:ins>
+      <w:ins w:id="4" w:author="No own text">
+        <w:ins w:id="5" w:author="Reviewer"><w:r><w:t>Independent text</w:t></w:r></w:ins>
+      </w:ins>
+    </w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Added FIELD result"),
+        (2, 0, "deletion", "Seller", "Removed"),
+        (3, 0, "formatting", "Style", ""),
+        (4, 0, "insertion", "Reviewer", "Independent text"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (1, 2, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1, "Style": 1, "Reviewer": 1}
+
+
+@pytest.mark.parametrize("tag", ["w:moveFrom", "w:moveTo", "w14:conflictIns", "w14:conflictDel"])
+def test_parse_redline_docx_does_not_attribute_unsupported_revision_subtrees(tag: str) -> None:
+    source = _redline_docx_with_body(f"""
+    <w:p xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+      <w:ins w:id="1" w:author="Buyer">
+        <{tag} w:id="2" w:author="Unsupported reviewer">
+          <w:r><w:t>Unsupported text</w:t></w:r>
+          <w:del w:id="3" w:author="Unsupported reviewer"><w:r><w:delText>Wrapped deletion</w:delText></w:r></w:del>
+          <w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>
+            <w:txbxContent><w:p>
+              <w:ins w:id="4" w:author="Unsupported reviewer"><w:r><w:t>Wrapped text box edit</w:t></w:r></w:ins>
+            </w:p></w:txbxContent>
+          </v:textbox></v:shape></w:pict></w:r>
+        </{tag}>
+        <w:r><w:t>Independent text</w:t></w:r>
+      </w:ins>
+    </w:p>
+    <w:p><w:del w:id="5" w:author="Seller"><w:r><w:delText>Independent deletion</w:delText></w:r></w:del></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Independent text"),
+        (2, 2, "deletion", "Seller", "Independent deletion"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1}
+
+
 @pytest.mark.parametrize("source_kind", ["bytes", "stream", "path"])
 def test_parse_redline_docx_preserves_table_change_metadata(
     tmp_path: Path, source_kind: str,
