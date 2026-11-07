@@ -7,6 +7,11 @@ October 31 Ram Batch 4.
 
 ## Verdicts
 
+Production, 2026-11-07 (release d2a172f7, prod-verify 42311071636): every
+prod-verify group passed, including Batch4 and the test-legal write groups that
+failed on 9b48edc5 and b876c23d on the portfolio timeouts (B4-ADJ-41,
+mechanism 11). The row verdicts below are unchanged.
+
 Production, 2026-11-05 (release 2aae2367, prod-verify 41971095146): eleven
 rows are `Properly fixed`, BUG-015 is `Partially fixed`, and BUG-003, BUG-004,
 BUG-006, BUG-010 and BUG-011 are `Inconclusive` because production never
@@ -328,6 +333,41 @@ major finding. Its verdict is recorded with the corrected status.
 Guard: process only.
 
 Gap: no automated control enforces it.
+
+### 11. A cause inferred locally and shipped without production evidence
+
+On 2026-11-06, test-legal portfolio reads went from 1 to 2 s to the 60 s
+statement timeout (B4-ADJ-41). The first fix turned PostgreSQL JIT off,
+because a local run with JIT forced on was slow and an autoanalyze had just
+run. That fix was released (#594, b876c23d), and production timed out exactly
+as before. The real cause showed up only when tenants were compared by
+caller: only the wide tenant that retains every run's revoked walls and
+grants timed out. Its policy seeks were written as `(scalar subquery) IS
+NULL`, which PostgreSQL estimates at a fixed 0.5%, so it planned one visible
+docket and rescanned two tables per docket.
+
+Permanent rules:
+
+- Diagnose a production regression from production evidence (Cloud SQL
+  cancelled STATEMENT text, Cloud Run latency by tenant and route) before
+  shipping a fix. A local slowdown with a forced setting proves only that the
+  setting can be slow.
+- Reproduce with production-shaped statistics: tenant width, the retained
+  policy rows, then ANALYZE. A fixture with empty walls and grants tables
+  cannot show this plan.
+- Never write a visibility predicate as `(scalar subquery) IS [NOT] NULL`; use
+  `[NOT] EXISTS`.
+- A known-open defect cannot be parked as `xfail(strict=True)`: the
+  PostgreSQL acceptance rejects skipped and xfail nodes. Track it in the
+  ledger (B4-ADJ-42) with its reproduction instead.
+
+Guard: `test_ip_portfolio_policy_estimate_postgres_20261106.py` rejects a
+repeated sequential scan of `ip_docket_records`, `trademark_applications` or
+`ip_assets` in the portfolio page, query and families reads under retained
+policy rows.
+
+Gap: no guard covers the renewal-tracker fact CTE (B4-ADJ-42) or other
+scalar-subquery `IS NULL` predicates outside the IP policy.
 
 ## Where this batch's own process still falls short
 
