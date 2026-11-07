@@ -109,13 +109,19 @@ test("Watch removes revoked source evidence from the workspace and report after 
     await expect(page.getByTestId(`journal-entry-${permitted.publications[0].id}`)).toBeVisible();
     await expect(page.getByTestId(`journal-entry-${restricted.publications[0].id}`)).toHaveCount(0);
 
+    const principal = await json<{ membership: { id: string } }>(await page.request.get(
+      `${api}/auth/me`, { headers: NO_PAID },
+    ), "Read current reviewer principal");
+    expect(principal.membership.id).toBe(reviewer.membershipId);
+    const csrf = (await page.context().cookies(rt.api.origin)).find(cookie => cookie.name === "caseops_csrf")?.value;
+    if (!csrf) throw new Error("The signed-in reviewer must have a CSRF cookie.");
     const dismissal = await page.request.post(`${api}/ip/watch/hits/${hit.id}/disposition`, {
-      headers: NO_PAID, data: {
+      headers: { ...NO_PAID, "X-CSRF-Token": csrf }, data: {
         expected_version: hit.version, disposition: "not_relevant",
         reason: "This stale review must be refused.", source_confirmed: true,
       },
     });
-    expect(dismissal.status()).toBe(404);
+    expect(dismissal.status(), "Revoked source access must reach the Watch handler and return not found").toBe(404);
     await page.goto(`${rt.web.origin}/app/ip/reports`);
     await page.getByRole("combobox", { name: "Report", exact: true }).selectOption("watch");
     const preview = page.waitForResponse(response =>
