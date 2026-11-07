@@ -160,3 +160,27 @@ def test_portfolio_reads_never_rescan_the_portfolio_per_docket(
     }
     rescans = _portfolio_rescans(isolated_postgres_client, monkeypatch, record_property, requests)
     assert rescans == {}
+
+
+def test_fact_filtered_portfolio_reads_never_rescan_per_docket(
+    isolated_postgres_client, monkeypatch, record_property
+):
+    # B4-ADJ-42: the renewal-tracker and date filters join a materialized fact
+    # CTE. Its IS NULL and date filters carry no statistics, so the planner took
+    # one matching docket and rescanned trademark_applications (tracker) or
+    # ip_assets (date range only) per docket.
+    tracker = {
+        "renewal_tracker_state": "missing",
+        "application_date_from": "2020-01-01",
+        "application_date_to": "2020-12-31",
+    }
+    requests = {
+        "tracker": ("/api/ip/portfolio", {**tracker, "limit": 50}),
+        "tracker-families": ("/api/ip/portfolio/families", tracker),
+        "dates": (
+            "/api/ip/portfolio",
+            {"application_date_from": "2020-01-01", "application_date_to": "2020-12-31"},
+        ),
+    }
+    rescans = _portfolio_rescans(isolated_postgres_client, monkeypatch, record_property, requests)
+    assert rescans == {}

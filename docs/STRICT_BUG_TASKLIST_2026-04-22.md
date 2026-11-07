@@ -51,17 +51,27 @@ Releases since the November 5 run, all deployed with deploy-prod.sh from
   statement-timeout cancellation and no API 5xx since the revision started
   (2026-11-06 23:02 UTC). `-c jit=off` stays harmless; its comment in
   `connection_safety.py` still claims the JIT cause (follow-up).
-- B4-ADJ-42 Status: Not fixed (tracked). Found by the same reproduction: a
-  portfolio read filtered by `renewal_tracker_state` plus an application date
-  range joins the MATERIALIZED fact CTE `ip_tracker_stopped`
-  (`ip_renewal_tracker_read.py`). Its `stop_reason IS NULL`,
-  `renewal_due_on IS NULL` and date filters have no statistics, so the planner
-  estimates one row and rescans `trademark_applications` per matching docket.
-  The PostgreSQL CI acceptance rejects skipped and xfail nodes, so the strict
-  xfail written for it was removed from #595; reproduce with the #595 test's
-  `_portfolio_rescans` helper and the request
-  `renewal_tracker_state=missing&application_date_from=2020-01-01&application_date_to=2020-12-31`.
-  No production timeout is attributed to it yet.
+- B4-ADJ-42 Status: Fixed in code (fix/b4-adj-42-tracker-estimate);
+  production verification pending. A portfolio read filtered by
+  `renewal_tracker_state` or by an application/renewal date range joined the
+  MATERIALIZED fact CTEs (`ip_tracker_stopped`, `ip_date_validated`) and
+  filtered their columns directly. Those columns have no statistics, so each
+  `IS NULL` or date range was estimated at 0.5% and the planner expected one
+  docket: the tracker read rescanned `trademark_applications` and the
+  date-only read rescanned `ip_assets` once per docket (1,000 x 1,000 at
+  1,000 dockets). The same predicates are now evaluated as one boolean per
+  docket in a materialized `ip_portfolio_fact_match` stage and the outer read
+  filters that boolean, which PostgreSQL estimates at 50%; NULL still
+  excludes a docket exactly as the WHERE clause did. Reproduced RED on main
+  with `test_fact_filtered_portfolio_reads_never_rescan_per_docket`
+  (tracker, tracker families and date-only reads; 1,000 dockets plus 400
+  revoked walls and grants, analyzed), GREEN on the fix; in a restored copy of
+  the seeded database EXPLAIN ANALYZE fell from 776-1,475 ms to 113 ms
+  (tracker page) and from 330-904 ms to 99 ms (date filter). 76 PostgreSQL
+  and 146 SQLite portfolio/tracker tests pass. Not changed: the renewal
+  tracker's own page read still seeks `ip_docket_records` by sequential scan
+  for each of its 51 rows (linear in tenant width, page-bounded; production
+  p50 0.66 s on 00520); tracked as an observation, not a defect.
 - B4-ADJ-43 Status: Properly fixed, production-proven on 9b48edc5 and
   d2a172f7 (batch4 BUG-014 desktop and mobile). On 9a61cc18 the watch Pause
   badge changed about 12 s after the server paused the profile, because the
