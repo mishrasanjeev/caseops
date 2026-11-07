@@ -385,7 +385,7 @@ test("available sibling rows stay visible beside unsupported retained content", 
   assert.doesNotMatch(h.text(), /Recorded reasoning/);
 });
 
-test("real private application boundary remounts on session, membership, role or capability change", () => {
+function loadMobileApplication(resolve: (name: string) => unknown) {
   const source = readFileSync(
     new URL("../application/MobileApplication.tsx", import.meta.url),
     "utf8",
@@ -404,10 +404,16 @@ test("real private application boundary remounts on session, membership, role or
     key,
   });
   new Function("require", "module", "exports", code)(
-    (name: string) => (name === "react/jsx-runtime" ? { jsx, jsxs: jsx } : {}),
+    (name: string) =>
+      name === "react/jsx-runtime" ? { jsx, jsxs: jsx } : resolve(name),
     module,
     module.exports,
   );
+  return module.exports.MobileApplication;
+}
+
+test("real private application boundary remounts on session, membership, role or capability change", () => {
+  const MobileApplication = loadMobileApplication(() => ({}));
   const props = {
     identity: {
       company: { id: "co" },
@@ -417,7 +423,7 @@ test("real private application boundary remounts on session, membership, role or
     },
     sessionKey: "session",
   };
-  const key = (value: any) => module.exports.MobileApplication(value).key;
+  const key = (value: any) => MobileApplication(value).key;
   const original = key(props);
   for (const changed of [
     { ...props, sessionKey: "new-session" },
@@ -445,4 +451,94 @@ test("real private application boundary remounts on session, membership, role or
     }),
     original,
   );
+});
+
+test("the private reader loads only when an attachment opens", () => {
+  const state: unknown[] = [];
+  let cursor = 0;
+  let readerLoads = 0;
+  const MobileApplication = loadMobileApplication((name) => {
+    switch (name) {
+      case "react":
+        return {
+          useState<T>(initial: T) {
+            const index = cursor++;
+            if (!(index in state)) state[index] = initial;
+            return [
+              state[index],
+              (update: (previous: T) => T) => {
+                state[index] = update(state[index] as T);
+              },
+            ];
+          },
+          useRef: (current: unknown) => ({ current }),
+          useMemo: (factory: () => unknown) => factory(),
+          useCallback: (callback: unknown) => callback,
+          useEffect: () => {},
+        };
+      case "react-native":
+        return {
+          PanResponder: { create: () => ({}) },
+          Platform: { OS: "ios" },
+        };
+      case "../components/theme":
+        return { colors: {}, styles: {} };
+      case "../domain/repository":
+        return { createRepository: () => ({}) };
+      case "../domain/source-records":
+        return { createSourceRecordsRepository: () => ({}) };
+      case "./useResource":
+        return { useResource: () => ({ resource: { state: "loading" } }) };
+      case "./screens/TodayScreen":
+        return { TodayScreen: "TodayScreen" };
+      case "./screens/MatterScreen":
+        return { MatterScreen: "MatterScreen" };
+      case "../viewer/PrivateDocumentViewer":
+        readerLoads += 1;
+        return { PrivateDocumentViewer: "PrivateDocumentViewer" };
+      default:
+        return {};
+    }
+  });
+  const app = MobileApplication({
+    identity: {
+      company: { id: "company" },
+      user: { id: "user" },
+      membership: { id: "member", role: "member" },
+      capabilities: [],
+    },
+    sessionKey: "session",
+    viewer: {},
+  });
+  const render = () => {
+    cursor = 0;
+    return app.type(app.props);
+  };
+  function find(node: any, matches: (node: any) => boolean): any {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const match = find(child, matches);
+        if (match) return match;
+      }
+    } else if (node && typeof node === "object") {
+      if (matches(node)) return node;
+      return find(node.props?.children, matches);
+    }
+  }
+  const today = find(render(), (node) => node.type === "TodayScreen");
+  today.props.openWork({ kind: "task", matter: { id: "matter" } });
+  const matter = find(render(), (node) => node.type === "MatterScreen");
+  assert.equal(readerLoads, 0);
+  const source = { matterId: "matter", attachmentId: "file" };
+  matter.props.files.onOpenFile(source);
+  const readerRoute = find(render(), (node) => node.props?.source === source);
+  assert.ok(readerRoute);
+  assert.equal(readerLoads, 0);
+  const reader = readerRoute.type(readerRoute.props);
+  assert.equal(readerLoads, 1);
+  assert.equal(reader.type, "PrivateDocumentViewer");
+  assert.equal(reader.props.source, source);
+  reader.props.onClose();
+  assert.ok(find(render(), (node) => node.type === "MatterScreen"));
+  assert.equal(readerLoads, 1);
 });

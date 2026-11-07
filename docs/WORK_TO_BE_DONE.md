@@ -1,3 +1,15 @@
+## 2026-11-07 — native welcome and reader startup
+
+J20/M22, US-MOB-01/08 and MOB-01/02/37–39 are partially implemented.
+The initial compatibility and signed-out screens share the bundled CaseOps
+mark, a scrollable safe area and the existing secure sign-in controls.
+The private viewer and its bundled PDF assets load when an authorized
+attachment route opens. Exact-candidate device timing, large-text rendering
+and the complete Android and iOS acceptance suites are pending.
+Source Records admits one action from the current page or picker visit
+and retires callbacks when a refresh, denial or navigation changes that visit.
+Forward paging continues beyond 100 pages with bounded cursor history.
+
 ## 2026-11-04 — private invalidation assertion ownership
 
 **Partially fixed; candidate PostgreSQL and CI verification pending.** Three

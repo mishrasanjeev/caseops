@@ -33,7 +33,7 @@ import type {
 import { createMatterFilesApi } from "../files/api";
 import { attachmentViewerSource } from "../viewer/contracts";
 import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
-import { PrivateDocumentViewer } from "../viewer/PrivateDocumentViewer";
+import type { PrivateDocumentViewerProps } from "../viewer/PrivateDocumentViewer";
 import { useResource } from "./useResource";
 
 import type {
@@ -651,7 +651,7 @@ function ApplicationContent({
               locator={route.locator}
             />
           ) : route.type === "viewer" ? (
-            <PrivateDocumentViewer
+            <PrivateViewerRoute
               source={route.source}
               ports={viewerPorts}
               onClose={pop}
@@ -724,6 +724,13 @@ function ApplicationContent({
       </View>
     </SafeAreaView>
   );
+}
+
+function PrivateViewerRoute(props: PrivateDocumentViewerProps) {
+  // Metro bundles the renderer and PDF assets without evaluating them at launch.
+  const { PrivateDocumentViewer } =
+    require("../viewer/PrivateDocumentViewer") as typeof import("../viewer/PrivateDocumentViewer");
+  return <PrivateDocumentViewer {...props} />;
 }
 
 function NativeSourcesButton({ onPress }: { onPress: () => void }) {

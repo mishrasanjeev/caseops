@@ -84,6 +84,8 @@ export function sourceKey(source: SourceRef): string {
   const ref = decodeSourceRef(source);
   return `${ref.kind}:${ref.id}`;
 }
+const SOURCE_CURSOR_HISTORY_LIMIT = 100;
+
 export function advanceSourcePage(
   history: readonly (string | null)[],
   next: string,
@@ -91,12 +93,12 @@ export function advanceSourcePage(
   identityCursor(next);
   if (
     !history.length ||
-    history[0] !== null ||
-    history.includes(next) ||
-    history.length >= 100
+    history.length > SOURCE_CURSOR_HISTORY_LIMIT ||
+    history.includes(next)
   )
     throw new ContractError("source continuation; return to the first page");
-  return [...history, next];
+  // Retain recent cursor identities for cycle detection without limiting reads.
+  return [...history.slice(-(SOURCE_CURSOR_HISTORY_LIMIT - 1)), next];
 }
 
 export type ContractSource = {

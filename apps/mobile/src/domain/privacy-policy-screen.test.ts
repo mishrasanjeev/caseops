@@ -54,12 +54,16 @@ function screen(
     },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "react-native": {
+      Image: "Image",
+      Platform: { select: (fonts: { default: string }) => fonts.default },
+      StyleSheet: { create: (styles: unknown) => styles },
       View: "View",
       ScrollView: "ScrollView",
       Text: "Text",
       Pressable: "Pressable",
       Linking: { openURL: observeOpen },
     },
+    "../../assets/app-icon.png": 1,
     "react-native-safe-area-context": { SafeAreaView: "SafeAreaView" },
     "./NativeControls": {
       NativeButton: "NativeButton",
@@ -98,6 +102,7 @@ function screen(
   }
   const policy = loadComponent("../components/PrivacyPolicyLink.tsx");
   bindings["./PrivacyPolicyLink"] = policy;
+  bindings["./WelcomeFrame"] = loadComponent("../components/WelcomeFrame.tsx");
   const signIn = welcome
     ? loadComponent("../components/SignInPanel.tsx").SignInPanel
     : null;
@@ -214,6 +219,14 @@ test("signed-out welcome keeps its sign-in action when no privacy policy is conf
     canOpen: () => true,
   });
   t.after(s.unmount);
+  const mark = s.initial.find((node) => node.type === "Image");
+  assert.equal(mark.props.source, 1);
+  assert.equal(mark.props.accessible, false);
+  const heading = s.initial.find(
+    (node) => node.type === "Text" && node.props.accessibilityRole === "header",
+  );
+  assert.equal(heading.props.children, "Your day in view.");
+  assert.match(text(s.initial), /matters, upcoming hearings and assigned work/);
   const signIn = s.initial.find((node) => node.props?.testID === "sign-in");
   assert.equal(signIn.props.label, "Continue to sign in");
   assert.equal(signIn.props.disabled, false);
