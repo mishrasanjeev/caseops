@@ -19,8 +19,12 @@ at nested report rendering; run05 passed eight and runs06/07 passed all ten. The
 are built-app SQLite preflights. No Docker, deployed fix or complete
 requirement closure is inferred.
 See [the complete evaluation](AI_REQUIREMENTS_TRIAGE_2026-11-07.md). Preserve all
-earlier failed UI/setup receipts and existing lifecycle fences. Claude quality
-review is blocked by expired OAuth, not completed or waived.
+earlier failed UI/setup receipts and existing lifecycle fences. The owner
+reassigned #597 to Codex. Two independent Codex reviews found open stale
+membership, Assistant private-source, Watch visibility and redline boundaries
+on candidate `722fe7fe`. The superseded Docker run retained 102 completed
+database cases and did not run browsers. Do not treat that prefix or the
+earlier focused counts as acceptance of a replacement.
 
 ## November 7 Production Run On d2a172f7: B4-ADJ-36, 41, 43 Proven; B4-ADJ-40, 42 Open
 

@@ -189,17 +189,36 @@ after capacity is restored. None of this is production certification.
 
 ## Release And Reviewer Gates
 
-Claude owns the preceding release closeout and must independently review this
-candidate. The first separate read-only Claude review could not authenticate:
-its OAuth session expired before any model call; this is not reviewer approval.
-No credentials were requested in chat and no alternate credential or broader
-permission is substituted. The owner has been asked to sign in normally.
+The owner reassigned #597 to this Codex session without waiting for Claude.
+The first separate Claude review did not authenticate. The desktop CaseOps
+chat later showed a weekly limit and separate #599 CI work, not #597 review
+approval. Other release ownership is unchanged. Two independent Codex
+reviews examined exact candidate `722fe7fe829151cebc897766fef999b54dd1c51d`
+against main `61aa6bbeca4a86890def9a2eac7ef2adbc9d0323`.
 
 Required before closure: complete intended browser fixture/inventory, focused
 built-Docker journeys, full canonical Docker and CI/security, protected main,
 guarded exact-SHA deployment, production replay, required maintenance/resume
 and honest workbook update. No source candidate, prior-release QA or green
 unit component bypasses those gates. MacBook app work stays separate.
+
+## Independent Review Hold
+
+The review exposed a new Teams checkbox routed through add/upsert, allowing
+a stale dialog to re-admit a removed member. It also identified the possible
+tenant/actor lock inversion at the new audit write, separate ACL snapshots
+for Watch rows and aggregate metadata, an adjacent Watch workspace source
+visibility gap, and nested tracked DOCX text being collected by the wrong
+revision. Assistant findings include inherited abstained actions retaining
+source labels without dependencies, a final-check versus dispose/reopen
+window, mixed-source paginated history retaining revoked earlier content, and
+a direct proposal link bypassing the audited saved-source opening path.
+
+These are independent static findings, not successful replacement tests.
+The superseded Docker02 was interrupted by the release owner, not by a
+failing assertion: 102 complete native cases and no browser execution, with
+the raw partial journal retained. A complete replacement must cover the
+fixed source and current base. The earlier review and evidence stay distinct.
 
 ## Candidate Reopen Analysis
 
@@ -254,7 +273,8 @@ The dated local and production specs now assert the named citation button
 and the disappearance of both it and any direct citation link after access
 changes. Production acceptance must click the real button, observe the
 marked authorization request, and reach the same-origin destination before
-proving that the saved answer and citation stay locked. Keep the separate
-proposed navigation action and immutable evidence checks in place. This is a
+proving that the saved answer and citation stay locked. Preserve legitimate
+navigation and immutable evidence checks without providing a parallel
+unaudited path to a private saved source. This is a
 test-contract correction, not a deployed result. Fresh Docker, CI and
 exact-release browser acceptance remain required.

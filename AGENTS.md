@@ -4016,3 +4016,19 @@ requirements when using the fallback.
   bootstrap/login, verify the effective principal before the denial, and
   preserve the original status, persisted state, audit and owner readback.
   Do not change production authentication precedence to repair the test.
+- An edit to an existing membership is not an invitation or admission.
+  Bind it to the current relationship row and reject a removed or replaced
+  row. Prove concurrent remove/re-add, stale UI recovery, unchanged record
+  visibility and no false admission audit. Lock the tenant before the actor
+  where a write also inserts tenant-referenced audit evidence.
+- Every private-derived control needs the same revocation boundary as the
+  answer and its citations, even on abstention. A clean later history page
+  does not reauthorize a previously loaded page from a different source.
+  Exercise that split-source case and a real parent dispose/reopen race;
+  unchanged document bytes alone do not establish unchanged lifecycle.
+- Report rows, totals and freshness cutoffs must share one authorization
+  snapshot. Verify a permission change across the count/page boundary and
+  cover adjacent detail, source and mutation paths, not only the report UI.
+- Tracked DOCX text belongs to its nearest paragraph and revision. Test a
+  nested deletion inside an inserted table-cell text box and preserve the
+  original downloadable bytes and authors without duplicating text.
