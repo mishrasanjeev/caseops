@@ -559,17 +559,24 @@ def _scoped_query(
         else:
             dates = current_date_facts(statement, company_id=context.company.id)
             facts = select(dates).subquery()
-        statement = statement.join(facts, facts.c.docket_id == IpDocketRecord.id)
+        conditions = []
         for expression, lower, upper in (
             (facts.c.application_on, filters.application_date_from, filters.application_date_to),
             (facts.c.renewal_due_on, filters.renewal_due_from, filters.renewal_due_to),
         ):
             if lower:
-                statement = statement.where(expression >= lower.isoformat())
+                conditions.append(expression >= lower.isoformat())
             if upper:
-                statement = statement.where(expression <= upper.isoformat())
+                conditions.append(expression <= upper.isoformat())
+        match_source = facts
         if filters.renewal_tracker_state:
-            statement = statement.outerjoin(
+            match_source = facts.join(
+                IpDocketRecord,
+                and_(
+                    IpDocketRecord.id == facts.c.docket_id,
+                    IpDocketRecord.company_id == context.company.id,
+                ),
+            ).outerjoin(
                 IpPortfolioRenewalSeries,
                 and_(
                     IpPortfolioRenewalSeries.company_id == IpDocketRecord.company_id,
@@ -582,9 +589,24 @@ def _scoped_query(
                 due=facts.c.renewal_due_on,
                 stop_reason=facts.c.stop_reason,
             )
-            statement = statement.where(
-                or_(*(predicates[key] for key in filters.renewal_tracker_state))
-            )
+            conditions.append(or_(*(predicates[key] for key in filters.renewal_tracker_state)))
+        # B4-ADJ-42: the fact columns come from a materialized CTE and have no
+        # statistics, so filtering them directly estimated ~1 docket (0.5% per
+        # IS NULL or date range) and planned per-docket rescans of the portfolio.
+        # Evaluate the same predicates as one boolean per docket instead; an
+        # unanalyzed boolean filter is estimated at 50%, keeping the join linear.
+        # NULL still excludes a docket exactly as the WHERE clause did. The stage
+        # must stay MATERIALIZED: PostgreSQL inlines a CTE referenced once and
+        # would push the boolean back down onto the unanalyzed fact columns.
+        matched = (
+            select(facts.c.docket_id, and_(*conditions).label("fact_filters_match"))
+            .select_from(match_source)
+            .cte(name="ip_portfolio_fact_match", nesting=True)
+            .prefix_with("MATERIALIZED", dialect="postgresql")
+        )
+        statement = statement.join(matched, matched.c.docket_id == IpDocketRecord.id).where(
+            matched.c.fact_filters_match
+        )
     return statement
 
 

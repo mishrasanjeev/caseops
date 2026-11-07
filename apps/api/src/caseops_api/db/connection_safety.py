@@ -16,15 +16,15 @@ from __future__ import annotations
 
 from sqlalchemy.engine import make_url
 
-# JIT is chosen per statement from the planner's cost estimate. The
-# policy-scoped IP portfolio reads compile to tens of KB of SQL, so a
-# statistics refresh that pushes the estimate past ``jit_*_above_cost`` adds
-# compile time to every read. On 2026-11-06 the test-legal portfolio reads
-# went from ~1 s to the 60 s statement timeout after an autoanalyze; forcing
-# those thresholds locally slowed the same reads 20-40x while ``jit=off`` kept
-# them under 0.2 s. Request and export reads are short OLTP work, so their
-# engines append this after every other option: neither the server default
-# nor URL options can re-enable JIT.
+# ``jit=off`` was added on 2026-11-06, when the test-legal portfolio reads went
+# from ~1 s to the 60 s statement timeout. JIT was not the cause: production
+# kept timing out with JIT off. The cause was the IP access policy testing its
+# wall and grant seeks as ``(scalar subquery) IS NULL``, which PostgreSQL
+# estimates at 0.5%, so the planner rescanned the portfolio per docket; the
+# policy now uses ``[NOT] EXISTS``. Request and export reads are short OLTP work
+# that gains nothing from JIT compilation, so the option stays. Their engines
+# append it after every other option: neither the server default nor URL
+# options can re-enable JIT.
 DISABLE_JIT_OPTION = "-c jit=off"
 
 
