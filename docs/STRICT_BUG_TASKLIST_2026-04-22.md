@@ -1,5 +1,15 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 B4-ADJ-07 Mobile Retirement Regression
+
+**Inconclusive; candidate change, not released.** CI 42457749671 on
+`283ee514` confirmed the retirement preview succeeded at 393px, but the
+reason textarea remained below the viewport. The candidate brings the field
+and its validation error into view after the server preview without moving
+focus. It does not change which documents may be retired or bypass the
+confirmation request. The dated browser test retains the original viewport
+assertion and now also checks the field error before the next interaction.
+
 ## November 8 PR #597 Review Fixes
 
 **Inconclusive; release proof pending.** An independent review of `7dfc0b29`
@@ -82,6 +92,44 @@ membership, Assistant private-source, Watch visibility and redline boundaries
 on candidate `722fe7fe`. The superseded Docker run retained 102 completed
 database cases and did not run browsers. Do not treat that prefix or the
 earlier focused counts as acceptance of a replacement.
+
+## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
+
+Release 61aa6bbe (#598 fact-filter estimate, JIT comment correction) was
+deployed with deploy-prod.sh from `main` without the test-legal grant input
+and serves `caseops-api-00521-7qz`. Prod-verify 42364478725 succeeded in every
+group.
+
+- B4-ADJ-40 Status: Inconclusive (backlog drained; integrity endpoint read not
+  recorded). With the owner's approval the per-tenant `--mode purge` drain ran
+  for all 8 tenants: 172 executions blanked 8,330,496 retained payload rows.
+  Exit code 2 means "more remain", so the loop continued while each run purged
+  rows, capped at 40 runs per round. During the drain production showed no API
+  5xx, and Cloud SQL CPU peaked at 0.74. The stock `--mode=maintain` runs after
+  resuming report no blockers, and purge-after-activation blanked 6,471,
+  13,885 and 5,511 rows in later rebuilds. The fix is proven in code; the
+  closing proof is a recorded clean integrity response, which prod-verify does
+  not keep.
+- Private maintenance scheduler: ENABLED through `scheduler_inventory.py
+  resume` after two clean executions on the release image
+  (`caseops-private-projection-maintenance-m2fms` and `-gxg8s`, the second
+  with `rebuild_count=0`). The guard could not finish on the workstation: its
+  `gcloud run jobs executions list` sorts the full history client-side
+  (about 2m40s) and its log read took 66 s, both over the fixed 60 s per-call
+  limit. A scratch copy that raised only those two limits to 300 s, with every
+  evidence check unchanged, passed. The guard itself still needs the bounded
+  v2 listing and a time-bounded log filter (follow-up). Cadence runs at 03:10,
+  03:15 and 03:20 UTC succeeded.
+- B4-ADJ-42 Status: Inconclusive (fixed in code and deployed on 61aa6bbe;
+  production width proof pending). PR #599 adds the unnarrowed tracker,
+  families and date reads to `ram-2026-10-17-ip-tracker.spec.ts`; the verdict
+  can become Properly fixed only after a release ships that spec and
+  prod-verify runs it.
+- Revision `caseops-api-00506` was deleted at the owner's request (part of the
+  IPLF-027B revision cleanup; 00294 is kept).
+- B4-ADJ-39: unchanged at the owner's decision; releases keep omitting the
+  grant input.
+- B4-ADJ-44: still Not fixed (tracked below).
 
 ## November 7 Production Run On d2a172f7: B4-ADJ-36, 41, 43 Proven; B4-ADJ-40, 42 Open
 

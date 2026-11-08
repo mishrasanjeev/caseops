@@ -111,6 +111,7 @@ async function retirementJourney(page: Page, request: APIRequestContext, rt: Tes
     await expect(error).toHaveText("Give a reason of at least 10 characters.");
     await expect(reason).toHaveAttribute("aria-invalid", "true");
     await expect(reason).toHaveAttribute("aria-describedby", new RegExp(await error.getAttribute("id") ?? "missing-id"));
+    await expectOnScreen(error, "The field error is on screen without another scroll");
     expect(retireRequests).toEqual([]);
 
     // A real reason retires it.

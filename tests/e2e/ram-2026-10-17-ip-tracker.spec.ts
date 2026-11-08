@@ -81,6 +81,25 @@ for (const width of [1280, 393]) {
       test.setTimeout(240_000);
       const workspace = await prepareIp15Workspace(page, request, baseURL, width);
       const fixture = await sourceFixture(workspace, request);
+      // B4-ADJ-42: the same filters without the search reach every retained source in the
+      // tenant. test-legal keeps every run's fixtures, and filtering the unanalyzed fact
+      // columns planned a per-docket rescan that grew toward the 60 s statement timeout.
+      const unnarrowed = { application_date_from: "2020-01-01", application_date_to: "2020-12-31" };
+      const reads: Array<[string, string, Record<string, string | number>]> = [
+        ["tracker", "/api/ip/portfolio", { ...unnarrowed, renewal_tracker_state: "missing", limit: 50 }],
+        ["tracker-families", "/api/ip/portfolio/families", { ...unnarrowed, renewal_tracker_state: "missing" }],
+        ["dates", "/api/ip/portfolio", { ...unnarrowed, limit: 50 }],
+      ];
+      const readMs: Record<string, number> = {};
+      for (const [label, path, params] of reads) {
+        const started = performance.now();
+        const response = await request.get(`${workspace.api.origin}${path}`, { headers: workspace.headers, params, timeout: 60_000 });
+        readMs[label] = Math.round(performance.now() - started);
+        const body = await json<{ counts?: { total: number } }>(response);
+        if (body.counts) expect(body.counts.total).toBeGreaterThanOrEqual(fixture.missingIds.length);
+      }
+      await test.info().attach("b4-adj-42-unnarrowed-read-ms", { body: JSON.stringify(readMs), contentType: "application/json" });
+      expect(Math.max(...Object.values(readMs)), JSON.stringify(readMs)).toBeLessThan(15_000);
       await page.goto(`${workspace.web.origin}/app/ip/portfolio`);
       const columns = page.getByRole("button", { name: "Choose portfolio columns", exact: true });
       await columns.click();

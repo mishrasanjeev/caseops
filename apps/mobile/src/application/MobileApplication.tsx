@@ -33,7 +33,7 @@ import type {
 import { createMatterFilesApi } from "../files/api";
 import { attachmentViewerSource } from "../viewer/contracts";
 import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
-import { PrivateDocumentViewer } from "../viewer/PrivateDocumentViewer";
+import type { PrivateDocumentViewerProps } from "../viewer/PrivateDocumentViewer";
 import { useResource } from "./useResource";
 
 import type {
@@ -651,7 +651,7 @@ function ApplicationContent({
               locator={route.locator}
             />
           ) : route.type === "viewer" ? (
-            <PrivateDocumentViewer
+            <PrivateViewerRoute
               source={route.source}
               ports={viewerPorts}
               onClose={pop}
@@ -723,6 +723,58 @@ function ApplicationContent({
         ) : null}
       </View>
     </SafeAreaView>
+  );
+}
+
+type PrivateViewerModule = typeof import("../viewer/PrivateDocumentViewer");
+let privateViewer: { module: PrivateViewerModule } | { failed: true } | null =
+  null;
+
+// Metro bundles the renderer and PDF assets without evaluating them at launch.
+// A module that fails to initialise stays failed until the app restarts, so
+// the first failure is kept and the route renders a way back instead of
+// throwing during render.
+function loadPrivateViewer(): PrivateViewerModule | null {
+  if (!privateViewer)
+    try {
+      privateViewer = {
+        module:
+          require("../viewer/PrivateDocumentViewer") as PrivateViewerModule,
+      };
+    } catch (error) {
+      privateViewer = { failed: true };
+      // Observable without exposing document data: the module, not a source.
+      console.warn(
+        JSON.stringify({
+          event: "private_viewer_unavailable",
+          error: error instanceof Error ? error.name : typeof error,
+        }),
+      );
+    }
+  return "module" in privateViewer ? privateViewer.module : null;
+}
+
+function PrivateViewerRoute(props: PrivateDocumentViewerProps) {
+  const viewer = loadPrivateViewer();
+  if (viewer) return <viewer.PrivateDocumentViewer {...props} />;
+  return (
+    <View
+      testID="private-viewer-unavailable"
+      style={[styles.content, { flex: 1, justifyContent: "center" }]}
+    >
+      <Text accessibilityRole="alert" style={styles.heading}>
+        Document reader unavailable
+      </Text>
+      <Text style={styles.body}>
+        The document reader could not start. Restart CaseOps, then open the
+        document again.
+      </Text>
+      <NativeButton
+        label="Close"
+        testID="private-viewer-close"
+        onPress={props.onClose}
+      />
+    </View>
   );
 }
 

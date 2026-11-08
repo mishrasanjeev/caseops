@@ -32,6 +32,8 @@ import {
 } from "../domain/record-links.ts";
 import { LOCAL_NATIVE_LINK_POLICY } from "../../../web/lib/native-link-policy.cjs";
 import { runPrivateFileCleanup } from "../files/private-imports.ts";
+import { createWelcomeBrowserLease } from "./welcome-browser-lease.ts";
+import { PRIVACY_POLICY_OPEN_TIMEOUT_MS } from "../domain/privacy-policy.ts";
 
 const installationId = "00000000-0000-4000-8000-000000000001";
 const nonce = "00000000-0000-4000-8000-000000000002";
@@ -102,12 +104,16 @@ function deferred<T>() {
 // Execute the real App, local gate and picker. Only React/native hosts, SDK IO
 // and the session endpoint are doubles. Real NativeSession is composed in the
 // adjacent tests; this proves root callback ownership, not native acceptance.
-function host(cold = false, appVersion: unknown = "1.10.0") {
+function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   const events: string[] = [];
+  const browserOpens: { url: string; opened: ReturnType<typeof deferred> }[] =
+    [];
   let restoreIdentity = original,
     restoreBinding = originalBinding;
-  let serverIdentity: SessionIdentity | null = cold ? null : original;
-  let serverBinding: LocalSessionBinding | null = cold ? null : originalBinding;
+  let serverIdentity: SessionIdentity | null =
+    cold || signedOut ? null : original;
+  let serverBinding: LocalSessionBinding | null =
+    cold || signedOut ? null : originalBinding;
   let policy: unknown = cold ? structuredClone(enabled) : null;
   let marker: string | null = cold ? localUnlockMarker(enabled) : null;
   let markerRead: (() => Promise<string | null>) | null = null;
@@ -147,6 +153,7 @@ function host(cold = false, appVersion: unknown = "1.10.0") {
     }
     async restore() {
       events.push("restore-credential");
+      if (signedOut) return null;
       serverIdentity = restoreIdentity;
       serverBinding = restoreBinding;
       return structuredClone(restoreIdentity);
@@ -262,6 +269,12 @@ function host(cold = false, appVersion: unknown = "1.10.0") {
       },
       Platform: { OS: "ios", Version: "26.5" },
       Linking: {
+        openURL(url: string) {
+          events.push("browser-open");
+          const opened = deferred();
+          browserOpens.push({ url, opened });
+          return opened.promise;
+        },
         getInitialURL() {
           events.push("record-initial-read");
           return initialUrl;
@@ -296,7 +309,10 @@ function host(cold = false, appVersion: unknown = "1.10.0") {
         },
       },
     },
-    "expo-crypto": {},
+    "expo-crypto": {
+      // Holds an admitted sign-in in flight before it reaches the browser.
+      getRandomBytesAsync: () => new Promise(() => {}),
+    },
     "expo-web-browser": {
       maybeCompleteAuthSession() {},
       openAuthSessionAsync() {
@@ -346,7 +362,13 @@ function host(cold = false, appVersion: unknown = "1.10.0") {
     },
     "./src/auth/local-unlock": { createLocalUnlock, sameServerBinding },
     "./src/auth/biometric-store": { createBiometricStore: () => store },
-    "./src/auth/handoff": {},
+    "./src/auth/handoff": {
+      authSessionCallback() {
+        events.push("sign-in-admitted");
+        return { redirectUri: "caseops://auth", options: {} };
+      },
+    },
+    "./src/auth/welcome-browser-lease": { createWelcomeBrowserLease },
     "../web/lib/native-link-policy.cjs": {
       DISABLED_NATIVE_LINK_POLICY: { mode: "disabled" },
     },
@@ -421,6 +443,7 @@ function host(cold = false, appVersion: unknown = "1.10.0") {
   };
   return {
     events,
+    browserOpens,
     render,
     async flush() {
       await new Promise((resolve) => setImmediate(resolve));
@@ -980,5 +1003,118 @@ test("actual App late initial URL rejection cannot add an obsolete error after a
     f.props("PrivateApplication").identity.user.id,
     original.user.id,
   );
+  f.close();
+});
+
+const welcomePolicyUrl = "https://caseops.ai/privacy-policy";
+const signInsAdmitted = (f: ReturnType<typeof host>) =>
+  f.events.filter((x) => x === "sign-in-admitted").length;
+
+test("actual App welcome privacy launch and sign-in each refuse the other while one is in flight", async () => {
+  const f = host(false, "1.10.0", true);
+  f.render();
+  await f.flush();
+  const welcome = f.props("SignInPanel");
+  assert.equal(welcome.privacyOpening, false);
+  assert.equal(welcome.canOpenBrowser(), true);
+  const launch = welcome.openPrivacyPolicy(welcomePolicyUrl);
+  const repeated = welcome.openPrivacyPolicy(welcomePolicyUrl);
+  assert.equal(f.browserOpens.length, 1);
+  await assert.rejects(repeated, /Browser action unavailable/);
+  welcome.onContinue();
+  f.render();
+  const opening = f.props("SignInPanel");
+  assert.equal(opening.privacyOpening, true);
+  assert.equal(opening.canOpenBrowser(), false);
+  opening.onContinue();
+  assert.equal(signInsAdmitted(f), 0);
+  assert.deepEqual(
+    f.browserOpens.map(({ url }) => url),
+    [welcomePolicyUrl],
+  );
+
+  f.browserOpens[0].opened.resolve(undefined);
+  await launch;
+  f.render();
+  const ready = f.props("SignInPanel");
+  assert.equal(ready.privacyOpening, false);
+  ready.onContinue();
+  assert.equal(signInsAdmitted(f), 1);
+  f.render();
+  const duringSignIn = [
+    f.props("SignInPanel").openPrivacyPolicy(welcomePolicyUrl),
+    ready.openPrivacyPolicy(welcomePolicyUrl),
+  ];
+  assert.equal(f.browserOpens.length, 1);
+  for (const refused of duringSignIn)
+    await assert.rejects(refused, /Browser action unavailable/);
+  f.close();
+});
+
+test("actual App welcome browser lease ends at the privacy acknowledgement deadline and a late original settlement cannot end a newer launch", async (t) => {
+  const f = host(false, "1.10.0", true);
+  f.render();
+  await f.flush();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.after(() => t.mock.timers.reset());
+  const first = f.props("SignInPanel").openPrivacyPolicy(welcomePolicyUrl);
+  t.mock.timers.tick(PRIVACY_POLICY_OPEN_TIMEOUT_MS - 1);
+  f.render();
+  assert.equal(f.props("SignInPanel").privacyOpening, true);
+  f.props("SignInPanel").onContinue();
+  assert.equal(signInsAdmitted(f), 0);
+  t.mock.timers.tick(1);
+  f.render();
+  const released = f.props("SignInPanel");
+  assert.equal(released.privacyOpening, false);
+  assert.equal(released.canOpenBrowser(), true);
+
+  const second = released.openPrivacyPolicy(welcomePolicyUrl);
+  f.browserOpens[0].opened.resolve(undefined);
+  await first;
+  f.render();
+  assert.equal(f.props("SignInPanel").privacyOpening, true);
+  f.props("SignInPanel").onContinue();
+  assert.equal(signInsAdmitted(f), 0);
+
+  f.browserOpens[1].opened.resolve(undefined);
+  await second;
+  f.render();
+  assert.equal(f.props("SignInPanel").privacyOpening, false);
+  f.props("SignInPanel").onContinue();
+  assert.equal(signInsAdmitted(f), 1);
+  assert.equal(f.browserOpens.length, 2);
+  f.close();
+});
+
+test("actual App welcome browser lease ends on return from the background, not on a transient inactive state", async () => {
+  const f = host(false, "1.10.0", true);
+  f.render();
+  await f.flush();
+  const launch = f.props("SignInPanel").openPrivacyPolicy(welcomePolicyUrl);
+  f.appState("inactive");
+  f.appState("active");
+  await f.flush();
+  await f.flush();
+  assert.equal(f.props("SignInPanel").privacyOpening, true);
+  f.props("SignInPanel").onContinue();
+  assert.equal(signInsAdmitted(f), 0);
+
+  f.appState("inactive");
+  f.appState("background");
+  await f.flush();
+  assert.match(f.text(), /CaseOps locked/);
+  f.appState("active");
+  await f.flush();
+  await f.flush();
+  const returned = f.props("SignInPanel");
+  assert.equal(returned.privacyOpening, false);
+  returned.onContinue();
+  assert.equal(signInsAdmitted(f), 1);
+
+  f.browserOpens[0].opened.resolve(undefined);
+  await launch;
+  f.render();
+  assert.equal(f.browserOpens.length, 1);
   f.close();
 });

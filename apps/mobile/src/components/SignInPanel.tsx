@@ -1,48 +1,64 @@
-import { ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StyleSheet, Text, View } from "react-native";
 import { NativeButton, NativeProgress } from "./NativeControls";
+import { PrivacyPolicyLink } from "./PrivacyPolicyLink";
+import { WelcomeFrame } from "./WelcomeFrame";
 import { colors, styles } from "./theme";
 export type SignInPanelProps = {
   busy: boolean;
   error: string | null;
   onContinue: () => void;
+  privacyOpening: boolean;
+  canOpenBrowser: () => boolean;
+  openPrivacyPolicy: (url: string) => Promise<unknown>;
 };
-export function SignInPanel({ busy, error, onContinue }: SignInPanelProps) {
+export function SignInPanel({
+  busy,
+  error,
+  onContinue,
+  privacyOpening,
+  canOpenBrowser,
+  openPrivacyPolicy,
+}: SignInPanelProps) {
   return (
-    <SafeAreaView
-      testID={busy ? "session-loading" : "signed-out"}
-      style={styles.fill}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { flexGrow: 1, justifyContent: "center", gap: 24 },
-        ]}
-      >
-        <View style={{ gap: 8 }}>
-          <Text style={[styles.title, { fontSize: 32, lineHeight: 40 }]}>
-            CaseOps
-          </Text>
-          <Text style={styles.heading}>Your legal workspace</Text>
-          <Text style={styles.muted}>Sign in securely to continue.</Text>
-        </View>
+    <WelcomeFrame testID={busy ? "session-loading" : "signed-out"}>
+      <View style={welcome.group}>
+        <Text accessibilityRole="header" style={styles.title}>
+          Your legal workspace
+        </Text>
+        <Text style={styles.body}>
+          Find your matters, upcoming hearings and assigned work in one place.
+        </Text>
+      </View>
+      <View style={welcome.group}>
+        <Text style={styles.muted}>Sign in securely to continue.</Text>
         {error ? (
-          <Text
-            accessibilityRole="alert"
-            style={[styles.body, { color: colors.danger }]}
-          >
+          <Text accessibilityRole="alert" style={[styles.body, welcome.error]}>
             {error}
           </Text>
         ) : null}
-        {busy ? <NativeProgress /> : null}
         <NativeButton
           label={busy ? "Opening secure sign-in" : "Continue to sign in"}
-          onPress={onContinue}
-          disabled={busy}
+          onPress={() => {
+            if (!busy && canOpenBrowser()) onContinue();
+          }}
+          disabled={busy || privacyOpening}
           testID="sign-in"
         />
-      </ScrollView>
-    </SafeAreaView>
+        {busy ? <NativeProgress /> : null}
+        <PrivacyPolicyLink
+          disabled={busy}
+          canOpen={canOpenBrowser}
+          openUrl={openPrivacyPolicy}
+          hideUnconfigured
+        />
+      </View>
+    </WelcomeFrame>
   );
 }
+
+const welcome = StyleSheet.create({
+  group: { gap: 12 },
+  error: { color: colors.danger },
+});
+
 export default SignInPanel;

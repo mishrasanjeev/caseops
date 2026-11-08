@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Archive, Download, FileText, Link2, Upload } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
@@ -960,6 +960,7 @@ function RetireDocumentPanel({
   const reasonHelpId = `${reasonId}-help`;
   const reasonErrorId = `${reasonId}-error`;
   const blockedNoteId = `${panelId}-blocked`;
+  const reasonGroup = useRef<HTMLDivElement>(null);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const preview = useQuery({
@@ -1000,6 +1001,17 @@ function RetireDocumentPanel({
   const data = preview.data;
   const blockers = data?.blockers ?? [];
   const blocked = !!data && (!data.may_retire || blockers.length > 0 || data.already_retired);
+  const reasonReady = !!data && !preview.isError && !blocked;
+  useEffect(() => {
+    if (!reasonReady || !reasonGroup.current) return;
+    const group = reasonGroup.current;
+    const { activeElement, body } = group.ownerDocument;
+    // The preview can finish after the user moves on. Do not pull them back.
+    if (activeElement && activeElement !== body
+      && activeElement.getAttribute("aria-controls") !== panelId
+      && !group.closest("section")?.contains(activeElement)) return;
+    group.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [panelId, reasonError, reasonReady]);
   return (
     <section
       id={panelId}
@@ -1056,7 +1068,7 @@ function RetireDocumentPanel({
           </ul>
         </div>
       ) : (
-        <div className="flex min-w-0 flex-col gap-1">
+        <div ref={reasonGroup} className="flex min-w-0 scroll-my-4 flex-col gap-1">
           <Label htmlFor={reasonId}>Reason for retiring</Label>
           <Textarea
             id={reasonId}

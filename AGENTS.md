@@ -4051,3 +4051,12 @@ requirements when using the fallback.
 - Tracked DOCX text belongs to its nearest paragraph and revision. Test a
   nested deletion inside an inserted table-cell text box and preserve the
   original downloadable bytes and authors without duplicating text.
+- An inline disclosure can be present in the DOM and still land below the
+  mobile viewport after asynchronous admission. Reveal the resulting field
+  and inline validation error without opening the touch keyboard or stealing
+  focus. Assert viewport intersection before any test click or fill that
+  would scroll to the field automatically.
+- During a long local release gate, check both remote PR head and canonical
+  main at native group boundaries. A healthy checkout can keep testing a
+  superseded tree for hours. Preserve its partial evidence and resolve any
+  concurrent branch work without force-pushing; never transfer a pass.

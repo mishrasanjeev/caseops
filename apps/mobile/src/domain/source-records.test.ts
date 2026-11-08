@@ -472,13 +472,23 @@ test("source references cannot relabel IP/contracts as Matters, collide across k
 
 test("continuation history detects non-adjacent cycles and remains bounded with an explicit first-page recovery", () => {
   assert.deepEqual(advanceSourcePage([null, "a"], "b"), [null, "a", "b"]);
+  // A window that has slid past the first page no longer starts with null,
+  // but the first-page null can never appear later in the window.
+  assert.deepEqual(advanceSourcePage(["a", "b"], "c"), ["a", "b", "c"]);
+  assert.throws(() => advanceSourcePage([null, "a", null], "b"), ContractError);
+  assert.throws(() => advanceSourcePage(["a", null], "b"), ContractError);
   assert.throws(() => advanceSourcePage([null, "a", "b"], "a"), ContractError);
+  const full = [null, ...Array.from({ length: 99 }, (_, i) => `cursor-${i}`)];
+  const advanced = advanceSourcePage(full, "next");
+  assert.deepEqual(advanced, [...full.slice(1), "next"]);
+  assert.equal(advanced.length, 100);
+  assert.throws(() => advanceSourcePage(advanced, "cursor-0"), ContractError);
+  assert.deepEqual(advanceSourcePage(advanced, "later"), [
+    ...advanced.slice(1),
+    "later",
+  ]);
   assert.throws(
-    () =>
-      advanceSourcePage(
-        [null, ...Array.from({ length: 99 }, (_, i) => `cursor-${i}`)],
-        "next",
-      ),
+    () => advanceSourcePage([...full, "extra"], "next"),
     ContractError,
   );
   assert.throws(() => advanceSourcePage([], "next"), ContractError);
@@ -957,5 +967,458 @@ test("Calendar source callback composes into the originating tab stack and gener
   assert.match(
     screen.replace(/\s+/g, " "),
     /no dates are inferred from the Calendar event/,
+  );
+});
+
+// Execute the list's actual TSX and resource hook, with synthetic native
+// primitives and the real repository decoder. This is source-level evidence.
+function sourceListHarness(respond: (path: string) => unknown) {
+  type Node = { type: unknown; props: Record<string, unknown>; key?: string };
+  type Instance = { hooks: unknown[]; index: number };
+  type Effect = { deps?: unknown[]; cleanup?: () => void };
+  const instances = new Map<string, Instance>();
+  const calls: { path: string; signal: AbortSignal }[] = [];
+  const opened: unknown[][] = [];
+  const kinds: string[] = [];
+  let current: Instance;
+  let kind: "contract" | "ip_docket" = "contract";
+  let active = true;
+  let nodes: Node[] = [];
+  let visible: string[] = [];
+  let seen = new Set<string>();
+  // Like React, only a changed state value schedules another commit.
+  let scheduled = false;
+  const layout: (() => void)[] = [];
+  const effects: (() => void)[] = [];
+
+  function effect(queue: (() => void)[]) {
+    return (setup: () => (() => void) | undefined, deps?: unknown[]) => {
+      const instance = current;
+      const slot = instance.index++;
+      const old = instance.hooks[slot] as Effect | undefined;
+      if (
+        deps &&
+        old?.deps?.length === deps.length &&
+        deps.every((value, index) => Object.is(value, old.deps?.[index]))
+      )
+        return;
+      const next: Effect = { deps };
+      instance.hooks[slot] = next;
+      queue.push(() => {
+        old?.cleanup?.();
+        next.cleanup = setup();
+      });
+    };
+  }
+  const react = {
+    useState<T>(initial: T) {
+      const instance = current;
+      const slot = instance.index++;
+      if (!(slot in instance.hooks)) instance.hooks[slot] = initial;
+      return [
+        instance.hooks[slot] as T,
+        (value: T | ((previous: T) => T)) => {
+          const previous = instance.hooks[slot] as T;
+          instance.hooks[slot] =
+            typeof value === "function"
+              ? (value as (previous: T) => T)(previous)
+              : value;
+          if (!Object.is(previous, instance.hooks[slot])) scheduled = true;
+        },
+      ];
+    },
+    useRef<T>(value: T) {
+      return (current.hooks[current.index++] ??= { current: value });
+    },
+    useCallback<T>(value: T, deps: unknown[]) {
+      const slot = current.index++;
+      const old = current.hooks[slot] as
+        | { deps: unknown[]; value: T }
+        | undefined;
+      if (
+        old?.deps.length === deps.length &&
+        deps.every((item, index) => Object.is(item, old.deps[index]))
+      )
+        return old.value;
+      current.hooks[slot] = { deps, value };
+      return value;
+    },
+    useEffect: effect(effects),
+    useLayoutEffect: effect(layout),
+  };
+  const jsx = (
+    type: unknown,
+    props: Record<string, unknown>,
+    key?: string,
+  ): Node => ({ type, props, key });
+  const load = (relative: string, bindings: Record<string, unknown>) => {
+    const { outputText } = ts.transpileModule(
+      readFileSync(new URL(relative, import.meta.url), "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+          jsx: ts.JsxEmit.ReactJSX,
+        },
+      },
+    );
+    const module = { exports: {} as Record<string, unknown> };
+    new Function("require", "module", "exports", outputText)(
+      (name: string) => {
+        assert.ok(Object.hasOwn(bindings, name), name);
+        return bindings[name];
+      },
+      module,
+      module.exports,
+    );
+    return module.exports;
+  };
+  const screen = load("../application/screens/SourceRecordsScreen.tsx", {
+    react,
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "Fragment" },
+    "react-native": { ScrollView: "ScrollView", Text: "Text", View: "View" },
+    "../../components/Content": { Fact: "Fact", RecordRow: "RecordRow" },
+    "../../components/ContractObligations": {
+      ContractObligations: "Obligations",
+    },
+    "../../components/NativeControls": {
+      NativeButton: "NativeButton",
+      NativeProgress: "NativeProgress",
+      NativeSegments: "NativeSegments",
+    },
+    "../../components/theme": { styles: {} },
+    "../../domain/contracts": { displayDay },
+    "../../domain/repository": { readFailure },
+    "../../domain/source-records": {
+      advanceSourcePage,
+      formatSourceValue,
+      SOURCE_GAPS,
+      sourceDateStateLabel,
+    },
+    "../useResource": load("../application/useResource.ts", {
+      react,
+      "../domain/repository": { readFailure },
+    }),
+  }).SourceRecordsScreen;
+  const repository = createSourceRecordsRepository(
+    async <T>(path: string, init?: RequestInit) => {
+      assert.equal(init?.method, undefined);
+      assert.ok(init?.signal);
+      calls.push({ path, signal: init.signal });
+      return respond(path) as T;
+    },
+    company,
+    ["ip:read"],
+  );
+  function visit(value: unknown, path: string) {
+    if (Array.isArray(value))
+      value.forEach((item, index) => visit(item, path + "." + index));
+    else if (typeof value === "string" || typeof value === "number")
+      visible.push(String(value));
+    else if (value && typeof value === "object") {
+      const node = value as Node;
+      if (typeof node.type === "function") {
+        const key = path + ":" + node.type.name + ":" + (node.key ?? "");
+        let instance = instances.get(key);
+        if (!instance) {
+          instance = { hooks: [], index: 0 };
+          instances.set(key, instance);
+        }
+        seen.add(key);
+        current = instance;
+        current.index = 0;
+        visit(node.type(node.props), key);
+      } else {
+        nodes.push(node);
+        visit(node.props.children, path + "." + String(node.type));
+      }
+    }
+  }
+  const retire = (instance: Instance) => {
+    for (const value of instance.hooks)
+      (value as Effect | null | undefined)?.cleanup?.();
+  };
+  function render() {
+    scheduled = false;
+    nodes = [];
+    visible = [];
+    seen = new Set();
+    visit(
+      jsx(screen, {
+        repository,
+        active,
+        kind,
+        onKindChange(value: typeof kind) {
+          kinds.push(value);
+          kind = value;
+        },
+        openSource(...args: unknown[]) {
+          opened.push(args);
+        },
+      }),
+      "root",
+    );
+    for (const [key, instance] of instances) {
+      if (seen.has(key)) continue;
+      retire(instance);
+      instances.delete(key);
+    }
+    layout.splice(0).forEach((setup) => setup());
+    effects.splice(0).forEach((setup) => setup());
+  }
+  return {
+    render,
+    async settle() {
+      render();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      render();
+    },
+    control(testID: string) {
+      const matches = nodes.filter((node) => node.props.testID === testID);
+      assert.equal(matches.length, 1, testID);
+      return matches[0].props.onPress as () => void;
+    },
+    choose() {
+      const picker = nodes.find((node) => node.type === "NativeSegments");
+      assert.ok(picker);
+      return picker.props.onChange as (value: typeof kind) => void;
+    },
+    setActive(value: boolean) {
+      active = value;
+    },
+    scheduled: () => scheduled,
+    text: () => visible.join(" "),
+    has: (testID: string) => nodes.some((node) => node.props.testID === testID),
+    calls,
+    opened,
+    kinds,
+    unmount() {
+      for (const instance of instances.values()) retire(instance);
+      instances.clear();
+    },
+  };
+}
+
+function readSourceCursor(path: string) {
+  return new URL(path, "https://caseops.invalid").searchParams.get("cursor");
+}
+
+function numberedContractPage(path: string) {
+  const cursor = readSourceCursor(path);
+  const page = cursor === null ? 1 : Number(cursor);
+  return {
+    company_id: company,
+    contracts: [
+      contract({ id: `contract-${page}`, title: `Contract ${page}` }),
+    ],
+    next_cursor: page === 3 ? null : String(page + 1),
+  };
+}
+
+test("a retained Sources Next cannot rewind a later contract page", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  const firstNext = app.control("source-next-page");
+  firstNext();
+  firstNext();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +3/);
+  firstNext();
+  await app.settle();
+  assert.match(app.text(), /Page +3/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    [
+      "/api/contracts/?limit=25",
+      "/api/contracts/?limit=25&cursor=2",
+      "/api/contracts/?limit=25&cursor=3",
+    ],
+  );
+});
+
+test("Sources refresh retires the displayed rows before a permission refusal", async (t) => {
+  let denied = false;
+  const app = sourceListHarness((path) => {
+    if (denied)
+      throw Object.assign(new Error("Synthetic denied"), { status: 403 });
+    return numberedContractPage(path);
+  });
+  t.after(app.unmount);
+  await app.settle();
+  const retainedRow = app.control("source-row-contract-contract-1");
+  const retainedNext = app.control("source-next-page");
+  denied = true;
+  app.control("source-reload")();
+  retainedRow();
+  retainedNext();
+  await app.settle();
+  retainedRow();
+  assert.deepEqual(app.opened, []);
+  assert.doesNotMatch(app.text(), /Page +[12]/);
+  assert.equal(app.has("source-row-contract-contract-1"), false);
+  assert.match(app.text(), /Not available to this account/);
+  assert.equal(app.calls[0].signal.aborted, true);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    ["/api/contracts/?limit=25", "/api/contracts/?limit=25"],
+  );
+});
+
+test("Sources retires held type and IP row controls and opens the exact admitted source once", async (t) => {
+  const app = sourceListHarness((path) => {
+    if (path === "/api/ip/readiness") return readiness();
+    if (!path.startsWith("/api/ip/portfolio?"))
+      return numberedContractPage(path);
+    const cursor = readSourceCursor(path);
+    return cursor === null
+      ? ipPage(
+          [ip({ docket_id: "docket-1", application_id: "application-1" })],
+          "opaque/+=",
+        )
+      : ipPage([
+          ip({ docket_id: "docket-2", application_id: "application-2" }),
+        ]);
+  });
+  t.after(app.unmount);
+  await app.settle();
+  const firstKind = app.choose();
+  const retiredContract = app.control("source-row-contract-contract-1");
+  const retiredNext = app.control("source-next-page");
+  const retiredReload = app.control("source-reload");
+  firstKind("ip_docket");
+  firstKind("ip_docket");
+  retiredContract();
+  // Held list actions only touch the contract list this commit unmounts.
+  retiredNext();
+  retiredReload();
+  await app.settle();
+  const next = app.control("source-next-page");
+  next();
+  next();
+  await app.settle();
+  firstKind("contract");
+  const open = app.control("source-row-ip_docket-docket-2-application-2");
+  open();
+  open();
+  app.setActive(false);
+  await app.settle();
+  open();
+  assert.deepEqual(app.kinds, ["ip_docket"]);
+  assert.deepEqual(app.opened, [
+    [
+      { kind: "ip_docket", id: "docket-2" },
+      {
+        kind: "ip_docket",
+        docketId: "docket-2",
+        applicationId: "application-2",
+        cursor: "opaque/+=",
+      },
+    ],
+  ]);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    [
+      "/api/contracts/?limit=25",
+      "/api/ip/readiness",
+      "/api/ip/portfolio?limit=25",
+      "/api/ip/readiness",
+      "/api/ip/portfolio?limit=25&cursor=opaque%2F%2B%3D",
+    ],
+  );
+});
+
+test("a Sources action that changes nothing still commits, so its fresh controls are admitted", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  assert.equal(app.scheduled(), false);
+  // The harness parent records the open without navigating, like a declined
+  // navigation: nothing else would re-render the screen.
+  const retained = app.control("source-row-contract-contract-1");
+  retained();
+  retained();
+  assert.equal(app.opened.length, 1);
+  assert.equal(app.scheduled(), true);
+  app.render();
+  app.control("source-row-contract-contract-1")();
+  retained();
+  assert.equal(app.opened.length, 2);
+  app.render();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    ["/api/contracts/?limit=25", "/api/contracts/?limit=25&cursor=2"],
+  );
+});
+
+test("Sources reaches and opens the exact older application beyond 100 pages", async (t) => {
+  const pageCount = 101;
+  const pageSize = 25;
+  const cursorFor = (page: number) => `page-${page}/+=`;
+  const app = sourceListHarness((path) => {
+    if (path === "/api/ip/readiness") return readiness();
+    if (path.startsWith("/api/contracts/?")) return numberedContractPage(path);
+    const url = new URL(path, "https://caseops.invalid");
+    assert.equal(url.pathname, "/api/ip/portfolio");
+    assert.equal(url.searchParams.get("limit"), String(pageSize));
+    const cursor = readSourceCursor(path);
+    const page =
+      cursor === null ? 1 : Number(/^page-(\d+)\/\+=$/.exec(cursor)?.[1]);
+    assert.ok(page >= 1 && page <= pageCount);
+    return ipPage(
+      Array.from({ length: pageSize }, (_, offset) => {
+        const n = (page - 1) * pageSize + offset + 1;
+        return ip({
+          docket_id: `docket-${n}`,
+          application_id: `application-${n}`,
+        });
+      }),
+      page < pageCount ? cursorFor(page + 1) : null,
+    );
+  });
+  t.after(app.unmount);
+  await app.settle();
+  app.choose()("ip_docket");
+  await app.settle();
+  for (let page = 1; page < pageCount; page++) {
+    assert.match(app.text(), new RegExp(`Page +${page}$`));
+    app.control("source-next-page")();
+    await app.settle();
+  }
+
+  assert.match(app.text(), /Page +101$/);
+  assert.equal(app.has("source-next-page"), false);
+  assert.equal(app.has("source-first-page"), true);
+  assert.equal(
+    app.has("source-row-ip_docket-docket-2500-application-2500"),
+    false,
+  );
+  app.control("source-row-ip_docket-docket-2525-application-2525")();
+  assert.deepEqual(app.opened, [
+    [
+      { kind: "ip_docket", id: "docket-2525" },
+      {
+        kind: "ip_docket",
+        docketId: "docket-2525",
+        applicationId: "application-2525",
+        cursor: cursorFor(pageCount),
+      },
+    ],
+  ]);
+  const expected = ["/api/contracts/?limit=25"];
+  for (let page = 1; page <= pageCount; page++) {
+    const query = new URLSearchParams({ limit: String(pageSize) });
+    if (page > 1) query.set("cursor", cursorFor(page));
+    expected.push("/api/ip/readiness", `/api/ip/portfolio?${query}`);
+  }
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    expected,
   );
 });
