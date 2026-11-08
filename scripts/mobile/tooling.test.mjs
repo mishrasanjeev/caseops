@@ -1753,7 +1753,7 @@ test('Firefox refuses to submit when a replaced field does not read back exactly
 });
 
 const firefoxEntryClockMocks = new WeakMap();
-function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure } = {}) {
+function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure, timeoutBeforeFinalPoll = false } = {}) {
   const recipe = validateFirefoxRecipe(firefoxRecipe(t, { entryLocators: { useAnotherAccount: { kind: 'label', value: 'Use another account' } } }));
   let clock = 0, polling = false, wrapperClicks = 0, swallowed = 0;
   const attempts = [], acknowledged = [], queries = [], waits = [], records = [];
@@ -1776,6 +1776,7 @@ function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = f
     waitUntil: async (callback, settings) => {
       const start = clock; waits.push({ start, ...settings });
       for (;;) {
+        if (timeoutBeforeFinalPoll && clock - start >= settings.timeout) throw Error(settings.timeoutMsg);
         polling = true;
         try { if (await callback()) return; } catch { swallowed++; }
         finally { polling = false; }
@@ -1808,6 +1809,66 @@ test('Firefox acknowledged entry lingering while the form loads waits without a 
   assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
   assert.equal(fake.elapsed(), 4500); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.swallowed(), 0);
   assert.ok(fake.waits[1].timeout <= 20000);
+});
+
+test('Firefox waits for transient duplicate login anchors after one acknowledged account switch', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (key === 'companySlug') return clock < 450 ? 2 : 1;
+    return Number(key === 'useAnotherAccount' && clock < 450);
+  });
+  await resolveFirefoxEntry(fake.context, fake.recipe);
+  assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0']);
+  assert.equal(fake.elapsed(), 450);
+  assert.equal(fake.wrapperClicks(), 0);
+  assert.equal(fake.swallowed(), 0);
+  assert.equal(fake.waits[1].timeout, 20000);
+});
+
+test('Firefox persistent duplicate anchors retain ambiguity at the original deadline after an account switch', async t => {
+  for (const timeoutBeforeFinalPoll of [false, true]) {
+    const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+      if (clock < 19500) return 0;
+      if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+      return key === 'companySlug' ? 2 : 0;
+    }, { timeoutBeforeFinalPoll });
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/);
+    assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0']);
+    assert.equal(fake.elapsed(), 20000);
+    assert.equal(fake.waits[1].timeout, 500);
+    assert.equal(fake.wrapperClicks(), 0);
+    assert.equal(fake.swallowed(), 0);
+  }
+});
+
+test('Firefox post-switch transport and conflicting form states remain terminal immediately', async t => {
+  const failure = Error('UNIT_POST_SWITCH_TRANSPORT_CLOSED');
+  const broken = firefoxEntryDouble(t, ({ key, acknowledged }) => {
+    if (acknowledged.length) throw failure;
+    return Number(key === 'useAnotherAccount');
+  });
+  await assert.rejects(resolveFirefoxEntry(broken.context, broken.recipe), error => error === failure);
+  assert.equal(broken.elapsed(), 0);
+  assert.equal(broken.attempts.length, 1);
+  assert.equal(broken.swallowed(), 0);
+  const conflicting = firefoxEntryDouble(t, ({ key, acknowledged }) => !acknowledged.length
+    ? Number(key === 'useAnotherAccount') : Number(['companySlug', 'signInLink'].includes(key)));
+  await assert.rejects(resolveFirefoxEntry(conflicting.context, conflicting.recipe), /AMBIGUOUS_FIREFOX_ENTRY_STATE/);
+  assert.equal(conflicting.elapsed(), 0);
+  assert.equal(conflicting.attempts.length, 1);
+  assert.equal(conflicting.swallowed(), 0);
+});
+
+test('Firefox duplicate anchors after a different acknowledged link remain terminal immediately', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, acknowledged }) => {
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (acknowledged.length === 1) return Number(key === 'signInLink');
+    return key === 'companySlug' ? 2 : 0;
+  });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/);
+  assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0', 'signInLink-original-0']);
+  assert.equal(fake.elapsed(), 0);
+  assert.equal(fake.swallowed(), 0);
 });
 
 test('Firefox unknown or disabled entry states exhaust one 20 second bound without credentials or gestures', async t => {

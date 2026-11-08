@@ -197,10 +197,11 @@ export async function resolveFirefoxEntry(context, recipe) {
 }
 async function resolveFirefoxEntryOnce(context, recipe) {
   const deadline = Date.now() + 20000, attempted = new Set();
+  let lastAcknowledgedEntry;
   browserStep(context, 'companySlug', 'wait');
   for (;;) {
     assert.ok(Date.now() < deadline, 'FIREFOX_ENTRY_NOT_READY');
-    let ready, terminal;
+    let ready, terminal, pendingAmbiguity;
     await context.driver.waitUntil(async () => {
       try {
         assert.equal(await context.driver.getCurrentPackage(), recipe.packageName, 'WRONG_SYSTEM_BROWSER_PACKAGE');
@@ -213,6 +214,7 @@ async function resolveFirefoxEntryOnce(context, recipe) {
             if (control) entries.push({ key, locator, control });
           }
         }
+        pendingAmbiguity = undefined;
         assert.ok(entries.length <= 1, 'AMBIGUOUS_FIREFOX_ENTRY_STATE');
         assert.ok(Date.now() <= deadline, 'FIREFOX_ENTRY_NOT_READY');
         // An acknowledged link may remain in accessibility while navigation
@@ -228,11 +230,20 @@ async function resolveFirefoxEntryOnce(context, recipe) {
         }
         return false;
       } catch (error) {
-        // WDIO waitUntil normally catches callback errors. Exit its polling
-        // loop, then preserve ambiguity/transport errors without retrying them.
+        // After an acknowledged account switch Firefox can expose duplicate
+        // controls while navigation settles. Keep polling without another click.
+        if (lastAcknowledgedEntry === 'useAnotherAccount' && Date.now() < deadline
+          && error?.code === 'ERR_ASSERTION' && error.message === 'AMBIGUOUS_VISIBLE_NATIVE_LOCATOR') {
+          pendingAmbiguity = error;
+          return false;
+        }
+        // Preserve other callback errors outside WDIO's polling loop.
         terminal = error; return true;
       }
-    }, { timeout: Math.max(1, deadline - Date.now()), interval: 150, timeoutMsg: 'FIREFOX_ENTRY_NOT_READY' });
+    }, { timeout: Math.max(1, deadline - Date.now()), interval: 150, timeoutMsg: 'FIREFOX_ENTRY_NOT_READY' }).catch(error => {
+      if (pendingAmbiguity && error?.message === 'FIREFOX_ENTRY_NOT_READY') throw pendingAmbiguity;
+      throw error;
+    });
     if (terminal) throw terminal;
     assert.ok(ready && Date.now() <= deadline, 'FIREFOX_ENTRY_NOT_READY');
     if (ready.form) return;
@@ -240,6 +251,7 @@ async function resolveFirefoxEntryOnce(context, recipe) {
     attempted.add(ready.key);
     browserStep(context, ready.key, 'click');
     await dispatchNativeClick(context, ready.control, ready.locator.kind, ready.locator.value);
+    lastAcknowledgedEntry = ready.key;
   }
 }
 
