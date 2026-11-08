@@ -981,6 +981,8 @@ function sourceListHarness(respond: (path: string) => unknown) {
   let nodes: Node[] = [];
   let visible: string[] = [];
   let seen = new Set<string>();
+  // Like React, only a changed state value schedules another commit.
+  let scheduled = false;
   const layout: (() => void)[] = [];
   const effects: (() => void)[] = [];
 
@@ -1011,10 +1013,12 @@ function sourceListHarness(respond: (path: string) => unknown) {
       return [
         instance.hooks[slot] as T,
         (value: T | ((previous: T) => T)) => {
+          const previous = instance.hooks[slot] as T;
           instance.hooks[slot] =
             typeof value === "function"
-              ? (value as (previous: T) => T)(instance.hooks[slot] as T)
+              ? (value as (previous: T) => T)(previous)
               : value;
+          if (!Object.is(previous, instance.hooks[slot])) scheduled = true;
         },
       ];
     },
@@ -1130,6 +1134,7 @@ function sourceListHarness(respond: (path: string) => unknown) {
       (value as Effect | null | undefined)?.cleanup?.();
   };
   function render() {
+    scheduled = false;
     nodes = [];
     visible = [];
     seen = new Set();
@@ -1176,6 +1181,7 @@ function sourceListHarness(respond: (path: string) => unknown) {
     setActive(value: boolean) {
       active = value;
     },
+    scheduled: () => scheduled,
     text: () => visible.join(" "),
     has: (testID: string) => nodes.some((node) => node.props.testID === testID),
     calls,
@@ -1312,6 +1318,32 @@ test("Sources retires held type and IP row controls and opens the exact admitted
       "/api/ip/readiness",
       "/api/ip/portfolio?limit=25&cursor=opaque%2F%2B%3D",
     ],
+  );
+});
+
+test("a Sources action that changes nothing still commits, so its fresh controls are admitted", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  assert.equal(app.scheduled(), false);
+  // The harness parent records the open without navigating, like a declined
+  // navigation: nothing else would re-render the screen.
+  const retained = app.control("source-row-contract-contract-1");
+  retained();
+  retained();
+  assert.equal(app.opened.length, 1);
+  assert.equal(app.scheduled(), true);
+  app.render();
+  app.control("source-row-contract-contract-1")();
+  retained();
+  assert.equal(app.opened.length, 2);
+  app.render();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    ["/api/contracts/?limit=25", "/api/contracts/?limit=25&cursor=2"],
   );
 });
 

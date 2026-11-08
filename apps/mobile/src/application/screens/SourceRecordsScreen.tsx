@@ -41,6 +41,7 @@ export type SourceRecordsScreenProps = {
 
 function useSourceInteraction(active: boolean) {
   const committed = useRef<object | null>(null);
+  const [, rearm] = useState(0);
   const interaction = {};
   useLayoutEffect(() => {
     committed.current = active ? interaction : null;
@@ -55,6 +56,9 @@ function useSourceInteraction(active: boolean) {
       if (!available()) return;
       // Native callbacks can arrive twice before React commits navigation.
       committed.current = null;
+      // Commit again even when the action changes nothing (for example a
+      // declined navigation), so the next render admits its fresh controls.
+      rearm((value) => value + 1);
       action();
     },
   };
