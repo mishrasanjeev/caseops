@@ -24,16 +24,23 @@ if TYPE_CHECKING:
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _W14_NS = "{http://schemas.microsoft.com/office/word/2010/wordml}"
+_MC_NS = "{http://schemas.openxmlformats.org/markup-compatibility/2006}"
 _PARAGRAPH_TAG = f"{_W_NS}p"
+# Word 2010+ writes every text box twice inside ``mc:AlternateContent``: the
+# DrawingML ``mc:Choice`` and a VML ``mc:Fallback`` copy of the same
+# paragraphs. Reading the fallback would report each change twice.
+_ALTERNATE_FALLBACK_TAG = f"{_MC_NS}Fallback"
 _CHANGE_KINDS = {
     f"{_W_NS}ins": "insertion",
     f"{_W_NS}del": "deletion",
+    f"{_W_NS}moveFrom": "move_from",
+    f"{_W_NS}moveTo": "move_to",
     f"{_W_NS}rPrChange": "formatting",
 }
 _TEXT_TAGS = frozenset(f"{_W_NS}{name}" for name in ("t", "delText", "instrText"))
 _UNSUPPORTED_REVISION_TAGS = (
     *(f"{_W_NS}{name}" for name in (
-        "moveFrom", "moveTo", "pPrChange", "sectPrChange", "tblGridChange", "tblPrChange",
+        "pPrChange", "sectPrChange", "tblGridChange", "tblPrChange",
         "tblPrExChange", "tcPrChange", "trPrChange",
     )),
     f"{_W14_NS}conflictIns",
@@ -47,7 +54,8 @@ _REVISION_BOUNDARIES = _PARAGRAPH_BOUNDARIES.union(_CHANGE_KINDS)
 class RedlineChange:
     """One tracked change recovered from a Word redline file.
 
-    ``kind`` is one of: ``insertion``, ``deletion``, ``formatting``.
+    ``kind`` is one of: ``insertion``, ``deletion``, ``move_from`` (text
+    moved away from here), ``move_to`` (text moved here), ``formatting``.
     ``context_before`` / ``context_after`` capture ~120 chars of
     surrounding paragraph text so the UI can render the change
     inline with enough anchor to locate it visually.
@@ -69,6 +77,10 @@ class RedlineParseResult:
     changes: list[RedlineChange] = field(default_factory=list)
     paragraph_count: int = 0
     author_counts: dict[str, int] = field(default_factory=dict)
+    # Revisions this parser does not interpret (paragraph, section and table
+    # property changes, merge conflicts). Reported so a reviewer is never
+    # told a revised file is clean.
+    uninterpreted_revision_count: int = 0
 
     @property
     def insertion_count(self) -> int:
@@ -77,6 +89,10 @@ class RedlineParseResult:
     @property
     def deletion_count(self) -> int:
         return sum(1 for c in self.changes if c.kind == "deletion")
+
+    @property
+    def move_count(self) -> int:
+        return sum(1 for c in self.changes if c.kind in ("move_from", "move_to"))
 
 
 def parse_redline_docx(
@@ -114,7 +130,16 @@ def parse_redline_docx(
     change_index = 0
     # XML order includes nested tables once, without merged-cell aliases.
     body = document._element.body  # noqa: SLF001
-    for para_idx, element in enumerate(body.iter(_PARAGRAPH_TAG)):
+    result.uninterpreted_revision_count = sum(
+        1
+        for element in body.iter(*_UNSUPPORTED_REVISION_TAGS)
+        if not _in_alternate_fallback(element)
+    )
+    para_idx = -1
+    for element in body.iter(_PARAGRAPH_TAG):
+        if _in_alternate_fallback(element):
+            continue
+        para_idx += 1
         result.paragraph_count += 1
         # Keep paragraph indices stable even inside revisions we do not interpret.
         if next(element.iterancestors(*_UNSUPPORTED_REVISION_TAGS), None) is not None:
@@ -167,6 +192,10 @@ def parse_redline_docx(
                 result.author_counts[author] = result.author_counts.get(author, 0) + 1
 
     return result
+
+
+def _in_alternate_fallback(element: _Element) -> bool:
+    return next(element.iterancestors(_ALTERNATE_FALLBACK_TAG), None) is not None
 
 
 def _scoped_descendants(

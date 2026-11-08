@@ -649,6 +649,8 @@ async def parse_contract_attachment_redline(
         paragraph_count=result.paragraph_count,
         insertion_count=result.insertion_count,
         deletion_count=result.deletion_count,
+        move_count=result.move_count,
+        uninterpreted_revision_count=result.uninterpreted_revision_count,
         author_counts=result.author_counts,
         changes=[
             RedlineChangeRecord(

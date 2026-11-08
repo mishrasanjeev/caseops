@@ -6530,7 +6530,7 @@ export async function comparePlaybook(input: {
 
 export type ContractRedlineChange = {
   index: number;
-  kind: "insertion" | "deletion" | "formatting";
+  kind: "insertion" | "deletion" | "move_from" | "move_to" | "formatting";
   author: string | null;
   timestamp: string | null;
   text: string;
@@ -6548,6 +6548,8 @@ export async function fetchContractAttachmentRedline(input: {
   paragraph_count: number;
   insertion_count: number;
   deletion_count: number;
+  move_count: number;
+  uninterpreted_revision_count: number;
   author_counts: Record<string, number>;
   changes: ContractRedlineChange[];
 }> {

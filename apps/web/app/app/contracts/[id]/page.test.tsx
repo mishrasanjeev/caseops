@@ -10,12 +10,14 @@ const {
   extractByPartyMock,
   listTenantPlaybooksMock,
   tenantCompareMock,
+  redlineMock,
 } = vi.hoisted(() => ({
   fetchWorkspaceMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   extractByPartyMock: vi.fn(),
   listTenantPlaybooksMock: vi.fn(),
   tenantCompareMock: vi.fn(),
+  redlineMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -39,7 +41,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   comparePlaybook: vi.fn(),
   listTenantContractPlaybooks: listTenantPlaybooksMock,
   compareContractAgainstTenantPlaybook: tenantCompareMock,
-  fetchContractAttachmentRedline: vi.fn(),
+  fetchContractAttachmentRedline: redlineMock,
   updateContractMetadata: vi.fn(),
   createContractLegalReference: vi.fn(),
   updateContractLegalReference: vi.fn(),
@@ -76,6 +78,7 @@ describe("ContractDetailPage", () => {
     extractByPartyMock.mockReset();
     listTenantPlaybooksMock.mockReset();
     tenantCompareMock.mockReset();
+    redlineMock.mockReset();
     listTenantPlaybooksMock.mockResolvedValue([]);
     useCapabilityMock.mockImplementation(() => false);
     fetchWorkspaceMock.mockResolvedValue({
@@ -102,6 +105,84 @@ describe("ContractDetailPage", () => {
       legal_references: [],
       term_suggestions: [],
     });
+  });
+
+  async function openRedline(redline: Record<string, unknown>) {
+    const workspace = await fetchWorkspaceMock();
+    fetchWorkspaceMock.mockResolvedValue({
+      ...workspace,
+      attachments: [
+        {
+          id: "d1",
+          original_filename: "counterparty.docx",
+          content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          size_bytes: 4096,
+          processing_status: "indexed",
+          attachment_role: "primary_contract",
+          parent_attachment_id: null,
+          document_date: null,
+          notes: null,
+          created_at: "2026-05-01T00:00:00Z",
+        },
+      ],
+    });
+    redlineMock.mockResolvedValue({
+      attachment_id: "d1",
+      attachment_name: "counterparty.docx",
+      paragraph_count: 3,
+      insertion_count: 0,
+      deletion_count: 0,
+      move_count: 0,
+      uninterpreted_revision_count: 0,
+      author_counts: {},
+      changes: [],
+      ...redline,
+    });
+    const user = userEvent.setup();
+    render(withClient(<ContractDetailPage />));
+    await user.click(await screen.findByRole("tab", { name: /Attachments/ }));
+    await user.click(await screen.findByTestId("contract-attachment-redline-d1"));
+    await user.click(screen.getByRole("tab", { name: "Redline" }));
+    await waitFor(() =>
+      expect(redlineMock).toHaveBeenCalledWith({ contractId: "c1", attachmentId: "d1" }),
+    );
+  }
+
+  it("never calls a redline with only uninterpreted revisions clean", async () => {
+    await openRedline({ uninterpreted_revision_count: 2 });
+    expect(
+      (await screen.findByTestId("contract-redline-uninterpreted")).textContent,
+    ).toContain("2 tracked revisions are not shown here");
+    expect(screen.queryByText("Clean document")).not.toBeInTheDocument();
+  });
+
+  it("labels moved text and counts moves", async () => {
+    await openRedline({
+      move_count: 2,
+      author_counts: { Counsel: 2 },
+      changes: [
+        {
+          index: 1, kind: "move_from", author: "Counsel", timestamp: null,
+          text: "Indemnity survives termination.", paragraph_index: 0,
+          context_before: "", context_after: "",
+        },
+        {
+          index: 2, kind: "move_to", author: "Counsel", timestamp: null,
+          text: "Indemnity survives termination.", paragraph_index: 2,
+          context_before: "", context_after: "",
+        },
+      ],
+    });
+    expect(await screen.findByText(/Moved from · paragraph 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Moved to · paragraph 3/)).toBeInTheDocument();
+    expect(screen.getByText("moves", { exact: false }).textContent).toContain("2");
+    expect(screen.queryByText("Clean document")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("contract-redline-uninterpreted")).not.toBeInTheDocument();
+  });
+
+  it("shows a clean state only when nothing was found or skipped", async () => {
+    await openRedline({});
+    expect(await screen.findByText("Clean document")).toBeInTheDocument();
   });
 
   it("renders the contract header and the Clauses tab label after fetch", async () => {

@@ -544,9 +544,18 @@ class PlaybookComparisonResponse(BaseModel):
     model: str
 
 
+RedlineChangeKindLiteral = Literal[
+    "insertion",
+    "deletion",
+    "move_from",
+    "move_to",
+    "formatting",
+]
+
+
 class RedlineChangeRecord(BaseModel):
     index: int
-    kind: str
+    kind: RedlineChangeKindLiteral
     author: str | None
     timestamp: str | None
     text: str
@@ -561,6 +570,8 @@ class RedlineParseResponse(BaseModel):
     paragraph_count: int
     insertion_count: int
     deletion_count: int
+    move_count: int
+    uninterpreted_revision_count: int
     author_counts: dict[str, int]
     changes: list[RedlineChangeRecord]
 

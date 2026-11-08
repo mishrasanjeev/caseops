@@ -721,7 +721,78 @@ def test_parse_redline_docx_same_paragraph_tokens_belong_to_nearest_revision() -
     assert result.author_counts == {"Buyer": 1, "Seller": 1, "Style": 1, "Reviewer": 1}
 
 
-@pytest.mark.parametrize("tag", ["w:moveFrom", "w:moveTo", "w14:conflictIns", "w14:conflictDel"])
+def test_parse_redline_docx_word_text_box_fallback_is_not_read_twice() -> None:
+    # Word 2010+ writes a text box as a DrawingML choice plus a VML fallback
+    # copy of the same paragraphs; only one copy is the document.
+    txbx = (
+        '<w:txbxContent><w:p><w:ins w:id="9" w:author="Counsel" w:date="2026-04-18T12:00:00Z">'
+        "<w:r><w:t>Cap is 24 months</w:t></w:r></w:ins></w:p></w:txbxContent>"
+    )
+    source = _redline_docx_with_body(f"""
+    <w:p xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+      xmlns:v="urn:schemas-microsoft-com:vml"><w:r><mc:AlternateContent>
+      <mc:Choice Requires="wps"><w:drawing><wps:wsp><wps:txbx>{txbx}</wps:txbx></wps:wsp></w:drawing></mc:Choice>
+      <mc:Fallback><w:pict><v:shape><v:textbox>{txbx}</v:textbox></v:shape></w:pict></mc:Fallback>
+    </mc:AlternateContent></w:r></w:p>
+    <w:p><w:del w:id="10" w:author="Seller"><w:r><w:delText>Old cap</w:delText></w:r></w:del></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 1, "insertion", "Counsel", "Cap is 24 months"),
+        (2, 2, "deletion", "Seller", "Old cap"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
+    assert result.author_counts == {"Counsel": 1, "Seller": 1}
+    assert result.uninterpreted_revision_count == 0
+
+
+def test_parse_redline_docx_reports_moves_and_a_move_only_file_is_not_clean() -> None:
+    source = _redline_docx_with_body("""
+    <w:p><w:moveFromRangeStart w:id="1" w:name="move1" w:author="Counsel"/>
+      <w:moveFrom w:id="2" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t>Indemnity survives termination.</w:t></w:r></w:moveFrom>
+      <w:moveFromRangeEnd w:id="1"/></w:p>
+    <w:p><w:r><w:t>Governing law is India.</w:t></w:r></w:p>
+    <w:p><w:moveToRangeStart w:id="3" w:name="move1" w:author="Counsel"/>
+      <w:moveTo w:id="4" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t>Indemnity survives termination.</w:t></w:r>
+        <w:del w:id="5" w:author="Seller"><w:r><w:delText> for two years</w:delText></w:r></w:del></w:moveTo>
+      <w:moveToRangeEnd w:id="3"/></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "move_from", "Counsel", "Indemnity survives termination."),
+        (2, 2, "move_to", "Counsel", "Indemnity survives termination."),
+        (3, 2, "deletion", "Seller", "for two years"),
+    ]
+    assert result.changes[0].timestamp == "2026-04-18T12:00:00+00:00"
+    assert (result.move_count, result.insertion_count, result.deletion_count) == (2, 0, 1)
+    assert result.author_counts == {"Counsel": 2, "Seller": 1}
+    assert result.uninterpreted_revision_count == 0
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [
+        '<w:pPr><w:pPrChange w:id="1" w:author="Style"><w:pPr/></w:pPrChange></w:pPr>',
+        '<w:pPr><w:sectPr><w:sectPrChange w:id="1" w:author="Style"><w:sectPr/></w:sectPrChange></w:sectPr></w:pPr>',
+    ],
+    ids=["paragraph-properties", "section-properties"],
+)
+def test_parse_redline_docx_counts_revisions_it_does_not_interpret(revision: str) -> None:
+    result = parse_redline_docx(
+        source=_redline_docx_with_body(f"<w:p>{revision}<w:r><w:t>Body.</w:t></w:r></w:p>"),
+    )
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+@pytest.mark.parametrize("tag", ["w14:conflictIns", "w14:conflictDel"])
 def test_parse_redline_docx_does_not_attribute_unsupported_revision_subtrees(tag: str) -> None:
     source = _redline_docx_with_body(f"""
     <w:p xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
@@ -750,6 +821,8 @@ def test_parse_redline_docx_does_not_attribute_unsupported_revision_subtrees(tag
     ]
     assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
     assert result.author_counts == {"Buyer": 1, "Seller": 1}
+    # The skipped subtree is surfaced, never reported as a clean file.
+    assert result.uninterpreted_revision_count == 1
 
 
 @pytest.mark.parametrize("source_kind", ["bytes", "stream", "path"])
@@ -811,6 +884,8 @@ def test_parse_redline_docx_clean_tables_have_no_changes(
     assert result.author_counts == {}
     assert result.insertion_count == 0
     assert result.deletion_count == 0
+    assert result.move_count == 0
+    assert result.uninterpreted_revision_count == 0
 
 
 def test_parse_redline_docx_empty_on_clean_document() -> None:
