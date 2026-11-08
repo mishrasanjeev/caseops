@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
+import { setTimeout as pause } from 'node:timers/promises';
 import { collectQP, decodeQueuePage, decodeAccountDeletionReceipt, expectedQueue, hash } from './queue-privacy-contract.mjs';
 import { find, findQuery, read, visible, selector, dispatchNativeClick, home } from './native-ui.mjs';
 import { traffic,delta,readOnlyTraffic } from './journeys.mjs';
 import { displayDay } from '../src/domain/contracts.ts';
 const event=(c,boundary,facts={})=>c.record({type:'queue_privacy_assertion',boundary,...facts});
 const consume=c=>assert.ok(++c.nativeOperations<=160,'QP_NATIVE_CONTROL_BOUND');
+const NATIVE_STATE_MS = 20000;
+const ANDROID_SCROLL_LIMIT = 10;
+const ANDROID_SCROLL_PERCENT = 0.65;
 async function tap(c,id){consume(c);const e=await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
 async function fact(c,id){consume(c);return read(c,'id',id,{scroll:true});}
-async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:20000,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
+async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
 async function control(c,name,args={}){assert.ok(++c.controlCalls<=24,'QP_CASE_CONTROL_BOUND');return c.controls[name]({caseId:c.caseId,...args});}
 const queueSegments = {
@@ -21,34 +25,107 @@ function containsFrame(outer, inner) {
     inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
 }
 
-export async function resolveAndroidComposeQueueSegment(c, group, label) {
+async function withinAndroidViewport(reason, operation) {
+  const deadline = performance.now() + NATIVE_STATE_MS;
+  let active = true, timer;
+  const check = () => assert.ok(active && performance.now() < deadline, reason);
+  const probe = async (command) => {
+    check();
+    const result = await command();
+    check();
+    return result;
+  };
+  try {
+    return await Promise.race([
+      operation(probe),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(reason)), NATIVE_STATE_MS); }),
+    ]);
+  } finally {
+    active = false;
+    clearTimeout(timer);
+  }
+}
+const queueViewport = "//*[@resource-id='screen-work' or @resource-id='matter-task-queue']/ancestor::*[@class='android.widget.ScrollView'][1]";
+async function androidScrollScope(c, screen, probe) {
+  const query = screen === 'work' ? queueViewport : selector('android', 'id', 'account-screen');
+  const scope = await visible(c.driver, query, probe);
+  assert.ok(scope, 'QP_ANDROID_OWNED_SCROLL_VIEW_REQUIRED');
+  assert.equal(await probe(() => scope.getAttribute('class')), 'android.widget.ScrollView', 'QP_ANDROID_OWNED_SCROLL_VIEW_REQUIRED');
+  assert.equal(await probe(() => scope.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_SCROLL_PACKAGE');
+  return scope;
+}
+async function androidScroll(c, scope, direction, probe) {
+  const frame = await probe(() => c.driver.getElementRect(scope.elementId));
+  const window = await probe(() => c.driver.getWindowRect());
+  assert.ok(containsFrame(window, frame), 'QP_ANDROID_SCROLL_OUTSIDE_WINDOW');
+  consume(c);
+  const more = await probe(() => c.driver.execute('mobile: scrollGesture',
+    { elementId: scope.elementId, direction, percent: ANDROID_SCROLL_PERCENT }));
+  assert.equal(typeof more, 'boolean', 'QP_ANDROID_SCROLL_ACK_REQUIRED');
+  return more;
+}
+async function revealAndroidWorkHeader(c, scope, probe) {
+  for (let n = 0; n <= ANDROID_SCROLL_LIMIT; n++) {
+    if (await visible(c.driver, selector('android', 'id', 'screen-work'), probe)) return;
+    assert.ok(n < ANDROID_SCROLL_LIMIT, 'QP_ANDROID_WORK_HEADER_REQUIRED');
+    if (!await androidScroll(c, scope, 'up', probe)) break;
+  }
+  assert.ok(await visible(c.driver, selector('android', 'id', 'screen-work'), probe), 'QP_ANDROID_WORK_HEADER_REQUIRED');
+}
+
+export async function waitForQPPrivacyControl(c, id, value) {
+  if (c.platform !== 'android') return wait(c, id, value);
+  return withinAndroidViewport('QP_NATIVE_STATE_REQUIRED', async (probe) => {
+    const query = selector('android', 'id', id);
+    const scope = await androidScrollScope(c, 'account', probe);
+    let direction = 'up', gestures = 0, atBottom = false;
+    for (;;) {
+      const control = await visible(c.driver, query, probe);
+      if (control) {
+        assert.equal(await probe(() => control.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_PRIVACY_PACKAGE');
+        if (value === undefined || await probe(() => control.getText()) === value) return;
+      } else if (!atBottom && gestures < ANDROID_SCROLL_LIMIT) {
+        gestures++;
+        if (!await androidScroll(c, scope, direction, probe)) {
+          if (direction === 'up') direction = 'down';
+          else atBottom = true;
+        }
+        continue;
+      }
+      // A visible transient state can settle in place. Do not scroll it away.
+      await probe(() => pause(200));
+    }
+  });
+}
+
+export async function resolveAndroidComposeQueueSegment(c, group, label, probe = operation => operation()) {
   assert.equal(c.platform, 'android');
   assert.ok(Object.hasOwn(queueSegments, group) && queueSegments[group].includes(label), 'QP_ANDROID_QUEUE_LABEL_REQUIRED');
   const { driver } = c;
-  const work = await visible(driver, selector('android', 'id', 'screen-work'));
-  const queue = await visible(driver, selector('android', 'id', 'matter-task-queue'));
+  const work = await visible(driver, selector('android', 'id', 'screen-work'), probe);
+  const queue = await visible(driver, selector('android', 'id', 'matter-task-queue'), probe);
   assert.ok(work && queue, 'QP_ANDROID_WORK_QUEUE_REQUIRED');
   // Compose puts the exact label on a noninteractive TextView and its radio
   // semantics on the direct parent. The RN queue marker is flattened beside it.
   const labelQuery = `//*[@class='android.widget.TextView' and @text='${label}']`;
-  const leaves = await driver.$$(labelQuery);
-  const parents = await driver.$$(`${labelQuery}/parent::*`);
+  const leaves = await probe(() => driver.$$(labelQuery));
+  const parents = await probe(() => driver.$$(`${labelQuery}/parent::*`));
   assert.equal(leaves.length, 1, 'QP_ANDROID_EXACT_QUEUE_LABEL_REQUIRED');
   assert.equal(parents.length, 1, 'QP_ANDROID_EXACT_QUEUE_PARENT_REQUIRED');
   const [leaf] = leaves, [parent] = parents;
-  assert.equal(await leaf.isDisplayed(), true, 'QP_ANDROID_QUEUE_LABEL_NOT_VISIBLE');
-  assert.equal(await parent.isDisplayed(), true, 'QP_ANDROID_QUEUE_PARENT_NOT_VISIBLE');
-  assert.equal(await parent.isEnabled(), true, 'QP_ANDROID_QUEUE_PARENT_DISABLED');
-  assert.equal(await parent.getAttribute('package'), c.fixture.appId, 'QP_ANDROID_QUEUE_PARENT_WRONG_PACKAGE');
-  assert.equal(await parent.getAttribute('checkable'), 'true', 'QP_ANDROID_QUEUE_RADIO_REQUIRED');
-  const queueFrame = await driver.getElementRect(queue.elementId);
-  const parentFrame = await driver.getElementRect(parent.elementId);
-  const labelFrame = await driver.getElementRect(leaf.elementId);
+  assert.equal(await probe(() => leaf.isDisplayed()), true, 'QP_ANDROID_QUEUE_LABEL_NOT_VISIBLE');
+  assert.equal(await probe(() => parent.isDisplayed()), true, 'QP_ANDROID_QUEUE_PARENT_NOT_VISIBLE');
+  assert.equal(await probe(() => parent.isEnabled()), true, 'QP_ANDROID_QUEUE_PARENT_DISABLED');
+  assert.equal(await probe(() => parent.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_QUEUE_PARENT_WRONG_PACKAGE');
+  assert.equal(await probe(() => parent.getAttribute('checkable')), 'true', 'QP_ANDROID_QUEUE_RADIO_REQUIRED');
+  const queueFrame = await probe(() => driver.getElementRect(queue.elementId));
+  const parentFrame = await probe(() => driver.getElementRect(parent.elementId));
+  const labelFrame = await probe(() => driver.getElementRect(leaf.elementId));
   assert.ok(containsFrame(queueFrame, parentFrame) && containsFrame(parentFrame, labelFrame), 'QP_ANDROID_QUEUE_PARENT_OUTSIDE_SCOPE');
-  const checked = await parent.getAttribute('checked');
+  const checked = await probe(() => parent.getAttribute('checked'));
   assert.ok(['true', 'false'].includes(checked), 'QP_ANDROID_QUEUE_CHECKED_STATE_REQUIRED');
   const selected = checked === 'true';
-  assert.equal(await parent.getAttribute('clickable'), selected ? 'false' : 'true', 'QP_ANDROID_QUEUE_PARENT_CLICKABILITY');
+  assert.equal(await probe(() => parent.getAttribute('clickable')), selected ? 'false' : 'true', 'QP_ANDROID_QUEUE_PARENT_CLICKABILITY');
   return { parent, selected };
 }
 
@@ -57,7 +134,13 @@ export async function selectQueueSegment(c, group, label) {
  const r=observed.segments[group]?.[label];assert.ok(r&&r.group===group&&r.label===label);
  if (r.kind === 'android-compose-parent') {
    assert.equal(typeof r.selectedAtObservation, 'boolean', 'QP_ANDROID_QUEUE_OBSERVED_STATE_REQUIRED');
-   const { parent, selected } = await resolveAndroidComposeQueueSegment(c, group, label);
+   const { parent, selected } = await withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
+     if (!await visible(c.driver, selector('android', 'id', 'screen-work'), probe)) {
+       const scope = await androidScrollScope(c, 'work', probe);
+       await revealAndroidWorkHeader(c, scope, probe);
+     }
+     return resolveAndroidComposeQueueSegment(c, group, label, probe);
+   });
    assert.equal(selected, false, 'QP_ANDROID_QUEUE_TRANSITION_ALREADY_SELECTED');
    consume(c);
    await dispatchNativeClick(c, parent);
@@ -66,8 +149,82 @@ export async function selectQueueSegment(c, group, label) {
  assert.ok(r.query.startsWith(c.platform==='ios'?'-ios predicate string:':'android='));
  const scope=r.scopeQuery?await findQuery(c,r.scopeQuery,{scroll:true}):c.driver,e=await visible(scope,r.query);assert.ok(e);assert.equal(await e.getAttribute(r.labelAttribute),label);consume(c);await dispatchNativeClick(c,e);
 }
+async function queueViewportRows(c, probe) {
+  const elements = await probe(() => c.driver.$$("//*[starts-with(@resource-id, 'queue-task-')]"));
+  assert.ok(elements.length <= 64, 'QP_NATIVE_ROW_BOUND');
+  const ids = [];
+  for (const element of elements) {
+    const id = await probe(() => element.getAttribute('resource-id'));
+    if (!/^queue-task-[a-f0-9-]{36}$/.test(id)) continue;
+    assert.equal(await probe(() => element.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_ROW_PACKAGE');
+    assert.equal(await probe(() => element.isDisplayed()), true, 'QP_ANDROID_ROW_NOT_VISIBLE');
+    ids.push(id.slice(11));
+  }
+  assert.deepEqual(ids, [...new Set(ids)], 'QP_DUPLICATE_NATIVE_ROW');
+  assert.ok(ids.every(id => c.fixture.qp.dataset.tasks.some(t => t.id === id && t.role !== 'excluded')),
+    'QP_UNAUTHORIZED_OR_UNBOUND_NATIVE_ROW');
+  return ids;
+}
+
+// Android's accessibility tree exposes one viewport. The entire server page
+// must be reached through overlapping, ordered viewports, including its footer.
+function extendQPAndroidQueueOrder(expected, seen, sample) {
+  const first = sample.length ? expected.indexOf(sample[0]) : -1;
+  assert.ok(first >= 0 && (seen.end === 0 ? first === 0 : first >= seen.start && first < seen.end),
+    'QP_EXACT_NATIVE_PAGE_IDENTITIES');
+  assert.deepEqual(sample, expected.slice(first, first + sample.length), 'QP_EXACT_NATIVE_PAGE_IDENTITIES');
+  return { start: first, end: Math.max(seen.end, first + sample.length) };
+}
+
+export async function androidQueuePage(c, page) {
+  return withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
+    const scope = await androidScrollScope(c, 'work', probe);
+    await revealAndroidWorkHeader(c, scope, probe);
+    const expected = page.items.map(row => row.id);
+    const matches = (actual, prefix) => actual.length === prefix.length && actual.every((id, i) => id === prefix[i]);
+    const empty = () => visible(c.driver, selector('android', 'text', 'No matching tasks'), probe);
+    const footer = id => visible(c.driver, selector('android', 'id', id), probe);
+    let sample;
+    for (;;) {
+      sample = await queueViewportRows(c, probe);
+      if (expected.length ? sample.length && matches(sample, expected.slice(0, sample.length)) : !sample.length && await empty()) break;
+      await probe(() => pause(200));
+    }
+    let seen = { start: 0, end: 0 }, more = true;
+    for (let n = 0; n <= ANDROID_SCROLL_LIMIT; n++) {
+      if (expected.length) seen = extendQPAndroidQueueOrder(expected, seen, sample);
+      else assert.equal(sample.length, 0, 'QP_EXACT_NATIVE_PAGE_IDENTITIES');
+      if (!more || n === ANDROID_SCROLL_LIMIT) break;
+      more = await androidScroll(c, scope, 'down', probe);
+      sample = await queueViewportRows(c, probe);
+    }
+    assert.equal(more, false, 'QP_ANDROID_QUEUE_FOOTER_NOT_REACHED');
+    assert.equal(seen.end, expected.length, 'QP_EXACT_NATIVE_PAGE_IDENTITIES');
+    const first = await footer('queue-first');
+    assert.ok(first, 'QP_ANDROID_QUEUE_FOOTER_NOT_REACHED');
+    assert.equal(await probe(() => first.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_FOOTER_PACKAGE');
+    const next = await probe(() => c.driver.$$(selector('android', 'id', 'queue-next')));
+    assert.equal(next.length, page.next_cursor ? 1 : 0, 'QP_ANDROID_QUEUE_NEXT_MISMATCH');
+    if (next.length) {
+      assert.equal(await probe(() => next[0].isDisplayed()), true, 'QP_ANDROID_QUEUE_NEXT_NOT_VISIBLE');
+      assert.equal(await probe(() => next[0].getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_FOOTER_PACKAGE');
+    }
+  });
+}
+
+async function tapQueueTask(c, id) {
+  if (c.platform === 'android') {
+    await withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
+      const scope = await androidScrollScope(c, 'work', probe);
+      await revealAndroidWorkHeader(c, scope, probe);
+    });
+  }
+  await tap(c, 'queue-task-' + id);
+}
+
 async function rows(c,page){
  await wait(c,'matter-task-queue');consume(c);
+ if (c.platform === 'android') return androidQueuePage(c, page);
  const attribute=c.platform==='ios'?'name':'resource-id';let terminal;
  await c.driver.waitUntil(async()=>{try{
   const elements=await c.driver.$$(`//*[starts-with(@${attribute}, 'queue-task-')]`);assert.ok(elements.length<=64);
@@ -108,7 +265,7 @@ export const queuePrivacyScenarios=Object.freeze([
   const before=await traffic(c);await home(c,'work');await wait(c,'matter-task-queue');c.selected={ownership:'mine',dates:'all'};
   const page=await queue(c,'mine','all');assert.equal(page.items.length,25);assert.ok(page.next_cursor);await rows(c,page);
   await tap(c,'queue-next');const second=await queue(c,'mine','all',page.next_cursor);assert.equal(second.items.length,2);assert.equal(second.next_cursor,null);await rows(c,second);
-  await tap(c,'queue-task-'+second.items[1].id);await wait(c,'queue-task-detail');await taskFacts(c,second.items[1]);await tap(c,'queue-back');await rows(c,second);
+  await tapQueueTask(c,second.items[1].id);await wait(c,'queue-task-detail');await taskFacts(c,second.items[1]);await tap(c,'queue-back');await rows(c,second);
   await tap(c,'queue-first');await rows(c,page);
   for(const ownership of['mine','team','unassigned'])for(const dates of['all','dated','undated']){
    if(ownership==='mine'&&dates==='all')continue;const actual=await selectQueue(c,ownership,dates);
@@ -124,26 +281,26 @@ export const queuePrivacyScenarios=Object.freeze([
   const restored=await control(c,'changeAnchor',{action:'restore'});assert.equal(restored.acknowledged,true);assert.equal(restored.id,changed.id);
   await tap(c,'queue-first');const reloaded=await queue(c,'mine','all');await rows(c,reloaded);assert.deepEqual(reloaded.items.map(x=>x.id),page.items.map(x=>x.id));
   assert.equal(reloaded.items.at(-1).due_on,page.items.at(-1).due_on);assert.equal(reloaded.items.at(-1).updated_at,restored.updatedAt);assert.notEqual(restored.updatedAt,page.items.at(-1).updated_at);
-  await tap(c,'queue-task-'+page.items[0].id);await wait(c,'queue-task-detail');await tap(c,'queue-open-matter');await wait(c,'screen-matter');assert.equal(await fact(c,'matter-code'),page.items[0].matter.matter_code);
+  await tapQueueTask(c,page.items[0].id);await wait(c,'queue-task-detail');await tap(c,'queue-open-matter');await wait(c,'screen-matter');assert.equal(await fact(c,'matter-code'),page.items[0].matter.matter_code);
   await home(c,'work');await wait(c,'matter-task-queue');await absent(c,'queue-task-detail');
   const native=await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence});assert.equal(native.requests.length,0);
   readOnlyTraffic(delta(before,await traffic(c)));event(c,'queue-complete',{firstPageIds:page.items.map(x=>x.id),secondPageIds:second.items.map(x=>x.id),anchor:changed.id,restored:true,staleRejected:true,nativeBusinessWrites:0});
  }},
  {id:'PRIVACY-01',run:async c=>{
-  const before=await traffic(c);await tap(c,'account-open');await wait(c,'privacy-request-state','No received request is recorded');assert.equal(await ownPrivacy(c),null);
-  await tap(c,'privacy-request-start');await wait(c,'privacy-request-confirmation');await tap(c,'privacy-request-cancel');await wait(c,'privacy-request-state','No received request is recorded');
+  const before=await traffic(c);await tap(c,'account-open');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');assert.equal(await ownPrivacy(c),null);
+  await tap(c,'privacy-request-start');await waitForQPPrivacyControl(c,'privacy-request-confirmation');await tap(c,'privacy-request-cancel');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');
   const noPost=await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence});assert.equal(noPost.requests.length,0);
   const arm=await control(c,'armPrivacyAckLoss');await tap(c,'privacy-request-start');await tap(c,'privacy-request-confirm');
-  await wait(c,'privacy-request-state','Acknowledgement unconfirmed');await absent(c,'privacy-request-start');await absent(c,'privacy-request-confirm');
+  await waitForQPPrivacyControl(c,'privacy-request-state','Acknowledgement unconfirmed');await absent(c,'privacy-request-start');await absent(c,'privacy-request-confirm');
   // UI Unknown follows the gateway's completed successful-upstream record, so
   // this is one explicit read, never a hidden20-iteration receipt poll.
   const ack=await control(c,'readControlReceipt',{id:arm.id});assert.equal(ack.requestsForwarded,1);assert.equal(ack.upstreamAcknowledged,true);assert.equal(ack.upstreamStatus,202);
   const receipt=decodeAccountDeletionReceipt(ack.responseObservation);assert.deepEqual(await ownPrivacy(c),receipt);
-  const reloadBefore=await traffic(c);await tap(c,'privacy-request-reload');await completedNativeRead(c,reloadBefore.lastSequence);await wait(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);assert.deepEqual(await ownPrivacy(c),receipt);
-  await tap(c,'back');const revisitBefore=await traffic(c);await tap(c,'account-open');await completedNativeRead(c,revisitBefore.lastSequence);await wait(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);await absent(c,'privacy-request-start');
+  const reloadBefore=await traffic(c);await tap(c,'privacy-request-reload');await completedNativeRead(c,reloadBefore.lastSequence);await waitForQPPrivacyControl(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);assert.deepEqual(await ownPrivacy(c),receipt);
+  await tap(c,'back');const revisitBefore=await traffic(c);await tap(c,'account-open');await completedNativeRead(c,revisitBefore.lastSequence);await waitForQPPrivacyControl(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);await absent(c,'privacy-request-start');
   const posts=(await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence})).requests;
   assert.equal(posts.length,1);assert.equal(posts[0].status,202);assert.deepEqual(posts[0].bodyObservation.keys,['confirmation','operation_id']);assert.deepEqual(posts[0].responseObservation,receipt);
-  await c.switchActor('second-company');await tap(c,'account-open');await wait(c,'privacy-request-state','No received request is recorded');await absent(c,'privacy-request-receipt');assert.equal(await ownPrivacy(c,'second-company'),null);
+  await c.switchActor('second-company');await tap(c,'account-open');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');await absent(c,'privacy-request-receipt');assert.equal(await ownPrivacy(c,'second-company'),null);
   event(c,'privacy-complete',{receipt,onePost:true,unknownAcknowledgementReconciledByGet:true,otherUserReceiptAbsent:true,deletionCompleted:false});
  }},
 ]);

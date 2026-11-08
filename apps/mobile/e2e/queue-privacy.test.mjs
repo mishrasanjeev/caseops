@@ -10,7 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
-import { collectQueuePrivacy,queuePrivacyScenarios,resolveAndroidComposeQueueSegment,selectQueueSegment } from './queue-privacy.mjs';
+import { androidQueuePage, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
 import { admitQPBeforeMembers,pendingQPRequest,withQPActor } from '../../../scripts/mobile/run-queue-privacy.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
@@ -364,7 +364,7 @@ test('control client single receipt read has no hidden20poll and enforces case+c
 async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,delayedReadEvidence=false}={}){
  const producer=producerDouble(),dataset=await producer.run(),tasks=structuredClone(dataset.tasks),events=[],clicks=[],records=[];
  const state={page:0,ownership:'mine',dates:'all',screen:'work',selected:null,changed:false,actor:'member',privacy:'null',confirmation:false,receipt:null,armed:false};
- const fixture={udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},membershipId:dataset.membershipId,gatewayRunId:'synthetic-qp',gatewayUrl:'https://127.0.0.1:18443',qp:{dataset,nativeSelectors:{observed:true,udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},segments:{}}}};
+ const fixture={appId:'ai.caseops.mobile.dev.localacceptance',udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},membershipId:dataset.membershipId,gatewayRunId:'synthetic-qp',gatewayUrl:'https://127.0.0.1:18443',qp:{dataset,nativeSelectors:{observed:true,udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},segments:{}}}};
  for(const[group,labels]of[['Task ownership',['Mine','Team','Unassigned']],['Task dates',['All dates','Dated','Undated']]])fixture.qp.nativeSelectors.segments[group]=Object.fromEntries(labels.map(label=>[label,{group,label,query:'android='+label,labelAttribute:'text'}]));
  const add=(method,route,status=200,extra={})=>{const r={sequence:records.length+1,method,route,status,nativeMarker:true,...extra};records.push(r);return r;};
  const page=(ownership=state.ownership,dates=state.dates,cursor=null)=>{const list=expectedQueue(tasks,ownership,dates,dataset.membershipId,dataset.teamPeerId);return{scope:'matter_tasks',ownership,dates,due_from:null,due_to:null,sort:'due_on_created_at_id',limit:25,items:structuredClone(list.slice(cursor?25:0,cursor?50:25)),next_cursor:!cursor&&list.length>25?'synthetic-next-'+tasks.find(t=>t.id===dataset.anchor.id).updated_at:null};};
@@ -379,16 +379,21 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    else{for(const t of current().items)v['queue-task-'+t.id]=t.title;if(current().next_cursor)v['queue-next']='Next';v['queue-first']='First page';v['queue-ownership-meaning']='Your own and unassigned tasks are excluded';}
   }else if(state.screen==='matter'){v['screen-matter']='Matter';v['matter-code']=dataset.matter.matter_code;}
   else if(state.screen==='account'){
-   v.back='Back';v['privacy-request-state']=state.privacy==='unknown'?'Acknowledgement unconfirmed':state.privacy==='received'?'Request received':'No received request is recorded';
+   v['account-screen']='Account';v.back='Back';v['privacy-request-state']=state.privacy==='unknown'?'Acknowledgement unconfirmed':state.privacy==='received'?'Request received':'No received request is recorded';
    if(state.confirmation){v['privacy-request-confirmation']='Confirm request';v['privacy-request-confirm']='Confirm';v['privacy-request-cancel']='Cancel';}
    else if(state.privacy==='null')v['privacy-request-start']='Request';
    if(state.privacy==='unknown')v['privacy-request-reload']='Reload';
    if(state.privacy==='received')Object.assign(v,{'privacy-request-receipt':'Receipt','privacy-request-id':wrongReceipt?id(999):receipt.id,'privacy-request-operation':receipt.operation_id,'privacy-request-requested-at':receipt.requested_at,'privacy-request-status':'Received','privacy-request-not-completed':'Not completed'});
   }return v;
  };
- const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
+ const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
+  attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
  const driver={waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
+  getElementRect:async()=>({x:4,y:20,width:900,height:1900}),getWindowRect:async()=>({x:0,y:0,width:1080,height:2400}),
+  execute:async(command,opts)=>{assert.equal(command,'mobile: scrollGesture');assert.equal(opts.elementId,'work-scroll');assert.equal(opts.direction,'down');return false;},
   $$:async query=>{
+   if(query.includes("/ancestor::*[@class='android.widget.ScrollView']"))return state.screen==='work'?[element('work-scroll','')]:[];
+   if(query===`android=new UiSelector().text("No matching tasks")`)return state.screen==='work'&&!current().items.length?[element(query,'No matching tasks')]:[];
    if(query.startsWith('//*[starts-with(')){const rows=Object.entries(values()).filter(([k])=>/^queue-task-[a-f0-9-]{36}$/.test(k)).map(([k,v])=>element(k,v));return duplicateRow?[...rows,rows[0]]:rows;}
    if(query.startsWith('android='))return[element(query,query.slice(8))];const key=query.replace(/^id=/,'');const v=values();return Object.hasOwn(v,key)?[element(key,v[key])]:[];
   },elementClick:async key=>{clicks.push(key);
@@ -453,4 +458,101 @@ test('complete Queue/Privacy admission binds physical4K layout and rejects chang
 
 test('Queue/Privacy complete admission binds signed observer UID and rejects substitution before private reads',async()=>{
  for(const wrong of[false,true]){const x=await admissionDouble(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'caseops-qp-observer-'));try{const actual=bindPhysicalPacket(x,x.map,x.io.installed());const ref=bindObserverTestIdentity(actual,dir,x.q.expectedSourceSha);for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])x.map.get(r.path).privacyObserverEvidence=ref;for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){delete x.map.get(r.path).runAsUid;Object.assign(x.map.get(r.path),structuredClone(actual));}x.io.installed=()=>structuredClone(actual);if(wrong)x.map.get(x.q.installedEvidence.path).observerUid++;if(wrong){await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);}else{const r=await x.run();assert.equal(r.actual.access,'qa-observer-service');assert.equal(r.actual.sixteenKEmulatorAcceptance,false);}}finally{x.close();fs.rmSync(dir,{recursive:true,force:true});}}
+});
+
+const androidViewportRanks = [
+  [1, 2], [2, 3, 4, 5, 6], [5, 6, 7, 8, 9], [8, 9, 10, 11, 12],
+  [11, 12, 13, 14, 15], [14, 15, 16, 17, 18], [18, 19, 20, 21],
+  [21, 22, 23, 24, 25], [23, 24, 25],
+];
+
+function androidViewportDouble({ rankPages = androidViewportRanks, next = true, footer = true, status,
+  initial = 0, scopePackage = 'ai.caseops.mobile.dev.localacceptance' } = {}) {
+  const appId = 'ai.caseops.mobile.dev.localacceptance';
+  const scope = {
+    elementId: 'owned-scroll',
+    isDisplayed: async () => true,
+    getAttribute: async key => ({ class: 'android.widget.ScrollView', package: scopePackage }[key]),
+  };
+  const element = (attributes = {}, getText = async () => '') => ({
+    isDisplayed: async () => true,
+    getAttribute: async key => ({ package: appId, ...attributes }[key]),
+    getText,
+  });
+  const view = { x: 2, y: 40, width: 1010, height: 2010 }, window = { x: 0, y: 0, width: 1080, height: 2400 };
+  const gestures = [];
+  let position = initial;
+  const driver = {
+    async $$(query) {
+      if (query === 'id=account-screen' || query.includes("/ancestor::*[@class='android.widget.ScrollView']")) return [scope];
+      if (query === 'id=screen-work') return position === 0 ? [element()] : [];
+      if (query === 'id=privacy-request-state') return status && position >= 2 ? [element({}, status)] : [];
+      if (query === 'id=queue-first') return footer && position === rankPages.length - 1 ? [element()] : [];
+      if (query === 'id=queue-next') return next && position === rankPages.length - 1 ? [element()] : [];
+      if (query === "//*[starts-with(@resource-id, 'queue-task-')]") {
+        return rankPages[position].map(rank => element({ 'resource-id': 'queue-task-' + id(rank) }));
+      }
+      throw Error('Unexpected diagnostic query ' + query);
+    },
+    getElementRect: async target => { assert.equal(target, scope.elementId); return view; },
+    getWindowRect: async () => window,
+    async execute(command, args) {
+      assert.equal(command, 'mobile: scrollGesture');
+      assert.deepEqual(args, { elementId: scope.elementId, direction: args.direction, percent: 0.65 });
+      gestures.push(args.direction);
+      if (args.direction === 'up') {
+        position = Math.max(0, position - 1);
+        return position > 0;
+      }
+      assert.equal(args.direction, 'down');
+      position = Math.min(rankPages.length - 1, position + 1);
+      return position < rankPages.length - 1;
+    },
+  };
+  const tasks = Array.from({ length: 26 }, (_, n) => ({ id: id(n + 1), role: n === 25 ? 'excluded' : 'mine' }));
+  return { c: { platform: 'android', driver, nativeOperations: 0, fixture: { appId, qp: { dataset: { tasks } } } },
+    page: { items: tasks.slice(0, 25), next_cursor: 'owned cursor' }, gestures };
+}
+
+test('Android queue reaches the exact page through all measured overlapping visible ranges and its real footer', async () => {
+  const current = androidViewportDouble();
+  await androidQueuePage(current.c, current.page);
+  assert.deepEqual(current.gestures, Array(8).fill('down'));
+  assert.equal(current.c.nativeOperations, 8);
+  // Page replacement can leave the viewport at the old footer. Verify again
+  // from the actual top, even when the header is absent from the first lookup.
+  await androidQueuePage(current.c, current.page);
+  assert.deepEqual(current.gestures.slice(8), [...Array(8).fill('up'), ...Array(8).fill('down')]);
+});
+
+test('Android queue rejects skipped, reordered, duplicate, excluded and unbound rows, or an incorrect footer', async () => {
+  for (const [sample, reason] of [
+    [[3, 4, 5, 6], /QP_EXACT_NATIVE_PAGE_IDENTITIES/],
+    [[2, 4, 3, 5, 6], /QP_EXACT_NATIVE_PAGE_IDENTITIES/],
+    [[2, 3, 3, 4, 5], /QP_DUPLICATE_NATIVE_ROW/],
+    [[2, 3, 26], /QP_UNAUTHORIZED_OR_UNBOUND_NATIVE_ROW/],
+    [[2, 3, 27], /QP_UNAUTHORIZED_OR_UNBOUND_NATIVE_ROW/],
+  ]) {
+    const current = androidViewportDouble({ rankPages: [[1, 2], sample, ...androidViewportRanks.slice(2)] });
+    await assert.rejects(androidQueuePage(current.c, current.page), reason);
+    assert.deepEqual(current.gestures, ['down']);
+  }
+  for (const [settings, reason] of [[{ next: false }, /QP_ANDROID_QUEUE_NEXT_MISMATCH/],
+    [{ footer: false }, /QP_ANDROID_QUEUE_FOOTER_NOT_REACHED/],
+    [{ scopePackage: 'other.app' }, /QP_ANDROID_WRONG_SCROLL_PACKAGE/]]) {
+    const current = androidViewportDouble(settings);
+    await assert.rejects(androidQueuePage(current.c, current.page), reason);
+  }
+});
+
+test('Android account locates the exact public status after the measured two scoped downward gestures', async () => {
+  const text = 'No received request is recorded';
+  let reads = 0;
+  const current = androidViewportDouble({ status: async () => ++reads === 1 ? 'Loading your own request' : text });
+  await waitForQPPrivacyControl(current.c, 'privacy-request-state', text);
+  assert.deepEqual(current.gestures, ['up', 'down', 'down']);
+  assert.equal(reads, 2, 'visible transient state must settle without another gesture');
+  const foreign = androidViewportDouble({ scopePackage: 'other.app' });
+  await assert.rejects(waitForQPPrivacyControl(foreign.c, 'privacy-request-state', text), /QP_ANDROID_WRONG_SCROLL_PACKAGE/);
+  assert.deepEqual(foreign.gestures, []);
 });
