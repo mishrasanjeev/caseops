@@ -1,8 +1,9 @@
 import { PRIVACY_POLICY_OPEN_TIMEOUT_MS } from "../domain/privacy-policy.ts";
 
-// Sign-in and the privacy policy both hand the welcome screen to a system
-// browser, so they share one lease. A launch promise that never settles must
-// not lock sign-in until the app is killed: the lease also ends at the privacy
+// The privacy policy hands the welcome screen to a system browser; sign-in is
+// refused while that launch holds this lease (sign-in tracks its own flight).
+// A launch promise that never settles must not lock sign-in until the app is
+// killed: the lease also ends at the privacy
 // opener's acknowledgement deadline, or when the app returns to the foreground
 // after the browser sent it to the background. Each launch owns its release, so
 // a late settlement cannot end a newer launch's lease.

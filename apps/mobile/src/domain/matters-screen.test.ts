@@ -389,7 +389,8 @@ test("Matters can browse past the bounded back history and refuses a repeated co
   repeating();
   app.render();
   assert.match(app.text(), /unsupported matter continuation response/);
-  assert.doesNotMatch(app.text(), /Matter 3/);
+  // Only Next is refused: the page's authorized rows stay on screen.
+  assert.match(app.text(), /Matter 3.*Page 3\./);
   assert.equal(app.button("Next page"), undefined);
   assert.ok(app.button("Previous page"));
   assert.equal(app.calls.length, 204);

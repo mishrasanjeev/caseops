@@ -78,9 +78,8 @@ const ports: ViewerPorts = {
   subscribeInvalidation: subscribePrivateSourceInvalidation,
 };
 
-// Evaluated on first open, not at launch.
-const { PrivateDocumentViewer } =
-  require("./viewer/PrivateDocumentViewer") as typeof import("./viewer/PrivateDocumentViewer");
+// Load through PrivateViewerRoute, which evaluates the module on first open
+// and renders the unavailable state if it fails. Never call require() here.
 const props: PrivateDocumentViewerProps = {
   source,
   ports,
@@ -89,7 +88,7 @@ const props: PrivateDocumentViewerProps = {
   onPositionChange: rememberPositionInMemory,
 };
 
-<PrivateDocumentViewer {...props} />;
+<PrivateViewerRoute {...props} />;
 ```
 
 Bind `session.requestBytes` if it is not an arrow method. Never capture a token

@@ -741,8 +741,15 @@ function loadPrivateViewer(): PrivateViewerModule | null {
         module:
           require("../viewer/PrivateDocumentViewer") as PrivateViewerModule,
       };
-    } catch {
+    } catch (error) {
       privateViewer = { failed: true };
+      // Observable without exposing document data: the module, not a source.
+      console.warn(
+        JSON.stringify({
+          event: "private_viewer_unavailable",
+          error: error instanceof Error ? error.name : typeof error,
+        }),
+      );
     }
   return "module" in privateViewer ? privateViewer.module : null;
 }

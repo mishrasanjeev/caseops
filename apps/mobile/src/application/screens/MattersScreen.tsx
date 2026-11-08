@@ -85,7 +85,7 @@ export function MattersScreen({
   // A repeated continuation is refused when Next is pressed, so the rows the
   // server authorized for this page stay readable until then.
   const next = (continuation: string) => {
-    if (!visit.active || committed.current !== visit) return;
+    // move() refuses a retained press; a refusal belongs to its own visit.
     let advanced: (string | null)[];
     try {
       advanced = advanceCursorHistory(
@@ -104,10 +104,7 @@ export function MattersScreen({
   };
   const search = () =>
     move({ query: input.trim(), history: [null], firstPage: 1 }, true);
-  const resource =
-    refused?.visit === visit
-      ? ({ state: "error", error: refused.failure } as const)
-      : page.resource;
+  const refusal = refused?.visit === visit ? refused.failure : null;
   const hasPrevious = history.length > 1;
   return (
     <ScrollView
@@ -146,7 +143,7 @@ export function MattersScreen({
         onPress={search}
         secondary
       />
-      <ResourceView resource={resource} reload={() => move({})}>
+      <ResourceView resource={page.resource} reload={() => move({})}>
         {(value) => (
           <>
             {query ? (
@@ -172,7 +169,11 @@ export function MattersScreen({
             <Text style={styles.label}>
               Page {pageNumber}. Up to 25 records per page.
             </Text>
-            {value.next_cursor !== null ? (
+            {refusal ? (
+              <Text accessibilityRole="alert" style={styles.muted}>
+                {refusal.title}. {refusal.message}
+              </Text>
+            ) : value.next_cursor !== null ? (
               <NativeButton
                 label="Next page"
                 onPress={() => {

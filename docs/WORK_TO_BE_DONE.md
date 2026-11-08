@@ -9,6 +9,12 @@ and the complete Android and iOS acceptance suites are pending.
 Source Records admits one action from the current page or picker visit
 and retires callbacks when a refresh, denial or navigation changes that visit.
 Forward paging continues beyond 100 pages with bounded cursor history.
+Matters shares that cursor contract: a repeated continuation refuses only
+Next, keeping the page's authorized rows, and Previous/First page stay
+reachable when a page fails. A privacy-policy launch that never settles no
+longer disables sign-in: the welcome browser lease ends at the 10 s
+acknowledgement deadline or on return from the background. A reader module
+that fails to initialise shows "Document reader unavailable" with Close.
 
 ## 2026-11-04 — private invalidation assertion ownership
 

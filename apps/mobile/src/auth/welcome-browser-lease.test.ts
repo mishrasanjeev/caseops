@@ -23,3 +23,22 @@ test("welcome browser lease refuses an overlapping launch without opening or end
   assert.equal(lease.held, false);
   assert.deepEqual(changes, [true, false]);
 });
+
+test("a new welcome launch does not inherit the previous launch's background", async () => {
+  const lease = createWelcomeBrowserLease(() => {});
+  await lease.launch(async () => {
+    lease.visibility("background");
+  });
+  assert.equal(lease.held, false);
+  let finish!: () => void;
+  const second = lease.launch(
+    () => new Promise<void>((resolve) => (finish = resolve)),
+  );
+  // A system alert during the second launch is not a return from the browser.
+  lease.visibility("inactive");
+  lease.visibility("active");
+  assert.equal(lease.held, true);
+  finish();
+  await second;
+  assert.equal(lease.held, false);
+});
