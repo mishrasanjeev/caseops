@@ -22,7 +22,7 @@ attempts failed only on GitHub release 504s while installing uv.
 - #601 still needs the production association and a Play-installed device
   sign-in check.
 
-## November 8 B4-ADJ-07 Adjacent Defect: Retire Panel Opens Off Screen
+## November 8 B4-ADJ-45: Document Retire Panel Opens Off Screen
 
 Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
 `app-mobile` case "B4-ADJ-07 [mobile] the retire panel, its field error and the
@@ -39,8 +39,8 @@ of 0 at 393px. PR #597 changes no IP document code; the cause is on `main`.
 - Regression: a component test asserts both scrolls target the panel and fails
   without the fix; the B4-ADJ-07 journey now puts Retire on the bottom edge of
   the screen before tapping it, on desktop and at 393px.
-- Status: Inconclusive until hosted `app-mobile` and `app-chromium` pass on the
-  fix and a release ships it.
+- B4-ADJ-45 Status: Inconclusive until hosted `app-mobile` and
+  `app-chromium` pass on the fix and a release ships it.
 
 ## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
 
