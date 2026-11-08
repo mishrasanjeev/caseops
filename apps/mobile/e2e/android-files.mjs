@@ -280,6 +280,13 @@ async function closeReader(context) {
   await assertAndroidViewerAbsent(context); await find(context, 'id', 'files-matter-code', { scroll: true });
 }
 export function androidTextSegments(text) { assert.ok(typeof text === 'string' && text.length > 0 && text.length <= 500000, 'ANDROID_FILES_TEXT_BOUND'); return Array.from({ length: Math.ceil(text.length / 10000) }, (_, index) => text.slice(index * 10000, (index + 1) * 10000)); }
+export async function awaitAndroidTextFirstSegment(context, segmentCount) {
+  const position = selector(context.platform, 'id', 'viewer-position');
+  await wait(context, async () => {
+    const label = await visible(context.driver, position);
+    return label !== undefined && await label.getText() === `Segment 1 of ${segmentCount}`;
+  }, 15000, 'ANDROID_FILES_TEXT_INITIAL_ACK_REQUIRED');
+}
 async function readText(context, anchor) {
   const segments = androidTextSegments(anchor.text), before = await openReader(context, anchor);
   const check = async page => {
@@ -288,6 +295,7 @@ async function readText(context, anchor) {
     assert.equal(await (await find(context, 'id', 'viewer-previous')).isEnabled(), page > 1, 'ANDROID_FILES_PREVIOUS_STATE_MISMATCH');
     assert.equal(await (await find(context, 'id', 'viewer-next')).isEnabled(), page < segments.length, 'ANDROID_FILES_NEXT_STATE_MISMATCH');
   };
+  await awaitAndroidTextFirstSegment(context, segments.length);
   await check(1);
   if (segments.length > 1) { await click(context, 'id', 'viewer-zoom-in'); await wait(context, async () => await read(context, 'id', 'viewer-zoom') === '125%', 15000, 'ANDROID_FILES_TEXT_ZOOM_ACK_REQUIRED'); await check(1); }
   for (let page = 2; page <= segments.length; page++) { await click(context, 'id', 'viewer-next'); await wait(context, async () => await read(context, 'id', 'viewer-position') === `Segment ${page} of ${segments.length}`, 10000, 'ANDROID_FILES_NEXT_ACK_REQUIRED'); await check(page); }
