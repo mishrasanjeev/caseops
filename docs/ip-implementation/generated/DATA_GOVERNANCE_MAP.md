@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `5c269ff615563c1d87a12be6cf635fd8397adb8383afc2942a2bc01c595171f4`
-- SQL tables: `362`
-- SQL columns: `5787`
+- Canonical map SHA-256: `91d7a9ecf55aeeda2a30247a60b77f31f55e52921b092859bf4b3dd2ab3fb532`
+- SQL tables: `363`
+- SQL columns: `5791`
 - ORM indexes: `1824`
 - Alembic/raw index declarations: `1601`
 - Non-SQL data classes: `16`
@@ -383,6 +383,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `user_notification_preferences` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `users` | `platform_operational_reference` | 7 | `registry_fail_closed` |
 | `voyage_usage` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
+| `workspace_conduct_acceptances` | `security_identity_control` | 4 | `registry_fail_closed` |
 
 ## Known non-SQL data classes
 

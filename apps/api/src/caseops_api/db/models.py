@@ -22674,6 +22674,7 @@ MatterPackItemReadPage = _readthrough_models.MatterPackItemReadPage
 MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
 MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
 from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
+from caseops_api.db import workspace_conduct_models as _conduct_models  # noqa: E402
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
@@ -22687,6 +22688,7 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
 MatterTaskQueueDirty = _queue_models.MatterTaskQueueDirty
 MatterTaskQueueGroup = _queue_models.MatterTaskQueueGroup
 MatterTaskQueuePage = _queue_models.MatterTaskQueuePage
+WorkspaceConductAcceptance = _conduct_models.WorkspaceConductAcceptance
 
 event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
 event.listen(
