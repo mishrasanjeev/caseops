@@ -51,7 +51,6 @@ function useSourceInteraction(active: boolean) {
   });
   const available = () => committed.current === interaction;
   return {
-    available,
     run(action: () => void) {
       if (!available()) return;
       // Native callbacks can arrive twice before React commits navigation.
@@ -64,10 +63,6 @@ function useSourceInteraction(active: boolean) {
   };
 }
 
-type SourceListProps = SourceRecordsScreenProps & {
-  canUseList: () => boolean;
-};
-
 // Type selection does not grant authority: both lists use their normal
 // authenticated readers, and IP additionally checks current workspace readiness.
 export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
@@ -76,7 +71,6 @@ export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
   if (!props.active) return null;
   const listProps = {
     ...props,
-    canUseList: interaction.available,
     openSource: (...args: Parameters<SourceRecordsScreenProps["openSource"]>) =>
       interaction.run(() => props.openSource(...args)),
   };
@@ -110,7 +104,6 @@ function useSourcePagination<T>(
   key: string,
   load: (cursor: string | null, signal: AbortSignal) => Promise<T>,
   active: boolean,
-  canUseList: () => boolean,
 ) {
   const interaction = useSourceInteraction(active);
   const [page, setPage] = useState<{
@@ -129,9 +122,10 @@ function useSourcePagination<T>(
     (signal) => load(cursor, signal),
     active,
   );
-  const run = (action: () => void) => {
-    if (canUseList()) interaction.run(action);
-  };
+  // Row opens are also admitted by the screen-level interaction through
+  // openSource. A list action held across a type change only updates this
+  // list, which that same commit unmounts, so it needs no screen admission.
+  const { run } = interaction;
   const reload = () =>
     run(() => {
       setPageError(null);
@@ -169,13 +163,11 @@ function ContractRecords({
   repository,
   active,
   openSource,
-  canUseList,
-}: SourceListProps) {
+}: SourceRecordsScreenProps) {
   const paging = useSourcePagination(
     `contract-source-page:${repository.companyId}`,
     (cursor, signal) => repository.contracts(cursor, signal),
     active,
-    canUseList,
   );
   return (
     <ScrollView
@@ -247,13 +239,11 @@ function IpRecords({
   repository,
   active,
   openSource,
-  canUseList,
-}: SourceListProps) {
+}: SourceRecordsScreenProps) {
   const paging = useSourcePagination(
     `ip-source-page:${repository.companyId}`,
     (cursor, signal) => repository.ipPage(cursor, signal),
     active,
-    canUseList,
   );
   return (
     <ScrollView

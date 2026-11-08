@@ -1282,9 +1282,14 @@ test("Sources retires held type and IP row controls and opens the exact admitted
   await app.settle();
   const firstKind = app.choose();
   const retiredContract = app.control("source-row-contract-contract-1");
+  const retiredNext = app.control("source-next-page");
+  const retiredReload = app.control("source-reload");
   firstKind("ip_docket");
   firstKind("ip_docket");
   retiredContract();
+  // Held list actions only touch the contract list this commit unmounts.
+  retiredNext();
+  retiredReload();
   await app.settle();
   const next = app.control("source-next-page");
   next();
