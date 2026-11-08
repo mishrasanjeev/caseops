@@ -1,5 +1,6 @@
 import '../../../scripts/mobile/calendar-producer-gateway-cases.mjs';
 import '../../../scripts/mobile/v1-launch-attestor-cases.mjs';
+import './v1-calendar-acknowledgement-cases.mjs';
 import './v1-counsel-prerequisite-cases.mjs';
 import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
