@@ -152,3 +152,29 @@ raw-buffer purge including an in-flight read failure, strict path/schema/mode/
 UTF8/extent admission, failed-public-gate zero private reads, and one consumed
 unknown synthetic signer attempt with cleared environment/no value reflection.
 These are46 source contracts, not actual password-file, signing or store proof.
+
+## Store review document processing
+
+The dedicated synthetic review workspace covers J04/M03 and J14/M14
+(US-MOB-04, MOB-22/23/30/39). A store-installed app uses ordinary API requests.
+Its uploads still require tenant authorization, lifecycle checks, storage
+quota and malware scanning. For this workspace only, its document jobs use the
+existing deterministic no-paid embedding path.
+
+- Leave `CASEOPS_STORE_REVIEW_DOCUMENT_NO_PAID_COMPANY_ID` unset by default.
+  After the API release, an operator can set it to the UUIDv4 read back from
+  the authenticated, synthetic workspace. A malformed value fails settings
+  validation. Keep the ID and credentials out of Git and public receipts.
+- Confirm the workspace contains only synthetic records and has no previously
+  admitted unmarked document jobs before sharing reviewer access. Check the
+  serving API revision and verify that a clean, unmarked review upload creates a
+  job with `no_paid_providers=true`, then read back the processed document.
+  Check a separate ordinary workspace with an explicit no-paid marker if
+  exercising its worker in production.
+- Initial uploads and user-requested retries persist the decision on each new
+  job. Stale-job recovery keeps that bit on the same row. Scheduled document
+  reprocessing already admits only no-paid jobs. Workers use the persisted bit
+  without a copy of the setting. The setting does not retrofit older jobs,
+  cover other provider surfaces or eliminate hosted storage and compute costs.
+- Deactivate the reviewer membership before removing the setting. Existing
+  jobs keep their recorded provider policy.

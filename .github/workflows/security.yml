@@ -119,9 +119,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
-        with:
-          version: "latest"
+      - name: Install uv
+        uses: ./.github/actions/verified-linux-uv
       - name: Set up Python
         run: uv python install 3.13
       - name: Sync API deps
