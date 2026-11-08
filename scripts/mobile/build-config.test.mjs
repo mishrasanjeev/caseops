@@ -170,7 +170,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
-    'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
+    'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs', 'apps/mobile/e2e/v1-counsel-prerequisite.test.mjs',
     'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
