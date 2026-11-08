@@ -104,6 +104,94 @@ class Protocol(unittest.TestCase):
             self.assertEqual([r['type']for r in rows],['qp_control_started','qp_control_completed'])
             self.assertTrue(result['journalClosed']);self.assertTrue(self.c.closed)
             with self.assertRaises(AssertionError):persist({'type':'after_close_forbidden'})
+    def test_closed_gateway_keeps_marked_reads_without_reopening_control_journal(self):
+        from http.client import HTTPConnection
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+
+        forwarded = []
+        routes = [p.QUEUE + "?ownership=mine&dates=all&limit=25", p.PRIVACY]
+
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                forwarded.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"request":null}')
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            (root / "gateway-routes.json").write_text(json.dumps({"routes": ["GET " + p.QUEUE, "GET " + p.PRIVACY]}))
+            base = load("qp_closed_read_journal", "local-v1-controls.py")
+            persist, close_journal = base.create_journal(root, "c" * 32)
+            self.c.persist = persist
+            self.c.close_journal = close_journal
+            journal_path = root / ("v1-control-events-" + "c" * 32 + ".jsonl")
+            with patch.dict(os.environ, {"CASEOPS_MOBILE_V1_CONTROLS": "0"}):
+                gateway = g.Gateway(root)
+            gateway.v1 = self.c
+            upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+            server = g.ThreadingHTTPServer(("127.0.0.1", 0), gateway.handler())
+            threads = [Thread(target=item.serve_forever) for item in (upstream, server)]
+            for thread in threads:
+                thread.start()
+
+            def request(method, route):
+                conn = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                try:
+                    conn.request(method, route, headers={
+                        "Authorization": "Bearer cnat_SYNTHETIC",
+                        "X-CaseOps-Automated-Test": "no-paid-providers",
+                    })
+                    response = conn.getresponse()
+                    return response.status, response.read()
+                finally:
+                    conn.close()
+
+            try:
+                with patch.object(g, "upstream_destination", return_value=("127.0.0.1", upstream.server_port)):
+                    for route in routes:
+                        self.assertEqual(request("GET", route), (200, b'{"request":null}'))
+                    self.assertEqual(len(self.c.records), 2)
+                    self.assertTrue(self.call("closeRunControls")["journalClosed"])
+                    closed_bytes = journal_path.read_bytes()
+                    for route in routes:
+                        self.assertEqual(request("GET", route), (200, b'{"request":null}'))
+                    status, response = request("GET", "/__caseops_e2e/status")
+                    self.assertEqual(status, 200)
+                    state = json.loads(response)
+                    self.assertFalse(state["overflow"])
+                    self.assertFalse(state["v1ControlsEnabled"])
+                    self.assertTrue(state["v1ControlRunClosed"])
+                    self.assertEqual([(r["route"], r["status"], r["nativeMarker"]) for r in state["requests"]],
+                                     [(p.QUEUE, 200, True), (p.PRIVACY, 200, True)] * 2)
+                    self.assertEqual(journal_path.read_bytes(), closed_bytes)
+                    self.assertEqual(len(self.c.records), 2)
+                    self.assertEqual(request("POST", p.PRIVACY)[0], 403)
+                self.assertEqual(forwarded, routes * 2)
+            finally:
+                for item in (server, upstream):
+                    item.shutdown()
+                    item.server_close()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+                gateway.journal.close()
+                close_journal()
+
+    def test_pending_privacy_ack_after_closure_stays_unverified(self):
+        self.arm()
+        intercept = self.native()
+        self.assertTrue(self.call("closeRunControls")["journalClosed"])
+        with self.assertRaisesRegex(AssertionError, "QP_CLOSED_NATIVE_WRITE_EVIDENCE_UNAVAILABLE"):
+            self.ack(intercept)
+        self.assertFalse(self.c.should_withhold(intercept, 202))
+        self.assertEqual(self.c.records, [])
+
     def test_original_native_202_is_durable_before_ack_loss_is_authorized(self):
         base=load('ack_journal_base','local-v1-controls.py')
         with tempfile.TemporaryDirectory() as raw:

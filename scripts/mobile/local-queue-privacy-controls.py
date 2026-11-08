@@ -142,38 +142,49 @@ class Controls:
         arm.update(consumed=True,requestsForwarded=1,requestId=request_id);return {"arm":arm}
     def after_native(self,method,route,*,native,request_id,sequence,body,query,status,data,intercept):
         if not native or method+" "+route not in self.registration["exactRoutes"]:return False
-        assert len(self.records)<100
-        row={"sequence":sequence,"method":method,"route":route,"status":status,"requestId":request_id}
-        if route==QUEUE:
-            from urllib.parse import parse_qs
-            q=parse_qs(query,strict_parsing=True);assert set(q)<={"ownership","dates","limit","cursor"} and all(len(v)==1 for v in q.values())
-            assert q.get("ownership",["mine"])[0] in ("mine","team","unassigned") and q.get("dates",["all"])[0]in("all","dated","undated") and q.get("limit",["25"])[0]=="25"
-            assert "cursor"not in q or len(q["cursor"][0])<=4000
-            row["queryObservation"]={"ownership":q.get("ownership",["mine"])[0],"dates":q.get("dates",["all"])[0],"cursorSha256":sha(q["cursor"][0].encode())if"cursor"in q else None}
-        if method=="POST":
-            assert route==PRIVACY and self.privacy_attempted
-            row["bodyObservation"]={"keys":["confirmation","operation_id"],"canonicalSha256":sha(canonical(json.loads(body)))}
-            if status==202:
-                value=receipt(json.loads(data));assert value["operation_id"]==self.operation_id
-                assert len(self.known_ids|{value["id"],value["operation_id"]})<=96
-                row["responseObservation"]=value
-                assert intercept and intercept["arm"]["requestId"]==request_id
-        # The original upstream ACK must be fsynced before intentional client
-        # response loss is permitted. A failed journal leaves the attempt
-        # consumed and the ACK unknown; it can never authorize replay or loss.
-        self.persist({"type":"qp_native_request_observed",**row})
-        self.records.append(row)
-        if method=="POST" and status==202:
-            self.known_ids.update((value["id"],value["operation_id"]))
-            intercept["arm"].update(upstreamAcknowledged=True,upstreamStatus=202,responseObservation=value,durableAck=True)
-        return self.should_withhold(intercept,status)
+        with self.lock:
+            # The public gateway still forwards its statically allowed reads
+            # after this authority has closed its private evidence journal.
+            if self.closed:
+                assert method == "GET" and intercept is None, "QP_CLOSED_NATIVE_WRITE_EVIDENCE_UNAVAILABLE"
+                return False
+            assert len(self.records)<100
+            row={"sequence":sequence,"method":method,"route":route,"status":status,"requestId":request_id}
+            if route==QUEUE:
+                from urllib.parse import parse_qs
+                q=parse_qs(query,strict_parsing=True);assert set(q)<={"ownership","dates","limit","cursor"} and all(len(v)==1 for v in q.values())
+                assert q.get("ownership",["mine"])[0] in ("mine","team","unassigned") and q.get("dates",["all"])[0]in("all","dated","undated") and q.get("limit",["25"])[0]=="25"
+                assert "cursor"not in q or len(q["cursor"][0])<=4000
+                row["queryObservation"]={"ownership":q.get("ownership",["mine"])[0],"dates":q.get("dates",["all"])[0],"cursorSha256":sha(q["cursor"][0].encode())if"cursor"in q else None}
+            if method=="POST":
+                assert route==PRIVACY and self.privacy_attempted
+                row["bodyObservation"]={"keys":["confirmation","operation_id"],"canonicalSha256":sha(canonical(json.loads(body)))}
+                if status==202:
+                    value=receipt(json.loads(data));assert value["operation_id"]==self.operation_id
+                    assert len(self.known_ids|{value["id"],value["operation_id"]})<=96
+                    row["responseObservation"]=value
+                    assert intercept and intercept["arm"]["requestId"]==request_id
+            # The original upstream ACK must be fsynced before intentional client
+            # response loss is permitted. A failed journal leaves the attempt
+            # consumed and the ACK unknown; it can never authorize replay or loss.
+            self.persist({"type":"qp_native_request_observed",**row})
+            self.records.append(row)
+            if method=="POST" and status==202:
+                self.known_ids.update((value["id"],value["operation_id"]))
+                intercept["arm"].update(upstreamAcknowledged=True,upstreamStatus=202,responseObservation=value,durableAck=True)
+            return self.should_withhold(intercept,status)
     @staticmethod
     def should_withhold(intercept,status):return bool(intercept and status==202 and intercept["arm"].get("upstreamAcknowledged") is True and intercept["arm"].get("durableAck") is True)
     def close(self):
-        if not self.closed:
-            self.closed=True
-            try:self.owner.close()
-            finally:self.authority=None;self.close_journal()
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+        try:
+            self.owner.close()
+        finally:
+            self.authority = None
+            self.close_journal()
 
 def from_environment(root,run_id,*,environment=None,verified_implementation_sha256=None,verified_registration_bytes=None,base_module=None,**_unused):
     env=environment or {};assert env.get("CASEOPS_ENV")=="local" and env.get("CASEOPS_MOBILE_V1_CONTROLS")=="1"
