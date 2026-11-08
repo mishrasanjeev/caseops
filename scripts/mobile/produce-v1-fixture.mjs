@@ -8,6 +8,8 @@ import { produceV1Dataset, produceV1Inbox } from '../../apps/mobile/e2e/v1-workf
 import { produceV1Viewer } from '../../apps/mobile/e2e/v1-workflows-viewer.mjs';
 import { createProducerHttp, createProducerStore, producerHash, readProducerReference, producerTimeout } from './native-producer-host.mjs';
 import { admitProducerPublic } from './native-producer-admission.mjs';
+import { admitProducerRouteFile } from './native-producer-route-file.mjs';
+import { producerFixedRoutes, producerRouteProvenance } from './native-producer-route-provenance.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
@@ -95,8 +97,19 @@ export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,no
   assert.deepEqual(Object.keys(q.plans),['base','viewer','inbox','readthrough']);
   const store=createProducerStore(q.outputRoot);store.claim('v1-producer:'+q.runId);store.write('request.json',q);
   const initial=await admitPublic(q.admission,{requiredInputs:V1_PRODUCER_INPUTS});
+  const deadline = now() + 510000;
+  let file, provenance;
+  if (q.routePublication) {
+    assert.deepEqual(Object.keys(q.routePublication), ['baseRoutesSha256']);
+    assert.equal(q.runId, initial.docker.gatewayRunId, 'PRODUCER_GATEWAY_EPOCH_MISMATCH');
+    file = await admitProducerRouteFile({ receipt: initial.docker, docker: q.docker, publicCa: q.admission.publicCa,
+      baseSha256: q.routePublication.baseRoutesSha256, root: ROOT, remaining: () => deadline - now(), persist: store.persist,
+      requiredRoutes: producerFixedRoutes('v1'), command });
+    provenance = producerRouteProvenance('v1', initial.source.sourceSha);
+  }
   const host=createProducerHttp({apiOrigin:initial.docker.gatewayUrl,webOrigin:initial.docker.webGatewayUrl,sourceSha:initial.source.sourceSha,
-    publicCa:q.admission.publicCa,deadlineMs:now()+510000,persist:store.persist,now});
+    publicCa:q.admission.publicCa,deadlineMs:deadline,persist:store.persist,now,
+    ...(file ? { routeAdmission: { file, provenance } } : {})});
   const aggregate=createV1FixtureAggregate({runId:q.runId,sourceSha:initial.source.sourceSha,claim:store.claim,persist:store.persist,now});
   const produced={};let stage,actor,actorSpec,admitted;
   const identity=(me,spec)=>{assert.equal(me.company.id,spec.companyId);assert.equal(me.membership.id,spec.membershipId);assert.equal(me.membership.is_active,true);assert.equal(me.user.is_active,true);return me;};
@@ -118,9 +131,10 @@ export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,no
       const plan=resolveProducedReferences(q.plans[stage],produced);assert.equal(plan.sourceSha,initial.source.sourceSha);assert.equal(plan.runId,q.runId);
       actor=stage==='inbox'?'member':'owner';actorSpec=stage==='viewer'?produced.base.receipt.secondaryOwner:q.actors[actor];
       assert.equal(plan.companyId,actorSpec.companyId);assert.equal(stage==='inbox'?plan.membershipId:plan.ownerMembershipId,actorSpec.membershipId);
+      if (stage === 'inbox') provenance?.bindInbox({ company: plan.companyId, matter: plan.matterId, membership: plan.membershipId });
       if(stage==='viewer')for(const key of ['buildReceipt','dockerReceipt','installedEvidence'])assert.deepEqual(plan[key],q.admission[key]);
       const planEvidence=store.write(stage+'-plan.json',plan),privateWriter=createV1PrivateWriter({root:q.privateRoot,python:q.python,canonicalWriter:q.canonicalWriter,adapter:q.privateAdapter,remaining:()=>aggregate.remaining(stage)},command);
-      const dependencies={aggregate,planEvidence,admit,request:input=>host.request({actor,...input,deadlineMs:now()+aggregate.remaining(stage)}),persist:store.persist,claim:store.claim,now,persistPrivate:privateWriter};
+      const dependencies={aggregate,planEvidence,admit,request:input=>host.request({actor,...input,producerStage:stage,deadlineMs:now()+aggregate.remaining(stage)}),persist:store.persist,claim:store.claim,now,persistPrivate:privateWriter};
       let result;
       if(stage==='viewer')result={receipt:await produceV1Viewer(plan,dependencies)};
       else if(stage==='inbox')result={receipt:await produceV1Inbox(plan,{...dependencies,...createV1Worker({docker:q.docker,dockerReceipt:initial.docker,cache:q.workerCache,sourceSha:initial.source.sourceSha,store},command)})};
@@ -129,11 +143,12 @@ export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,no
       produced[stage]={...result,receiptEvidence,...(fixtureEvidence?{fixtureEvidence}:{})};aggregate.complete(stage,receiptEvidence);
     }
     const result=aggregate.finish();validateV1FixtureAggregate(result,initial.source.sourceSha);
+    if (file) await file.finish();
     const aggregateEvidence=store.write('aggregate.json',result);
     return {aggregateEvidence,producerEvidence:produced.readthrough.receiptEvidence,datasetEvidence:produced.readthrough.fixtureEvidence,
       viewerEvidence:produced.viewer.receiptEvidence,inboxEvidence:produced.inbox.receiptEvidence,nativeExecution:'not-run'};
   } catch {store.persist({type:'v1_producer_orchestration_stopped',stage,automaticRetry:false,observed:false,completionUnverified:true});throw new Error('V1_PRODUCER_INCOMPLETE_NO_REPLAY');}
-  finally {host.clear();}
+  finally {host.clear();file?.clear();}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{assert.equal(process.env.CASEOPS_NATIVE_V1_PRODUCER_GO,'EXPLICIT_OWNED_SYNTHETIC_PRODUCER');assert.equal(process.argv.length,4);

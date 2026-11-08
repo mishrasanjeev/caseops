@@ -20,6 +20,10 @@ import { pendingV1Request } from '../../../scripts/mobile/prepare-v1-fixture.mjs
 import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from '../../../scripts/mobile/run-v1-workflows.mjs';
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
 import https from 'node:https';
+import http from 'node:http';
+import { once } from 'node:events';
+import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-route-file.mjs';
+import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
 import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
 import { createV1PrivateWriter, resolveProducedReferences, createV1Worker } from '../../../scripts/mobile/produce-v1-fixture.mjs';
 
@@ -903,3 +907,171 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     await assert.rejects(worker.executeWorker({requestEvidence,sourceEvidence:producerRef(path.join(repo,'scripts/mobile/local-v1-inbox.py')),timeoutMs:1000,automaticRetry:false,onObserverStatement(){assert.fail();}}));assert.equal(calls.length,1);
   }
 });
+
+// Real gateway regressions remain in this inventoried producer test module.
+{
+  const sourceSha = 'a'.repeat(40);
+  const company = '00000000-0000-4000-8000-000000000011';
+  const member = '00000000-0000-4000-8000-000000000015';
+  const foreign = '00000000-0000-4000-8000-000000000012';
+  const id = '00000000-0000-4000-8000-000000000013';
+  const other = '00000000-0000-4000-8000-000000000014';
+  const base = Buffer.from('{"routes":["POST /api/auth/login","POST /api/matters/"]}\n');
+  const initial = { baseSha256: producerHash(base), epoch: 'qp-0000000000000000', persist() {} };
+
+  function fixture(t) {
+    const cache = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-route-pub-')));
+    const file = path.join(cache, 'gateway-routes.json');
+    fs.writeFileSync(file, base, { mode: 0o600, flag: 'wx' });
+    t.after(() => fs.rmSync(cache, { recursive: true, force: true }));
+    return { cache, file };
+  }
+
+  const ack = (value, requestId = 'request-01') => ({ status: 200, value, requestId, releaseSha: sourceSha });
+  const creator = (stage, actor, path, response) => ({ stage, actor, path, response, method: 'POST', company, membership: member });
+  const ask = (stage, actor, method, path, organization = company) => ({ stage, actor, method, path, company: organization, membership: member });
+
+  test('specialist and trademark acknowledgements admit only the typed record and docket for that actor and stage', () => {
+    const scope = producerRouteProvenance('v1', sourceSha);
+    scope.observe(creator('base', 'owner', '/api/ip/trademark-applications/manual',
+      ack({ application: { id }, docket: { id: other }, asset: { id: foreign }, duplicate_candidates: [{ id: foreign }] })));
+    assert.ok(scope.allow(ask('base', 'owner', 'GET', '/api/ip/trademark-applications/' + id)));
+    assert.ok(scope.allow(ask('base', 'owner', 'POST', '/api/ip/dockets/' + other + '/matter-links')));
+    for (const question of [
+      ask('base', 'owner', 'GET', '/api/ip/trademark-applications/' + foreign),
+      ask('base', 'owner', 'GET', '/api/ip/trademark-applications/' + other),
+      ask('readthrough', 'owner', 'GET', '/api/ip/trademark-applications/' + id),
+      ask('base', 'owner', 'GET', '/api/ip/trademark-applications/' + id, foreign),
+      ask('base', 'member', 'GET', '/api/ip/trademark-applications/' + id),
+    ]) assert.equal(scope.allow(question), null);
+    assert.throws(() => scope.observe(creator('base', 'owner', '/api/ip/specialist/records', ack({ id, docket_id: other }))), /CREATOR_ACK_REQUIRED/);
+    assert.throws(() => scope.observe(creator('base', 'owner', '/api/ip/specialist/records', ack({ id, duplicate_candidates: [{ id: other }] }, 'request-02'))), /TYPED_ID_REQUIRED/);
+    assert.equal(scope.allow(ask('base', 'owner', 'GET', '/api/ip/specialist/records/' + id)), null);
+  });
+
+  test('unacknowledged, cross-source and cross-tenant creators cannot add queue dependencies', () => {
+    const scope = producerRouteProvenance('queue', sourceSha);
+    const permit = ask('queue', 'owner', 'POST', '/api/matters/' + id + '/tasks');
+    for (const response of [
+      { ...ack({ id }), status: 502 }, { ...ack({ id }), releaseSha: 'b'.repeat(40) },
+      ack({ id, company_id: foreign }), ack({ id }, null), ack(null),
+    ]) {
+      const action = () => scope.observe(creator('queue', 'owner', '/api/matters/', response));
+      if (response.status === 502) action(); else assert.throws(action);
+      assert.equal(scope.allow(permit), null);
+    }
+    scope.observe(creator('queue', 'owner', '/api/matters/', ack({ id, company_id: company })));
+    assert.ok(scope.allow(permit));
+    assert.equal(scope.allow({ ...permit, actor: 'foreign-owner' }), null);
+  });
+
+  test('an uncertain send preserves the base inventory and blocks further dispatch from the same producer', async t => {
+    const { cache, file } = fixture(t);
+    const owner = openProducerRouteFile({ cache, ...initial });
+    const route = 'POST /api/matters/' + id + '/tasks';
+    let sends = 0;
+    await assert.rejects(owner.dispatch(route, { requestDigest: 'c'.repeat(64) }, 'Bearer local-fixture', Date.now() + 5000, async () => {
+      sends++; assert.deepEqual(fs.readFileSync(file), base);
+      throw new Error('Uncertain write acknowledgement');
+    }), /Uncertain write acknowledgement/);
+    assert.deepEqual(fs.readFileSync(file), base);
+    owner.verifyRestored();
+    await assert.rejects(owner.dispatch(route, { requestDigest: 'c'.repeat(64) }, 'Bearer local-fixture', Date.now() + 5000, () => sends++), /SCOPE_CLOSED/);
+    assert.throws(() => openProducerRouteFile({ cache, ...initial }), { code: 'EEXIST' });
+    assert.equal(sends, 1);
+  });
+
+  test('route namespace or even identical file replacement prevents dispatch', async t => {
+    const { cache, file } = fixture(t);
+    const owner = openProducerRouteFile({ cache, ...initial });
+    fs.renameSync(file, file + '.original');
+    fs.writeFileSync(file, base, { mode: 0o600, flag: 'wx' });
+    let sends = 0;
+    await assert.rejects(owner.dispatch('POST /api/matters/', null, undefined, Date.now() + 5000, () => sends++), /WRITER_CONFLICT/);
+    assert.equal(sends, 0);
+    assert.deepEqual(fs.readFileSync(file + '.original'), base);
+  });
+
+  test('the real TLS gateway refuses a future route, then the actual host sends it only after its creator ACK', async t => {
+    const { cache, file } = fixture(t), seen = [], events = [];
+    const upstream = http.createServer((req, res) => {
+      const request = { method: req.method, route: req.url, marker: req.headers['x-caseops-automated-test'] };
+      assert.equal(req.headers['x-caseops-qa-producer-permit'], undefined);
+      seen.push(request);
+      const body = req.url === '/api/auth/login' ? { access_token: 'synthetic-local-token', company: { id: company }, membership: { id: member } }
+        : req.url === '/api/matters/' ? { id, company_id: company } : { matter_id: id };
+      req.resume();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-http-' + seen.length });
+      res.end(JSON.stringify(body));
+    });
+    upstream.listen(0, '127.0.0.1');
+    await once(upstream, 'listening');
+    t.after(() => upstream.close());
+    const key = path.join(cache, 'fixture.key'), cert = path.join(cache, 'fixture.crt');
+    childProcess.execFileSync('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-keyout', key, '-out', cert,
+      '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { timeout: 10000, stdio: 'ignore' });
+    const gateway = fileURLToPath(new URL('../../../scripts/mobile/local-gateway.py', import.meta.url));
+    const code = [
+      'import runpy,ssl,sys',
+      'from http.server import ThreadingHTTPServer',
+      'from pathlib import Path',
+      'g=runpy.run_path(sys.argv[1]); cls=g["Gateway"]',
+      'cls.handler.__globals__["upstream_destination"]=lambda web: ("127.0.0.1",int(sys.argv[5]))',
+      'instance=cls(Path(sys.argv[2])); http=ThreadingHTTPServer(("127.0.0.1",0),instance.handler())',
+      'context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(sys.argv[3],sys.argv[4])',
+      'http.socket=context.wrap_socket(http.socket,server_side=True)',
+      'print(http.server_address[1],flush=True)',
+      'http.serve_forever()',
+    ].join('\n');
+    const child = childProcess.spawn(process.env.CASEOPS_MOBILE_PRODUCER_PYTHON || 'python3', ['-I', '-c', code, gateway, cache, cert, key, String(upstream.address().port)],
+      { env: { PATH: process.env.PATH, CASEOPS_MOBILE_RUN_ID: initial.epoch, CASEOPS_ENV: 'local' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const exited = once(child, 'exit');
+    t.after(async () => { if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await exited; } });
+    const [ready] = await Promise.race([
+      once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) }),
+      exited.then(([status, signal]) => { throw new Error('Isolated gateway exited before readiness: ' + (signal ?? status)); }),
+    ]);
+    const port = Number(String(ready).trim()); assert.ok(port >= 1024 && port <= 65535);
+    const origin = 'https://127.0.0.1:' + port, certBytes = fs.readFileSync(cert);
+    const options = { apiOrigin: origin, webOrigin: origin, sourceSha, publicCa: { path: cert, sha256: producerHash(certBytes) },
+      deadlineMs: Date.now() + 20000, persist: e => events.push(e) };
+    const route = '/api/matters/' + id + '/tasks', attempt = { actor: 'owner', method: 'POST', route, producerStage: 'queue', body: { title: 'Synthetic task' } };
+    const prior = createProducerHttp(options); t.after(() => prior.clear());
+    await assert.rejects(prior.request(attempt), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.deepEqual(seen, []);
+    const routeFile = openProducerRouteFile({ cache, ...initial, persist: options.persist });
+    let interceptedProof;
+    const rawProbe = (where, proof, bearer) => new Promise((resolve, reject) => {
+      const request = https.request(origin + where, { ca: certBytes, rejectUnauthorized: true, method: 'POST', agent: false, headers: {
+        'X-CaseOps-Automated-Test': 'no-paid-providers', ...(proof ? { 'X-CaseOps-QA-Producer-Permit': proof } : {}), Authorization: bearer,
+      } }, response => { response.resume(); response.on('end', () => resolve(response.statusCode)); });
+      request.setTimeout(2000, () => request.destroy(new Error('probe timed out'))); request.on('error', reject); request.end();
+    });
+    const fileWithNegativeControls = { dispatch: (literal, provenance, authorization, deadline, send) =>
+      routeFile.dispatch(literal, provenance, authorization, deadline, async proof => {
+        if (proof) {
+          interceptedProof = proof;
+          const notAdmitted = [
+            await rawProbe(route, undefined, authorization),
+            await rawProbe(route, proof, 'Bearer other-actor'),
+            await rawProbe('/api/matters/' + other + '/tasks', proof, authorization),
+          ];
+          assert.deepEqual(notAdmitted, [403, 403, 403]);
+        }
+        return send(proof);
+      }) };
+    const client = createProducerHttp({ ...options, routeAdmission: { file: fileWithNegativeControls, provenance: producerRouteProvenance('queue', sourceSha) } });
+    t.after(() => client.clear());
+    await client.request({ actor: 'owner', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic@example.invalid' } });
+    await client.request({ actor: 'owner', method: 'POST', route: '/api/matters/', producerStage: 'queue', body: { title: 'Synthetic matter' } });
+    const result = await client.request(attempt);
+    assert.equal(result.value.matter_id, id);
+    const replay = await rawProbe(route, interceptedProof, 'Bearer synthetic-local-token');
+    assert.equal(replay, 403);
+    assert.deepEqual(seen, ['/api/auth/login', '/api/matters/', route].map(route => ({ method: 'POST', route, marker: 'no-paid-providers' })));
+    assert.deepEqual(events.filter(e => e.type.startsWith('producer_exact_route_')).map(e => e.type),
+      ['producer_exact_route_permit', 'producer_exact_route_consumed']);
+    routeFile.verifyRestored();
+    assert.deepEqual(fs.readFileSync(file), base);
+  });
+}

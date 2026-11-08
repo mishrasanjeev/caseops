@@ -29,7 +29,24 @@ BROWSER_ROUTES = {
 HOP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-authorization", "proxy-authenticate"}
 HEADER_TOKEN_CHARACTERS = frozenset("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 REQUEST_SINGLETONS = ("Authorization", MARKER_HEADER, "Cookie", "Origin", "Host", "Content-Length",
-                      "Content-Type", "X-CSRF-Token", "X-CaseOps-V1-Control", "X-Forwarded-Proto")
+                      "Content-Type", "X-CSRF-Token", "X-CaseOps-V1-Control", "X-Forwarded-Proto",
+                      "X-CaseOps-QA-Producer-Permit")
+PRODUCER_PERMIT = "X-CaseOps-QA-Producer-Permit"
+PRODUCER_RECEIPT = "X-CaseOps-QA-Producer-Permit-Consumed"
+_PRODUCER_UUID = r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}"
+_PRODUCER_PATHS = (
+    rf"GET /api/matters/{_PRODUCER_UUID}(?:/workspace|/access)?",
+    rf"POST /api/matters/{_PRODUCER_UUID}/(?:tasks|hearings|access/(?:restricted|grants))",
+    rf"PATCH /api/matters/{_PRODUCER_UUID}/lifecycle/status",
+    rf"GET /api/contracts/{_PRODUCER_UUID}(?:/obligations)?",
+    rf"POST /api/contracts/{_PRODUCER_UUID}/obligations",
+    rf"GET /api/outside-counsel/matters/{_PRODUCER_UUID}/context",
+    rf"GET /api/ip/(?:patents/families|specialist/records)/{_PRODUCER_UUID}(?:/versions/1)?",
+    rf"GET /api/ip/trademark-applications/{_PRODUCER_UUID}",
+    rf"GET /api/ip/dockets/{_PRODUCER_UUID}/(?:summary|access|matter-links)",
+    rf"POST /api/ip/dockets/{_PRODUCER_UUID}/matter-links",
+    rf"POST /api/teams/{_PRODUCER_UUID}/members",
+)
 
 
 def upstream_destination(web):
@@ -203,6 +220,51 @@ class Gateway:
         config = json.loads((self.root / "gateway-routes.json").read_text())
         return set(config["routes"]) | ((set(self.v1.registration["exactRoutes"]) | getattr(self.v1, "dynamic_routes", set())) if self.v1 and not self.v1.closed else set())
 
+    def consume_producer_permit(self, token, route, bearer):
+        """Only a private, current, exact-route test capability can admit a request."""
+        if os.environ.get("CASEOPS_ENV") != "local" or self.v1 or not bearer.startswith("Bearer ") or bearer.startswith("Bearer cnat_"):
+            return None
+        if not re.fullmatch(r"[a-f0-9]{64}", token) or not re.fullmatch(r"[a-z0-9-]{8,160}", self.state["runId"]):
+            return None
+        if not any(re.fullmatch(pattern, route) for pattern in _PRODUCER_PATHS):
+            return None
+        digest = lambda raw: hashlib.sha256(raw).hexdigest()
+        root = self.root / ("producer-permits-" + digest(self.state["runId"].encode()))
+        proof = digest(token.encode())
+        try:
+            with self.lock:
+                directory = root.lstat()
+                assert stat.S_ISDIR(directory.st_mode) and directory.st_mode & 0o077 == 0
+                item = root / (proof + ".json")
+                metadata = item.lstat()
+                assert stat.S_ISREG(metadata.st_mode) and metadata.st_mode & 0o077 == 0
+                assert 0 < metadata.st_size <= 2048 and metadata.st_uid == directory.st_uid
+                raw = runtime_source_bytes(item)
+                assert len(raw) <= 2048
+                permit = json.loads(raw)
+                assert set(permit) == {"epoch", "route", "bearerSha256", "expires", "creatorAckSha256"}
+                assert permit["epoch"] == self.state["runId"] and permit["route"] == route
+                assert permit["bearerSha256"] == digest(bearer.encode())
+                assert re.fullmatch(r"[a-f0-9]{64}", permit["creatorAckSha256"])
+                now = int(time.time() * 1000)
+                assert type(permit["expires"]) is int and now < permit["expires"] <= now + 10000
+                receipt = digest(raw)
+                directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+                try:
+                    assert source_named_identity_equal(os.fstat(directory_fd), directory)
+                    fd = os.open(proof + ".spent", os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                                 0o600, dir_fd=directory_fd)
+                    with os.fdopen(fd, "wb") as held:
+                        held.write((receipt + "\n").encode())
+                        held.flush()
+                        os.fsync(held.fileno())
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+                return receipt
+        except (OSError, ValueError, TypeError, AssertionError):
+            return None
+
     def admit_current_session(self, data, request_id):
         try:
             rows = json.loads(data)["sessions"]
@@ -302,6 +364,17 @@ class Gateway:
                         gateway.state["markerRejected"] += 1
                     return self.reply(403, {"code": "AUTOMATED_MARKER_REQUIRED"})
                 admitted = route in gateway.allowed()
+                producer_receipt = None
+                permit = incoming_headers.pop(PRODUCER_PERMIT, None)
+                if permit is not None:
+                    if (not web and not admitted and not browser and marked and not incoming_headers.get("Cookie")
+                            and self.command in ("GET", "POST", "PATCH")):
+                        producer_receipt = gateway.consume_producer_permit(permit, route, incoming_headers.get("Authorization", ""))
+                    if not producer_receipt:
+                        with gateway.lock:
+                            gateway.state["routeRejected"] += 1
+                        return self.reply(403, {"code": "PRODUCER_PERMIT_NOT_ADMITTED"})
+                    admitted = True
                 if not web and self.command == "DELETE" and native_bearer:
                     with gateway.lock:
                         if route == gateway.session_delete_route:
@@ -355,6 +428,8 @@ class Gateway:
                                   "route": path, "status": status, "browserHandoff": browser,
                                   "requestId": request_id,
                                   "trafficClass": "browser-preflight" if preflight else "public-identity" if route == "GET /api/build" else "api"}
+                        if producer_receipt:
+                            record["producerPermitSha256"] = producer_receipt
                         if gateway.v1:
                             try:
                                 gateway.v1.after_native(self.command, path, native=native_bearer,
@@ -406,7 +481,7 @@ class Gateway:
                         raise ValueError("Response bound exceeded")
                     if route == "GET /api/auth/native/sessions" and native_bearer and status == 200:
                         gateway.admit_current_session(data, request_id)
-                    if gateway.v1:
+                    if gateway.v1 or producer_receipt:
                         # Make the actual ACK/body facts durable before the app
                         # can render a positive outcome or observe response loss.
                         record_request()
@@ -417,6 +492,8 @@ class Gateway:
                     response_started = True
                     self.send_response(status)
                     for key, value in response_headers:
+                        if key.lower() == PRODUCER_RECEIPT.lower():
+                            continue
                         # Reject both header components before the response sink.
                         # The replacements are defense in depth and are identities
                         # for every admitted value; unsafe input is never repaired.
@@ -425,6 +502,8 @@ class Gateway:
                         self.send_header(key.replace("\r", "").replace("\n", ""),
                                          value.replace("\r", "").replace("\n", ""))
                     self.send_header("Content-Length", str(len(data)))
+                    if producer_receipt:
+                        self.send_header(PRODUCER_RECEIPT, producer_receipt)
                     self.send_header("Connection", "close")
                     self.end_headers()
                     self.wfile.write(data)

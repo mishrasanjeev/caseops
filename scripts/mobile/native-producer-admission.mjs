@@ -11,6 +11,7 @@ import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 export function producerCodeInputs(extra = []) {
   return [...new Set(['scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/source-snapshot.mjs',
+    'scripts/mobile/native-producer-route-file.mjs','scripts/mobile/native-producer-route-provenance.mjs',
     'scripts/mobile/run-v1-workflows.mjs','scripts/mobile/android-files-privacy.mjs','scripts/mobile/android-qa-observer.mjs','scripts/mobile/camera-files-privacy.mjs',
     ...readdirSync(path.join(ROOT,'apps/mobile/e2e')).filter(x => /\.(mjs|json)$/.test(x)).map(x => 'apps/mobile/e2e/'+x), ...extra])].sort();
 }
