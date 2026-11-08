@@ -294,7 +294,7 @@ export function WorkspaceAssistant() {
     }
   }
 
-  async function openSession(summary: AssistantSessionSummary) {
+  async function openSession(summary: AssistantSessionSummary): Promise<number | null> {
     const epoch = resetConversationReads();
     setActive(null);
     setSelected([]);
@@ -312,9 +312,11 @@ export function WorkspaceAssistant() {
       setTurns(mergeTurns([], history.items));
       setHasMoreHistory(hasMore);
       setSelected(sessionRecord.scopes.map(fallbackScopeOption));
+      return epoch;
     } catch (caught) {
-      if (readEpoch.current !== epoch) return;
+      if (readEpoch.current !== epoch) return null;
       setError(apiErrorMessage(caught, "Could not open that conversation."));
+      return null;
     } finally {
       if (readEpoch.current === epoch) setBusy(null);
     }
@@ -398,10 +400,21 @@ export function WorkspaceAssistant() {
       );
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
+      const message = apiErrorMessage(caught, "The workspace assistant could not answer.");
+      if (isApiErrorShape(caught) && caught.problemType === "workspace_assistant_unavailable") {
+        // The server recorded the failed exchange and advanced the session:
+        // reload that state, then offer the same question again.
+        const reopened = await openSession(active);
+        if (reopened !== null && readEpoch.current === reopened) {
+          setQuestion(normalized);
+          setError(message);
+        }
+        return;
+      }
       // Keep the conversation and the typed question when the request never
       // reached a decision, so the user can simply ask again.
       if (!isTransientHistoryError(caught)) hideConversation();
-      setError(apiErrorMessage(caught, "The workspace assistant could not answer."));
+      setError(message);
     } finally {
       if (readEpoch.current === epoch) setBusy(null);
     }

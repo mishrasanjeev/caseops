@@ -32,6 +32,20 @@ describe("assistant history and citation contracts", () => {
     );
   });
 
+  it("requests the newest page for a reopened conversation", async () => {
+    await listAssistantTurns("session-1", { latest: true });
+    expect(request).toHaveBeenCalledExactlyOnceWith(
+      "/api/workspace-assistant/sessions/session-1/turns?limit=50&offset=0&latest=true",
+    );
+  });
+
+  it.each([{ latest: true, offset: 50 }, { latest: true, snapshot: true }])(
+    "rejects a latest page combined with an offset or snapshot: %j", (options) => {
+      expect(() => listAssistantTurns("session-1", options)).toThrow("Invalid assistant history page.");
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([{ limit: 51 }, { limit: 0 }, { limit: 1.5 }, { offset: -1 }, { offset: 10001 }, { offset: NaN }])(
     "rejects invalid page arguments before requesting: %j", (options) => {
       expect(() => listAssistantTurns("session-1", options)).toThrow("Invalid assistant history page.");

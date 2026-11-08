@@ -249,7 +249,8 @@ async function signIn(page: Page, baseURL: string | undefined) {
       expect((await response.json()).release_sha).toBe(sha);
     }
   };
-  return { api, headers, history, other, first, turns, release, local, matterId: evidence.matter_id };
+  const verify = (id: string, snapshot: AssistantTurnPage) => verifyPage(evidence, id, snapshot);
+  return { api, headers, history, other, first, turns, verify, release, local, matterId: evidence.matter_id };
 }
 
 async function visibleTurnIds(page: Page) {
@@ -270,8 +271,11 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
   await page.getByRole("button", { name: "Load more messages", exact: true }).click();
   const snapshot = await response;
   expect(snapshot.status()).toBe(200);
-  const { items: expected, limit, offset, has_more } = await snapshot.json() as AssistantTurnPage;
+  const full = await snapshot.json() as AssistantTurnPage;
+  const { items: expected, limit, offset, has_more } = full;
   expect({ limit, offset, has_more }).toEqual({ limit: 200, offset: 0, has_more: false });
+  // Every retained turn, not only the newest page, matches its pinned evidence.
+  fixture.verify(fixture.history.id, full);
   expect(expected.length).toBeLessThanOrEqual(200);
   expect(expected.slice(-50).map((turn) => turn.id)).toEqual(fixture.first.items.map((turn) => turn.id));
   await expect.poll(() => visibleTurnIds(page)).toEqual(expected.map((turn) => turn.id));

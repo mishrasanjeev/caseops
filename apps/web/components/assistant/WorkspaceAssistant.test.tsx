@@ -461,6 +461,44 @@ describe("WorkspaceAssistant", () => {
     expect(screen.getByRole("textbox", { name: "Ask this workspace" })).toHaveValue("What is the next hearing?");
   });
 
+  it("reloads the recorded failure and keeps the question when the provider could not answer", async () => {
+    const user = userEvent.setup();
+    const message = "The workspace assistant could not complete this question. Try again.";
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.askWorkspaceAssistant.mockRejectedValue(
+      new ApiError(503, message, null, "workspace_assistant_unavailable"),
+    );
+    await openStoredConversation(user);
+    await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "What is the next hearing?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(api.getAssistantSession).toHaveBeenCalledTimes(2);
+    expect(api.listAssistantTurns.mock.calls).toEqual([
+      [SESSION.id, { latest: true }],
+      [SESSION.id, { latest: true }],
+    ]);
+    expect(screen.getByText(ASSISTANT_TURN.content)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Ask this workspace" })).toHaveValue("What is the next hearing?");
+  });
+
+  it("reads the newest history page after the scope changes", async () => {
+    const user = userEvent.setup();
+    const second = { ...SCOPE, scope_id: "matter-2", label: "TM-43 · Birch mark" };
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.searchAssistantScopes.mockResolvedValue({ query: "TM-43", items: [second], truncated: false });
+    api.replaceAssistantScopes.mockResolvedValue({
+      ...SESSION, version: 2, scopes: [{ ...SCOPE, ordinal: 0 }, { ...second, ordinal: 1 }],
+    });
+    await openStoredConversation(user);
+    await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "TM-43");
+    await user.click(screen.getByRole("button", { name: "Find permitted records" }));
+    await user.click(await screen.findByRole("button", { name: "Add TM-43 · Birch mark" }));
+    await user.click(screen.getByRole("button", { name: "Apply scope" }));
+    await waitFor(() => expect(api.replaceAssistantScopes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listAssistantTurns).toHaveBeenLastCalledWith(SESSION.id, { latest: true }));
+    expect(api.listAssistantTurns).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     new ApiError(409, "Conversation sources changed. Reopen the conversation.", null, "assistant_sources_changed"),
     new ApiError(403, "This conversation is no longer permitted.", null),
