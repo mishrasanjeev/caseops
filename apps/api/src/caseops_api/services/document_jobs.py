@@ -16,6 +16,7 @@ from caseops_api.core.automated_test_context import (
     set_automated_test_request,
 )
 from caseops_api.core.redaction import redact_provider_error
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
@@ -404,6 +405,7 @@ def enqueue_processing_job(
     action: str,
     no_paid_providers: bool = False,
 ) -> DocumentProcessingJob:
+    review_company_id = get_settings().store_review_document_no_paid_company_id
     job = DocumentProcessingJob(
         company_id=company_id,
         requested_by_membership_id=requested_by_membership_id,
@@ -411,7 +413,11 @@ def enqueue_processing_job(
         attachment_id=attachment_id,
         action=action,
         status=DocumentProcessingJobStatus.QUEUED,
-        no_paid_providers=no_paid_providers or paid_providers_blocked_for_request(),
+        no_paid_providers=(
+            no_paid_providers
+            or paid_providers_blocked_for_request()
+            or (review_company_id is not None and company_id == str(review_company_id))
+        ),
     )
     session.add(job)
     session.flush()
