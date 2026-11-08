@@ -1054,7 +1054,7 @@ def test_native_context_validation_is_fail_closed_and_bounded(tail_database, var
 )
 def test_native_cross_tenant_source_or_actor_cannot_use_matching_context(tail_database, field):
     database = tail_database
-    other = _fixture(database.engine, active=False)
+    other = _fixture(database.engine, active=False, historical_attachment=True)
     with Session(database.engine) as session:
         order = MatterCourtOrder(
             matter_id=other.matter,
@@ -1221,7 +1221,7 @@ def test_native_model_run_link_requires_exact_tenant_target_and_purpose(
     tail_database, field, operation
 ):
     database = tail_database
-    other = _fixture(database.engine, active=False)
+    other = _fixture(database.engine, active=False, historical_attachment=True)
     command.upgrade(database.cfg, "head")
     with Session(database.engine) as session:
         model = ModelRun(
