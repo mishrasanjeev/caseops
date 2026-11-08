@@ -101,7 +101,15 @@ async function matchAndroidBiometric(c, simulation, prompt) {
   operation(c);
   await waitId(c, androidBiometricTitleId, prompt.title, { timeout: CX_BUDGETS.nativeReadMs });
   record(c, 'normal-os-recipe-complete', { recipe: prompt.recipe, steps: 1, workflowDomain: c.workflowDomain, physicalHardwareProven: false });
-  await c.driver.execute('mobile: fingerprint', { fingerprintId });
+  c.checkBudget?.(CX_BUDGETS.nativeReadMs);
+  assert.equal(typeof c.androidFingerprint, 'function', 'CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED');
+  try {
+    await c.androidFingerprint(fingerprintId);
+  } catch (error) {
+    if (error?.message === 'CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY')
+      c.state.mutationUncertain = true;
+    throw error;
+  }
 }
 export async function biometric(c, mode) {
   assert.ok(['match', 'cancel', 'enrollment-change'].includes(mode));
@@ -147,6 +155,7 @@ export async function enableLock(c) {
   if (c.platform === 'android' && c.workflowDomain === 'emulator') {
     androidSimulation = requireBiometricSimulation(c);
     androidFingerprintId(androidSimulation);
+    assert.equal(typeof c.androidFingerprint, 'function', 'CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED');
     // Refuse incomplete setup evidence before enabling the local lock.
     requireAndroidBiometricPrompt(c, androidBiometricPrompts.write);
     requireAndroidBiometricPrompt(c, androidBiometricPrompts.read);

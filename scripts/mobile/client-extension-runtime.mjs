@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 import { readClientPublicInput, assertClientNamedDescriptor } from './client-extension-public-input.mjs';
 
 const fields=['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs'];
@@ -24,7 +26,7 @@ function canonicalParents(file) {
   }
 }
 export function selectedClientExecutable(name,environment=process.env) {
-  assert.ok(['git','node'].includes(name));
+  assert.ok(['git','node','adb'].includes(name));
   const leaf=process.platform==='win32'?name+'.exe':name;
   for(const folder of(environment.PATH||'').split(path.delimiter))if(path.isAbsolute(folder)){
     const file=path.join(folder,leaf);try{fs.accessSync(file,fs.constants.X_OK);if(fs.statSync(file).isFile())return fs.realpathSync(file);}catch{}
@@ -71,6 +73,80 @@ export function captureClientFile(file,maxBytes=268435456) {
     const value = readOpenedFile(file, fd, opened, maxBytes);
     return {path:file,sha256:value.sha256,extent:value.extent,metadata:value.metadata};
   } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+export function createAndroidFingerprintDispatch({
+  fixture, installed, adbTool, environment = process.env,
+}, {
+  command = execFileSync, capture = captureClientFile, hold = delay, now = performance.now.bind(performance),
+} = {}) {
+  const profile = androidLocalProfile(fixture.udid, 'CX_ANDROID_FINGERPRINT_EMULATOR_REQUIRED');
+  const socket = `tcp:127.0.0.1:${profile.adbPort}`;
+  assert.equal(fixture.cx.workflowDomain, 'emulator');
+  assert.equal(fixture.androidTransport.adbPort, profile.adbPort);
+  assert.equal(fixture.androidTransport.transportMode ?? 'emulator', 'emulator');
+  assert.equal(environment.ADB_SERVER_SOCKET, socket);
+  if (environment.ANDROID_ADB_SERVER_PORT !== undefined)
+    assert.equal(environment.ANDROID_ADB_SERVER_PORT, String(profile.adbPort));
+  if (environment.ANDROID_SERIAL !== undefined)
+    assert.equal(environment.ANDROID_SERIAL, fixture.udid);
+  assert.equal(installed.platform, 'android');
+  assert.equal(installed.udid, fixture.udid);
+  assert.equal(installed.appId, fixture.appId);
+  assert.equal(installed.binaryHash, fixture.cx.osRecipes.binaryHash);
+  const simulation = fixture.cx.biometricSimulation;
+  assert.equal(simulation?.observed, true, 'CX_OBSERVED_OS_BIOMETRIC_SIMULATION_REQUIRED');
+  assert.equal(simulation.udid, installed.udid);
+  assert.equal(simulation.binaryHash, installed.binaryHash);
+  assert.match(installed.bootId, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.ok(path.isAbsolute(adbTool.path) && path.basename(adbTool.path) === (process.platform === 'win32' ? 'adb.exe' : 'adb'));
+  const childEnvironment = Object.fromEntries(['HOME', 'USERPROFILE', 'SYSTEMROOT', 'TEMP', 'TMPDIR']
+    .filter(key => typeof environment[key] === 'string').map(key => [key, environment[key]]));
+  Object.assign(childEnvironment, {
+    ADB_SERVER_SOCKET: socket, ANDROID_ADB_SERVER_PORT: String(profile.adbPort), ANDROID_SERIAL: fixture.udid,
+  });
+  const args = ['-P', String(profile.adbPort), '-s', fixture.udid];
+
+  return async fingerprintId => {
+    assert.equal(fingerprintId, simulation.fingerprintId);
+    assert.ok(Number.isInteger(fingerprintId) && fingerprintId > 0 && fingerprintId < 1000);
+    const deadline = now() + 10000;
+    assert.deepEqual(capture(adbTool.path, 32 * 1024 * 1024), adbTool, 'CX_ANDROID_FINGERPRINT_ADB_CHANGED');
+    const invoke = commandArgs => {
+      const remaining = Math.floor(deadline - now());
+      assert.ok(remaining > 0, 'CX_ANDROID_FINGERPRINT_TRANSPORT_DEADLINE');
+      return command(adbTool.path, [...args, ...commandArgs], {
+        shell: false, windowsHide: true, env: childEnvironment, encoding: 'utf8',
+        timeout: Math.min(2500, remaining), maxBuffer: 256, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    };
+    const verifyBoot = () => {
+      assert.equal(invoke(['shell', 'cat', '/proc/sys/kernel/random/boot_id']).trim(),
+        installed.bootId, 'CX_ANDROID_FINGERPRINT_BOOT_CHANGED');
+    };
+    const verify = () => {
+      verifyBoot();
+      const avd = invoke(['emu', 'avd', 'name']).split(/\r?\n/);
+      if (avd.at(-1) === '') avd.pop();
+      assert.deepEqual(avd, [profile.avdName, 'OK'], 'CX_ANDROID_FINGERPRINT_AVD_ACK_REQUIRED');
+    };
+    const acknowledge = operation => {
+      assert.match(invoke(operation), /^OK(?:\r?\n)?$/, 'CX_ANDROID_FINGERPRINT_EXACT_ACK_REQUIRED');
+    };
+    verify();
+    try {
+      // ADB uses the existing emulator-console authentication. Appium's
+      // fingerprint wrapper empties the console token before dispatch.
+      acknowledge(['emu', 'finger', 'touch', String(fingerprintId)]);
+      await hold(220);
+      verifyBoot();
+      acknowledge(['emu', 'finger', 'remove']);
+      verify();
+    } catch (cause) {
+      // A timeout or lost response may have executed the touch. Never replay it.
+      throw new Error('CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY', { cause });
+    }
+  };
 }
 
 /** Receipt v2 requires a fresh capture; legacy one-observation receipts are not upgraded.
