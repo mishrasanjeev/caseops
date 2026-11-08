@@ -218,6 +218,29 @@ describe("IpDocumentWorkspace retirement", () => {
     expect(within(panel).getByRole("button", { name: "Retire document" })).toBeDisabled();
   });
 
+  it("brings the panel into view when it opens and again once the reason field appears", async () => {
+    let settle: (value: IpDocumentRetirementPreview) => void = () => undefined;
+    fetchIpDocumentRetirementMock.mockReturnValueOnce(new Promise((resolve) => { settle = resolve; }));
+    const original = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole("button", { name: "Retire" }));
+      const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrollIntoView.mock.contexts[0]).toBe(panel);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", behavior: "smooth" });
+
+      settle(RETIRABLE);
+      await within(panel).findByLabelText("Reason for retiring");
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+      expect(scrollIntoView.mock.contexts[1]).toBe(panel);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
   it("shows a retry when the reliance check fails", async () => {
     fetchIpDocumentRetirementMock.mockRejectedValueOnce(new Error("network down"));
     renderWorkspace();
