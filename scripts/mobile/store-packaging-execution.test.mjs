@@ -11,23 +11,25 @@ import { syncBuiltinESMExports } from 'node:module';
 import { digest, gitSource } from './store-packaging-inputs.mjs';
 
 const repo = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
-function fixture(t) {
+function fixture(t, { androidOnly = false, reservationDirectory } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-store-execution-')));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
-  const root = path.join(base, 'source'), outputs = path.join(base, 'outputs'), reservations = path.join(base, 'reservations');
-  for (const p of [root, outputs, reservations]) fs.mkdirSync(p, { mode: 0o700 });
+  const root = path.join(base, 'source'), outputs = path.join(base, 'outputs');
+  const reservations = reservationDirectory ?? path.join(base, 'reservations');
+  for (const p of [root, outputs]) fs.mkdirSync(p, { mode: 0o700 });
+  if (!reservationDirectory) fs.mkdirSync(reservations, { mode: 0o700 });
   const save = (name, value) => { const file = path.join(base, name), bytes = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
     fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 }); return { path: file, sha256: digest(bytes) }; };
   const source = { sourceSha: '1'.repeat(40), tree: '2'.repeat(40), fullSourceFingerprint: digest('full source'), files: [] };
   const sourceContract = { sourceSha: source.sourceSha, sourceFingerprint: digest('mobile source'), inputFileCount: 100 };
   const config = { schemaVersion: 1, kind: 'caseops-native-links', syntheticDataOnly: true, redirectUri: 'https://auth.contract-fixture.org/native/oauth/callback',
-    ios: { bundleIdentifier: 'org.contract.storeapp', applicationIdentifierPrefix: 'PREF123456' },
+    ...(androidOnly ? {} : { ios: { bundleIdentifier: 'org.contract.storeapp', applicationIdentifierPrefix: 'PREF123456' } }),
     android: { packageName: 'org.contract.storeapp', signingCertificateSha256: [digest('app-signing')] } };
-  const nativeLinks = save('links.json', config), identities = { iosBundleIdentifier: config.ios.bundleIdentifier, androidPackageName: config.android.packageName };
+  const nativeLinks = save('links.json', config), identities = { iosBundleIdentifier: config.ios?.bundleIdentifier ?? null, androidPackageName: config.android.packageName };
   const privacyPolicy = save('privacy-policy.json', { schemaVersion: 1, kind: 'caseops-mobile-privacy-policy', nativeLinkConfigSha256: nativeLinks.sha256,
     url: 'https://auth.contract-fixture.org/app-privacy', version: 'synthetic-contract-only' });
   const credentialInput = { path: path.join(base, 'synthetic-passwords.json') };
-  fs.writeFileSync(credentialInput.path, JSON.stringify({ storePassword: 'synthetic-only', keyPassword: 'synthetic-only' }), { flag: 'wx', mode: 0o600 });
+  if (!androidOnly) fs.writeFileSync(credentialInput.path, JSON.stringify({ storePassword: 'synthetic-only', keyPassword: 'synthetic-only' }), { flag: 'wx', mode: 0o600 });
   const baseline = save('baseline.json', { schemaVersion: 1, kind: 'caseops-declared-store-build-baseline', syntheticDataOnly: true, identities,
     marketingVersion: '0.9.0', iosBuildNumber: '0', androidVersionCode: 0, scope: 'operator-declared-not-store-verified' });
   const storeBuild = save('build.json', { schemaVersion: 1, kind: 'caseops-store-build', syntheticDataOnly: true, nativeLinkConfigSha256: nativeLinks.sha256,
@@ -137,6 +139,59 @@ test('the same approved build batch serves both platforms but each platform can 
   const c = f.make('ios'), before = f.calls.length, readBefore = f.reads().signingReads;
   const replay = await executeStorePackaging(c.ref(), { root: f.root, adapter: f.adapter }); assert.equal(replay.observed, false);
   assert.equal(f.calls.length, before); assert.equal(f.reads().signingReads, readBefore); assert.equal(replay.phases[0].status, 'failed');
+});
+test('Android-only execution reserves only its real identity and retains a failed attempt across replays', async t => {
+  const f = fixture(t, { androidOnly: true });
+  f.adapter.command = async command => {
+    f.calls.push(command);
+    return f.answer(23);
+  };
+  const a = f.make('android');
+  assert.equal(fs.existsSync(a.q.signingSecrets.path), false);
+  const first = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(first.phases[0].status, 'passed', JSON.stringify(first.originalFailure));
+  assert.equal(first.originalFailure.code, 'STORE_COMMAND_FAILED');
+  assert.equal(first.commands[0].exitCode, 23);
+  assert.equal(first.observed, false);
+  assert.equal(first.distributionSigningVerified, false);
+  assert.equal(f.reads().signingReads, 0);
+  assert.equal(f.calls.length, 1);
+  assert.ok(f.calls[0].args.includes('scripts/mobile/prepare-viewer-assets.mjs'));
+
+  const readReservations = () => new Map(fs.readdirSync(f.reservations).map(name => [
+    name, fs.readFileSync(path.join(f.reservations, name)),
+  ]));
+  const retained = readReservations();
+  const batchName = [...retained.keys()].find(name => name.startsWith('batch-'));
+  const batch = JSON.parse(retained.get(batchName)).batch;
+  const record = { platform: 'android', appId: 'org.contract.storeapp', value: '1' };
+  const counterName = digest(JSON.stringify([record.platform, record.appId])) + '-android-1.json';
+  const claimName = 'execution-' + batch + '-android.claim';
+  assert.deepEqual([...retained.keys()].sort(), [counterName, batchName, claimName].sort());
+  assert.deepEqual(JSON.parse(retained.get(counterName)), { requestSha256: batch, platform: 'android', value: '1' });
+  assert.deepEqual(JSON.parse(retained.get(batchName)), { kind: 'caseops-store-number-batch', batch, records: [record] });
+  assert.deepEqual(JSON.parse(retained.get(claimName)), { batch, platform: 'android' });
+  if (process.platform !== 'win32') {
+    for (const name of retained.keys()) {
+      assert.equal(fs.statSync(path.join(f.reservations, name)).mode & 0o777, 0o600);
+    }
+  }
+
+  const b = f.make('android');
+  const replay = await executeStorePackaging(b.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(replay.observed, false);
+  assert.equal(replay.phases[0].status, 'failed');
+  assert.equal(replay.commands.length, 0);
+  assert.equal(f.reads().signingReads, 0);
+  assert.deepEqual(readReservations(), retained);
+
+  const joint = fixture(t, { reservationDirectory: f.reservations });
+  const c = joint.make('android');
+  const collision = await executeStorePackaging(c.ref(), { root: joint.root, adapter: joint.adapter });
+  assert.equal(collision.originalFailure.code, 'STORE_PARTIAL_RESERVATION_REFUSED');
+  assert.equal(joint.calls.length, 0);
+  assert.equal(joint.reads().signingReads, 0);
+  assert.deepEqual(readReservations(), retained);
 });
 test('a failed required gate refuses before reservation output or signing reads', async t => {
   const f = fixture(t), a = f.make(); a.q.gates = f.save('failed-gates.json', { ...f.gateValue, results: { ...f.gateValue.results, codeqlAlertVerdict: 'failed' } });
