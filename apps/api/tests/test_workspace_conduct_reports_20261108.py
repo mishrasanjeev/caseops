@@ -84,7 +84,8 @@ def test_reported_note_file_and_author_require_exact_current_visible_provenance(
 
     note_payload = _payload("note", matter_id, note_id)
     note_receipt = _receipt(client, reporter, note_payload)
-    assert _receipt(client, reporter, note_payload).content == note_receipt.content
+    replay = _receipt(client, reporter, note_payload)
+    assert replay.content == note_receipt.content
     changed_reason = {**note_payload, "reason": "other"}
     conflict = client.post(REPORTS, headers=reporter, json=changed_reason)
     assert conflict.status_code == 409
@@ -100,15 +101,19 @@ def test_reported_note_file_and_author_require_exact_current_visible_provenance(
     opaque = client.post(REPORTS, headers=reporter, json=unknown_item)
     assert opaque.status_code == 404
     opaque_body = opaque.json()
-    assert opaque_body.pop("request_id")
-    assert client.post(REPORTS, headers=reporter_web, json=note_payload).status_code == 403
-    assert client.post(REPORTS, headers=reporter, json={
+    request_id = opaque_body.pop("request_id")
+    assert request_id
+    web_denied = client.post(REPORTS, headers=reporter_web, json=note_payload)
+    assert web_denied.status_code == 403
+    free_text_denied = client.post(REPORTS, headers=reporter, json={
         **note_payload, "target": {**note_payload["target"], "body": "Synthetic free text"},
-    }).status_code == 422
-    assert client.post(REPORTS, headers=reporter, json={
+    })
+    assert free_text_denied.status_code == 422
+    unbound_user_denied = client.post(REPORTS, headers=reporter, json={
         "operation_id": str(uuid4()), "reason": "other",
         "target": {"kind": "user", "membership_id": author_id},
-    }).status_code == 422
+    })
+    assert unbound_user_denied.status_code == 422
     for forged in (
         _payload("note", str(uuid4()), note_id),
         _payload("file", matter_id, note_id),
@@ -118,7 +123,8 @@ def test_reported_note_file_and_author_require_exact_current_visible_provenance(
         response = client.post(REPORTS, headers=reporter, json=forged)
         assert response.status_code == 404
         body = response.json()
-        assert body.pop("request_id")
+        request_id = body.pop("request_id")
+        assert request_id
         assert body == opaque_body
 
     wall = client.post(f"/api/matters/{matter_id}/access/walls", headers=owner, json={
@@ -129,7 +135,8 @@ def test_reported_note_file_and_author_require_exact_current_visible_provenance(
         denied = client.post(REPORTS, headers=reporter, json=payload)
         assert denied.status_code == 404
         body = denied.json()
-        assert body.pop("request_id")
+        request_id = body.pop("request_id")
+        assert request_id
         assert body == opaque_body
 
     # Reports do not change the target's access. The existing explicit owner
@@ -220,9 +227,10 @@ def test_operator_intake_paginates_opaque_metadata_and_escalates_admins(client, 
     other_native = _headers(_device(client, other_owner))
     assert client.get(WORKSPACE, headers=other_owner).json() == {"reports": [], "next_cursor": None}
     assert client.get(WORKSPACE, headers=other_owner, params={"after": first}).status_code == 404
-    assert client.post(
+    foreign_report = client.post(
         REPORTS, headers=other_native, json=_payload("note", matter_id, member_note_id),
-    ).status_code == 404
+    )
+    assert foreign_report.status_code == 404
 
     # The existing platform MFA fence applies to the new endpoint. Synthetic
     # enrolment and step-up exercise real auth APIs without changing policy.
