@@ -1,0 +1,33 @@
+name: Install pinned PostgreSQL CI uv
+description: Verify the upstream Linux x64 uv archive before adding its tools to PATH.
+runs:
+  using: composite
+  steps:
+    - name: Install uv 0.13.7 from Astral
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${RUNNER_TEMP:?}" "${GITHUB_PATH:?}" "${GITHUB_ENV:?}"
+        if [[ "${RUNNER_OS}" != Linux || "${RUNNER_ARCH}" != X64 ]]; then
+          echo "PostgreSQL CI uv requires a Linux X64 runner." >&2
+          exit 1
+        fi
+
+        root=$(mktemp -d "${RUNNER_TEMP}/caseops-postgres-uv.XXXXXXXX")
+        artifact=uv-x86_64-unknown-linux-gnu.tar.gz
+        archive="${root}/${artifact}"
+        # Astral's official 0.13.7 release lists this first-party endpoint and
+        # the same archive SHA-256 as its GitHub Releases asset.
+        curl --disable --proto '=https' --fail --silent --show-error \
+          --connect-timeout 15 --max-time 90 --max-filesize 16671812 --output "${archive}" \
+          "https://releases.astral.sh/github/uv/releases/download/0.13.7/${artifact}"
+        printf 'c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83  %s\n' \
+          "${archive}" | sha256sum --check --strict -
+        tar --extract --gzip --file "${archive}" --directory "${root}" \
+          uv-x86_64-unknown-linux-gnu/uv uv-x86_64-unknown-linux-gnu/uvx
+        bin="${root}/uv-x86_64-unknown-linux-gnu"
+        version=$("${bin}/uv" --version)
+        [[ "${version}" == 'uv 0.13.7' || "${version}" == 'uv 0.13.7 '* ]]
+        printf '%s\n' "${version}"
+        printf 'UV_CACHE_DIR=%s/setup-uv-cache\n' "${RUNNER_TEMP}" >> "${GITHUB_ENV}"
+        printf '%s\n' "${bin}" >> "${GITHUB_PATH}"

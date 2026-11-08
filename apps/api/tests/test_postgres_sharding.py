@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree
@@ -19,6 +22,138 @@ from tests.postgres_sharding import (
     pytest_collection_modifyitems,
     verify_reports,
 )
+from tests.test_deploy_prod_hardening import _bash_path, _find_working_bash, _write_fake_executable
+
+UV_ACTION = "./.github/actions/postgres-uv"
+UV_ARCHIVE = "uv-x86_64-unknown-linux-gnu.tar.gz"
+UV_ARCHIVE_URL = f"https://releases.astral.sh/github/uv/releases/download/0.13.7/{UV_ARCHIVE}"
+UV_ARCHIVE_SHA256 = "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+
+
+def _postgres_uv_step(root: Path) -> str:
+    action = yaml.safe_load((root / UV_ACTION / "action.yml").read_text(encoding="utf-8"))
+    assert action["runs"]["using"] == "composite"
+    step, = action["runs"]["steps"]
+    assert step["shell"] == "bash"
+    return step["run"]
+
+
+def test_ci_postgres_install_is_scoped_and_pinned_to_the_official_archive():
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    using_action = [
+        (name, step)
+        for name, job in workflow["jobs"].items()
+        for step in job.get("steps", [])
+        if step.get("uses") == UV_ACTION
+    ]
+    assert len(using_action) == 2
+    assert dict(using_action) == {
+        "postgres-validation-shards": {
+            "name": "Install uv", "timeout-minutes": 5, "uses": UV_ACTION,
+        },
+        "postgres-validation": {"name": "Install uv", "uses": UV_ACTION},
+    }
+    for job, install in using_action:
+        steps = workflow["jobs"][job]["steps"]
+        checkout = next(step for step in steps if step.get("uses") == "actions/checkout@v4")
+        assert steps.index(checkout) < steps.index(install)
+    action = _postgres_uv_step(root)
+    assert f"artifact={UV_ARCHIVE}" in action
+    assert UV_ARCHIVE_URL.replace(UV_ARCHIVE, "${artifact}") in action
+    assert action.count(UV_ARCHIVE_SHA256) == 1
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "ok", "http-504", "transfer-timeout", "corrupt-archive",
+        "wrong-version", "wrong-architecture",
+    ],
+)
+def test_postgres_uv_install_verifies_before_activation(tmp_path: Path, mode: str):
+    root = Path(__file__).resolve().parents[3]
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    output_path, output_env = tmp_path / "github-path", tmp_path / "github-env"
+    curl_trace, uv_trace = tmp_path / "curl-attempt", tmp_path / "uv-attempt"
+    fixture_archive = tmp_path / UV_ARCHIVE
+    version = "uv 0.13.70" if mode == "wrong-version" else "uv 0.13.7 (fixture)"
+    with tarfile.open(fixture_archive, "w:gz") as archive:
+        for binary in ("uv", "uvx"):
+            contents = (
+                '#!/usr/bin/env bash\n'
+                'printf "%s\\n" "$*" >> "$FAKE_UV_TRACE"\n'
+                '[[ "$*" == --version ]] || exit 93\n'
+                f'printf "%s\\n" "{version}"\n'
+            ).encode()
+            member = tarfile.TarInfo(f"uv-x86_64-unknown-linux-gnu/{binary}")
+            member.size = len(contents)
+            member.mode = 0o755
+            archive.addfile(member, io.BytesIO(contents))
+    fixture_hash = hashlib.sha256(fixture_archive.read_bytes()).hexdigest()
+    if mode == "corrupt-archive":
+        with fixture_archive.open("ab") as archive:
+            archive.write(b"corrupt")
+    _write_fake_executable(fake_bin / "curl", """#!/usr/bin/env bash
+set -euo pipefail
+printf 'attempt\\n' >> "$FAKE_CURL_TRACE"
+expected=(--disable --proto '=https' --fail --silent --show-error
+          --connect-timeout 15 --max-time 90 --max-filesize 16671812 --output)
+[[ "$#" == 15 && "${*:1:13}" == "${expected[*]}" ]]
+[[ "${15}" == "$FAKE_UV_URL" && "${14}" == "$RUNNER_TEMP"/caseops-postgres-uv.*/"$FAKE_UV_NAME" ]]
+case "$FAKE_UV_MODE" in
+  http-504) exit 22 ;;
+  transfer-timeout) exit 28 ;;
+esac
+cp -- "$FAKE_UV_ARCHIVE" "${14}"
+""")
+    env = {
+        **os.environ,
+        "RUNNER_TEMP": _bash_path(runner),
+        "RUNNER_OS": "Linux",
+        "RUNNER_ARCH": "ARM64" if mode == "wrong-architecture" else "X64",
+        "GITHUB_PATH": _bash_path(output_path),
+        "GITHUB_ENV": _bash_path(output_env),
+        "FAKE_CURL_TRACE": _bash_path(curl_trace),
+        "FAKE_UV_TRACE": _bash_path(uv_trace),
+        "FAKE_UV_MODE": mode,
+        "FAKE_UV_URL": UV_ARCHIVE_URL,
+        "FAKE_UV_NAME": UV_ARCHIVE,
+        "FAKE_UV_ARCHIVE": _bash_path(fixture_archive),
+    }
+    # Synthetic archive and version process only. The unmodified source pin
+    # is independently bound to the upstream archive by the source contract.
+    command = (
+        'export PATH="$1:$PATH"; [[ "$(command -v curl)" == "$1/curl" ]] || exit 92; '
+        + _postgres_uv_step(root).replace(UV_ARCHIVE_SHA256, fixture_hash)
+    )
+    result = subprocess.run(
+        [_find_working_bash(), "-c", command, "postgres-uv-test", _bash_path(fake_bin)],
+        env=env, capture_output=True, text=True, timeout=15, check=False,
+    )
+    if mode == "wrong-architecture":
+        assert not curl_trace.exists()
+        assert "requires a Linux X64 runner" in result.stderr
+    else:
+        assert curl_trace.read_text().splitlines() == ["attempt"]
+    if mode in {"ok", "wrong-version"}:
+        assert uv_trace.read_text().splitlines() == ["--version"]
+    else:
+        assert not uv_trace.exists()
+    if mode == "ok":
+        assert result.returncode == 0, result.stdout + result.stderr
+        binary, = runner.glob("caseops-postgres-uv.*/uv-x86_64-unknown-linux-gnu")
+        assert (binary / "uvx").is_file()
+        assert output_path.read_text().splitlines() == [_bash_path(binary)]
+        assert output_env.read_text().splitlines() == [
+            f"UV_CACHE_DIR={_bash_path(runner)}/setup-uv-cache",
+        ]
+    else:
+        assert result.returncode == {"http-504": 22, "transfer-timeout": 28}.get(mode, 1)
+        assert not output_path.exists() and not output_env.exists()
 
 
 def _render_postgres_matrix(value: str, shard: int, total: int) -> str:

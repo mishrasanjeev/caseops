@@ -348,9 +348,7 @@ jobs:
 
       - name: Install uv
         timeout-minutes: 5
-        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
-        with:
-          version: "latest"
+        uses: ./.github/actions/postgres-uv
 
       - name: Set up Python
         run: uv python install 3.13
@@ -439,7 +437,7 @@ jobs:
         run: exit 1
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        uses: ./.github/actions/postgres-uv
       - name: Download PostgreSQL evidence
         uses: actions/download-artifact@v4
         with:
