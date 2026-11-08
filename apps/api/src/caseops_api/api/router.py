@@ -191,6 +191,16 @@ def register_api_routes(application: FastAPI) -> None:
         tags=["platform-admin"],
     )
     application.include_router(
+        workspace_conduct.workspace_operator_router,
+        prefix="/api/admin/workspace-conduct",
+        tags=["workspace-conduct"],
+    )
+    application.include_router(
+        workspace_conduct.publisher_operator_router,
+        prefix="/api/platform-admin",
+        tags=["workspace-conduct"],
+    )
+    application.include_router(
         provider_operations.router,
         prefix="/api/admin/provider-operations",
         tags=["provider-operations"],

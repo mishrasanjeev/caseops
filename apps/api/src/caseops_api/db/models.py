@@ -22689,6 +22689,7 @@ MatterTaskQueueDirty = _queue_models.MatterTaskQueueDirty
 MatterTaskQueueGroup = _queue_models.MatterTaskQueueGroup
 MatterTaskQueuePage = _queue_models.MatterTaskQueuePage
 WorkspaceConductAcceptance = _conduct_models.WorkspaceConductAcceptance
+WorkspaceConductReport = _conduct_models.WorkspaceConductReport
 
 event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_model_schema)
 event.listen(

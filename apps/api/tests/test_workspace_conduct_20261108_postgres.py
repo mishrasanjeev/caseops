@@ -14,6 +14,18 @@ from tests.test_workspace_conduct_20261108 import (
 from tests.test_workspace_conduct_20261108 import (
     test_upload_rechecks_native_membership_after_storage_and_cleans_owned_copy as upload_race,
 )
+from tests.test_workspace_conduct_reports_20261108 import (
+    test_concurrent_exact_report_replays_share_one_durable_receipt as duplicate,
+)
+from tests.test_workspace_conduct_reports_20261108 import (
+    test_operator_intake_paginates_opaque_metadata_and_escalates_admins as intake,
+)
+from tests.test_workspace_conduct_reports_20261108 import (
+    test_report_rechecks_revocation_after_authentication as report_race,
+)
+from tests.test_workspace_conduct_reports_20261108 import (
+    test_reported_note_file_and_author_require_exact_current_visible_provenance as reports,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -32,3 +44,20 @@ def test_conduct_rejects_revoked_acceptance(isolated_postgres_client, monkeypatc
 
 def test_conduct_rejects_revocation_after_upload_storage(isolated_postgres_client, monkeypatch):
     upload_race(isolated_postgres_client, monkeypatch)
+
+
+
+def test_conduct_report_target_provenance(isolated_postgres_client):
+    reports(isolated_postgres_client)
+
+
+def test_conduct_report_operator_intake(isolated_postgres_client, monkeypatch):
+    intake(isolated_postgres_client, monkeypatch)
+
+
+def test_conduct_report_rejects_stale_authority(isolated_postgres_client, monkeypatch):
+    report_race(isolated_postgres_client, monkeypatch)
+
+
+def test_conduct_report_duplicate_atomicity(isolated_postgres_client, monkeypatch):
+    duplicate(isolated_postgres_client, monkeypatch)

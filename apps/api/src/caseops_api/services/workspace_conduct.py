@@ -9,10 +9,11 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from caseops_api.core.problem_details import ProblemHTTPException
-from caseops_api.db.models import NativeDeviceSession, WorkspaceConductAcceptance
+from caseops_api.db.models import CompanyMembership, NativeDeviceSession, WorkspaceConductAcceptance
 from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.workspace_conduct import WorkspaceConductStatus
 from caseops_api.services import native_auth
+from caseops_api.services.assignment_memberships import lock_company_memberships_for_oauth
 from caseops_api.services.identity import _token_precedes_membership_cutoff
 from caseops_api.services.session_context import SessionContext
 
@@ -45,31 +46,31 @@ def current_status(session: Session, *, context: SessionContext) -> WorkspaceCon
     return _status(session.get(WorkspaceConductAcceptance, _key(context)))
 
 
-def accept_current(
-    session: Session, *, context: SessionContext, version: str,
-) -> WorkspaceConductStatus:
+def lock_current_native_actor(
+    session: Session, *, context: SessionContext, target_membership_id: str | None = None,
+) -> tuple[SessionContext, CompanyMembership | None]:
     _require_native(context)
-    if version != RULES_VERSION:
-        raise ProblemHTTPException(
-            409,
-            problem_type="workspace_conduct_version_changed",
-            detail="The workspace use rules changed. Review the current version.",
-        )
     serialize_sqlite_writer(session)
-    # This uses the same Company -> Membership -> User -> Device order as
-    # native refresh. The membership lock also serializes concurrent accepts.
-    fresh = native_auth._identity_fence(
-        session,
-        membership_id=context.membership.id,
-        source_issued_at=context.token_issued_at,
+    # Native refresh uses this same Company -> Membership -> User -> Device
+    # order. Include the reported membership before taking the Device lock.
+    company, memberships = lock_company_memberships_for_oauth(
+        session, company_id=context.company.id,
+        membership_ids=(context.membership.id, target_membership_id),
     )
-    if fresh.company.id != context.company.id or fresh.user.id != context.user.id:
+    fresh = memberships.get(context.membership.id)
+    if company is None or fresh is None or fresh.user.id != context.user.id:
         raise HTTPException(401, "The current identity changed. Sign in again.")
+    native_auth._validate_identity(SessionContext(
+        company=company,
+        membership=fresh,
+        user=fresh.user,
+        token_issued_at=context.token_issued_at,
+    ))
     device = session.scalar(
         select(NativeDeviceSession)
         .where(
             NativeDeviceSession.id == context.native_session_id,
-            NativeDeviceSession.membership_id == fresh.membership.id,
+            NativeDeviceSession.membership_id == fresh.id,
         )
         .with_for_update(of=NativeDeviceSession)
         .execution_options(populate_existing=True)
@@ -80,11 +81,25 @@ def accept_current(
         session,
         {
             "sid": device.id,
-            "membership_id": fresh.membership.id,
-            "company_id": fresh.company.id,
+            "membership_id": fresh.id,
+            "company_id": company.id,
             "sub": fresh.user.id,
         },
     )
+    return verified, memberships.get(target_membership_id)
+
+
+def accept_current(
+    session: Session, *, context: SessionContext, version: str,
+) -> WorkspaceConductStatus:
+    _require_native(context)
+    if version != RULES_VERSION:
+        raise ProblemHTTPException(
+            409,
+            problem_type="workspace_conduct_version_changed",
+            detail="The workspace use rules changed. Review the current version.",
+        )
+    verified, _target = lock_current_native_actor(session, context=context)
     row = session.get(WorkspaceConductAcceptance, _key(verified))
     if row is None:
         insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert
