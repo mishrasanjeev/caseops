@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
 import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor } from './v1-workflows.mjs';
-import { validateV1Fixture, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
+import { validateV1Fixture, v1CalendarDeadlineIdentity, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
 import { pendingV1ProducerPlan, requireV1ProducerPlan, produceV1Dataset, resolveV1ResponseReferences, produceV1Inbox, pendingV1InboxPlan } from './v1-workflows-fixture.mjs';
@@ -399,6 +399,27 @@ test('supplement exact list and producer create routes match actual canonical tr
     assert.throws(() => requireV1ProducerPlan(changed));
   }
 });
+test('Calendar row identity preserves the typed API ID and the acknowledged docket and Matter lineage', () => {
+  const docket = { id: uuid(50), matter_id: uuid(100) };
+  const confirmation = { id: uuid(65), docket_id: docket.id, matter_deadline_id: uuid(66) };
+  const events = { range_from: '2026-10-27', range_to: '2026-10-27', events: [{
+    id: `deadline:${confirmation.matter_deadline_id}`, kind: 'deadline', ip_docket_id: docket.id, matter_id: docket.matter_id,
+  }] };
+  const [event] = events.events;
+  const id = v1CalendarDeadlineIdentity(event, docket, confirmation.matter_deadline_id);
+  assert.equal(selector('ios', 'id', `event-${id}`), `~event-deadline:${confirmation.matter_deadline_id}`);
+  assert.equal(selector('android', 'id', `event-${id}`), `id=event-deadline:${confirmation.matter_deadline_id}`);
+  for (const [changed, pattern] of [
+    [{ kind: 'task' }, /ACTUAL_CALENDAR_DEADLINE_KIND_REQUIRED/],
+    [{ id: `task:${confirmation.matter_deadline_id}` }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ id: confirmation.matter_deadline_id }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ id: `deadline:${confirmation.id}` }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ ip_docket_id: uuid(51) }, /CALENDAR_DOCKET_IDENTITY_REQUIRED/],
+    [{ matter_id: uuid(101) }, /CALENDAR_LINKED_MATTER_IDENTITY_REQUIRED/],
+  ]) assert.throws(() => v1CalendarDeadlineIdentity({ ...event, ...changed }, docket, confirmation.matter_deadline_id), pattern);
+  assert.throws(() => v1CalendarDeadlineIdentity(event, docket, null), /EXACT_V1_IDENTITY_REQUIRED/);
+});
+
 test('old eleven-case request identity refuses before any evidence or private loader', async () => {
   const value = admissionFixture(); value.q.inventoryId = 'native-v1-source-work-2026-10-27'; let reads = 0;
   value.dependencies.read = () => { reads++; throw Error('must not read'); };

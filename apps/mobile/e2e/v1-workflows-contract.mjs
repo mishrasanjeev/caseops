@@ -345,6 +345,14 @@ export function validateV1Fixture(fixture, platform) {
   assert.equal(inbox.externalCalls, 0); assert.equal(inbox.manualReceiptInsertion, false);
   return fixture;
 }
+/** Calendar's row identity is typed; the UUID is the acknowledged Matter deadline. */
+export function v1CalendarDeadlineIdentity(event, docket, deadlineId) {
+  assert.equal(event?.kind, 'deadline', 'ACTUAL_CALENDAR_DEADLINE_KIND_REQUIRED');
+  assert.equal(event.id, `deadline:${v1Identity(deadlineId)}`, 'ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED');
+  assert.equal(event.ip_docket_id, v1Identity(docket?.id), 'CALENDAR_DOCKET_IDENTITY_REQUIRED');
+  assert.equal(event.matter_id, v1Identity(docket?.matter_id), 'CALENDAR_LINKED_MATTER_IDENTITY_REQUIRED');
+  return event.id;
+}
 export function validateV1ExecutionFixture(fixture, platform) {
   validateV1Fixture(fixture, platform);
   const { records, nativeSelectors } = fixture.v1;
@@ -356,7 +364,8 @@ export function validateV1ExecutionFixture(fixture, platform) {
   for (const key of ['day', 'dayLabel', 'nextWeekLabel']) text(records.calendar[key]);
   assert.match(records.calendar.day, /^\d{4}-\d{2}-\d{2}$/);
   for (const source of records.calendar.sources) {
-    v1Identity(source.event.id); text(source.docket.status); v1Version(source.docket.updated_at, 'task');
+    v1CalendarDeadlineIdentity(source.event, source.docket, source.expected.deadlineId);
+    text(source.docket.status); v1Version(source.docket.updated_at, 'task');
     assert.ok(Array.isArray(source.rowFields) && source.rowFields.length === 3); source.rowFields.forEach(text);
   }
   const contracts = records.contracts.pages.flatMap(page => page.contracts);
@@ -387,7 +396,7 @@ export function validateV1ExecutionFixture(fixture, platform) {
   assert.equal(records.policy.revokedWork.task.immutable_lifecycle_history, false); v1Version(records.policy.revokedWork.task.updated_at, 'task');
   assert.ok(records.policy.revokedWork.rowFacts); assert.ok(records.policy.readOnly.rowFacts);
   const wall = records.access.wall;
-  v1Identity(wall.event.id); assert.equal(wall.event.ip_docket_id, wall.docket.id);
+  v1CalendarDeadlineIdentity(wall.event, wall.docket, wall.expected.deadlineId);
   assert.equal(wall.rowFields.length, 3); wall.rowFields.forEach(text);
   for (const target of [...records.work.targets.flatMap(value => [value, ...(value.races || []).filter(race => race.matter)]), records.policy.readOnly, records.policy.revokedWork]) {
     text(target.matter.search); text(target.matter.identityLabel); text(target.matter.title);
