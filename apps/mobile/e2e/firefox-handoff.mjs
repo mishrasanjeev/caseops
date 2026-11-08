@@ -4,6 +4,11 @@ import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
 import { browserStep } from './browser-progress.mjs';
 
+const CONVERSION_CONFIRMATION = {
+  sheet: { kind: 'id', value: 'org.mozilla.firefox:id/design_bottom_sheet' },
+  button: { kind: 'label', value: 'Open in Firefox' },
+};
+
 const REQUIRED = ['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'appOpen'];
 export function validateFirefoxRecipe(auth) {
   const stage = mfaStage(auth);
@@ -23,6 +28,9 @@ export function validateFirefoxRecipe(auth) {
     { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, 'EXACT_FIREFOX_FULL_BROWSER_MARKER_REQUIRED');
   assert.deepEqual(evidence.prepare || [], recipe.prepare || [], 'FIREFOX_PREPARATION_NOT_OBSERVED');
   assert.deepEqual(evidence.afterConnect || [], recipe.afterConnect || [], 'FIREFOX_APP_PROMPT_NOT_OBSERVED');
+  assert.deepEqual(evidence.conversionConfirmation, recipe.conversionConfirmation, 'FIREFOX_CONVERSION_CONFIRMATION_NOT_OBSERVED');
+  if (recipe.conversionConfirmation !== undefined) assert.deepEqual(recipe.conversionConfirmation,
+    CONVERSION_CONFIRMATION, 'EXACT_FIREFOX_CONVERSION_CONFIRMATION_REQUIRED');
   assert.equal(evidence.urlCloseMode || 'locator', recipe.urlCloseMode || 'locator', 'FIREFOX_URL_DISMISSAL_NOT_OBSERVED');
   for (const key of REQUIRED) assert.ok(recipe.locators?.[key], 'FIREFOX_OBSERVED_LOCATORS_REQUIRED');
   assert.deepEqual(recipe.locators.appOpen, { kind: 'id', value: 'native-app-open' }, 'EXACT_NATIVE_APP_OPEN_CONTROL_REQUIRED');
@@ -101,10 +109,35 @@ export async function prepareFirefox(context, recipe) {
   browserStep(context, 'prepare-ready', 'check');
   const locator = recipe.locators.fullBrowser;
   let nextAction = 0;
+  let lastMenuElementId;
+  let confirmationDispatched = false;
   let failure;
   await context.driver.waitUntil(async () => {
     try {
       assert.equal(await context.driver.getCurrentPackage(), recipe.packageName, 'WRONG_SYSTEM_BROWSER_PACKAGE');
+      if (recipe.conversionConfirmation) {
+        const { sheet, button } = recipe.conversionConfirmation;
+        browserStep(context, 'conversion-confirmation', 'find');
+        const dialog = await visible(context.driver, selector(context.platform, sheet.kind, sheet.value));
+        if (dialog) {
+          if (confirmationDispatched) return false;
+          const displayed = [];
+          for (const item of await dialog.$$(selector(context.platform, button.kind, button.value))) {
+            if (await item.isDisplayed()) displayed.push(item);
+          }
+          assert.ok(displayed.length <= 1, 'AMBIGUOUS_FIREFOX_CONVERSION_CONFIRMATION');
+          const [control] = displayed;
+          if (!control) return false;
+          assert.equal(await control.getAttribute('package'), recipe.packageName, 'WRONG_FIREFOX_CONFIRMATION_PACKAGE');
+          assert.equal(await control.isEnabled(), true, 'FIREFOX_CONVERSION_CONFIRMATION_DISABLED');
+          assert.notEqual(control.elementId, lastMenuElementId, 'FIREFOX_CONVERSION_CONFIRMATION_REUSES_MENU_CONTROL');
+          confirmationDispatched = true;
+          browserStep(context, 'conversion-confirmation', 'click');
+          await dispatchNativeClick(context, control, button.kind, button.value);
+          nextAction = recipe.prepare?.length || 0;
+          return false;
+        }
+      }
       browserStep(context, 'fullBrowser', 'find');
       if (locator && await visible(context.driver, selector(context.platform, locator.kind, locator.value))) return true;
       // An already open menu must not be toggled closed, and a completed
@@ -116,6 +149,7 @@ export async function prepareFirefox(context, recipe) {
         if (!control) continue;
         assert.equal(await control.isEnabled(), true, 'FIREFOX_PREPARATION_CONTROL_DISABLED');
         browserStep(context, `prepare-${index}`, 'click');
+        lastMenuElementId = control.elementId;
         await dispatchNativeClick(context, control, action.kind, action.value);
         nextAction = index + 1;
         return false;

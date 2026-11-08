@@ -1210,7 +1210,8 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {} } = {}) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {},
+  conversionConfirmation } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
@@ -1219,10 +1220,10 @@ function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], 
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
-  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect });
+  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect, conversionConfirmation });
   return { ...(consent ? { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' } : {}),
     firefoxUi: { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2', signerSha256: 'A78B62A5165B4494B2FEAD9E76A280D22D937FEE6251AECE599446B2EA319B04',
-    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare, afterConnect } };
+    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare, afterConnect, conversionConfirmation } };
 }
 test('Firefox native automation requires observed exact locators, trusted CA and reviewed package signer', (t) => {
   const auth = firefoxRecipe(t);
@@ -1234,6 +1235,22 @@ test('Firefox native automation requires observed exact locators, trusted CA and
     (copy) => { copy.firefoxUi.locatorEvidenceSha256 = '0'.repeat(64); },
     (copy) => { copy.firefoxUi.packageName = 'foreign.browser'; },
   ]) { const copy = structuredClone(auth); mutate(copy); assert.throws(() => validateFirefoxRecipe(copy)); }
+});
+
+test('Firefox accepts only the observed exact conversion confirmation sheet and button pair', (t) => {
+  const confirmation = {
+    sheet: { kind: 'id', value: 'org.mozilla.firefox:id/design_bottom_sheet' },
+    button: { kind: 'label', value: 'Open in Firefox' },
+  };
+  const observed = firefoxRecipe(t, { conversionConfirmation: confirmation });
+  assert.equal(validateFirefoxRecipe(observed), observed.firefoxUi);
+  const unobserved = firefoxRecipe(t);
+  unobserved.firefoxUi.conversionConfirmation = confirmation;
+  assert.throws(() => validateFirefoxRecipe(unobserved), /FIREFOX_CONVERSION_CONFIRMATION_NOT_OBSERVED/);
+  const foreign = firefoxRecipe(t, { conversionConfirmation: {
+    ...confirmation, sheet: { kind: 'id', value: 'org.mozilla.firefox:id/other_sheet' },
+  } });
+  assert.throws(() => validateFirefoxRecipe(foreign), /EXACT_FIREFOX_CONVERSION_CONFIRMATION_REQUIRED/);
 });
 
 test('Firefox app-open admission requires the exact new locator in both the recipe and hashed observed evidence', (t) => {
@@ -1574,22 +1591,53 @@ function firefoxDouble(t, foreign = false, options = {}) {
     elapsed: () => clock };
 }
 
-function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure } = {}) {
+function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure,
+  conversionConfirmation = false, confirmationInitiallyOpen = false, confirmationDispatchFailure, keepConfirmationOpen = false } = {}) {
   const recipe = { packageName: 'org.mozilla.firefox', locators: {
     fullBrowser: { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, urlOpen: { kind: 'id', value: 'ADDRESSBAR_URL_BOX' },
   }, prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] };
-  let menuOpen = menuInitiallyOpen, full = false, clock = 0;
+  if (conversionConfirmation) recipe.conversionConfirmation = {
+    sheet: { kind: 'id', value: 'org.mozilla.firefox:id/design_bottom_sheet' },
+    button: { kind: 'label', value: 'Open in Firefox' },
+  };
+  let menuOpen = menuInitiallyOpen, full = false, clock = 0, confirmationOpen = confirmationInitiallyOpen;
   const clicks = [], records = [];
   const menuQuery = selector('android', 'label', 'More options'), conversionQuery = selector('android', 'label', 'Open in Firefox');
+  const sheetQuery = selector('android', 'id', 'org.mozilla.firefox:id/design_bottom_sheet');
+  const sheetButtonId = 'scoped-firefox-confirmation-button';
   const driver = {
     async getCurrentPackage() { return recipe.packageName; },
     async elementClick(id) {
       clicks.push(id);
       if (dispatchFailure) throw dispatchFailure;
       if (id === menuQuery) { menuOpen = !menuOpen; if (fullAfterMenu) full = true; }
-      if (id === conversionQuery) full = true;
+      if (id === conversionQuery) {
+        if (conversionConfirmation) confirmationOpen = true;
+        else full = true;
+      }
+      if (id === sheetButtonId) {
+        if (confirmationDispatchFailure) throw confirmationDispatchFailure;
+        if (!keepConfirmationOpen) {
+          confirmationOpen = false;
+          full = true;
+        }
+      }
     },
     async $$(query) {
+      if (query === sheetQuery && confirmationOpen) return [{
+        elementId: sheetQuery,
+        async isDisplayed() { return true; },
+        async $$(query) {
+          assert.equal(query, conversionQuery);
+          return [{
+            elementId: sheetButtonId,
+            async isDisplayed() { return true; },
+            async isEnabled() { return true; },
+            async getAttribute(name) { assert.equal(name, 'package'); return recipe.packageName; },
+            async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); },
+          }];
+        },
+      }];
       const shown = query === selector('android', 'id', 'ADDRESSBAR_TABS_COUNTER') ? full : query === menuQuery ? true
         : query === conversionQuery ? menuOpen && !full && !missingConversion
         : query === selector('android', 'id', 'ADDRESSBAR_URL_BOX') ? full : false;
@@ -1635,6 +1683,41 @@ test('Firefox preparation retains stale and lost dispatch failures without refet
     assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options')]);
     assert.equal(fake.elapsed(), 0);
   }
+});
+
+test('Firefox preparation dispatches the observed conversion menu and distinct confirmation sheet once each', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [
+    selector('android', 'label', 'More options'), selector('android', 'label', 'Open in Firefox'),
+    'scoped-firefox-confirmation-button',
+  ]);
+  assert.equal(fake.records.filter(({ key, action }) => key === 'conversion-confirmation' && action === 'click').length, 1);
+});
+
+test('Firefox preparation handles an already visible conversion confirmation without opening the menu behind it', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, ['scoped-firefox-confirmation-button']);
+});
+
+test('Firefox does not click an unadmitted confirmation sheet', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true });
+  delete fake.recipe.conversionConfirmation;
+  await assert.rejects(prepareFirefox(fake.context, fake.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options'), selector('android', 'label', 'Open in Firefox')]);
+  assert.equal(fake.elapsed(), 10000);
+});
+
+test('Firefox never replays a persistent or unacknowledged conversion confirmation', async () => {
+  const persistent = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true, keepConfirmationOpen: true });
+  await assert.rejects(prepareFirefox(persistent.context, persistent.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(persistent.clicks, ['scoped-firefox-confirmation-button']);
+  assert.equal(persistent.elapsed(), 10000);
+  const failure = new Error('conversion acknowledgement lost');
+  const lost = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true, confirmationDispatchFailure: failure });
+  await assert.rejects(prepareFirefox(lost.context, lost.recipe), error => error === failure);
+  assert.deepEqual(lost.clicks, ['scoped-firefox-confirmation-button']);
 });
 
 test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
