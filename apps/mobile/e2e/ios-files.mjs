@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { admitApplication, FixtureUnavailable, verifiedFile } from './fixture-contract.mjs';
 import { browserOrigin } from './browser-handoff.mjs';
 import { delta, openMatter, readOnlyTraffic, traffic } from './journeys.mjs';
-import { absent, backgroundAndResume, click, dispatchNativeClick, find, findQuery, nativeAction, read, restart, selector, swipe, visible } from './native-ui.mjs';
+import { absent, backgroundAndResume, click, dispatchNativeClick, find, findQuery, nativeAction, read, restart, selector, swipe, visible, waitForIosVisibility } from './native-ui.mjs';
 import { reconcileInventory } from './support.mjs';
 import { withoutPublicCompatibilityReads } from './traffic.mjs';
 
@@ -346,22 +346,22 @@ export async function findIosFileFact(context, id, type) {
   for (let attempt = 0; attempt <= 9; attempt++) {
     let direction, frame, viewport;
     try {
-      await context.driver.waitUntil(async () => {
-        const matches = await context.driver.$$(query);
+      await waitForIosVisibility(context.driver, async probe => {
+        const matches = await probe(() => context.driver.$$(query));
         assert.ok(matches.length <= 1, 'IOS_FILES_FACT_ID_NOT_UNIQUE');
         if (!matches.length) return false;
         control = matches[0];
-        assert.equal(await control.getAttribute('name'), id, 'IOS_FILES_FACT_ID_MISMATCH');
-        assert.equal(await control.getAttribute('type'), type, 'IOS_FILES_FACT_TYPE_MISMATCH');
-        const scroll = await visible(context.driver, '-ios predicate string:type == "XCUIElementTypeScrollView"');
+        assert.equal(await probe(() => control.getAttribute('name')), id, 'IOS_FILES_FACT_ID_MISMATCH');
+        assert.equal(await probe(() => control.getAttribute('type')), type, 'IOS_FILES_FACT_TYPE_MISMATCH');
+        const scroll = await visible(context.driver, '-ios predicate string:type == "XCUIElementTypeScrollView"', probe);
         assert.ok(scroll, 'IOS_FILES_VIEWPORT_REQUIRED');
-        viewport = await context.driver.getElementRect(scroll.elementId);
-        frame = await context.driver.getElementRect(control.elementId);
-        const window = await context.driver.getWindowRect();
+        viewport = await probe(() => context.driver.getElementRect(scroll.elementId));
+        frame = await probe(() => context.driver.getElementRect(control.elementId));
+        const window = await probe(() => context.driver.getWindowRect());
         assert.ok(validFrame(frame) && validFrame(viewport) && validFrame(window) && containsFrame(window, viewport), 'IOS_FILES_FACT_GEOMETRY_REQUIRED');
         assert.ok(frame.x >= viewport.x && frame.x + frame.width <= viewport.x + viewport.width, 'IOS_FILES_FACT_HORIZONTAL_BOUNDS_REQUIRED');
         direction = frame.y < viewport.y ? 'up' : frame.y + frame.height > viewport.y + viewport.height ? 'down' : undefined;
-        return !direction && await control.isDisplayed();
+        return !direction && await probe(() => control.isDisplayed());
       }, { timeout: 1500, interval: 150, timeoutMsg: 'IOS_FILES_FACT_NOT_VISIBLE' });
       return control;
     } catch (error) {

@@ -117,6 +117,40 @@ test('an explicit known scroll direction reaches a control without changing the 
   await assert.rejects(findQuery(context, 'id=target', { scroll: true, scrollDirection: 'sideways' }), /VALID_NATIVE_SCROLL_DIRECTION_REQUIRED/);
 });
 
+test('iOS native visibility refuses a first finder that settles after the existing wait', async (t) => {
+  let now = 0, displayedReads = 0;
+  t.mock.method(performance, 'now', () => now);
+  const context = { platform: 'ios', driver: {
+    $$: async () => {
+      now = 10006;
+      return [{ isDisplayed: async () => { displayedReads++; return true; } }];
+    },
+    waitUntil: async (condition, { timeout, interval }) => {
+      assert.equal(timeout, 10000);
+      assert.equal(interval, 150);
+      assert.equal(await condition(), true);
+    },
+  } };
+  await assert.rejects(findQuery(context, '~files-choose'), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(displayedReads, 0);
+});
+
+test('iOS native visibility stops a pending finder when its outer wait has rejected', async () => {
+  let resolveFinder, pendingCondition, displayedReads = 0;
+  const context = { platform: 'ios', driver: {
+    $$: () => new Promise(resolve => { resolveFinder = resolve; }),
+    waitUntil: async (condition, { timeoutMsg }) => {
+      pendingCondition = condition();
+      throw new Error(timeoutMsg);
+    },
+  } };
+  await assert.rejects(findQuery(context, '~files-choose'), /NATIVE_CONTROL_NOT_VISIBLE/);
+  const rejectedCondition = assert.rejects(pendingCondition, /NATIVE_CONTROL_NOT_VISIBLE/);
+  resolveFinder([{ isDisplayed: async () => { displayedReads++; return true; } }]);
+  await rejectedCondition;
+  assert.equal(displayedReads, 0);
+});
+
 test('iOS exact text resolves the one accessible leaf behind the actual Application and RN wrappers', async () => {
   const app = element('application', { value: null });
   const wrapper = element('wrapper');
