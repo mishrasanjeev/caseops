@@ -1,5 +1,27 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 Release 9cd90aff: #599, #600 and #601 Live; B4-ADJ-42 Properly Fixed
+
+`main` at 9cd90aff (#599 B4-ADJ-42 width proof, #600 mobile welcome and record
+navigation, #601 Play-signed Android App Links) serves `caseops-api-00523-r9k`
+with image tag `9cd90af`. A peer release created revisions 00522 and 00523;
+this session's own deploy-prod attempts failed closed before any build or
+mutation (read-only worker preflight gcloud deadline, then "main advanced
+during release"), so they did not overlap the change. Security run
+42466390480 succeeded; main CI 42466390396 succeeded on attempt 3, after two
+attempts failed only on GitHub release 504s while installing uv.
+
+- B4-ADJ-42 Status: Properly fixed. Prod-verify 42471824330 on the exact
+  release passed every group. In `test-legal-write-oct13-b` (11 expected,
+  0 skipped, 0 failed), "IP18 current-source tracker filters saved views
+  export and full continuation" passed at 1280px and 393px. Both cases issue
+  the three unnarrowed fact-filtered reads against the retained test-legal
+  tenant and require each to finish under 15 s.
+- #600 ships no web or API code; native and device acceptance remains as
+  recorded in its PR.
+- #601 still needs the production association and a Play-installed device
+  sign-in check.
+
 ## November 8 B4-ADJ-07 Adjacent Defect: Retire Panel Opens Off Screen
 
 Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
