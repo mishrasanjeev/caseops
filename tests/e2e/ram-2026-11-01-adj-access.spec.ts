@@ -20,8 +20,9 @@
  * calendar approver), Ram is the only member who signs in on test-legal, and
  * both journeys change walls or working calendars that the product cannot retire.
  */
+import { writeFileSync } from "node:fs";
 import {
-  expect, request as playwrightRequest, test, type APIRequestContext, type Locator, type Page, type Response,
+  expect, request as playwrightRequest, test, type APIRequestContext, type Locator, type Page, type Request, type Response,
 } from "@playwright/test";
 
 import {
@@ -29,6 +30,7 @@ import {
   stamp, type TesterCredentials, type TesterRuntime,
 } from "./support/ram-bugs4";
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { diagnosticTransport } from "./support/prod-failure-diagnostics";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -251,24 +253,80 @@ async function cleanUpMatters(rt: TesterRuntime, request: APIRequestContext, wal
   }
 }
 
+async function searchPortalMatters(page: Page, rt: TesterRuntime, search: Locator, code: string, stage: "hidden" | "chosen") {
+  const start = performance.now();
+  const elapsed = () => Math.min(300_000, Math.round(performance.now() - start));
+  const matches = (req: Request) => {
+    const url = new URL(req.url());
+    return req.method() === "GET" && [rt.api.origin, rt.web.origin].includes(url.origin)
+      && /^\/api\/matters\/?$/.test(url.pathname) && url.searchParams.get("q") === code;
+  };
+  const requests = new WeakMap<Request, { atMs: number; failed?: string }>();
+  const records: Array<{ atMs: number; failed?: string }> = [];
+  let omitted = 0;
+  const started = (req: Request) => {
+    if (!matches(req)) return;
+    if (records.length === 4) { omitted = Math.min(65_535, omitted + 1); return; }
+    const row = { atMs: elapsed() };
+    records.push(row);
+    requests.set(req, row);
+  };
+  const failed = (req: Request) => {
+    const row = requests.get(req);
+    if (row) row.failed = diagnosticTransport(req.failure()?.errorText);
+  };
+  let response: Response | undefined;
+  let status: number | undefined;
+  let responseMs: number | undefined;
+  let bodyFinished = false;
+  page.on("request", started);
+  page.on("requestfailed", failed);
+  try {
+    [response] = await Promise.all([
+      page.waitForResponse((row) => {
+        if (!matches(row.request())) return false;
+        status = row.status();
+        responseMs = elapsed();
+        return true;
+      }),
+      (async () => {
+        await search.fill(code);
+        await expect(search).toHaveValue(code);
+        await search.press("Enter");
+      })(),
+    ]);
+    expect(await response.finished(), "The picker response finished before its body is used").toBeNull();
+    bodyFinished = true;
+    return await json<{ matters: Matter[] }>(response, "Matter grant picker read");
+  } finally {
+    page.off("request", started);
+    page.off("requestfailed", failed);
+    try {
+      const report = test.info().outputPath(`b4-adj-01-matter-picker-${stage}.json`);
+      writeFileSync(report, JSON.stringify({ route: "GET /api/matters/", stage, records, omitted, status, responseMs, bodyFinished }) + "\n",
+        { flag: "wx", mode: 0o600 });
+    } catch { /* Do not replace the original browser outcome with diagnostic failure. */ }
+  }
+}
+
 async function portalWallJourney(page: Page, request: APIRequestContext, rt: TesterRuntime, mobile: boolean) {
   expect(rt.local, "Needs a second admin and an ethical wall; Ram is alone on test-legal").toBe(true);
   const admin = await colleague(rt, "admin", "Walled Admin");
   const hidden = await createMatter(rt, request, "ADJ01-HIDDEN");
   const chosen = await createMatter(rt, request, "ADJ01-CHOSEN");
   const walls: Array<[string, string]> = [[hidden.id, await wall(rt, request, hidden.id, admin.membershipId)]];
+  const failures: unknown[] = [];
   try {
     await switchUser(page, rt, admin.credentials);
     await page.goto(`${rt.web.origin}/app/admin`);
-    const select = page.getByLabel("Matter grant", { exact: true });
-    const search = page.getByLabel("Search Matters to grant");
+    const select = page.getByRole("combobox", { name: "Matter grant", exact: true });
+    const search = page.getByRole("searchbox", { name: "Search Matters to grant", exact: true });
     await page.getByTestId("portal-invite-name").fill("Acceptance Client");
     await page.getByTestId("portal-invite-email").fill(`adj01-${rt.run.replace(/\W+/g, "").slice(-10)}@example.com`);
+    await expect(select).toBeVisible();
 
     // The picker never offers the walled Matter.
-    const hiddenSearch = page.waitForResponse((row) => new URL(row.url()).searchParams.get("q") === hidden.matter_code);
-    await search.fill(hidden.matter_code);
-    const hiddenRows = await (await hiddenSearch).json();
+    const hiddenRows = await searchPortalMatters(page, rt, search, hidden.matter_code, "hidden");
     expect(hiddenRows.matters.map((row: Matter) => row.id)).not.toContain(hidden.id);
     await expect(select.locator(`option[value="${hidden.id}"]`)).toHaveCount(0);
 
@@ -280,10 +338,10 @@ async function portalWallJourney(page: Page, request: APIRequestContext, rt: Tes
     expect((await direct.json()).detail).toBe("Matter not found.");
 
     // A Matter walled after it was chosen is refused at the Matter field.
-    const chosenSearch = page.waitForResponse((row) => new URL(row.url()).searchParams.get("q") === chosen.matter_code);
-    await search.fill(chosen.matter_code);
-    expect((await chosenSearch).status()).toBe(200);
+    const chosenRows = await searchPortalMatters(page, rt, search, chosen.matter_code, "chosen");
+    expect(chosenRows.matters.map((row) => row.id)).toContain(chosen.id);
     await select.selectOption(chosen.id);
+    await expect(select).toHaveValue(chosen.id);
     walls.push([chosen.id, await wall(rt, request, chosen.id, admin.membershipId)]);
     const submit = page.getByTestId("portal-invite-submit");
     await expect(submit).toBeEnabled();
@@ -305,10 +363,14 @@ async function portalWallJourney(page: Page, request: APIRequestContext, rt: Tes
     });
     expect(owner.status()).toBe(201);
     await markPositive(test.info(), mobile ? "b4-adj-01-portal-wall-mobile" : "b4-adj-01-portal-wall", { hidden: hidden.id, chosen: chosen.id });
+  } catch (error) {
+    failures.push(error);
   } finally {
-    await admin.api.dispose();
-    await cleanUpMatters(rt, request, walls, [hidden, chosen]);
+    try { await admin.api.dispose(); } catch (error) { failures.push(error); }
+    try { await cleanUpMatters(rt, request, walls, [hidden, chosen]); } catch (error) { failures.push(error); }
   }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, "Portal wall journey and cleanup reported separate failures");
 }
 
 test("B4-ADJ-01 [local-only] a walled admin cannot grant portal access to a Matter they cannot see", async ({
