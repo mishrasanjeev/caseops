@@ -1,5 +1,21 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 PR #597 Review Fixes
+
+**Inconclusive; release proof pending.** An independent review of `7dfc0b29`
+found four defects, now fixed in code with regression tests (details in
+[the AI requirements ledger](AI_REQUIREMENTS_TRIAGE_2026-11-07.md#november-8-review-fixes)):
+
+- Redline: Word text-box changes reported twice; moves dropped, so a move-only
+  file read "Clean document"; other revision kinds never surfaced.
+- Assistant: a reopened conversation showed its oldest 50 turns; a transient
+  error cleared the conversation and the typed question.
+- Watch: a non-array run capture would fail the PostgreSQL workspace read.
+- Watch report contract changed shape under the same version (now v2).
+
+Full Docker, hosted CI and exact-serving production acceptance on the final
+head are still required before any of these is Properly fixed.
+
 ## November 8 Patent Disclosure Physical Work
 
 **Inconclusive; deployment held.** IPLF-090A/UJ-02/NFT-005 and J14/M14.

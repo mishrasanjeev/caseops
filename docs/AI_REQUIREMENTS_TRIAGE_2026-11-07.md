@@ -115,7 +115,7 @@ The earlier evidence-writer module passed 655 cases/1,965 phases. The final
 resolved app inventory moved from 714/53 desktop/mobile to 718/55 (six added
 cases, no dropped prior identities) at this checkpoint; the later Watch ACL
 query-state case makes the current inventory 719/55, 774 cases, seven added. The complete writer replacement
-passed all 655 cases and 1,965 phases at those final counts. Production tester discovery includes both
+passed all 655 cases and 1,965 phases at the 718/55 checkpoint counts. Production tester discovery includes both
 Teams and contract widths; the separate assistant retained-history role
 requires genuine hash-pinned evidence and cannot manufacture production turns.
 
@@ -277,3 +277,39 @@ navigation and immutable evidence checks without providing a parallel
 unaudited path to a private saved source. This is a
 test-contract correction, not a deployed result. Fresh Docker, CI and
 exact-release browser acceptance remain required.
+
+## November 8 Review Fixes
+
+An independent review of head `7dfc0b29` found the redline, assistant and
+Watch gaps below; a second independent review checked the fixes. Each item is
+fixed in code with regression tests. None is release-proven until the full
+Docker gate, hosted CI and production acceptance run on the final head.
+
+- Redline (`contract_redline.py`): a tracked change inside a Word 2010+ text
+  box was reported twice, because the `mc:Fallback` copy of the text box was
+  read too. Moves (`w:moveFrom`/`w:moveTo`) were dropped, so a move-only file
+  showed "Clean document". Fallback copies are skipped; moves are reported as
+  `move_from`/`move_to` and counted once per moved passage. Revisions the
+  parser does not list (property, table-structure and numbering changes,
+  merge conflicts, changes without text such as an image or a merged
+  paragraph mark, and any revision in headers, footers, notes or comments)
+  are counted in `uninterpreted_revision_count`. The viewer shows a notice and
+  never shows "Clean document" while that count is above zero.
+- Assistant history: a reopened conversation showed its oldest 50 turns.
+  `GET .../turns?latest=true` returns the newest page in conversation order,
+  with `has_more` meaning older turns exist; open and scope changes use it.
+- Assistant errors: a network failure or an untyped 5xx while asking or
+  opening a citation cleared the conversation and the typed question. Those
+  now keep both; any typed server decision still clears the view. A recorded
+  provider failure (`workspace_assistant_unavailable`) reloads the updated
+  conversation and keeps the question.
+- Watch: a run whose capture list is not a JSON array made PostgreSQL's array
+  expansion fail the whole workspace read; such a run is now hidden. The Watch
+  report contract is versioned `ip-watch-report-v2`.
+- Known tradeoff, unchanged: every assistant answer re-checks private-index
+  access under a tenant lock after the provider call, so a concurrent access
+  change returns 409 after the provider cost is spent. This fails closed by
+  design.
+- Not addressed: a client-side ask timeout (75 s) can leave the previous view
+  on screen if the server finishes later; the next ask then gets a version
+  conflict and clears the view. No data is exposed.
