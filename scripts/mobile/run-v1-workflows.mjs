@@ -338,7 +338,7 @@ export async function runV1(config) {
           logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: V1_BUDGETS.transportMs, capabilities });
         journal.write({ ...appiumSessionEvent(driver.sessionId, 'created'), id });
         if (config.platform === 'android') journal.write({ ...verifyAndroidSessionTransport(fixture, config.platform, driver.capabilities), id });
-        await configureNativeDriver(driver, config.platform); await driver.switchContext('NATIVE_APP');
+        await configureNativeDriver(driver, config.platform, event => journal.write({ ...event, id })); await driver.switchContext('NATIVE_APP');
         context = prepareV1Context({ fixture, platform: config.platform, driver, gatewayBaseline: baseline, controls, state, caseId: scenario.id,
           record: value => journal.write({ ...value, id }), authenticate: async (wanted, options) => {
             const member = members.find(value => value.fixture.membershipId === wanted.membershipId); assert.ok(member, 'ADMITTED_NATIVE_MEMBER_REQUIRED');

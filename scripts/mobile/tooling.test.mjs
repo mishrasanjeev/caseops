@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEADER, reconcileInventory, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
@@ -2312,6 +2313,42 @@ test('Android explicitly updates then reads ID-autocompletion setting and expose
   assert.deepEqual(calls, ['update', 'read', 'lookup']);
   assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: true,
     waitForIdleTimeout: 500, waitForSelectorTimeout: 0 }]);
+});
+
+test('Android supplement runners journal the real driver settings readback under the current case ID', async (t) => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'co-native-settings-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const platform = 'android';
+  const settings = { disableIdLocatorAutocompletion: true, waitForIdleTimeout: 500, waitForSelectorTimeout: 0 };
+  const runners = [
+    ['run-queue-privacy.mjs', 'QUEUE-01'],
+    ['run-v1-workflows.mjs', 'SOURCE-01'],
+    ['run-client-extensions.mjs', 'CX28-CAM-01'],
+  ];
+  for (const [runner, scenarioId] of runners) {
+    const id = `${platform}:${scenarioId}`;
+    const source = readFileSync(new URL(`./${runner}`, import.meta.url), 'utf8');
+    // Execute only the runner's settings invocation with a fake driver and the real journal.
+    const invocations = source.match(/(?<=await )configureNativeDriver\([^\n]*?\);/g);
+    assert.equal(invocations?.length, 1, runner);
+    const file = path.join(directory, `${runner}.jsonl`);
+    const journal = new Journal(file);
+    const calls = [];
+    const driver = {
+      updateSettings: async (value) => { assert.deepEqual(value, settings); calls.push('update'); },
+      getSettings: async () => { calls.push('read'); return { ...settings, privateSetting: 'unit-private' }; },
+    };
+    try {
+      await runInNewContext(invocations[0], { configureNativeDriver, driver, journal, id,
+        q: { platform }, config: { platform }, scenario: { id: scenarioId }, write: (event) => journal.write(event) });
+    } finally {
+      journal.close();
+    }
+    assert.deepEqual(calls, ['update', 'read'], runner);
+    const { at, ...receipt } = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(new Date(at).toISOString(), at, runner);
+    assert.deepEqual(receipt, { type: 'native_driver_settings', ...settings, id }, runner);
+  }
 });
 
 test('false, missing or nonboolean ID-setting readback fails closed before UI and journals only the bounded boolean', async () => {

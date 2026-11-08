@@ -184,7 +184,8 @@ export async function runClientExtensions(q,dependencies={}) {
       sessionUnknown=true;const driver=await remote({hostname:url.hostname,port:Number(url.port),protocol:url.protocol.slice(0,-1),path:url.pathname,capabilities,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:10000});sessionUnknown=false;
       active=driver;sessions.push(driver.sessionId);write({...appiumSessionEvent(driver.sessionId,'created'),id:q.platform+':'+scenario.id});
       if(q.platform==='android')verifyAndroidSessionTransport(f,q.platform,driver.capabilities);
-      await configureNativeDriver(driver,q.platform);await driver.switchContext('NATIVE_APP');
+      await configureNativeDriver(driver, q.platform, event => write({ ...event, id: q.platform + ':' + scenario.id }));
+      await driver.switchContext('NATIVE_APP');
       const actor=state.activeActor==='second-company'?admitted.members[1].fixture:f;
       const context={fixture:{...actor,cx:f.cx},platform:q.platform,driver,controls,state,caseId:scenario.id,binaryHash:q.expectedBinaryHash,workflowDomain:f.cx.workflowDomain,appiumInventoryEvidence:q.appiumInventoryEvidence,startedAt:io.now(),nativeOperations:0,ownerOperations:0,authoritativeReads:0,record:row=>write({...row,id:q.platform+':'+scenario.id})};
       context.androidFingerprint=admitted.androidFingerprint;
