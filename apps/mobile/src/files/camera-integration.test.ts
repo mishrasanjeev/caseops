@@ -376,6 +376,11 @@ function render(
     "../../components/NativeControls": { NativeButton: "NativeButton" },
     "../../components/Content": { Fact: "Fact" },
     "../../components/theme": { styles: {}, colors: {} },
+    "../WorkspaceConductGate": {
+      WorkspaceConductGate() {
+        assert.fail("the camera fixture did not enable workspace conduct");
+      },
+    },
     "../../files/api": {
       createMatterFilesApi() {
         return {};

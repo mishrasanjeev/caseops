@@ -25,6 +25,10 @@ import { selectTab } from "../domain/tab-selection";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
 import { createSourceRecordsRepository } from "../domain/source-records";
+import {
+  workspaceConductRepository,
+  type WorkspaceReportTarget,
+} from "../domain/workspace-conduct";
 import type {
   SourceKind,
   SourceLocator,
@@ -35,6 +39,7 @@ import { attachmentViewerSource } from "../viewer/contracts";
 import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
 import type { PrivateDocumentViewerProps } from "../viewer/PrivateDocumentViewer";
 import { useResource } from "./useResource";
+import { WorkspaceConductGate } from "./WorkspaceConductGate";
 
 import type {
   LeaveGuard,
@@ -59,6 +64,7 @@ import type { QuickTarget } from "../domain/quick-work";
 import { DraftScreen } from "./screens/DraftScreen";
 
 import { AccountScreen } from "./screens/AccountScreen";
+import { WorkspaceReportScreen } from "./screens/WorkspaceReportScreen";
 import { InboxScreen } from "./screens/InboxScreen";
 import { CounselScreen } from "./screens/CounselScreen";
 import {
@@ -86,6 +92,7 @@ type Route =
   | { type: "inbox" }
   | { type: "counsel"; matterId: string }
   | { type: "readthrough"; matterId: string; target: ReadthroughTarget }
+  | { type: "workspace-report"; subject: WorkspaceReportTarget }
   | { type: "account" };
 
 const tabs: {
@@ -137,6 +144,7 @@ function ApplicationContent({
   onSignOut,
 }: MobileApplicationProps) {
   const repository = useMemo(() => createRepository(request), [request]);
+  const conduct = useMemo(() => workspaceConductRepository(request), [request]);
   const sources = useMemo(
     () =>
       createSourceRecordsRepository(
@@ -537,12 +545,21 @@ function ApplicationContent({
               onClose={completeQuickWork}
             />
           ) : route.type === "note" ? (
-            <NoteEditor
-              repository={repository}
-              matter={route.matter}
+            <WorkspaceConductGate repository={conduct} action="notes">
+              <NoteEditor
+                repository={repository}
+                matter={route.matter}
+                guard={leaveGuard}
+                onDone={completeNote}
+                onCancel={pop}
+              />
+            </WorkspaceConductGate>
+          ) : route.type === "workspace-report" ? (
+            <WorkspaceReportScreen
+              subject={route.subject}
+              repository={conduct}
               guard={leaveGuard}
-              onDone={completeNote}
-              onCancel={pop}
+              onClose={pop}
             />
           ) : route.type === "matter" ? (
             <MatterScreen
@@ -551,6 +568,29 @@ function ApplicationContent({
               matterId={route.matterId}
               initialSection={route.section}
               canWrite={identity.capabilities.includes("matters:write")}
+              currentMembershipId={identity.membership.id}
+              reportNote={(itemId) =>
+                push({
+                  type: "workspace-report",
+                  subject: {
+                    kind: "note",
+                    matter_id: route.matterId,
+                    item_id: itemId,
+                  },
+                })
+              }
+              reportAuthor={(itemId, membershipId) =>
+                push({
+                  type: "workspace-report",
+                  subject: {
+                    kind: "user",
+                    matter_id: route.matterId,
+                    item_id: itemId,
+                    source_kind: "note",
+                    membership_id: membershipId,
+                  },
+                })
+              }
               onSectionChange={(section) =>
                 setStacks((previous) => ({
                   ...previous,
@@ -563,6 +603,7 @@ function ApplicationContent({
               }
               files={{
                 request,
+                conduct,
                 companyId: identity.company.id,
                 userId: identity.user.id,
                 sessionKey,
@@ -580,6 +621,27 @@ function ApplicationContent({
                 readFileSelection,
                 onClearSelectedFile,
                 onOpenFile: (source) => push({ type: "viewer", source }),
+                onReportFile: (itemId) =>
+                  push({
+                    type: "workspace-report",
+                    subject: {
+                      kind: "file",
+                      matter_id: route.matterId,
+                      item_id: itemId,
+                    },
+                  }),
+                onReportUploader: (itemId, membershipId) =>
+                  push({
+                    type: "workspace-report",
+                    subject: {
+                      kind: "user",
+                      matter_id: route.matterId,
+                      item_id: itemId,
+                      source_kind: "file",
+                      membership_id: membershipId,
+                    },
+                  }),
+                currentMembershipId: identity.membership.id,
                 guard: leaveGuard,
               }}
               addNote={(matter) => push({ type: "note", matter })}
@@ -690,6 +752,7 @@ function ApplicationContent({
         </View>
         {route.type !== "note" &&
         route.type !== "quick-work" &&
+        route.type !== "workspace-report" &&
         route.type !== "viewer" ? (
           <View
             style={{
