@@ -98,6 +98,46 @@ export async function waitForQPPrivacyControl(c, id, value) {
   });
 }
 
+export async function assertQPPrivacyControlsAbsent(c, ids) {
+  if (c.platform !== 'android') {
+    for (const id of ids) await absent(c, id);
+    return;
+  }
+  return withinAndroidViewport('QP_NATIVE_STATE_REQUIRED', async (probe) => {
+    const scope = await androidScrollScope(c, 'account', probe);
+    const edge = async (direction, observe) => {
+      for (let n = 0; n <= ANDROID_SCROLL_LIMIT; n++) {
+        if (observe) await observe();
+        if (n === ANDROID_SCROLL_LIMIT) break;
+        if (!await androidScroll(c, scope, direction, probe)) {
+          if (observe) await observe();
+          return;
+        }
+      }
+      throw Error('QP_ANDROID_PRIVACY_EDGE_NOT_REACHED');
+    };
+    const observedAbsent = async () => {
+      for (const id of ids) {
+        const matches = await probe(() => c.driver.$$(selector('android', 'id', id)));
+        assert.equal(matches.length, 0, 'QP_PRIVATE_OLD_CONTROL_REMAINS');
+      }
+    };
+    for (const id of ids) { selector('android', 'id', id); consume(c); }
+    await edge('up');
+    await edge('down', observedAbsent);
+    // Leave the viewport on the account request section for the next action.
+    for (let n = 0; n <= ANDROID_SCROLL_LIMIT; n++) {
+      if (await visible(c.driver, selector('android', 'id', 'privacy-request-state'), probe)) return;
+      if (n === ANDROID_SCROLL_LIMIT) break;
+      if (!await androidScroll(c, scope, 'up', probe)) {
+        if (await visible(c.driver, selector('android', 'id', 'privacy-request-state'), probe)) return;
+        break;
+      }
+    }
+    throw Error('QP_NATIVE_STATE_REQUIRED');
+  });
+}
+
 export async function resolveAndroidComposeQueueSegment(c, group, label, probe = operation => operation()) {
   assert.equal(c.platform, 'android');
   assert.ok(Object.hasOwn(queueSegments, group) && queueSegments[group].includes(label), 'QP_ANDROID_QUEUE_LABEL_REQUIRED');
@@ -177,9 +217,17 @@ function extendQPAndroidQueueOrder(expected, seen, sample) {
 }
 
 export async function androidQueuePage(c, page) {
+  // Keep the original independent queue-ready and exact-page deadlines. A
+  // page transition can leave the viewport at the old page's footer.
+  const scope = await withinAndroidViewport('QP_NATIVE_STATE_REQUIRED', async (probe) => {
+    while (!await visible(c.driver, selector('android', 'id', 'matter-task-queue'), probe)) {
+      await probe(() => pause(200));
+    }
+    const view = await androidScrollScope(c, 'work', probe);
+    await revealAndroidWorkHeader(c, view, probe);
+    return view;
+  });
   return withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
-    const scope = await androidScrollScope(c, 'work', probe);
-    await revealAndroidWorkHeader(c, scope, probe);
     const expected = page.items.map(row => row.id);
     const matches = (actual, prefix) => actual.length === prefix.length && actual.every((id, i) => id === prefix[i]);
     const empty = () => visible(c.driver, selector('android', 'text', 'No matching tasks'), probe);
@@ -223,8 +271,8 @@ async function tapQueueTask(c, id) {
 }
 
 async function rows(c,page){
+ if (c.platform === 'android') { consume(c); return androidQueuePage(c, page); }
  await wait(c,'matter-task-queue');consume(c);
- if (c.platform === 'android') return androidQueuePage(c, page);
  const attribute=c.platform==='ios'?'name':'resource-id';let terminal;
  await c.driver.waitUntil(async()=>{try{
   const elements=await c.driver.$$(`//*[starts-with(@${attribute}, 'queue-task-')]`);assert.ok(elements.length<=64);
@@ -291,16 +339,16 @@ export const queuePrivacyScenarios=Object.freeze([
   await tap(c,'privacy-request-start');await waitForQPPrivacyControl(c,'privacy-request-confirmation');await tap(c,'privacy-request-cancel');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');
   const noPost=await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence});assert.equal(noPost.requests.length,0);
   const arm=await control(c,'armPrivacyAckLoss');await tap(c,'privacy-request-start');await tap(c,'privacy-request-confirm');
-  await waitForQPPrivacyControl(c,'privacy-request-state','Acknowledgement unconfirmed');await absent(c,'privacy-request-start');await absent(c,'privacy-request-confirm');
+  await waitForQPPrivacyControl(c,'privacy-request-state','Acknowledgement unconfirmed');await assertQPPrivacyControlsAbsent(c,['privacy-request-start','privacy-request-confirm']);
   // UI Unknown follows the gateway's completed successful-upstream record, so
   // this is one explicit read, never a hidden20-iteration receipt poll.
   const ack=await control(c,'readControlReceipt',{id:arm.id});assert.equal(ack.requestsForwarded,1);assert.equal(ack.upstreamAcknowledged,true);assert.equal(ack.upstreamStatus,202);
   const receipt=decodeAccountDeletionReceipt(ack.responseObservation);assert.deepEqual(await ownPrivacy(c),receipt);
   const reloadBefore=await traffic(c);await tap(c,'privacy-request-reload');await completedNativeRead(c,reloadBefore.lastSequence);await waitForQPPrivacyControl(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);assert.deepEqual(await ownPrivacy(c),receipt);
-  await tap(c,'back');const revisitBefore=await traffic(c);await tap(c,'account-open');await completedNativeRead(c,revisitBefore.lastSequence);await waitForQPPrivacyControl(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);await absent(c,'privacy-request-start');
+  await tap(c,'back');const revisitBefore=await traffic(c);await tap(c,'account-open');await completedNativeRead(c,revisitBefore.lastSequence);await waitForQPPrivacyControl(c,'privacy-request-state','Request received');await receiptFacts(c,receipt);await assertQPPrivacyControlsAbsent(c,['privacy-request-start']);
   const posts=(await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence})).requests;
   assert.equal(posts.length,1);assert.equal(posts[0].status,202);assert.deepEqual(posts[0].bodyObservation.keys,['confirmation','operation_id']);assert.deepEqual(posts[0].responseObservation,receipt);
-  await c.switchActor('second-company');await tap(c,'account-open');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');await absent(c,'privacy-request-receipt');assert.equal(await ownPrivacy(c,'second-company'),null);
+  await c.switchActor('second-company');await tap(c,'account-open');await waitForQPPrivacyControl(c,'privacy-request-state','No received request is recorded');await assertQPPrivacyControlsAbsent(c,['privacy-request-receipt']);assert.equal(await ownPrivacy(c,'second-company'),null);
   event(c,'privacy-complete',{receipt,onePost:true,unknownAcknowledgementReconciledByGet:true,otherUserReceiptAbsent:true,deletionCompleted:false});
  }},
 ]);

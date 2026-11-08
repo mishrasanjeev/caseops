@@ -10,7 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
-import { androidQueuePage, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
+import { androidQueuePage, assertQPPrivacyControlsAbsent, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
 import { admitQPBeforeMembers,pendingQPRequest,withQPActor } from '../../../scripts/mobile/run-queue-privacy.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
@@ -390,7 +390,9 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
   attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
  const driver={waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
   getElementRect:async()=>({x:4,y:20,width:900,height:1900}),getWindowRect:async()=>({x:0,y:0,width:1080,height:2400}),
-  execute:async(command,opts)=>{assert.equal(command,'mobile: scrollGesture');assert.equal(opts.elementId,'work-scroll');assert.equal(opts.direction,'down');return false;},
+  execute:async(command,opts)=>{assert.equal(command,'mobile: scrollGesture');
+   assert.equal(opts.elementId,state.screen==='account'?'account-screen':'work-scroll');
+   assert.ok(['down','up'].includes(opts.direction));return false;},
   $$:async query=>{
    if(query.includes("/ancestor::*[@class='android.widget.ScrollView']"))return state.screen==='work'?[element('work-scroll','')]:[];
    if(query===`android=new UiSelector().text("No matching tasks")`)return state.screen==='work'&&!current().items.length?[element(query,'No matching tasks')]:[];
@@ -467,7 +469,7 @@ const androidViewportRanks = [
 ];
 
 function androidViewportDouble({ rankPages = androidViewportRanks, next = true, footer = true, status,
-  initial = 0, scopePackage = 'ai.caseops.mobile.dev.localacceptance' } = {}) {
+  initial = 0, scopePackage = 'ai.caseops.mobile.dev.localacceptance', hiddenPrivacyAt } = {}) {
   const appId = 'ai.caseops.mobile.dev.localacceptance';
   const scope = {
     elementId: 'owned-scroll',
@@ -486,6 +488,8 @@ function androidViewportDouble({ rankPages = androidViewportRanks, next = true, 
     async $$(query) {
       if (query === 'id=account-screen' || query.includes("/ancestor::*[@class='android.widget.ScrollView']")) return [scope];
       if (query === 'id=screen-work') return position === 0 ? [element()] : [];
+      if (query === 'id=matter-task-queue') return [element()];
+      if (query === 'id=privacy-request-start') return position === hiddenPrivacyAt ? [element()] : [];
       if (query === 'id=privacy-request-state') return status && position >= 2 ? [element({}, status)] : [];
       if (query === 'id=queue-first') return footer && position === rankPages.length - 1 ? [element()] : [];
       if (query === 'id=queue-next') return next && position === rankPages.length - 1 ? [element()] : [];
@@ -555,4 +559,14 @@ test('Android account locates the exact public status after the measured two sco
   const foreign = androidViewportDouble({ scopePackage: 'other.app' });
   await assert.rejects(waitForQPPrivacyControl(foreign.c, 'privacy-request-state', text), /QP_ANDROID_WRONG_SCROLL_PACKAGE/);
   assert.deepEqual(foreign.gestures, []);
+});
+
+
+test('Android privacy absence rejects a stale control below the status viewport', async () => {
+  const current = androidViewportDouble({ initial: 2, hiddenPrivacyAt: 5, status: async () => 'Request received' });
+  await assert.rejects(assertQPPrivacyControlsAbsent(current.c, ['privacy-request-start']), /QP_PRIVATE_OLD_CONTROL_REMAINS/);
+  assert.deepEqual(current.gestures, ['up', 'up', 'down', 'down', 'down', 'down', 'down']);
+  const clean = androidViewportDouble({ initial: 2, status: async () => 'Request received' });
+  await assertQPPrivacyControlsAbsent(clean.c, ['privacy-request-start']);
+  assert.deepEqual(clean.gestures, ['up', 'up', ...Array(8).fill('down')]);
 });
