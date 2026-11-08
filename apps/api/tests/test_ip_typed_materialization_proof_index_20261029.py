@@ -261,7 +261,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head
+        assert current_head == "20261108_0003"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)
@@ -281,12 +281,11 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
-        # SQLite cannot roll back an index drop, so the head's index migration
-        # refuses first there; PostgreSQL rolls the whole downgrade back.
+        # The current head refuses before any provenance or indexes change.
+        # The historical index's own conflict guard is exercised separately.
         assert str(refused.value) == (
-            "SQLite retained-payload index downgrade requires exact immediate parent."
-            if kind == "sqlite"
-            else "Pricing catalog 2026.11.v1 is restore-forward; restore the reviewed backup."
+            "Restore-forward required: removing native attachment provenance could "
+            "reenable third-party processing without consent."
         )
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting
