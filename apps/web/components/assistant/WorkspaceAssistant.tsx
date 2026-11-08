@@ -278,7 +278,7 @@ export function WorkspaceAssistant() {
     setError(null);
     try {
       const updated = await replaceAssistantScopes(active.id, active.version, selected);
-      const history = await listAssistantTurns(updated.id);
+      const history = await listAssistantTurns(updated.id, { latest: true });
       const hasMore = validateHistory(history);
       if (readEpoch.current !== epoch) return;
       setActive(updated);
@@ -304,7 +304,7 @@ export function WorkspaceAssistant() {
     try {
       const [sessionRecord, history] = await Promise.all([
         getAssistantSession(summary.id),
-        listAssistantTurns(summary.id),
+        listAssistantTurns(summary.id, { latest: true }),
       ]);
       const hasMore = validateHistory(history);
       if (readEpoch.current !== epoch) return;
@@ -364,7 +364,9 @@ export function WorkspaceAssistant() {
       router.push(safeAssistantCitationHref(opened.source_url));
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
-      hideConversation();
+      // No response means no new access decision: keep the conversation for a
+      // retry. Any answer from the server may mean access changed.
+      if (!isTransientHistoryError(caught)) hideConversation();
       setError(apiErrorMessage(caught, "Could not open this citation. Reopen the conversation and try again."));
     } finally {
       if (readEpoch.current === epoch) {
@@ -396,7 +398,9 @@ export function WorkspaceAssistant() {
       );
     } catch (caught) {
       if (readEpoch.current !== epoch) return;
-      hideConversation();
+      // Keep the conversation and the typed question when the request never
+      // reached a decision, so the user can simply ask again.
+      if (!isTransientHistoryError(caught)) hideConversation();
       setError(apiErrorMessage(caught, "The workspace assistant could not answer."));
     } finally {
       if (readEpoch.current === epoch) setBusy(null);

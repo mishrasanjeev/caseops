@@ -47475,8 +47475,11 @@ export interface components {
             context_before: string;
             /** Index */
             index: number;
-            /** Kind */
-            kind: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "insertion" | "deletion" | "move_from" | "move_to" | "formatting";
             /** Paragraph Index */
             paragraph_index: number;
             /** Text */
@@ -47500,8 +47503,12 @@ export interface components {
             deletion_count: number;
             /** Insertion Count */
             insertion_count: number;
+            /** Move Count */
+            move_count: number;
             /** Paragraph Count */
             paragraph_count: number;
+            /** Uninterpreted Revision Count */
+            uninterpreted_revision_count: number;
         };
         /**
          * ResolvedBenchMember
@@ -81478,6 +81485,7 @@ export interface operations {
     get_assistant_turns_api_workspace_assistant_sessions__session_id__turns_get: {
         parameters: {
             query?: {
+                latest?: boolean;
                 limit?: number;
                 offset?: number;
                 snapshot?: boolean;

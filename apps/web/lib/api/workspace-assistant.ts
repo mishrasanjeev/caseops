@@ -239,17 +239,20 @@ export function askWorkspaceAssistant(
 
 export function listAssistantTurns(
   sessionId: string,
-  options: { limit?: number; offset?: number; snapshot?: boolean } = {},
+  options: { limit?: number; offset?: number; snapshot?: boolean; latest?: boolean } = {},
 ) {
   const limit = options.limit ?? 50;
   const offset = options.offset ?? 0;
   if (!Number.isInteger(limit) || limit < 1 || limit > 50
     || !Number.isInteger(offset) || offset < 0 || offset > 10000
-    || (options.snapshot && offset !== 0)) {
+    || (options.snapshot && offset !== 0)
+    || (options.latest && (options.snapshot || offset !== 0))) {
     throw new RangeError("Invalid assistant history page.");
   }
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (options.snapshot) params.set("snapshot", "true");
+  // The newest page, in conversation order; has_more means older turns exist.
+  if (options.latest) params.set("latest", "true");
   return apiRequest<AssistantTurnPage>(
     `/api/workspace-assistant/sessions/${sessionId}/turns?${params}`,
   );

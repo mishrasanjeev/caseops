@@ -407,7 +407,7 @@ describe("WorkspaceAssistant", () => {
     new ApiError(401, "Your session has expired.", null),
     new ApiError(403, "This source is no longer permitted.", null),
     new ApiError(409, "Citation access or source version changed. Ask again before opening it.", null),
-    new NetworkError("The citation request timed out.", null),
+    new ApiError(503, "Private verification is no longer current.", null, "private_manifest_changed"),
     new Error("The citation destination is unavailable. Reopen the conversation and try again."),
   ])("never falls back to a cached source after $message", async (error) => {
     const user = userEvent.setup();
@@ -421,6 +421,59 @@ describe("WorkspaceAssistant", () => {
     expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: SESSION.title })).toBeEnabled();
+  });
+
+  it.each([
+    new NetworkError("The citation request timed out.", null),
+    new ApiError(503, "Citation service temporarily unavailable.", null),
+  ])("keeps the conversation without navigating after transient $message", async (error) => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.openAssistantCitation.mockRejectedValue(error);
+    await openStoredConversation(user);
+    await user.click(screen.getByRole("button", { name: "Open source: TM-42 · Aster mark" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(error.message);
+    expect(router.push).not.toHaveBeenCalled();
+    expect(screen.getByText(ASSISTANT_TURN.content)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open source: TM-42 · Aster mark" })).toBeEnabled();
+  });
+
+  it("reopens a conversation on its newest history page", async () => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    await openStoredConversation(user);
+    expect(api.listAssistantTurns).toHaveBeenCalledExactlyOnceWith(SESSION.id, { latest: true });
+  });
+
+  it.each([
+    new NetworkError("The assistant request timed out.", null),
+    new ApiError(503, "Assistant temporarily unavailable.", null),
+  ])("keeps the conversation and typed question after transient $message", async (error) => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.askWorkspaceAssistant.mockRejectedValue(error);
+    await openStoredConversation(user);
+    const box = screen.getByRole("textbox", { name: "Ask this workspace" });
+    await user.type(box, "What is the next hearing?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(error.message);
+    expect(screen.getByText(ASSISTANT_TURN.content)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Ask this workspace" })).toHaveValue("What is the next hearing?");
+  });
+
+  it.each([
+    new ApiError(409, "Conversation sources changed. Reopen the conversation.", null, "assistant_sources_changed"),
+    new ApiError(403, "This conversation is no longer permitted.", null),
+  ])("clears the conversation when the server rejects the question: $message", async (error) => {
+    const user = userEvent.setup();
+    api.listAssistantSessions.mockResolvedValue({ items: [SESSION] });
+    api.askWorkspaceAssistant.mockRejectedValue(error);
+    await openStoredConversation(user);
+    await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "What is the next hearing?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(error.message);
+    expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open source:/ })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -516,7 +569,7 @@ describe("WorkspaceAssistant", () => {
     await user.click(screen.getByRole("button", { name: SESSION.title }));
     expect(await screen.findByText(hiddenTurn().content)).toBeVisible();
     expect(screen.queryByText(ASSISTANT_TURN.content)).not.toBeInTheDocument();
-    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { snapshot: true }], [SESSION.id]]);
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id, { latest: true }], [SESSION.id, { snapshot: true }], [SESSION.id, { latest: true }]]);
   });
 
   it.each(["session", "user", "assistant"] as const)("invalidates cached turns for a successful ask with a changed %s", async (changed) => {
@@ -617,7 +670,7 @@ describe("WorkspaceAssistant", () => {
     await openStoredConversation(user);
     await user.click(screen.getByRole("button", { name: "Load more messages" }));
     await screen.findByText("Private message 200");
-    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id], [SESSION.id, { snapshot: true }]]);
+    expect(api.listAssistantTurns.mock.calls).toEqual([[SESSION.id, { latest: true }], [SESSION.id, { snapshot: true }]]);
     expect(screen.getByTestId("assistant-turns").querySelectorAll("article")).toHaveLength(200);
     expect(screen.queryByRole("button", { name: "Load more messages" })).not.toBeInTheDocument();
   });

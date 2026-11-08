@@ -233,6 +233,7 @@ def get_assistant_turns(
     limit: Annotated[int, Query(ge=1, le=50)] = 50,
     offset: Annotated[int, Query(ge=0, le=10000)] = 0,
     snapshot: bool = False,
+    latest: bool = False,
 ) -> AssistantTurnListResponse:
     return list_assistant_turns(
         session,
@@ -241,6 +242,7 @@ def get_assistant_turns(
         limit=limit,
         offset=offset,
         snapshot=snapshot,
+        latest=latest,
     )
 
 

@@ -70,7 +70,7 @@ function retainedEvidence(): Evidence {
   return evidence;
 }
 
-function verifyPage(evidence: Evidence, id: string, page: AssistantTurnPage) {
+function verifyPage(evidence: Evidence, id: string, page: AssistantTurnPage, latest = false) {
   const actual = page.items.map((turn): TurnProof => ({
     id: turn.id,
     sequence: turn.sequence,
@@ -80,9 +80,12 @@ function verifyPage(evidence: Evidence, id: string, page: AssistantTurnPage) {
       source_version: citation.source_version, source_sha256: citation.source_sha256, source_url: citation.source_url,
     })),
   }));
+  const retained = evidence.sessions[id];
+  // The latest page is the newest `limit` turns; has_more then means older turns exist.
+  const start = latest ? Math.max(0, retained.length - page.limit) : page.offset;
   expect(actual, "retained content/citation/source versions match their pinned evidence")
-    .toEqual(evidence.sessions[id].slice(page.offset, page.offset + page.limit));
-  expect(page.has_more).toBe(page.offset + page.items.length < evidence.sessions[id].length);
+    .toEqual(retained.slice(start, start + page.limit));
+  expect(page.has_more).toBe(latest ? start > 0 : page.offset + page.items.length < retained.length);
 }
 
 async function signIn(page: Page, baseURL: string | undefined) {
@@ -210,16 +213,18 @@ async function signIn(page: Page, baseURL: string | undefined) {
     expect(response.status(), `retained session ${id}`).toBe(200);
     return response.json();
   };
-  const turns = async (id: string, offset = 0): Promise<AssistantTurnPage> => {
-    const response = await page.request.get(`${api}/api/workspace-assistant/sessions/${id}/turns?limit=50&offset=${offset}`, { headers });
+  const turns = async (id: string, offset = 0, latest = false): Promise<AssistantTurnPage> => {
+    const query = `limit=50&offset=${offset}${latest ? "&latest=true" : ""}`;
+    const response = await page.request.get(`${api}/api/workspace-assistant/sessions/${id}/turns?${query}`, { headers });
     expect(response.status(), `retained turns ${id} at ${offset}`).toBe(200);
     const result = await response.json() as AssistantTurnPage;
-    verifyPage(evidence, id, result);
+    verifyPage(evidence, id, result, latest);
     return result;
   };
   const history = await session(historyId);
   const other = await session(otherId);
-  const first = await turns(historyId);
+  // A reopened conversation shows its newest page.
+  const first = await turns(historyId, 0, true);
   expect(first.items).toHaveLength(50);
   expect(first.offset).toBe(0);
   expect(first.has_more).toBe(true);
@@ -268,7 +273,7 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
   const { items: expected, limit, offset, has_more } = await snapshot.json() as AssistantTurnPage;
   expect({ limit, offset, has_more }).toEqual({ limit: 200, offset: 0, has_more: false });
   expect(expected.length).toBeLessThanOrEqual(200);
-  expect(expected.slice(0, 50).map((turn) => turn.id)).toEqual(fixture.first.items.map((turn) => turn.id));
+  expect(expected.slice(-50).map((turn) => turn.id)).toEqual(fixture.first.items.map((turn) => turn.id));
   await expect.poll(() => visibleTurnIds(page)).toEqual(expected.map((turn) => turn.id));
   expect(expected.length).toBeGreaterThanOrEqual(52);
   expect(new Set(expected.map((turn) => turn.id)).size).toBe(expected.length);
@@ -350,7 +355,7 @@ test("retained assistant history continues beyond 50 and opens only its reauthor
 
 test("a delayed real history page cannot contaminate another retained session", async ({ page, baseURL }) => {
   const fixture = await signIn(page, baseURL);
-  const otherPage = await fixture.turns(fixture.other.id);
+  const otherPage = await fixture.turns(fixture.other.id, 0, true);
   expect(otherPage.items.length).toBeGreaterThan(0);
   expect(otherPage.items.some((turn) => fixture.first.items.some((old) => old.id === turn.id))).toBe(false);
   let release!: () => void;

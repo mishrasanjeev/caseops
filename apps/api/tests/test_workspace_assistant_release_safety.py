@@ -208,6 +208,15 @@ def test_full_history_reauthorizes_prefix_when_later_source_is_independent(clien
     later_saved = second_page.json()["items"][1]
     assert later_saved["id"] == later_turn["id"] and later_saved["render_status"] == "visible"
     assert later_saved["content"] == later_turn["content"]
+    newest = client.get(f"{base}/turns?latest=true", headers=seeded.member())
+    assert newest.status_code == 200, newest.text
+    newest_body = newest.json()
+    assert (newest_body["limit"], newest_body["offset"], newest_body["has_more"]) == (50, 0, True)
+    assert [item["sequence"] for item in newest_body["items"]] == list(range(3, 53))
+    assert newest_body["items"][-1] == later_saved
+    for invalid_latest in ("latest=true&offset=1", "latest=true&snapshot=true"):
+        rejected = client.get(f"{base}/turns?{invalid_latest}", headers=seeded.member())
+        assert rejected.status_code == 422, invalid_latest
     add_wall(seeded)
 
     clean_page = client.get(f"{base}/turns?offset=50", headers=seeded.member())

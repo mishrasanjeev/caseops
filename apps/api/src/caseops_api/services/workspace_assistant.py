@@ -2307,10 +2307,22 @@ def list_assistant_turns(
     limit: int,
     offset: int,
     snapshot: bool = False,
+    latest: bool = False,
 ) -> AssistantTurnListResponse:
+    """Page retained turns oldest-first by ``offset``.
+
+    ``latest`` returns the newest ``limit`` turns instead (still in
+    conversation order); ``has_more`` then means older turns exist. A reopened
+    conversation reads this page so the most recent exchange is on screen.
+    """
     row = _session_or_404(session, context=context, session_id=session_id)
     if snapshot and offset != 0:
         raise HTTPException(status_code=422, detail="A history snapshot must start at offset zero.")
+    if latest and (snapshot or offset != 0):
+        raise HTTPException(
+            status_code=422,
+            detail="The latest history page cannot be combined with an offset or a snapshot.",
+        )
     bounded_limit = MAX_SESSION_TURNS if snapshot else min(limit, MAX_TURN_LIST_LIMIT)
     starting_epochs = (
         _assistant_source_epochs(session, company_id=context.company.id) if snapshot else None
@@ -2322,12 +2334,16 @@ def list_assistant_turns(
                 AssistantTurn.company_id == context.company.id,
                 AssistantTurn.session_id == row.id,
             )
-            .order_by(AssistantTurn.sequence.asc())
+            .order_by(
+                AssistantTurn.sequence.desc() if latest else AssistantTurn.sequence.asc()
+            )
             .offset(offset)
             .limit(bounded_limit + 1)
         ).all()
     )
     has_more = len(turns) > bounded_limit
+    if latest:
+        turns = turns[:bounded_limit][::-1]
     if snapshot and has_more:
         raise HTTPException(
             status_code=409, detail="Conversation history exceeds its retained limit."
