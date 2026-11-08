@@ -307,7 +307,7 @@ export function WorkspaceAssistant() {
         listAssistantTurns(summary.id, { latest: true }),
       ]);
       const hasMore = validateHistory(history);
-      if (readEpoch.current !== epoch) return;
+      if (readEpoch.current !== epoch) return null;
       setActive(sessionRecord);
       setTurns(mergeTurns([], history.items));
       setHasMoreHistory(hasMore);
