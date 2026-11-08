@@ -1,6 +1,7 @@
 import { array, ContractError, dateOnly, object, string } from "./contracts.ts";
 import type { AuthorizedRequest } from "./repository.ts";
 import { createContractObligationsRepository } from "./contract-obligations.ts";
+import { advanceCursorHistory, continuationCursor } from "./cursor-history.ts";
 
 export const SOURCE_PAGE_SIZE = 25;
 export type SourceKind = "contract" | "ip_docket";
@@ -53,10 +54,7 @@ function continuation(value: unknown): string | null {
   return nullable(value, (item) => identityCursor(item));
 }
 function identityCursor(value: unknown): string {
-  const result = string(value, "source continuation", 8000);
-  if (!result.trim() || /[\x00-\x1f\x7f]/.test(result))
-    throw new ContractError("source continuation");
-  return result;
+  return continuationCursor(value, "source continuation");
 }
 function unique<T>(rows: T[], key: (row: T) => string): T[] {
   if (new Set(rows.map(key)).size !== rows.length)
@@ -84,21 +82,15 @@ export function sourceKey(source: SourceRef): string {
   const ref = decodeSourceRef(source);
   return `${ref.kind}:${ref.id}`;
 }
-const SOURCE_CURSOR_HISTORY_LIMIT = 100;
-
 export function advanceSourcePage(
   history: readonly (string | null)[],
   next: string,
 ): (string | null)[] {
-  identityCursor(next);
-  if (
-    !history.length ||
-    history.length > SOURCE_CURSOR_HISTORY_LIMIT ||
-    history.includes(next)
-  )
-    throw new ContractError("source continuation; return to the first page");
-  // Retain recent cursor identities for cycle detection without limiting reads.
-  return [...history.slice(-(SOURCE_CURSOR_HISTORY_LIMIT - 1)), next];
+  return advanceCursorHistory(
+    history,
+    next,
+    "source continuation; return to the first page",
+  );
 }
 
 export type ContractSource = {

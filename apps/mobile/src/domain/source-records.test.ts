@@ -472,6 +472,11 @@ test("source references cannot relabel IP/contracts as Matters, collide across k
 
 test("continuation history detects non-adjacent cycles and remains bounded with an explicit first-page recovery", () => {
   assert.deepEqual(advanceSourcePage([null, "a"], "b"), [null, "a", "b"]);
+  // A window that has slid past the first page no longer starts with null,
+  // but the first-page null can never appear later in the window.
+  assert.deepEqual(advanceSourcePage(["a", "b"], "c"), ["a", "b", "c"]);
+  assert.throws(() => advanceSourcePage([null, "a", null], "b"), ContractError);
+  assert.throws(() => advanceSourcePage(["a", null], "b"), ContractError);
   assert.throws(() => advanceSourcePage([null, "a", "b"], "a"), ContractError);
   const full = [null, ...Array.from({ length: 99 }, (_, i) => `cursor-${i}`)];
   const advanced = advanceSourcePage(full, "next");
