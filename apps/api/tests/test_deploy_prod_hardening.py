@@ -1497,6 +1497,59 @@ def test_web_builder_preserves_strict_colocated_unit_typechecking() -> None:
     )
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Container checkout modes use POSIX permissions")
+@pytest.mark.parametrize("input_kind", ["regular", "absent", "symlink", "directory"])
+def test_web_runner_normalizes_restrictive_native_link_input(
+    tmp_path: Path, input_kind: str,
+) -> None:
+    runner = _read_repo_text("apps/web/Dockerfile").split("FROM trusted-base AS runner", 1)[1]
+    runner_instructions = runner.replace("\\\n", " ").splitlines()
+    copy_index = runner_instructions.index(
+        "COPY --from=builder /app/apps/web/native-links ./native-links"
+    )
+    next_copy = next(index for index in range(copy_index + 1, len(runner_instructions))
+                     if runner_instructions[index].startswith("COPY "))
+    (normalization,) = [instruction.removeprefix("RUN ")
+                        for instruction in runner_instructions[copy_index + 1:next_copy]
+                        if instruction.startswith("RUN ")]
+    runtime_check = runner_instructions[runner_instructions.index("USER nextjs") + 1]
+    assert runtime_check.startswith("RUN test -x ./native-links && test ! -w ./native-links")
+
+    config_dir = tmp_path / "native-links"
+    config_dir.mkdir(mode=0o700)
+    config = config_dir / "production.json"
+    config_bytes = _native_link_config().encode("utf-8")
+    target = tmp_path / "other.json"
+    target.write_bytes(config_bytes)
+    target.chmod(0o600)
+    if input_kind == "regular":
+        config.write_bytes(config_bytes)
+        config.chmod(0o600)
+    elif input_kind == "symlink":
+        config.symlink_to(target)
+    elif input_kind == "directory":
+        config.mkdir(mode=0o700)
+
+    try:
+        result = subprocess.run(
+            ["sh", "-ec", normalization], cwd=tmp_path,
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        assert config_dir.stat().st_mode & 0o777 == 0o555
+        if input_kind in {"symlink", "directory"}:
+            assert result.returncode != 0
+            assert target.stat().st_mode & 0o777 == 0o600
+        else:
+            assert result.returncode == 0, result.stderr
+            if input_kind == "regular":
+                assert config.stat().st_mode & 0o777 == 0o444
+                assert config.read_bytes() == config_bytes
+            else:
+                assert list(config_dir.iterdir()) == []
+    finally:
+        config_dir.chmod(0o700)
+
+
 def _assert_ci_web_builder_gate(workflow: dict) -> None:
     web = workflow["jobs"]["web"]
     assert "if" not in web and not web.get("continue-on-error", False)

@@ -108,6 +108,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./public
 # The public native-link input stays root-owned; deploy-prod.sh points the
 # runtime at native-links/production.json only when that file is committed.
 COPY --from=builder /app/apps/web/native-links ./native-links
+# Cloud Build preserves restrictive checkout modes. Give the runtime read
+# access without letting it write or replace the committed configuration.
+RUN chmod 0555 ./native-links \
+  && if [ -e ./native-links/production.json ] || [ -L ./native-links/production.json ]; then \
+       test -f ./native-links/production.json && test ! -L ./native-links/production.json \
+         && chmod 0444 ./native-links/production.json; \
+     fi
 # Operator compliance materials are deliberately outside every public asset root.
 COPY --chown=nextjs:nodejs license-policy/reviewed-packages.json /app/third-party-compliance/license-policy/reviewed-packages.json
 COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/license-policy/upstream/
@@ -120,5 +127,9 @@ ARG CASEOPS_RELEASE_SHA=unavailable
 LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 
 USER nextjs
+RUN test -x ./native-links && test ! -w ./native-links \
+  && if [ -e ./native-links/production.json ]; then \
+       test -r ./native-links/production.json && test ! -w ./native-links/production.json; \
+     fi
 
 CMD ["sh", "-c", "exec node --use-openssl-ca --require /opt/caseops/trust/node-trust-start.cjs /app/node_modules/next/dist/bin/next start -p ${PORT}"]
