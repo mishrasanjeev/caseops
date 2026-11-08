@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 B4-ADJ-07 Adjacent Defect: Retire Panel Opens Off Screen
+
+Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
+`app-mobile` case "B4-ADJ-07 [mobile] the retire panel, its field error and the
+history card fit 393px": the "Reason for retiring" field had a viewport ratio
+of 0 at 393px. PR #597 changes no IP document code; the cause is on `main`.
+
+- Root cause: the retire panel opens under the Retire button and never brings
+  itself into view. When Retire is the last thing on screen (Playwright scrolls
+  only far enough to show the button; a phone user meets the same position),
+  the reason field and the blockers open below the fold and the tap appears to
+  do nothing. The earlier green runs depended on where the card happened to sit.
+- Fix: the panel scrolls itself into view (`block: "nearest"`, no motion under
+  reduced-motion) when it opens and again when the reliance check settles.
+- Regression: a component test asserts both scrolls target the panel and fails
+  without the fix; the B4-ADJ-07 journey now puts Retire on the bottom edge of
+  the screen before tapping it, on desktop and at 393px.
+- Status: Inconclusive until hosted `app-mobile` and `app-chromium` pass on the
+  fix and a release ships it.
+
 ## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
 
 Release 61aa6bbe (#598 fact-filter estimate, JIT comment correction) was

@@ -86,6 +86,12 @@ async function retirementJourney(page: Page, request: APIRequestContext, rt: Tes
     await expectNoPageOverflow(page);
     const retire = card.getByRole("button", { name: "Retire", exact: true });
     await expect(retire).toHaveAttribute("aria-expanded", "false");
+    // Put Retire on the last line of the screen, where a phone user often meets
+    // it: the panel opens below it and must still bring its reason field into view.
+    await retire.evaluate((button) => {
+      window.scrollBy(0, button.getBoundingClientRect().bottom - window.innerHeight);
+    });
+    await expect(retire, "Retire sits on the bottom edge of the screen").toBeInViewport();
     const previewed = page.waitForResponse((response) =>
       new URL(response.url()).pathname === `/api/ip/documents/${documentId}/retirement`);
     await retire.click();
