@@ -43,7 +43,6 @@ export const SOURCE_GATE_WORKER_PATHS = Object.freeze([
   "scripts/mobile/privacy-policy.test.mjs",
   "scripts/mobile/prepare-source-exports.test.mjs",
   "apps/mobile/e2e/v1-workflows.test.mjs",
-  "apps/mobile/e2e/v1-counsel-prerequisite.test.mjs",
   "scripts/mobile/v1-workflows-credentials.test.mjs",
   "apps/mobile/e2e/queue-privacy.test.mjs",
   "scripts/mobile/client-extensions.test.mjs",

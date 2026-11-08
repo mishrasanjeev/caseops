@@ -1,3 +1,4 @@
+import './v1-counsel-prerequisite-cases.mjs';
 import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
 import assert from 'node:assert/strict';
