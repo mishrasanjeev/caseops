@@ -53,8 +53,16 @@ Do not remove this devDependency before the release's asset check.
 
 ## Parent Interface
 
+The parent never imports the viewer module statically. The module embeds the
+renderer and PDF.js assets, so evaluating it at launch delays startup; the
+parent `require`s it only when an attachment opens. Import only its props type
+statically, because type imports are erased from the bundle.
+`MobileApplication.tsx` `PrivateViewerRoute` is the single loader: it keeps
+the first initialisation failure and renders a "Document reader unavailable"
+state with a Close action instead of throwing during render.
+
 ```tsx
-import { PrivateDocumentViewer } from "./viewer/PrivateDocumentViewer";
+import type { PrivateDocumentViewerProps } from "./viewer/PrivateDocumentViewer";
 import { attachmentViewerSource } from "./viewer/contracts";
 import type { ViewerPorts } from "./viewer/contracts";
 
@@ -70,13 +78,18 @@ const ports: ViewerPorts = {
   subscribeInvalidation: subscribePrivateSourceInvalidation,
 };
 
-<PrivateDocumentViewer
-  source={source}
-  ports={ports}
-  onClose={returnToFiles}
-  initialPosition={memoryOnlyPosition}
-  onPositionChange={rememberPositionInMemory}
-/>;
+// Evaluated on first open, not at launch.
+const { PrivateDocumentViewer } =
+  require("./viewer/PrivateDocumentViewer") as typeof import("./viewer/PrivateDocumentViewer");
+const props: PrivateDocumentViewerProps = {
+  source,
+  ports,
+  onClose: returnToFiles,
+  initialPosition: memoryOnlyPosition,
+  onPositionChange: rememberPositionInMemory,
+};
+
+<PrivateDocumentViewer {...props} />;
 ```
 
 Bind `session.requestBytes` if it is not an arrow method. Never capture a token
