@@ -2,13 +2,13 @@
 
 ## November 8 B4-ADJ-07 Mobile Retirement Regression
 
-**Inconclusive; candidate change, not released.** CI 42457749671 on
-`283ee514` confirmed the retirement preview succeeded at 393px, but the
-reason textarea remained below the viewport. The candidate brings the field
-and its validation error into view after the server preview without moving
-focus. It does not change which documents may be retired or bypass the
-confirmation request. The dated browser test retains the original viewport
-assertion and now also checks the field error before the next interaction.
+CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at
+393px but the reason textarea remained below the viewport. The superseded
+`dfd6870e` candidate passed its own hosted browser replay with an inline
+reason/error reveal. Main independently merged B4-ADJ-45 in #608 with a
+panel reveal and a stronger bottom-edge setup. #597 adopts that exact main
+implementation and regression instead of combining two scroll effects.
+The earlier candidate's green checks do not certify the reconciled tree.
 
 ## November 8 PR #597 Review Fixes
 
@@ -92,6 +92,48 @@ membership, Assistant private-source, Watch visibility and redline boundaries
 on candidate `722fe7fe`. The superseded Docker run retained 102 completed
 database cases and did not run browsers. Do not treat that prefix or the
 earlier focused counts as acceptance of a replacement.
+
+## November 8 Release 9cd90aff: #599, #600 and #601 Live; B4-ADJ-42 Properly Fixed
+
+`main` at 9cd90aff (#599 B4-ADJ-42 width proof, #600 mobile welcome and record
+navigation, #601 Play-signed Android App Links) serves `caseops-api-00523-r9k`
+with image tag `9cd90af`. A peer release created revisions 00522 and 00523;
+this session's own deploy-prod attempts failed closed before any build or
+mutation (read-only worker preflight gcloud deadline, then "main advanced
+during release"), so they did not overlap the change. Security run
+42466390480 succeeded; main CI 42466390396 succeeded on attempt 3, after two
+attempts failed only on GitHub release 504s while installing uv.
+
+- B4-ADJ-42 Status: Properly fixed. Prod-verify 42471824330 on the exact
+  release passed every group. In `test-legal-write-oct13-b` (11 expected,
+  0 skipped, 0 failed), "IP18 current-source tracker filters saved views
+  export and full continuation" passed at 1280px and 393px. Both cases issue
+  the three unnarrowed fact-filtered reads against the retained test-legal
+  tenant and require each to finish under 15 s.
+- #600 ships no web or API code; native and device acceptance remains as
+  recorded in its PR.
+- #601 still needs the production association and a Play-installed device
+  sign-in check.
+
+## November 8 B4-ADJ-45: Document Retire Panel Opens Off Screen
+
+Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
+`app-mobile` case "B4-ADJ-07 [mobile] the retire panel, its field error and the
+history card fit 393px": the "Reason for retiring" field had a viewport ratio
+of 0 at 393px. PR #597 changes no IP document code; the cause is on `main`.
+
+- Root cause: the retire panel opens under the Retire button and never brings
+  itself into view. When Retire is the last thing on screen (Playwright scrolls
+  only far enough to show the button; a phone user meets the same position),
+  the reason field and the blockers open below the fold and the tap appears to
+  do nothing. The earlier green runs depended on where the card happened to sit.
+- Fix: the panel scrolls itself into view (`block: "nearest"`, no motion under
+  reduced-motion) when it opens and again when the reliance check settles.
+- Regression: a component test asserts both scrolls target the panel and fails
+  without the fix; the B4-ADJ-07 journey now puts Retire on the bottom edge of
+  the screen before tapping it, on desktop and at 393px.
+- B4-ADJ-45 Status: Inconclusive until hosted `app-mobile` and
+  `app-chromium` pass on the fix and a release ships it.
 
 ## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
 

@@ -135,35 +135,6 @@ describe("IpDocumentWorkspace retirement", () => {
     fetchIpDocumentRetirementMock.mockResolvedValue(RETIRABLE);
   });
 
-  it("reveals the reason and its inline error without moving keyboard focus", async () => {
-    const previous = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
-    const scroll = vi.fn();
-    Object.defineProperty(Element.prototype, "scrollIntoView", { value: scroll, configurable: true });
-    try {
-      renderWorkspace();
-      const trigger = await screen.findByRole("button", { name: "Retire" });
-      trigger.focus();
-      fireEvent.click(trigger);
-      const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
-      const reason = await within(panel).findByLabelText("Reason for retiring");
-      const confirm = within(panel).getByRole("button", { name: "Retire document" });
-      await waitFor(() => expect(scroll.mock.contexts).toContain(reason.parentElement));
-      expect(trigger).toHaveFocus();
-
-      scroll.mockClear();
-      fireEvent.change(reason, { target: { value: "short" } });
-      confirm.focus();
-      fireEvent.click(confirm);
-      expect(await within(panel).findByRole("alert")).toBeInTheDocument();
-      await waitFor(() => expect(scroll.mock.contexts).toContain(reason.parentElement));
-      expect(confirm).toHaveFocus();
-      expect(retireIpDocumentMock).not.toHaveBeenCalled();
-    } finally {
-      if (previous) Object.defineProperty(Element.prototype, "scrollIntoView", previous);
-      else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
-    }
-  });
-
   it("retires with a field-anchored reason and reloads the current list", async () => {
     retireIpDocumentMock.mockResolvedValue(document({
       retirement: { retired_at: "2026-11-01T00:00:00Z", retired_by_name: "Ram", reason: "Wrong file" },
@@ -245,6 +216,29 @@ describe("IpDocumentWorkspace retirement", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Retire document" }));
     expect(await within(panel).findByText("Assignment recordal · draft")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Retire document" })).toBeDisabled();
+  });
+
+  it("brings the panel into view when it opens and again once the reason field appears", async () => {
+    let settle: (value: IpDocumentRetirementPreview) => void = () => undefined;
+    fetchIpDocumentRetirementMock.mockReturnValueOnce(new Promise((resolve) => { settle = resolve; }));
+    const original = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole("button", { name: "Retire" }));
+      const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(scrollIntoView.mock.contexts[0]).toBe(panel);
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", behavior: "smooth" });
+
+      settle(RETIRABLE);
+      await within(panel).findByLabelText("Reason for retiring");
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+      expect(scrollIntoView.mock.contexts[1]).toBe(panel);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
   });
 
   it("shows a retry when the reliance check fails", async () => {

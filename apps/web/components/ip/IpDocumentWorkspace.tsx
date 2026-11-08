@@ -960,14 +960,21 @@ function RetireDocumentPanel({
   const reasonHelpId = `${reasonId}-help`;
   const reasonErrorId = `${reasonId}-error`;
   const blockedNoteId = `${panelId}-blocked`;
-  const reasonGroup = useRef<HTMLDivElement>(null);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const preview = useQuery({
     queryKey: ["ip", "documents", document.id, "retirement"],
     queryFn: () => fetchIpDocumentRetirement(document.id),
     staleTime: 0,
   });
+  // The panel opens under the Retire button, which on a phone is often the
+  // last thing on screen. Bring it into view when it opens and again when the
+  // reliance check settles and the reason field or blockers replace the status.
+  useEffect(() => {
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    panelRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [preview.status]);
   const retire = useMutation({
     mutationFn: () => {
       const trimmed = reason.trim();
@@ -1001,19 +1008,9 @@ function RetireDocumentPanel({
   const data = preview.data;
   const blockers = data?.blockers ?? [];
   const blocked = !!data && (!data.may_retire || blockers.length > 0 || data.already_retired);
-  const reasonReady = !!data && !preview.isError && !blocked;
-  useEffect(() => {
-    if (!reasonReady || !reasonGroup.current) return;
-    const group = reasonGroup.current;
-    const { activeElement, body } = group.ownerDocument;
-    // The preview can finish after the user moves on. Do not pull them back.
-    if (activeElement && activeElement !== body
-      && activeElement.getAttribute("aria-controls") !== panelId
-      && !group.closest("section")?.contains(activeElement)) return;
-    group.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [panelId, reasonError, reasonReady]);
   return (
     <section
+      ref={panelRef}
       id={panelId}
       aria-label={`Retire ${document.title}`}
       className="mt-3 flex min-w-0 flex-col gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm"
@@ -1068,7 +1065,7 @@ function RetireDocumentPanel({
           </ul>
         </div>
       ) : (
-        <div ref={reasonGroup} className="flex min-w-0 scroll-my-4 flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <Label htmlFor={reasonId}>Reason for retiring</Label>
           <Textarea
             id={reasonId}
