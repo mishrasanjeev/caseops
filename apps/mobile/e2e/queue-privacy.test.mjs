@@ -10,7 +10,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
-import { collectQueuePrivacy,queuePrivacyScenarios } from './queue-privacy.mjs';
+import { collectQueuePrivacy,queuePrivacyScenarios,resolveAndroidComposeQueueSegment,selectQueueSegment } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
 import { admitQPBeforeMembers,pendingQPRequest,withQPActor } from '../../../scripts/mobile/run-queue-privacy.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
@@ -265,6 +265,95 @@ test('second reader refusal purges already loaded first member and never creates
 test('actor environment is restored exactly on success and original failure',async()=>{const name='CASEOPS_MOBILE_QP_UNIT_EMAIL';const old=process.env[name];process.env[name]='prior';try{const member={fixture:{auth:{emailEnv:name,passwordEnv:'CASEOPS_MOBILE_QP_UNIT_PASS',totpSecretEnv:'CASEOPS_MOBILE_QP_UNIT_TOTP'}},value:{email:'new',password:'SYNTHETIC_ONLY',totp_secret:'SYNTHETIC_ONLY'}};await assert.rejects(withQPActor(member,async()=>{assert.equal(process.env[name],'new');throw Error('original');}),/original/);assert.equal(process.env[name],'prior');assert.equal(process.env.CASEOPS_MOBILE_QP_UNIT_PASS,undefined);}finally{if(old===undefined)delete process.env[name];else process.env[name]=old;}});
 test('receipt validation requires exact operation and received false-completion UTC contract',()=>{const r={id:id(1),operation_id:id(2),request_type:'account_deletion',status:'received',requested_at:'2026-10-27T12:00:00.123456Z',deletion_completed:false};assert.deepEqual(decodeAccountDeletionReceipt(r),r);for(const change of[v=>v.deletion_completed=true,v=>v.status='completed',v=>v.requested_at='2026-10-27T12:00:00']){const v={...r};change(v);assert.throws(()=>decodeAccountDeletionReceipt(v));}});
 test('native scenarios dispatch through original-ID raw helper without element.click or generic case filters',()=>{const text=fs.readFileSync(new URL('./queue-privacy.mjs',import.meta.url),'utf8'),runner=fs.readFileSync(path.join(ROOT,'scripts/mobile/run-queue-privacy.mjs'),'utf8');assert.equal(queuePrivacyScenarios.length,2);assert.match(text,/dispatchNativeClick/);assert.doesNotMatch(text,/\.click\(/);assert.doesNotMatch(runner,/--case|--grep/);assert.match(runner,/connectionRetryCount:0/);assert.match(text,/attempt<4/);assert.match(text,/upstreamStatus,202/);});
+test('measured Android Compose queue labels resolve one contained radio parent and dispatch its raw ID once', async () => {
+  // Sanitized Appium Android 16 readback on the 1080x2424 QA device. Each row
+  // contains label, checked/clickable flags, parent frame and text frame.
+  const captured = JSON.parse(`{
+    "queue":[53,692,975,1467],
+    "segments":[
+      ["Mine","true","false",[53,836,327,126],[211,878,79,43]],
+      ["Team","false","true",[380,836,321,126],[495,878,91,43]],
+      ["Unassigned","false","true",[701,836,327,126],[770,878,189,43]],
+      ["All dates","true","false",[53,1075,327,126],[181,1117,140,43]],
+      ["Dated","false","true",[380,1075,321,126],[493,1117,95,43]],
+      ["Undated","false","true",[701,1075,327,126],[798,1117,134,43]]
+    ]
+  }`);
+  const appId = 'ai.caseops.mobile.dev.localacceptance';
+  const rect = ([x, y, width, height]) => ({ x, y, width, height });
+  const node = (elementId, attrs = {}, enabled = true) => ({ elementId, isDisplayed: async () => true,
+    isEnabled: async () => enabled, getAttribute: async (name) => attrs[name],
+    click: async () => { throw new Error('RAW_CLICK_REQUIRED'); } });
+  const frames = new Map([['queue', rect(captured.queue)]]);
+  const queries = new Map([['id=screen-work', [node('work')]], ['id=matter-task-queue', [node('queue')]]]);
+  const selectors = { 'Task ownership': {}, 'Task dates': {} };
+  for (const [index, [label, checked, clickable, parentFrame, labelFrame]] of captured.segments.entries()) {
+    const group = index < 3 ? 'Task ownership' : 'Task dates';
+    const query = `//*[@class='android.widget.TextView' and @text='${label}']`;
+    frames.set(`radio-${index}`, rect(parentFrame));
+    frames.set(`label-${index}`, rect(labelFrame));
+    queries.set(query, [node(`label-${index}`)]);
+    queries.set(`${query}/parent::*`, [node(`radio-${index}`, { package: appId, checkable: 'true', checked, clickable })]);
+    selectors[group][label] = { kind: 'android-compose-parent', group, label, selectedAtObservation: checked === 'true' };
+  }
+  const dispatches = [];
+  const driver = { $$: async (query) => queries.get(query) ?? [], getElementRect: async (id) => frames.get(id),
+    elementClick: async (id) => dispatches.push(id) };
+  const udid = 'captured-android-emulator';
+  const buildReceipt = { path: '/synthetic/build', sha256: 'a'.repeat(64) };
+  const c = { platform: 'android', driver, nativeOperations: 0, fixture: { appId, udid, buildReceipt,
+    qp: { nativeSelectors: { observed: true, udid, buildReceipt, segments: selectors } } } };
+  for (const [group, options] of Object.entries(selectors)) {
+    for (const [label, recipe] of Object.entries(options)) {
+      const { selected } = await resolveAndroidComposeQueueSegment(c, group, label);
+      assert.equal(selected, recipe.selectedAtObservation);
+    }
+  }
+  assert.deepEqual(dispatches, []);
+  assert.equal(c.nativeOperations, 0);
+  await selectQueueSegment(c, 'Task ownership', 'Team');
+  assert.deepEqual(dispatches, ['radio-1']);
+  assert.equal(c.nativeOperations, 1);
+  await assert.rejects(selectQueueSegment(c, 'Task ownership', 'Mine'), /QP_ANDROID_QUEUE_TRANSITION_ALREADY_SELECTED/);
+  await assert.rejects(resolveAndroidComposeQueueSegment(c, 'Task dates', 'Team'), /QP_ANDROID_QUEUE_LABEL_REQUIRED/);
+  const parentQuery = "//*[@class='android.widget.TextView' and @text='Team']/parent::*";
+  const parents = queries.get(parentQuery);
+  queries.set(parentQuery, [...parents, node('second-parent')]);
+  await assert.rejects(selectQueueSegment(c, 'Task ownership', 'Team'), /QP_ANDROID_EXACT_QUEUE_PARENT_REQUIRED/);
+  queries.set(parentQuery, [node('radio-1', {}, false)]);
+  await assert.rejects(selectQueueSegment(c, 'Task ownership', 'Team'), /QP_ANDROID_QUEUE_PARENT_DISABLED/);
+  queries.set(parentQuery, parents);
+  frames.set('radio-1', { ...frames.get('radio-1'), y: 300 });
+  await assert.rejects(selectQueueSegment(c, 'Task ownership', 'Team'), /QP_ANDROID_QUEUE_PARENT_OUTSIDE_SCOPE/);
+  assert.deepEqual(dispatches, ['radio-1']);
+  frames.set('radio-1', rect(captured.segments[1][3]));
+  const lost = new Error('original native acknowledgement lost');
+  driver.elementClick = async (id) => { dispatches.push(id); throw lost; };
+  await assert.rejects(selectQueueSegment(c, 'Task ownership', 'Team'), (error) => error === lost);
+  assert.deepEqual(dispatches, ['radio-1', 'radio-1']);
+  assert.equal(c.nativeOperations, 2);
+});
+
+test('iOS observed queue segment keeps its native exact-label locator and original dispatch identity', async () => {
+  const query = '-ios predicate string:label == "Team"';
+  const group = 'Task ownership';
+  const label = 'Team';
+  const udid = 'synthetic-ios';
+  const buildReceipt = { path: '/synthetic/ios-build', sha256: 'b'.repeat(64) };
+  const selectors = { observed: true, udid, buildReceipt,
+    segments: { [group]: { [label]: { group, label, query, labelAttribute: 'label' } } } };
+  const lookups = [], dispatches = [];
+  const driver = {
+    $$: async (wanted) => { lookups.push(wanted); return [{ elementId: 'ios-original', isDisplayed: async () => true,
+      getAttribute: async (attribute) => { assert.equal(attribute, 'label'); return label; } }]; },
+    elementClick: async (id) => dispatches.push(id),
+  };
+  await selectQueueSegment({ platform: 'ios', driver, nativeOperations: 0,
+    fixture: { udid, buildReceipt, qp: { nativeSelectors: selectors } } }, group, label);
+  assert.deepEqual(lookups, [query]);
+  assert.deepEqual(dispatches, ['ios-original']);
+});
+
 test('control client single receipt read has no hidden20poll and enforces case+cleanup bounds',async()=>{const previous=process.env.NODE_EXTRA_CA_CERTS;process.env.NODE_EXTRA_CA_CERTS='/synthetic/ca';try{let calls=0,reads=0;const fixture={binarySourceSha:'a'.repeat(40),gatewayRunId:'qp-run',gatewayUrl:'https://127.0.0.1:8443',publicCa:{path:'/synthetic/ca'}},descriptor={profile:QP.profile,kind:'registered-queue-privacy-controls',observed:true,sourceSha:fixture.binarySourceSha,runId:fixture.gatewayRunId,binaryHash:'b'.repeat(64),capabilities:QP.capabilities,protocol:V1_CONTROL_PROTOCOL,origin:'https://127.0.0.1:8443',authorityEvidence:{path:'/synthetic/private',sha256:'c'.repeat(64),uid:process.getuid()},registrationSha256:'d'.repeat(64)};
  const controls=createControls({fixture,descriptor,admission:{beforeMemberRead:true,source:{sourceSha:fixture.binarySourceSha},installed:{binaryHash:descriptor.binaryHash}}},{member:()=>({bytes:Buffer.from('synthetic'),sha256:'c'.repeat(64),uid:process.getuid(),value:{control_secret:'e'.repeat(64)}}),fetch:async(_url,options)=>{calls++;const q=JSON.parse(options.body);if(q.capability==='readControlReceipt')reads++;return new Response(JSON.stringify({...q,observed:true,sourceSha:fixture.binarySourceSha,noPaidMarker:'no-paid-providers',directDatabaseWrites:false,nativeMutationsForwardedByControls:false}),{status:200});}});
  await controls.readControlReceipt({caseId:'PRIVACY-01',id:'synthetic'});assert.equal(reads,1);for(let i=0;i<23;i++)await controls.readNativeRequest({caseId:'PRIVACY-01'});await assert.rejects(controls.readNativeRequest({caseId:'PRIVACY-01'}));await controls.closeRunControls({caseId:'PRIVACY-01'});assert.equal(calls,25);assert.equal(controls.publicState().finalCleanup,1);controls.dispose();

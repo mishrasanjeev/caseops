@@ -10,9 +10,60 @@ async function fact(c,id){consume(c);return read(c,'id',id,{scroll:true});}
 async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:20000,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
 async function control(c,name,args={}){assert.ok(++c.controlCalls<=24,'QP_CASE_CONTROL_BOUND');return c.controls[name]({caseId:c.caseId,...args});}
-async function segment(c,group,label){
+const queueSegments = {
+  'Task ownership': ['Mine', 'Team', 'Unassigned'],
+  'Task dates': ['All dates', 'Dated', 'Undated'],
+};
+function containsFrame(outer, inner) {
+  const valid = (frame) => frame && [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
+    frame.width > 0 && frame.height > 0;
+  return valid(outer) && valid(inner) && inner.x >= outer.x && inner.y >= outer.y &&
+    inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+}
+
+export async function resolveAndroidComposeQueueSegment(c, group, label) {
+  assert.equal(c.platform, 'android');
+  assert.ok(Object.hasOwn(queueSegments, group) && queueSegments[group].includes(label), 'QP_ANDROID_QUEUE_LABEL_REQUIRED');
+  const { driver } = c;
+  const work = await visible(driver, selector('android', 'id', 'screen-work'));
+  const queue = await visible(driver, selector('android', 'id', 'matter-task-queue'));
+  assert.ok(work && queue, 'QP_ANDROID_WORK_QUEUE_REQUIRED');
+  // Compose puts the exact label on a noninteractive TextView and its radio
+  // semantics on the direct parent. The RN queue marker is flattened beside it.
+  const labelQuery = `//*[@class='android.widget.TextView' and @text='${label}']`;
+  const leaves = await driver.$$(labelQuery);
+  const parents = await driver.$$(`${labelQuery}/parent::*`);
+  assert.equal(leaves.length, 1, 'QP_ANDROID_EXACT_QUEUE_LABEL_REQUIRED');
+  assert.equal(parents.length, 1, 'QP_ANDROID_EXACT_QUEUE_PARENT_REQUIRED');
+  const [leaf] = leaves, [parent] = parents;
+  assert.equal(await leaf.isDisplayed(), true, 'QP_ANDROID_QUEUE_LABEL_NOT_VISIBLE');
+  assert.equal(await parent.isDisplayed(), true, 'QP_ANDROID_QUEUE_PARENT_NOT_VISIBLE');
+  assert.equal(await parent.isEnabled(), true, 'QP_ANDROID_QUEUE_PARENT_DISABLED');
+  assert.equal(await parent.getAttribute('package'), c.fixture.appId, 'QP_ANDROID_QUEUE_PARENT_WRONG_PACKAGE');
+  assert.equal(await parent.getAttribute('checkable'), 'true', 'QP_ANDROID_QUEUE_RADIO_REQUIRED');
+  const queueFrame = await driver.getElementRect(queue.elementId);
+  const parentFrame = await driver.getElementRect(parent.elementId);
+  const labelFrame = await driver.getElementRect(leaf.elementId);
+  assert.ok(containsFrame(queueFrame, parentFrame) && containsFrame(parentFrame, labelFrame), 'QP_ANDROID_QUEUE_PARENT_OUTSIDE_SCOPE');
+  const checked = await parent.getAttribute('checked');
+  assert.ok(['true', 'false'].includes(checked), 'QP_ANDROID_QUEUE_CHECKED_STATE_REQUIRED');
+  const selected = checked === 'true';
+  assert.equal(await parent.getAttribute('clickable'), selected ? 'false' : 'true', 'QP_ANDROID_QUEUE_PARENT_CLICKABILITY');
+  return { parent, selected };
+}
+
+export async function selectQueueSegment(c, group, label) {
  const observed=c.fixture.qp.nativeSelectors;assert.equal(observed.observed,true);assert.equal(observed.udid,c.fixture.udid);assert.deepEqual(observed.buildReceipt,c.fixture.buildReceipt);
- const r=observed.segments[group]?.[label];assert.ok(r&&r.group===group&&r.label===label);assert.ok(r.query.startsWith(c.platform==='ios'?'-ios predicate string:':'android='));
+ const r=observed.segments[group]?.[label];assert.ok(r&&r.group===group&&r.label===label);
+ if (r.kind === 'android-compose-parent') {
+   assert.equal(typeof r.selectedAtObservation, 'boolean', 'QP_ANDROID_QUEUE_OBSERVED_STATE_REQUIRED');
+   const { parent, selected } = await resolveAndroidComposeQueueSegment(c, group, label);
+   assert.equal(selected, false, 'QP_ANDROID_QUEUE_TRANSITION_ALREADY_SELECTED');
+   consume(c);
+   await dispatchNativeClick(c, parent);
+   return;
+ }
+ assert.ok(r.query.startsWith(c.platform==='ios'?'-ios predicate string:':'android='));
  const scope=r.scopeQuery?await findQuery(c,r.scopeQuery,{scroll:true}):c.driver,e=await visible(scope,r.query);assert.ok(e);assert.equal(await e.getAttribute(r.labelAttribute),label);consume(c);await dispatchNativeClick(c,e);
 }
 async function rows(c,page){
@@ -38,8 +89,8 @@ async function taskFacts(c,item){
  for(const[id,value]of Object.entries(values))assert.equal(await fact(c,id),value,'QP_EXACT_TASK_FACT');
 }
 async function selectQueue(c,ownership,dates){
- if(c.selected.ownership!==ownership){await segment(c,'Task ownership',{mine:'Mine',team:'Team',unassigned:'Unassigned'}[ownership]);c.selected.ownership=ownership;}
- if(c.selected.dates!==dates){await segment(c,'Task dates',{all:'All dates',dated:'Dated',undated:'Undated'}[dates]);c.selected.dates=dates;}
+ if(c.selected.ownership!==ownership){await selectQueueSegment(c,'Task ownership',{mine:'Mine',team:'Team',unassigned:'Unassigned'}[ownership]);c.selected.ownership=ownership;}
+ if(c.selected.dates!==dates){await selectQueueSegment(c,'Task dates',{all:'All dates',dated:'Dated',undated:'Undated'}[dates]);c.selected.dates=dates;}
  const page=await queue(c,ownership,dates);await rows(c,page);return page;
 }
 async function ownPrivacy(c,actor='member'){assert.ok(++c.authoritativeReads<=24);const r=await control(c,'readOwnPrivacy',{actor});assert.equal(r.status,200);return r.value.request===null?null:decodeAccountDeletionReceipt(r.value.request);}
