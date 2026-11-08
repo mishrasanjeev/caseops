@@ -15,6 +15,9 @@ from tests.test_workspace_conduct_20261108 import (
     test_receipt_is_bound_to_authenticated_membership_and_tenant as tenant_scope,
 )
 from tests.test_workspace_conduct_20261108 import (
+    test_store_review_workspace_composes_with_native_document_processing as composed_processing,
+)
+from tests.test_workspace_conduct_20261108 import (
     test_upload_rechecks_native_membership_after_storage_and_cleans_owned_copy as upload_race,
 )
 from tests.test_workspace_conduct_reports_20261108 import (
@@ -39,6 +42,10 @@ def test_conduct_native_write_and_scanner(isolated_postgres_client, monkeypatch)
 
 def test_native_document_processing_privacy(isolated_postgres_client, monkeypatch):
     local_processing(isolated_postgres_client, monkeypatch)
+
+
+def test_store_review_workspace_processing_privacy(isolated_postgres_client, monkeypatch):
+    composed_processing(isolated_postgres_client, monkeypatch)
 
 
 def test_conduct_tenant_receipt_scope(isolated_postgres_client):

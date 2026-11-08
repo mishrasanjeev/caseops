@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from caseops_api.core.automated_test_context import NO_PAID_PROVIDERS_HEADER
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CompanyMembership,
     DocumentProcessingJob,
@@ -15,7 +17,14 @@ from caseops_api.db.models import (
     WorkspaceConductAcceptance,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services import embeddings, matters, virus_scan, workspace_conduct
+from caseops_api.services import (
+    document_dispatch,
+    embeddings,
+    matters,
+    virus_scan,
+    workspace_conduct,
+)
+from caseops_api.services.document_jobs import run_document_processing_job
 from tests.test_native_auth_20261024 import _browser, _device, _headers
 
 PATH = "/api/account/workspace-conduct"
@@ -102,6 +111,79 @@ def test_native_upload_and_web_reprocessing_skip_external_embedding_provider(cli
         ).all()
         assert len(jobs) == 3 and all(job.no_paid_providers for job in jobs)
         assert {job.status for job in jobs} == {"completed"}
+
+
+def test_store_review_workspace_composes_with_native_document_processing(client, monkeypatch):
+    auth, browser = _browser(client)
+    native = _headers(_device(client, browser))
+    del client.headers[NO_PAID_PROVIDERS_HEADER]
+    del client.headers["X-CaseOps-Client"]
+    del browser[NO_PAID_PROVIDERS_HEADER]
+    accepted = _accept(client, native)
+    assert accepted.status_code == 200, accepted.text
+    matter = _matter(client, browser)
+    matter_id, version = matter["id"], matter["lifecycle_version"]
+
+    review_setting = "CASEOPS_STORE_REVIEW_DOCUMENT_NO_PAID_COMPANY_ID"
+    monkeypatch.setenv(review_setting, auth["company"]["id"])
+    monkeypatch.setenv("CASEOPS_DOCUMENT_PROCESSING_DISPATCH_MODE", "cloud_run_job")
+    monkeypatch.setenv("CASEOPS_GCP_PROJECT_ID", "caseops-test-fixture")
+    monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "voyage")
+    monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "offline-test")
+    get_settings.cache_clear()
+    paid_constructions = []
+
+    def offline_voyage(*, model, dimensions, **_):
+        paid_constructions.append(model)
+        return embeddings.MockProvider(model=model, dimensions=dimensions)
+
+    async def wake(**_):
+        return True
+
+    monkeypatch.setattr(embeddings, "VoyageProvider", offline_voyage)
+    monkeypatch.setattr(document_dispatch, "_wake_cloud_run_queue", wake)
+    queued = {}
+    for is_native, headers, content in (
+        (True, native, CONTENT),
+        (False, browser, b"Synthetic unmarked browser review document."),
+    ):
+        uploaded = _upload(client, headers, matter_id, version, content)
+        assert uploaded.status_code == 200, uploaded.text
+        attachment = uploaded.json()
+        attachment_id = attachment["id"]
+        jobs = [attachment["latest_job"]["id"]]
+        for action in ("retry", "reindex"):
+            response = client.post(
+                f"/api/matters/{matter_id}/attachments/{attachment_id}/{action}", headers=browser,
+            )
+            assert response.status_code == 200, response.text
+            job = response.json()["latest_job"]
+            assert job["action"] == action and job["status"] == "queued"
+            jobs.append(job["id"])
+        assert len(set(jobs)) == 3
+        queued[attachment_id] = is_native, content, jobs
+
+    monkeypatch.delenv(review_setting)
+    get_settings.cache_clear()
+    factory = get_session_factory()
+    for attachment_id, (is_native, content, jobs) in queued.items():
+        for job_id in jobs:
+            processed = run_document_processing_job(job_id)
+            assert processed
+        with factory() as session:
+            attachment = session.get(MatterAttachment, attachment_id)
+            assert attachment.native_local_processing_only is is_native
+            assert attachment.processing_status == "indexed"
+            assert [chunk.content for chunk in attachment.chunks] == [content.decode()]
+            assert [chunk.embedding_model for chunk in attachment.chunks] == [
+                None if is_native else "caseops-automated-test-embed",
+            ]
+            for job_id in jobs:
+                job = session.get(DocumentProcessingJob, job_id)
+                assert (job.status, job.attempt_count, job.no_paid_providers) == (
+                    "completed", 1, True,
+                )
+    assert paid_constructions == []
 
 
 def test_native_note_and_upload_require_current_rules_and_preserve_web_scanner(client, monkeypatch):
