@@ -125,6 +125,8 @@ def test_watch_report_reproduces_disconnected_adapter_and_preserves_review_evide
             for model in (IpWatchProfile, IpWatchHit, IpJournalPublication)
         }
     body = _report(client, headers)
+    # The evidence-row contract replaced the v1 unavailable stub.
+    assert body["schema_version"] == "ip-watch-report-v2"
     assert body["summary"] == {
         "available": True,
         "reason": "Only retained journal-watch records are included; automated journal "

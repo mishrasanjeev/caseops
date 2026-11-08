@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select, true
+from sqlalchemy import case, false, func, or_, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -609,21 +609,22 @@ def _visible_runs_condition(
         IpJournalPublication.company_id == company_id, publications
     )
     hit_ids = _visible_hits_statement(company_id, visible_dockets).with_only_columns(IpWatchHit.id)
-    array_elements = (
-        func.json_array_elements_text
-        if session.get_bind().dialect.name == "postgresql"
-        else func.json_each
-    )
+    postgresql = session.get_bind().dialect.name == "postgresql"
+    array_elements = func.json_array_elements_text if postgresql else func.json_each
+    json_type = func.json_typeof if postgresql else func.json_type
 
     def all_visible(column: Any, allowed: Any) -> Any:
         ids = array_elements(column).table_valued("value")
-        return ~(
+        hidden_id = (
             select(1)
             .select_from(ids)
             .where(or_(ids.c.value.is_(None), ids.c.value.not_in(allowed.correlate(None))))
             .correlate(IpJournalIngestionRun)
             .exists()
         )
+        # CASE keeps a malformed (non-array) capture from reaching the array
+        # expansion, which would fail the whole read; such a run is hidden.
+        return case((json_type(column) == "array", ~hidden_id), else_=false())
 
     return all_visible(IpJournalIngestionRun.publication_ids_json, publication_ids) & all_visible(
         IpJournalIngestionRun.hit_ids_json, hit_ids

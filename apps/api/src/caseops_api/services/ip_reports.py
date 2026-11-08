@@ -84,7 +84,8 @@ _DEFINITIONS = (
     ),
     IpReportDefinitionRecord(
         key="watch",
-        schema_version="ip-watch-report-v1",
+        # v2: rows carry hit and publication evidence; v1 was an unavailable stub.
+        schema_version="ip-watch-report-v2",
         canonical_sources=["ip_watch_profiles", "ip_watch_hits", "ip_journal_publications"],
     ),
     IpReportDefinitionRecord(
