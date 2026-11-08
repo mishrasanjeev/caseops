@@ -52,6 +52,7 @@ export const privacyPolicy = {
         "Account and contact information: name, work email, phone number, organisation, role, workspace membership and information needed to sign in and secure your account.",
         "Legal workspace information: client and party details, matters, documents, messages, notes, contracts, hearings, deadlines and billing records. These records may contain sensitive information about clients and other people.",
         "Files and optional device features: files, photos or camera images you choose to provide, with related file information. Device permissions depend on the feature and the app version.",
+        "If you send a workspace conduct report, we record the selected reason, when we received it, your workspace and account references, and references to the relevant matter, item or member.",
         "Technical and security information: IP address, browser or device type, operating system, app version, session information, access times, error reports and audit records.",
         "Billing and support information: invoice details, business or tax information you provide, payment references or status, enquiries and support communications.",
         "Connected-service information: the account details, access credentials and selected calendar, email or document information needed for an integration you authorise."
@@ -73,6 +74,7 @@ export const privacyPolicy = {
       "title": "4. Who may receive information",
       "paragraphs": [
         "Information is available to people your organisation authorises, subject to the workspace and record-level access controls.",
+        "Authorised workspace owners or CaseOps reviewers may see limited report details, depending on who the report concerns. Access to the underlying matter, note or file follows the usual workspace permissions.",
         "We use service providers for hosting, storage, AI and search processing, communications, payments and support. Depending on the enabled feature, these may include Google Cloud, OpenAI, Voyage AI and SendGrid. A connected service or payment provider may also receive information when you use its integration. Relevant information is shared to perform that function.",
         "Service providers processing personal data for us must use it for the agreed service and protect it with at least the same level of protection described in this policy and required by applicable law.",
         "We may disclose information when required by law, to protect rights or security, or as part of a business transfer with appropriate protections and notice where required.",
@@ -95,6 +97,8 @@ export const privacyPolicy = {
       "title": "6. Device permissions, storage and connections",
       "paragraphs": [
         "Optional features may ask for permission to use the camera, select files or photos, show notifications or use a device security feature. You can manage permissions in your device settings. Refusing an optional permission may prevent that feature from working.",
+        "When you upload a photo, we keep the information embedded in the uploaded file, which can include when or where it was taken. Location information in this flow comes from the file you choose to upload. Taking a photo in CaseOps and uploading it are separate actions.",
+        "If you turn on the optional biometric screen lock, your device checks your face or fingerprint and CaseOps uses the device’s verification to unlock the app. The lock settings and biometric template stay on your device.",
         "Cookies and similar storage support sign-in, security and preferences. Apps may use protected device storage for session credentials and temporary files. A file you export, download or share may remain on your device or in the app you selected.",
         "When you connect an external account, the permissions you authorise determine the information available to that integration. You can revoke access through the connected service or available CaseOps controls. Disconnecting does not by itself delete records already imported or copies already shared."
       ],
