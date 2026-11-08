@@ -22,9 +22,9 @@
 #   scripts/deploy-prod.sh <commit-sha>    # assert this SHA is current HEAD
 #
 # Pre-reqs: gcloud authenticated, project set to perfect-period-305406,
-# region set to asia-south1, and API/web build contexts clean for the
-# HEAD you intend to ship. Cloud Build uploads current files, so dirty
-# contexts are rejected before any gcloud call.
+# region set to asia-south1, local main checked out at current origin/main,
+# and clean API/web build contexts. Cloud Build uploads current files, so
+# dirty contexts are rejected before any gcloud call.
 
 set -euo pipefail
 
@@ -281,8 +281,18 @@ echo "  rule governance from ${IP_RULE_GOVERNANCE_STATE_FILE}: enabled=${IP_RULE
 
 assert_current_main() {
   local phase="$1"
-  local origin_main_sha
+  local current_branch local_main_sha origin_main_sha
 
+  if ! current_branch=$(git symbolic-ref --quiet --short HEAD) || \
+      [[ "${current_branch}" != "main" ]]; then
+    echo "ERROR: production deploy requires checked-out local main at ${phase}."
+    exit 1
+  fi
+  if ! local_main_sha=$(git rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null) || \
+      [[ "${local_main_sha}" != "${HEAD_SHA}" ]]; then
+    echo "ERROR: local main does not match candidate ${HEAD_SHA} at ${phase}."
+    exit 1
+  fi
   if ! git fetch --quiet origin main; then
     echo "ERROR: could not refresh origin/main at ${phase}; refusing production mutation."
     exit 1

@@ -2204,6 +2204,8 @@ def _run_deploy_with_fakes(
     migration_job_missing: bool = False,
     python_crlf: bool = False,
     main_drift_after_fetches: int | None = None,
+    local_branch: str | None = "main",
+    local_main_sha: str = "abcdef1234567890abcdef1234567890abcdef12",
     private_projection_scheduler_hold: str | None = None,
     active_prod_verify_runs: str = "",
     artifact_describe_failures: int = 0,
@@ -2238,6 +2240,16 @@ def _run_deploy_with_fakes(
         fake_bin / "git",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$*" == "symbolic-ref --quiet --short HEAD" ]]; then
+  [[ -n "${FAKE_LOCAL_BRANCH}" ]] || exit 1
+  printf '%s\n' "${FAKE_LOCAL_BRANCH}"
+  exit 0
+fi
+if [[ "$*" == "rev-parse --verify refs/heads/main^{commit}" ]]; then
+  [[ -n "${FAKE_LOCAL_MAIN_SHA}" ]] || exit 128
+  printf '%s\n' "${FAKE_LOCAL_MAIN_SHA}"
+  exit 0
+fi
 if [[ "$1" == "fetch" ]]; then
   fetch_count=0
   if [[ -f "${FAKE_GIT_FETCH_COUNT}" ]]; then
@@ -2897,6 +2909,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GIT_FETCH_COUNT": _bash_path(tmp_path / "git-fetch-count"),
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
+            "FAKE_LOCAL_BRANCH": local_branch or "",
+            "FAKE_LOCAL_MAIN_SHA": local_main_sha,
             "FAKE_GH_MODE": gh_mode,
             "FAKE_SECURITY_PAYLOADS": str(security_payloads),
             "FAKE_SECURITY_MODE": security_mode,
@@ -3078,6 +3092,33 @@ def test_deploy_prod_rejects_a_requested_commit_that_is_not_head(tmp_path: Path)
 
     assert result.returncode != 0
     assert "does not match current HEAD" in result.stdout
+    assert not (tmp_path / "gcloud.log").exists()
+
+
+@pytest.mark.parametrize(
+    ("local_branch", "local_main_sha", "error"),
+    [
+        (None, "abcdef1234567890abcdef1234567890abcdef12", "requires checked-out local main"),
+        (
+            "release-candidate", "abcdef1234567890abcdef1234567890abcdef12",
+            "requires checked-out local main",
+        ),
+        ("main", "dddddddddddddddddddddddddddddddddddddddd", "local main does not match"),
+        ("main", "", "local main does not match"),
+    ],
+    ids=["detached-at-exact-sha", "other-branch-at-exact-sha", "local-main-drift", "missing-ref"],
+)
+def test_deploy_prod_requires_local_main_before_remote_or_cloud(
+    tmp_path: Path, local_branch: str | None, local_main_sha: str, error: str,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path, "abcdef1", local_branch=local_branch, local_main_sha=local_main_sha,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stdout
+    assert "release preflight" in result.stdout
+    assert not (tmp_path / "git-fetch-count").exists()
     assert not (tmp_path / "gcloud.log").exists()
 
 
