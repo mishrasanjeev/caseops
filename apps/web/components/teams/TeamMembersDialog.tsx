@@ -122,7 +122,7 @@ export function TeamMembersDialog({ team }: { team: Team }) {
         </DialogHeader>
         <div className="flex min-w-0 flex-col gap-5" aria-busy={busy}>
           {change.isError ? (
-            <p role="alert" className="break-words text-sm text-red-700">
+            <p role="alert" className="break-words text-sm text-[var(--color-danger-text)]">
               {apiErrorMessage(change.error, "The membership change could not be saved.")}
             </p>
           ) : null}
