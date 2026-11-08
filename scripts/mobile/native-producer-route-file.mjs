@@ -14,6 +14,8 @@ const calendarId = '[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}';
 const calendarRead = new RegExp(`^GET /api/ip/dockets/${calendarId}/deadline-workspace$`);
 const calendarWrite = new RegExp(`^POST /api/ip/(?:dockets/${calendarId}/(?:deadlines|access/(?:preview|apply))|deadlines/${calendarId}/confirm)$`);
 const bound = 131072;
+// Leave clock skew room below the gateway's independent 10-second ceiling.
+const permitLifetimeMs = 9500;
 const keyFields = ['dev', 'ino', 'uid', 'gid', 'mode'];
 const fileFields = [...keyFields, 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const equal = (a, b, fields) => fields.every(field => field === 'dev' && process.platform === 'win32' && b.dev === 0n || a[field] === b[field]);
@@ -93,7 +95,7 @@ export function openProducerRouteFile({ cache, baseSha256, epoch, persist, requi
         assert.match(provenance?.requestDigest || '', /^[a-f0-9]{64}$/, 'PRODUCER_DEPENDENT_ROUTE_NOT_ADMITTED');
         assert.ok(typeof authorization === 'string' && authorization.startsWith('Bearer ') && !authorization.startsWith('Bearer cnat_')
           && authorization.length <= 16384, 'PRODUCER_NORMAL_BEARER_REQUIRED');
-        const current = now(), expires = Math.min(deadline, current + 10000);
+        const current = now(), expires = Math.min(deadline, current + permitLifetimeMs);
         assert.ok(Number.isSafeInteger(expires) && expires > current && ++issued <= 96, 'PRODUCER_PERMIT_BOUND');
         const proof = randomBytes(32).toString('hex'), proofSha256 = hash(proof);
         const permit = path.join(permitRoot, proofSha256 + '.json');

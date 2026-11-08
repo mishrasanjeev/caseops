@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { openProducerRouteFile } from './native-producer-route-file.mjs';
 
 const epoch = 'v1-' + 'a'.repeat(16);
 const docket = '01000000-0000-4000-8000-000000000001';
@@ -25,14 +26,14 @@ const receiptHeader = 'x-caseops-qa-producer-permit-consumed';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const body = Buffer.from('{\n  "reason": "Synthetic QA लेख", "preview_token": "private-fixture-preview"\n}\n');
 
-async function fixture(t) {
+async function fixture(t, { gatewayNow, producerCreatesPermits = false } = {}) {
   const cache = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'calendar-gateway-')));
   t.after(() => rmSync(cache, { recursive: true, force: true }));
   const baseline = Buffer.from('{"routes":["POST /api/matters/"]}\n');
   const routeFile = path.join(cache, 'gateway-routes.json');
   writeFileSync(routeFile, baseline, { mode: 0o600 });
   const permits = path.join(cache, 'producer-permits-' + hash(epoch));
-  mkdirSync(permits, { mode: 0o700 });
+  if (!producerCreatesPermits) mkdirSync(permits, { mode: 0o700 });
   const seen = [];
   const upstream = http.createServer(async (request, response) => {
     const parts = [];
@@ -53,8 +54,11 @@ async function fixture(t) {
     'import runpy,ssl,sys',
     'from http.server import ThreadingHTTPServer',
     'from pathlib import Path',
+    'from types import SimpleNamespace',
     'g=runpy.run_path(sys.argv[1]); cls=g["Gateway"]',
     'cls.handler.__globals__["upstream_destination"]=lambda web: ("127.0.0.1",int(sys.argv[5]))',
+    'clock=cls.consume_producer_permit.__globals__["time"]',
+    'if len(sys.argv) > 6: cls.consume_producer_permit.__globals__["time"]=SimpleNamespace(time=lambda: int(sys.argv[6])/1000,time_ns=clock.time_ns,monotonic=clock.monotonic)',
     'instance=cls(Path(sys.argv[2])); server=ThreadingHTTPServer(("127.0.0.1",0),instance.handler())',
     'context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(sys.argv[3],sys.argv[4])',
     'server.socket=context.wrap_socket(server.socket,server_side=True)',
@@ -62,8 +66,10 @@ async function fixture(t) {
     'server.serve_forever()',
   ].join('\n');
   const child = spawn(process.env.CASEOPS_MOBILE_PRODUCER_PYTHON || 'python3',
-    ['-I', '-c', code, gateway, cache, cert, key, String(upstream.address().port)],
+    ['-I', '-c', code, gateway, cache, cert, key, String(upstream.address().port), ...(gatewayNow === undefined ? [] : [String(gatewayNow)])],
     { env: { PATH: process.env.PATH, CASEOPS_ENV: 'local', CASEOPS_MOBILE_RUN_ID: epoch }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let startupError = '';
+  child.stderr.on('data', bytes => { startupError = (startupError + bytes.toString()).slice(0, 4096); });
   const exited = once(child, 'exit');
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) {
@@ -73,7 +79,7 @@ async function fixture(t) {
   });
   const [ready] = await Promise.race([
     once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) }),
-    exited.then(([status, signal]) => { throw new Error('Isolated gateway exited before readiness: ' + (signal ?? status)); }),
+    exited.then(([status, signal]) => { throw new Error('Isolated gateway exited before readiness: ' + (signal ?? status) + '\n' + startupError); }),
   ]);
   const port = Number(String(ready).trim()), ca = readFileSync(cert);
   assert.ok(port >= 1024 && port <= 65535);
@@ -102,7 +108,7 @@ async function fixture(t) {
     return { token, receipt: hash(bytes), identity };
   };
   const spent = () => readdirSync(permits).filter(name => name.endsWith('.spent')).sort();
-  return { cache, routeFile, baseline, seen, probe, issue, spent };
+  return { cache, routeFile, baseline, permits, seen, probe, issue, spent };
 }
 
 test('calendar one-use permit framing and hashes reach the real isolated TLS gateway', async t => {
@@ -188,5 +194,61 @@ test('calendar one-use permit framing and hashes reach the real isolated TLS gat
     assert.equal(journal.includes(privateValue), false);
     assert.equal(status.body.includes(privateValue), false);
   }
+  assert.deepEqual(readFileSync(routeFile), baseline);
+});
+
+test('a 65 ms fast producer stays inside the real TLS gateway permit ceiling', async t => {
+  const gatewayNow = 1700000000000;
+  const producerNow = gatewayNow + 65;
+  const { cache, routeFile, baseline, permits, seen, probe, issue, spent } = await fixture(t, { gatewayNow, producerCreatesPermits: true });
+  const route = '/api/matters/' + docket + '/tasks';
+  const payload = Buffer.from('{"title":"Synthetic task"}');
+  const events = [];
+  const writer = openProducerRouteFile({ cache, epoch, baseSha256: hash(baseline), now: () => producerNow,
+    persist: event => events.push(event) });
+  const requestDigest = hash('synthetic-creator-ack');
+  const send = token => probe('POST', route, { token, payload });
+  for (const expires of [producerNow + 10000, gatewayNow + 10001, gatewayNow, gatewayNow - 1]) {
+    const { token } = issue('POST', route, undefined, { expires });
+    const rejected = await send(token);
+    assert.equal(rejected.status, 403);
+    assert.equal(rejected.receipt, undefined);
+  }
+  assert.deepEqual(spent(), []);
+  assert.deepEqual(seen, []);
+
+  const accepted = [];
+  for (const [deadline, expectedExpiry] of [[producerNow + 20000, producerNow + 9500], [producerNow + 1000, producerNow + 1000]]) {
+    await writer.dispatch('POST ' + route, { requestDigest }, auth, deadline, async token => {
+      const identity = hash(token);
+      const bytes = readFileSync(path.join(permits, identity + '.json'));
+      const result = await send(token);
+      assert.equal(result.status, 200);
+      assert.equal(result.receipt, hash(bytes));
+      assert.equal(JSON.parse(bytes).expires, expectedExpiry);
+      accepted.push({ token, identity, receipt: result.receipt });
+      return { permitReceipt: result.receipt };
+    });
+  }
+  assert.deepEqual(writer.consumed(), accepted.map(permit => permit.receipt));
+  assert.deepEqual(events.map(event => event.type), ['producer_exact_route_permit', 'producer_exact_route_consumed',
+    'producer_exact_route_permit', 'producer_exact_route_consumed']);
+  const atLimit = issue('POST', route, undefined, { expires: gatewayNow + 10000 });
+  const limitAck = await send(atLimit.token);
+  assert.equal(limitAck.status, 200);
+  assert.equal(limitAck.receipt, atLimit.receipt);
+  accepted.push(atLimit);
+  for (const { token, identity, receipt } of accepted) {
+    const replay = await send(token);
+    assert.equal(replay.status, 403);
+    assert.equal(replay.receipt, undefined);
+    assert.equal(readFileSync(path.join(permits, identity + '.spent'), 'utf8'), receipt + '\n');
+  }
+  assert.deepEqual(spent(), accepted.map(permit => permit.identity + '.spent').sort());
+  assert.deepEqual(seen.map(request => [request.method, request.route, request.body]),
+    accepted.map(() => ['POST', route, payload]));
+  assert.ok(seen.every(request => request.headers[permitHeader.toLowerCase()] === undefined
+    && request.headers['x-caseops-automated-test'] === marker));
+  writer.seal();
   assert.deepEqual(readFileSync(routeFile), baseline);
 });
