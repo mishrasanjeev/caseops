@@ -13,8 +13,9 @@ const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const SOURCE = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
 // Reviewed with the actual Python Gateway regressions, including the 64-event boundary.
 // A changed implementation requires another review; runtime hashes alone cannot admit it.
-export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = '923c396a6a3dc21ed4a0c5366d0eb0d2a8652799e6f9b54aaec70eb730ff3cde';
+export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = '10ea96c3a185e1b2aa2b1052b2a74107cdd39132427b44a516b4d022b08523a8';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const coreMatterReadCounts = new Map([['consent', 2], ['full-core', 9]]);
 const inside = (root, file) => {
   const relative = path.relative(root, file);
   return relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -120,7 +121,7 @@ export function prepareGatewayRoutes({ cache, dockerReceipt, statusEvidence, out
   assert.equal(receipt.fixtureSourceHashes?.['scripts/mobile/local-gateway.py'], implementationEvidence.sha256, 'ISOLATION_GATEWAY_SOURCE_MISMATCH');
   const routeInventorySourceEvidence = gatewayEvidenceReference(path.join(cache, 'gateway-routes.json'));
   const routeInventoryBytes = verifiedFile(routeInventorySourceEvidence.path, routeInventorySourceEvidence.sha256);
-  const { routes } = JSON.parse(routeInventoryBytes);
+  const { routes, coreMatterReadAdmission } = JSON.parse(routeInventoryBytes);
   assert.ok(Array.isArray(routes) && routes.length > 0 && routes.length <= 500, 'GATEWAY_ROUTE_INVENTORY_REQUIRED');
   assert.ok(routes.every((route) => typeof route === 'string' && route.length <= 400
     && /^(GET|POST|PATCH|DELETE|OPTIONS) \/api\/[^\s?#*{}<>]*$/.test(route)), 'EXACT_GATEWAY_ROUTES_REQUIRED');
@@ -129,6 +130,17 @@ export function prepareGatewayRoutes({ cache, dockerReceipt, statusEvidence, out
   assert.ok(inside(cache, realpathSync(statusEvidence?.path || '')), 'STATUS_EVIDENCE_MUST_STAY_INSIDE_FIXTURE_CACHE');
   const status = JSON.parse(verifiedFile(statusEvidence.path, statusEvidence.sha256));
   assert.equal(status.accepted, status.lastSequence, 'GATEWAY_ACCEPTED_COUNT_MISMATCH');
+  if (coreMatterReadAdmission !== undefined) {
+    const a = coreMatterReadAdmission;
+    assert.ok(a && Object.keys(a).sort().join(',') === 'runId,stage,targetSha256'
+      && a.runId === receipt.gatewayRunId && /^[a-z0-9-]{8,140}-core-[a-f0-9]{8}$/.test(a.runId)
+      && status.v1ControlsEnabled === false && status.v1ControlRunClosed === false
+      && !routes.includes('GET /api/matters/')
+      && Array.isArray(a.targetSha256) && a.targetSha256.length === coreMatterReadCounts.get(a.stage)
+      && a.targetSha256[0] === sha256('/api/matters/?limit=25')
+      && a.targetSha256.every(value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value))
+      && new Set(a.targetSha256).size === a.targetSha256.length, 'EXACT_CORE_MATTER_READ_ADMISSION_REQUIRED');
+  }
   const policy = { kind: 'native-current-session-delete-v1', sourceRoute: 'GET /api/auth/native/sessions', sourceListLimit: 50,
     maxLiveIds: 1, maxAdmissionEvents: 64, nativeBearerOnly: true, cookiesAllowed: false, currentOnly: true, unrevokedOnly: true,
     consumeOnAttempt: true, gatewayRunId: receipt.gatewayRunId, implementationSha256: implementationEvidence.sha256,

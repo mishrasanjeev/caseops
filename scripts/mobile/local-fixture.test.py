@@ -1311,6 +1311,122 @@ class GatewayTests(unittest.TestCase):
         (self.root / "gateway-routes.json").write_text(json.dumps({"routes": sorted(actual)}))
         self.assertEqual(self.gateway.allowed(), actual)
 
+    def test_core_matter_read_stages_forward_only_exact_encoded_native_gets_over_tls(self):
+        certificates = self.root / "certificates"
+        certificates.mkdir()
+        with patch.object(fixture_module, "ROOT", certificates), redirect_stdout(io.StringIO()):
+            fixture_module.prepare(argparse.Namespace())
+        config_path = self.root / "gateway-routes.json"
+        run_id = "caseops-mobile-unit-core-a1b2c3d4"
+        default = "/api/matters/?limit=25"
+        search = default + "&q=Core+setup%2F%2B%25%7E%2A"
+        full_searches = [search, *(default + f"&q=Core+identifier+{n}" for n in range(7))]
+        marker = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        native = {**marker, "Authorization": "Bearer cnat_SYNTHETIC"}
+        observed = []
+
+        class Upstream(gateway_module.BaseHTTPRequestHandler):
+            def log_message(self, *_args): pass
+
+            def do_GET(self):
+                observed.append((self.command, self.path, self.headers.get(gateway_module.MARKER_HEADER)))
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+        def configure(stage, targets, epoch=run_id, routes=None):
+            config_path.write_text(json.dumps({
+                "routes": ["GET /api/build"] if routes is None else routes,
+                "coreMatterReadAdmission": {"runId": epoch, "stage": stage,
+                    "targetSha256": [hashlib.sha256(target.encode("ascii")).hexdigest() for target in targets]},
+            }))
+
+        self.gateway.state["runId"] = run_id
+        configure("consent", [default, search])
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler()) as tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
+            tls.socket = context.wrap_socket(tls.socket, server_side=True)
+            client_context = ssl.create_default_context(cafile=str(certificates / "tls/ca.crt"))
+            client_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in (upstream, tls)]
+            for thread in threads:
+                thread.start()
+
+            def request(method, target, headers=native):
+                with closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
+                                                         context=client_context)) as client:
+                    client.request(method, target, headers=headers)
+                    response = client.getresponse()
+                    return response.status, json.loads(response.read())
+
+            def rejected(method, target, headers=native, code="ROUTE_NOT_ADMITTED"):
+                self.assertEqual(request(method, target, headers), (403, {"code": code}))
+
+            try:
+                with patch.dict(os.environ, {"CASEOPS_ENV": "local"}), \
+                        patch.object(gateway_module, "upstream_destination", return_value=("127.0.0.1", upstream.server_port)):
+                    self.assertEqual(request("GET", default), (200, {}))
+                    self.assertEqual(request("GET", search), (200, {}))
+                    for target in ("/api/matters/", default + "&q=", default + "&q=wrong",
+                                   default + "&cursor=future", search + "&q=repeat",
+                                   search.replace("+", "%20"), search.replace("%2F", "%2f"),
+                                   "/api/matters/?q=Core+setup%2F%2B%25%7E%2A&limit=25", full_searches[1]):
+                        rejected("GET", target)
+                    rejected("GET", search, marker)
+                    rejected("GET", search, {**native, "Cookie": "synthetic=scope"})
+                    rejected("GET", search, {"Authorization": native["Authorization"]}, "AUTOMATED_MARKER_REQUIRED")
+                    rejected("POST", search)
+                    with socket.create_connection(("127.0.0.1", tls.server_port), timeout=3) as raw, \
+                            client_context.wrap_socket(raw, server_hostname="127.0.0.1") as client, \
+                            client.makefile("rb") as response:
+                        client.sendall(b"GET /api/matters/?limit=25&q=raw-\xe9 HTTP/1.1\r\n"
+                                       b"Host: localhost\r\nX-CaseOps-Automated-Test: no-paid-providers\r\n"
+                                       b"Authorization: Bearer cnat_SYNTHETIC\r\n\r\n")
+                        self.assertIn(b" 400 ", response.readline(200))
+                        error = response.read(2048)
+                        self.assertIn(b"ORIGIN_FORM_REQUIRED", error)
+                        self.assertNotIn(b"raw-", error)
+                    with patch.object(gateway_module, "upstream_target", return_value=default + "&q=non-ascii-\xe9"):
+                        rejected("GET", search)
+                    permit = {**native, gateway_module.PRODUCER_PERMIT: "a" * 64}
+                    with patch.object(self.gateway, "consume_producer_permit", return_value="b" * 64) as producer:
+                        rejected("GET", default + "&q=wrong", permit, "PRODUCER_PERMIT_NOT_ADMITTED")
+                        rejected("GET", search, permit, "PRODUCER_PERMIT_NOT_ADMITTED")
+                        producer.assert_not_called()
+                    configure("consent", [default, search], epoch=run_id[:-1] + "0")
+                    rejected("GET", default)
+                    configure("consent", [default, search], routes=["GET /api/matters/"])
+                    rejected("GET", default)
+                    configure("consent", [default, *full_searches])
+                    rejected("GET", default)
+                    configure("full-core", [default, *full_searches])
+                    with patch.dict(os.environ, {"CASEOPS_ENV": "test"}):
+                        rejected("GET", default)
+                    with patch.object(self.gateway, "v1", SimpleNamespace(closed=False)):
+                        rejected("GET", default)
+                    for target in [default, *full_searches]:
+                        self.assertEqual(request("GET", target), (200, {}))
+                    rejected("GET", default + "&q=not-from-fixture")
+            finally:
+                tls.shutdown()
+                upstream.shutdown()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+
+        targets = [default, search, default, *full_searches]
+        self.assertEqual(observed, [("GET", target, gateway_module.MARKER) for target in targets])
+        self.assertEqual(self.gateway.state["accepted"], len(targets))
+        self.assertEqual([row["route"] for row in self.gateway.state["requests"]], ["/api/matters/"] * len(targets))
+        journal = next(self.root.glob("gateway-events-*.jsonl")).read_text()
+        self.assertNotIn("?", journal)
+        self.assertNotIn("cnat_", journal)
+        self.assertNotIn("raw-", journal)
+
     def test_absolute_authorities_fragments_and_encoded_request_line_injection_never_open_upstream(self):
         headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
         for target in ("http://synthetic.invalid/api/build", "https://synthetic.invalid/api/build", "/api/build#fragment", "/api/%0d%0aInjected/build", "/api/%2f%2fsynthetic.invalid", "/api/\\synthetic.invalid"):

@@ -19,6 +19,9 @@ from urllib.parse import urlsplit
 ROOT = Path(os.environ.get("CASEOPS_MOBILE_STATE", "/fixture-state"))
 MARKER_HEADER = "X-CaseOps-Automated-Test"
 MARKER = "no-paid-providers"
+CORE_MATTER_ROUTE = "GET /api/matters/"
+CORE_MATTER_DEFAULT_TARGET = "/api/matters/?limit=25"
+CORE_MATTER_READ_COUNTS = {"consent": 2, "full-core": 9}
 # Covers 23 core journeys plus their account/restore checks without dropping evidence.
 MAX_SESSION_ADMISSION_EVENTS = 64
 BROWSER_ROUTES = {
@@ -229,9 +232,38 @@ class Gateway:
             elif self.v1.registration.get("profile") == "native-client-extensions-v1":
                 self.state["v1ControlProfile"] = "native-client-extensions-v1"
 
-    def allowed(self):
-        config = json.loads((self.root / "gateway-routes.json").read_text())
+    def route_configuration(self):
+        return json.loads((self.root / "gateway-routes.json").read_text())
+
+    def allowed(self, config=None):
+        if config is None:
+            config = self.route_configuration()
         return set(config["routes"]) | ((set(self.v1.registration["exactRoutes"]) | getattr(self.v1, "dynamic_routes", set())) if self.v1 and not self.v1.closed else set())
+
+    def core_matter_read(self, config, target, native_bearer):
+        admission = config["coreMatterReadAdmission"]
+        if (os.environ.get("CASEOPS_ENV") != "local" or self.v1 is not None
+                or not native_bearer or CORE_MATTER_ROUTE in config["routes"]
+                or not isinstance(admission, dict) or set(admission) != {"runId", "stage", "targetSha256"}
+                or admission["runId"] != self.state["runId"]
+                or not re.fullmatch(r"[a-z0-9-]{8,140}-core-[a-f0-9]{8}", self.state["runId"])):
+            return False
+        targets = admission["targetSha256"]
+        stage = admission["stage"]
+        default = hashlib.sha256(CORE_MATTER_DEFAULT_TARGET.encode("ascii")).hexdigest()
+        if (not isinstance(stage, str) or stage not in CORE_MATTER_READ_COUNTS
+                or not isinstance(targets, list) or len(targets) != CORE_MATTER_READ_COUNTS[stage]
+                or targets[0] != default
+                or not all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value) for value in targets)
+                or len(set(targets)) != len(targets)):
+            return False
+        if target == CORE_MATTER_DEFAULT_TARGET:
+            return True
+        # Match the original encoded bytes without retaining any search value.
+        prefix = CORE_MATTER_DEFAULT_TARGET + "&q="
+        return (target.isascii() and target.startswith(prefix) and len(target) > len(prefix)
+                and "&" not in target[len(prefix):]
+                and hashlib.sha256(target.encode("ascii")).hexdigest() in targets)
 
     def producer_permit_candidate(self, token, bearer):
         return (os.environ.get("CASEOPS_ENV") == "local" and not self.v1
@@ -395,12 +427,17 @@ class Gateway:
                     with gateway.lock:
                         gateway.state["markerRejected"] += 1
                     return self.reply(403, {"code": "AUTOMATED_MARKER_REQUIRED"})
-                admitted = route in gateway.allowed()
+                config = gateway.route_configuration()
+                guarded_matter_read = route == CORE_MATTER_ROUTE and "coreMatterReadAdmission" in config
+                if guarded_matter_read:
+                    admitted = not web and gateway.core_matter_read(config, target, native_bearer)
+                else:
+                    admitted = route in gateway.allowed(config)
                 producer_receipt = None
                 calendar_method = None
                 permit = incoming_headers.pop(PRODUCER_PERMIT, None)
                 if permit is not None:
-                    if (web or admitted or browser or not marked or incoming_headers.get("Cookie")
+                    if (guarded_matter_read or web or admitted or browser or not marked or incoming_headers.get("Cookie")
                             or self.command not in ("GET", "POST", "PATCH")):
                         return self.reject_producer_permit()
                     bearer = incoming_headers.get("Authorization", "")
