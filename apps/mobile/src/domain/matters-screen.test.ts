@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
 import * as contracts from "./contracts.ts";
+import * as cursorHistory from "./cursor-history.ts";
 import { createRepository, readFailure } from "./repository.ts";
 import { matterFixture } from "./test-fixtures.ts";
 
@@ -129,6 +130,8 @@ function screen(respond: (path: string) => unknown) {
     "../../components/StableTextInput": { StableTextInput: "Input" },
     "../../components/theme": theme,
     "../../domain/contracts": contracts,
+    "../../domain/cursor-history": cursorHistory,
+    "../../domain/repository": { readFailure },
     "../useResource": resource,
   }).MattersScreen as (props: {
     repository: ReturnType<typeof createRepository>;
@@ -348,7 +351,7 @@ test("Matters rejects stale page actions after tab reentry and a search reset, w
   );
 });
 
-test("Matters can browse past the bounded back history and fails closed on a repeated continuation", async (t) => {
+test("Matters can browse past the bounded back history and refuses a repeated continuation only when Next is pressed", async (t) => {
   let repeated = false;
   const app = screen((path) => {
     const number = numberOf(path);
@@ -378,9 +381,75 @@ test("Matters can browse past the bounded back history and fails closed on a rep
   await app.settle();
   app.press("Next page")();
   await app.settle();
+  // Page 3 points back to page 2. Its authorized rows still show.
+  assert.match(app.text(), /Matter 3.*Page 3\./);
+  assert.doesNotMatch(app.text(), /unsupported matter continuation/);
+  const repeating = app.press("Next page");
+  repeating();
+  repeating();
+  app.render();
   assert.match(app.text(), /unsupported matter continuation response/);
-  assert.doesNotMatch(app.text(), /Matter [23]/);
+  assert.doesNotMatch(app.text(), /Matter 3/);
   assert.equal(app.button("Next page"), undefined);
+  assert.ok(app.button("Previous page"));
   assert.equal(app.calls.length, 204);
+  app.press("First page")();
+  await app.settle();
+  assert.match(app.text(), /Matter 1.*Page 1\./);
+  assert.equal(app.calls.length, 205);
   assert.ok(app.calls.every(({ path }) => queryOf(path).get("limit") === "25"));
+});
+
+test("Matters keeps Previous and First page outside a failed page so the reader can leave it", async (t) => {
+  let failing = false;
+  const app = screen((path) => {
+    const number = numberOf(path);
+    if (failing && number === 3)
+      throw Object.assign(new Error("Synthetic outage"), { status: 503 });
+    return numberedPage(number);
+  });
+  t.after(app.unmount);
+  await app.settle();
+  assert.equal(app.button("Previous page"), undefined);
+  assert.equal(app.button("First page"), undefined);
+  app.press("Next page")();
+  await app.settle();
+  // Page 2: Previous already returns to the first page.
+  assert.ok(app.button("Previous page"));
+  assert.equal(app.button("First page"), undefined);
+  failing = true;
+  app.press("Next page")();
+  await app.settle();
+  assert.match(app.text(), /Could not load this view/);
+  assert.doesNotMatch(app.text(), /Matter [123]/);
+  app.press("Previous page")();
+  await app.settle();
+  assert.match(app.text(), /Matter 2.*Page 2\./);
+  app.press("Next page")();
+  await app.settle();
+  assert.match(app.text(), /Could not load this view/);
+  app.press("First page")();
+  await app.settle();
+  assert.match(app.text(), /Matter 1.*Page 1\./);
+  assert.deepEqual(
+    app.calls.map(({ path }) => path),
+    [
+      "/api/matters/?limit=25",
+      "/api/matters/?limit=25&cursor=cursor-2",
+      "/api/matters/?limit=25&cursor=cursor-3",
+      "/api/matters/?limit=25&cursor=cursor-2",
+      "/api/matters/?limit=25&cursor=cursor-3",
+      "/api/matters/?limit=25",
+    ],
+  );
+});
+
+test("Matters refuses a malformed continuation before offering Next", async (t) => {
+  for (const next of ["   ", "cursor\u0000hidden", "c".repeat(8001)]) {
+    const app = screen(() => numberedPage(1, next));
+    t.after(app.unmount);
+    await app.settle();
+    assert.match(app.text(), /unsupported matter continuation response/);
+    assert.equal(app.button("Next page"), undefined);
+  }
 });

@@ -4,12 +4,16 @@ import { NativeButton } from "../../components/NativeControls";
 import { Empty, RecordRow, ResourceView } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
 import { StableTextInput } from "../../components/StableTextInput";
-import { ContractError, displayDay } from "../../domain/contracts";
+import { displayDay } from "../../domain/contracts";
 import type { MatterRef } from "../../domain/contracts";
-import type { Repository } from "../../domain/repository";
+import {
+  advanceCursorHistory,
+  continuationCursor,
+} from "../../domain/cursor-history";
+import { readFailure } from "../../domain/repository";
+import type { ReadFailure, Repository } from "../../domain/repository";
 import { useResource } from "../useResource";
 
-const CURSOR_HISTORY_LIMIT = 100;
 type MatterVisit = {
   query: string;
   history: readonly (string | null)[];
@@ -39,6 +43,11 @@ export function MattersScreen({
   // prevents the previous authorized result flashing on the way back in.
   if (visit.active !== active)
     setVisit({ ...visit, active, version: visit.version + 1 });
+  // A refused Next belongs to the visit it was pressed on; any move clears it.
+  const [refused, setRefused] = useState<{
+    visit: MatterVisit;
+    failure: ReadFailure;
+  } | null>(null);
   const committed = useRef<MatterVisit | null>(null);
   useLayoutEffect(() => {
     committed.current = visit;
@@ -53,15 +62,8 @@ export function MattersScreen({
     `matters:${visit.version}`,
     async (signal) => {
       const result = await repository.matters(query, cursor, signal);
-      const next = result.next_cursor;
-      if (
-        next !== null &&
-        (!next.trim() ||
-          next.length > 8000 ||
-          /[\x00-\x1f\x7f]/.test(next) ||
-          history.includes(next))
-      )
-        throw new ContractError("matter continuation");
+      if (result.next_cursor !== null)
+        continuationCursor(result.next_cursor, "matter continuation");
       return result;
     },
     active && visit.active,
@@ -80,8 +82,33 @@ export function MattersScreen({
     );
     if (dismissKeyboard) Keyboard.dismiss();
   };
+  // A repeated continuation is refused when Next is pressed, so the rows the
+  // server authorized for this page stay readable until then.
+  const next = (continuation: string) => {
+    if (!visit.active || committed.current !== visit) return;
+    let advanced: (string | null)[];
+    try {
+      advanced = advanceCursorHistory(
+        history,
+        continuation,
+        "matter continuation",
+      );
+    } catch (error) {
+      setRefused({ visit, failure: readFailure(error) });
+      return;
+    }
+    move({
+      history: advanced,
+      firstPage: firstPage + history.length + 1 - advanced.length,
+    });
+  };
   const search = () =>
     move({ query: input.trim(), history: [null], firstPage: 1 }, true);
+  const resource =
+    refused?.visit === visit
+      ? ({ state: "error", error: refused.failure } as const)
+      : page.resource;
+  const hasPrevious = history.length > 1;
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
@@ -119,7 +146,7 @@ export function MattersScreen({
         onPress={search}
         secondary
       />
-      <ResourceView resource={page.resource} reload={() => move({})}>
+      <ResourceView resource={resource} reload={() => move({})}>
         {(value) => (
           <>
             {query ? (
@@ -149,32 +176,28 @@ export function MattersScreen({
               <NativeButton
                 label="Next page"
                 onPress={() => {
-                  const next = value.next_cursor;
-                  if (next === null) return;
-                  const drop = history.length === CURSOR_HISTORY_LIMIT ? 1 : 0;
-                  move({
-                    history: [...history.slice(drop), next],
-                    firstPage: firstPage + drop,
-                  });
+                  if (value.next_cursor !== null) next(value.next_cursor);
                 }}
-              />
-            ) : null}
-            {history.length > 1 ? (
-              <NativeButton
-                label="Previous page"
-                onPress={() => move({ history: history.slice(0, -1) })}
-                secondary
-              />
-            ) : firstPage > 1 ? (
-              <NativeButton
-                label="First page"
-                onPress={() => move({ history: [null], firstPage: 1 })}
-                secondary
               />
             ) : null}
           </>
         )}
       </ResourceView>
+      {/* Outside the resource so a failed page can still be left. */}
+      {hasPrevious ? (
+        <NativeButton
+          label="Previous page"
+          onPress={() => move({ history: history.slice(0, -1) })}
+          secondary
+        />
+      ) : null}
+      {pageNumber > (hasPrevious ? 2 : 1) ? (
+        <NativeButton
+          label="First page"
+          onPress={() => move({ history: [null], firstPage: 1 })}
+          secondary
+        />
+      ) : null}
     </ScrollView>
   );
 }
