@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from caseops_api.services.private_retrieval_jobs import inspect_private_index_integrity
+from tests.fixtures_historical_attachments import historical_attachment_sessions
 from tests.migration_index_catalog import require_index_additions, require_revision, schema_catalog
 from tests.test_platform_console_migration import KINDS, fresh_engine, migration_config
 from tests.test_postgres_validation import _seed_company
@@ -205,9 +206,12 @@ def test_integrity_tombstone_count_reads_only_the_partial_index(
             ):
                 statements.append((statement, parameters))
 
+        # The dated schema predates native attachment provenance. The integrity
+        # reader uses the retained attachment identity and hash.
+        historical_sessions = historical_attachment_sessions(engine)
         event.listen(engine, "before_cursor_execute", capture)
         try:
-            with Session(engine) as session:
+            with historical_sessions() as session:
                 report = inspect_private_index_integrity(session, company_id=company_id)
         finally:
             event.remove(engine, "before_cursor_execute", capture)
