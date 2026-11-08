@@ -12,6 +12,7 @@ a cleaned DOCX" flow; for now the UI just displays what's there.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -41,11 +42,16 @@ _TEXT_TAGS = frozenset(f"{_W_NS}{name}" for name in ("t", "delText", "instrText"
 _UNSUPPORTED_REVISION_TAGS = (
     *(f"{_W_NS}{name}" for name in (
         "pPrChange", "sectPrChange", "tblGridChange", "tblPrChange",
-        "tblPrExChange", "tcPrChange", "trPrChange",
+        "tblPrExChange", "tcPrChange", "trPrChange", "cellIns", "cellDel", "cellMerge",
     )),
     f"{_W14_NS}conflictIns",
     f"{_W14_NS}conflictDel",
 )
+_TABLE_ROW_PROPERTIES_TAG = f"{_W_NS}trPr"
+_RUN_PROPERTIES_TAG = f"{_W_NS}rPr"
+# Parts outside the main text that Word also tracks. They are not parsed, so
+# any revision in them is reported as uninterpreted.
+_UNREAD_PART_NAME = re.compile(r"^/word/(?:header\d*|footer\d*|footnotes|endnotes|comments)\.xml$")
 _PARAGRAPH_BOUNDARIES = frozenset((_PARAGRAPH_TAG, *_UNSUPPORTED_REVISION_TAGS))
 _REVISION_BOUNDARIES = _PARAGRAPH_BOUNDARIES.union(_CHANGE_KINDS)
 
@@ -77,9 +83,11 @@ class RedlineParseResult:
     changes: list[RedlineChange] = field(default_factory=list)
     paragraph_count: int = 0
     author_counts: dict[str, int] = field(default_factory=dict)
-    # Revisions this parser does not interpret (paragraph, section and table
-    # property changes, merge conflicts). Reported so a reviewer is never
-    # told a revised file is clean.
+    # Revisions this parser does not list: property, table-structure and
+    # numbering changes, merge conflicts, changes without text (an inserted or
+    # deleted image, a merged paragraph mark) and any revision in headers,
+    # footers, notes or comments. Reported so a reviewer is never told a
+    # revised file is clean.
     uninterpreted_revision_count: int = 0
 
     @property
@@ -92,7 +100,10 @@ class RedlineParseResult:
 
     @property
     def move_count(self) -> int:
-        return sum(1 for c in self.changes if c.kind in ("move_from", "move_to"))
+        # One move has a source and a destination; count the passages moved.
+        sources = sum(1 for c in self.changes if c.kind == "move_from")
+        destinations = sum(1 for c in self.changes if c.kind == "move_to")
+        return max(sources, destinations)
 
 
 def parse_redline_docx(
@@ -134,7 +145,12 @@ def parse_redline_docx(
         1
         for element in body.iter(*_UNSUPPORTED_REVISION_TAGS)
         if not _in_alternate_fallback(element)
-    )
+    ) + sum(
+        1
+        for properties in body.iter(_TABLE_ROW_PROPERTIES_TAG)
+        for element in properties
+        if element.tag in (f"{_W_NS}ins", f"{_W_NS}del") and not _in_alternate_fallback(element)
+    ) + _unread_part_revisions(document)
     para_idx = -1
     for element in body.iter(_PARAGRAPH_TAG):
         if _in_alternate_fallback(element):
@@ -159,6 +175,8 @@ def parse_redline_docx(
                 if token.tag in _TEXT_TAGS and token.text
             ).strip()
             if not text and kind != "formatting":
+                if _is_textless_revision(child):
+                    result.uninterpreted_revision_count += 1
                 continue
 
             author = child.get(f"{_W_NS}author")
@@ -192,6 +210,29 @@ def parse_redline_docx(
                 result.author_counts[author] = result.author_counts.get(author, 0) + 1
 
     return result
+
+
+def _is_textless_revision(element: _Element) -> bool:
+    # A wrapper whose content is another change is reported through that change;
+    # a moved paragraph mark is part of the move it belongs to.
+    if any(True for _ in element.iterdescendants(*_CHANGE_KINDS)):
+        return False
+    moved = element.tag in (f"{_W_NS}moveFrom", f"{_W_NS}moveTo")
+    parent = element.getparent()
+    return not (moved and parent is not None and parent.tag == _RUN_PROPERTIES_TAG)
+
+
+def _unread_part_revisions(document: object) -> int:
+    from lxml import etree
+
+    tags = (*_CHANGE_KINDS, *_UNSUPPORTED_REVISION_TAGS)
+    total = 0
+    for part in document.part.package.iter_parts():  # type: ignore[attr-defined]
+        if not _UNREAD_PART_NAME.match(str(part.partname)):
+            continue
+        root = etree.fromstring(part.blob)
+        total += sum(1 for element in root.iter(*tags) if not _in_alternate_fallback(element))
+    return total
 
 
 def _in_alternate_fallback(element: _Element) -> bool:

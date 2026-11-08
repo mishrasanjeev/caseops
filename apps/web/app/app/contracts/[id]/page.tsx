@@ -1491,7 +1491,7 @@ export default function ContractDetailPage() {
                       <span className="font-semibold text-[var(--color-ink-2)]">
                         {redlineQuery.data.move_count}
                       </span>{" "}
-                      moves
+                      {redlineQuery.data.move_count === 1 ? "moved passage" : "moved passages"}
                     </div>
                     <div>
                       {redlineQuery.data.paragraph_count} paragraphs
@@ -1516,8 +1516,9 @@ export default function ContractDetailPage() {
                         {redlineQuery.data.uninterpreted_revision_count === 1
                           ? "revision is"
                           : "revisions are"}{" "}
-                        not shown here (paragraph, section or table property
-                        changes, or merge conflicts). Review them in Word before
+                        not shown here (images, table structure, numbering or
+                        property changes, merge conflicts, or changes in headers,
+                        footers, notes or comments). Review them in Word before
                         relying on this list.
                       </span>
                     </div>
@@ -1749,9 +1750,9 @@ function FindingIcon({ status }: { status: string }) {
 
 function RedlineRow({ change }: { change: ContractRedlineChange }) {
   const color =
-    change.kind === "insertion"
+    change.kind === "insertion" || change.kind === "move_to"
       ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-      : change.kind === "deletion"
+      : change.kind === "deletion" || change.kind === "move_from"
         ? "bg-rose-50 text-rose-800 border-rose-200"
         : "bg-slate-100 text-slate-800 border-slate-200";
   const label =
@@ -1783,7 +1784,7 @@ function RedlineRow({ change }: { change: ContractRedlineChange }) {
           className={
             change.kind === "deletion" || change.kind === "move_from"
               ? "text-rose-700 line-through"
-              : change.kind === "insertion"
+              : change.kind === "insertion" || change.kind === "move_to"
                 ? "text-emerald-700"
                 : "text-slate-700"
           }

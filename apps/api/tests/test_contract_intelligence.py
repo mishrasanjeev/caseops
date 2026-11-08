@@ -725,7 +725,8 @@ def test_parse_redline_docx_word_text_box_fallback_is_not_read_twice() -> None:
     # Word 2010+ writes a text box as a DrawingML choice plus a VML fallback
     # copy of the same paragraphs; only one copy is the document.
     txbx = (
-        '<w:txbxContent><w:p><w:ins w:id="9" w:author="Counsel" w:date="2026-04-18T12:00:00Z">'
+        '<w:txbxContent><w:p><w:pPr><w:pPrChange w:id="8" w:author="Style"><w:pPr/></w:pPrChange></w:pPr>'
+        '<w:ins w:id="9" w:author="Counsel" w:date="2026-04-18T12:00:00Z">'
         "<w:r><w:t>Cap is 24 months</w:t></w:r></w:ins></w:p></w:txbxContent>"
     )
     source = _redline_docx_with_body(f"""
@@ -747,7 +748,8 @@ def test_parse_redline_docx_word_text_box_fallback_is_not_read_twice() -> None:
     ]
     assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
     assert result.author_counts == {"Counsel": 1, "Seller": 1}
-    assert result.uninterpreted_revision_count == 0
+    # The paragraph-property change is counted once, not again in its fallback copy.
+    assert result.uninterpreted_revision_count == 1
 
 
 def test_parse_redline_docx_reports_moves_and_a_move_only_file_is_not_clean() -> None:
@@ -771,7 +773,8 @@ def test_parse_redline_docx_reports_moves_and_a_move_only_file_is_not_clean() ->
         (3, 2, "deletion", "Seller", "for two years"),
     ]
     assert result.changes[0].timestamp == "2026-04-18T12:00:00+00:00"
-    assert (result.move_count, result.insertion_count, result.deletion_count) == (2, 0, 1)
+    # One passage moved: its source and destination are one move.
+    assert (result.move_count, result.insertion_count, result.deletion_count) == (1, 0, 1)
     assert result.author_counts == {"Counsel": 2, "Seller": 1}
     assert result.uninterpreted_revision_count == 0
 
@@ -781,13 +784,75 @@ def test_parse_redline_docx_reports_moves_and_a_move_only_file_is_not_clean() ->
     [
         '<w:pPr><w:pPrChange w:id="1" w:author="Style"><w:pPr/></w:pPrChange></w:pPr>',
         '<w:pPr><w:sectPr><w:sectPrChange w:id="1" w:author="Style"><w:sectPr/></w:sectPrChange></w:sectPr></w:pPr>',
+        # An inserted image has no text.
+        '<w:ins w:id="1" w:author="Buyer"><w:r><w:drawing/></w:r></w:ins>',
+        # A deleted paragraph mark merges two paragraphs.
+        '<w:pPr><w:rPr><w:del w:id="1" w:author="Buyer"/></w:rPr></w:pPr>',
+        # A numbering change.
+        '<w:pPr><w:numPr><w:ins w:id="1" w:author="Buyer"/></w:numPr></w:pPr>',
     ],
-    ids=["paragraph-properties", "section-properties"],
+    ids=[
+        "paragraph-properties", "section-properties", "inserted-image",
+        "deleted-paragraph-mark", "numbering",
+    ],
 )
 def test_parse_redline_docx_counts_revisions_it_does_not_interpret(revision: str) -> None:
     result = parse_redline_docx(
         source=_redline_docx_with_body(f"<w:p>{revision}<w:r><w:t>Body.</w:t></w:r></w:p>"),
     )
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+@pytest.mark.parametrize(
+    "row_properties, cell_properties",
+    [
+        ('<w:trPr><w:ins w:id="1" w:author="Buyer"/></w:trPr>', ""),
+        ("", '<w:tcPr><w:cellIns w:id="1" w:author="Buyer"/></w:tcPr>'),
+        ("", '<w:tcPr><w:cellDel w:id="1" w:author="Buyer"/></w:tcPr>'),
+        ("", '<w:tcPr><w:cellMerge w:id="1" w:author="Buyer" w:vMerge="cont"/></w:tcPr>'),
+    ],
+    ids=["inserted-row", "inserted-cell", "deleted-cell", "merged-cell"],
+)
+def test_parse_redline_docx_counts_table_structure_revisions(
+    row_properties: str, cell_properties: str,
+) -> None:
+    result = parse_redline_docx(source=_redline_docx_with_body(
+        f"<w:tbl><w:tr>{row_properties}<w:tc>{cell_properties}<w:p/></w:tc></w:tr></w:tbl>"
+    ))
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+def test_parse_redline_docx_counts_revisions_in_parts_it_does_not_read() -> None:
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    package = BytesIO(_redline_docx_with_body("<w:p><w:r><w:t>Body.</w:t></w:r></w:p>"))
+    rebuilt = BytesIO()
+    with ZipFile(package) as original, ZipFile(rebuilt, "w", ZIP_DEFLATED) as zf:
+        for item in original.infolist():
+            data = original.read(item)
+            if item.filename == "[Content_Types].xml":
+                data = data.replace(
+                    b"</Types>",
+                    b'<Override PartName="/word/header1.xml" ContentType="application/'
+                    b'vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>',
+                )
+            zf.writestr(item, data)
+        zf.writestr(
+            "word/_rels/document.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/header" Target="header1.xml"/></Relationships>',
+        )
+        zf.writestr(
+            "word/header1.xml",
+            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:p><w:del w:id="1" w:author="Seller"><w:r><w:delText>Confidential</w:delText>'
+            "</w:r></w:del></w:p></w:hdr>",
+        )
+    result = parse_redline_docx(source=rebuilt.getvalue())
     assert result.changes == []
     assert result.uninterpreted_revision_count == 1
 

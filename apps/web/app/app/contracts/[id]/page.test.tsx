@@ -156,9 +156,9 @@ describe("ContractDetailPage", () => {
     expect(screen.queryByText("Clean document")).not.toBeInTheDocument();
   });
 
-  it("labels moved text and counts moves", async () => {
+  it("labels moved text and counts one move once", async () => {
     await openRedline({
-      move_count: 2,
+      move_count: 1,
       author_counts: { Counsel: 2 },
       changes: [
         {
@@ -175,7 +175,7 @@ describe("ContractDetailPage", () => {
     });
     expect(await screen.findByText(/Moved from · paragraph 1/)).toBeInTheDocument();
     expect(screen.getByText(/Moved to · paragraph 3/)).toBeInTheDocument();
-    expect(screen.getByText("moves", { exact: false }).textContent).toContain("2");
+    expect(screen.getByText("moved passage", { exact: false }).textContent).toBe("1 moved passage");
     expect(screen.queryByText("Clean document")).not.toBeInTheDocument();
     expect(screen.queryByTestId("contract-redline-uninterpreted")).not.toBeInTheDocument();
   });
