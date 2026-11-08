@@ -2343,6 +2343,11 @@ for argument in "$@"; do
   fi
 done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "${1:-} ${2:-} ${3:-}" == "run services describe" && \
+  " $* " != *" --project perfect-period-305406 "* ]]; then
+  printf '%s\n' 'Cloud Run service description requires an explicit release project.' >&2
+  exit 98
+fi
 if [[ "$*" == "secrets versions describe latest --secret caseops-native-signing-secret "* ]]; then
   printf '%s\n' "${FAKE_NATIVE_SECRET_STATE}"
   exit 0
@@ -3994,6 +3999,27 @@ def test_deploy_prod_fails_if_exact_release_verification_cannot_be_dispatched(
 
     assert result.returncode != 0
     assert "DONE abcdef1" not in result.stdout
+
+
+def test_deploy_prod_certifies_both_services_without_a_default_gcloud_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CLOUDSDK_CORE_PROJECT", raising=False)
+
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(
+        call.startswith("run services describe caseops-web ")
+        and "containers[0].image" in call for call in calls
+    )
+    assert any(
+        call.startswith("run services describe caseops-api ")
+        and "containers[1].startupProbe.failureThreshold" in call for call in calls
+    )
+    assert any(call.startswith("gh workflow run prod-verify.yml ") for call in calls)
 
 
 def test_deploy_prod_fails_before_routing_on_database_index_health_failure(
