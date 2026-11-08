@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import inspect, select, text
+from sqlalchemy import MetaData, Table, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
+    Matter,
     User,
     WorkspaceConductAcceptance,
     WorkspaceConductReport,
@@ -145,3 +146,81 @@ def test_additive_report_migration_restricts_cross_tenant_keys_and_preserves_rec
             current = connection.scalar(text("SELECT version_num FROM alembic_version"))
             assert current == report_revision
             assert connection.execute(select(report)).all() == original
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_native_document_privacy_migration_preserves_existing_and_old_writer_rows(
+    kind, tmp_path, monkeypatch,
+):
+    previous, current = "20261108_0002", "20261108_0003"
+    name = "matter_attachments"
+    flag = "native_local_processing_only"
+    with fresh_engine(kind, tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, previous)
+        legacy = Table(name, MetaData(), autoload_with=engine)
+        assert flag not in legacy.c
+        with Session(engine) as session:
+            company = Company(
+                name="Synthetic privacy migration", slug="native-file-privacy",
+                tenant_key="native-file-privacy", company_type="law_firm",
+            )
+            session.add(company)
+            session.flush()
+            matter = Matter(
+                company_id=company.id, title="Synthetic privacy migration",
+                matter_code="NATIVE-FILE-PRIVACY", status="intake",
+                practice_area="Commercial advisory", forum_level="advisory",
+            )
+            session.add(matter)
+            session.flush()
+            matter_id = matter.id
+            session.commit()
+        base = {
+            "matter_id": matter_id,
+            "original_filename": "synthetic.txt",
+            "content_type": "text/plain",
+            "size_bytes": 9,
+            "sha256_hex": "1" * 64,
+            "processing_status": "pending",
+            "extracted_char_count": 0,
+            "notice_currency": "INR",
+            "notice_reply_required": False,
+            "notice_reply_sent": False,
+            "notice_document_role": "notice",
+            "created_at": datetime(2026, 11, 8, tzinfo=UTC),
+        }
+
+        def create(table, label, **values):
+            key = str(uuid4())
+            with engine.begin() as conn:
+                conn.execute(table.insert().values(
+                    **base, id=key, storage_key=f"synthetic-{label}", **values,
+                ))
+            return key
+
+        original_id = create(legacy, "before")
+        with engine.connect() as conn:
+            original = dict(conn.execute(select(legacy)).mappings().one())
+        command.upgrade(config, current)
+        schema = inspect(engine)
+        observed = Table(name, MetaData(), autoload_with=engine)
+        assert set(observed.c.keys()) == set(legacy.c.keys()) | {flag}
+        schema_before = _shape(schema, name)
+        old_writer_id = create(legacy, "old-writer-after-upgrade")
+        protected_id = create(observed, "native", native_local_processing_only=True)
+        with engine.connect() as conn:
+            records = {
+                row["id"]: dict(row) for row in conn.execute(select(observed)).mappings()
+            }
+        assert records[original_id] == {**original, flag: False}
+        assert records[old_writer_id][flag] is False
+        assert records[protected_id][flag] is True
+        with pytest.raises(RuntimeError, match="removing native attachment provenance"):
+            command.downgrade(config, previous)
+        assert _shape(inspect(engine), name) == schema_before
+        with engine.connect() as conn:
+            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == current
+            assert {
+                row["id"]: dict(row) for row in conn.execute(select(observed)).mappings()
+            } == records

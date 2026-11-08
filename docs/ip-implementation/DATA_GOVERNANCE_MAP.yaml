@@ -195,6 +195,9 @@
     "matter_readthrough_dirty": "registry_fail_closed"
   },
   "column_category_overrides": {
+    "matter_attachments": {
+      "native_local_processing_only": "lifecycle_or_audit_evidence"
+    },
     "user_mfa_step_ups": {
       "source_token_issued_at": "lifecycle_or_audit_evidence"
     },
@@ -20964,6 +20967,11 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "native_local_processing_only": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "notice_amount_minor": {
           "category_id": "financial_or_payment_data",
           "sql_type": "BIGINT",
@@ -33241,7 +33249,7 @@
       }
     }
   ],
-  "schema_fingerprint": "d7217060b9204017850cec505a68566fe04bc3470d46c3a11d9b0af32667870a",
+  "schema_fingerprint": "2cadb3ebc97800dbb5e4f898034a89b9d0e8eadab141f95a0d92bf86b8245230",
   "index_inventory": {
     "orm_index_count": 1827,
     "orm_index_fingerprint": "8e22a9fb7a30e8073e99fdb1ecb65002ed1e55a74ef57ea9d808654fe9db5bbf",

@@ -15,7 +15,7 @@ from caseops_api.db.models import (
     WorkspaceConductAcceptance,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services import matters, virus_scan, workspace_conduct
+from caseops_api.services import embeddings, matters, virus_scan, workspace_conduct
 from tests.test_native_auth_20261024 import _browser, _device, _headers
 
 PATH = "/api/account/workspace-conduct"
@@ -54,6 +54,54 @@ def _note(client, headers, matter_id, version, body="Synthetic native note"):
 
 def _accept(client, headers, version=VERSION):
     return client.post(f"{PATH}/accept", headers=headers, json={"version": version})
+
+
+def test_native_upload_and_web_reprocessing_skip_external_embedding_provider(client, monkeypatch):
+    _, browser = _browser(client)
+    native = _headers(_device(client, browser))
+    matter = _matter(client, browser)
+    matter_id, version = matter["id"], matter["lifecycle_version"]
+    seen = []
+    mock = embeddings.MockProvider()
+
+    def provider():
+        seen.append("embedding-entry")
+        return mock
+
+    monkeypatch.setattr(embeddings, "build_provider", provider)
+    assert _accept(client, native).status_code == 200
+    native_file = _upload(client, native, matter_id, version)
+    assert native_file.status_code == 200, native_file.text
+    native_id = native_file.json()["id"]
+    assert seen == [], "native upload invoked the configured embedding provider"
+    for action in ("retry", "reindex"):
+        result = client.post(
+            f"/api/matters/{matter_id}/attachments/{native_id}/{action}", headers=browser,
+        )
+        assert result.status_code == 200, result.text
+        assert seen == [], f"browser {action} invoked the provider for a native upload"
+    download = client.get(
+        f"/api/matters/{matter_id}/attachments/{native_id}/download", headers=native,
+    )
+    assert download.status_code == 200 and download.content == CONTENT
+
+    web_file = _upload(
+        client, browser, matter_id, version, content=b"Separate synthetic web content.",
+    )
+    assert web_file.status_code == 200, web_file.text
+    assert seen == ["embedding-entry"]
+    with get_session_factory()() as session:
+        native_row = session.get(MatterAttachment, native_id)
+        assert native_row.native_local_processing_only is True
+        web_row = session.get(MatterAttachment, web_file.json()["id"])
+        assert web_row.native_local_processing_only is False
+        assert native_row.extracted_text == CONTENT.decode()
+        assert [chunk.content for chunk in native_row.chunks] == [CONTENT.decode()]
+        jobs = session.scalars(
+            select(DocumentProcessingJob).where(DocumentProcessingJob.attachment_id == native_id),
+        ).all()
+        assert len(jobs) == 3 and all(job.no_paid_providers for job in jobs)
+        assert {job.status for job in jobs} == {"completed"}
 
 
 def test_native_note_and_upload_require_current_rules_and_preserve_web_scanner(client, monkeypatch):

@@ -813,6 +813,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         return
 
     lifecycle_version = attachment.matter.lifecycle_version
+    local_only = attachment.native_local_processing_only
     _release_preparation_transaction(session, attachment)
     # Prepare replacement chunks without deleting the retained index until
     # external work finishes and fresh authority/source checks succeed.
@@ -867,11 +868,12 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     # the explicit lock immediately below.
     _assert_company_active(session, company_id=job.company_id)
     session.rollback()
-    embed_matter_attachment_chunks(
-        session,
-        attachment,
-        before_flush=lock_operational_parent_for_persist,
-    )
+    if not local_only:
+        embed_matter_attachment_chunks(
+            session,
+            attachment,
+            before_flush=lock_operational_parent_for_persist,
+        )
     lock_operational_parent_for_persist()
     job.processed_char_count = attachment.extracted_char_count
     job.error_message = attachment.extraction_error
@@ -883,8 +885,10 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     )
     session.add(attachment)
     session.add(job)
-    should_extract_compliance = job.status == DocumentProcessingJobStatus.COMPLETED and (
-        attachment.linked_court_order_id or attachment.document_type == "order_judgment"
+    should_extract_compliance = not local_only and (
+        job.status == DocumentProcessingJobStatus.COMPLETED and (
+            attachment.linked_court_order_id or attachment.document_type == "order_judgment"
+        )
     )
     processing_job_id = job.id
     session.add(

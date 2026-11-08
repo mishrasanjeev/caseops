@@ -5926,6 +5926,7 @@ def create_matter_attachment(
         id=str(uuid4()),
         matter_id=matter.id,
         uploaded_by_membership_id=upload_actor_id,
+        native_local_processing_only=native_session_id is not None,
         original_filename=sanitize_filename(filename),
         storage_key="pending",
         content_type=content_type,
@@ -6064,6 +6065,7 @@ def create_matter_attachment(
             target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
             attachment_id=attachment.id,
             action=DocumentProcessingAction.INITIAL_INDEX,
+            no_paid_providers=attachment.native_local_processing_only,
         )
         session.add(attachment)
         _append_activity(
@@ -6430,6 +6432,7 @@ def request_matter_attachment_processing(
         target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
         attachment_id=attachment.id,
         action=action,
+        no_paid_providers=attachment.native_local_processing_only,
     )
     session.add(attachment)
     _append_activity(

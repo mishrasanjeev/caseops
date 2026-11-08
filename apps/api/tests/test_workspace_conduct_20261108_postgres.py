@@ -9,6 +9,9 @@ from tests.test_workspace_conduct_20261108 import (
     test_native_note_and_upload_require_current_rules_and_preserve_web_scanner as workflow,
 )
 from tests.test_workspace_conduct_20261108 import (
+    test_native_upload_and_web_reprocessing_skip_external_embedding_provider as local_processing,
+)
+from tests.test_workspace_conduct_20261108 import (
     test_receipt_is_bound_to_authenticated_membership_and_tenant as tenant_scope,
 )
 from tests.test_workspace_conduct_20261108 import (
@@ -32,6 +35,10 @@ pytestmark = pytest.mark.postgres
 
 def test_conduct_native_write_and_scanner(isolated_postgres_client, monkeypatch):
     workflow(isolated_postgres_client, monkeypatch)
+
+
+def test_native_document_processing_privacy(isolated_postgres_client, monkeypatch):
+    local_processing(isolated_postgres_client, monkeypatch)
 
 
 def test_conduct_tenant_receipt_scope(isolated_postgres_client):

@@ -5829,6 +5829,11 @@ class MatterAttachment(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Native upload has no third-party AI consent flow. Keep this provenance
+    # on the source, so a later browser retry cannot implicitly grant consent.
+    native_local_processing_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+    )
     processing_status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
