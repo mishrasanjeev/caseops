@@ -97,7 +97,8 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
       const attempt = { stage: producerStage, actor, company: identity?.company?.id, membership: identity?.membership?.id, method, path: url.pathname };
       const result = routeAdmission && !useWeb
         ? await routeAdmission.file.dispatch(method + ' ' + url.pathname, routeAdmission.provenance.allow(attempt), safeHeaders.Authorization,
-          Math.min(deadlineMs, callDeadlineMs, now() + timeoutMs), send)
+          Math.min(deadlineMs, callDeadlineMs, now() + timeoutMs), send,
+          { bodyBytes: payload, queryPresent: route.includes('?') || query !== undefined })
         : await send();
       if (method === 'POST' && ['/api/auth/login','/api/bootstrap/company'].includes(url.pathname) && result.status === 200) {
         assert.ok(typeof result.value.access_token === 'string' && result.value.access_token.length > 0, 'PRODUCER_NORMAL_TOKEN_REQUIRED');

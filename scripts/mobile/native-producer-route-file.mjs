@@ -10,6 +10,9 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const exactRoute = /^(GET|POST|PATCH|DELETE|OPTIONS) \/api\/[a-zA-Z0-9_./-]{1,390}$/;
+const calendarId = '[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}';
+const calendarRead = new RegExp(`^GET /api/ip/dockets/${calendarId}/deadline-workspace$`);
+const calendarWrite = new RegExp(`^POST /api/ip/(?:dockets/${calendarId}/(?:deadlines|access/(?:preview|apply))|deadlines/${calendarId}/confirm)$`);
 const bound = 131072;
 const keyFields = ['dev', 'ino', 'uid', 'gid', 'mode'];
 const fileFields = [...keyFields, 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
@@ -70,12 +73,22 @@ export function openProducerRouteFile({ cache, baseSha256, epoch, persist, requi
     assert.ok(equal(original.named, current.named, fileFields) && original.bytes.equals(current.bytes), 'PRODUCER_ROUTE_WRITER_CONFLICT');
   };
   return {
-    async dispatch(route, provenance, authorization, deadline, send) {
+    async dispatch(route, provenance, authorization, deadline, send, binding) {
       assert.ok(!busy && !poisoned && !closed && typeof send === 'function', 'PRODUCER_ROUTE_SCOPE_CLOSED');
       assert.match(route, exactRoute);
       busy = true;
       try {
         verify();
+        const reviewedRead = calendarRead.test(route), reviewedWrite = calendarWrite.test(route);
+        let bodySha256;
+        if (reviewedRead || reviewedWrite) {
+          assert.ok(!routes.has(route) && provenance?.calendarExact === true && binding?.queryPresent === false,
+            'PRODUCER_CALENDAR_EXACT_ADMISSION_REQUIRED');
+          const bytes = binding.bodyBytes;
+          assert.ok(reviewedWrite ? Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 1048576 : bytes === undefined,
+            'PRODUCER_CALENDAR_BODY_REQUIRED');
+          if (reviewedWrite) bodySha256 = hash(bytes);
+        }
         if (routes.has(route)) return await send();
         assert.match(provenance?.requestDigest || '', /^[a-f0-9]{64}$/, 'PRODUCER_DEPENDENT_ROUTE_NOT_ADMITTED');
         assert.ok(typeof authorization === 'string' && authorization.startsWith('Bearer ') && !authorization.startsWith('Bearer cnat_')
@@ -85,7 +98,7 @@ export function openProducerRouteFile({ cache, baseSha256, epoch, persist, requi
         const proof = randomBytes(32).toString('hex'), proofSha256 = hash(proof);
         const permit = path.join(permitRoot, proofSha256 + '.json');
         const bytes = Buffer.from(JSON.stringify({ epoch, route, bearerSha256: hash(authorization), expires,
-          creatorAckSha256: provenance.requestDigest }) + '\n');
+          creatorAckSha256: provenance.requestDigest, ...(bodySha256 === undefined ? {} : { bodySha256 }) }) + '\n');
         const fd = openSync(permit, 'wx', 0o600);
         try { writeFileSync(fd, bytes); fsyncSync(fd); } finally { closeSync(fd); }
         verify();

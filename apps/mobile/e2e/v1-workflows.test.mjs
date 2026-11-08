@@ -1015,6 +1015,56 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     assert.deepEqual(fs.readFileSync(file + '.original'), base);
   });
 
+  test('Calendar route permits bind serialized bytes without persisting the private payload', async t => {
+    const { cache, file } = fixture(t), events = [];
+    const owner = openProducerRouteFile({ cache, ...initial, persist: event => events.push(event) });
+    const authorization = 'Bearer local-calendar-fixture';
+    const provenance = { requestDigest: 'c'.repeat(64), calendarExact: true };
+    const permitRoot = path.join(cache, 'producer-permits-' + producerHash(initial.epoch));
+    const read = 'GET /api/ip/dockets/' + id + '/deadline-workspace';
+    const writes = ['POST /api/ip/dockets/' + id + '/deadlines', 'POST /api/ip/deadlines/' + id + '/confirm',
+      ...['preview', 'apply'].map(action => 'POST /api/ip/dockets/' + id + '/access/' + action)];
+    const bodyBytes = Buffer.from('{"preview_token":"synthetic-raw-token", "reason":"fixture"}');
+    const receipts = [];
+    for (const route of [read, ...writes]) {
+      await owner.dispatch(route, provenance, authorization, Date.now() + 5000, async proof => {
+        const bytes = fs.readFileSync(path.join(permitRoot, producerHash(proof) + '.json'));
+        const permit = JSON.parse(bytes);
+        assert.equal(permit.route, route);
+        assert.equal(permit.creatorAckSha256, provenance.requestDigest);
+        assert.equal(permit.bearerSha256, producerHash(authorization));
+        assert.equal(permit.bodySha256, route === read ? undefined : producerHash(bodyBytes));
+        assert.ok(!bytes.includes('synthetic-raw-token') && !bytes.includes(authorization));
+        const permitReceipt = producerHash(bytes); receipts.push(permitReceipt);
+        return { permitReceipt };
+      }, { queryPresent: false, bodyBytes: route === read ? undefined : bodyBytes });
+    }
+    assert.deepEqual(owner.consumed(), receipts);
+    assert.ok(!JSON.stringify(events).includes('synthetic-raw-token'));
+    owner.verifyRestored();
+    assert.deepEqual(fs.readFileSync(file), base);
+  });
+
+  test('Calendar route permits refuse ordinary provenance, queries and unexpected body framing', async t => {
+    const docket = '/api/ip/dockets/' + id;
+    const read = 'GET ' + docket + '/deadline-workspace', write = 'POST ' + docket + '/access/apply';
+    const provenance = { requestDigest: 'c'.repeat(64), calendarExact: true }, bodyBytes = Buffer.from('{}');
+    for (const [route, evidence, binding, refusal] of [
+      [write, { requestDigest: provenance.requestDigest }, { bodyBytes, queryPresent: false }, /EXACT_ADMISSION/],
+      [write, provenance, { bodyBytes, queryPresent: true }, /EXACT_ADMISSION/],
+      [read, provenance, { bodyBytes, queryPresent: false }, /BODY_REQUIRED/],
+      [write, provenance, { queryPresent: false }, /BODY_REQUIRED/],
+    ]) {
+      const { cache } = fixture(t);
+      const owner = openProducerRouteFile({ cache, ...initial });
+      let sends = 0;
+      await assert.rejects(owner.dispatch(route, evidence, 'Bearer local-calendar-fixture', Date.now() + 5000,
+        () => { sends++; }, binding), refusal);
+      assert.deepEqual(fs.readdirSync(path.join(cache, 'producer-permits-' + producerHash(initial.epoch))), []);
+      assert.equal(sends, 0);
+    }
+  });
+
   test('the real TLS gateway refuses a future route, then the actual host sends it only after its creator ACK', async t => {
     const { cache, file } = fixture(t), seen = [], events = [];
     const upstream = http.createServer((req, res) => {
