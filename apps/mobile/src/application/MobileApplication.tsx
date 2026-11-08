@@ -122,8 +122,10 @@ function ApplicationContent({
   identity,
   sessionKey,
   initialFilesMatterId,
+  initialAccount,
   recordLinks,
   selectedFile,
+  cameraPermissionDenial,
   onChooseFile,
   onCapturePhoto,
   selectingFile,
@@ -176,25 +178,51 @@ function ApplicationContent({
   const [tab, setTab] = useState<Tab>("today");
   const [sourceKind, setSourceKind] = useState<SourceKind>("ip_docket");
   const [stacks, setStacks] = useState<Record<Tab, Route[]>>({
-    today: initialFilesMatterId
-      ? [
-          { type: "home" },
-          { type: "matter", matterId: initialFilesMatterId, section: "Files" },
-        ]
-      : [{ type: "home" }],
+    today: initialAccount
+      ? [{ type: "home" }, { type: "account" }]
+      : initialFilesMatterId
+        ? [
+            { type: "home" },
+            {
+              type: "matter",
+              matterId: initialFilesMatterId,
+              section: "Files",
+            },
+          ]
+        : [{ type: "home" }],
     matters: [{ type: "home" }],
     calendar: [{ type: "home" }],
     work: [{ type: "home" }],
   });
   const stack = stacks[tab],
     route = stack[stack.length - 1];
+  const currentCameraPermissionDenial =
+    cameraPermissionDenial &&
+    route.type === "matter" &&
+    route.section === "Files" &&
+    route.matterId === cameraPermissionDenial.matterId
+      ? cameraPermissionDenial
+      : undefined;
   useEffect(() => {
     if (
-      selectedFile &&
-      !(route.type === "matter" && route.matterId === selectedFile.matterId)
+      (selectedFile &&
+        !(
+          route.type === "matter" && route.matterId === selectedFile.matterId
+        )) ||
+      (cameraPermissionDenial &&
+        !currentCameraPermissionDenial &&
+        readFileSelection().revision === selectionRevision)
     )
       onClearSelectedFile();
-  }, [route, selectedFile, onClearSelectedFile]);
+  }, [
+    route,
+    selectedFile,
+    cameraPermissionDenial,
+    currentCameraPermissionDenial,
+    readFileSelection,
+    selectionRevision,
+    onClearSelectedFile,
+  ]);
   const workAvailable = useRef(false);
   const suspendWork = useRef<(() => void) | null>(null);
   workAvailable.current = route.type === "home" && tab === "work";
@@ -541,6 +569,8 @@ function ApplicationContent({
                 matterId: route.matterId,
                 capabilities: identity.capabilities,
                 selectedFile,
+                cameraPermissionDeniedAtVersion:
+                  currentCameraPermissionDenial?.expectedLifecycleVersion,
                 onChooseFile: (version) =>
                   onChooseFile(route.matterId, version),
                 onCapturePhoto: (version) =>

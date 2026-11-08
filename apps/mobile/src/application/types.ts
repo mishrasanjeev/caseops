@@ -2,7 +2,7 @@ import type { AuthorizedRequest } from "../domain/repository";
 import type { LocalSessionBinding, SessionIdentity } from "../auth/types";
 import type { RecordLinkInbox } from "../domain/record-links";
 import type { MatterFileSelection } from "../files/contracts";
-import type { FileSelectionState } from "../domain/file-picker";
+import type { FileSelectionState, PickerIntent } from "../domain/file-picker";
 import type { ViewerPorts } from "../viewer/contracts";
 
 export type MobileApplicationProps = {
@@ -10,11 +10,13 @@ export type MobileApplicationProps = {
   identity: SessionIdentity;
   sessionKey: string;
   initialFilesMatterId?: string;
+  initialAccount?: boolean;
   recordLinks?: {
     inbox: RecordLinkInbox;
     binding: LocalSessionBinding;
   };
   selectedFile: MatterFileSelection | null;
+  cameraPermissionDenial?: PickerIntent;
   onChooseFile: (matterId: string, expectedLifecycleVersion: number) => void;
   onCapturePhoto: (matterId: string, expectedLifecycleVersion: number) => void;
   selectingFile: boolean;

@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import {collectNativeClientExtensions,clientExtensionScenarios} from '../../apps/mobile/e2e/client-extensions-20261028.mjs';
 import {collectClientExtensions} from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import {parseClientCompatibility,requireClientExtensionRequest,decodeReadPage,decodeRecommendation} from '../../apps/mobile/e2e/client-extensions-contract.mjs';
-import {ClientExtensionUnavailable} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
+import {ClientExtensionUnavailable,enableLock} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import {readClientPublicInput,writeClientProjection} from './client-extension-public-input.mjs';
 import {captureClientTree,captureClientTreeAsync,captureClientTreeCommitmentAsync,captureClientTreeInventoryAsync,captureClientFile,admitClientServer,admitClientServerAsync,captureClientTreeCommitment,captureClientTreeInventory,clientTreeManifest,assertClientTreeCommitment,assertClientRuntimeInventory,writeClientTreeAuditManifest,CLIENT_TREE_AUDIT_MAX_BYTES} from './client-extension-runtime.mjs';
 import {admitClientExtensions,executeClientExtensionInventory,runClientExtensions} from './run-client-extensions.mjs';
@@ -1123,4 +1123,92 @@ test('complete ClientExtensions admission binds physical4K layout and rejects mi
 
 test('ClientExtensions complete admission binds signed observer source and refuses a forged run-as label',async()=>{
  for(const wrong of[false,true]){const x=clientAdmissionPacket(),dir=temp();try{const actual=bindPhysicalPacket(x,x.values,x.io.installed());const ref=bindObserverTestIdentity(actual,dir,x.q.expectedSourceSha);for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])x.values.get(r.path).privacyObserverEvidence=ref;for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){delete x.values.get(r.path).runAsUid;Object.assign(x.values.get(r.path),structuredClone(actual));}x.io.installed=()=>structuredClone(actual);x.values.get(x.q.artifactVersionEvidence.path).reader='aapt2-dump-badging';if(wrong)x.values.get(x.q.deviceEvidence.path).access='run-as';if(wrong){await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}else{const r=await admitClientExtensions(x.q,x.io);assert.equal(r.installed.access,'qa-observer-service');assert.equal(r.installed.sixteenKEmulatorAcceptance,false);}}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+});
+
+
+function androidLockSetup({staleWritePrompt = false, omitReadRecipe = false} = {}) {
+  const udid = 'emulator-5584';
+  const binaryHash = 'a'.repeat(64);
+  const appiumInventoryEvidence = {path: '/synthetic/appium', sha256: 'b'.repeat(64)};
+  const promptId = 'com.android.systemui:id/title';
+  const writeTitle = 'Set up CaseOps biometric lock';
+  const readTitle = 'Unlock CaseOps';
+  const enabled = 'Enabled for this sign-in on this installation. Sign out to turn it off.';
+  const recipes = {
+    androidBiometricWritePromptVisible: [{kind: 'wait', locator: {kind: 'id', value: promptId}}],
+    ...(!omitReadRecipe ? {
+      androidBiometricReadPromptVisible: [{kind: 'wait', locator: {kind: 'id', value: promptId}}],
+    } : {}),
+  };
+  let screen = 'today';
+  const clicks = [];
+  const matches = [];
+  const driver = {
+    async $$(query) {
+      const controls = {
+        today: {'id=account-open': ''},
+        account: {
+          'id=account-screen': '', 'id=account-principal': 'Synthetic Member',
+          'id=account-workspace': 'Synthetic Workspace', 'id=local-lock-enable': '',
+        },
+        writePrompt: {['id=' + promptId]: writeTitle},
+        readPrompt: {['id=' + promptId]: readTitle},
+        enabled: {'id=back': '', [`android=new UiSelector().text(${JSON.stringify(enabled)})`]: enabled},
+      }[screen];
+      if (!Object.hasOwn(controls,query)) return [];
+      return [{
+        elementId: query, isDisplayed: async () => true, isEnabled: async () => true,
+        getText: async () => controls[query],
+      }];
+    },
+    async waitUntil(predicate, {timeoutMsg}) {
+      if (!await predicate()) throw new Error(timeoutMsg);
+    },
+    async elementClick(id) {
+      clicks.push(id);
+      assert.ok(Object.hasOwn({
+        'id=account-open': 'account', 'id=local-lock-enable': 'writePrompt', 'id=back': 'today',
+      }, id));
+      screen = {'id=account-open': 'account', 'id=local-lock-enable': 'writePrompt', 'id=back': 'today'}[id];
+    },
+    async execute(command, options) {
+      assert.equal(command, 'mobile: fingerprint');
+      assert.deepEqual(options, {fingerprintId: 52});
+      matches.push(screen);
+      if (screen === 'writePrompt' && !staleWritePrompt) screen = 'readPrompt';
+      else if (screen === 'readPrompt') screen = 'enabled';
+    },
+  };
+  return {
+    clicks, matches,
+    context: {
+      platform: 'android', workflowDomain: 'emulator', binaryHash, appiumInventoryEvidence,
+      nativeOperations: 0, record() {}, driver,
+      fixture: {
+        udid, principalLabel: 'Synthetic Member', workspaceLabel: 'Synthetic Workspace',
+        cx: {
+          osRecipes: {observed: true, platform: 'android', udid, binaryHash, appiumInventoryEvidence, recipes},
+          biometricSimulation: {observed: true, udid, binaryHash, fingerprintId: 52},
+        },
+      },
+    },
+  };
+}
+
+test('Android biometric opt-in matches the distinct observed OS write and readback prompts exactly once', async () => {
+  const fixture = androidLockSetup();
+  await enableLock(fixture.context);
+  assert.deepEqual(fixture.clicks, ['id=account-open', 'id=local-lock-enable', 'id=back']);
+  assert.deepEqual(fixture.matches, ['writePrompt', 'readPrompt']);
+});
+
+test('Android biometric opt-in never matches a stale prompt twice and refuses missing readback evidence before enabling', async () => {
+  const stale = androidLockSetup({staleWritePrompt: true});
+  await assert.rejects(enableLock(stale.context), /CX_NATIVE_STATE_REQUIRED/);
+  assert.deepEqual(stale.matches, ['writePrompt']);
+  assert.deepEqual(stale.clicks, ['id=account-open', 'id=local-lock-enable']);
+  const missing = androidLockSetup({omitReadRecipe: true});
+  await assert.rejects(enableLock(missing.context), /CX_ACTUAL_OS_RECIPE_REQUIRED/);
+  assert.deepEqual(missing.clicks, []);
+  assert.deepEqual(missing.matches, []);
 });

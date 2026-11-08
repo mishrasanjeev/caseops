@@ -14,6 +14,7 @@ import { Fact } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
 import type { AuthorizedRequest } from "../../domain/repository";
 import { createMatterFilesApi } from "../../files/api";
+import { CAMERA_PERMISSION_DENIED_MESSAGE } from "../../files/camera";
 import { matchesSelection, uploadRestriction } from "../../files/contracts";
 import type { MatterFile, MatterFileSelection } from "../../files/contracts";
 import { createFilesController } from "../../files/controller";
@@ -36,6 +37,7 @@ export type FilesScreenProps = {
   matterId: string;
   capabilities: readonly string[];
   selectedFile: MatterFileSelection | null;
+  cameraPermissionDeniedAtVersion?: number;
   onChooseFile: (expectedLifecycleVersion: number) => void;
   onCapturePhoto: (expectedLifecycleVersion: number) => void;
   selectingFile: boolean;
@@ -70,6 +72,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     matterId,
     capabilities,
     selectedFile,
+    cameraPermissionDeniedAtVersion,
     onChooseFile,
     onCapturePhoto,
     selectingFile,
@@ -186,7 +189,12 @@ function ScopedFilesScreen(props: FilesScreenProps) {
   let selectionError: string | null =
     selectedFile && !scopedSelection
       ? "This file selection does not belong to the current account and matter. Clear it and choose the file again."
-      : null;
+      : workspace &&
+          !selectedFile &&
+          cameraPermissionDeniedAtVersion !== undefined &&
+          cameraPermissionDeniedAtVersion === workspace.matter.lifecycle_version
+        ? CAMERA_PERMISSION_DENIED_MESSAGE
+        : null;
   if (workspace && scopedSelection) {
     if (
       scopedSelection.expectedLifecycleVersion !==

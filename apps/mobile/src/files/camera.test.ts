@@ -128,17 +128,20 @@ test("camera denial cleans orphans, performs no camera action and leaves file-pi
     () => {},
     f.capture,
   );
-  await assert.rejects(
-    picker.choose(intent, "camera"),
-    (error) =>
-      error instanceof CameraCaptureError &&
-      error.reason === "permission" &&
-      error.message.includes("Choose file"),
+  await picker.choose(intent, "camera");
+  assert.equal(
+    picker.snapshot(identity, "session")?.cameraPermissionDenied,
+    true,
   );
+  assert.equal(picker.snapshot(identity, "session")?.selection, null);
   assert.equal(f.events.includes("camera"), false);
   assert.deepEqual([...f.disk.keys()], [original]);
   await picker.choose(intent);
   assert.equal(files, 1);
+  assert.equal(
+    picker.snapshot(identity, "session")?.cameraPermissionDenied,
+    undefined,
+  );
   assert.equal(
     picker.snapshot(identity, "session")?.selection?.asset.uri,
     original,

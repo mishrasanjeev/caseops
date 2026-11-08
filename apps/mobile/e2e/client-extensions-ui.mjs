@@ -29,11 +29,21 @@ export async function signOut(c,control='sign-out') {
  c.state.activeActor=null;
 }
 export async function cameraPrivacy(c,{empty=true}={}) {const witnessed=c.platform==='android'&&c.fixture.privacyObserverEvidence?await withObserverAppiumWitness(c.driver,()=>authoritative(c,'cameraPrivacy')):{value:await authoritative(c,'cameraPrivacy')};const r=witnessed.value;if(witnessed.appiumWitness){assert.equal(r.access,'qa-observer-service');assert.equal(r.observationEpoch?.fullPackageForceStoppedStateCertified,false);c.record?.({type:'qa-observer-appium-coexistence',evidence:witnessed.appiumWitness,observationEpoch:r.observationEpoch});}assert.equal(r.observed,true);assert.equal(r.complete,true);assert.equal(r.udid,c.fixture.udid);assert.equal(r.appId,c.fixture.appId);assert.equal(r.binaryHash,c.binaryHash);assert.equal(r.providerOriginalsRead,false);assert.equal(r.filesDeleted,false);assert.equal(r.legacyKnownFixtureCountsIncluded,false);if(empty)assert.equal(r.counts.copies,0,'CX_CAMERA_SDK_COPY_REMAINS');return r;}
+function observedOsRecipe(c, name) {
+  const envelope = c.fixture.cx.osRecipes;
+  assert.equal(envelope.observed, true);
+  assert.equal(envelope.platform, c.platform);
+  assert.equal(envelope.udid, c.fixture.udid);
+  assert.equal(envelope.binaryHash, c.binaryHash);
+  assert.deepEqual(envelope.appiumInventoryEvidence, c.appiumInventoryEvidence);
+  const recipe = envelope.recipes[name];
+  if (!recipe) throw new ClientExtensionUnavailable('CX_ACTUAL_OS_RECIPE_REQUIRED');
+  assert.ok(Array.isArray(recipe) && recipe.length > 0 && recipe.length <= 12, 'CX_OS_RECIPE_BOUND');
+  return recipe;
+}
 export async function runOsRecipe(c,name) {
  const envelope=c.fixture.cx.osRecipes;
- assert.equal(envelope.observed,true);assert.equal(envelope.platform,c.platform);assert.equal(envelope.udid,c.fixture.udid);assert.equal(envelope.binaryHash,c.binaryHash);assert.deepEqual(envelope.appiumInventoryEvidence,c.appiumInventoryEvidence);
- const recipe=envelope.recipes[name];if(!recipe)throw new ClientExtensionUnavailable('CX_ACTUAL_OS_RECIPE_REQUIRED');
- assert.ok(Array.isArray(recipe)&&recipe.length>0&&recipe.length<=12,'CX_OS_RECIPE_BOUND');
+ const recipe=observedOsRecipe(c,name);
  for(const step of recipe){operation(c);
   if(step.kind==='activate') {assert.ok(envelope.allowedApplications.includes(step.appId),'CX_OWNED_OS_APPLICATION_REQUIRED');await c.driver.activateApp(step.appId);}
   else if(step.kind==='wait') {assert.ok(['id','text','label'].includes(step.locator.kind));await find(c,step.locator.kind,step.locator.value);}
@@ -62,24 +72,66 @@ export async function observedSegment(c,group,label){
  assert.equal(await element.getAttribute(recipe.labelAttribute),label);operation(c);await dispatchNativeClick(c,element);
 }
 export async function cold(c) {operation(c);await restart(c);}
-export async function biometric(c,mode) {
- assert.ok(['match','cancel','enrollment-change'].includes(mode));
- if(c.workflowDomain==='physical') {await owner(c,'operatorBoundary',{operation:'biometric-'+mode});return;}
- const b=c.fixture.cx.biometricSimulation;
- if(!b?.observed||b.udid!==c.fixture.udid||b.binaryHash!==c.binaryHash)throw new ClientExtensionUnavailable('CX_OBSERVED_OS_BIOMETRIC_SIMULATION_REQUIRED');
- operation(c);
- if(mode==='cancel'){await runOsRecipe(c,'biometricCancel');return;}
- if(mode==='match')await runOsRecipe(c,'biometricPromptVisible');
- if(c.platform==='ios') {
-  assert.equal(c.workflowDomain,'simulator');assert.ok(['faceId','touchId'].includes(b.type));
-  if(mode==='enrollment-change'){await c.driver.execute('mobile: enrollBiometric',{isEnabled:false});await c.driver.execute('mobile: enrollBiometric',{isEnabled:true});}
-  else await c.driver.execute('mobile: sendBiometricMatch',{type:b.type,match:true});
- }else {
-  assert.equal(c.workflowDomain,'emulator');
-  if(mode==='enrollment-change')await runOsRecipe(c,'biometricEnrollmentChange');
-  else {assert.ok(Number.isInteger(b.fingerprintId)&&b.fingerprintId>0&&b.fingerprintId<1000);await c.driver.execute('mobile: fingerprint',{fingerprintId:b.fingerprintId});}
- }
- record(c,'native-os-simulation',{operation:mode,workflowDomain:c.workflowDomain,physicalHardwareProven:false});
+const androidBiometricTitleId = 'com.android.systemui:id/title';
+const androidBiometricPrompts = {
+  write: { recipe: 'androidBiometricWritePromptVisible', title: 'Set up CaseOps biometric lock' },
+  read: { recipe: 'androidBiometricReadPromptVisible', title: 'Unlock CaseOps' },
+};
+function requireAndroidBiometricPrompt(c, prompt) {
+  const recipe = observedOsRecipe(c, prompt.recipe);
+  // SystemUI uses the same resource ID for both prompts. Validate the exact
+  // title separately so a lingering first prompt cannot consume the readback.
+  assert.deepEqual(recipe, [{ kind: 'wait', locator: { kind: 'id', value: androidBiometricTitleId } }]);
+}
+function requireBiometricSimulation(c) {
+  const simulation = c.fixture.cx.biometricSimulation;
+  if (!simulation?.observed || simulation.udid !== c.fixture.udid || simulation.binaryHash !== c.binaryHash)
+    throw new ClientExtensionUnavailable('CX_OBSERVED_OS_BIOMETRIC_SIMULATION_REQUIRED');
+  return simulation;
+}
+function androidFingerprintId(simulation) {
+  const { fingerprintId } = simulation;
+  assert.ok(Number.isInteger(fingerprintId) && fingerprintId > 0 && fingerprintId < 1000);
+  return fingerprintId;
+}
+async function matchAndroidBiometric(c, simulation, prompt) {
+  assert.equal(c.workflowDomain, 'emulator');
+  const fingerprintId = androidFingerprintId(simulation);
+  requireAndroidBiometricPrompt(c, prompt);
+  operation(c);
+  await waitId(c, androidBiometricTitleId, prompt.title, { timeout: CX_BUDGETS.nativeReadMs });
+  record(c, 'normal-os-recipe-complete', { recipe: prompt.recipe, steps: 1, workflowDomain: c.workflowDomain, physicalHardwareProven: false });
+  await c.driver.execute('mobile: fingerprint', { fingerprintId });
+}
+export async function biometric(c, mode) {
+  assert.ok(['match', 'cancel', 'enrollment-change'].includes(mode));
+  if (c.workflowDomain === 'physical') {
+    await owner(c, 'operatorBoundary', { operation: 'biometric-' + mode });
+    return;
+  }
+  const simulation = requireBiometricSimulation(c);
+  operation(c);
+  if (mode === 'cancel') {
+    await runOsRecipe(c, 'biometricCancel');
+    return;
+  }
+  if (c.platform === 'ios') {
+    assert.equal(c.workflowDomain, 'simulator');
+    assert.ok(['faceId', 'touchId'].includes(simulation.type));
+    if (mode === 'enrollment-change') {
+      await c.driver.execute('mobile: enrollBiometric', { isEnabled: false });
+      await c.driver.execute('mobile: enrollBiometric', { isEnabled: true });
+    } else {
+      await runOsRecipe(c, 'biometricPromptVisible');
+      await c.driver.execute('mobile: sendBiometricMatch', { type: simulation.type, match: true });
+    }
+  } else {
+    assert.equal(c.platform, 'android');
+    assert.equal(c.workflowDomain, 'emulator');
+    if (mode === 'enrollment-change') await runOsRecipe(c, 'biometricEnrollmentChange');
+    else await matchAndroidBiometric(c, simulation, androidBiometricPrompts.read);
+  }
+  record(c, 'native-os-simulation', { operation: mode, workflowDomain: c.workflowDomain, physicalHardwareProven: false });
 }
 export async function recordLink(c,url,{verifiedHttps=false}={}) {
  assert.ok(typeof url==='string'&&url.length<=512&&!/[\x00-\x20\x7f]/.test(url));
@@ -90,5 +142,24 @@ export async function recordLink(c,url,{verifiedHttps=false}={}) {
 export async function openPending(c){await waitId(c,'record-link-open');await tap(c,'record-link-open');}
 export async function locked(c){await waitId(c,'local-lock');await privateAbsent(c);}
 export async function unlock(c){await locked(c);await tap(c,'local-unlock');await biometric(c,'match');await waitId(c,'account-open',undefined,{timeout:CX_BUDGETS.physicalPromptMs});await absent(c,'local-lock');}
-export async function enableLock(c){await account(c);await tap(c,'local-lock-enable');await biometric(c,'match');await text(c,'Enabled for this sign-in on this installation. Sign out to turn it off.');await absent(c,'local-lock-enable');await tap(c,'back');}
+export async function enableLock(c) {
+  let androidSimulation;
+  if (c.platform === 'android' && c.workflowDomain === 'emulator') {
+    androidSimulation = requireBiometricSimulation(c);
+    androidFingerprintId(androidSimulation);
+    // Refuse incomplete setup evidence before enabling the local lock.
+    requireAndroidBiometricPrompt(c, androidBiometricPrompts.write);
+    requireAndroidBiometricPrompt(c, androidBiometricPrompts.read);
+  }
+  await account(c);
+  await tap(c, 'local-lock-enable');
+  if (androidSimulation) {
+    operation(c);
+    await matchAndroidBiometric(c, androidSimulation, androidBiometricPrompts.write);
+  }
+  await biometric(c, 'match');
+  await text(c, 'Enabled for this sign-in on this installation. Sign out to turn it off.');
+  await absent(c, 'local-lock-enable');
+  await tap(c, 'back');
+}
 export async function inputNote(c,value){operation(c);await input(c,'id','note-input',value);}

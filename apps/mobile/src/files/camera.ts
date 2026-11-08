@@ -7,11 +7,14 @@ import {
 import type { PrivateImportIO } from "./private-imports.ts";
 import { TempCleanupError } from "./staging.ts";
 
+export const CAMERA_PERMISSION_DENIED_MESSAGE =
+  "Camera access was not granted. You can still use Choose file, or enable camera access in device settings.";
+
 export class CameraCaptureError extends Error {
   constructor(readonly reason: "permission" | "unavailable" | "busy") {
     super(
       reason === "permission"
-        ? "Camera access was not granted. You can still use Choose file, or enable camera access in device settings."
+        ? CAMERA_PERMISSION_DENIED_MESSAGE
         : reason === "busy"
           ? "Finish the current photo capture first."
           : "The photo could not be captured. You can still use Choose file.",

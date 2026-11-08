@@ -48,10 +48,12 @@ export function createFilePickerCoordinator(
   let returning = false;
   let intent: PickerIntent | null = null;
   let asset: MatterFileAsset | null = null;
+  let cameraPermissionDenied = false;
   const clear = () => {
     ++epoch;
     returning = false;
     intent = null;
+    cameraPermissionDenied = false;
     const previous = asset;
     asset = null;
     try {
@@ -68,9 +70,11 @@ export function createFilePickerCoordinator(
     get leased() {
       return picking || returning;
     },
-    /** The app is active again and its compatibility recheck succeeded. */
+    /** The provider has returned and foreground authentication succeeded. */
     settle() {
-      returning = false;
+      // A permission dialog can briefly reactivate the app before the
+      // external camera has even opened. Keep its opaque return lease.
+      if (!picking) returning = false;
     },
     get selectionState(): FileSelectionState {
       return { picking, revision: epoch, hasSelection: asset !== null };
@@ -83,12 +87,16 @@ export function createFilePickerCoordinator(
       intent: PickerIntent;
       selection: MatterFileSelection | null;
       revision: number;
+      cameraPermissionDenied?: true;
     } | null {
       if (!intent || !pickerIdentityMatches(intent, identity, sessionKey))
         return null;
       return {
         intent: { ...intent },
         revision: epoch,
+        ...(cameraPermissionDenied
+          ? { cameraPermissionDenied: true as const }
+          : {}),
         selection: asset
           ? {
               companyId: intent.companyId,
@@ -148,6 +156,15 @@ export function createFilePickerCoordinator(
         // picker. An unrelated late provider rejection still stays silent.
         if (cause instanceof TempCleanupError) throw cause;
         if (owner !== epoch) return;
+        if (
+          cause instanceof CameraCaptureError &&
+          cause.reason === "permission"
+        ) {
+          // The camera has cleaned its owned copies. Keep only the current
+          // Files intent and the denial so the user can choose a file instead.
+          cameraPermissionDenied = true;
+          return;
+        }
         clear();
         if (cause instanceof CameraCaptureError) throw cause;
         throw new Error(
