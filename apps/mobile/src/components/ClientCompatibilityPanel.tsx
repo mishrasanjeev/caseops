@@ -1,7 +1,7 @@
-import { ScrollView, Text } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Text, View } from "react-native";
 import type { CompatibilitySnapshot } from "../network/client-compatibility";
 import { NativeButton, NativeProgress } from "./NativeControls";
+import { WelcomeFrame } from "./WelcomeFrame";
 import { styles } from "./theme";
 
 export function ClientCompatibilityPanel(props: {
@@ -11,13 +11,8 @@ export function ClientCompatibilityPanel(props: {
 }) {
   const busy = props.state.busy;
   return (
-    <SafeAreaView testID="client-compatibility" style={styles.fill}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { flexGrow: 1, justifyContent: "center", gap: 24 },
-        ]}
-      >
+    <WelcomeFrame testID="client-compatibility">
+      <View style={{ gap: 12 }}>
         <Text accessibilityRole="header" style={styles.title}>
           {props.state.status === "update_required"
             ? "Update CaseOps"
@@ -40,6 +35,8 @@ export function ClientCompatibilityPanel(props: {
           obtain an update. You can sign out here, or revoke this device from
           another signed-in device.
         </Text>
+      </View>
+      <View style={{ gap: 8 }}>
         <NativeButton
           testID="compatibility-retry"
           label="Check again"
@@ -52,7 +49,7 @@ export function ClientCompatibilityPanel(props: {
           secondary
           onPress={props.onSignOut}
         />
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </WelcomeFrame>
   );
 }
