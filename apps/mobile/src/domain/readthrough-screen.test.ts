@@ -453,7 +453,7 @@ test("real private application boundary remounts on session, membership, role or
   );
 });
 
-test("the private reader loads only when an attachment opens", () => {
+function readerHarness(loadReader: () => unknown) {
   const state: unknown[] = [];
   let cursor = 0;
   let readerLoads = 0;
@@ -495,7 +495,7 @@ test("the private reader loads only when an attachment opens", () => {
         return { MatterScreen: "MatterScreen" };
       case "../viewer/PrivateDocumentViewer":
         readerLoads += 1;
-        return { PrivateDocumentViewer: "PrivateDocumentViewer" };
+        return loadReader();
       default:
         return {};
     }
@@ -534,11 +534,51 @@ test("the private reader loads only when an attachment opens", () => {
   const readerRoute = find(render(), (node) => node.props?.source === source);
   assert.ok(readerRoute);
   assert.equal(readerLoads, 0);
+  return {
+    source,
+    readerRoute,
+    render,
+    find,
+    readerLoads: () => readerLoads,
+  };
+}
+
+test("the private reader loads only when an attachment opens", () => {
+  const { source, readerRoute, render, find, readerLoads } = readerHarness(
+    () => ({ PrivateDocumentViewer: "PrivateDocumentViewer" }),
+  );
   const reader = readerRoute.type(readerRoute.props);
-  assert.equal(readerLoads, 1);
+  assert.equal(readerLoads(), 1);
   assert.equal(reader.type, "PrivateDocumentViewer");
   assert.equal(reader.props.source, source);
   reader.props.onClose();
   assert.ok(find(render(), (node) => node.type === "MatterScreen"));
-  assert.equal(readerLoads, 1);
+  assert.equal(readerLoads(), 1);
+});
+
+test("a reader that fails to initialise renders an explicit way back instead of throwing", () => {
+  const { readerRoute, render, find, readerLoads } = readerHarness(() => {
+    throw new Error("Synthetic reader initialisation failure");
+  });
+  const unavailable = readerRoute.type(readerRoute.props);
+  assert.equal(unavailable.props.testID, "private-viewer-unavailable");
+  assert.ok(
+    find(
+      unavailable,
+      (node) =>
+        node.props?.accessibilityRole === "alert" &&
+        node.props.children === "Document reader unavailable",
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(unavailable), /Synthetic reader/);
+  // The failed module is not re-evaluated on every render.
+  readerRoute.type(readerRoute.props);
+  assert.equal(readerLoads(), 1);
+  const close = find(
+    unavailable,
+    (node) => node.props?.testID === "private-viewer-close",
+  );
+  assert.equal(close.props.label, "Close");
+  close.props.onPress();
+  assert.ok(find(render(), (node) => node.type === "MatterScreen"));
 });

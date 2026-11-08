@@ -726,11 +726,49 @@ function ApplicationContent({
   );
 }
 
+type PrivateViewerModule = typeof import("../viewer/PrivateDocumentViewer");
+let privateViewer: { module: PrivateViewerModule } | { failed: true } | null =
+  null;
+
+// Metro bundles the renderer and PDF assets without evaluating them at launch.
+// A module that fails to initialise stays failed until the app restarts, so
+// the first failure is kept and the route renders a way back instead of
+// throwing during render.
+function loadPrivateViewer(): PrivateViewerModule | null {
+  if (!privateViewer)
+    try {
+      privateViewer = {
+        module:
+          require("../viewer/PrivateDocumentViewer") as PrivateViewerModule,
+      };
+    } catch {
+      privateViewer = { failed: true };
+    }
+  return "module" in privateViewer ? privateViewer.module : null;
+}
+
 function PrivateViewerRoute(props: PrivateDocumentViewerProps) {
-  // Metro bundles the renderer and PDF assets without evaluating them at launch.
-  const { PrivateDocumentViewer } =
-    require("../viewer/PrivateDocumentViewer") as typeof import("../viewer/PrivateDocumentViewer");
-  return <PrivateDocumentViewer {...props} />;
+  const viewer = loadPrivateViewer();
+  if (viewer) return <viewer.PrivateDocumentViewer {...props} />;
+  return (
+    <View
+      testID="private-viewer-unavailable"
+      style={[styles.content, { flex: 1, justifyContent: "center" }]}
+    >
+      <Text accessibilityRole="alert" style={styles.heading}>
+        Document reader unavailable
+      </Text>
+      <Text style={styles.body}>
+        The document reader could not start. Restart CaseOps, then open the
+        document again.
+      </Text>
+      <NativeButton
+        label="Close"
+        testID="private-viewer-close"
+        onPress={props.onClose}
+      />
+    </View>
+  );
 }
 
 function NativeSourcesButton({ onPress }: { onPress: () => void }) {
