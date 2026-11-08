@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { prepareV1CalendarDeadline, validateV1CalendarReadback } from './v1-calendar-acknowledgements.mjs';
+import { createV1CalendarHostRoutes } from '../../../scripts/mobile/v1-calendar-host-routes.mjs';
 
 const id = n => '01000000-0000-4000-8000-' + String(n).padStart(12, '0');
 const time = '2026-11-08T12:00:00.000000Z';
@@ -194,4 +196,78 @@ test('a serialized proof cannot stand in for a held typed confirmation', () => {
   const f = fixture(), entries = f.entries.map(e => ({ confirmation: confirmed(f.scope, e), memberDocket: e.memberDocket }));
   entries[0].confirmation = JSON.parse(JSON.stringify(entries[0].confirmation));
   assert.throws(() => validateV1CalendarReadback(f.scope, entries, f.calendar), /HELD_CONFIRMATION_REQUIRED/);
+});
+
+const hash = value => createHash('sha256').update(value).digest('hex');
+
+function attempt(scope, { method, route, body }) {
+  return { stage: 'base', actor: 'owner', company: scope.companyId, membership: scope.ownerMembershipId,
+    method, requestTarget: route, bodyBytes: body === undefined ? undefined : Buffer.from(JSON.stringify(body)) };
+}
+
+test('host only claims the exact next Calendar route and bytes from each held predecessor', () => {
+  const { scope, entries, calendar } = fixture();
+  const proofs = entries.map(entry => {
+    const { workspace, link } = entry.parents;
+    const host = createV1CalendarHostRoutes(scope, entry.spec, entry.parents);
+    let predecessor = link.response.requestId, confirmation;
+    for (const ack of [workspace, entry.proposal, entry.confirmation]) {
+      const { method, route, body } = ack.request;
+      assert.deepEqual(host.nextRequest(), { method, route, ...(body === undefined ? {} : { body }) });
+      const current = attempt(scope, ack.request);
+      assert.equal(host.claim({ ...current, stage: 'readthrough' }), null);
+      assert.equal(host.claim({ ...current, actor: 'member' }), null);
+      assert.equal(host.claim({ ...current, company: id(900) }), null);
+      assert.equal(host.claim({ ...current, membership: scope.memberMembershipId }), null);
+      assert.equal(host.claim({ ...current, requestTarget: route + '?variant=wrong' }), null);
+      const wrongBytes = body === undefined ? Buffer.alloc(0) : Buffer.concat([current.bodyBytes, Buffer.from(' ')]);
+      assert.equal(host.claim({ ...current, bodyBytes: wrongBytes }), null);
+      const grant = host.claim(current);
+      assert.deepEqual(grant.provenance, { requestDigest: hash(predecessor),
+        ...(body === undefined ? {} : { bodySha256: hash(current.bodyBytes) }) });
+      assert.equal(host.nextRequest(), undefined);
+      assert.equal(host.claim(current), null);
+      confirmation = grant.acceptResponse(ack.response);
+      assert.throws(() => grant.acceptResponse(ack.response), /ROUTE_ACK_REPLAY_REFUSED/);
+      predecessor = ack.response.requestId;
+    }
+    assert.equal(host.nextRequest(), undefined);
+    return { confirmation, memberDocket: entry.memberDocket };
+  });
+  assert.deepEqual(validateV1CalendarReadback(scope, proofs, calendar).sources.map(source => source.event),
+    entries.map(entry => entry.event));
+});
+
+test('the host cannot create permits from foreign parent ACKs or guessed proposal identities', () => {
+  const { scope, entries: [entry] } = fixture();
+  const parents = structuredClone(entry.parents);
+  parents.link.response.value.docket_id = id(900);
+  assert.throws(() => createV1CalendarHostRoutes(scope, entry.spec, parents), /LINK_DOCKET_MISMATCH/);
+  const host = createV1CalendarHostRoutes(scope, entry.spec, entry.parents);
+  assert.equal(host.claim(attempt(scope, entry.proposal.request)), null);
+  const { workspace } = entry.parents;
+  host.claim(attempt(scope, workspace.request)).acceptResponse(workspace.response);
+  assert.equal(host.claim(attempt(scope, entry.confirmation.request)), null);
+  const proposal = host.claim(attempt(scope, entry.proposal.request));
+  const bad = structuredClone(entry.proposal.response);
+  bad.value.docket_id = id(900);
+  assert.throws(() => proposal.acceptResponse(bad), /DEADLINE_DOCKET_MISMATCH/);
+  assert.equal(host.claim(attempt(scope, entry.proposal.request)), null);
+  assert.equal(host.claim(attempt(scope, entry.confirmation.request)), null);
+});
+
+test('the host leaves a claimed operation closed on absent or stale workspace ACKs', () => {
+  const { scope, entries: [entry] } = fixture();
+  const { workspace } = entry.parents;
+  const current = attempt(scope, workspace.request);
+  const unknown = createV1CalendarHostRoutes(scope, entry.spec, entry.parents);
+  assert.ok(unknown.claim(current));
+  assert.equal(unknown.nextRequest(), undefined);
+  assert.equal(unknown.claim(current), null);
+  const stale = createV1CalendarHostRoutes(scope, entry.spec, entry.parents);
+  const grant = stale.claim(current);
+  const bad = structuredClone(workspace.response);
+  bad.value.rules[0].status = 'retired';
+  assert.throws(() => grant.acceptResponse(bad), /SELECTION_INACTIVE/);
+  assert.equal(stale.claim(attempt(scope, entry.proposal.request)), null);
 });

@@ -149,14 +149,17 @@ function deadlineFacts(value, target, scope) {
   }
 }
 
-/** Derive the two finite owner commands only from the held typed ACK chain. */
-export function prepareV1CalendarDeadline(scopeInput, spec, { creator, matter, link, workspace }) {
+/** Derive the first owner read only from the three held parent ACKs. */
+export function prepareV1CalendarWorkspace(scopeInput, spec, { creator, matter, link }) {
   const scope = scopeOf(scopeInput), { family } = spec;
   assert.ok(Object.hasOwn(creators, family), 'V1_CALENDAR_FAMILY_REQUIRED');
   const baseDate = day(spec.baseDate);
   assert.ok(baseDate <= scope.day, 'V1_CALENDAR_BASE_AFTER_RESULT');
   assert.match(spec.jurisdiction || '', /^[A-Z]{2}$/);
   for (const hash of [spec.ruleSourceHash, spec.calendarSourceHash]) assert.match(hash || '', sourceHash);
+  const ruleVersionId = v1Identity(spec.ruleVersionId), calendarVersionId = v1Identity(spec.calendarVersionId);
+  const selectionSpec = { family, baseDate, ruleVersionId, calendarVersionId, jurisdiction: spec.jurisdiction,
+    ruleSourceHash: spec.ruleSourceHash, calendarSourceHash: spec.calendarSourceHash, title: text(spec.title) };
   const owner = scope.ownerMembershipId;
   const creatorAck = acknowledged(scope, creator, owner, { method: 'POST', route: creators[family].route }, 201);
   const { recordId, docketId } = creatorIdentity(family, creatorAck.value, scope.companyId);
@@ -180,13 +183,34 @@ export function prepareV1CalendarDeadline(scopeInput, spec, { creator, matter, l
   assert.equal(edge.created_by_membership_id, owner, 'V1_CALENDAR_LINK_ACTOR_MISMATCH');
   assert.equal(link.request.body?.matter_id, matterId, 'V1_CALENDAR_LINK_MATTER_MISMATCH');
   assert.equal(link.request.body?.relation_role, 'operational');
-  const workspaceAck = acknowledged(scope, workspace, owner, { method: 'GET', route: prefix + '/deadline-workspace' }, 200);
-  const ruleVersionId = v1Identity(spec.ruleVersionId), calendarVersionId = v1Identity(spec.calendarVersionId);
+  const parentReceipts = [creatorAck.requestId, matterAck.requestId, linkAck.requestId];
+  distinct(parentReceipts, 'V1_CALENDAR_DUPLICATE_ACK');
+  const workspaceRequest = { method: 'GET', route: prefix + '/deadline-workspace' };
+  const target = { recordId, docketId, matterId, matterTitle, matterCode, parentReceipts, prefix };
+  return {
+    workspaceRequest: structuredClone(workspaceRequest),
+    predecessorRequestId: linkAck.requestId,
+    acceptWorkspace(workspace) {
+      const workspaceAck = acknowledged(scope, workspace, owner, workspaceRequest, 200);
+      return prepareV1CalendarProposal(scope, selectionSpec, target, workspaceAck);
+    },
+  };
+}
+
+/** Derive the two finite owner writes only from the held typed ACK chain. */
+export function prepareV1CalendarDeadline(scopeInput, spec, { workspace, ...parents }) {
+  return prepareV1CalendarWorkspace(scopeInput, spec, parents).acceptWorkspace(workspace);
+}
+
+function prepareV1CalendarProposal(scope, spec, parents, workspaceAck) {
+  const { family, ruleVersionId, calendarVersionId, baseDate, title } = spec;
+  const { recordId, docketId, matterId, matterTitle, matterCode, parentReceipts, prefix } = parents;
+  const owner = scope.ownerMembershipId;
   const selection = currentSelection(scope, spec, workspaceAck.value, docketId);
-  const ackIds = [creatorAck.requestId, matterAck.requestId, linkAck.requestId, workspaceAck.requestId];
+  const ackIds = [...parentReceipts, workspaceAck.requestId];
   distinct(ackIds, 'V1_CALENDAR_DUPLICATE_ACK');
   const proposalRequest = { method: 'POST', route: prefix + '/deadlines', body: {
-    title: text(spec.title), rule_version_id: ruleVersionId, calendar_version_id: calendarVersionId,
+    title, rule_version_id: ruleVersionId, calendar_version_id: calendarVersionId,
     base_date: baseDate, base_date_certainty: 'certain', date_precision: 'date', is_critical: false,
   } };
   const target = { docketId, proposalRequest, selection };
