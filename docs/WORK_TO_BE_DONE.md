@@ -5,8 +5,8 @@ The 30-section v2.1 document is evaluated in
 software defects and the Teams membership enhancement are isolated, not
 released. The full 60 proposed scenarios and external legal/provider/quality
 dependencies are not completed by these bounded patches. Local component
-passes, retained browser failures and pending Docker/Claude/production gates
-are explicitly separate. Do not advance main or compete with Claude's prior
+passes, retained browser failures and pending Docker/review/production gates
+are explicitly separate. Do not advance main or compete with the prior
 release closeout; MacBook app work is unchanged.
 
 ## 2026-11-04 — private invalidation assertion ownership

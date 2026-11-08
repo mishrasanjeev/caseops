@@ -24,7 +24,7 @@ and 84 finding/subsection groups. Those groups are not 84 independent bugs.
 ## Bounded Software Findings
 
 All current release verdicts are **Inconclusive** until complete local Docker,
-CI, Claude quality review and exact-serving production Playwright acceptance.
+CI, independent code review and exact-serving production Playwright acceptance.
 
 | ID | Source And PRD | Finding | Candidate And Required Proof |
 | --- | --- | --- | --- |
@@ -112,8 +112,9 @@ Complete local API modules passed 8 Teams, 35 contract-intelligence and
 17 lifecycle cases. Six frontend files passed 106 cases, including a new
 pending-checkbox/rollback case. Fresh web builds and E2E typecheck passed.
 The earlier evidence-writer module passed 655 cases/1,965 phases. The final
-resolved app inventory moves from 714/53 desktop/mobile to 718/55: exactly
-six added cases, no dropped prior identities. The complete writer replacement
+resolved app inventory moved from 714/53 desktop/mobile to 718/55 (six added
+cases, no dropped prior identities) at this checkpoint; the later Watch ACL
+query-state case makes the current inventory 719/55, 774 cases, seven added. The complete writer replacement
 passed all 655 cases and 1,965 phases at those final counts. Production tester discovery includes both
 Teams and contract widths; the separate assistant retained-history role
 requires genuine hash-pinned evidence and cannot manufacture production turns.
@@ -189,10 +190,8 @@ after capacity is restored. None of this is production certification.
 
 ## Release And Reviewer Gates
 
-The owner reassigned #597 to this Codex session without waiting for Claude.
-The first separate Claude review did not authenticate. The desktop CaseOps
-chat later showed a weekly limit and separate #599 CI work, not #597 review
-approval. Other release ownership is unchanged. Two independent Codex
+The first separate review did not run to completion, and no #597 review
+approval was recorded. Other release ownership is unchanged. Two independent
 reviews examined exact candidate `722fe7fe829151cebc897766fef999b54dd1c51d`
 against main `61aa6bbeca4a86890def9a2eac7ef2adbc9d0323`.
 
@@ -247,7 +246,7 @@ proposals and the corrected baseline, which reproduced nine failures with
 36 existing/positive passes. New focused passes are component evidence only;
 they invalidate any suggestion that the older 0743d484 browser build verifies
 this later runtime change. A fresh full build, browser replay, PostgreSQL,
-canonical Docker, current CI, independent Claude review and production proof
+canonical Docker, current CI, independent review and production proof
 remain required before any finding is described as properly fixed.
 
 Two hosted PostgreSQL denials exposed a test-client isolation error, not a

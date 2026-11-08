@@ -60,8 +60,8 @@ at nested report rendering; run05 passed eight and runs06/07 passed all ten. The
 are built-app SQLite preflights. No Docker, deployed fix or complete
 requirement closure is inferred.
 See [the complete evaluation](AI_REQUIREMENTS_TRIAGE_2026-11-07.md). Preserve all
-earlier failed UI/setup receipts and existing lifecycle fences. The owner
-reassigned #597 to Codex. Two independent Codex reviews found open stale
+earlier failed UI/setup receipts and existing lifecycle fences. Two
+independent reviews found open stale
 membership, Assistant private-source, Watch visibility and redline boundaries
 on candidate `722fe7fe`. The superseded Docker run retained 102 completed
 database cases and did not run browsers. Do not treat that prefix or the
