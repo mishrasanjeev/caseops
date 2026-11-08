@@ -8,7 +8,18 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import BigInteger, cast, column, literal, null, select, true, tuple_, values
+from sqlalchemy import (
+    BigInteger,
+    cast,
+    column,
+    literal,
+    literal_column,
+    null,
+    select,
+    true,
+    tuple_,
+    values,
+)
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.util import ClauseAdapter
 
@@ -661,19 +672,24 @@ def list_patent_families(
             column("version", IpPatentFamilyVersion.__table__.c.version.type),
             name="admitted_patent_disclosure_keys",
         ).data(version_keys)
-        # The complete unique key stays inside the per-key barrier. A range
-        # with an unknown generic LIMIT can scan/sort an entire tenant per key.
+        key_columns = (
+            IpPatentFamilyVersion.family_id,
+            IpPatentFamilyVersion.version,
+        )
+        indexed_key = tuple_(*key_columns)
+        admitted_key = tuple_(wanted_versions.c.family_id, wanted_versions.c.version)
+        # Fix the tenant and bound both ends of the admitted key. Ordering
+        # only the suffix gives the company-only indexes no useful sort prefix.
         picked_version = (
             select(IpPatentFamilyVersion)
             .where(
-                # Keep this tenant runtime-bound too: fresh skewed statistics
-                # can favor a company-only index for every admitted version.
                 IpPatentFamilyVersion.company_id == company_key,
-                IpPatentFamilyVersion.family_id == wanted_versions.c.family_id,
-                IpPatentFamilyVersion.version == wanted_versions.c.version,
+                indexed_key >= admitted_key,
+                indexed_key <= admitted_key,
             )
+            .order_by(*key_columns)
             .correlate(wanted_versions)
-            .limit(1)
+            .limit(literal_column("1"))
             .lateral("admitted_patent_disclosure_row")
         )
         hydrated_version = aliased(IpPatentFamilyVersion, picked_version)

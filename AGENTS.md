@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A per-key LIMIT does not bound PostgreSQL index work when the plan scans
+  a tenant prefix and filters the rest of the key. Retain actual first-page
+  and cursor plans under stale/fresh statistics and custom/generic/auto
+  preparation. Keep exact authorized keys, ordered composite index bounds
+  and a fixed SQL limit; prove misses never hydrate a successor.
+
 - An undated portfolio import row cannot schedule a source-date reminder.
   Preserve the locked docket write check, then skip current-version and
   source-provenance hydration for the absent date only. Dated and corrected

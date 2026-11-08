@@ -1,5 +1,26 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 Patent Disclosure Physical Work
+
+**Inconclusive; deployment held.** IPLF-090A/UJ-02/NFT-005 and J14/M14.
+Exact #597 Docker06 at `2f81e6be` recorded one stale mixed-tenant
+statistics failure after 1,383 passing native cases. The family-page
+admission/readback completed, but current disclosure hydration charged
+482,401 first-page and 487,001 cursor units vs the unchanged <50,000
+bound. Plans used the registry index's company prefix in 100 loops,
+removing 4,819 or 4,865 rows by filter per loop. This is measured work,
+not an elapsed-time or threshold issue. Keep the interrupted suffix
+and full failed plans; the Docker browser stage did not run.
+
+The candidate fixes the tenant and both bounds of the admitted
+`(family_id, version)` suffix in the lateral lookup. It orders only
+the suffix and uses a fixed SQL one-row limit, with all three exact
+outer checks, current ACL/lifecycle/source guards and SQLite unchanged.
+No index, migration, optimizer setting, plan threshold or retry change.
+The existing full native patent suite must prove the observed variant,
+all competing modes and successor denial. Full Docker, hosted CI,
+canonical deploy and exact-serving proof remain separate.
+
 ## November 8 Portfolio Import Resume Gate
 
 **Inconclusive; production not changed.** IPLF-032/UJ-02/NFT-005
