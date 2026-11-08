@@ -11,9 +11,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { OBSERVER_IDENTITY, attestAndroidFilesContainers } from './android-files-privacy.mjs';
 import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
-import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
+import { attestAndroidBinary, attestLocalQAAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
-import { validateBuildReceipt, validateCoreFixture, admitApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { validateBuildReceipt, validateCoreFixture, admitApplication, admitLocalQAApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { binaryHash, localJson, Journal, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
@@ -42,13 +42,22 @@ export function v1HarnessFingerprint(root = ROOT) {
 const toolEnvironment = environment => Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'DEVELOPER_DIR', 'SYSTEMROOT', 'TEMP', 'TMPDIR',
   'ANDROID_USER_HOME', 'ADB_SERVER_SOCKET', 'ANDROID_ADB_SERVER_PORT', 'ANDROID_SERIAL', 'CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'].filter(k => typeof environment[k] === 'string').map(k => [k, environment[k]]));
 export function observeInstalled(fixture, platform, expectedHash, environment) {
+  return observeInstalledApplication(fixture, platform, expectedHash, environment, attestAndroidBinary);
+}
+
+export function observeLocalQAInstalled(fixture, platform, expectedHash, environment) {
+  admitLocalQAApplication(fixture, platform);
+  return observeInstalledApplication(fixture, platform, expectedHash, environment, attestLocalQAAndroidBinary);
+}
+
+function observeInstalledApplication(fixture, platform, expectedHash, environment, attestAndroid) {
   const tools = toolEnvironment(environment);
   if (platform === 'android' && tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE !== undefined) {
     assert.equal(tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE, fixture.androidTransport?.transportMode ?? 'emulator', 'V1_ANDROID_TRANSPORT_MODE_MISMATCH');
   }
   const command = (file, args, options) => execFileSync(file, args, { ...options, env: tools });
   if (platform === 'android') {
-    const installed = attestAndroidBinary(fixture, expectedHash, { install: false, command });
+    const installed = attestAndroid(fixture, expectedHash, { install: false, command });
     const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, privacyObserver: fixture.privacyObserverEvidence, command, environment: tools });
     let layout;
     if (containers.transportMode === 'usb-reverse') {

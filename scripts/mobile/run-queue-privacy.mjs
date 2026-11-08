@@ -6,15 +6,15 @@ import os from 'node:os';
 import { createHash,randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { QP,requireRequest,validateDataset,collectQP,readReference,readBytes,reference ,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
+import { QP,requireRequest,validateDataset,collectQP,readReference,readBytes,reference,identity,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { queuePrivacyScenarios } from '../../apps/mobile/e2e/queue-privacy.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
-import { observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
+import { observeLocalQAInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
-import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
+import { authenticate, browserOrigin } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { find,visible,selector,dispatchNativeClick } from '../../apps/mobile/e2e/native-ui.mjs';
-import { validateBuildReceipt,validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { Journal,binaryHash,localJson,reconcileResults,safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { validateFixtureCredentials, validateLocalQAActor, validateLocalQABuildReceipt } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { Journal,binaryHash,localJson,localUrl,reconcileResults,safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline,validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { appiumSessionEvent,configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 import { androidSessionTransport,verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
@@ -32,10 +32,63 @@ export function pendingQPRequest(){return{schemaVersion:1,inventoryId:QP.invento
  expectedSourceSha:null,expectedSourceFingerprint:null,expectedInputFileCount:null,expectedBinaryHash:null,expectedHarnessFingerprint:null,
  fixtureEvidence:null,buildReceipt:null,dockerReceipt:null,deviceEvidence:null,installedEvidence:null,producerEvidence:null,controlsEvidence:null,codeClosure:null,
  members:[{fixtureEvidence:null,credentialEvidence:null,authObservation:null},{fixtureEvidence:null,credentialEvidence:null,authObservation:null}],reportRoot:null};}
+function validateQPOrigins(fixture, isolation, environment) {
+ for (const key of ['gatewayUrl', 'webGatewayUrl']) {
+  const url = localUrl(isolation[key]);
+  assert.equal(url.protocol, 'https:', 'QP_STRICT_GATEWAY_TLS_REQUIRED');
+  assert.equal(url.origin, isolation[key], 'QP_EXACT_GATEWAY_ORIGIN_REQUIRED');
+  assert.equal(fixture[key], isolation[key], 'QP_ACTOR_GATEWAY_ORIGIN_CHANGED');
+ }
+ for (const [field, expected] of [[fixture.apiOrigin, isolation.apiOrigin], [fixture.auth?.webOrigin, isolation.webOrigin]]) {
+  assert.equal(browserOrigin(field), expected, 'QP_EXACT_MOBILE_ORIGIN_REQUIRED');
+  assert.equal(field, expected, 'QP_EXACT_MOBILE_ORIGIN_REQUIRED');
+ }
+ assert.equal(fixture.gatewayRunId, isolation.gatewayRunId, 'QP_ACTOR_GATEWAY_RUN_CHANGED');
+ assert.notEqual(environment.NODE_TLS_REJECT_UNAUTHORIZED, '0');
+ assert.equal(environment.NODE_EXTRA_CA_CERTS, isolation.publicCA);
+ assert.equal(fixture.publicCa?.path, isolation.publicCA, 'QP_PUBLIC_CA_CHANGED');
+ assert.equal(isolation.tlsProof?.strictDefaultTLS, true, 'QP_STRICT_GATEWAY_TLS_REQUIRED');
+ assert.equal(isolation.tlsProof?.verificationDisabled, false, 'QP_STRICT_GATEWAY_TLS_REQUIRED');
+}
+
+function validateQPPublicActor(f, auth, { fixture, actor, source, isolation, request }) {
+ for (const key of ['backendSha', 'webSha', 'binarySourceSha']) assert.equal(f[key], source.sourceSha);
+ assert.equal(f.binarySourceFingerprint, source.sourceFingerprint);
+ for (const key of ['appId', 'appPath', 'udid', 'deviceName', 'platformVersion', 'apiOrigin', 'gatewayUrl', 'webGatewayUrl',
+  'gatewayRunId', 'publicCa', 'androidTransport']) assert.deepEqual(f[key], fixture[key], 'QP_ACTOR_BINARY_DEVICE_ORIGIN_CHANGED');
+ assert.equal(f.auth?.webOrigin, fixture.auth?.webOrigin, 'QP_ACTOR_BROWSER_ORIGIN_CHANGED');
+ assert.equal(f.auth.mfaRequired, true, 'QP_ACTOR_MFA_REQUIRED');
+ assert.match(f.auth.companySlug || '', /^[a-z0-9-]{2,80}$/, 'FIXTURE_WORKSPACE_SLUG_REQUIRED');
+ if (request.platform === 'ios') assert.equal(typeof f.auth.iosConsent, 'boolean', 'EXPLICIT_OBSERVED_IOS_CONSENT_REQUIRED');
+ for (const key of ['principalLabel', 'workspaceLabel', 'deviceName', 'platformVersion']) {
+  assert.ok(typeof f[key] === 'string' && f[key].trim() && f[key].length <= 4000, 'QP_ACTUAL_ACTOR_AND_DEVICE_LABELS_REQUIRED');
+ }
+ assert.deepEqual(f.buildReceipt, request.buildReceipt); assert.deepEqual(f.isolationEvidence, request.dockerReceipt);
+ assert.equal(f.membershipId, identity(actor.membershipId), 'QP_ACTOR_MEMBERSHIP_CHANGED');
+ assert.equal(f.companyId, identity(actor.companyId), 'QP_ACTOR_COMPANY_CHANGED');
+ const userId=identity(actor.userId);
+ if (f.userId !== undefined) assert.equal(f.userId, userId, 'QP_ACTOR_USER_CHANGED');
+ validateLocalQAActor(f, isolation);
+ for (const key of ['observed', 'nativePrincipalVerified', 'nativeWorkspaceVerified', 'pkceUnchanged', 'logoutAcknowledged']) assert.equal(auth[key], true, 'QP_ACTUAL_BROWSER_AUTH_OBSERVATION_REQUIRED');
+ assert.equal(auth.sessionCleanup, 'passed'); assert.equal(auth.udid, f.udid); assert.equal(auth.membershipId, f.membershipId);
+ assert.equal(auth.binaryHash, request.expectedBinaryHash);
+ const appIds=['appId','bundleId'].filter(key=>Object.hasOwn(auth,key));
+ assert.ok(appIds.length>0,'QP_AUTH_APP_ID_REQUIRED');
+ for(const key of appIds)assert.equal(auth[key],f.appId,'QP_AUTH_APP_ID_CHANGED');
+ for (const key of ['principalLabel', 'workspaceLabel', 'companyId', 'userId']) {
+  if (auth[key] !== undefined) assert.equal(auth[key], key === 'userId' ? userId : f[key], 'QP_AUTH_ACTOR_CHANGED');
+ }
+ if (auth.platform !== undefined) assert.equal(auth.platform, request.platform);
+ if (auth.mode !== undefined) assert.equal(auth.mode, f.auth.mode);
+ if (auth.webOrigin !== undefined) assert.equal(auth.webOrigin, f.auth.webOrigin);
+ assert.deepEqual(auth.importedSource, source); assert.deepEqual(auth.buildReceipt, request.buildReceipt); assert.deepEqual(auth.dockerReceipt, request.dockerReceipt);
+ assert.equal(auth.mfaStage, f.auth.mfaStage); assert.equal(auth.iosConsent, f.auth.iosConsent);
+}
+
 export async function admitQPBeforeMembers(q,dependencies={}){
  requireRequest(q);assert.equal(q.profile,QP.profile);assert.equal(q.repoRoot,ROOT);
- const io={read:readReference,bytes:readBytes,snapshot:sourceSnapshot,installed:observeInstalled,getJson:localJson,reader:readV1Member,
- artifactHash:binaryHash,buildCheck:validateBuildReceipt,coreCheck:validateCoreFixture,environment:process.env,harness:qpHarnessFingerprint,inputs:qpInputPaths,...dependencies};
+ const io={read:readReference,bytes:readBytes,snapshot:sourceSnapshot,installed:observeLocalQAInstalled,getJson:localJson,reader:readV1Member,
+ artifactHash:binaryHash,buildCheck:validateLocalQABuildReceipt,environment:process.env,harness:qpHarnessFingerprint,inputs:qpInputPaths,...dependencies};
  for(const key of['fixtureEvidence','buildReceipt','dockerReceipt','deviceEvidence','installedEvidence','producerEvidence','controlsEvidence','codeClosure'])reference(q[key]);
  assert.equal(q.members.length,2);for(const m of q.members)v1PrivateReference(m.credentialEvidence);for(const m of q.members)for(const key of['fixtureEvidence','credentialEvidence','authObservation'])reference(m[key]);
  const fixture=io.read(q.fixtureEvidence),build=io.read(q.buildReceipt),isolation=io.read(q.dockerReceipt),device=io.read(q.deviceEvidence),installed=io.read(q.installedEvidence),dataset=io.read(q.producerEvidence),controls=io.read(q.controlsEvidence);
@@ -68,20 +121,16 @@ export async function admitQPBeforeMembers(q,dependencies={}){
  for(const actor of Object.values(registration.actors))for(const key of ['userId','membershipId','companyId'])assert.ok(registration.syntheticIds.includes(actor[key]),'QP_COMPLETE_ACTOR_CONTROL_IDENTITIES_REQUIRED');
  for(const t of dataset.tasks)assert.ok(registration.syntheticIds.includes(t.id)&&registration.syntheticIds.includes(t.matter.id));
  assert.equal(registration.actors.member.userId,dataset.memberUserId);assert.equal(registration.actors['second-company'].userId,dataset.secondUserId);
- assert.notEqual(io.environment.NODE_TLS_REJECT_UNAUTHORIZED,'0');assert.equal(io.environment.NODE_EXTRA_CA_CERTS,isolation.publicCA);
+ validateQPOrigins(fixture,isolation,io.environment);reference(fixture.publicCa);io.bytes(fixture.publicCa);
  assert.equal(device.observed,true);assert.equal(device.udid,fixture.udid);assert.equal(device.platform,q.platform);assert.deepEqual(device.buildReceipt,q.buildReceipt);
  const actual=io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment);assert.equal(actual.udid,fixture.udid);assert.equal(actual.appId,fixture.appId);assert.equal(actual.binaryHash,q.expectedBinaryHash);
  assert.equal(installed.udid,actual.udid);assert.equal(installed.binaryHash??installed.installedApkSha256,actual.binaryHash);assert.deepEqual(installed.buildReceipt,q.buildReceipt);
  if(q.platform==='android')validateAndroidLayoutEvidence(fixture,actual,device,installed);else assert.equal(actual.deviceTypeIdentifier,device.deviceTypeIdentifier);
  if(installed.appDataPath)assert.equal(actual.appDataPath,installed.appDataPath);
  const publics=q.members.map((m,i)=>{
-  const f=io.read(m.fixtureEvidence),auth=io.read(m.authObservation),actor=registration.actors[i?'second-company':'member'];
-  for(const key of['backendSha','webSha','binarySourceSha'])assert.equal(f[key],source.sourceSha);
-  assert.equal(f.binarySourceFingerprint,source.sourceFingerprint);assert.equal(f.udid,fixture.udid);assert.equal(f.appId,fixture.appId);assert.equal(f.auth.mfaRequired,true);
-  assert.deepEqual(f.buildReceipt,q.buildReceipt);assert.deepEqual(f.isolationEvidence,q.dockerReceipt);assert.equal(f.membershipId,actor.membershipId);assert.equal(f.companyId,actor.companyId);assert.deepEqual(m.credentialEvidence,controls.actorCredentialMappings[i?'second-company':'member'].hostEvidence);
-  for(const key of['observed','nativePrincipalVerified','nativeWorkspaceVerified','pkceUnchanged','logoutAcknowledged'])assert.equal(auth[key],true);
-  assert.equal(auth.sessionCleanup,'passed');assert.equal(auth.udid,f.udid);assert.equal(auth.bundleId,f.appId);assert.equal(auth.membershipId,f.membershipId);assert.equal(auth.binaryHash,q.expectedBinaryHash);
-  assert.deepEqual(auth.importedSource,source);assert.deepEqual(auth.buildReceipt,q.buildReceipt);assert.deepEqual(auth.dockerReceipt,q.dockerReceipt);assert.equal(auth.mfaStage,f.auth.mfaStage);assert.equal(auth.iosConsent,f.auth.iosConsent);
+  const f=io.read(m.fixtureEvidence),auth=io.read(m.authObservation),name=i?'second-company':'member';
+  validateQPPublicActor(f,auth,{fixture,actor:registration.actors[name],source,isolation,request:q});
+  assert.deepEqual(m.credentialEvidence,controls.actorCredentialMappings[name].hostEvidence);
   return{entry:m,fixture:f};});
  assert.notEqual(publics[0].fixture.companyId,publics[1].fixture.companyId);assert.equal(publics[0].fixture.membershipId,fixture.membershipId);
  const names=publics.flatMap(x=>['emailEnv','passwordEnv','totpSecretEnv'].map(k=>x.fixture.auth[k]));assert.equal(new Set(names).size,6);for(const name of names)assert.match(name,/^CASEOPS_MOBILE_[A-Z0-9_]+$/);
@@ -93,12 +142,15 @@ export async function admitQPBeforeMembers(q,dependencies={}){
   const api=await io.getJson(isolation.gatewayUrl+'/api/build'),web=await io.getJson(isolation.webGatewayUrl+'/api/release-identity');assert.equal(api.release_sha,source.sourceSha);assert.equal(api.revision,isolation.backendRevision);assert.equal(web.release_sha,source.sourceSha);assert.equal(web.revision,isolation.webRevision);
   const status=await io.getJson(isolation.gatewayUrl+'/__caseops_e2e/status');assert.equal(status.runId,isolation.gatewayRunId);assert.equal(status.v1ControlsEnabled,true);assert.equal(status.v1ControlProfile,QP.profile);
   assert.equal(status.v1ControlsImplementationSha256,controls.gatewayImplementationEvidence.sha256);assert.equal(status.v1RegistrationSha256,controls.registrationEvidence.sha256);
-  const loaded=io.reader(p.entry.credentialEvidence.path);let value;try{
+  const loaded=io.reader(p.entry.credentialEvidence.path);let value,transferred=false;try{
    assert.equal(loaded.sha256,p.entry.credentialEvidence.sha256);assert.equal(loaded.uid,p.entry.credentialEvidence.uid);value=loaded.value;assert.equal(value.full_name,p.fixture.principalLabel);assert.equal(value.company_slug,p.fixture.auth.companySlug);
    const environment={...io.environment};for(const[key,field]of[['emailEnv','email'],['passwordEnv','password'],['totpSecretEnv','totp_secret']]){assert.ok(typeof value[field]==='string'&&value[field]);environment[p.fixture.auth[key]]=value[field];}
-   try{io.coreCheck(p.fixture,environment);}finally{for(const key of['emailEnv','passwordEnv','totpSecretEnv'])delete environment[p.fixture.auth[key]];}
-   members.push({fixture:p.fixture,value});
-  }finally{loaded.bytes.fill(0);}
+   try{validateFixtureCredentials(p.fixture,environment);}finally{for(const key of['emailEnv','passwordEnv','totpSecretEnv'])delete environment[p.fixture.auth[key]];}
+   members.push({fixture:p.fixture,value});transferred=true;
+  }finally{
+   loaded.bytes.fill(0);
+   if(!transferred&&loaded.value)for(const key of Object.keys(loaded.value))loaded.value[key]=undefined;
+  }
  }}catch(error){for(const m of members){for(const key of Object.keys(m.value||{}))m.value[key]=undefined;m.value=undefined;}throw error;}
  return{fixture,isolation,source,actual,members,controls,publicAdmission:{source,installed:actual,beforeMemberRead:true}};
 }
@@ -122,7 +174,7 @@ export async function runQueuePrivacy(q){
   for(const scenario of queuePrivacyScenarios){const id=q.platform+':'+scenario.id;let driver,c,setup=false,requested=false;let sessionId;
    journal.write({type:'phase_started',id,phase:'setup'});
    try{
-    assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
+    assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeLocalQAInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
     const f=a.members[0].fixture;requested=true;driver=await remote({hostname:url.hostname,port:Number(url.port)||4723,protocol:url.protocol.slice(0,-1),path:url.pathname,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:60000,
      capabilities:{platformName:q.platform==='ios'?'iOS':'Android','appium:automationName':q.platform==='ios'?'XCUITest':'UiAutomator2','appium:udid':f.udid,'appium:deviceName':f.deviceName,'appium:platformVersion':f.platformVersion,'appium:noReset':true,'appium:newCommandTimeout':60,...transport.capabilities,
       ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})}});
@@ -138,7 +190,7 @@ export async function runQueuePrivacy(q){
    else if(requested)clean=false;
    cleanupUncertain||=!clean;journal.write({type:'qp_case_budget',id,nativeControls:c?.nativeOperations,logicalControlCalls:c?.controlCalls,actualTransport:controls.publicState()});journal.write({type:'phase_result',id,phase:'teardown',status:clean?'passed':'failed'});
   }
-  assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
+  assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeLocalQAInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
   const after=await localJson(a.isolation.gatewayUrl+'/__caseops_e2e/status');validateTraffic(after,baseline);fs.writeFileSync(path.join(report,'gateway-after.json'),JSON.stringify(after,null,2)+'\n',{flag:'wx',mode:0o600});
   for(const[url,revision]of[[a.isolation.gatewayUrl+'/api/build',a.isolation.backendRevision],[a.isolation.webGatewayUrl+'/api/release-identity',a.isolation.webRevision]]){const value=await localJson(url);assert.equal(value.release_sha,a.source.sourceSha);assert.equal(value.revision,revision);}
   postflight={type:'postflight_result',status:'passed'};

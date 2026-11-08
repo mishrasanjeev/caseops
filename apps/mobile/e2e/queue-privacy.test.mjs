@@ -1,5 +1,7 @@
 import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
+import { validateBuildReceipt, validateCoreFixture } from './fixture-contract.mjs';
+import { attestAndroidBinary, attestLocalQAAndroidBinary } from './installed-android.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -62,16 +64,31 @@ async function admissionDouble(){
  const p=producerDouble(),dataset=await p.run(),q={...pendingQPRequest(),readyForLive:true,preparedOnly:false,platform:'ios',repoRoot:ROOT,expectedSourceSha:'a'.repeat(40),expectedSourceFingerprint:'b'.repeat(64),expectedInputFileCount:151,expectedBinaryHash:'c'.repeat(64),expectedHarnessFingerprint:'d'.repeat(64)};
  const map=new Map(),r=(key,value)=>{const ref={path:'/synthetic/'+key,sha256:'e'.repeat(64)};map.set(ref.path,value);return ref;};
  const source={sourceSha:q.expectedSourceSha,sourceFingerprint:q.expectedSourceFingerprint,inputFileCount:151,sourceDirty:false};
- const isolation={backendSha:source.sourceSha,webSha:source.sourceSha,environment:'docker-integration',syntheticDataOnly:true,project:'owned',gatewayRunId:dataset.runId,gatewayUrl:'https://127.0.0.1:8443',webGatewayUrl:'https://127.0.0.1:3443',backendRevision:'api',webRevision:'web',publicCA:'/synthetic/ca'};
- q.dockerReceipt=r('receipt',isolation);q.buildReceipt=r('build',{...source,binaryHash:q.expectedBinaryHash,artifact:'/synthetic/app'});q.producerEvidence=r('producer',dataset);
+ const isolation={backendSha:source.sourceSha,webSha:source.sourceSha,environment:'docker-integration',syntheticDataOnly:true,project:'owned',gatewayRunId:dataset.runId,gatewayUrl:'https://127.0.0.1:8443',webGatewayUrl:'https://127.0.0.1:3443',backendRevision:'api',webRevision:'web',publicCA:'/synthetic/ca',
+  apiOrigin:'https://127.0.0.1:8443',webOrigin:'https://127.0.0.1:3443',webIdentity:{service:'web',release_sha:source.sourceSha,revision:'web'},
+  webAcceptanceMarkerBuild:true,productionAccessed:false,metroLaunched:false,tlsProof:{strictDefaultTLS:true,verificationDisabled:false},
+  containers:['api','web','postgres'].map(service=>({name:'/owned-'+service+'-1',project:'owned',image:'sha256:'+'c'.repeat(64),networks:['owned']}))};
+ q.dockerReceipt=r('receipt',isolation);q.producerEvidence=r('producer',dataset);
+ const writeEvidence=(file,value)=>{const bytes=Buffer.from(JSON.stringify(value));fs.writeFileSync(file,bytes,{flag:'wx',mode:0o600});const reference={path:file,sha256:hash(bytes)};map.set(file,value);return reference;};
+ const publicRoot=path.dirname(p.plan.privatePeerFiles[0]);
+ const signingEvidence=writeEvidence(path.join(publicRoot,'signing-evidence.json'),{kind:'synthetic-unit-signing-evidence'});
  const installed={udid:id(80),appId:'ai.caseops.mobile.dev.simulatoracceptance',binaryHash:q.expectedBinaryHash,deviceTypeIdentifier:'com.apple.CoreSimulator.SimDeviceType.iPhone-17',appDataPath:'/synthetic/container'};
+ const applicationIdentifier='CASEOPSUNIT.'+installed.appId;
+ q.buildReceipt=writeEvidence(path.join(publicRoot,'build-evidence.json'),{...source,binaryHash:q.expectedBinaryHash,artifact:'/synthetic/CaseOps.app',
+  platform:'ios',profile:'ios-simulator-acceptance',appId:installed.appId,automatedTest:true,devEnabled:false,apiOrigin:isolation.apiOrigin,webOrigin:isolation.webOrigin,
+  iosSigning:{kind:'ios-simulator-ad-hoc-signing',appId:installed.appId,strictVerified:true,signingIdentity:'-',distributionSigning:false,
+   nativeExecution:'not-run-by-signing-verifier',artifactSha256:q.expectedBinaryHash,entitlementsLocation:'Mach-O __TEXT,__entitlements',applicationIdentifier,
+   keychainAccessGroups:[applicationIdentifier],slices:[{architecture:'arm64',applicationIdentifier,keychainAccessGroups:[applicationIdentifier]}],evidence:[signingEvidence]}});
  q.installedEvidence=r('installed',{...installed,buildReceipt:q.buildReceipt});q.deviceEvidence=r('device',{...installed,observed:true,platform:'ios',buildReceipt:q.buildReceipt});
  const fixture=(i)=>({environment:'docker-integration',syntheticDataOnly:true,binarySourceSha:source.sourceSha,binarySourceFingerprint:source.sourceFingerprint,backendSha:source.sourceSha,webSha:source.sourceSha,
-  appId:installed.appId,udid:installed.udid,membershipId:i?id(40):id(2),companyId:i?id(41):id(1),principalLabel:'Synthetic '+i,buildReceipt:q.buildReceipt,isolationEvidence:q.dockerReceipt,
-  auth:{mfaRequired:true,mode:'web-context',iosConsent:false,mfaStage:'consent',companySlug:'synthetic-'+i,emailEnv:'CASEOPS_MOBILE_QP_EMAIL_'+i,passwordEnv:'CASEOPS_MOBILE_QP_PASSWORD_'+i,totpSecretEnv:'CASEOPS_MOBILE_QP_TOTP_'+i},
-  publicCa:{path:isolation.publicCA}});
+  appId:installed.appId,appPath:'/synthetic/CaseOps.app',udid:installed.udid,deviceName:'Synthetic iPhone',platformVersion:'26.5',
+  membershipId:i?id(40):id(2),companyId:i?id(41):id(1),principalLabel:'Synthetic '+i,workspaceLabel:'Synthetic firm '+i,
+  buildReceipt:q.buildReceipt,isolationEvidence:q.dockerReceipt,backendRevision:isolation.backendRevision,webRevision:isolation.webRevision,
+  gatewayRunId:isolation.gatewayRunId,gatewayUrl:isolation.gatewayUrl,webGatewayUrl:isolation.webGatewayUrl,apiOrigin:isolation.apiOrigin,browserApiMarkerVerified:true,
+  auth:{webOrigin:isolation.webOrigin,mfaRequired:true,mode:'web-context',iosConsent:false,mfaStage:'consent',companySlug:'synthetic-'+i,emailEnv:'CASEOPS_MOBILE_QP_EMAIL_'+i,passwordEnv:'CASEOPS_MOBILE_QP_PASSWORD_'+i,totpSecretEnv:'CASEOPS_MOBILE_QP_TOTP_'+i},
+  publicCa:{path:isolation.publicCA,sha256:'e'.repeat(64)}});
  const first=fixture(0),second=fixture(1),selectors={observed:true,udid:installed.udid,buildReceipt:q.buildReceipt};first.qp={inventoryId:QP.inventoryId,dataset,nativeSelectors:selectors};q.fixtureEvidence=r('fixture',first);
- const credentials=[];q.members=[first,second].map((f,i)=>{const credentialEvidence={path:'/synthetic/private'+i,sha256:'e'.repeat(64),uid:process.getuid()};const bytes=Buffer.from('synthetic private');const value={full_name:f.principalLabel,company_slug:f.auth.companySlug,email:'synthetic-'+i+'@example.invalid',password:'SYNTHETIC_ONLY',totp_secret:'SYNTHETIC_ONLY'};credentials.push({path:credentialEvidence.path,bytes,value});
+ const credentials=[];q.members=[first,second].map((f,i)=>{const credentialEvidence={path:'/synthetic/private'+i,sha256:'e'.repeat(64),uid:process.getuid()};const bytes=Buffer.from('synthetic private');const value={full_name:f.principalLabel,company_slug:f.auth.companySlug,email:'synthetic-'+i+'@example.invalid',password:'SYNTHETIC_ONLY',totp_secret:'JBSWY3DPEHPK3PXP'};credentials.push({path:credentialEvidence.path,bytes,value});
   const auth={observed:true,nativePrincipalVerified:true,nativeWorkspaceVerified:true,pkceUnchanged:true,logoutAcknowledged:true,sessionCleanup:'passed',udid:f.udid,bundleId:f.appId,membershipId:f.membershipId,binaryHash:q.expectedBinaryHash,importedSource:source,buildReceipt:q.buildReceipt,dockerReceipt:q.dockerReceipt,mfaStage:f.auth.mfaStage,iosConsent:f.auth.iosConsent};
   return{fixtureEvidence:r('member'+i,f),credentialEvidence,authObservation:r('auth'+i,auth)};});
  const authorityEvidence={path:'/synthetic/authority',sha256:'e'.repeat(64),uid:process.getuid()};
@@ -87,10 +104,10 @@ async function admissionDouble(){
  controls.credentialMountEvidence=r('mount',{kind:'actual-native-client-cache-mount-metadata',observed:true,project:isolation.project,runId:isolation.gatewayRunId,hostRoot:'/synthetic',containerRoot:'/fixture-state',containerEffectiveUid:0,files:privateRefs.map(hostEvidence=>({hostEvidence,containerUid:0}))});
  q.controlsEvidence=r('controls',controls);q.codeClosure=r('closure',{code});const calls=[];
  const io={read:x=>{calls.push('read:'+x.path);assert.ok(map.has(x.path));return map.get(x.path);},bytes:x=>calls.push('code:'+x.path),snapshot:()=>source,inputs:()=>code.map(x=>path.relative(ROOT,x.path)).sort(),harness:()=>q.expectedHarnessFingerprint,
-  installed:()=>installed,artifactHash:()=>q.expectedBinaryHash,buildCheck:()=>calls.push('signed-build-check'),coreCheck:(_f,environment)=>{assert.ok(Object.values(environment).includes('SYNTHETIC_ONLY'));calls.push('core-check');},environment:{NODE_EXTRA_CA_CERTS:isolation.publicCA},
+  installed:()=>installed,artifactHash:()=>q.expectedBinaryHash,environment:{NODE_EXTRA_CA_CERTS:isolation.publicCA},
   getJson:async url=>{calls.push('endpoint:'+url);if(url.endsWith('/api/build'))return{release_sha:source.sourceSha,revision:'api'};if(url.endsWith('/api/release-identity'))return{release_sha:source.sourceSha,revision:'web'};return{runId:isolation.gatewayRunId,v1ControlsEnabled:true,v1ControlProfile:QP.profile,v1ControlsImplementationSha256:'e'.repeat(64),v1RegistrationSha256:controls.registrationEvidence.sha256};},
   reader:file=>{calls.push('PRIVATE:'+file);const c=credentials.find(x=>x.path===file);return{bytes:c.bytes,value:c.value,sha256:'e'.repeat(64),uid:process.getuid()};}};
- return{q,io,map,source,first,second,dataset,controls,registration,credentials,calls,run:()=>admitQPBeforeMembers(q,io),close:p.close};
+ return{q,io,map,source,first,second,dataset,controls,registration,credentials,calls,writeEvidence,publicRoot,run:()=>admitQPBeforeMembers(q,io),close:p.close};
 }
 test('literal independent two-case inventory and original17 budgets remain separate',()=>{for(const platform of['android','ios']){const c=collectQueuePrivacy(platform);assert.deepEqual(c.intended,[platform+':QUEUE-01',platform+':PRIVACY-01']);assert.equal(c.expectedPhases,6);assert.equal(c.expectedSessions,2);}assert.equal(QP.totalControls,49);assert.equal(Object.values(QP_CALL_INVENTORY['QUEUE-01']).reduce((a,b)=>a+b),18);assert.equal(Object.values(QP_CALL_INVENTORY['PRIVACY-01']).reduce((a,b)=>a+b),17);const old=fs.readFileSync(path.join(ROOT,'apps/mobile/e2e/v1-workflows-inventory.mjs'),'utf8');assert.match(old,/expectedPhases: 51/);assert.match(old,/264/);});
 test('actual producer creates35tasks and complete74HTTP53POST1PATCH inventory with private peers first',async()=>{const x=producerDouble();try{const d=await x.run();assert.equal(x.calls.length,62);assert.equal(d.requests,74);assert.equal(d.posts,53);assert.equal(d.patches,1);assert.equal(d.admissions,12);assert.equal(d.tasks.length,35);assert.equal(d.pages.length,10);assert.equal(d.tasks.filter(x=>x.role==='excluded').length,4);assert.equal(x.privateFiles.length,2);assert.equal(x.claims.length,1);assert.equal(JSON.stringify(x.events).includes('Aa1!'),false);assert.equal(QP_PRODUCER.requests,74);}finally{x.close();}});
@@ -150,6 +167,76 @@ test('private peer creation is0600underumask0 and refuses symlink and existing f
 test('independent order retains microseconds and exact IDs instead of millisecond or insertion order',()=>{const row=(n,stamp)=>({id:id(n),role:'mine',owner_membership_id:id(1),due_on:'2027-01-01',created_at:stamp});const a=row(9,'2026-10-27T00:00:00.100001Z'),b=row(1,'2026-10-27T00:00:00.1+00:00');assert.deepEqual(expectedQueue([a,b],'mine','all',id(1),id(2)).map(x=>x.id),[b.id,a.id]);});
 test('real profile owner recipes contain only exact anchor normal APIs and current version selectors',async()=>{const x=producerDouble();try{const d=await x.run(),r=ownerRecipes(d);assert.equal(r.length,2);assert.deepEqual(r.map(x=>x.id),['change','restore']);for(const recipe of r){assert.deepEqual(recipe.requests.map(x=>x.method),['GET','GET','PATCH']);assert.deepEqual(Object.keys(recipe.requests[2].body).sort(),['due_on','expected_lifecycle_version','expected_updated_at']);assert.ok(recipe.requests.every(x=>!x.route.includes('/account/')));}}finally{x.close();}});
 test('public source installed API ANDweb precede EACH actual protected-reader callback and buffers clear',async()=>{const x=await admissionDouble();try{const r=await x.run();assert.equal(r.members.length,2);assert.equal(x.calls.filter(x=>x.startsWith('PRIVATE:')).length,2);for(let i=0;i<x.calls.length;i++)if(x.calls[i].startsWith('PRIVATE:')){assert.match(x.calls[i-3],/api\/build$/);assert.match(x.calls[i-2],/api\/release-identity$/);assert.match(x.calls[i-1],/__caseops_e2e\/status$/);}assert.ok(x.credentials.every(c=>c.bytes.every(b=>b===0)));}finally{x.close();}});
+test('QP admits freshly owned actors without Core-only records while Core still refuses', async () => {
+ const x=await admissionDouble();
+ try {
+  for(const f of [x.first,x.second]) for(const key of ['coreInventory','seedEvidence','matter','today','work','calendar','foreignMatter','lifecycleMatter','accessMatter']) assert.equal(f[key],undefined);
+  const secondAuth=x.map.get(x.q.members[1].authObservation.path);
+  secondAuth.appId=secondAuth.bundleId;delete secondAuth.bundleId;
+  const result=await x.run(); assert.equal(result.members.length,2);
+  assert.deepEqual(result.members.map(member=>member.fixture.membershipId),[x.dataset.membershipId,x.dataset.actors['second-company'].membershipId]);
+  const f=x.first, value=x.credentials[0].value;
+  const environment={ [f.auth.emailEnv]:value.email,[f.auth.passwordEnv]:value.password,[f.auth.totpSecretEnv]:value.totp_secret };
+  assert.throws(()=>validateCoreFixture(f,environment),/DATED_CORE_FIXTURE_REQUIRED/);
+  assert.throws(()=>validateBuildReceipt(f,'ios',x.q.expectedBinaryHash),/DATED_CORE_FIXTURE_REQUIRED/);
+  const docker=x.writeEvidence(path.join(x.publicRoot,'core-isolation.json'),x.map.get(x.q.dockerReceipt.path));
+  const core={...f,coreInventory:'native-core-2026-10-25',isolationEvidence:docker};
+  assert.throws(()=>validateCoreFixture(core,environment),/SEEDED_MATTER_ID_REQUIRED/);
+  core.matter={id:id(70),identityLabel:'SYNTHETIC',title:'Synthetic matter',searches:[
+   {kind:'matter_code',value:'SYNTHETIC'},{kind:'case_number',value:'SYNTHETIC-CASE'},{kind:'filing_number',value:'SYNTHETIC-FILE'},
+   {kind:'cnr_number',value:'SYNTHETIC-CNR'},{kind:'temporary_e_case_number',value:'SYNTHETIC-E'},
+  ]};
+  assert.throws(()=>validateCoreFixture(core,environment),/SEEDED_WORK_ID_REQUIRED/);
+ } finally {x.close();}
+});
+test('QP Android attestation verifies installed bytes without admitting a Core fixture or reinstalling', () => {
+ const fixture={environment:'docker-integration',syntheticDataOnly:true,udid:'CASEOPSUNITUSB01',
+  appId:'ai.caseops.mobile.dev.localacceptance',appPath:'/synthetic/CaseOps.apk'};
+ const expected='c'.repeat(64),apk='/data/app/owned/base.apk',calls=[];
+ const command=(program,args,options)=>{
+  assert.equal(program,'adb');assert.equal(options.shell,false);assert.deepEqual(args.slice(0,2),['-s',fixture.udid]);
+  const route=args.slice(2);calls.push(route);
+  if(route[1]==='pm'&&route[2]==='list')return 'package:'+fixture.appId+'\n';
+  if(route[1]==='pm'&&route[2]==='path')return 'package:'+apk+'\n';
+  assert.deepEqual(route,['shell','sha256sum',apk]);return expected+'  '+apk+'\n';
+ };
+ assert.throws(()=>attestAndroidBinary(fixture,expected,{command}),/DATED_CORE_FIXTURE_REQUIRED/);
+ assert.throws(()=>attestLocalQAAndroidBinary({...fixture,appId:'ai.caseops.mobile.dev'},expected,{command}),/DEDICATED_LOCAL_QA_APP_REQUIRED/);
+ assert.equal(calls.length,0);
+ const receipt=attestLocalQAAndroidBinary(fixture,expected,{command});
+ assert.equal(receipt.installedApkSha256,expected);assert.equal(receipt.explicitReplaceInstall,false);
+ assert.throws(()=>attestLocalQAAndroidBinary(fixture,'d'.repeat(64),{command}),/INSTALLED_ANDROID_APK_HASH_MISMATCH/);
+ assert.deepEqual(calls.map(args=>args[0]),Array(6).fill('shell'));
+});
+test('QP public actor auth identity device and TLS failures refuse before either credential read', async () => {
+ const cases=[
+  [(x,auth)=>{delete x.second.auth.mfaStage;},/EXPLICIT_MFA_STAGE_REQUIRED/],
+  [(x,auth)=>{delete x.second.auth.companySlug;},/FIXTURE_WORKSPACE_SLUG_REQUIRED/],
+  [(x,auth)=>{x.second.auth.mode='native-firefox';},/FIREFOX_RECIPE_INCOMPLETE/],
+  [(x,auth)=>{delete x.second.workspaceLabel;},/QP_ACTUAL_ACTOR_AND_DEVICE_LABELS_REQUIRED/],
+  [(x,auth)=>{x.second.membershipId=x.first.membershipId;},/QP_ACTOR_MEMBERSHIP_CHANGED/],
+  [(x,auth)=>{x.second.browserApiMarkerVerified=false;},/BROWSER_API_MARKER_RECEIPT_REQUIRED/],
+  [(x,auth)=>{auth.nativePrincipalVerified=false;},/QP_ACTUAL_BROWSER_AUTH_OBSERVATION_REQUIRED/],
+  [(x,auth)=>{auth.appId=x.second.appId;auth.bundleId='wrong';},/QP_AUTH_APP_ID_CHANGED/],
+  [(x,auth)=>{x.second.auth.webOrigin='http://127.0.0.1:3443';},/QP_ACTOR_BROWSER_ORIGIN_CHANGED/],
+  [(x,auth)=>{x.map.get(x.q.dockerReceipt.path).tlsProof.verificationDisabled=true;},/QP_STRICT_GATEWAY_TLS_REQUIRED/],
+ ];
+ for(const [mutate,pattern] of cases){
+  const x=await admissionDouble();
+  try {mutate(x,x.map.get(x.q.members[1].authObservation.path));await assert.rejects(x.run(),pattern);
+   assert.equal(x.calls.some(call=>call.startsWith('PRIVATE:')),false);}
+  finally{x.close();}
+ }
+});
+test('QP still validates protected MFA and clears both actor values on a failed check', async () => {
+ const x=await admissionDouble();
+ try {
+  x.credentials[1].value.totp_secret='INVALID';
+  await assert.rejects(x.run(),/SYNTHETIC_TOTP_SECRET_REQUIRED/);
+  assert.equal(x.calls.filter(call=>call.startsWith('PRIVATE:')).length,2);
+  assert.ok(x.credentials.every(c=>c.bytes.every(byte=>byte===0)&&Object.values(c.value).every(value=>value===undefined)));
+ } finally{x.close();}
+});
 test('pending old-source or wrong public installed admission refuses before any reader',async()=>{const x=await admissionDouble();try{for(const change of[q=>q.readyForLive=false,q=>q.expectedSourceSha='f'.repeat(40),q=>q.expectedInputFileCount=120]){const q=structuredClone(x.q);change(q);const calls=x.calls.length;await assert.rejects(admitQPBeforeMembers(q,x.io));assert.equal(x.calls.slice(calls).some(x=>x.startsWith('PRIVATE:')),false);}}finally{x.close();}});
 test('serving API ORweb drift and wrong active controlprofile are zero-reader refusals',async()=>{for(const target of['api','web','profile']){const x=await admissionDouble();try{const old=x.io.getJson;x.io.getJson=async url=>{const r=await old(url);if(target==='api'&&url.endsWith('/api/build'))r.revision='wrong';if(target==='web'&&url.endsWith('/api/release-identity'))r.release_sha='f'.repeat(40);if(target==='profile'&&url.endsWith('/status'))r.v1ControlProfile='source-work-v3';return r;};await assert.rejects(x.run());assert.equal(x.calls.some(x=>x.startsWith('PRIVATE:')),false);}finally{x.close();}}});
 test('second reader refusal purges already loaded first member and never creates native session',async()=>{const x=await admissionDouble();try{const old=x.io.reader;x.io.reader=file=>{if(file.endsWith('1'))throw Error('SYNTHETIC_PRIVATE_REFUSAL');return old(file);};await assert.rejects(x.run(),/SYNTHETIC_PRIVATE_REFUSAL/);assert.equal(x.credentials[0].value.password,undefined);assert.ok(x.credentials[0].bytes.every(b=>b===0));}finally{x.close();}});
@@ -241,6 +328,9 @@ function bindPhysicalPacket(x, values, current, pageSize=4096) {
  for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)]){const f=values.get(r.path);f.androidTransport={adbPort:5042,appiumUrl:'http://127.0.0.1:4729',systemPort:8206,transportMode:'usb-reverse'};if(f.cx)f.cx.workflowDomain='physical';f.apiOrigin='https://127.0.0.1:8443';f.auth.webOrigin='https://127.0.0.1:3443';}
  const build=values.get(x.q.buildReceipt.path);Object.assign(build,{apiOrigin:'https://127.0.0.1:8443',webOrigin:'https://127.0.0.1:3443'});
  for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])validateAndroidTransport(values.get(r.path),'android',build);
+ // This packet model exercises native layout admission. Its signed Android
+ // evidence is covered separately by the build receipt tests.
+ x.io.buildCheck=(f,platform,binary)=>{assert.equal(platform,'android');assert.equal(binary,actual.binaryHash);assert.equal(f.appId,actual.appId);};
  x.io.installed=()=>structuredClone(actual);return actual;
 }
 
