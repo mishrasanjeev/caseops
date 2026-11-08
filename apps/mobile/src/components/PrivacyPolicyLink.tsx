@@ -6,11 +6,17 @@ import { colors, styles } from "./theme";
 
 export function PrivacyPolicyLink({
   disabled = false,
+  canOpen,
+  openUrl = (url) => Linking.openURL(url),
+  hideUnconfigured = false,
 }: {
   disabled?: boolean;
+  canOpen?: () => boolean;
+  openUrl?: (url: string) => Promise<unknown>;
+  hideUnconfigured?: boolean;
 }) {
-  const liveDisabled = useRef(disabled);
-  liveDisabled.current = disabled;
+  const live = useRef({ disabled, canOpen, openUrl });
+  live.current = { disabled, canOpen, openUrl };
   const [, changed] = useState(0);
   const controller = useRef<ReturnType<
     typeof createPrivacyPolicyOpener
@@ -18,8 +24,9 @@ export function PrivacyPolicyLink({
   const createController = () => {
     const extra = Constants.expoConfig?.extra;
     return createPrivacyPolicyOpener(extra?.privacyPolicy, extra?.webOrigin, {
-      openUrl: (url) => Linking.openURL(url),
-      allowed: () => !liveDisabled.current,
+      openUrl: (url) => live.current.openUrl(url),
+      allowed: () =>
+        !live.current.disabled && (live.current.canOpen?.() ?? true),
       changed: () => changed((value) => value + 1),
     });
   };
@@ -33,6 +40,7 @@ export function PrivacyPolicyLink({
     };
   }, []);
   const state = action.snapshot();
+  if (hideUnconfigured && state.status === "unconfigured") return null;
   const available = !["unconfigured", "unavailable", "unknown"].includes(
     state.status,
   );

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Fact, RecordRow } from "../../components/Content";
 import {
@@ -39,11 +39,41 @@ export type SourceRecordsScreenProps = {
   openSource: (source: SourceRef, locator?: SourceLocator) => void;
 };
 
+function useSourceInteraction(active: boolean) {
+  const committed = useRef<object | null>(null);
+  const [, rearm] = useState(0);
+  const interaction = {};
+  useLayoutEffect(() => {
+    committed.current = active ? interaction : null;
+    return () => {
+      committed.current = null;
+    };
+  });
+  const available = () => committed.current === interaction;
+  return {
+    run(action: () => void) {
+      if (!available()) return;
+      // Native callbacks can arrive twice before React commits navigation.
+      committed.current = null;
+      // Commit again even when the action changes nothing (for example a
+      // declined navigation), so the next render admits its fresh controls.
+      rearm((value) => value + 1);
+      action();
+    },
+  };
+}
+
 // Type selection does not grant authority: both lists use their normal
 // authenticated readers, and IP additionally checks current workspace readiness.
 export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
   const { kind } = props;
+  const interaction = useSourceInteraction(props.active);
   if (!props.active) return null;
+  const listProps = {
+    ...props,
+    openSource: (...args: Parameters<SourceRecordsScreenProps["openSource"]>) =>
+      interaction.run(() => props.openSource(...args)),
+  };
   return (
     <View style={styles.fill}>
       <NativeSegments
@@ -54,20 +84,79 @@ export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
           { value: "contract", label: "Contracts" },
         ]}
         onChange={(value) => {
-          if (value === "contract" || value === "ip_docket")
-            props.onKindChange(value);
+          if (value !== kind && (value === "contract" || value === "ip_docket"))
+            interaction.run(() => props.onKindChange(value));
         }}
       />
       {kind === "contract" ? (
         <ContractRecords
           key={`contracts:${props.repository.companyId}`}
-          {...props}
+          {...listProps}
         />
       ) : (
-        <IpRecords key={`ip:${props.repository.companyId}`} {...props} />
+        <IpRecords key={`ip:${props.repository.companyId}`} {...listProps} />
       )}
     </View>
   );
+}
+
+function useSourcePagination<T>(
+  key: string,
+  load: (cursor: string | null, signal: AbortSignal) => Promise<T>,
+  active: boolean,
+) {
+  const interaction = useSourceInteraction(active);
+  const [page, setPage] = useState<{
+    history: (string | null)[];
+    number: number;
+  }>({
+    history: [null],
+    number: 1,
+  });
+  const [pageError, setPageError] = useState<ReturnType<
+    typeof readFailure
+  > | null>(null);
+  const cursor = page.history[page.history.length - 1];
+  const data = useResource(
+    JSON.stringify([key, cursor]),
+    (signal) => load(cursor, signal),
+    active,
+  );
+  // Row opens are also admitted by the screen-level interaction through
+  // openSource. A list action held across a type change only updates this
+  // list, which that same commit unmounts, so it needs no screen admission.
+  const { run } = interaction;
+  const reload = () =>
+    run(() => {
+      setPageError(null);
+      data.reload();
+    });
+  return {
+    cursor,
+    page: page.number,
+    resource: pageError
+      ? ({ state: "error", error: pageError } as const)
+      : data.resource,
+    run,
+    reload,
+    next: (next: string) =>
+      run(() => {
+        try {
+          setPage({
+            history: advanceSourcePage(page.history, next),
+            number: page.number + 1,
+          });
+        } catch (error) {
+          setPageError(readFailure(error));
+        }
+      }),
+    first: () =>
+      run(() => {
+        setPageError(null);
+        setPage({ history: [null], number: 1 });
+        data.reload();
+      }),
+  };
 }
 
 function ContractRecords({
@@ -75,20 +164,11 @@ function ContractRecords({
   active,
   openSource,
 }: SourceRecordsScreenProps) {
-  const [history, setHistory] = useState<(string | null)[]>([null]);
-  const [pageError, setPageError] = useState<ReturnType<
-    typeof readFailure
-  > | null>(null);
-  const cursor = history[history.length - 1];
-  const data = useResource(
-    JSON.stringify(["contract-source-page", repository.companyId, cursor]),
-    (signal) => repository.contracts(cursor, signal),
+  const paging = useSourcePagination(
+    `contract-source-page:${repository.companyId}`,
+    (cursor, signal) => repository.contracts(cursor, signal),
     active,
   );
-  const reload = () => {
-    setPageError(null);
-    data.reload();
-  };
   return (
     <ScrollView
       testID="screen-source-records"
@@ -98,12 +178,7 @@ function ContractRecords({
       <Text testID="source-scope" style={styles.muted}>
         Contract metadata visible to this workspace account
       </Text>
-      <SourceRead
-        resource={
-          pageError ? { state: "error", error: pageError } : data.resource
-        }
-        reload={reload}
-      >
+      <SourceRead resource={paging.resource} reload={paging.reload}>
         {(page) => (
           <>
             {page.contracts.length ? (
@@ -115,7 +190,9 @@ function ContractRecords({
                   subtitle={record.contract_code}
                   meta={`${record.status} · ${record.counterparty_name || "Counterparty not recorded"}`}
                   onPress={() =>
-                    openSource({ kind: "contract", id: record.id })
+                    paging.run(() =>
+                      openSource({ kind: "contract", id: record.id }),
+                    )
                   }
                 />
               ))
@@ -128,40 +205,30 @@ function ContractRecords({
               </View>
             )}
             <Text testID="source-page" style={styles.label}>
-              Page {history.length}
+              Page {paging.page}
             </Text>
             {page.next_cursor !== null ? (
               <NativeButton
                 label="Next page"
                 testID="source-next-page"
-                onPress={() => {
-                  try {
-                    setHistory(advanceSourcePage(history, page.next_cursor!));
-                  } catch (error) {
-                    setPageError(readFailure(error));
-                  }
-                }}
+                onPress={() => paging.next(page.next_cursor!)}
               />
             ) : null}
           </>
         )}
       </SourceRead>
-      {history.length > 1 ? (
+      {paging.page > 1 ? (
         <NativeButton
           label="First page"
           testID="source-first-page"
-          onPress={() => {
-            setPageError(null);
-            setHistory([null]);
-            data.reload();
-          }}
+          onPress={paging.first}
           secondary
         />
       ) : null}
       <NativeButton
         label="Reload sources"
         testID="source-reload"
-        onPress={reload}
+        onPress={paging.reload}
         secondary
       />
     </ScrollView>
@@ -173,20 +240,11 @@ function IpRecords({
   active,
   openSource,
 }: SourceRecordsScreenProps) {
-  const [history, setHistory] = useState<(string | null)[]>([null]);
-  const [pageError, setPageError] = useState<ReturnType<
-    typeof readFailure
-  > | null>(null);
-  const cursor = history[history.length - 1];
-  const data = useResource(
-    JSON.stringify(["ip-source-page", repository.companyId, cursor]),
-    (signal) => repository.ipPage(cursor, signal),
+  const paging = useSourcePagination(
+    `ip-source-page:${repository.companyId}`,
+    (cursor, signal) => repository.ipPage(cursor, signal),
     active,
   );
-  const reload = () => {
-    setPageError(null);
-    data.reload();
-  };
   return (
     <ScrollView
       testID="screen-source-records"
@@ -196,12 +254,7 @@ function IpRecords({
       <Text testID="source-scope" style={styles.muted}>
         Visible active trademark applications
       </Text>
-      <SourceRead
-        resource={
-          pageError ? { state: "error", error: pageError } : data.resource
-        }
-        reload={reload}
-      >
+      <SourceRead resource={paging.resource} reload={paging.reload}>
         {(result) =>
           result.state === "unavailable" ? (
             <Unavailable value={result} />
@@ -221,14 +274,16 @@ function IpRecords({
                     }
                     meta={`${record.docket_status} · ${record.office || "Office not recorded"} · Renewal: ${record.source_renewal_due_on ? displayDay(record.source_renewal_due_on) : "Not recorded"} · ${sourceDateStateLabel(record.source_renewal_state)}`}
                     onPress={() =>
-                      openSource(
-                        { kind: "ip_docket", id: record.id },
-                        {
-                          kind: "ip_docket",
-                          docketId: record.id,
-                          applicationId: record.application_id,
-                          cursor,
-                        },
+                      paging.run(() =>
+                        openSource(
+                          { kind: "ip_docket", id: record.id },
+                          {
+                            kind: "ip_docket",
+                            docketId: record.id,
+                            applicationId: record.application_id,
+                            cursor: paging.cursor,
+                          },
+                        ),
                       )
                     }
                   />
@@ -244,43 +299,31 @@ function IpRecords({
                 </View>
               )}
               <Text testID="source-page" style={styles.label}>
-                Page {history.length}
+                Page {paging.page}
               </Text>
               {result.page.next_cursor !== null ? (
                 <NativeButton
                   label="Next page"
                   testID="source-next-page"
-                  onPress={() => {
-                    try {
-                      setHistory(
-                        advanceSourcePage(history, result.page.next_cursor!),
-                      );
-                    } catch (error) {
-                      setPageError(readFailure(error));
-                    }
-                  }}
+                  onPress={() => paging.next(result.page.next_cursor!)}
                 />
               ) : null}
             </>
           )
         }
       </SourceRead>
-      {history.length > 1 ? (
+      {paging.page > 1 ? (
         <NativeButton
           label="First page"
           testID="source-first-page"
-          onPress={() => {
-            setPageError(null);
-            setHistory([null]);
-            data.reload();
-          }}
+          onPress={paging.first}
           secondary
         />
       ) : null}
       <NativeButton
         label="Reload sources"
         testID="source-reload"
-        onPress={reload}
+        onPress={paging.reload}
         secondary
       />
     </ScrollView>

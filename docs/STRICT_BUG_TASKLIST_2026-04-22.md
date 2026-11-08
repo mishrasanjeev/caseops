@@ -1,5 +1,85 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 Release 9cd90aff: #599, #600 and #601 Live; B4-ADJ-42 Properly Fixed
+
+`main` at 9cd90aff (#599 B4-ADJ-42 width proof, #600 mobile welcome and record
+navigation, #601 Play-signed Android App Links) serves `caseops-api-00523-r9k`
+with image tag `9cd90af`. A peer release created revisions 00522 and 00523;
+this session's own deploy-prod attempts failed closed before any build or
+mutation (read-only worker preflight gcloud deadline, then "main advanced
+during release"), so they did not overlap the change. Security run
+42466390480 succeeded; main CI 42466390396 succeeded on attempt 3, after two
+attempts failed only on GitHub release 504s while installing uv.
+
+- B4-ADJ-42 Status: Properly fixed. Prod-verify 42471824330 on the exact
+  release passed every group. In `test-legal-write-oct13-b` (11 expected,
+  0 skipped, 0 failed), "IP18 current-source tracker filters saved views
+  export and full continuation" passed at 1280px and 393px. Both cases issue
+  the three unnarrowed fact-filtered reads against the retained test-legal
+  tenant and require each to finish under 15 s.
+- #600 ships no web or API code; native and device acceptance remains as
+  recorded in its PR.
+- #601 still needs the production association and a Play-installed device
+  sign-in check.
+
+## November 8 B4-ADJ-45: Document Retire Panel Opens Off Screen
+
+Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
+`app-mobile` case "B4-ADJ-07 [mobile] the retire panel, its field error and the
+history card fit 393px": the "Reason for retiring" field had a viewport ratio
+of 0 at 393px. PR #597 changes no IP document code; the cause is on `main`.
+
+- Root cause: the retire panel opens under the Retire button and never brings
+  itself into view. When Retire is the last thing on screen (Playwright scrolls
+  only far enough to show the button; a phone user meets the same position),
+  the reason field and the blockers open below the fold and the tap appears to
+  do nothing. The earlier green runs depended on where the card happened to sit.
+- Fix: the panel scrolls itself into view (`block: "nearest"`, no motion under
+  reduced-motion) when it opens and again when the reliance check settles.
+- Regression: a component test asserts both scrolls target the panel and fails
+  without the fix; the B4-ADJ-07 journey now puts Retire on the bottom edge of
+  the screen before tapping it, on desktop and at 393px.
+- B4-ADJ-45 Status: Inconclusive until hosted `app-mobile` and
+  `app-chromium` pass on the fix and a release ships it.
+
+## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
+
+Release 61aa6bbe (#598 fact-filter estimate, JIT comment correction) was
+deployed with deploy-prod.sh from `main` without the test-legal grant input
+and serves `caseops-api-00521-7qz`. Prod-verify 42364478725 succeeded in every
+group.
+
+- B4-ADJ-40 Status: Inconclusive (backlog drained; integrity endpoint read not
+  recorded). With the owner's approval the per-tenant `--mode purge` drain ran
+  for all 8 tenants: 172 executions blanked 8,330,496 retained payload rows.
+  Exit code 2 means "more remain", so the loop continued while each run purged
+  rows, capped at 40 runs per round. During the drain production showed no API
+  5xx, and Cloud SQL CPU peaked at 0.74. The stock `--mode=maintain` runs after
+  resuming report no blockers, and purge-after-activation blanked 6,471,
+  13,885 and 5,511 rows in later rebuilds. The fix is proven in code; the
+  closing proof is a recorded clean integrity response, which prod-verify does
+  not keep.
+- Private maintenance scheduler: ENABLED through `scheduler_inventory.py
+  resume` after two clean executions on the release image
+  (`caseops-private-projection-maintenance-m2fms` and `-gxg8s`, the second
+  with `rebuild_count=0`). The guard could not finish on the workstation: its
+  `gcloud run jobs executions list` sorts the full history client-side
+  (about 2m40s) and its log read took 66 s, both over the fixed 60 s per-call
+  limit. A scratch copy that raised only those two limits to 300 s, with every
+  evidence check unchanged, passed. The guard itself still needs the bounded
+  v2 listing and a time-bounded log filter (follow-up). Cadence runs at 03:10,
+  03:15 and 03:20 UTC succeeded.
+- B4-ADJ-42 Status: Inconclusive (fixed in code and deployed on 61aa6bbe;
+  production width proof pending). PR #599 adds the unnarrowed tracker,
+  families and date reads to `ram-2026-10-17-ip-tracker.spec.ts`; the verdict
+  can become Properly fixed only after a release ships that spec and
+  prod-verify runs it.
+- Revision `caseops-api-00506` was deleted at the owner's request (part of the
+  IPLF-027B revision cleanup; 00294 is kept).
+- B4-ADJ-39: unchanged at the owner's decision; releases keep omitting the
+  grant input.
+- B4-ADJ-44: still Not fixed (tracked below).
+
 ## November 7 Production Run On d2a172f7: B4-ADJ-36, 41, 43 Proven; B4-ADJ-40, 42 Open
 
 Releases since the November 5 run, all deployed with deploy-prod.sh from

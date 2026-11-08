@@ -537,36 +537,48 @@ test("actual compatibility panel has honest unavailable/update/checking states, 
   const jsx = (type: unknown, props: unknown) => ({ type, props });
   const bindings: Record<string, unknown> = {
     "react/jsx-runtime": { jsx, jsxs: jsx },
-    "react-native": { ScrollView: "ScrollView", Text: "Text" },
+    "react-native": {
+      Image: "Image",
+      ScrollView: "ScrollView",
+      StyleSheet: { create: (value: unknown) => value },
+      Text: "Text",
+      View: "View",
+    },
     "react-native-safe-area-context": { SafeAreaView: "SafeAreaView" },
+    "../../assets/app-icon.png": 1,
     "./NativeControls": { NativeButton: "Button", NativeProgress: "Progress" },
     "./theme": {
+      colors: { ink: "ink" },
       styles: { fill: {}, content: {}, title: {}, body: {}, muted: {} },
     },
   };
-  const code = ts.transpileModule(
-    readFileSync(
-      new URL("../components/ClientCompatibilityPanel.tsx", import.meta.url),
-      "utf8",
-    ),
-    {
-      compilerOptions: {
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.CommonJS,
-        jsx: ts.JsxEmit.ReactJSX,
+  function loadComponent(relative: string) {
+    const code = ts.transpileModule(
+      readFileSync(new URL(relative, import.meta.url), "utf8"),
+      {
+        compilerOptions: {
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+        },
       },
-    },
-  ).outputText;
-  const module = {
-    exports: {} as { ClientCompatibilityPanel: (props: unknown) => unknown },
-  };
-  new Function("require", "module", "exports", code)(
-    (name: string) => {
-      assert.ok(Object.hasOwn(bindings, name), name);
-      return bindings[name];
-    },
-    module,
-    module.exports,
+    ).outputText;
+    const module = {
+      exports: {} as Record<string, (props: unknown) => unknown>,
+    };
+    new Function("require", "module", "exports", code)(
+      (name: string) => {
+        assert.ok(Object.hasOwn(bindings, name), name);
+        return bindings[name];
+      },
+      module,
+      module.exports,
+    );
+    return module.exports;
+  }
+  bindings["./WelcomeFrame"] = loadComponent("../components/WelcomeFrame.tsx");
+  const { ClientCompatibilityPanel } = loadComponent(
+    "../components/ClientCompatibilityPanel.tsx",
   );
   for (const status of [
     "checking",
@@ -575,7 +587,7 @@ test("actual compatibility panel has honest unavailable/update/checking states, 
   ] as const) {
     let retries = 0,
       exits = 0;
-    const tree = module.exports.ClientCompatibilityPanel({
+    const tree = ClientCompatibilityPanel({
       state: {
         status,
         minimum: status === "update_required" ? "2.0.0" : null,
@@ -594,14 +606,28 @@ test("actual compatibility panel has honest unavailable/update/checking states, 
       disabled?: boolean;
       onPress: () => void;
     }[] = [];
+    const visible: any[] = [];
     const visit = (node: any) => {
       if (Array.isArray(node)) node.forEach(visit);
       else if (node && typeof node === "object") {
+        if (typeof node.type === "function") {
+          visit(node.type(node.props));
+          return;
+        }
+        visible.push(node);
         if (node.type === "Button") buttons.push(node.props);
         visit(node.props?.children);
       }
     };
     visit(tree);
+    assert.equal(visible[0].props.testID, "client-compatibility");
+    assert.equal(
+      visible.find((n) => n.type === "Image").props.accessible,
+      false,
+    );
+    assert.ok(
+      visible.some((n) => n.type === "Text" && n.props.children === "CaseOps"),
+    );
     assert.equal(buttons.length, 2);
     assert.equal(retries, 0);
     assert.equal(exits, 0);
