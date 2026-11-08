@@ -144,6 +144,8 @@ export async function admitProducerRouteFile({ receipt, docker, publicCa, baseSh
   assert.equal(receipt.tlsProof?.verificationDisabled, false);
   assert.match(receipt.gatewayImplementationSha256, /^[a-f0-9]{64}$/);
   assert.equal(receipt.fixtureSourceHashes['scripts/mobile/local-gateway.py'], receipt.gatewayImplementationSha256);
+  verifiedFile(path.join(root, 'scripts/mobile/local-gateway.py'), receipt.gatewayImplementationSha256, bound);
+  verifiedFile(path.join(root, 'compose.mobile-local.yml'), receipt.composeSha256, bound);
   assert.match(receipt.project, /^caseops-mobile-[a-z0-9-]+$/);
   const rows = receipt.containers.filter(row => row.name === '/' + receipt.project + '-gateway-1');
   assert.equal(rows.length, 1); const [gateway] = rows;

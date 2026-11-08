@@ -14,7 +14,8 @@ import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export const V1_PRODUCER_INPUTS = Object.freeze(['scripts/mobile/produce-v1-fixture.mjs','scripts/mobile/native-producer-private.py',
-  'scripts/mobile/local-fixture.py','scripts/mobile/local-transport.py','scripts/mobile/local-v1-inbox.py','scripts/mobile/local-v1-controls.py']);
+  'scripts/mobile/local-fixture.py','scripts/mobile/local-transport.py','scripts/mobile/local-v1-inbox.py','scripts/mobile/local-v1-controls.py',
+  'scripts/mobile/local-gateway.py','compose.mobile-local.yml']);
 /** References resolve only to earlier acknowledged outputs; no code or future
  * receipt is accepted. The resolved plan itself is retained before its stage. */
 export function resolveProducedReferences(value, produced) {
