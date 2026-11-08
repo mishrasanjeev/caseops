@@ -22,6 +22,7 @@ import { createClientCompatibility } from "./src/network/client-compatibility";
 import { createLocalUnlock, sameServerBinding } from "./src/auth/local-unlock";
 import type { LocalUnlockController } from "./src/auth/local-unlock";
 import { createBiometricStore } from "./src/auth/biometric-store";
+import { createWelcomeBrowserLease } from "./src/auth/welcome-browser-lease";
 import {
   authorizationUrl,
   authSessionCallback,
@@ -79,8 +80,14 @@ export default function App() {
   );
   const foreground = useRef(isForeground);
   const loginInFlight = useRef(false);
-  const welcomePrivacyInFlight = useRef(false);
   const [welcomePrivacyOpening, setWelcomePrivacyOpening] = useState(false);
+  const welcomeBrowser = useMemo(
+    () =>
+      createWelcomeBrowserLease((held) => {
+        if (alive.current) setWelcomePrivacyOpening(held);
+      }),
+    [],
+  );
   const signOutInFlight = useRef(false);
   const localLock = useRef<LocalUnlockController | null>(null);
   const [, setLockRevision] = useState(0);
@@ -508,6 +515,7 @@ export default function App() {
       }
     })();
     const listener = AppState.addEventListener("change", (state) => {
+      welcomeBrowser.visibility(state);
       foreground.current = state === "active";
       setIsForeground(foreground.current);
       runtime.compatibility.visibility(
@@ -550,6 +558,7 @@ export default function App() {
   }, [
     runtime,
     picker,
+    welcomeBrowser,
     coverPrivate,
     openServerSession,
     publishUnlocked,
@@ -706,21 +715,14 @@ export default function App() {
     return (
       !loginInFlight.current &&
       !signOutInFlight.current &&
-      !welcomePrivacyInFlight.current &&
+      !welcomeBrowser.held &&
       currentUiCommand(uiCommand)
     );
   }
 
   async function openWelcomePrivacyPolicy(url: string) {
     if (!canOpenWelcomeBrowser()) throw Error("Browser action unavailable");
-    welcomePrivacyInFlight.current = true;
-    setWelcomePrivacyOpening(true);
-    try {
-      await Linking.openURL(url);
-    } finally {
-      welcomePrivacyInFlight.current = false;
-      if (alive.current) setWelcomePrivacyOpening(false);
-    }
+    await welcomeBrowser.launch(() => Linking.openURL(url));
   }
 
   async function signIn() {
