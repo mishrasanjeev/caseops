@@ -5,7 +5,7 @@ from typing import Literal
 from unicodedata import category
 
 from email_validator import EmailNotValidError, validate_email
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import UUID4, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
@@ -159,6 +159,9 @@ class Settings(BaseSettings):
     document_processing_run_job: str = Field(
         default="caseops-document-processing", pattern=r"^[a-z][a-z0-9-]{0,62}$"
     )
+    # The exact synthetic store review workspace can exercise document intake
+    # with local embeddings even when a store-installed app sends no QA header.
+    store_review_document_no_paid_company_id: UUID4 | None = None
     max_attachment_size_bytes: int = Field(default=25 * 1024 * 1024)
     tesseract_command: str | None = Field(default=None)
     document_worker_poll_interval_seconds: int = Field(default=10, ge=1)
