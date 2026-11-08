@@ -1069,10 +1069,22 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
 
   test('the real TLS gateway refuses a future route, then the actual host sends it only after its creator ACK', async t => {
     const { cache, file } = fixture(t), seen = [], events = [];
+    const calendarPath = '/api/ip/dockets/' + id + '/deadlines';
+    const calendarReceived = [];
     const upstream = http.createServer((req, res) => {
       const request = { method: req.method, route: req.url, marker: req.headers['x-caseops-automated-test'] };
       assert.equal(req.headers['x-caseops-qa-producer-permit'], undefined);
       seen.push(request);
+      if (req.url === calendarPath) {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+          calendarReceived.push(Buffer.concat(chunks));
+          res.writeHead(201, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-calendar-ack' });
+          res.end(JSON.stringify({ id: other, privateProjectionMarker: 'not returned to caller' }));
+        });
+        return;
+      }
       const body = req.url === '/api/auth/login' ? { access_token: 'synthetic-local-token', company: { id: company }, membership: { id: member } }
         : req.url === '/api/matters/' ? { id, company_id: company } : { matter_id: id };
       req.resume();
@@ -1148,5 +1160,32 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
       ['producer_exact_route_permit', 'producer_exact_route_consumed']);
     routeFile.verifyRestored();
     assert.deepEqual(fs.readFileSync(file), base);
+
+    const calendarClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => calendarClient.clear());
+    await calendarClient.request({ actor: 'owner', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic@example.invalid' } });
+    const body = { title: 'Synthetic governed deadline', is_critical: false }, exact = Buffer.from(JSON.stringify(body));
+    const planned = { actor: 'owner', method: 'POST', route: calendarPath, producerStage: 'base', body };
+    let claimed = false, accepted = 0;
+    const chain = { claim(got) {
+      assert.equal(got.company, company); assert.equal(got.membership, member);
+      assert.equal(got.requestTarget, calendarPath); assert.deepEqual(got.bodyBytes, exact);
+      if (claimed) return null;
+      claimed = true;
+      return { provenance: { requestDigest: producerHash('synthetic-predecessor-ack'), bodySha256: producerHash(exact) },
+        acceptResponse(response) {
+          accepted++; assert.equal(response.status, 201); assert.equal(response.releaseSha, sourceSha);
+          assert.equal(response.value.id, other); assert.match(response.permitReceipt, /^[a-f0-9]{64}$/);
+          return { id: response.value.id };
+        } };
+    } };
+    assert.deepEqual(await calendarClient.requestCalendar(planned, chain),
+      { status: 201, requestId: 'synthetic-calendar-ack', projection: { id: other } });
+    await assert.rejects(calendarClient.requestCalendar(planned, chain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.equal(accepted, 1);
+    assert.deepEqual(calendarReceived, [exact]);
+    assert.deepEqual(seen.filter(row => row.route === calendarPath), [{ method: 'POST', route: calendarPath, marker: 'no-paid-providers' }]);
+    assert.ok(!JSON.stringify(events).includes('privateProjectionMarker'));
+    routeFile.verifyRestored();
   });
 }

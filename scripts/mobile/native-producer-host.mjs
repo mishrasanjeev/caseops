@@ -46,6 +46,8 @@ function origin(value) {
     && !url.username && !url.password && !url.search && !url.hash, 'PRODUCER_LOCAL_TLS_REQUIRED');
   return url;
 }
+const docketId = '[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}';
+const calendarRoute = new RegExp(`^(?:GET /api/ip/dockets/${docketId}/deadline-workspace|POST /api/ip/(?:dockets/${docketId}/deadlines|deadlines/${docketId}/confirm))$`);
 /** Ordinary Bearer tokens come only from this host's real normal login/bootstrap
  * responses. releaseSha is admission provenance, not an invented HTTP header. */
 export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, deadlineMs, persist, now = Date.now, routeAdmission }) {
@@ -53,9 +55,9 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
   assert.match(sourceSha, /^[a-f0-9]{40}$/); assert.ok(Number.isFinite(deadlineMs) && deadlineMs > now() && deadlineMs - now() <= 510000);
   assert.equal(typeof persist, 'function');
   const tokens = new Map(), identities = new Map(); let sequence = 0, poisoned = false;
-  const request = async ({ actor = 'owner', method, route, body, query, headers = {}, timeoutMs = 10000, maxResponseBytes = 1048576, signal,
+  const dispatch = async ({ actor = 'owner', method, route, body, query, headers = {}, timeoutMs = 10000, maxResponseBytes = 1048576, signal,
     web: useWeb = false, automaticRetry = false, accessTokenFromNormalBootstrap, deadlineMs:callDeadlineMs=deadlineMs,
-    producerStage }) => {
+    producerStage }, calendar) => {
     assert.equal(poisoned, false, 'PRODUCER_TRANSPORT_OUTCOME_UNCERTAIN');
     assert.equal(automaticRetry, false, 'PRODUCER_RETRY_REFUSED');
     assert.ok(['GET','POST','PATCH','DELETE'].includes(method) && typeof actor === 'string' && /^[a-z][a-z-]{0,40}$/.test(actor));
@@ -95,11 +97,31 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
       });
       const identity = identities.get(actor);
       const attempt = { stage: producerStage, actor, company: identity?.company?.id, membership: identity?.membership?.id, method, path: url.pathname };
+      let calendarClaim, calendarProvenance;
+      if (calendar !== undefined) {
+        assert.ok(routeAdmission && !useWeb && query === undefined && url.pathname === route
+          && actor === 'owner' && producerStage === 'base' && calendarRoute.test(method + ' ' + route)
+          && typeof calendar.claim === 'function', 'PRODUCER_CALENDAR_TRANSPORT_SCOPE_REQUIRED');
+        calendarClaim = calendar.claim({ ...attempt, requestTarget: route, bodyBytes: payload });
+        assert.ok(calendarClaim && typeof calendarClaim.acceptResponse === 'function', 'PRODUCER_CALENDAR_TYPED_CLAIM_REQUIRED');
+        const { requestDigest, bodySha256 } = calendarClaim.provenance;
+        assert.match(requestDigest || '', /^[a-f0-9]{64}$/, 'PRODUCER_CALENDAR_PREDECESSOR_REQUIRED');
+        assert.equal(bodySha256, payload === undefined ? undefined : producerHash(payload), 'PRODUCER_CALENDAR_DISPATCH_BYTES_CHANGED');
+        calendarProvenance = { calendarExact: true, requestDigest };
+      }
       const result = routeAdmission && !useWeb
-        ? await routeAdmission.file.dispatch(method + ' ' + url.pathname, routeAdmission.provenance.allow(attempt), safeHeaders.Authorization,
+        ? await routeAdmission.file.dispatch(method + ' ' + url.pathname, calendarProvenance ?? routeAdmission.provenance.allow(attempt), safeHeaders.Authorization,
           Math.min(deadlineMs, callDeadlineMs, now() + timeoutMs), send,
           { bodyBytes: payload, queryPresent: route.includes('?') || query !== undefined })
         : await send();
+      if (calendarClaim) {
+        // The route file reconciles the exact consumed receipt before this
+        // ACK can advance the held chain. Return only the typed projection.
+        assert.match(result.permitReceipt || '', /^[a-f0-9]{64}$/, 'PRODUCER_CALENDAR_CONSUMPTION_REQUIRED');
+        const projection = calendarClaim.acceptResponse(result);
+        persist({type:'producer_http_ack',sequence:id,status:result.status,requestId:result.requestId,releaseShaProvenance:'public-before-after-admission'});
+        return { status: result.status, requestId: result.requestId, projection };
+      }
       if (method === 'POST' && ['/api/auth/login','/api/bootstrap/company'].includes(url.pathname) && result.status === 200) {
         assert.ok(typeof result.value.access_token === 'string' && result.value.access_token.length > 0, 'PRODUCER_NORMAL_TOKEN_REQUIRED');
         tokens.set(actor,result.value.access_token);
@@ -110,6 +132,7 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
       return result;
     } catch { poisoned = true; throw new Error('PRODUCER_HTTP_INCOMPLETE_NO_REPLAY'); }
   };
+  const request = input => dispatch(input);
   const login = async (actor, ref, { charge, remaining, includeIdentity = true } = {}) => {
     producerTimeout(remaining());
     const credentials = readProducerActor(ref);
@@ -121,5 +144,8 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
       return includeIdentity ? await call('actor-identity','GET','/api/auth/me') : {user:session.user,membership:session.membership,company:session.company,capabilities:session.capabilities};
     } finally { for (const key of Object.keys(credentials)) credentials[key] = undefined; }
   };
-  return {request,login,getActorIdentity: actor => structuredClone(identities.get(actor)),clear() {tokens.clear();identities.clear();ca.fill(0);poisoned=true;} };
+  return {request,login,requestCalendar: (input, calendar) => {
+    assert.ok(calendar && typeof calendar.claim === 'function', 'PRODUCER_CALENDAR_TYPED_CLAIM_REQUIRED');
+    return dispatch(input, calendar);
+  },getActorIdentity: actor => structuredClone(identities.get(actor)),clear() {tokens.clear();identities.clear();ca.fill(0);poisoned=true;} };
 }
