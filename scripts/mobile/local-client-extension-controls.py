@@ -16,7 +16,7 @@ import time
 from urllib.parse import urlencode
 
 PROFILE = "native-client-extensions-v1"
-BASE_SHA256 = "a03af49be43afd3618688c64e0f7ac7938b8fa3e5e30b05bff00aeeb629ec4fc"
+BASE_SHA256 = "399b458ca2eb9ad11724bf7a7a454cb89de37251c82debe4f7e0270e8cdc20ca"
 CASE_IDS = (
     "CX28-CAM-01", "CX28-CAM-02", "CX28-CAM-03", "CX28-CAM-04", "CX28-CAM-05", "CX28-CAM-06",
     "CX28-LOCK-01", "CX28-LOCK-02", "CX28-LOCK-03", "CX28-LOCK-04", "CX28-LOCK-05",

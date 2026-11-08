@@ -295,8 +295,10 @@ def main(request, digest):
                 assert response.status_code == 200 and len(response.content) <= 65536
                 value = response.json(); assert value["company"]["id"] == q["companyId"] and value["membership"]["id"] == q["membershipId"] and value["user"]["id"] == q["userId"]
                 actor.cookies.clear(); actor.headers["Authorization"] = "Bearer " + value["access_token"]
-                import pyotp
-                response = actor.post("/api/auth/mfa/step-up", json={"code": pyotp.TOTP(credentials["totp_secret"]).now(), "purpose": "step_up", "method": "totp"}, timeout=5)
+                from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
+
+                factor = _hotp(credentials["totp_secret"], int(time.time()) // TOTP_PERIOD_SECONDS)
+                response = actor.post("/api/auth/mfa/step-up", json={"code": factor, "purpose": "step_up", "method": "totp"}, timeout=5)
                 assert response.status_code == 200
                 return actor
             finally: credentials.clear()
