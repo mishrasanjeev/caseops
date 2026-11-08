@@ -72,7 +72,7 @@ export async function produceQueuePrivacy(plan,{request,admit,persist,claim,pers
  const tasks=[];const definitions=[...Array.from({length:27},(_,i)=>({role:'mine',owner:plan.membershipId,due:i===26?null:day(plan.legalDay,14+Math.floor(i/2))})),
   {role:'team',owner:teamPeerId,due:day(plan.legalDay,14)},{role:'team',owner:teamPeerId,due:null},
   {role:'unassigned',owner:null,due:day(plan.legalDay,14)},{role:'unassigned',owner:null,due:null},
-  {role:'excluded',owner:otherPeerId,due:day(plan.legalDay,14)},{role:'excluded',owner:plan.membershipId,due:day(plan.legalDay,14),status:'done'}];
+  {role:'excluded',owner:otherPeerId,due:day(plan.legalDay,14)},{role:'excluded',owner:plan.membershipId,due:day(plan.legalDay,14),status:'completed'}];
  for(const[i,spec]of definitions.entries()){
   const body={title:'Synthetic queue '+plan.runId+' '+i,owner_membership_id:spec.owner,due_on:spec.due,status:spec.status||'todo',priority:'medium',expected_lifecycle_version:main.lifecycle_version};
   const value=await call('task-'+i,'owner','POST','/api/matters/'+main.id+'/tasks',body);v1Identity(value.id);assert.equal(value.matter_id,main.id);for(const key of['title','due_on','owner_membership_id','status','priority'])assert.equal(value[key],body[key]);

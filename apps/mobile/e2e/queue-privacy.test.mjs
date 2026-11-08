@@ -44,11 +44,18 @@ function producerDouble(){
   if(route==='/api/teams/'&&method==='POST'){const t={id:id(serial++),...body,members:[]};teams.set(t.id,t);return{status:201,value:t};}
   if(route.startsWith('/api/teams/')){const t=teams.get(route.split('/')[3]);t.members.push({membership_id:body.membership_id});return{status:200,value:structuredClone(t)};}
   if(route.endsWith('/lifecycle/status')){const m=parents.get(route.split('/')[3]);assert.equal(body.expected_updated_at,m.updated_at);m.status='disposed';m.updated_at=stamp();m.lifecycle_version++;return{status:200,value:structuredClone(m)};}
-  if(route.endsWith('/tasks')&&method==='POST'){const m=parents.get(route.split('/')[3]);assert.equal(body.expected_lifecycle_version,m.lifecycle_version);const t={id:id(serial++),matter_id:m.id,...body,created_at:stamp(),updated_at:stamp()};tasks.push(t);return{status:200,value:structuredClone(t)};}
+  if(route.endsWith('/tasks')&&method==='POST'){
+   const m=parents.get(route.split('/')[3]);
+   assert.equal(body.expected_lifecycle_version,m.lifecycle_version);
+   assert.ok(['todo','in_progress','blocked','completed'].includes(body.status),'QP_TASK_CREATE_WIRE_STATUS');
+   const t={id:id(serial++),matter_id:m.id,...body,created_at:stamp(),updated_at:stamp()};
+   tasks.push(t);
+   return{status:200,value:structuredClone(t)};
+  }
   if(route==='/api/account/deletion-requests')return{status:200,value:{request:null}};
   if(route==='/api/matter-work-queue'){
    const ownership=url.searchParams.get('ownership'),dates=url.searchParams.get('dates'),peer=id(20),cursor=url.searchParams.get('cursor');
-   const list=tasks.filter(t=>{const m=parents.get(t.matter_id);return m.company_id===id(1)&&['intake','active','on_hold'].includes(m.status)&&t.status!=='done'&&
+   const list=tasks.filter(t=>{const m=parents.get(t.matter_id);return m.company_id===id(1)&&['intake','active','on_hold'].includes(m.status)&&t.status!=='completed'&&
     (ownership==='mine'?t.owner_membership_id===id(2):ownership==='team'?t.owner_membership_id===peer:t.owner_membership_id===null)&&
     (dates==='all'||(dates==='dated')===(t.due_on!==null));}).sort((a,b)=>Number(a.due_on===null)-Number(b.due_on===null)||(a.due_on||'').localeCompare(b.due_on||'')||a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id));
    const offset=cursor?25:0,items=list.slice(offset,offset+25).map(t=>{const m=parents.get(t.matter_id);return{...t,matter:{id:m.id,title:m.title,matter_code:m.matter_code,status:m.status,is_active:true,lifecycle_version:m.lifecycle_version}};});
@@ -111,6 +118,21 @@ async function admissionDouble(){
 }
 test('literal independent two-case inventory and original17 budgets remain separate',()=>{for(const platform of['android','ios']){const c=collectQueuePrivacy(platform);assert.deepEqual(c.intended,[platform+':QUEUE-01',platform+':PRIVACY-01']);assert.equal(c.expectedPhases,6);assert.equal(c.expectedSessions,2);}assert.equal(QP.totalControls,49);assert.equal(Object.values(QP_CALL_INVENTORY['QUEUE-01']).reduce((a,b)=>a+b),18);assert.equal(Object.values(QP_CALL_INVENTORY['PRIVACY-01']).reduce((a,b)=>a+b),17);const old=fs.readFileSync(path.join(ROOT,'apps/mobile/e2e/v1-workflows-inventory.mjs'),'utf8');assert.match(old,/expectedPhases: 51/);assert.match(old,/264/);});
 test('actual producer creates35tasks and complete74HTTP53POST1PATCH inventory with private peers first',async()=>{const x=producerDouble();try{const d=await x.run();assert.equal(x.calls.length,62);assert.equal(d.requests,74);assert.equal(d.posts,53);assert.equal(d.patches,1);assert.equal(d.admissions,12);assert.equal(d.tasks.length,35);assert.equal(d.pages.length,10);assert.equal(d.tasks.filter(x=>x.role==='excluded').length,4);assert.equal(x.privateFiles.length,2);assert.equal(x.claims.length,1);assert.equal(JSON.stringify(x.events).includes('Aa1!'),false);assert.equal(QP_PRODUCER.requests,74);}finally{x.close();}});
+test('completed task uses the Matter task write status and stays out of every queue page',async()=>{
+ const x=producerDouble();
+ try{
+  const dataset=await x.run();
+  const writes=x.calls.filter(call=>call.method==='POST'&&call.route===`/api/matters/${dataset.matter.id}/tasks`&&call.body.status==='completed');
+  assert.equal(writes.length,1);
+  assert.equal(writes[0].body.owner_membership_id,x.plan.membershipId);
+  const completed=dataset.tasks.filter(task=>task.status==='completed');
+  assert.equal(completed.length,1);
+  assert.equal(completed[0].role,'excluded');
+  assert.equal(completed[0].owner_membership_id,x.plan.membershipId);
+  assert.equal(completed[0].matter.id,dataset.matter.id);
+  assert.ok(dataset.pages.every(page=>page.value.items.every(item=>item.id!==completed[0].id)));
+ }finally{x.close();}
+});
 function hostProducerDouble(){
  const x=producerDouble(),root=path.dirname(x.plan.privatePeerFiles[0]),effects=[],source={sourceSha:x.plan.sourceSha,sourceFingerprint:'b'.repeat(64),inputFileCount:226,sourceDirty:false};
  const actors=Object.fromEntries([['owner',id(1),id(3),id(7)],['member',id(1),id(2),id(5)],['second-company',id(41),id(40),id(6)],['foreign-owner',id(41),id(4),id(8)]].map(([name,companyId,membershipId,userId])=>[name,{companyId,membershipId,userId,credentialEvidence:{path:'/synthetic/'+name+'.json',sha256:'e'.repeat(64),uid:process.getuid()}}]));
