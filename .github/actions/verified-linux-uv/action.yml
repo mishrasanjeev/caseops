@@ -1,4 +1,4 @@
-name: Install pinned PostgreSQL CI uv
+name: Install verified Linux uv
 description: Verify the upstream Linux x64 uv archive before adding its tools to PATH.
 runs:
   using: composite
@@ -9,11 +9,11 @@ runs:
         set -euo pipefail
         : "${RUNNER_TEMP:?}" "${GITHUB_PATH:?}" "${GITHUB_ENV:?}"
         if [[ "${RUNNER_OS}" != Linux || "${RUNNER_ARCH}" != X64 ]]; then
-          echo "PostgreSQL CI uv requires a Linux X64 runner." >&2
+          echo "Verified uv requires a Linux X64 runner." >&2
           exit 1
         fi
 
-        root=$(mktemp -d "${RUNNER_TEMP}/caseops-postgres-uv.XXXXXXXX")
+        root=$(mktemp -d "${RUNNER_TEMP}/caseops-linux-uv.XXXXXXXX")
         artifact=uv-x86_64-unknown-linux-gnu.tar.gz
         archive="${root}/${artifact}"
         # Astral's official 0.13.7 release lists this first-party endpoint and

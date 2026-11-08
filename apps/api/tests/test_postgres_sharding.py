@@ -24,13 +24,13 @@ from tests.postgres_sharding import (
 )
 from tests.test_deploy_prod_hardening import _bash_path, _find_working_bash, _write_fake_executable
 
-UV_ACTION = "./.github/actions/postgres-uv"
+UV_ACTION = "./.github/actions/verified-linux-uv"
 UV_ARCHIVE = "uv-x86_64-unknown-linux-gnu.tar.gz"
 UV_ARCHIVE_URL = f"https://releases.astral.sh/github/uv/releases/download/0.13.7/{UV_ARCHIVE}"
 UV_ARCHIVE_SHA256 = "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
 
 
-def _postgres_uv_step(root: Path) -> str:
+def _verified_uv_step(root: Path) -> str:
     action = yaml.safe_load((root / UV_ACTION / "action.yml").read_text(encoding="utf-8"))
     assert action["runs"]["using"] == "composite"
     step, = action["runs"]["steps"]
@@ -38,27 +38,42 @@ def _postgres_uv_step(root: Path) -> str:
     return step["run"]
 
 
-def test_ci_postgres_install_is_scoped_and_pinned_to_the_official_archive():
+def test_affected_ci_jobs_use_the_official_uv_archive_before_work():
     root = Path(__file__).resolve().parents[3]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflows = {
+        name: yaml.safe_load((root / f".github/workflows/{name}.yml").read_text(encoding="utf-8"))
+        for name in ("ci", "security")
+    }
     using_action = [
-        (name, step)
-        for name, job in workflow["jobs"].items()
-        for step in job.get("steps", [])
+        (workflow, job, step)
+        for workflow, source in workflows.items()
+        for job, definition in source["jobs"].items()
+        for step in definition.get("steps", [])
         if step.get("uses") == UV_ACTION
     ]
-    assert len(using_action) == 2
-    assert dict(using_action) == {
-        "postgres-validation-shards": {
+    assert len(using_action) == 4
+    assert {(workflow, job): step for workflow, job, step in using_action} == {
+        ("ci", "api-test-shards"): {
             "name": "Install uv", "timeout-minutes": 5, "uses": UV_ACTION,
         },
-        "postgres-validation": {"name": "Install uv", "uses": UV_ACTION},
+        ("ci", "postgres-validation-shards"): {
+            "name": "Install uv", "timeout-minutes": 5, "uses": UV_ACTION,
+        },
+        ("ci", "postgres-validation"): {"name": "Install uv", "uses": UV_ACTION},
+        ("security", "pip-audit"): {"name": "Install uv", "uses": UV_ACTION},
     }
-    for job, install in using_action:
-        steps = workflow["jobs"][job]["steps"]
+    for workflow, job, install in using_action:
+        definition = workflows[workflow]["jobs"][job]
+        assert definition["runs-on"] == "ubuntu-latest"
+        steps = definition["steps"]
         checkout = next(step for step in steps if step.get("uses") == "actions/checkout@v4")
         assert steps.index(checkout) < steps.index(install)
-    action = _postgres_uv_step(root)
+        following = steps[steps.index(install) + 1]
+        if (workflow, job) == ("ci", "postgres-validation"):
+            assert following["name"] == "Download PostgreSQL evidence"
+        else:
+            assert following["run"] == "uv python install 3.13"
+    action = _verified_uv_step(root)
     assert f"artifact={UV_ARCHIVE}" in action
     assert UV_ARCHIVE_URL.replace(UV_ARCHIVE, "${artifact}") in action
     assert action.count(UV_ARCHIVE_SHA256) == 1
@@ -71,7 +86,7 @@ def test_ci_postgres_install_is_scoped_and_pinned_to_the_official_archive():
         "wrong-version", "wrong-architecture",
     ],
 )
-def test_postgres_uv_install_verifies_before_activation(tmp_path: Path, mode: str):
+def test_verified_uv_install_verifies_before_activation(tmp_path: Path, mode: str):
     root = Path(__file__).resolve().parents[3]
     runner = tmp_path / "runner"
     runner.mkdir()
@@ -103,7 +118,7 @@ printf 'attempt\\n' >> "$FAKE_CURL_TRACE"
 expected=(--disable --proto '=https' --fail --silent --show-error
           --connect-timeout 15 --max-time 90 --max-filesize 16671812 --output)
 [[ "$#" == 15 && "${*:1:13}" == "${expected[*]}" ]]
-[[ "${15}" == "$FAKE_UV_URL" && "${14}" == "$RUNNER_TEMP"/caseops-postgres-uv.*/"$FAKE_UV_NAME" ]]
+[[ "${15}" == "$FAKE_UV_URL" && "${14}" == "$RUNNER_TEMP"/caseops-linux-uv.*/"$FAKE_UV_NAME" ]]
 case "$FAKE_UV_MODE" in
   http-504) exit 22 ;;
   transfer-timeout) exit 28 ;;
@@ -128,7 +143,7 @@ cp -- "$FAKE_UV_ARCHIVE" "${14}"
     # is independently bound to the upstream archive by the source contract.
     command = (
         'export PATH="$1:$PATH"; [[ "$(command -v curl)" == "$1/curl" ]] || exit 92; '
-        + _postgres_uv_step(root).replace(UV_ARCHIVE_SHA256, fixture_hash)
+        + _verified_uv_step(root).replace(UV_ARCHIVE_SHA256, fixture_hash)
     )
     result = subprocess.run(
         [_find_working_bash(), "-c", command, "postgres-uv-test", _bash_path(fake_bin)],
@@ -145,7 +160,7 @@ cp -- "$FAKE_UV_ARCHIVE" "${14}"
         assert not uv_trace.exists()
     if mode == "ok":
         assert result.returncode == 0, result.stdout + result.stderr
-        binary, = runner.glob("caseops-postgres-uv.*/uv-x86_64-unknown-linux-gnu")
+        binary, = runner.glob("caseops-linux-uv.*/uv-x86_64-unknown-linux-gnu")
         assert (binary / "uvx").is_file()
         assert output_path.read_text().splitlines() == [_bash_path(binary)]
         assert output_env.read_text().splitlines() == [
