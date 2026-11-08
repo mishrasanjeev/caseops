@@ -22,7 +22,7 @@ from tests.test_native_auth_20261024 import _browser, _device, _headers
 from tests.test_p0_paid_production_safety import _current_totp
 from tests.test_workspace_conduct_20261108 import PATH, _matter, _note, _upload
 
-REPORTS = f"{PATH}/reports"
+REPORTS = "/api/account/workspace-conduct/reports"
 WORKSPACE = "/api/admin/workspace-conduct/reports"
 PUBLISHER = "/api/platform-admin/workspace-conduct-reports"
 
