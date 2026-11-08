@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { NativeButton, NativeProgress } from "./NativeControls";
 import { PrivacyPolicyLink } from "./PrivacyPolicyLink";
 import { WelcomeFrame } from "./WelcomeFrame";
@@ -21,16 +21,15 @@ export function SignInPanel({
 }: SignInPanelProps) {
   return (
     <WelcomeFrame testID={busy ? "session-loading" : "signed-out"}>
-      <View style={welcome.hero}>
-        <Text style={welcome.kicker}>Legal workspace</Text>
-        <Text accessibilityRole="header" style={welcome.headline}>
-          Your day in view.
+      <View style={welcome.group}>
+        <Text accessibilityRole="header" style={styles.title}>
+          Your legal workspace
         </Text>
-        <Text style={welcome.intro}>
+        <Text style={styles.body}>
           Find your matters, upcoming hearings and assigned work in one place.
         </Text>
       </View>
-      <View style={welcome.entry}>
+      <View style={welcome.group}>
         <Text style={styles.muted}>Sign in securely to continue.</Text>
         {error ? (
           <Text accessibilityRole="alert" style={[styles.body, welcome.error]}>
@@ -58,23 +57,7 @@ export function SignInPanel({
 }
 
 const welcome = StyleSheet.create({
-  hero: { gap: 12 },
-  kicker: {
-    color: colors.brand,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-  },
-  headline: {
-    color: colors.ink,
-    fontFamily: Platform.select({ ios: "Georgia", default: "serif" }),
-    fontSize: 44,
-    lineHeight: 52,
-  },
-  intro: { color: colors.muted, fontSize: 17, lineHeight: 25 },
-  entry: { gap: 12 },
+  group: { gap: 12 },
   error: { color: colors.danger },
 });
 

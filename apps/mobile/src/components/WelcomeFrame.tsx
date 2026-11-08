@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, styles } from "./theme";
+import { styles } from "./theme";
 
 export function WelcomeFrame({
   testID,
@@ -23,7 +23,7 @@ export function WelcomeFrame({
             accessibilityElementsHidden
             importantForAccessibility="no"
           />
-          <Text style={frame.wordmark}>CaseOps</Text>
+          <Text style={styles.heading}>CaseOps</Text>
         </View>
         {children}
       </ScrollView>
@@ -48,10 +48,4 @@ const frame = StyleSheet.create({
     gap: 12,
   },
   mark: { width: 40, height: 40, borderRadius: 8 },
-  wordmark: {
-    color: colors.ink,
-    fontSize: 22,
-    lineHeight: 29,
-    fontWeight: "700",
-  },
 });

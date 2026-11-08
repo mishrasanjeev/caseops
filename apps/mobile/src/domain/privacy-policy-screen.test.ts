@@ -4,6 +4,13 @@ import fs from "node:fs";
 import ts from "typescript";
 import { createPrivacyPolicyOpener } from "./privacy-policy.ts";
 const origin = "https://publisher.contract-fixture.org";
+// Identity tokens: the welcome must take its type from the shared theme.
+const typeTokens = {
+  title: { token: "title" },
+  heading: { token: "heading" },
+  body: { token: "body" },
+  muted: { token: "muted" },
+};
 const projection = {
   url: origin + "/privacy-policy",
   version: "2026-10-28",
@@ -55,7 +62,6 @@ function screen(
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "react-native": {
       Image: "Image",
-      Platform: { select: (fonts: { default: string }) => fonts.default },
       StyleSheet: { create: (styles: unknown) => styles },
       View: "View",
       ScrollView: "ScrollView",
@@ -76,7 +82,10 @@ function screen(
       },
     },
     "../domain/privacy-policy": { createPrivacyPolicyOpener },
-    "./theme": { colors: { brand: "blue" }, styles: {} },
+    "./theme": {
+      colors: { brand: "blue", danger: "red" },
+      styles: { ...typeTokens, fill: {}, content: {}, divider: {} },
+    },
   };
   function loadComponent(relative: string) {
     const code = ts.transpileModule(
@@ -225,8 +234,32 @@ test("signed-out welcome keeps its sign-in action when no privacy policy is conf
   const heading = s.initial.find(
     (node) => node.type === "Text" && node.props.accessibilityRole === "header",
   );
-  assert.equal(heading.props.children, "Your day in view.");
+  assert.equal(heading.props.children, "Your legal workspace");
+  assert.equal(heading.props.style, typeTokens.title);
   assert.match(text(s.initial), /matters, upcoming hearings and assigned work/);
+  // House style: theme type tokens only, no ad-hoc face, caps or brand-coloured
+  // copy on the welcome itself (the accent is reserved for the policy link).
+  const texts = s.initial.filter((node) => node.type === "Text");
+  const tokens = new Set<unknown>(Object.values(typeTokens));
+  for (const node of texts) {
+    const style = [node.props.style].flat();
+    assert.ok(tokens.has(style[0]), JSON.stringify(node.props));
+    for (const part of style) {
+      assert.equal(part?.fontFamily, undefined);
+      assert.equal(part?.fontSize, undefined);
+      assert.equal(part?.textTransform, undefined);
+      assert.notEqual(part?.color, "blue");
+    }
+  }
+  assert.deepEqual(
+    texts.map((node) => node.props.children),
+    [
+      "CaseOps",
+      "Your legal workspace",
+      "Find your matters, upcoming hearings and assigned work in one place.",
+      "Sign in securely to continue.",
+    ],
+  );
   const signIn = s.initial.find((node) => node.props?.testID === "sign-in");
   assert.equal(signIn.props.label, "Continue to sign in");
   assert.equal(signIn.props.disabled, false);
