@@ -254,10 +254,17 @@ function ApplicationContent({
   };
   const push = (next: Route) =>
     guarded(() =>
-      setStacks((previous) => ({
-        ...previous,
-        [tab]: [...previous[tab], next],
-      })),
+      setStacks((previous) => {
+        if (next.type === "workspace-report") {
+          const parent = previous[tab].at(-1);
+          if (
+            parent?.type !== "matter" ||
+            parent.matterId !== next.subject.matter_id
+          )
+            return previous;
+        }
+        return { ...previous, [tab]: [...previous[tab], next] };
+      }),
     );
   const linkState = recordLinks?.inbox.snapshot;
   const attemptedLink = useRef<{ inbox: RecordLinkInbox; id: number } | null>(
@@ -556,6 +563,7 @@ function ApplicationContent({
             </WorkspaceConductGate>
           ) : route.type === "workspace-report" ? (
             <WorkspaceReportScreen
+              key={JSON.stringify(route.subject)}
               subject={route.subject}
               repository={conduct}
               guard={leaveGuard}

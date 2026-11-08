@@ -167,7 +167,7 @@ export function WorkspaceReportScreen({
         secondary
         disabled={phase === "sending"}
         onPress={() => {
-          if (!flight.current) onClose();
+          if (!retired.current && !flight.current) onClose();
         }}
       />
     </ScrollView>

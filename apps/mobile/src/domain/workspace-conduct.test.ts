@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import ts from "typescript";
 import { ContractError } from "./contracts.ts";
+import { errorStatus } from "./repository.ts";
 import type { AuthorizedRequest } from "./repository.ts";
 import {
   decodeWorkspaceConduct,
+  workspaceReportReasons,
   workspaceConductRepository,
 } from "./workspace-conduct.ts";
 
@@ -129,4 +133,146 @@ test("reporting a user binds the selected note or file to its actual author", as
     ContractError,
   );
   assert.equal(calls.length, 1);
+});
+
+test("the real report screen suppresses stale taps, preserves a lost acknowledgement, and retries the same report once", async () => {
+  // Replace only the React/native hosts and transport. Invoke the actual retained
+  // callbacks across renders, including the same turn before busy is visible.
+  type Node = { type: string; props: Record<string, any> };
+  const node = (type: string, props: Node["props"]): Node => ({ type, props });
+  const states: unknown[] = [];
+  let cursor = 0;
+  let cleanup: (() => void) | undefined;
+  let issued = 0;
+  const bindings: Record<string, unknown> = {
+    react: {
+      useState<T>(initial: T) {
+        const index = cursor++;
+        if (!(index in states)) states[index] = initial;
+        return [
+          states[index],
+          (next: T) => {
+            states[index] = next;
+          },
+        ];
+      },
+      useRef<T>(current: T) {
+        const index = cursor++;
+        if (!(index in states)) states[index] = { current };
+        return states[index];
+      },
+      useEffect(effect: () => () => void) {
+        if (!cleanup) cleanup = effect();
+      },
+    },
+    "react/jsx-runtime": { jsx: node, jsxs: node, Fragment: "Fragment" },
+    "react-native": {
+      Text: "Text",
+      Pressable: "Pressable",
+      ScrollView: "ScrollView",
+    },
+    "expo-crypto": {
+      randomUUID: () => {
+        issued++;
+        return operation;
+      },
+    },
+    "../../components/NativeControls": { NativeButton: "NativeButton" },
+    "../../components/theme": { colors: {}, styles: {}, target: 48 },
+    "../../domain/repository": { errorStatus },
+    "../../domain/workspace-conduct": { workspaceReportReasons },
+  };
+  const source = readFileSync(
+    new URL(
+      "../application/screens/WorkspaceReportScreen.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const code = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+    },
+  }).outputText;
+  const module = { exports: {} as Record<string, (props: any) => Node> };
+  new Function("require", "module", "exports", code)(
+    (name: string) => {
+      assert.ok(Object.hasOwn(bindings, name), name);
+      return bindings[name];
+    },
+    module,
+    module.exports,
+  );
+  const calls: {
+    bytes: string;
+    signal?: AbortSignal | null;
+    finish: (value: unknown) => void;
+    fail: (error: unknown) => void;
+  }[] = [];
+  const request: AuthorizedRequest = async <T>(
+    _path: string,
+    init?: RequestInit,
+  ) =>
+    await new Promise<T>((resolve, reject) => {
+      calls.push({
+        bytes: String(init?.body),
+        signal: init?.signal,
+        finish: (value) => resolve(value as T),
+        fail: reject,
+      });
+    });
+  let exits = 0;
+  const guard = { current: null as null | ((leave: () => void) => void) };
+  const props = {
+    subject: { kind: "file", matter_id: matter, item_id: item },
+    repository: workspaceConductRepository(request),
+    guard,
+    onClose: () => {
+      exits++;
+    },
+  };
+  function tree(testID: string) {
+    cursor = 0;
+    const root = module.exports.WorkspaceReportScreen(props);
+    const walk = (value: unknown): Node[] => {
+      if (Array.isArray(value)) return value.flatMap(walk);
+      if (!value || typeof value !== "object" || !("props" in value)) return [];
+      const child = value as Node;
+      return [child, ...walk(child.props.children)];
+    };
+    return walk(root).find((child) => child.props.testID === testID)?.props;
+  }
+  const action = tree("workspace-report-submit")!;
+  assert.equal(action.disabled, true);
+  action.onPress();
+  assert.equal(calls.length, 0);
+  tree("workspace-report-reason-unauthorized_disclosure")!.onPress();
+  action.onPress();
+  action.onPress();
+  guard.current?.(() => {
+    exits++;
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(exits, 0);
+  calls[0].fail(new Error("Lost response"));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.match(tree("workspace-report-status")!.children, /couldn’t confirm/);
+  const retry = tree("workspace-report-submit")!;
+  assert.equal(retry.label, "Retry this report");
+  retry.onPress();
+  retry.onPress();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].bytes, calls[1].bytes);
+  assert.equal(issued, 1);
+  calls[1].finish(receipt);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.match(tree("workspace-report-status")!.children, /^Report received/);
+  retry.onPress();
+  assert.equal(calls.length, 2);
+  cleanup?.();
+  assert.equal(guard.current, null);
+  retry.onPress();
+  assert.equal(calls.length, 2);
 });
