@@ -17,7 +17,7 @@ import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
-import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
@@ -1134,6 +1134,65 @@ test('fixture evidence hash changes and unbounded/relative files fail closed', (
 });
 test('owner capability absence is explicit unavailable and never an E2E pass', async () => {
   await assert.rejects(() => ownerControl({ owner: null }, 'disposeMatter', 'unit'), FixtureUnavailable);
+});
+test('Core does not spend the owner worker lifetime before the first owner case', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1700000000000 });
+  const module = ownedFile(t, `
+    import assert from 'node:assert/strict';
+    import {createHash} from 'node:crypto';
+    import {writeFileSync} from 'node:fs';
+    import {fileURLToPath} from 'node:url';
+    export function createOwnerControls() {
+      let started;
+      return {
+        async prepare({ signal }) {
+          assert.ok(signal instanceof AbortSignal && !signal.aborted);
+          started = Date.now();
+          writeFileSync(new URL('./owner-prepared.json', import.meta.url), JSON.stringify(started), { flag: 'wx' });
+          return { evidenceSha256: 'a'.repeat(64) };
+        },
+        async control({ operation, targetId, runId, backendSha, marker }) {
+          assert.ok(Date.now() - started < 20 * 60 * 1000, 'UNIT_OWNER_LEASE_EXPIRED');
+          assert.equal(marker, 'no-paid-providers');
+          const evidencePath = fileURLToPath(new URL('./' + operation + '.json', import.meta.url));
+          const body = JSON.stringify({ operation, targetId });
+          writeFileSync(evidencePath, body, { flag: 'wx' });
+          return { kind: 'docker-owner-control', operation, targetId, runId, backendSha, evidencePath,
+            evidenceSha256: createHash('sha256').update(body).digest('hex'), result: operation };
+        },
+      };
+    }
+  `, 'owner-worker.mjs');
+  const pathToPreparation = path.join(path.dirname(module.path), 'owner-prepared.json');
+  const fixture = { environment: 'docker-integration', backendSha: 'b'.repeat(40),
+    lifecycleMatter: { id: 'synthetic-lifecycle' }, accessMatter: { id: 'synthetic-access' },
+    ownerControls: { modulePath: module.path, sha256: module.sha256,
+      capabilities: ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'readNoteState'] } };
+  const owner = await loadOwnerControls(fixture);
+  const requirements = id => datedInventory.cases.find(item => item.id === id).ownerCapabilities || [];
+  assert.equal(await prepareOwnerControlsForCase(owner, requirements('NATIVE-16')), undefined);
+  t.mock.timers.tick(20 * 60 * 1000 + 43000);
+  assert.equal(fs.existsSync(pathToPreparation), false, 'Core preflight must not start the owner worker clock');
+  assert.deepEqual(await prepareOwnerControlsForCase(owner, requirements('NATIVE-17')),
+    { evidenceSha256: 'a'.repeat(64) });
+  assert.equal(JSON.parse(readFileSync(pathToPreparation, 'utf8')), Date.now());
+  const context = { fixture, owner, runId: 'synthetic-run' };
+  assert.equal(await ownerControl(context, 'readMatterState', fixture.lifecycleMatter.id), 'readMatterState');
+  t.mock.timers.tick(150000);
+  assert.equal(await ownerControl(context, 'disposeMatter', fixture.lifecycleMatter.id), 'disposeMatter');
+  assert.equal(await prepareOwnerControlsForCase(owner, requirements('NATIVE-18')), undefined);
+  assert.equal(await ownerControl(context, 'readNoteState', fixture.accessMatter.id), 'readNoteState');
+});
+test('deferred owner preparation refuses missing capabilities and never retries an uncertain start', async () => {
+  let starts = 0;
+  const owner = { capabilities: ['readMatterState'],
+    prepare: async () => { starts++; throw new Error('UNIT_OWNER_PREPARATION_UNKNOWN'); } };
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['disposeMatter']), FixtureUnavailable);
+  assert.equal(starts, 0);
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['readMatterState']), /UNIT_OWNER_PREPARATION_UNKNOWN/);
+  assert.equal(owner.poisoned, true);
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['readMatterState']), /OWNER_CONTROL_PREVIOUSLY_UNCERTAIN/);
+  assert.equal(starts, 1);
 });
 test('owner controls refuse positive and wrong-purpose targets without invoking privileged work', async () => {
   let calls = 0;
@@ -2390,6 +2449,10 @@ test('historical Windows plans without Mac proof or transport retain their exist
 test('actual runner binds transport before preflight device work and checks returned capabilities before every native action', () => {
   const source = readFileSync(new URL('./run-native.mjs', import.meta.url), 'utf8');
   assert.ok(source.indexOf('const sessionTransport = androidSessionTransport(') < source.indexOf('owner = await loadOwnerControls('));
+  const prepare = source.indexOf('await prepareOwnerControlsForCase(owner,');
+  assert.ok(source.indexOf("type: 'phase_started', id, phase: 'setup'") < prepare);
+  assert.ok(prepare < source.indexOf("type: 'owner_worker_prepared'"));
+  assert.ok(prepare < source.indexOf('driver = await remote('));
   assert.ok(source.indexOf('...sessionTransport.capabilities') < source.indexOf('driver = await remote('));
   const check = source.indexOf('verifyAndroidSessionTransport(fixture, platform, driver.capabilities)');
   assert.ok(check > source.indexOf('ownedSessionId = sessionCreated.sessionId'));
