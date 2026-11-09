@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { delta, noNotePostRetried, prepareScenario, scenarios, traffic } from '../../apps/mobile/e2e/journeys.mjs';
-import { admitApplication, FixtureUnavailable, loadOwnerControls, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { admitApplication, FixtureUnavailable, loadOwnerControls, prepareOwnerControlsForCase, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { collect, harnessFingerprint, inventory } from '../../apps/mobile/e2e/suite.mjs';
 import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
@@ -141,7 +141,7 @@ if (mode === '--collect') {
       webSha: web.release_sha, webRevision: web.revision,
       platformVersion: fixture.platformVersion, gatewayRunId: status.runId,
       harnessFingerprint: initialHarness, browserMode: fixture.auth.mode, ownerCapabilities: owner?.capabilities || [],
-      ownerReadinessEvidenceSha256: owner?.readiness?.evidenceSha256 || null,
+      ownerPreparationDeferred: typeof owner?.prepare === 'function',
       appId: fixture.appId, isolationEvidenceSha256: fixture.isolationEvidence.sha256,
       buildReceiptSha256: fixture.buildReceipt?.sha256 || null, gatewayBaseline: runGatewayBaseline });
   } catch (error) {
@@ -162,9 +162,12 @@ if (mode === '--collect') {
       authGate.assertSetup();
       if (previousCase?.cleanupUncertain) throw new FixtureUnavailable('PREVIOUS_NATIVE_SESSION_CLEANUP_UNCERTAIN');
       assert.notEqual(owner?.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
-      for (const capability of inventory.cases.find((item) => item.id === scenario.id).ownerCapabilities || []) {
-        if (!owner?.capabilities.includes(capability)) throw new FixtureUnavailable('FIXTURE_OWNER_CAPABILITY_UNAVAILABLE');
-      }
+      // The serial suite can outlive the owner worker. Bind the adapter during
+      // preflight and start its original lease only when a case needs it.
+      const ownerReadiness = await prepareOwnerControlsForCase(owner,
+        inventory.cases.find((item) => item.id === scenario.id).ownerCapabilities || []);
+      if (ownerReadiness) journal.write({ type: 'owner_worker_prepared', id, status: 'passed',
+        evidenceSha256: ownerReadiness.evidenceSha256 });
       driver = await remote({ hostname: appiumUrl.hostname, port: Number(appiumUrl.port) || 4723,
         protocol: appiumUrl.protocol.slice(0, -1), path: appiumUrl.pathname, capabilities,
         logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000 });

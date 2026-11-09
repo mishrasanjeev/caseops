@@ -65,6 +65,7 @@ from caseops_api.api.routes import (
     statutes,
     teams,
     workspace_assistant,
+    workspace_conduct,
 )
 
 
@@ -77,6 +78,11 @@ def register_api_routes(application: FastAPI) -> None:
     )
     application.include_router(
         account_privacy.router, prefix="/api/account", tags=["account-privacy"]
+    )
+    application.include_router(
+        workspace_conduct.router,
+        prefix="/api/account/workspace-conduct",
+        tags=["workspace-conduct"],
     )
     application.include_router(
         recipient_inbox.router, prefix="/api/recipient-inbox", tags=["notifications"]
@@ -183,6 +189,16 @@ def register_api_routes(application: FastAPI) -> None:
         platform_admin.router,
         prefix="/api/platform-admin",
         tags=["platform-admin"],
+    )
+    application.include_router(
+        workspace_conduct.workspace_operator_router,
+        prefix="/api/admin/workspace-conduct",
+        tags=["workspace-conduct"],
+    )
+    application.include_router(
+        workspace_conduct.publisher_operator_router,
+        prefix="/api/platform-admin",
+        tags=["workspace-conduct"],
     )
     application.include_router(
         provider_operations.router,

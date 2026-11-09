@@ -20,6 +20,9 @@ export function MatterScreen({
   initialSection,
   canWrite,
   addNote,
+  reportNote,
+  reportAuthor,
+  currentMembershipId,
   openDraft,
   openQuickWork,
   openCounsel,
@@ -33,6 +36,9 @@ export function MatterScreen({
   initialSection: MatterSection;
   canWrite: boolean;
   addNote: (matter: Matter) => void;
+  reportNote?: (id: string) => void;
+  reportAuthor?: (id: string, membershipId: string) => void;
+  currentMembershipId?: string;
   openDraft: (id: string) => void;
   openQuickWork: (matter: Matter, target: QuickTarget) => void;
   openCounsel: () => void;
@@ -158,6 +164,27 @@ export function MatterScreen({
                         {note.author_name || "Author not supplied"} ·{" "}
                         {note.created_at}
                       </Text>
+                      {reportNote ? (
+                        <NativeButton
+                          testID={`note-report-${note.id}`}
+                          label="Report note"
+                          secondary
+                          onPress={() => reportNote(note.id)}
+                        />
+                      ) : null}
+                      {reportAuthor &&
+                      note.author_membership_id &&
+                      note.author_membership_id !== currentMembershipId ? (
+                        <NativeButton
+                          testID={`note-report-author-${note.id}`}
+                          label="Report note author"
+                          secondary
+                          onPress={() => {
+                            const author = note.author_membership_id;
+                            if (author) reportAuthor(note.id, author);
+                          }}
+                        />
+                      ) : null}
                     </View>
                   ))
                 ) : (

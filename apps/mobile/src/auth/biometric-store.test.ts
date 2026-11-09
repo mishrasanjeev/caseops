@@ -32,7 +32,7 @@ function load(relative: string, bindings: Record<string, any>, jsx = false) {
   );
   return module.exports;
 }
-function sdk() {
+function sdk(platform: "android" | "ios" = "ios") {
   const rows: { command: string; key: string; options: any; value?: string }[] =
     [];
   const disk = new Map<string, string>();
@@ -57,6 +57,7 @@ function sdk() {
   const module = load("./biometric-store.ts", {
     "expo-secure-store": api,
     "expo-crypto": { randomUUID: () => oldId },
+    "react-native": { Platform: { OS: platform } },
   });
   return { api, rows, disk, module, store: module.createBiometricStore(id) };
 }
@@ -101,6 +102,31 @@ test("actual biometric adapter has a dedicated installation namespace and all ma
   ])
     assert.throws(() => f.module.createBiometricStore(invalid));
   assert.equal(f.rows.length, before);
+});
+
+test("Android marker setup and readback name distinct prompts with identical storage protection", async () => {
+  const f = sdk("android");
+  await f.store.writeMarker("synthetic-marker");
+  assert.equal(await f.store.readMarker(), "synthetic-marker");
+  await f.store.clearMarker();
+  const protectedOptions = {
+    keychainService: markerService,
+    keychainAccessible: 77,
+    requireAuthentication: true,
+    requireConfirmation: true,
+  };
+  assert.deepEqual(
+    f.rows.map((row) => [row.command, row.key, row.options]),
+    [
+      [
+        "set",
+        markerKey,
+        { ...protectedOptions, authenticationPrompt: "Set up CaseOps biometric lock" },
+      ],
+      ["get", markerKey, { ...protectedOptions, authenticationPrompt: "Unlock CaseOps" }],
+      ["delete", markerKey, { ...protectedOptions, authenticationPrompt: "Unlock CaseOps" }],
+    ],
+  );
 });
 
 test("actual store adapter plus coordinator requires positive authenticated read-back after writes", async () => {

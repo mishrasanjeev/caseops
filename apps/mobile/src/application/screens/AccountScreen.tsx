@@ -9,6 +9,7 @@ import { colors, styles } from "../../components/theme";
 import { cameraLicences } from "../../files/camera-notices";
 
 import type { MobileApplicationProps } from "../types";
+import { WorkspaceUseRulesLink } from "../WorkspaceConductGate";
 
 export type AccountScreenProps = Pick<
   MobileApplicationProps,
@@ -184,6 +185,7 @@ export function AccountScreen({
         disabled={busy || sessionBusy || privacyBusy}
         requestPanelPresent={!!request}
       />
+      <WorkspaceUseRulesLink disabled={busy || sessionBusy || privacyBusy} />
       <View testID="account-software" style={{ gap: 12 }}>
         <Text accessibilityRole="header" style={styles.heading}>
           About this software

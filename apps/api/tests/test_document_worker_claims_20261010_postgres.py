@@ -74,7 +74,7 @@ def _assert_success(engine, fixture, attempts, content="Prepared content"):
         )) == 1
 
 
-def _activity_source(engine, target, *, active=True):
+def _activity_source(engine, target, *, active=True, historical_attachment=False):
     if target == "ip-targeted":
         from tests.test_ip_document_workflow_postgres import _seed_document_source
 
@@ -88,7 +88,10 @@ def _activity_source(engine, target, *, active=True):
             return SimpleNamespace(company=fixture["company_id"], actor=fixture["actor_id"],
                 job=job.id, source=fixture["version_id"], model=IpDocumentVersion,
                 docket=str(fixture["family"].docket_id))
-    fixture = _fixture(engine, "ip" if target == "ip-targetless" else "matter", active=active)
+    fixture = _fixture(
+        engine, "ip" if target == "ip-targetless" else "matter", active=active,
+        historical_attachment=historical_attachment,
+    )
     if target == "contract":
         with Session(engine) as seed:
             seed.delete(seed.get(DocumentProcessingJob, fixture.job))

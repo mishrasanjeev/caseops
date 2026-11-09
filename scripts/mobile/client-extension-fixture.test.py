@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import os
 import sys
 
@@ -88,18 +88,21 @@ class Producer(unittest.TestCase):
                 if route=='/api/auth/login':return response({'access_token':'offline-response-token','user':{'id':uid(4)},'membership':{'id':uid(3)},'company':{'id':uid(2)}})
                 if route=='/api/auth/mfa/step-up':return response({'status':'verified'})
                 raise AssertionError('unexpected offline CLI route')
-        fake_http=SimpleNamespace(Client=Client);fake_otp=SimpleNamespace(TOTP=lambda value:SimpleNamespace(now=lambda:'123456'))
+        fake_http=SimpleNamespace(Client=Client);hotp=Mock(return_value='123456')
+        security=SimpleNamespace(TOTP_PERIOD_SECONDS=30,_hotp=hotp)
         def normal(request,*,root,environment,http,owner,now):
             self.assertEqual(request,q);actor=owner();self.assertIs(actor,clients[1]);self.assertEqual(actor.headers['Authorization'],'Bearer offline-response-token')
             with self.assertRaises(AssertionError):owner()
             return {'offlineDispatch':'normal','actualNativeAcceptance':False}
-        with patch.dict(os.environ,{**self.env,'CASEOPS_MOBILE_STATE':str(self.root)}),patch.dict(sys.modules,{'httpx':fake_http,'pyotp':fake_otp}),patch.object(p,'produce_normal',normal),patch.object(p,'produce',side_effect=AssertionError('retained dispatch must stay separate')):
+        with patch.dict(os.environ,{**self.env,'CASEOPS_MOBILE_STATE':str(self.root)}),patch.dict(sys.modules,{'httpx':fake_http,'pyotp':None,'caseops_api.services.security':security}),patch('time.time',return_value=301),patch.object(p,'produce_normal',normal),patch.object(p,'produce',side_effect=AssertionError('retained dispatch must stay separate')):
             result=p.main(str(request),hashlib.sha256(data).hexdigest())
         self.assertEqual(result['offlineDispatch'],'normal');self.assertEqual(len(clients),2)
         for client in clients:
             self.assertEqual(client.options['headers'],{'X-CaseOps-Automated-Test':'no-paid-providers'});self.assertIs(client.options['verify'],True);self.assertIs(client.options['follow_redirects'],False);self.assertIs(client.options['trust_env'],False)
         routes=[x for x in requests if x[0].startswith('/api/')];self.assertEqual([x[0]for x in routes],['/api/auth/login','/api/auth/mfa/step-up'])
         self.assertTrue(all(x[2]['X-CaseOps-Automated-Test']=='no-paid-providers'for x in routes));self.assertTrue(all(x[1]['timeout']==5 for x in routes))
+        hotp.assert_called_once_with('SYNTHETICOFFLINE',10)
+        self.assertEqual(routes[1][1]['json'],{'code':'123456','purpose':'step_up','method':'totp'})
     def test_private_reader_rejects_boolean_uid_and_erases_held_bytes_on_success_and_parse_failure(self):
         file=self.root/'held.json';file.write_text('{"password":"offline-only"}');file.chmod(0o600);raw=file.read_bytes();ref={'path':str(file),'sha256':hashlib.sha256(raw).hexdigest(),'uid':os.getuid()}
         for value in (True,False,-1,None):

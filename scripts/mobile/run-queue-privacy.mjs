@@ -24,7 +24,7 @@ const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export function qpInputPaths(root=ROOT){return [...new Set([...OBSERVER_SOURCE_INPUTS,
  ...fs.readdirSync(path.join(root,'apps/mobile/e2e')).filter(n=>/\.(mjs|json)$/.test(n)).map(n=>'apps/mobile/e2e/'+n),
  'scripts/mobile/run-queue-privacy.mjs','scripts/mobile/prepare-queue-privacy-fixture.mjs','scripts/mobile/queue-privacy-controls.mjs',
- 'scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/client-extension-public-input.mjs',
+ 'scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/native-producer-route-file.mjs','scripts/mobile/native-producer-route-provenance.mjs','scripts/mobile/client-extension-public-input.mjs',
  'scripts/mobile/run-v1-workflows.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/android-files-privacy.mjs',
  'scripts/mobile/local-gateway.py','scripts/mobile/local-v1-controls.py','scripts/mobile/local-queue-privacy-controls.py','compose.mobile-local.yml'])].sort();}
 export function qpHarnessFingerprint(root=ROOT){const h=createHash('sha256');for(const name of qpInputPaths(root))h.update(name+'\0').update(fs.readFileSync(path.join(root,name))).update('\0');return h.digest('hex');}

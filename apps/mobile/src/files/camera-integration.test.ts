@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { createPhotoCapture, createCameraCache } from "./camera.ts";
+import {
+  CAMERA_PERMISSION_DENIED_MESSAGE,
+  createPhotoCapture,
+  createCameraCache,
+} from "./camera.ts";
 import { createFilePickerCoordinator } from "../domain/file-picker.ts";
 import { createFilesController } from "./controller.ts";
 import { createFilesInteractionActions } from "./interaction-actions.ts";
@@ -332,6 +336,7 @@ function render(
   snapshot: FilesSnapshot,
   selectingFile = false,
   live = { picking: selectingFile, revision: 0, hasSelection: false },
+  cameraPermissionDeniedAtVersion?: number,
 ) {
   const jsx = (type: any, props: any) => ({ type, props });
   const events: unknown[] = [];
@@ -371,11 +376,17 @@ function render(
     "../../components/NativeControls": { NativeButton: "NativeButton" },
     "../../components/Content": { Fact: "Fact" },
     "../../components/theme": { styles: {}, colors: {} },
+    "../WorkspaceConductGate": {
+      WorkspaceConductGate() {
+        assert.fail("the camera fixture did not enable workspace conduct");
+      },
+    },
     "../../files/api": {
       createMatterFilesApi() {
         return {};
       },
     },
+    "../../files/camera": { CAMERA_PERMISSION_DENIED_MESSAGE },
     "../../files/contracts": {
       matchesSelection() {
         return true;
@@ -425,6 +436,7 @@ function render(
     request: async () => ({}),
     capabilities: ["documents:upload"],
     selectedFile: null,
+    cameraPermissionDeniedAtVersion,
     selectingFile,
     selectionRevision: live.revision,
     readFileSelection: () => ({ ...live }),
@@ -505,6 +517,26 @@ test("real Files screen disables both sources during selection and existing uplo
       assert.deepEqual(f.events, []);
     }
   }
+});
+
+test("real Files screen shows a current camera denial beside the usable picker, never after a lifecycle change", () => {
+  const version = matterFixture().lifecycle_version;
+  const renderDenial = (deniedVersion: number) =>
+    render(snapshot(), false, undefined, deniedVersion);
+  const current = renderDenial(version);
+  const alert = current.controls.get("files-selection-error");
+  assert.equal(alert.props.children, CAMERA_PERMISSION_DENIED_MESSAGE);
+  assert.equal(alert.props.accessibilityRole, "alert");
+  assert.equal(current.controls.has("files-selection"), false);
+  assert.equal(current.controls.has("files-upload"), false);
+  const choose = current.controls.get("files-choose");
+  assert.equal(choose.props.disabled, false);
+  choose.props.onPress();
+  assert.deepEqual(current.events, ["clear", ["file", version]]);
+  assert.equal(
+    renderDenial(version + 1).controls.has("files-selection-error"),
+    false,
+  );
 });
 
 test("actual leave guard and retained confirmation recheck live picker revision, busy state and inactive scope", () => {

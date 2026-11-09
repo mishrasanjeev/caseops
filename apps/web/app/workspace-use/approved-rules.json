@@ -1,0 +1,33 @@
+{
+  "title": "Workspace use rules",
+  "version": "2026-11-08",
+  "intro": "Publisher: Orchestrum Technologies LLP. These rules supplement the agreement that applies to your CaseOps workspace and the CaseOps Privacy Policy.",
+  "sections": [
+    {
+      "id": "authorized-use",
+      "title": "Authorized use",
+      "text": "CaseOps is for authorized legal work. Keep material in the correct workspace and matter. Share records only with people authorized to see them. Make sure you have authority to add any material, particularly if it concerns clients, witnesses or other third parties."
+    },
+    {
+      "id": "prohibited-use",
+      "title": "Prohibited use",
+      "text": "Do not use CaseOps to harass, threaten or exploit anyone; impersonate another person; distribute unlawful material or nonconsensual intimate material; solicit illegal activity; or send spam, malware or fraudulent content. Do not bypass access controls or disclose confidential records without authority."
+    },
+    {
+      "id": "sensitive-legal-material",
+      "title": "Sensitive legal material",
+      "text": "Legal work can involve sensitive or disturbing evidence. Keep such material in a restricted matter only when you have authority and a legitimate work purpose. Do not share it outside its authorized context or use it to harass anyone."
+    },
+    {
+      "id": "report-a-concern",
+      "title": "Report a concern",
+      "text": "If you encounter misuse, use Report a concern in CaseOps. Identify the relevant workspace and item or user through the app; do not include passwords, client documents or substantive matter details in the report. You can also contact sanjeev@orchestrum.in if you cannot access CaseOps."
+    },
+    {
+      "id": "how-reports-are-handled",
+      "title": "How reports are handled",
+      "text": "Orchestrum Technologies LLP and the appropriate workspace administrator can investigate reports using the minimum information necessary. They may restrict access, hide or remove material, or suspend a user where appropriate. Lawful retention duties, legal holds and professional confidentiality continue to apply. CaseOps will handle reports under its Privacy Policy."
+    }
+  ],
+  "contactEmail": "sanjeev@orchestrum.in"
+}

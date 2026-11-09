@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidUploadReadback, chooseAndroidFile,
+import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidTextFirstSegment, awaitAndroidUploadReadback, chooseAndroidFile,
   collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
@@ -88,6 +88,45 @@ test('bounded TXT segmentation retains independent literal windows and exact new
   const text = 'A'.repeat(9999) + '\n' + 'B'.repeat(10000) + 'C'.repeat(4000);
   assert.deepEqual(androidTextSegments(text), ['A'.repeat(9999) + '\n', 'B'.repeat(10000), 'C'.repeat(4000)]);
   for (const value of ['', null, 'x'.repeat(500001)]) assert.throws(() => androidTextSegments(value));
+});
+
+function textReaderPosition(positions) {
+  const calls = [];
+  let index = 0;
+  const driver = {
+    async $$(locator) {
+      assert.equal(locator, 'id=viewer-position');
+      return [{
+        async isDisplayed() { return true; },
+        async getText() {
+          const position = positions[Math.min(index++, positions.length - 1)];
+          calls.push(position);
+          return position;
+        },
+      }];
+    },
+    async waitUntil(probe, options) {
+      assert.equal(options.timeout <= 15000, true);
+      if (options.timeout === 15000) assert.equal(options.interval, 200);
+      for (let attempt = 0; attempt < positions.length; attempt++) if (await probe()) return;
+      throw new Error(options.timeoutMsg);
+    },
+  };
+  return { context: { platform: 'android', driver }, calls };
+}
+
+test('Android TXT waits for the exact first rendered segment after the native loading states', async () => {
+  const states = ['No page displayed', 'Opening document', 'Segment 1 of 2'];
+  const { context, calls } = textReaderPosition(states);
+  await awaitAndroidTextFirstSegment(context, 2);
+  assert.deepEqual(calls, states);
+});
+
+test('Android TXT refuses the wrong segment, count, and format throughout the renderer deadline', async () => {
+  const states = ['Segment 2 of 2', 'Segment 1 of 3', 'Page 1 of 2'];
+  const { context, calls } = textReaderPosition(states);
+  await assert.rejects(awaitAndroidTextFirstSegment(context, 2), /ANDROID_FILES_TEXT_INITIAL_ACK_REQUIRED/);
+  assert.deepEqual(calls, states);
 });
 
 test('five clean upload kinds require exact manifest bytes and two-page PDF oracle', t => {

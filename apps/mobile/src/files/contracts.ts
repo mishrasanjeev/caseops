@@ -4,6 +4,7 @@ import {
   dateOnly,
   decodeMatter,
   object,
+  reportableMembershipId,
   string,
 } from "../domain/contracts.ts";
 import type { Matter } from "../domain/contracts.ts";
@@ -40,6 +41,7 @@ export type MatterFile = {
   extraction_error: string | null;
   processed_at: string | null;
   uploaded_by_name: string | null;
+  uploaded_by_membership_id?: string;
   created_at: string;
   document_type: string | null;
   lifecycle_stage: string | null;
@@ -81,6 +83,7 @@ function timestamp(value: unknown, field: string): string {
 }
 export function decodeMatterFile(value: unknown, matterId: string): MatterFile {
   const row = object(value, "matter attachment");
+  const uploader = reportableMembershipId(row.uploaded_by_membership_id);
   if (identity(row.matter_id, "file parent") !== matterId)
     throw new ContractError("file parent");
   if (
@@ -113,6 +116,7 @@ export function decodeMatterFile(value: unknown, matterId: string): MatterFile {
         ? null
         : timestamp(row.processed_at, "processing timestamp"),
     uploaded_by_name: nullable(row.uploaded_by_name, "uploader"),
+    ...(uploader ? { uploaded_by_membership_id: uploader } : {}),
     created_at: timestamp(row.created_at, "upload timestamp"),
     document_type: optionalMetadata("document_type"),
     lifecycle_stage: optionalMetadata("lifecycle_stage"),

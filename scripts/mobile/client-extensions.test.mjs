@@ -9,9 +9,9 @@ import {createHash} from 'node:crypto';
 import {collectNativeClientExtensions,clientExtensionScenarios} from '../../apps/mobile/e2e/client-extensions-20261028.mjs';
 import {collectClientExtensions} from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import {parseClientCompatibility,requireClientExtensionRequest,decodeReadPage,decodeRecommendation} from '../../apps/mobile/e2e/client-extensions-contract.mjs';
-import {ClientExtensionUnavailable} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
+import {ClientExtensionUnavailable,enableLock} from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import {readClientPublicInput,writeClientProjection} from './client-extension-public-input.mjs';
-import {captureClientTree,captureClientTreeAsync,captureClientTreeCommitmentAsync,captureClientTreeInventoryAsync,captureClientFile,admitClientServer,admitClientServerAsync,captureClientTreeCommitment,captureClientTreeInventory,clientTreeManifest,assertClientTreeCommitment,assertClientRuntimeInventory,writeClientTreeAuditManifest,CLIENT_TREE_AUDIT_MAX_BYTES} from './client-extension-runtime.mjs';
+import {captureClientTree,captureClientTreeAsync,captureClientTreeCommitmentAsync,captureClientTreeInventoryAsync,captureClientFile,admitClientServer,admitClientServerAsync,captureClientTreeCommitment,captureClientTreeInventory,clientTreeManifest,assertClientTreeCommitment,assertClientRuntimeInventory,writeClientTreeAuditManifest,CLIENT_TREE_AUDIT_MAX_BYTES,createAndroidFingerprintDispatch} from './client-extension-runtime.mjs';
 import {admitClientExtensions,executeClientExtensionInventory,runClientExtensions} from './run-client-extensions.mjs';
 import {waitForClientOperator} from './client-extension-controls.mjs';
 import {fileURLToPath} from 'node:url';
@@ -1123,4 +1123,194 @@ test('complete ClientExtensions admission binds physical4K layout and rejects mi
 
 test('ClientExtensions complete admission binds signed observer source and refuses a forged run-as label',async()=>{
  for(const wrong of[false,true]){const x=clientAdmissionPacket(),dir=temp();try{const actual=bindPhysicalPacket(x,x.values,x.io.installed());const ref=bindObserverTestIdentity(actual,dir,x.q.expectedSourceSha);for(const r of[x.q.fixtureEvidence,...x.q.members.map(m=>m.fixtureEvidence)])x.values.get(r.path).privacyObserverEvidence=ref;for(const r of[x.q.deviceEvidence,x.q.installedEvidence]){delete x.values.get(r.path).runAsUid;Object.assign(x.values.get(r.path),structuredClone(actual));}x.io.installed=()=>structuredClone(actual);x.values.get(x.q.artifactVersionEvidence.path).reader='aapt2-dump-badging';if(wrong)x.values.get(x.q.deviceEvidence.path).access='run-as';if(wrong){await assert.rejects(admitClientExtensions(x.q,x.io));assert.equal(x.reads(),0);}else{const r=await admitClientExtensions(x.q,x.io);assert.equal(r.installed.access,'qa-observer-service');assert.equal(r.installed.sixteenKEmulatorAcceptance,false);}}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+});
+
+
+function androidLockSetup({staleWritePrompt = false, omitReadRecipe = false} = {}) {
+  const udid = 'emulator-5584';
+  const binaryHash = 'a'.repeat(64);
+  const appiumInventoryEvidence = {path: '/synthetic/appium', sha256: 'b'.repeat(64)};
+  const promptId = 'com.android.systemui:id/title';
+  const writeTitle = 'Set up CaseOps biometric lock';
+  const readTitle = 'Unlock CaseOps';
+  const enabled = 'Enabled for this sign-in on this installation. Sign out to turn it off.';
+  const recipes = {
+    androidBiometricWritePromptVisible: [{kind: 'wait', locator: {kind: 'id', value: promptId}}],
+    ...(!omitReadRecipe ? {
+      androidBiometricReadPromptVisible: [{kind: 'wait', locator: {kind: 'id', value: promptId}}],
+    } : {}),
+  };
+  let screen = 'today';
+  const clicks = [];
+  const matches = [];
+  const driver = {
+    async $$(query) {
+      const controls = {
+        today: {'id=account-open': ''},
+        account: {
+          'id=account-screen': '', 'id=account-principal': 'Synthetic Member',
+          'id=account-workspace': 'Synthetic Workspace', 'id=local-lock-enable': '',
+        },
+        writePrompt: {['id=' + promptId]: writeTitle},
+        readPrompt: {['id=' + promptId]: readTitle},
+        enabled: {'id=back': '', [`android=new UiSelector().text(${JSON.stringify(enabled)})`]: enabled},
+      }[screen];
+      if (!Object.hasOwn(controls,query)) return [];
+      return [{
+        elementId: query, isDisplayed: async () => true, isEnabled: async () => true,
+        getText: async () => controls[query],
+      }];
+    },
+    async waitUntil(predicate, {timeoutMsg}) {
+      if (!await predicate()) throw new Error(timeoutMsg);
+    },
+    async elementClick(id) {
+      clicks.push(id);
+      assert.ok(Object.hasOwn({
+        'id=account-open': 'account', 'id=local-lock-enable': 'writePrompt', 'id=back': 'today',
+      }, id));
+      screen = {'id=account-open': 'account', 'id=local-lock-enable': 'writePrompt', 'id=back': 'today'}[id];
+    },
+    async execute() {
+      assert.fail('Android biometric match must not invoke Appium');
+    },
+  };
+  return {
+    clicks, matches,
+    context: {
+      platform: 'android', workflowDomain: 'emulator', binaryHash, appiumInventoryEvidence,
+      nativeOperations: 0, record() {}, driver, state: {},
+      async androidFingerprint(fingerprintId) {
+        assert.equal(fingerprintId, 52);
+        matches.push(screen);
+        if (screen === 'writePrompt' && !staleWritePrompt) screen = 'readPrompt';
+        else if (screen === 'readPrompt') screen = 'enabled';
+      },
+      fixture: {
+        udid, principalLabel: 'Synthetic Member', workspaceLabel: 'Synthetic Workspace',
+        cx: {
+          osRecipes: {observed: true, platform: 'android', udid, binaryHash, appiumInventoryEvidence, recipes},
+          biometricSimulation: {observed: true, udid, binaryHash, fingerprintId: 52},
+        },
+      },
+    },
+  };
+}
+
+test('Android biometric opt-in matches the distinct observed OS write and readback prompts exactly once', async () => {
+  const fixture = androidLockSetup();
+  await enableLock(fixture.context);
+  assert.deepEqual(fixture.clicks, ['id=account-open', 'id=local-lock-enable', 'id=back']);
+  assert.deepEqual(fixture.matches, ['writePrompt', 'readPrompt']);
+});
+
+test('Android biometric opt-in never matches a stale prompt twice and refuses missing readback evidence before enabling', async () => {
+  const stale = androidLockSetup({staleWritePrompt: true});
+  await assert.rejects(enableLock(stale.context), /CX_NATIVE_STATE_REQUIRED/);
+  assert.deepEqual(stale.matches, ['writePrompt']);
+  assert.deepEqual(stale.clicks, ['id=account-open', 'id=local-lock-enable']);
+  const missing = androidLockSetup({omitReadRecipe: true});
+  await assert.rejects(enableLock(missing.context), /CX_ACTUAL_OS_RECIPE_REQUIRED/);
+  assert.deepEqual(missing.clicks, []);
+  assert.deepEqual(missing.matches, []);
+});
+
+function fingerprintTransport() {
+  const udid = 'emulator-5584';
+  const appId = 'ai.caseops.mobile.dev.localacceptance';
+  const bootId = 'ffffffff-aaaa-bbbb-cccc-dddddddddddd';
+  const binaryHash = 'a'.repeat(64);
+  const adbTool = {path: path.resolve(process.platform === 'win32' ? 'adb.exe' : 'adb')};
+  const request = {
+    fixture: {
+      udid, appId, androidTransport: {adbPort: 5038}, cx: {
+        workflowDomain: 'emulator', osRecipes: {binaryHash},
+        biometricSimulation: {observed: true, udid, binaryHash, fingerprintId: 52},
+      },
+    },
+    installed: {platform: 'android', udid, appId, binaryHash, bootId},
+    adbTool,
+    environment: {ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', SYNTHETIC_SECRET: 'excluded'},
+  };
+  const expected = {
+    boot: ['shell', 'cat', '/proc/sys/kernel/random/boot_id'],
+    name: ['emu', 'avd', 'name'],
+    touch: ['emu', 'finger', 'touch', '52'],
+    release: ['emu', 'finger', 'remove'],
+  };
+  const responses = {
+    boot: () => bootId + '\n', name: () => 'CaseOps_Pixel9_API36_arm64\r\nOK\n',
+    touch: () => 'OK\n', release: () => 'OK\n',
+  };
+  const actions = [];
+  const dependency = {
+    capture: () => adbTool,
+    now: () => 0,
+    async hold(milliseconds) {
+      assert.equal(milliseconds, 220);
+      actions.push('hold');
+    },
+    command(executable, argv, options) {
+      assert.equal(executable, adbTool.path);
+      assert.deepEqual(argv.slice(0, 4), ['-P', '5038', '-s', udid]);
+      assert.deepEqual(options.env, {
+        ADB_SERVER_SOCKET: 'tcp:127.0.0.1:5038', ANDROID_ADB_SERVER_PORT: '5038', ANDROID_SERIAL: udid,
+      });
+      assert.equal(options.shell, false);
+      assert.equal(options.timeout, 2500);
+      assert.equal(options.maxBuffer, 256);
+      const name = Object.keys(expected).find(key => expected[key].join(' ') === argv.slice(4).join(' '));
+      assert.ok(name);
+      actions.push(name);
+      return responses[name]();
+    },
+  };
+  return {request, dependency, responses, actions};
+}
+
+test('Android fingerprint dispatch binds the admitted ADB, boot and AVD and acknowledges one touch and release', async () => {
+  const run = fingerprintTransport();
+  const match = createAndroidFingerprintDispatch(run.request, run.dependency);
+  await match(52);
+  assert.deepEqual(run.actions, ['boot', 'name', 'touch', 'hold', 'boot', 'release', 'boot', 'name']);
+});
+
+test('Android fingerprint transport refuses wrong identity and never replays blank or unknown acknowledgements', async () => {
+  for (const [event, response, actions, expected] of [
+    ['name', () => '', ['boot', 'name'], /CX_ANDROID_FINGERPRINT_AVD_ACK_REQUIRED/],
+    ['boot', () => '11111111-2222-3333-4444-555555555555', ['boot'], /CX_ANDROID_FINGERPRINT_BOOT_CHANGED/],
+    ['touch', () => '', ['boot', 'name', 'touch'], /CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY/],
+    ['touch', () => { throw new Error('Synthetic lost touch acknowledgement'); },
+      ['boot', 'name', 'touch'], /CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY/],
+    ['release', () => 'KO: unconfirmed', ['boot', 'name', 'touch', 'hold', 'boot', 'release'],
+      /CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY/],
+  ]) {
+    const run = fingerprintTransport();
+    run.responses[event] = response;
+    const match = createAndroidFingerprintDispatch(run.request, run.dependency);
+    await assert.rejects(match(52), expected);
+    assert.deepEqual(run.actions, actions);
+  }
+  const replaced = fingerprintTransport();
+  let bootReads = 0;
+  replaced.responses.boot = () => ++bootReads === 1 ? replaced.request.installed.bootId : '11111111-2222-3333-4444-555555555555';
+  await assert.rejects(createAndroidFingerprintDispatch(replaced.request, replaced.dependency)(52), /CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY/);
+  assert.deepEqual(replaced.actions, ['boot', 'name', 'touch', 'hold', 'boot']);
+  const altered = fingerprintTransport();
+  altered.dependency.capture = () => ({...altered.request.adbTool, sha256: 'modified'});
+  await assert.rejects(createAndroidFingerprintDispatch(altered.request, altered.dependency)(52), /CX_ANDROID_FINGERPRINT_ADB_CHANGED/);
+  assert.deepEqual(altered.actions, []);
+});
+
+test('Android biometric opt-in stops after unconfirmed touch and records uncertain state', async () => {
+  const fixture = androidLockSetup();
+  let attempts = 0;
+  fixture.context.androidFingerprint = async () => {
+    attempts++;
+    throw new Error('CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY');
+  };
+  await assert.rejects(enableLock(fixture.context), /CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY/);
+  assert.equal(attempts, 1);
+  assert.equal(fixture.context.state.mutationUncertain, true);
+  assert.deepEqual(fixture.clicks, ['id=account-open', 'id=local-lock-enable']);
 });

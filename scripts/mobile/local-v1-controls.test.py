@@ -8,7 +8,7 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("v1_controls_unit", Path(__file__).with_name("local-v1-controls.py"))
 M = importlib.util.module_from_spec(SPEC)
@@ -66,7 +66,7 @@ class ControlTests(unittest.TestCase):
             root = Path(directory).resolve(); target = root / 'member.json'
             descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             try:
-                os.write(descriptor, b'{"email":"synthetic@example.invalid","password":"synthetic-only","company_slug":"synthetic"}')
+                os.write(descriptor, b'{"email":"synthetic@example.invalid","password":"synthetic-only","company_slug":"synthetic","totp_secret":"SYNTHETICOFFLINE"}')
                 actual_uid = os.fstat(descriptor).st_uid
             finally:
                 os.close(descriptor)
@@ -79,7 +79,7 @@ class ControlTests(unittest.TestCase):
                 def __init__(self):
                     self.headers = {}; self.cookies = SimpleNamespace(clear=lambda: None)
                 def stream(self, method, route, **kwargs):
-                    calls.append((method, route, sorted(kwargs['json'])))
+                    calls.append((method, route, kwargs['json']))
                     body = M.canonical({'company': {'id': binding['companyId']}, 'membership': {'id': binding['membershipId'], 'role': 'member'}, 'capabilities': ['matters:write'], 'access_token': 'synthetic-only'})
                     class Response:
                         status_code = 200; headers = {}
@@ -89,8 +89,15 @@ class ControlTests(unittest.TestCase):
                     return Response()
                 def close(self): closed.append(True)
             owner = M.RegisteredOwner(value, root, factory=Client)
-            self.assertIs(owner.client('member'), owner.client('member'))
-            self.assertEqual(calls, [('POST', '/api/auth/login', ['company_slug', 'email', 'password'])])
+            hotp = Mock(return_value='123456')
+            security = SimpleNamespace(TOTP_PERIOD_SECONDS=30, _hotp=hotp)
+            with patch.dict(sys.modules, {'pyotp': None, 'caseops_api.services.security': security}), patch.object(M.time, 'time', return_value=301):
+                self.assertIs(owner.client('member'), owner.client('member'))
+            hotp.assert_called_once_with('SYNTHETICOFFLINE', 10)
+            self.assertEqual(calls, [
+                ('POST', '/api/auth/login', {'company_slug': 'synthetic', 'email': 'synthetic@example.invalid', 'password': 'synthetic-only'}),
+                ('POST', '/api/auth/mfa/step-up', {'code': '123456', 'purpose': 'step_up', 'method': 'totp'}),
+            ])
             owner.close(); self.assertEqual(closed, [True])
 
     def test_missing_untyped_or_wrong_private_uid_refuses_before_private_bytes_or_http(self):

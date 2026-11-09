@@ -1,5 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { randomUUID } from "expo-crypto";
+import { Platform } from "react-native";
 import type { LocalUnlockStore } from "./local-unlock";
 
 const POLICY = "caseops.local-biometric.policy.v1";
@@ -34,12 +35,18 @@ async function readPolicy(): Promise<unknown> {
 }
 export function createBiometricStore(installationId: string): LocalUnlockStore {
   const options = markerOptions(installationId);
+  // Android asks for authentication separately when saving and reading the
+  // marker. Tell the user which operation is requesting their fingerprint.
+  const writeOptions =
+    Platform.OS === "android"
+      ? { ...options, authenticationPrompt: "Set up CaseOps biometric lock" }
+      : options;
   const clearMarker = () => SecureStore.deleteItemAsync(MARKER, options);
   return {
     readPolicy,
     writePolicy: (value) =>
       SecureStore.setItemAsync(POLICY, JSON.stringify(value), policyOptions),
-    writeMarker: (value) => SecureStore.setItemAsync(MARKER, value, options),
+    writeMarker: (value) => SecureStore.setItemAsync(MARKER, value, writeOptions),
     readMarker: () => SecureStore.getItemAsync(MARKER, options),
     clearMarker,
     async clear() {

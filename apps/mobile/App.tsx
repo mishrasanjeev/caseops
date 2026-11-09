@@ -72,7 +72,11 @@ type LocalUiCommand = {
 
 export default function App() {
   usePreventScreenCapture();
-  const [identity, setIdentity] = useState<SessionIdentity | null>(null);
+  const [privateView, setPrivateView] = useState<{
+    identity: SessionIdentity;
+    entry: "default" | "account";
+  } | null>(null);
+  const identity = privateView?.identity ?? null;
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isForeground, setIsForeground] = useState(
@@ -179,7 +183,7 @@ export default function App() {
       credentialStore,
       Date.now,
       () => {
-        if (alive.current) setIdentity(null);
+        if (alive.current) setPrivateView(null);
         try {
           runPrivateFileCleanup([
             retireRecordLinks,
@@ -215,7 +219,7 @@ export default function App() {
       () => JSON.stringify(session.localBinding),
       (status) => {
         if (alive.current) {
-          setIdentity(null);
+          setPrivateView(null);
           setError(null);
         }
         localLock.current?.invalidate();
@@ -296,7 +300,7 @@ export default function App() {
   // lock covering a return also keeps the opaque picker return lease.
   const coverPrivate = useCallback(
     async (mode: "background" | "resume" = "background") => {
-      if (alive.current) setIdentity(null);
+      if (alive.current) setPrivateView(null);
       runPrivateFileCleanup([
         () => viewerEvents.notify("background"),
         () => {
@@ -321,6 +325,7 @@ export default function App() {
       current: SessionIdentity | null,
       owner: LocalUnlockController,
       expectedEpoch: number,
+      entry: "default" | "account" = "default",
     ) => {
       const binding = runtime.session.localBinding;
       if (
@@ -336,7 +341,7 @@ export default function App() {
         owner.allows(binding) &&
         runtime.compatibility.supported
       ) {
-        setIdentity(current);
+        setPrivateView({ identity: current, entry });
         // The returned picker result is now published with its identity; a
         // later background, recheck or cover clears it as usual.
         picker.settle();
@@ -666,7 +671,7 @@ export default function App() {
     if (signOutInFlight.current || !currentUiCommand(command)) return;
     signOutInFlight.current = true;
     localLock.current?.invalidate();
-    setIdentity(null);
+    setPrivateView(null);
     setError(null);
     setBusy(true);
     try {
@@ -708,7 +713,9 @@ export default function App() {
     )
       return;
     const expectedEpoch = lock.commandEpoch;
-    publishUnlocked(await lock.enable(), lock, expectedEpoch);
+    // The protected prompt unmounts all private screens. After a successful
+    // opt-in, reopen only Account with the freshly revalidated identity.
+    publishUnlocked(await lock.enable(), lock, expectedEpoch, "account");
   }
 
   function canOpenWelcomeBrowser() {
@@ -875,7 +882,11 @@ export default function App() {
             }
             sessionKey={runtime.session.sessionKey}
             initialFilesMatterId={fileState?.intent.matterId}
+            initialAccount={privateView?.entry === "account"}
             selectedFile={fileState?.selection ?? null}
+            cameraPermissionDenial={
+              fileState?.cameraPermissionDenied ? fileState.intent : undefined
+            }
             onClearSelectedFile={clearSelection}
             selectingFile={picker.picking}
             selectionRevision={

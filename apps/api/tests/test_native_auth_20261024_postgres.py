@@ -283,6 +283,20 @@ def test_native_postgres_http_real_work_vertical_slice(isolated_postgres_client,
     original_version = workspace.json()["matter"]["lifecycle_version"]
     missing_version = client.post(notes_path, headers=headers, json={"body": "Missing version"})
     assert missing_version.status_code == 422, missing_version.text
+    unaccepted = client.post(
+        notes_path,
+        headers=headers,
+        json={
+            "body": "Native rules are not accepted",
+            "expected_lifecycle_version": original_version,
+        },
+    )
+    assert unaccepted.status_code == 403, unaccepted.text
+    assert unaccepted.json()["type"] == "workspace_conduct_acceptance_required"
+    acceptance = client.post(
+        "/api/account/workspace-conduct/accept", headers=headers, json={"version": "2026-11-08"},
+    )
+    assert acceptance.status_code == 200 and acceptance.json()["accepted_at"] is not None
     note = client.post(
         notes_path,
         headers=headers,

@@ -54,9 +54,11 @@ Build streams are bounded at16MiB each plus an overflow detector; bounded
 inspection streams use1MiB each, with256MiB aggregate command output.
 
 Actual current store maxima must be below both proposed build numbers. The
-existing exclusive reservation primitive reserves both platform numbers as one
-source/build/link batch. A complete matching batch can be reused for the other
-platform; each platform has its own exclusive execution claim. Partial batches,
+exclusive reservation covers both configured platform identities as one
+source/build/link batch. Android-only link configuration reserves only the
+Android counter and keeps the same release gates. A complete matching
+two-platform batch can be reused for the other platform. Each platform has its
+own exclusive execution claim. Partial batches,
 existing claims and existing output directories refuse rather than reset or
 replay. Outputs use owner-private directories and exclusive0600 files.
 The public Podfile.lock copy has a separate exclusive0600 writer: its generated

@@ -47,6 +47,16 @@ def upload_case(isolated_postgres_client, http_pg_engine, monkeypatch):
     me = client.get("/api/auth/me", headers=native)
     assert me.status_code == 200, me.text
     assert me.json()["membership"]["id"] == auth["membership"]["id"]
+    policy = client.get("/api/account/workspace-conduct", headers=native)
+    assert policy.status_code == 200, policy.text
+    assert policy.json()["accepted_at"] is None
+    acceptance = client.post(
+        "/api/account/workspace-conduct/accept",
+        headers=native,
+        json={"version": policy.json()["version"]},
+    )
+    assert acceptance.status_code == 200, acceptance.text
+    assert acceptance.json()["accepted_at"] is not None
     observed = {"scan": 0, "store": 0, "dispatch": 0, "session": None}
     create = routes.create_matter_attachment
     place = document_storage._place_local_temp_file

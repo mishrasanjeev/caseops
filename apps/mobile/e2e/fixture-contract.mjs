@@ -180,12 +180,28 @@ export async function loadOwnerControls(fixture) {
   const adapter = await import(`${pathToFileURL(modulePath).href}?sha256=${sha256}`);
   const instance = typeof adapter.createOwnerControls === 'function' ? adapter.createOwnerControls() : adapter;
   assert.equal(typeof instance.control, 'function', 'REAL_FIXTURE_CONTROL_REQUIRED');
+  return {
+    control: instance.control,
+    close: instance.close,
+    capabilities,
+    prepare: typeof instance.prepare === 'function'
+      ? () => instance.prepare({ fixture, signal: AbortSignal.timeout(60000) }) : undefined,
+  };
+}
+
+export async function prepareOwnerControlsForCase(owner, requiredCapabilities) {
+  for (const capability of requiredCapabilities) {
+    if (!owner?.capabilities.includes(capability)) throw new FixtureUnavailable('FIXTURE_OWNER_CAPABILITY_UNAVAILABLE');
+  }
+  if (!requiredCapabilities.length || typeof owner.prepare !== 'function') return;
+  assert.notEqual(owner.poisoned, true, 'OWNER_CONTROL_PREVIOUSLY_UNCERTAIN');
+  if (owner.prepared) return;
   try {
-    const readiness = typeof instance.prepare === 'function'
-      ? await instance.prepare({ fixture, signal: AbortSignal.timeout(60000) }) : undefined;
-    return { control: instance.control, close: instance.close, readiness, capabilities };
+    const readiness = await owner.prepare();
+    owner.prepared = true;
+    return readiness;
   } catch (error) {
-    if (typeof instance.close === 'function') await instance.close().catch(() => {});
+    owner.poisoned = true;
     throw error;
   }
 }

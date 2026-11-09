@@ -4,6 +4,8 @@ import { createFilePickerCoordinator } from "./file-picker.ts";
 import type { SessionIdentity } from "../auth/types.ts";
 import type { MatterFileAsset } from "../files/contracts.ts";
 import { TempCleanupError } from "../files/staging.ts";
+import { createPhotoCapture } from "../files/camera.ts";
+import type { CameraCaptureIO } from "../files/camera.ts";
 
 const identity: SessionIdentity = {
   company: { id: "company", name: "Local", slug: "local" },
@@ -144,6 +146,161 @@ test("a clear during the return lease ends it and discards the result", async ()
   assert.equal(f.coordinator.leased, false);
   assert.equal(f.coordinator.snapshot(identity, "epoch-1"), null);
   assert.deepEqual(f.cleaned, [asset]);
+});
+test("intermediate camera permission resume cannot retire the Files return lease", async () => {
+  let grant!: (permission: { granted: boolean }) => void;
+  let finishCamera!: (
+    result: Awaited<ReturnType<CameraCaptureIO["launch"]>>,
+  ) => void;
+  let cameraOpened!: () => void;
+  const launched = new Promise<void>((resolve) => {
+    cameraOpened = resolve;
+  });
+  let purges = 0;
+  const capture = createPhotoCapture({
+    cacheRootUri: "file:///data/user/0/qa/cache/ImagePicker/",
+    requestPermission: () =>
+      new Promise((resolve) => {
+        grant = resolve;
+      }),
+    launch: () =>
+      new Promise((resolve) => {
+        finishCamera = resolve;
+        cameraOpened();
+      }),
+    inspect: () => assert.fail("A cancelled camera has no file to inspect"),
+    purge: () => {
+      purges++;
+    },
+    retainOnly: () => assert.fail("A cancelled camera has no file to retain"),
+  });
+  const coordinator = createFilePickerCoordinator(
+    async () => assert.fail("Camera must not open the file picker"),
+    () => assert.fail("Cancellation did not produce an asset"),
+    () => {},
+    capture,
+  );
+  const pending = coordinator.choose(intent, "camera");
+  // Android may revalidate once after its permission prompt and again
+  // after the external camera finishes. The first is not the return.
+  coordinator.settle();
+  grant({ granted: true });
+  await launched;
+  finishCamera({ canceled: true });
+  await pending;
+  assert.equal(coordinator.picking, false);
+  assert.equal(coordinator.leased, true);
+  assert.equal(purges, 2);
+  assert.deepEqual(coordinator.snapshot(identity, "epoch-1"), {
+    intent,
+    revision: 1,
+    selection: null,
+  });
+  coordinator.settle();
+  assert.equal(coordinator.leased, false);
+  coordinator.clear();
+  assert.equal(coordinator.snapshot(identity, "epoch-1"), null);
+});
+test("camera denial retains only the current Files outcome and allows the file picker", async () => {
+  let deny!: (permission: { granted: boolean }) => void;
+  let purges = 0;
+  let picked = 0;
+  const capture = createPhotoCapture({
+    cacheRootUri: "file:///data/user/0/qa/cache/ImagePicker/",
+    requestPermission: () =>
+      new Promise((resolve) => {
+        deny = resolve;
+      }),
+    launch: () =>
+      assert.fail("Denied camera permission must not launch capture"),
+    inspect: () =>
+      assert.fail("Denied camera permission cannot produce a file"),
+    purge: () => {
+      purges++;
+    },
+    retainOnly: () =>
+      assert.fail("Denied camera permission cannot retain a file"),
+  });
+  const coordinator = createFilePickerCoordinator(
+    async () => {
+      picked++;
+      return null;
+    },
+    () => assert.fail("No denied selection exists to clean"),
+    () => {},
+    capture,
+  );
+  const pending = coordinator.choose(intent, "camera");
+  coordinator.settle();
+  deny({ granted: false });
+  await pending;
+  assert.equal(coordinator.leased, true);
+  assert.equal(purges, 2);
+  assert.equal(picked, 0);
+  assert.deepEqual(coordinator.snapshot(identity, "epoch-1"), {
+    intent,
+    revision: 1,
+    selection: null,
+    cameraPermissionDenied: true,
+  });
+  assert.equal(coordinator.snapshot(identity, "epoch-2"), null);
+  assert.equal(
+    coordinator.snapshot(
+      { ...identity, membership: { ...identity.membership, id: "another" } },
+      "epoch-1",
+    ),
+    null,
+  );
+  coordinator.settle();
+  assert.equal(coordinator.leased, false);
+  await coordinator.choose(intent, "file");
+  assert.equal(picked, 1);
+  assert.deepEqual(coordinator.snapshot(identity, "epoch-1"), {
+    intent,
+    revision: 2,
+    selection: null,
+  });
+});
+test("a revoked camera denial stays hidden and cleanup failure still escapes", async () => {
+  let deny!: (permission: { granted: boolean }) => void;
+  let purges = 0;
+  let failCleanup = false;
+  const capture = createPhotoCapture({
+    cacheRootUri: "file:///data/user/0/qa/cache/ImagePicker/",
+    requestPermission: () =>
+      new Promise((resolve) => {
+        deny = resolve;
+      }),
+    launch: () =>
+      assert.fail("Denied camera permission must not launch capture"),
+    inspect: () =>
+      assert.fail("Denied camera permission cannot produce a file"),
+    purge: () => {
+      if (++purges === 4 && failCleanup) throw new TempCleanupError();
+    },
+    retainOnly: () =>
+      assert.fail("Denied camera permission cannot retain a file"),
+  });
+  const coordinator = createFilePickerCoordinator(
+    async () => assert.fail("No file picker was requested"),
+    () => assert.fail("No denied selection exists to clean"),
+    () => {},
+    capture,
+  );
+  const revoked = coordinator.choose(intent, "camera");
+  coordinator.clear();
+  deny({ granted: false });
+  await revoked;
+  assert.equal(coordinator.snapshot(identity, "epoch-1"), null);
+  failCleanup = true;
+  const failed = coordinator.choose(intent, "camera");
+  deny({ granted: false });
+  await assert.rejects(failed, TempCleanupError);
+  assert.equal(
+    coordinator.snapshot(identity, "epoch-1")?.cameraPermissionDenied,
+    undefined,
+  );
+  assert.equal(coordinator.selectionState.hasSelection, false);
 });
 test("does not launch a second OS picker even after cancellation", async () => {
   const f = fixture();
