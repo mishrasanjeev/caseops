@@ -2204,6 +2204,8 @@ def _run_deploy_with_fakes(
     migration_job_missing: bool = False,
     python_crlf: bool = False,
     main_drift_after_fetches: int | None = None,
+    local_branch: str | None = "main",
+    local_main_sha: str = "abcdef1234567890abcdef1234567890abcdef12",
     private_projection_scheduler_hold: str | None = None,
     active_prod_verify_runs: str = "",
     artifact_describe_failures: int = 0,
@@ -2238,6 +2240,16 @@ def _run_deploy_with_fakes(
         fake_bin / "git",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$*" == "symbolic-ref --quiet --short HEAD" ]]; then
+  [[ -n "${FAKE_LOCAL_BRANCH}" ]] || exit 1
+  printf '%s\n' "${FAKE_LOCAL_BRANCH}"
+  exit 0
+fi
+if [[ "$*" == "rev-parse --verify refs/heads/main^{commit}" ]]; then
+  [[ -n "${FAKE_LOCAL_MAIN_SHA}" ]] || exit 128
+  printf '%s\n' "${FAKE_LOCAL_MAIN_SHA}"
+  exit 0
+fi
 if [[ "$1" == "fetch" ]]; then
   fetch_count=0
   if [[ -f "${FAKE_GIT_FETCH_COUNT}" ]]; then
@@ -2331,6 +2343,11 @@ for argument in "$@"; do
   fi
 done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "${1:-} ${2:-} ${3:-}" == "run services describe" && \
+  " $* " != *" --project perfect-period-305406 "* ]]; then
+  printf '%s\n' 'Cloud Run service description requires an explicit release project.' >&2
+  exit 98
+fi
 if [[ "$*" == "secrets versions describe latest --secret caseops-native-signing-secret "* ]]; then
   printf '%s\n' "${FAKE_NATIVE_SECRET_STATE}"
   exit 0
@@ -2897,6 +2914,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GIT_FETCH_COUNT": _bash_path(tmp_path / "git-fetch-count"),
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
+            "FAKE_LOCAL_BRANCH": local_branch or "",
+            "FAKE_LOCAL_MAIN_SHA": local_main_sha,
             "FAKE_GH_MODE": gh_mode,
             "FAKE_SECURITY_PAYLOADS": str(security_payloads),
             "FAKE_SECURITY_MODE": security_mode,
@@ -3078,6 +3097,33 @@ def test_deploy_prod_rejects_a_requested_commit_that_is_not_head(tmp_path: Path)
 
     assert result.returncode != 0
     assert "does not match current HEAD" in result.stdout
+    assert not (tmp_path / "gcloud.log").exists()
+
+
+@pytest.mark.parametrize(
+    ("local_branch", "local_main_sha", "error"),
+    [
+        (None, "abcdef1234567890abcdef1234567890abcdef12", "requires checked-out local main"),
+        (
+            "release-candidate", "abcdef1234567890abcdef1234567890abcdef12",
+            "requires checked-out local main",
+        ),
+        ("main", "dddddddddddddddddddddddddddddddddddddddd", "local main does not match"),
+        ("main", "", "local main does not match"),
+    ],
+    ids=["detached-at-exact-sha", "other-branch-at-exact-sha", "local-main-drift", "missing-ref"],
+)
+def test_deploy_prod_requires_local_main_before_remote_or_cloud(
+    tmp_path: Path, local_branch: str | None, local_main_sha: str, error: str,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path, "abcdef1", local_branch=local_branch, local_main_sha=local_main_sha,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stdout
+    assert "release preflight" in result.stdout
+    assert not (tmp_path / "git-fetch-count").exists()
     assert not (tmp_path / "gcloud.log").exists()
 
 
@@ -3953,6 +3999,27 @@ def test_deploy_prod_fails_if_exact_release_verification_cannot_be_dispatched(
 
     assert result.returncode != 0
     assert "DONE abcdef1" not in result.stdout
+
+
+def test_deploy_prod_certifies_both_services_without_a_default_gcloud_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CLOUDSDK_CORE_PROJECT", raising=False)
+
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(
+        call.startswith("run services describe caseops-web ")
+        and "containers[0].image" in call for call in calls
+    )
+    assert any(
+        call.startswith("run services describe caseops-api ")
+        and "containers[1].startupProbe.failureThreshold" in call for call in calls
+    )
+    assert any(call.startswith("gh workflow run prod-verify.yml ") for call in calls)
 
 
 def test_deploy_prod_fails_before_routing_on_database_index_health_failure(
