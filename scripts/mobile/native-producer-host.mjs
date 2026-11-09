@@ -48,13 +48,14 @@ function origin(value) {
 }
 /** Ordinary Bearer tokens come only from this host's real normal login/bootstrap
  * responses. releaseSha is admission provenance, not an invented HTTP header. */
-export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, deadlineMs, persist, now = Date.now }) {
+export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, deadlineMs, persist, now = Date.now, routeAdmission }) {
   const api = origin(apiOrigin), web = origin(webOrigin), ca = verifiedFile(publicCa.path, publicCa.sha256, 65536);
   assert.match(sourceSha, /^[a-f0-9]{40}$/); assert.ok(Number.isFinite(deadlineMs) && deadlineMs > now() && deadlineMs - now() <= 510000);
   assert.equal(typeof persist, 'function');
   const tokens = new Map(), identities = new Map(); let sequence = 0, poisoned = false;
   const request = async ({ actor = 'owner', method, route, body, query, headers = {}, timeoutMs = 10000, maxResponseBytes = 1048576, signal,
-    web: useWeb = false, automaticRetry = false, accessTokenFromNormalBootstrap, deadlineMs:callDeadlineMs=deadlineMs }) => {
+    web: useWeb = false, automaticRetry = false, accessTokenFromNormalBootstrap, deadlineMs:callDeadlineMs=deadlineMs,
+    producerStage }) => {
     assert.equal(poisoned, false, 'PRODUCER_TRANSPORT_OUTCOME_UNCERTAIN');
     assert.equal(automaticRetry, false, 'PRODUCER_RETRY_REFUSED');
     assert.ok(['GET','POST','PATCH','DELETE'].includes(method) && typeof actor === 'string' && /^[a-z][a-z-]{0,40}$/.test(actor));
@@ -66,18 +67,19 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
     assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 10000);
     assert.ok(Number.isSafeInteger(maxResponseBytes) && maxResponseBytes > 0 && maxResponseBytes <= 1048576);
     assert.ok(!signal?.aborted, 'PRODUCER_HTTP_DEADLINE');
-    for (const [key,value] of Object.entries(headers)) { assert.ok(!/^(authorization|cookie|host|content-length|connection)$/i.test(key)); if (/^x-caseops-automated-test$/i.test(key)) assert.equal(value,'no-paid-providers'); }
+    for (const [key,value] of Object.entries(headers)) { assert.ok(!/^(authorization|cookie|host|content-length|connection|x-caseops-qa-producer-permit)$/i.test(key)); if (/^x-caseops-automated-test$/i.test(key)) assert.equal(value,'no-paid-providers'); }
     if (accessTokenFromNormalBootstrap !== undefined) assert.equal(accessTokenFromNormalBootstrap, tokens.get(actor), 'PRODUCER_TOKEN_NOT_FROM_NORMAL_RESPONSE');
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body)); assert.ok(!payload || payload.length <= 1048576);
     const safeHeaders = { ...headers, 'X-CaseOps-Automated-Test':'no-paid-providers', ...(!useWeb&&tokens.has(actor) ? { Authorization:'Bearer '+tokens.get(actor) } : {}),
       ...(payload ? { 'Content-Type':'application/json', 'Content-Length':String(payload.length) } : {}) };
     const id = ++sequence; persist({ type:'producer_http_started', sequence:id, actor, method, route:url.pathname, automaticRetry:false, mutationUncertain:method !== 'GET' });
     try {
-      const remaining=producerTimeout(Math.min(timeoutMs,deadlineMs-now(),callDeadlineMs-now()));
-      const result = await new Promise((resolve,reject) => {
+      const send = proof => new Promise((resolve,reject) => {
+        const remaining=producerTimeout(Math.min(timeoutMs,deadlineMs-now(),callDeadlineMs-now()));
+        assert.ok(!signal?.aborted, 'PRODUCER_HTTP_DEADLINE');
         let settled = false, timer;
         const fail = () => { if (!settled) { settled = true; clearTimeout(timer); reject(new Error('PRODUCER_HTTP_INCOMPLETE_NO_REPLAY')); } };
-        const req = https.request(url, { method, headers:safeHeaders, ca, rejectUnauthorized:true, agent:false, signal }, res => {
+        const req = https.request(url, { method, headers: { ...safeHeaders, ...(proof ? { 'X-CaseOps-QA-Producer-Permit': proof } : {}) }, ca, rejectUnauthorized:true, agent:false, signal }, res => {
           const chunks = []; let size = 0;
           res.on('data', chunk => { size += chunk.length; if (size > maxResponseBytes) { res.destroy(); req.destroy(); fail(); } else chunks.push(chunk); });
           res.on('aborted', fail); res.on('error', fail);
@@ -85,17 +87,25 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
             assert.ok(res.statusCode < 300 || res.statusCode >= 400, 'PRODUCER_REDIRECT_REFUSED');
             const bytes = Buffer.concat(chunks), value = bytes.length ? JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)) : null;
             const observedId = res.headers['x-request-id'];assert.ok((typeof observedId==='string'&&observedId.length>0&&observedId.length<=160)||(useWeb&&observedId===undefined),'PRODUCER_REQUEST_ID_REQUIRED');const requestId=observedId??null;
-            settled = true; clearTimeout(timer); resolve({status:res.statusCode,value,requestId,releaseSha:sourceSha});
+            const permitReceipt = res.headers['x-caseops-qa-producer-permit-consumed'];
+            settled = true; clearTimeout(timer); resolve({status:res.statusCode,value,requestId,releaseSha:sourceSha, ...(proof ? { permitReceipt } : {})});
           } catch { req.destroy(); fail(); } });
         });
         timer = setTimeout(() => { req.destroy(); fail(); }, remaining); req.on('error',fail); req.end(payload);
       });
+      const identity = identities.get(actor);
+      const attempt = { stage: producerStage, actor, company: identity?.company?.id, membership: identity?.membership?.id, method, path: url.pathname };
+      const result = routeAdmission && !useWeb
+        ? await routeAdmission.file.dispatch(method + ' ' + url.pathname, routeAdmission.provenance.allow(attempt), safeHeaders.Authorization,
+          Math.min(deadlineMs, callDeadlineMs, now() + timeoutMs), send)
+        : await send();
       if (method === 'POST' && ['/api/auth/login','/api/bootstrap/company'].includes(url.pathname) && result.status === 200) {
         assert.ok(typeof result.value.access_token === 'string' && result.value.access_token.length > 0, 'PRODUCER_NORMAL_TOKEN_REQUIRED');
         tokens.set(actor,result.value.access_token);
         identities.set(actor, structuredClone({user:result.value.user,membership:result.value.membership,company:result.value.company,capabilities:result.value.capabilities}));
       }
       persist({type:'producer_http_ack',sequence:id,status:result.status,requestId:result.requestId,releaseShaProvenance:'public-before-after-admission'});
+      if (routeAdmission && producerStage !== undefined) routeAdmission.provenance.observe({ ...attempt, response: result });
       return result;
     } catch { poisoned = true; throw new Error('PRODUCER_HTTP_INCOMPLETE_NO_REPLAY'); }
   };

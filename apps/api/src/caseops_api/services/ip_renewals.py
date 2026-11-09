@@ -300,6 +300,9 @@ def schedule_imported_renewal_reminder(
     The caller commits this intent atomically with its imported application.
     """
     docket = _docket(session, context, docket_id, write=True)
+    raw_due = normalized.get("renewal_due_date")
+    if not raw_due:
+        return None
     version = session.scalar(
         select(IpTrademarkParticularVersion).where(
             IpTrademarkParticularVersion.company_id == context.company.id,
@@ -325,8 +328,7 @@ def schedule_imported_renewal_reminder(
         source=source,
     ):
         return None
-    raw_due = normalized.get("renewal_due_date")
-    if not raw_due or raw_due != source.get("renewal_due_date"):
+    if raw_due != source.get("renewal_due_date"):
         return None
     try:
         due_on = date.fromisoformat(raw_due)

@@ -34,9 +34,33 @@ export function nativeAction(context, action, kind, value) {
   context.record?.(event);
 }
 
-export async function visible(driver, query) {
+// WebdriverIO may settle the outer wait while an asynchronous condition is
+// still in flight. Guard each read and the condition result so a late reply
+// cannot start a new native read or satisfy an expired visibility wait.
+export async function waitForIosVisibility(driver, condition, options) {
+  const deadline = performance.now() + options.timeout;
+  let active = true;
+  const check = () => {
+    if (!active || performance.now() >= deadline) throw new Error(options.timeoutMsg);
+  };
+  const probe = async (operation) => {
+    check();
+    const result = await operation();
+    check();
+    return result;
+  };
+  try {
+    return await driver.waitUntil(() => probe(() => condition(probe)), options);
+  } finally {
+    active = false;
+  }
+}
+
+export async function visible(driver, query, probe = operation => operation()) {
   const matches = [];
-  for (const element of await driver.$$(query)) if (await element.isDisplayed()) matches.push(element);
+  for (const element of await probe(() => driver.$$(query))) {
+    if (await probe(() => element.isDisplayed())) matches.push(element);
+  }
   const iosText = query.startsWith('-ios predicate string:label == ')
     || query.startsWith('-ios predicate string:label BEGINSWITH ');
   if (matches.length > 1 && iosText && matches.every((element) => typeof element.getAttribute === 'function')) {
@@ -45,9 +69,9 @@ export async function visible(driver, query) {
     // privacy absence checks must never discard a still-rendered private label.
     const facts = [];
     for (const element of matches) {
-      const raw = await element.getAttribute('accessible');
+      const raw = await probe(() => element.getAttribute('accessible'));
       facts.push({ element, accessible: raw === true || raw === 'true' ? true : raw === false || raw === 'false' ? false : null,
-        label: await element.getAttribute('label'), value: await element.getAttribute('value') });
+        label: await probe(() => element.getAttribute('label')), value: await probe(() => element.getAttribute('value')) });
     }
     const accessible = facts.filter((fact) => fact.accessible === true);
     if (accessible.length === 1 && facts.every((fact) => fact.accessible !== null)) {
@@ -168,9 +192,13 @@ export async function findQuery(context, query, { scroll = false, scrollDirectio
   let element;
   for (let attempt = 0; attempt <= (scroll ? 9 : 0); attempt++) {
     try {
-      await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query))
-        && !await androidBehindTabBar(context, element),
-        { timeout: scroll ? 1500 : 10000, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
+      const options = { timeout: scroll ? 1500 : 10000, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' };
+      if (context.platform === 'ios') {
+        await waitForIosVisibility(context.driver, async probe => !!(element = await visible(context.driver, query, probe)), options);
+      } else {
+        await context.driver.waitUntil(async () => !!(element = await visible(context.driver, query))
+          && !await androidBehindTabBar(context, element), options);
+      }
       return element;
     } catch (error) {
       if (error?.message?.includes('AMBIGUOUS_VISIBLE_NATIVE_LOCATOR')) throw error;

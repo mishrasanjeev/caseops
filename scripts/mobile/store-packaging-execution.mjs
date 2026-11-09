@@ -10,7 +10,7 @@ import { EMBED_PROGRAM, inspectDistributionArtifact, PLIST_JSON_PROGRAM } from '
 import { admitIosHostExecution, composeIosHostCommand } from './ios-host-launch.mjs';
 
 const require = createRequire(import.meta.url);
-const { reference, validateStoreBuild, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
+const { reference, validateStoreBuild, storeNumberReservations, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
 const { validateNativeLinkConfig, nativeLinkProjections } = require('../../apps/web/lib/native-link-policy.cjs');
 export const GATES = Object.freeze(['mobile', 'web', 'apiCommon', 'apiPostgres', 'nativeIos', 'nativeAndroid',
   'secretTreeHistory', 'codeqlAnalysis', 'codeqlAlertVerdict', 'wholeLockAdvisories', 'installedAdvisories', 'licenses', 'sdk', 'linuxImage', 'requiredCI', 'privacyPolicy']);
@@ -104,22 +104,22 @@ function reserveBatch(directory, build, batch, platform, deadline) {
   const privateDirectory = (file, options) => rawPrivateDirectory(file, { ...options, deadline });
   const writePrivate = (file, bytes) => rawWritePrivate(file, bytes, { deadline });
   privateDirectory(directory);
-  const records = [['ios', build.identities.iosBundleIdentifier, build.iosBuildNumber],
-    ['android', build.identities.androidPackageName, String(build.androidVersionCode)]];
-  const paths = records.map(([p, app, n]) => path.join(directory, digest(JSON.stringify([p, app])) + '-' + p + '-' + n + '.json'));
+  const records = storeNumberReservations(build);
+  assert.ok(records.some(record => record.platform === platform), 'STORE_RESERVATION_PLATFORM_REQUIRED');
+  const paths = records.map(({ platform, appId, value }) =>
+    path.join(directory, digest(JSON.stringify([platform, appId])) + '-' + platform + '-' + value + '.json'));
   const batchPath = path.join(directory, 'batch-' + batch + '.json');
   if (paths.some(p => fs.existsSync(p)) || fs.existsSync(batchPath)) {
     assert.ok(paths.every(p => fs.existsSync(p)) && fs.existsSync(batchPath), 'STORE_PARTIAL_RESERVATION_REFUSED');
     const receipt = jsonInput({ path: batchPath, sha256: readInput(batchPath, { privateFile: true }).sha256 }, { privateFile: true }).value;
-    assert.deepEqual(receipt, { kind: 'caseops-store-number-batch', batch, records: records.map(([p, app, n]) => ({ platform: p, appId: app, value: n })) }, 'STORE_RESERVATION_BATCH_MISMATCH');
+    assert.deepEqual(receipt, { kind: 'caseops-store-number-batch', batch, records }, 'STORE_RESERVATION_BATCH_MISMATCH');
   } else {
     reserveBuildNumbers(directory, build, batch);
-    writePrivate(batchPath, Buffer.from(JSON.stringify({ kind: 'caseops-store-number-batch', batch,
-      records: records.map(([p, app, n]) => ({ platform: p, appId: app, value: n })) }) + '\n'));
+    writePrivate(batchPath, Buffer.from(JSON.stringify({ kind: 'caseops-store-number-batch', batch, records }) + '\n'));
   }
   for (let i = 0; i < records.length; i++) {
     const r = readInput(paths[i], { privateFile: true });
-    assert.deepEqual(utf8Json(r.bytes), { requestSha256: batch, platform: records[i][0], value: records[i][2] }, 'STORE_COUNTER_RESERVATION_MISMATCH');
+    assert.deepEqual(utf8Json(r.bytes), { requestSha256: batch, platform: records[i].platform, value: records[i].value }, 'STORE_COUNTER_RESERVATION_MISMATCH');
   }
   return writePrivate(path.join(directory, 'execution-' + batch + '-' + platform + '.claim'), Buffer.from(JSON.stringify({ batch, platform }) + '\n'));
 }

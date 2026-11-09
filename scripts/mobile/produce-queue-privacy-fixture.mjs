@@ -6,6 +6,8 @@ import { QP, identity } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
 import { v1PrivateReference } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
 import { readProducerReference, createProducerStore, createProducerHttp, producerTimeout } from './native-producer-host.mjs';
 import { admitProducerPublic } from './native-producer-admission.mjs';
+import { admitProducerRouteFile } from './native-producer-route-file.mjs';
+import { producerFixedRoutes, producerRouteProvenance } from './native-producer-route-provenance.mjs';
 
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export const QP_PRODUCER_INPUTS=Object.freeze(['scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/prepare-queue-privacy-fixture.mjs','scripts/mobile/run-queue-privacy.mjs','scripts/mobile/queue-privacy-controls.mjs','scripts/mobile/client-extension-public-input.mjs','scripts/mobile/local-queue-privacy-controls.py','scripts/mobile/local-v1-controls.py','scripts/mobile/local-gateway.py','compose.mobile-local.yml']);
@@ -45,7 +47,15 @@ export async function runQueuePrivacyProducer(q,dependencies={}) {
  const deadline=io.now()+QP_PRODUCER.milliseconds,publicBefore=await io.admitPublic(q.admission,{requiredInputs:QP_PRODUCER_INPUTS});
  producerTimeout(deadline-io.now());
  assert.deepEqual(publicBefore.source,q.admission.source);assert.equal(publicBefore.docker.gatewayRunId,plan.runId);assert.equal(publicBefore.build.binaryHash,publicBefore.installed.binaryHash);
- const origins=hostOrigins(publicBefore,q.platform),store=io.store(q.outputRoot),http=io.http({...origins,sourceSha:plan.sourceSha,publicCa:q.admission.publicCa,deadlineMs:deadline,persist:store.persist,now:io.now});
+ const origins=hostOrigins(publicBefore,q.platform),store=io.store(q.outputRoot);
+ let file;
+ if (q.routePublication) {
+  assert.deepEqual(Object.keys(q.routePublication).sort(),['baseRoutesSha256','docker']);
+  file=await admitProducerRouteFile({receipt:publicBefore.docker,docker:q.routePublication.docker,publicCa:q.admission.publicCa,
+   baseSha256:q.routePublication.baseRoutesSha256,root:ROOT,remaining:()=>deadline-io.now(),persist:store.persist,requiredRoutes:producerFixedRoutes('queue')});
+ }
+ const http=io.http({...origins,sourceSha:plan.sourceSha,publicCa:q.admission.publicCa,deadlineMs:deadline,persist:store.persist,now:io.now,
+  ...(file?{routeAdmission:{file,provenance:producerRouteProvenance('queue',plan.sourceSha)}}:{})});
  let claimed=false;
  const claim=key=>{assert.equal(claimed,false);store.write('queue-privacy-'+plan.runId+'.claim.json',{planSha256:key,sourceSha:plan.sourceSha,runId:plan.runId,noReplay:true});claimed=true;};
  const checkIdentity=(value,actor)=>{
@@ -71,11 +81,12 @@ export async function runQueuePrivacyProducer(q,dependencies={}) {
   return{beforeMemberRead:true,sourceSha:plan.sourceSha,apiSourceSha:plan.sourceSha,webSourceSha:plan.sourceSha,...Object.fromEntries(['baseActorEvidence','admissionEvidence','buildReceipt','dockerReceipt','installedEvidence','codeClosure'].map(key=>[key,plan[key]]))};
  };
  try{
-  const dataset=await io.produce(plan,{claim,persist:store.persist,admit,now:io.now,request:(actor,method,route,body,options)=>http.request({actor,method,route,body,...options})});
+  const dataset=await io.produce(plan,{claim,persist:store.persist,admit,now:io.now,request:(actor,method,route,body,options)=>http.request({actor,method,route,body,...options,producerStage:'queue'})});
   assert.equal(claimed,true);assert.ok(io.now()<=deadline,'QP_HOST_TOTAL_DEADLINE');
+  if (file) await file.finish();
   const datasetEvidence=store.write('queue-privacy-'+plan.runId+'.dataset.json',dataset);
   return{datasetEvidence,registrationActors:Object.fromEntries(['owner','member','second-company'].map(name=>[name,{...dataset.actors[name],credentialEvidence:q.actors[name].credentialEvidence}])),automaticRetry:false,actualNativeAcceptance:false,privateCredentialsPublished:false};
- }finally{http.clear();}
+ }finally{http.clear();file?.clear();}
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))try{

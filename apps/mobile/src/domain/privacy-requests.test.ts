@@ -6,6 +6,7 @@ import { ContractError } from "./contracts.ts";
 import { JsonTransport, MobileApiError } from "../network/http.ts";
 import * as privacy from "./privacy-requests.ts";
 import * as publisher from "./publisher-contact.ts";
+import * as conduct from "./workspace-conduct.ts";
 import { createPrivacyPolicyOpener } from "./privacy-policy.ts";
 import { cameraLicences } from "../files/camera-notices.ts";
 import type { AuthorizedRequest } from "./repository.ts";
@@ -456,6 +457,13 @@ function componentHost() {
     "./PrivacyPolicyLink": { PrivacyPolicyLink: policyLink },
     "./theme": theme,
   }).AccountHelp;
+  const workspaceRules = load("../application/WorkspaceConductGate.tsx", {
+    ...shared,
+    "../components/NativeControls": controls,
+    "../components/theme": theme,
+    "../domain/workspace-conduct": conduct,
+    "./useResource": {},
+  }).WorkspaceUseRulesLink;
   const screen = load("../application/screens/AccountScreen.tsx", {
     ...shared,
     "../../components/AccountPrivacyRequests": {
@@ -469,6 +477,7 @@ function componentHost() {
     "../../components/Content": content,
     "../../components/theme": theme,
     "../../files/camera-notices": { cameraLicences },
+    "../WorkspaceConductGate": { WorkspaceUseRulesLink: workspaceRules },
   }).AccountScreen;
   const materialize = (node: any, path: string): any => {
     if (Array.isArray(node))

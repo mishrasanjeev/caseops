@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
+import { workspaceConductRepository } from "./workspace-conduct.ts";
 import {
   createReadthroughRepository,
   createReadthroughPageLease,
@@ -487,6 +488,8 @@ function readerHarness(loadReader: () => unknown) {
         return { createRepository: () => ({}) };
       case "../domain/source-records":
         return { createSourceRecordsRepository: () => ({}) };
+      case "../domain/workspace-conduct":
+        return { workspaceConductRepository };
       case "./useResource":
         return { useResource: () => ({ resource: { state: "loading" } }) };
       case "./screens/TodayScreen":

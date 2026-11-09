@@ -71,6 +71,7 @@ tests/e2e/support/**
 !tests/e2e/support/ip-import-acknowledgements.ts
 !tests/e2e/support/ip-portfolio-export-completion.ts
 !tests/e2e/support/run-id.ts
+!tests/e2e/support/retained-assistant-evidence.ts
 
 apps/web/node_modules/
 apps/web/.next/

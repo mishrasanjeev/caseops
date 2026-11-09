@@ -14,6 +14,7 @@ import { Fact } from "../../components/Content";
 import { colors, styles } from "../../components/theme";
 import type { AuthorizedRequest } from "../../domain/repository";
 import { createMatterFilesApi } from "../../files/api";
+import { CAMERA_PERMISSION_DENIED_MESSAGE } from "../../files/camera";
 import { matchesSelection, uploadRestriction } from "../../files/contracts";
 import type { MatterFile, MatterFileSelection } from "../../files/contracts";
 import { createFilesController } from "../../files/controller";
@@ -27,6 +28,8 @@ import { uploadByteLimit, validateAsset } from "../../files/staging";
 import { viewerFormat, attachmentViewerSource } from "../../viewer/contracts";
 import type { ViewerSource } from "../../viewer/contracts";
 import type { FileSelectionState } from "../../domain/file-picker";
+import type { WorkspaceConductRepository } from "../../domain/workspace-conduct";
+import { WorkspaceConductGate } from "../WorkspaceConductGate";
 
 export type FilesScreenProps = {
   request: AuthorizedRequest;
@@ -36,6 +39,7 @@ export type FilesScreenProps = {
   matterId: string;
   capabilities: readonly string[];
   selectedFile: MatterFileSelection | null;
+  cameraPermissionDeniedAtVersion?: number;
   onChooseFile: (expectedLifecycleVersion: number) => void;
   onCapturePhoto: (expectedLifecycleVersion: number) => void;
   selectingFile: boolean;
@@ -43,6 +47,10 @@ export type FilesScreenProps = {
   readFileSelection: () => FileSelectionState;
   onClearSelectedFile: () => void;
   onOpenFile: (source: ViewerSource) => void;
+  onReportFile?: (itemId: string) => void;
+  onReportUploader?: (itemId: string, membershipId: string) => void;
+  currentMembershipId?: string;
+  conduct?: WorkspaceConductRepository;
   guard: RefObject<LeaveGuard | null>;
 };
 
@@ -70,6 +78,7 @@ function ScopedFilesScreen(props: FilesScreenProps) {
     matterId,
     capabilities,
     selectedFile,
+    cameraPermissionDeniedAtVersion,
     onChooseFile,
     onCapturePhoto,
     selectingFile,
@@ -186,7 +195,12 @@ function ScopedFilesScreen(props: FilesScreenProps) {
   let selectionError: string | null =
     selectedFile && !scopedSelection
       ? "This file selection does not belong to the current account and matter. Clear it and choose the file again."
-      : null;
+      : workspace &&
+          !selectedFile &&
+          cameraPermissionDeniedAtVersion !== undefined &&
+          cameraPermissionDeniedAtVersion === workspace.matter.lifecycle_version
+        ? CAMERA_PERMISSION_DENIED_MESSAGE
+        : null;
   if (workspace && scopedSelection) {
     if (
       scopedSelection.expectedLifecycleVersion !==
@@ -221,6 +235,15 @@ function ScopedFilesScreen(props: FilesScreenProps) {
       selectionRevision,
     );
   };
+
+  const requireConduct = (children: React.ReactNode) =>
+    props.conduct ? (
+      <WorkspaceConductGate repository={props.conduct} action="files">
+        {children}
+      </WorkspaceConductGate>
+    ) : (
+      children
+    );
 
   if (privacyClosed || snapshot.view.state === "inactive")
     return <View testID="files-inactive" />;
@@ -272,96 +295,100 @@ function ScopedFilesScreen(props: FilesScreenProps) {
               {restriction}
             </Text>
           ) : (
-            <View style={{ gap: 12 }}>
-              <Text style={styles.label}>
-                Current upload limit:{" "}
-                {formatBytes(uploadByteLimit(workspace.storage))}
-              </Text>
-              {scopedSelection ? (
-                <View
-                  testID="files-selection"
-                  style={{ gap: 8, paddingBottom: 8 }}
-                >
-                  <Text style={styles.body}>{scopedSelection.asset.name}</Text>
-                  <Text style={styles.label}>
-                    {scopedSelection.asset.size === undefined
-                      ? "Size will be checked before upload"
-                      : formatBytes(scopedSelection.asset.size)}
-                  </Text>
-                  <Text style={styles.muted}>
-                    Upload to {workspace.matter.matter_code}
-                  </Text>
-                  <NativeButton
-                    testID="files-upload"
-                    label="Upload file"
-                    disabled={
-                      busy ||
-                      selectingFile ||
-                      unknown ||
-                      !!selectionError ||
-                      snapshot.cleanupFailed
-                    }
-                    onPress={() => {
-                      void upload();
-                    }}
-                  />
-                </View>
-              ) : null}
-              {selectedFile ? (
-                <NativeButton
-                  testID="files-selection-clear"
-                  label="Clear selection"
-                  secondary
-                  disabled={busy || selectingFile}
-                  onPress={clearSelection}
-                />
-              ) : null}
-              {selectionError ? (
-                <Text
-                  testID="files-selection-error"
-                  accessibilityRole="alert"
-                  style={styles.body}
-                >
-                  {selectionError}
+            requireConduct(
+              <View style={{ gap: 12 }}>
+                <Text style={styles.label}>
+                  Current upload limit:{" "}
+                  {formatBytes(uploadByteLimit(workspace.storage))}
                 </Text>
-              ) : null}
-              <NativeButton
-                testID="files-choose"
-                label={selectedFile ? "Choose another file" : "Choose file"}
-                secondary={!!selectedFile}
-                disabled={
-                  busy || selectingFile || unknown || snapshot.cleanupFailed
-                }
-                onPress={() =>
-                  interactions.choose(() => {
-                    controller.clearOutcome();
-                    onChooseFile(workspace.matter.lifecycle_version);
-                  }, selectionRevision)
-                }
-              />
-              <Text testID="files-camera-privacy" style={styles.muted}>
-                Take a photo, then choose whether to upload it. Photos may
-                include details such as capture location. Those details are kept
-                when you upload. Camera access is optional; Choose file remains
-                available.
-              </Text>
-              <NativeButton
-                testID="files-camera"
-                label={
-                  selectingFile ? "Finishing file selection" : "Take photo"
-                }
-                secondary
-                disabled={
-                  busy || selectingFile || unknown || snapshot.cleanupFailed
-                }
-                onPress={() =>
-                  interactions.choose(() => {
-                    controller.clearOutcome();
-                    onCapturePhoto(workspace.matter.lifecycle_version);
-                  }, selectionRevision)
-                }
-              />
-            </View>
+                {scopedSelection ? (
+                  <View
+                    testID="files-selection"
+                    style={{ gap: 8, paddingBottom: 8 }}
+                  >
+                    <Text style={styles.body}>
+                      {scopedSelection.asset.name}
+                    </Text>
+                    <Text style={styles.label}>
+                      {scopedSelection.asset.size === undefined
+                        ? "Size will be checked before upload"
+                        : formatBytes(scopedSelection.asset.size)}
+                    </Text>
+                    <Text style={styles.muted}>
+                      Upload to {workspace.matter.matter_code}
+                    </Text>
+                    <NativeButton
+                      testID="files-upload"
+                      label="Upload file"
+                      disabled={
+                        busy ||
+                        selectingFile ||
+                        unknown ||
+                        !!selectionError ||
+                        snapshot.cleanupFailed
+                      }
+                      onPress={() => {
+                        void upload();
+                      }}
+                    />
+                  </View>
+                ) : null}
+                {selectedFile ? (
+                  <NativeButton
+                    testID="files-selection-clear"
+                    label="Clear selection"
+                    secondary
+                    disabled={busy || selectingFile}
+                    onPress={clearSelection}
+                  />
+                ) : null}
+                {selectionError ? (
+                  <Text
+                    testID="files-selection-error"
+                    accessibilityRole="alert"
+                    style={styles.body}
+                  >
+                    {selectionError}
+                  </Text>
+                ) : null}
+                <NativeButton
+                  testID="files-choose"
+                  label={selectedFile ? "Choose another file" : "Choose file"}
+                  secondary={!!selectedFile}
+                  disabled={
+                    busy || selectingFile || unknown || snapshot.cleanupFailed
+                  }
+                  onPress={() =>
+                    interactions.choose(() => {
+                      controller.clearOutcome();
+                      onChooseFile(workspace.matter.lifecycle_version);
+                    }, selectionRevision)
+                  }
+                />
+                <Text testID="files-camera-privacy" style={styles.muted}>
+                  Take a photo, then choose whether to upload it. Photos may
+                  include details such as capture location. Those details are
+                  kept when you upload. Camera access is optional; Choose file
+                  remains available.
+                </Text>
+                <NativeButton
+                  testID="files-camera"
+                  label={
+                    selectingFile ? "Finishing file selection" : "Take photo"
+                  }
+                  secondary
+                  disabled={
+                    busy || selectingFile || unknown || snapshot.cleanupFailed
+                  }
+                  onPress={() =>
+                    interactions.choose(() => {
+                      controller.clearOutcome();
+                      onCapturePhoto(workspace.matter.lifecycle_version);
+                    }, selectionRevision)
+                  }
+                />
+              </View>,
+            )
           )}
         </>
       ) : null}
@@ -446,6 +473,22 @@ function ScopedFilesScreen(props: FilesScreenProps) {
                   open={() =>
                     props.onOpenFile(attachmentViewerSource(scope, file))
                   }
+                  report={
+                    props.onReportFile
+                      ? () => props.onReportFile?.(file.id)
+                      : undefined
+                  }
+                  reportUploader={
+                    props.onReportUploader &&
+                    file.uploaded_by_membership_id &&
+                    file.uploaded_by_membership_id !== props.currentMembershipId
+                      ? () => {
+                          const uploader = file.uploaded_by_membership_id;
+                          if (uploader)
+                            props.onReportUploader?.(file.id, uploader);
+                        }
+                      : undefined
+                  }
                   supported={["pdf", "image", "text"].includes(
                     viewerFormat(attachmentViewerSource(scope, file))?.kind ||
                       "",
@@ -477,10 +520,14 @@ const processingLabels: Record<MatterFile["processing_status"], string> = {
 function FileRow({
   file,
   open,
+  report,
+  reportUploader,
   supported,
 }: {
   file: MatterFile;
   open: () => void;
+  report?: () => void;
+  reportUploader?: () => void;
   supported: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -531,6 +578,14 @@ function FileRow({
         secondary
         onPress={() => setExpanded((value) => !value)}
       />
+      {report ? (
+        <NativeButton
+          testID={`files-report-${file.id}`}
+          label="Report file"
+          secondary
+          onPress={report}
+        />
+      ) : null}
       {expanded ? (
         <View
           testID={`files-source-details-${file.id}`}
@@ -544,6 +599,14 @@ function FileRow({
             testID={`files-hash-${file.id}`}
           />
           <Fact label="Uploaded by" value={file.uploaded_by_name} />
+          {reportUploader ? (
+            <NativeButton
+              testID={`files-report-uploader-${file.id}`}
+              label="Report uploader"
+              secondary
+              onPress={reportUploader}
+            />
+          ) : null}
           <Fact label="Document type" value={file.document_type} />
           <Fact label="Lifecycle stage" value={file.lifecycle_stage} />
           <Fact label="Document date" value={file.document_date} />

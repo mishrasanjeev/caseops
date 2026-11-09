@@ -55,7 +55,7 @@ def test_historical_descriptions_reject_empty_compound():
 
 def test_historical_recipient_union_keeps_raw_overlap_and_does_not_load_entities(protocol_database):
     engine = protocol_database.engine
-    fixture = _fixture(engine, active=False)
+    fixture = _fixture(engine, active=False, historical_attachment=True)
     with Session(engine) as session:
         admins = tuple(tuple(row) for row in session.execute(
             select(CompanyMembership.id, CompanyMembership.role, CompanyMembership.is_active)
@@ -144,7 +144,7 @@ def test_historical_plain_entity_load_retains_defer_raiseload_and_parent_lock(
     protocol_database, root,
 ):
     engine = protocol_database.engine
-    fixture = _fixture(engine, active=False)
+    fixture = _fixture(engine, active=False, historical_attachment=True)
     columns = {column["name"] for column in inspect(engine).get_columns("users")}
     assert "sessions_valid_after" not in columns
     with Session(engine) as session:

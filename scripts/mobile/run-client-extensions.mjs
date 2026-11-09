@@ -8,7 +8,7 @@ import { sourceSnapshot } from './source-snapshot.mjs';
 import { observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { createClientExtensionControls } from './client-extension-controls.mjs';
 import { readClientPublicInput } from './client-extension-public-input.mjs';
-import { admitClientServerAsync, clientHarnessFingerprint, captureClientFile, captureClientTreeCommitmentAsync, assertClientRuntimeInventory, selectedClientExecutable } from './client-extension-runtime.mjs';
+import { admitClientServerAsync, clientHarnessFingerprint, captureClientFile, captureClientTreeCommitmentAsync, assertClientRuntimeInventory, selectedClientExecutable, createAndroidFingerprintDispatch } from './client-extension-runtime.mjs';
 import { clientExtensionCodeClosure } from './prepare-client-extensions.mjs';
 import { CX_BUDGETS } from '../../apps/mobile/e2e/client-extensions-inventory.mjs';
 import { collectNativeClientExtensions, clientExtensionScenarios } from '../../apps/mobile/e2e/client-extensions-20261028.mjs';
@@ -29,6 +29,7 @@ const read=ref=>readClientPublicInput(ref.path,{expectedSha256:ref.sha256}).valu
 const PUBLIC_FAILURES=new Set(['CX_EARLIER_OUTCOME_UNSAFE','CX_REQUIRED_PRIOR_CASE_UNVERIFIED','CX_CASE_DEADLINE',
  'CX_NATIVE_CLEANUP_RESERVE','CX_VERIFIED_DOMAIN_AND_SIGNED_PROFILE_PENDING','CX_CAPTURE_EXCEEDS_FIXED_GATEWAY_POSITIVE_BOUND',
  'CX_ACTUAL_OS_RECIPE_REQUIRED','CX_OBSERVED_OS_BIOMETRIC_SIMULATION_REQUIRED','CX_ACTUAL_VERIFIED_HTTPS_ARTIFACT_REQUIRED',
+ 'CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY','CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED',
  'CX_OPERATOR_OUTCOME_UNVERIFIED_NO_REPLAY','CX_OPERATOR_COMPLETION_DEADLINE','CX_SESSION_CREATE_OUTCOME_UNKNOWN','CX_INDEPENDENT_CLEANUP_UNVERIFIED','CX_OWNER_OUTCOME_UNKNOWN_NO_REPLAY']);
 export const clientFailure=(error,fallback)=>PUBLIC_FAILURES.has(error?.message)?error.message:fallback;
 
@@ -80,6 +81,13 @@ export async function admitClientExtensions(q,dependencies={}) {
   const installed=io.installed(fixture,q.platform,q.expectedBinaryHash,io.environment);assert.equal(installed.udid,fixture.udid);assert.equal(installed.appId,fixture.appId);assert.equal(installed.binaryHash,q.expectedBinaryHash);
   assert.equal(expectedInstalled.binaryHash??expectedInstalled.installedApkSha256,q.expectedBinaryHash);assert.equal(expectedInstalled.udid,fixture.udid);
   if(q.platform==='android')validateAndroidLayoutEvidence(fixture,installed,device,expectedInstalled);else{assert.equal(installed.deviceTypeIdentifier,device.deviceTypeIdentifier);assert.equal(installed.runtime,device.runtime);}
+  let androidFingerprint;
+  if (q.platform === 'android' && fixture.cx.workflowDomain === 'emulator' && fixture.cx.biometricSimulation?.observed === true) {
+    const adb = tools.executables.filter(tool => tool.role === 'adb');
+    assert.equal(adb.length, 1, 'CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED');
+    assert.equal(adb[0].file.path, io.selectedExecutable('adb', io.environment), 'CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED');
+    androidFingerprint = createAndroidFingerprintDispatch({fixture, installed, adbTool: adb[0].file, environment: io.environment});
+  }
   const server=await io.server(q);assert.deepEqual(fixture.cx.osRecipes.appiumInventoryEvidence,q.appiumInventoryEvidence);
   const clientRuntime=io.read(q.clientRuntimeInventoryEvidence);assertClientRuntimeInventory(clientRuntime,'webdriver',q.platform);assert.equal(clientRuntime.root,io.environment.CASEOPS_MOBILE_TOOLING_HOME);
   assert.deepEqual(await io.tree(clientRuntime.root),clientRuntime.tree,'CX_COMPLETE_WEBDRIVER_RUNTIME_CHANGED');
@@ -116,7 +124,7 @@ export async function admitClientExtensions(q,dependencies={}) {
     for(const [key,field]of [['emailEnv','email'],['passwordEnv','password'],['totpSecretEnv','totp_secret']]){assert.match(f.auth[key],/^CASEOPS_MOBILE_[A-Z0-9_]+$/);assert.ok(typeof loaded.value[field]==='string'&&loaded.value[field]);env[f.auth[key]]=loaded.value[field];}
     try{io.coreCheck(f,env);}finally{for(const key of ['emailEnv','passwordEnv','totpSecretEnv'])delete env[f.auth[key]];}members.push({fixture:f,value:loaded.value});transferred=true;
   }finally{try{loaded.bytes.fill(0);}finally{if(!transferred&&loaded.value)for(const key of Object.keys(loaded.value))loaded.value[key]=undefined;}}}}catch(error){members.forEach(m=>{if(m.value)for(const key of Object.keys(m.value))m.value[key]=undefined;m.value=undefined;});throw error;}
-  return{fixture,build,isolation,source,installed,members,controls,server,currentGuard,platform:q.platform,beforeMemberRead:true};
+  return{fixture,build,isolation,source,installed,members,controls,server,currentGuard,androidFingerprint,platform:q.platform,beforeMemberRead:true};
 }
 
 /** Serial phase accounting; known unsupported prerequisites remain unverified. */
@@ -179,6 +187,7 @@ export async function runClientExtensions(q,dependencies={}) {
       await configureNativeDriver(driver,q.platform);await driver.switchContext('NATIVE_APP');
       const actor=state.activeActor==='second-company'?admitted.members[1].fixture:f;
       const context={fixture:{...actor,cx:f.cx},platform:q.platform,driver,controls,state,caseId:scenario.id,binaryHash:q.expectedBinaryHash,workflowDomain:f.cx.workflowDomain,appiumInventoryEvidence:q.appiumInventoryEvidence,startedAt:io.now(),nativeOperations:0,ownerOperations:0,authoritativeReads:0,record:row=>write({...row,id:q.platform+':'+scenario.id})};
+      context.androidFingerprint=admitted.androidFingerprint;
       context.checkBudget=needed=>{assert.ok(io.now()+needed<=context.startedAt+CX_BUDGETS.perCaseMs,'CX_CASE_DEADLINE');assert.ok(io.now()+needed<=q.leaseDeadlineMs-120000,'CX_NATIVE_CLEANUP_RESERVE');};
       context.home=tab=>home(context,tab);context.segment=(group,label)=>observedSegment(context,group,label);
       context.openMatter=matter=>openMatter(context,matter);

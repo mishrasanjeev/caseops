@@ -31,10 +31,15 @@ from caseops_api.db.models import (
     DocumentProcessingJob,
     IpDocument,
     MatterActivity,
+    MatterAttachment,
     PrivateProjectionEvent,
     User,
 )
 from caseops_api.services import document_jobs, document_processing, embeddings
+from tests.fixtures_historical_attachments import (
+    HISTORICAL_ATTACHMENT_LOAD,
+    project_current_worker_attachment_column,
+)
 from tests.fixtures_historical_migrations import historical_database
 from tests.fixtures_postgres_client import temporary_http_database
 from tests.test_document_worker_claims_20261010_postgres import _activity_source, _parsed
@@ -209,7 +214,7 @@ def _legacy_module(database, clock):
 
 def test_historical_identity_has_real_columns_and_rejects_new_cutoff_access(protocol_database):
     engine = protocol_database.engine
-    fixture = _fixture(engine, active=False)
+    fixture = _fixture(engine, active=False, historical_attachment=True)
     columns = {column["name"] for column in inspect(engine).get_columns("users")}
     assert "sessions_valid_after" not in columns
     statements = []
@@ -289,10 +294,13 @@ def test_historical_identity_scope_leaves_other_engine_and_post_context_cutoff_r
             unrelated.dispose()
 
 
-def _snapshot(engine, fixture):
+def _snapshot(engine, fixture, *, historical_attachment=False):
     with Session(engine) as check:
         job = check.get(DocumentProcessingJob, fixture.job)
-        source = check.get(fixture.model, fixture.source)
+        options = (HISTORICAL_ATTACHMENT_LOAD,) if (
+            historical_attachment and fixture.model is MatterAttachment
+        ) else ()
+        source = check.get(fixture.model, fixture.source, options=options)
         result = {
             "job": tuple(getattr(job, key) for key in (
                 "status", "attempt_count", "started_at", "completed_at", "error_message",
@@ -325,7 +333,11 @@ def _assert_legacy_overlap(
     protocol_database, monkeypatch, target, old_fails, *, legacy_embedding_success=False,
 ):
     database = protocol_database
-    fixture = _activity_source(database.engine, target)
+    fixture = _activity_source(database.engine, target, historical_attachment=True)
+    if target == "matter":
+        project_current_worker_attachment_column(
+            database.engine, database.cfg, historical_revision="20261010_0002",
+        )
     entered, release = Event(), Event()
     clock = [datetime.now(UTC) - timedelta(minutes=16)]
     legacy = _legacy_module(database, clock)
@@ -426,7 +438,7 @@ def test_actual_legacy_claim_is_rejected_before_parser_or_provider(
     protocol_database, monkeypatch, target, status,
 ):
     database = protocol_database
-    fixture = _activity_source(database.engine, target)
+    fixture = _activity_source(database.engine, target, historical_attachment=True)
     # Establish the pre-trigger legacy FAILED fixture, not a bypass at head.
     with database.engine.begin() as seed:
         seed.execute(text("UPDATE document_processing_jobs SET status=:status WHERE id=:id"),
@@ -439,11 +451,11 @@ def test_actual_legacy_claim_is_rejected_before_parser_or_provider(
 
     monkeypatch.setattr(document_processing, "parse_attachment", forbidden)
     legacy.embed_matter_attachment_chunks = forbidden
-    before = _snapshot(database.engine, fixture)
+    before = _snapshot(database.engine, fixture, historical_attachment=True)
     with pytest.raises(DBAPIError) as rejected:
         legacy.run_document_processing_job(fixture.job)
     assert rejected.value.orig.sqlstate == "55000"
-    assert _snapshot(database.engine, fixture) == before
+    assert _snapshot(database.engine, fixture, historical_attachment=True) == before
 
 
 @pytest.mark.parametrize("payload", [
@@ -550,7 +562,7 @@ def test_independent_trigger_upgrade_retained_downgrade_preserves_catalog_and_re
     fixtures = []
     for status in ("queued", "processing", "completed", "failed"):
         for no_paid in (False, True):
-            fixture = _activity_source(database.engine, "matter")
+            fixture = _activity_source(database.engine, "matter", historical_attachment=True)
             with Session(database.engine) as seed:
                 receipt = seed.get(DocumentProcessingJob, fixture.job)
                 receipt.status, receipt.no_paid_providers = status, no_paid
@@ -561,7 +573,13 @@ def test_independent_trigger_upgrade_retained_downgrade_preserves_catalog_and_re
                 )
                 seed.commit()
             fixtures.append(fixture)
-    before = [_snapshot(database.engine, fixture) for fixture in fixtures]
+    def snapshot_rows():
+        return [
+            _snapshot(database.engine, fixture, historical_attachment=True)
+            for fixture in fixtures
+        ]
+
+    before = snapshot_rows()
     with database.engine.connect() as check:
         indexes = check.execute(text("SELECT indexname, indexdef FROM pg_indexes "
             "WHERE tablename='document_processing_jobs' ORDER BY indexname")).all()
@@ -578,13 +596,13 @@ def test_independent_trigger_upgrade_retained_downgrade_preserves_catalog_and_re
                                  "proname='caseops_document_execution_protocol'")) == 1
         assert check.execute(text("SELECT indexname,indexdef FROM pg_indexes WHERE "
             "tablename='document_processing_jobs' ORDER BY indexname")).all() == indexes
-    assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+    assert snapshot_rows() == before
     for opt_in in (None, "document_execution_fresh_downgrade=false",
                    "document_execution_fresh_downgrade=true"):
         database.cfg.cmd_opts = SimpleNamespace(x=[] if opt_in is None else [opt_in])
         with pytest.raises(RuntimeError, match="Document execution protocol.*restore-forward"):
             command.downgrade(database.cfg, "20261010_0002")
-        assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+        assert snapshot_rows() == before
         with database.engine.connect() as check:
             assert check.scalar(text("SELECT version_num FROM alembic_version")) == "20261010_0003"
             assert check.scalar(text("SELECT count(*) FROM pg_trigger WHERE "
@@ -605,12 +623,12 @@ def test_independent_trigger_upgrade_retained_downgrade_preserves_catalog_and_re
             old.rollback()
     database.cfg.cmd_opts = SimpleNamespace(x=[])
     command.upgrade(database.cfg, "head")
-    assert [_snapshot(database.engine, fixture) for fixture in fixtures] == before
+    assert snapshot_rows() == before
 
 
 def test_document_protocol_rehearsal_refuses_a_retained_legacy_compliance_root(protocol_database):
     database = protocol_database
-    fixture = _activity_source(database.engine, "matter")
+    fixture = _activity_source(database.engine, "matter", historical_attachment=True)
     root = Table("matter_compliance_extraction_runs", MetaData(), autoload_with=database.engine)
     assert "persistence_protocol" not in root.c
     with database.engine.begin() as seed:

@@ -35,6 +35,10 @@ from caseops_api.services.document_jobs import (
     _process_ip_document_version_job,
     _process_matter_attachment_job,
 )
+from tests.fixtures_historical_attachments import (
+    project_current_worker_attachment_column,
+    seed_historical_attachment,
+)
 from tests.test_document_execution_protocol_20261010_postgres import (
     _historical_identity_columns,
     _wait_for_legacy_boundary,
@@ -141,12 +145,11 @@ def test_first_release_requires_legacy_quiescence_before_recovery(
             company = _seed_company(seed)
             actor = _seed_membership(seed, company, role="admin")
             matter = _seed_matter(seed, company)
-            source = MatterAttachment(matter_id=matter, uploaded_by_membership_id=actor,
+            source_id = seed_historical_attachment(
+                seed, matter_id=matter, uploaded_by_membership_id=actor,
                 original_filename="rolling.txt", storage_key=uuid4().hex,
-                content_type="text/plain", size_bytes=20, sha256_hex="a" * 64)
-            seed.add(source)
-            seed.flush()
-            source_id = source.id
+                content_type="text/plain", size_bytes=20, sha256_hex="a" * 64,
+            )
             old_id, queued_id = str(uuid4()), str(uuid4())
             for job_id in (old_id, queued_id):
                 seed.execute(text(
@@ -157,6 +160,9 @@ def test_first_release_requires_legacy_quiescence_before_recovery(
                     "'initial_index', 'queued', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 ), {"id": job_id, "company": company, "actor": actor, "source": source_id})
             seed.commit()
+        project_current_worker_attachment_column(
+            engine, cfg, historical_revision="20260928_0001",
+        )
         table = Table("document_processing_jobs", MetaData(), autoload_with=engine)
         assert "no_paid_providers" not in table.c
 

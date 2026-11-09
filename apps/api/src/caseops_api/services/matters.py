@@ -165,6 +165,7 @@ from caseops_api.services.storage_governance import (
     get_storage_upload_policy,
     record_storage_quota_blocked_upload,
 )
+from caseops_api.services.workspace_conduct import require_for_locked_native_write
 
 logger = logging.getLogger(__name__)
 ACTIVE_STAY_STATUSES = {"granted", "continued", "modified"}
@@ -3872,6 +3873,8 @@ def create_matter_note(
             status_code=status.HTTP_409_CONFLICT,
             detail="The matter lifecycle changed. Reload the matter before adding a note.",
         )
+    if context.native_session_id is not None:
+        require_for_locked_native_write(session, context=context)
     note = MatterNote(
         matter_id=matter.id,
         author_membership_id=context.membership.id,
@@ -5849,8 +5852,8 @@ def create_matter_attachment(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="expected_lifecycle_version must be a nonnegative integer.",
         )
-    # Refreshing the actor below returns a context without its native credential identity.
-    if context.native_session_id is not None and expected_lifecycle_version is None:
+    native_session_id = context.native_session_id
+    if native_session_id is not None and expected_lifecycle_version is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Native uploads require expected_lifecycle_version. Reload the matter.",
@@ -5867,9 +5870,12 @@ def create_matter_attachment(
         context=context,
         required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
     )
+    if native_session_id is not None:
+        require_for_locked_native_write(session, context=context)
     context = get_session_context(
         session, context.membership.id, token_issued_at=context.token_issued_at,
     )
+    context.native_session_id = native_session_id
     # Preflight current authority before accepting bytes. These locks are
     # released before scanning/storage, then reacquired tenant-first to publish.
     matter = _get_matter_model(
@@ -5920,6 +5926,7 @@ def create_matter_attachment(
         id=str(uuid4()),
         matter_id=matter.id,
         uploaded_by_membership_id=upload_actor_id,
+        native_local_processing_only=native_session_id is not None,
         original_filename=sanitize_filename(filename),
         storage_key="pending",
         content_type=content_type,
@@ -6022,9 +6029,12 @@ def create_matter_attachment(
             context=context,
             required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
         )
+        if native_session_id is not None:
+            require_for_locked_native_write(session, context=context)
         context = get_session_context(
             session, context.membership.id, token_issued_at=context.token_issued_at,
         )
+        context.native_session_id = native_session_id
         matter = _get_matter_model(
             session, context=context, matter_id=audit_matter_id, lock_for_share=True,
         )
@@ -6055,6 +6065,7 @@ def create_matter_attachment(
             target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
             attachment_id=attachment.id,
             action=DocumentProcessingAction.INITIAL_INDEX,
+            no_paid_providers=attachment.native_local_processing_only,
         )
         session.add(attachment)
         _append_activity(
@@ -6421,6 +6432,7 @@ def request_matter_attachment_processing(
         target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
         attachment_id=attachment.id,
         action=action,
+        no_paid_providers=attachment.native_local_processing_only,
     )
     session.add(attachment)
     _append_activity(

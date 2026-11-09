@@ -33,7 +33,9 @@ function requested(): URL[] {
 }
 
 describe("IP offset-paged lists read one page per request", () => {
-  beforeEach(() => call.mockReset());
+  beforeEach(() => {
+    call.mockReset();
+  });
 
   it("renders from one request however large the tenant's history is", async () => {
     serveOffsetPages("recordal");
@@ -95,7 +97,9 @@ describe("IP offset-paged lists read one page per request", () => {
 });
 
 describe("every IP docket follows the keyset cursor", () => {
-  beforeEach(() => call.mockReset());
+  beforeEach(() => {
+    call.mockReset();
+  });
 
   function page(ids: string[], next: string | null, total: number) {
     return { dockets: ids.map((id) => ({ id })), count: ids.length, has_more: next !== null, next_cursor: next, total_count: total };

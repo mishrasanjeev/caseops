@@ -117,6 +117,7 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   let policy: unknown = cold ? structuredClone(enabled) : null;
   let marker: string | null = cold ? localUnlockMarker(enabled) : null;
   let markerRead: (() => Promise<string | null>) | null = null;
+  let captureReturn: Promise<null> | null = null;
   let invalidated = () => {};
   const stateListeners = new Set<(state: string) => void>();
   let visibility = "active";
@@ -404,7 +405,7 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
       },
       capturePhoto: async () => {
         events.push("capture");
-        return null;
+        return captureReturn;
       },
       cleanupPickedFile() {},
       purgeMatterFileTemps() {
@@ -478,6 +479,9 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
     holdMarker(fn: () => Promise<string | null>) {
       markerRead = fn;
     },
+    holdCapture(value: Promise<null>) {
+      captureReturn = value;
+    },
     compatibility(status: typeof policyStatus) {
       policyStatus = status;
     },
@@ -523,6 +527,45 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
     },
   };
 }
+
+test("actual App resumes the current Files route on camera denial and retires it on sign-in change", async () => {
+  const f = host();
+  const permission = deferred<null>();
+  f.holdCapture(permission.promise);
+  f.render();
+  await f.flush();
+  f.props("PrivateApplication").onCapturePhoto("owned-matter", 7);
+  f.appState("inactive");
+  await f.flush();
+  assert.doesNotMatch(f.text(), /PrivateApplication/);
+  f.appState("active");
+  await f.flush();
+  permission.reject(new CameraCaptureError("permission"));
+  await f.flush();
+  const restored = f.props("PrivateApplication");
+  assert.equal(restored.initialFilesMatterId, "owned-matter");
+  assert.deepEqual(restored.cameraPermissionDenial, {
+    companyId: originalBinding.companyId,
+    userId: originalBinding.userId,
+    membershipId: originalBinding.membershipId,
+    sessionKey: originalBinding.sessionKey,
+    matterId: "owned-matter",
+    expectedLifecycleVersion: 7,
+  });
+  assert.equal(restored.selectedFile, null);
+  assert.doesNotMatch(f.text(), /app-operation-error/);
+  assert.equal(f.events.filter((event) => event === "capture").length, 1);
+  f.invalidate();
+  f.adoptForeign();
+  f.appState("inactive");
+  f.appState("active");
+  await f.flush();
+  const next = f.props("PrivateApplication");
+  assert.equal(next.identity.user.id, foreign.user.id);
+  assert.equal(next.initialFilesMatterId, undefined);
+  assert.equal(next.cameraPermissionDenial, undefined);
+  f.close();
+});
 
 test("actual App retained Account/file callbacks cannot enable, sign out or capture for a newer revalidated principal", async () => {
   const f = host();

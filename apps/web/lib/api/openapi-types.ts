@@ -142,6 +142,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/account/workspace-conduct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_api_account_workspace_conduct_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account/workspace-conduct/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept */
+        post: operations["accept_api_account_workspace_conduct_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account/workspace-conduct/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report */
+        post: operations["report_api_account_workspace_conduct_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-feedback": {
         parameters: {
             query?: never;
@@ -1178,6 +1229,23 @@ export interface paths {
         head?: never;
         /** Toggle predictive bench analytics + admin-disabled templates for this workspace (PG-107 + Sprint 11). Owner/admin only. */
         patch: operations["patch_tenant_ai_policy_api_admin_tenant_ai_policy_patch"];
+        trace?: never;
+    };
+    "/api/admin/workspace-conduct/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Workspace Intake */
+        get: operations["workspace_intake_api_admin_workspace_conduct_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/ai-feedback/product-guide": {
@@ -13111,6 +13179,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/workspace-conduct-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Publisher Intake */
+        get: operations["publisher_intake_api_platform_admin_workspace_conduct_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-console/admins": {
         parameters: {
             query?: never;
@@ -14549,6 +14634,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/teams/{team_id}/members/{team_membership_id}/lead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the lead flag of an existing team membership */
+        patch: operations["patch_team_member_lead_api_teams__team_id__members__team_membership_id__lead_patch"];
         trace?: never;
     };
     "/api/teams/scoping": {
@@ -20106,6 +20208,70 @@ export interface components {
             /** Items */
             items: components["schemas"]["ComplianceItemRecord"][];
             run: components["schemas"]["ComplianceExtractionRunRecord"];
+        };
+        /** ConductFileReportTarget */
+        ConductFileReportTarget: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "file";
+            /**
+             * Matter Id
+             * Format: uuid
+             */
+            matter_id: string;
+        };
+        /** ConductNoteReportTarget */
+        ConductNoteReportTarget: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "note";
+            /**
+             * Matter Id
+             * Format: uuid
+             */
+            matter_id: string;
+        };
+        /** ConductUserReportTarget */
+        ConductUserReportTarget: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "user";
+            /**
+             * Matter Id
+             * Format: uuid
+             */
+            matter_id: string;
+            /**
+             * Membership Id
+             * Format: uuid
+             */
+            membership_id: string;
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "note" | "file";
         };
         /**
          * ConflictCandidate
@@ -47458,8 +47624,11 @@ export interface components {
             context_before: string;
             /** Index */
             index: number;
-            /** Kind */
-            kind: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "insertion" | "deletion" | "move_from" | "move_to" | "formatting";
             /** Paragraph Index */
             paragraph_index: number;
             /** Text */
@@ -47483,8 +47652,12 @@ export interface components {
             deletion_count: number;
             /** Insertion Count */
             insertion_count: number;
+            /** Move Count */
+            move_count: number;
             /** Paragraph Count */
             paragraph_count: number;
+            /** Uninterpreted Revision Count */
+            uninterpreted_revision_count: number;
         };
         /**
          * ResolvedBenchMember
@@ -49179,6 +49352,11 @@ export interface components {
             /** Membership Id */
             membership_id: string;
         };
+        /** TeamMembershipLeadUpdateRequest */
+        TeamMembershipLeadUpdateRequest: {
+            /** Is Lead */
+            is_lead: boolean;
+        };
         /** TeamMembershipRecord */
         TeamMembershipRecord: {
             /**
@@ -50870,6 +51048,96 @@ export interface components {
             /** Turn Id */
             turn_id: string;
         };
+        /** WorkspaceConductAccept */
+        WorkspaceConductAccept: {
+            /** Version */
+            version: string;
+        };
+        /** WorkspaceConductReportCreate */
+        WorkspaceConductReportCreate: {
+            /**
+             * Operation Id
+             * Format: uuid4
+             */
+            operation_id: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "harassment_threats" | "exploitation" | "impersonation" | "unlawful_content" | "spam_malware_fraud" | "unauthorized_disclosure" | "other";
+            /** Target */
+            target: components["schemas"]["ConductNoteReportTarget"] | components["schemas"]["ConductFileReportTarget"] | components["schemas"]["ConductUserReportTarget"];
+        };
+        /** WorkspaceConductReportMetadata */
+        WorkspaceConductReportMetadata: {
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "harassment_threats" | "exploitation" | "impersonation" | "unlawful_content" | "spam_malware_fraud" | "unauthorized_disclosure" | "other";
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "note" | "file" | "user";
+            /** Target Membership Id */
+            target_membership_id: string | null;
+        };
+        /** WorkspaceConductReportPage */
+        WorkspaceConductReportPage: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Reports */
+            reports: components["schemas"]["WorkspaceConductReportMetadata"][];
+        };
+        /** WorkspaceConductReportReceipt */
+        WorkspaceConductReportReceipt: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Operation Id
+             * Format: uuid4
+             */
+            operation_id: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /**
+             * Status
+             * @default received
+             * @constant
+             */
+            status: "received";
+        };
+        /** WorkspaceConductStatus */
+        WorkspaceConductStatus: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Policy Url */
+            policy_url: string;
+            /** Version */
+            version: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -51180,6 +51448,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountDeletionRequestReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_api_account_workspace_conduct_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceConductStatus"];
+                };
+            };
+        };
+    };
+    accept_api_account_workspace_conduct_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceConductAccept"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceConductStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_api_account_workspace_conduct_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceConductReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceConductReportReceipt"];
                 };
             };
             /** @description Validation Error */
@@ -53398,6 +53752,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantAIPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_intake_api_admin_workspace_conduct_reports_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceConductReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -78055,6 +78441,38 @@ export interface operations {
             };
         };
     };
+    publisher_intake_api_platform_admin_workspace_conduct_reports_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceConductReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admins_api_platform_console_admins_get: {
         parameters: {
             query?: {
@@ -80900,7 +81318,10 @@ export interface operations {
     };
     delete_team_member_api_teams__team_id__members__membership_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Remove only this team membership row. */
+                expected_team_membership_id?: string | null;
+            };
             header?: never;
             path: {
                 membership_id: string;
@@ -80918,6 +81339,63 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TeamRecord"];
                 };
+            };
+            /** @description The team membership or access changed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_team_member_lead_api_teams__team_id__members__team_membership_id__lead_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                team_membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMembershipLeadUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRecord"];
+                };
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The team membership changed or is no longer active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -81396,8 +81874,10 @@ export interface operations {
     get_assistant_turns_api_workspace_assistant_sessions__session_id__turns_get: {
         parameters: {
             query?: {
+                latest?: boolean;
                 limit?: number;
                 offset?: number;
+                snapshot?: boolean;
             };
             header?: never;
             path: {

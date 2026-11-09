@@ -17,7 +17,7 @@ import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
-import { admitApplication, FixtureUnavailable, ownerControl, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
@@ -1135,6 +1135,65 @@ test('fixture evidence hash changes and unbounded/relative files fail closed', (
 test('owner capability absence is explicit unavailable and never an E2E pass', async () => {
   await assert.rejects(() => ownerControl({ owner: null }, 'disposeMatter', 'unit'), FixtureUnavailable);
 });
+test('Core does not spend the owner worker lifetime before the first owner case', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1700000000000 });
+  const module = ownedFile(t, `
+    import assert from 'node:assert/strict';
+    import {createHash} from 'node:crypto';
+    import {writeFileSync} from 'node:fs';
+    import {fileURLToPath} from 'node:url';
+    export function createOwnerControls() {
+      let started;
+      return {
+        async prepare({ signal }) {
+          assert.ok(signal instanceof AbortSignal && !signal.aborted);
+          started = Date.now();
+          writeFileSync(new URL('./owner-prepared.json', import.meta.url), JSON.stringify(started), { flag: 'wx' });
+          return { evidenceSha256: 'a'.repeat(64) };
+        },
+        async control({ operation, targetId, runId, backendSha, marker }) {
+          assert.ok(Date.now() - started < 20 * 60 * 1000, 'UNIT_OWNER_LEASE_EXPIRED');
+          assert.equal(marker, 'no-paid-providers');
+          const evidencePath = fileURLToPath(new URL('./' + operation + '.json', import.meta.url));
+          const body = JSON.stringify({ operation, targetId });
+          writeFileSync(evidencePath, body, { flag: 'wx' });
+          return { kind: 'docker-owner-control', operation, targetId, runId, backendSha, evidencePath,
+            evidenceSha256: createHash('sha256').update(body).digest('hex'), result: operation };
+        },
+      };
+    }
+  `, 'owner-worker.mjs');
+  const pathToPreparation = path.join(path.dirname(module.path), 'owner-prepared.json');
+  const fixture = { environment: 'docker-integration', backendSha: 'b'.repeat(40),
+    lifecycleMatter: { id: 'synthetic-lifecycle' }, accessMatter: { id: 'synthetic-access' },
+    ownerControls: { modulePath: module.path, sha256: module.sha256,
+      capabilities: ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'readNoteState'] } };
+  const owner = await loadOwnerControls(fixture);
+  const requirements = id => datedInventory.cases.find(item => item.id === id).ownerCapabilities || [];
+  assert.equal(await prepareOwnerControlsForCase(owner, requirements('NATIVE-16')), undefined);
+  t.mock.timers.tick(20 * 60 * 1000 + 43000);
+  assert.equal(fs.existsSync(pathToPreparation), false, 'Core preflight must not start the owner worker clock');
+  assert.deepEqual(await prepareOwnerControlsForCase(owner, requirements('NATIVE-17')),
+    { evidenceSha256: 'a'.repeat(64) });
+  assert.equal(JSON.parse(readFileSync(pathToPreparation, 'utf8')), Date.now());
+  const context = { fixture, owner, runId: 'synthetic-run' };
+  assert.equal(await ownerControl(context, 'readMatterState', fixture.lifecycleMatter.id), 'readMatterState');
+  t.mock.timers.tick(150000);
+  assert.equal(await ownerControl(context, 'disposeMatter', fixture.lifecycleMatter.id), 'disposeMatter');
+  assert.equal(await prepareOwnerControlsForCase(owner, requirements('NATIVE-18')), undefined);
+  assert.equal(await ownerControl(context, 'readNoteState', fixture.accessMatter.id), 'readNoteState');
+});
+test('deferred owner preparation refuses missing capabilities and never retries an uncertain start', async () => {
+  let starts = 0;
+  const owner = { capabilities: ['readMatterState'],
+    prepare: async () => { starts++; throw new Error('UNIT_OWNER_PREPARATION_UNKNOWN'); } };
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['disposeMatter']), FixtureUnavailable);
+  assert.equal(starts, 0);
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['readMatterState']), /UNIT_OWNER_PREPARATION_UNKNOWN/);
+  assert.equal(owner.poisoned, true);
+  await assert.rejects(prepareOwnerControlsForCase(owner, ['readMatterState']), /OWNER_CONTROL_PREVIOUSLY_UNCERTAIN/);
+  assert.equal(starts, 1);
+});
 test('owner controls refuse positive and wrong-purpose targets without invoking privileged work', async () => {
   let calls = 0;
   const context = { fixture: { environment: 'docker-integration', lifecycleMatter: { id: 'lifecycle' }, accessMatter: { id: 'access' } },
@@ -1151,7 +1210,8 @@ test('an uncertain owner command poisons the shared adapter and cannot be replay
   assert.equal(calls, 1);
 });
 
-function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {} } = {}) {
+function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], afterConnect = [], entryLocators = {},
+  conversionConfirmation } = {}) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'urlClose', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace', 'connect', 'signInLink']
     .map((key) => [key, { kind: 'id', value: `unit-${key}` }]));
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
@@ -1160,10 +1220,10 @@ function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], 
   if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
-  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect });
+  const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect, conversionConfirmation });
   return { ...(consent ? { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' } : {}),
     firefoxUi: { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2', signerSha256: 'A78B62A5165B4494B2FEAD9E76A280D22D937FEE6251AECE599446B2EA319B04',
-    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare, afterConnect } };
+    caTrustedThroughSettings: true, locatorEvidencePath: evidence.path, locatorEvidenceSha256: evidence.sha256, locators, urlCloseMode, prepare, afterConnect, conversionConfirmation } };
 }
 test('Firefox native automation requires observed exact locators, trusted CA and reviewed package signer', (t) => {
   const auth = firefoxRecipe(t);
@@ -1175,6 +1235,22 @@ test('Firefox native automation requires observed exact locators, trusted CA and
     (copy) => { copy.firefoxUi.locatorEvidenceSha256 = '0'.repeat(64); },
     (copy) => { copy.firefoxUi.packageName = 'foreign.browser'; },
   ]) { const copy = structuredClone(auth); mutate(copy); assert.throws(() => validateFirefoxRecipe(copy)); }
+});
+
+test('Firefox accepts only the observed exact conversion confirmation sheet and button pair', (t) => {
+  const confirmation = {
+    sheet: { kind: 'id', value: 'org.mozilla.firefox:id/design_bottom_sheet' },
+    button: { kind: 'label', value: 'Open in Firefox' },
+  };
+  const observed = firefoxRecipe(t, { conversionConfirmation: confirmation });
+  assert.equal(validateFirefoxRecipe(observed), observed.firefoxUi);
+  const unobserved = firefoxRecipe(t);
+  unobserved.firefoxUi.conversionConfirmation = confirmation;
+  assert.throws(() => validateFirefoxRecipe(unobserved), /FIREFOX_CONVERSION_CONFIRMATION_NOT_OBSERVED/);
+  const foreign = firefoxRecipe(t, { conversionConfirmation: {
+    ...confirmation, sheet: { kind: 'id', value: 'org.mozilla.firefox:id/other_sheet' },
+  } });
+  assert.throws(() => validateFirefoxRecipe(foreign), /EXACT_FIREFOX_CONVERSION_CONFIRMATION_REQUIRED/);
 });
 
 test('Firefox app-open admission requires the exact new locator in both the recipe and hashed observed evidence', (t) => {
@@ -1515,22 +1591,53 @@ function firefoxDouble(t, foreign = false, options = {}) {
     elapsed: () => clock };
 }
 
-function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure } = {}) {
+function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure,
+  conversionConfirmation = false, confirmationInitiallyOpen = false, confirmationDispatchFailure, keepConfirmationOpen = false } = {}) {
   const recipe = { packageName: 'org.mozilla.firefox', locators: {
     fullBrowser: { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' }, urlOpen: { kind: 'id', value: 'ADDRESSBAR_URL_BOX' },
   }, prepare: [{ kind: 'label', value: 'More options' }, { kind: 'label', value: 'Open in Firefox' }] };
-  let menuOpen = menuInitiallyOpen, full = false, clock = 0;
+  if (conversionConfirmation) recipe.conversionConfirmation = {
+    sheet: { kind: 'id', value: 'org.mozilla.firefox:id/design_bottom_sheet' },
+    button: { kind: 'label', value: 'Open in Firefox' },
+  };
+  let menuOpen = menuInitiallyOpen, full = false, clock = 0, confirmationOpen = confirmationInitiallyOpen;
   const clicks = [], records = [];
   const menuQuery = selector('android', 'label', 'More options'), conversionQuery = selector('android', 'label', 'Open in Firefox');
+  const sheetQuery = selector('android', 'id', 'org.mozilla.firefox:id/design_bottom_sheet');
+  const sheetButtonId = 'scoped-firefox-confirmation-button';
   const driver = {
     async getCurrentPackage() { return recipe.packageName; },
     async elementClick(id) {
       clicks.push(id);
       if (dispatchFailure) throw dispatchFailure;
       if (id === menuQuery) { menuOpen = !menuOpen; if (fullAfterMenu) full = true; }
-      if (id === conversionQuery) full = true;
+      if (id === conversionQuery) {
+        if (conversionConfirmation) confirmationOpen = true;
+        else full = true;
+      }
+      if (id === sheetButtonId) {
+        if (confirmationDispatchFailure) throw confirmationDispatchFailure;
+        if (!keepConfirmationOpen) {
+          confirmationOpen = false;
+          full = true;
+        }
+      }
     },
     async $$(query) {
+      if (query === sheetQuery && confirmationOpen) return [{
+        elementId: sheetQuery,
+        async isDisplayed() { return true; },
+        async $$(query) {
+          assert.equal(query, conversionQuery);
+          return [{
+            elementId: sheetButtonId,
+            async isDisplayed() { return true; },
+            async isEnabled() { return true; },
+            async getAttribute(name) { assert.equal(name, 'package'); return recipe.packageName; },
+            async click() { assert.fail('ELEMENT_CLICK_WRAPPER_MUST_NOT_BE_CALLED'); },
+          }];
+        },
+      }];
       const shown = query === selector('android', 'id', 'ADDRESSBAR_TABS_COUNTER') ? full : query === menuQuery ? true
         : query === conversionQuery ? menuOpen && !full && !missingConversion
         : query === selector('android', 'id', 'ADDRESSBAR_URL_BOX') ? full : false;
@@ -1578,6 +1685,41 @@ test('Firefox preparation retains stale and lost dispatch failures without refet
   }
 });
 
+test('Firefox preparation dispatches the observed conversion menu and distinct confirmation sheet once each', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, [
+    selector('android', 'label', 'More options'), selector('android', 'label', 'Open in Firefox'),
+    'scoped-firefox-confirmation-button',
+  ]);
+  assert.equal(fake.records.filter(({ key, action }) => key === 'conversion-confirmation' && action === 'click').length, 1);
+});
+
+test('Firefox preparation handles an already visible conversion confirmation without opening the menu behind it', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true });
+  await prepareFirefox(fake.context, fake.recipe);
+  assert.deepEqual(fake.clicks, ['scoped-firefox-confirmation-button']);
+});
+
+test('Firefox does not click an unadmitted confirmation sheet', async () => {
+  const fake = firefoxPreparation({ conversionConfirmation: true });
+  delete fake.recipe.conversionConfirmation;
+  await assert.rejects(prepareFirefox(fake.context, fake.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(fake.clicks, [selector('android', 'label', 'More options'), selector('android', 'label', 'Open in Firefox')]);
+  assert.equal(fake.elapsed(), 10000);
+});
+
+test('Firefox never replays a persistent or unacknowledged conversion confirmation', async () => {
+  const persistent = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true, keepConfirmationOpen: true });
+  await assert.rejects(prepareFirefox(persistent.context, persistent.recipe), /FIREFOX_BROWSER_CHROME_NOT_READY/);
+  assert.deepEqual(persistent.clicks, ['scoped-firefox-confirmation-button']);
+  assert.equal(persistent.elapsed(), 10000);
+  const failure = new Error('conversion acknowledgement lost');
+  const lost = firefoxPreparation({ conversionConfirmation: true, confirmationInitiallyOpen: true, confirmationDispatchFailure: failure });
+  await assert.rejects(prepareFirefox(lost.context, lost.recipe), error => error === failure);
+  assert.deepEqual(lost.clicks, ['scoped-firefox-confirmation-button']);
+});
+
 test('Firefox waits for a delayed observed entry before any credential write without scrolling or replay', async t => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { entryDelayMs: 4011 });
@@ -1611,7 +1753,7 @@ test('Firefox refuses to submit when a replaced field does not read back exactly
 });
 
 const firefoxEntryClockMocks = new WeakMap();
-function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure } = {}) {
+function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = false, readFailure, timeoutBeforeFinalPoll = false } = {}) {
   const recipe = validateFirefoxRecipe(firefoxRecipe(t, { entryLocators: { useAnotherAccount: { kind: 'label', value: 'Use another account' } } }));
   let clock = 0, polling = false, wrapperClicks = 0, swallowed = 0;
   const attempts = [], acknowledged = [], queries = [], waits = [], records = [];
@@ -1634,6 +1776,7 @@ function firefoxEntryDouble(t, state, { dispatchFailure, lostAcknowledgement = f
     waitUntil: async (callback, settings) => {
       const start = clock; waits.push({ start, ...settings });
       for (;;) {
+        if (timeoutBeforeFinalPoll && clock - start >= settings.timeout) throw Error(settings.timeoutMsg);
         polling = true;
         try { if (await callback()) return; } catch { swallowed++; }
         finally { polling = false; }
@@ -1666,6 +1809,66 @@ test('Firefox acknowledged entry lingering while the form loads waits without a 
   assert.equal(fake.attempts.length, 1); assert.equal(fake.attempts[0].id, 'useAnotherAccount-original-0');
   assert.equal(fake.elapsed(), 4500); assert.equal(fake.wrapperClicks(), 0); assert.equal(fake.swallowed(), 0);
   assert.ok(fake.waits[1].timeout <= 20000);
+});
+
+test('Firefox waits for transient duplicate login anchors after one acknowledged account switch', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (key === 'companySlug') return clock < 450 ? 2 : 1;
+    return Number(key === 'useAnotherAccount' && clock < 450);
+  });
+  await resolveFirefoxEntry(fake.context, fake.recipe);
+  assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0']);
+  assert.equal(fake.elapsed(), 450);
+  assert.equal(fake.wrapperClicks(), 0);
+  assert.equal(fake.swallowed(), 0);
+  assert.equal(fake.waits[1].timeout, 20000);
+});
+
+test('Firefox persistent duplicate anchors retain ambiguity at the original deadline after an account switch', async t => {
+  for (const timeoutBeforeFinalPoll of [false, true]) {
+    const fake = firefoxEntryDouble(t, ({ key, clock, acknowledged }) => {
+      if (clock < 19500) return 0;
+      if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+      return key === 'companySlug' ? 2 : 0;
+    }, { timeoutBeforeFinalPoll });
+    await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/);
+    assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0']);
+    assert.equal(fake.elapsed(), 20000);
+    assert.equal(fake.waits[1].timeout, 500);
+    assert.equal(fake.wrapperClicks(), 0);
+    assert.equal(fake.swallowed(), 0);
+  }
+});
+
+test('Firefox post-switch transport and conflicting form states remain terminal immediately', async t => {
+  const failure = Error('UNIT_POST_SWITCH_TRANSPORT_CLOSED');
+  const broken = firefoxEntryDouble(t, ({ key, acknowledged }) => {
+    if (acknowledged.length) throw failure;
+    return Number(key === 'useAnotherAccount');
+  });
+  await assert.rejects(resolveFirefoxEntry(broken.context, broken.recipe), error => error === failure);
+  assert.equal(broken.elapsed(), 0);
+  assert.equal(broken.attempts.length, 1);
+  assert.equal(broken.swallowed(), 0);
+  const conflicting = firefoxEntryDouble(t, ({ key, acknowledged }) => !acknowledged.length
+    ? Number(key === 'useAnotherAccount') : Number(['companySlug', 'signInLink'].includes(key)));
+  await assert.rejects(resolveFirefoxEntry(conflicting.context, conflicting.recipe), /AMBIGUOUS_FIREFOX_ENTRY_STATE/);
+  assert.equal(conflicting.elapsed(), 0);
+  assert.equal(conflicting.attempts.length, 1);
+  assert.equal(conflicting.swallowed(), 0);
+});
+
+test('Firefox duplicate anchors after a different acknowledged link remain terminal immediately', async t => {
+  const fake = firefoxEntryDouble(t, ({ key, acknowledged }) => {
+    if (!acknowledged.length) return Number(key === 'useAnotherAccount');
+    if (acknowledged.length === 1) return Number(key === 'signInLink');
+    return key === 'companySlug' ? 2 : 0;
+  });
+  await assert.rejects(resolveFirefoxEntry(fake.context, fake.recipe), /AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/);
+  assert.deepEqual(fake.attempts.map(({ id }) => id), ['useAnotherAccount-original-0', 'signInLink-original-0']);
+  assert.equal(fake.elapsed(), 0);
+  assert.equal(fake.swallowed(), 0);
 });
 
 test('Firefox unknown or disabled entry states exhaust one 20 second bound without credentials or gestures', async t => {
@@ -2390,6 +2593,10 @@ test('historical Windows plans without Mac proof or transport retain their exist
 test('actual runner binds transport before preflight device work and checks returned capabilities before every native action', () => {
   const source = readFileSync(new URL('./run-native.mjs', import.meta.url), 'utf8');
   assert.ok(source.indexOf('const sessionTransport = androidSessionTransport(') < source.indexOf('owner = await loadOwnerControls('));
+  const prepare = source.indexOf('await prepareOwnerControlsForCase(owner,');
+  assert.ok(source.indexOf("type: 'phase_started', id, phase: 'setup'") < prepare);
+  assert.ok(prepare < source.indexOf("type: 'owner_worker_prepared'"));
+  assert.ok(prepare < source.indexOf('driver = await remote('));
   assert.ok(source.indexOf('...sessionTransport.capabilities') < source.indexOf('driver = await remote('));
   const check = source.indexOf('verifyAndroidSessionTransport(fixture, platform, driver.capabilities)');
   assert.ok(check > source.indexOf('ownedSessionId = sessionCreated.sessionId'));

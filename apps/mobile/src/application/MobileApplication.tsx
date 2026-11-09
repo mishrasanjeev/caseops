@@ -25,6 +25,10 @@ import { selectTab } from "../domain/tab-selection";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
 import { createSourceRecordsRepository } from "../domain/source-records";
+import {
+  workspaceConductRepository,
+  type WorkspaceReportTarget,
+} from "../domain/workspace-conduct";
 import type {
   SourceKind,
   SourceLocator,
@@ -35,6 +39,7 @@ import { attachmentViewerSource } from "../viewer/contracts";
 import type { ViewerSource, ViewerPorts } from "../viewer/contracts";
 import type { PrivateDocumentViewerProps } from "../viewer/PrivateDocumentViewer";
 import { useResource } from "./useResource";
+import { WorkspaceConductGate } from "./WorkspaceConductGate";
 
 import type {
   LeaveGuard,
@@ -59,6 +64,7 @@ import type { QuickTarget } from "../domain/quick-work";
 import { DraftScreen } from "./screens/DraftScreen";
 
 import { AccountScreen } from "./screens/AccountScreen";
+import { WorkspaceReportScreen } from "./screens/WorkspaceReportScreen";
 import { InboxScreen } from "./screens/InboxScreen";
 import { CounselScreen } from "./screens/CounselScreen";
 import {
@@ -86,6 +92,7 @@ type Route =
   | { type: "inbox" }
   | { type: "counsel"; matterId: string }
   | { type: "readthrough"; matterId: string; target: ReadthroughTarget }
+  | { type: "workspace-report"; subject: WorkspaceReportTarget }
   | { type: "account" };
 
 const tabs: {
@@ -122,8 +129,10 @@ function ApplicationContent({
   identity,
   sessionKey,
   initialFilesMatterId,
+  initialAccount,
   recordLinks,
   selectedFile,
+  cameraPermissionDenial,
   onChooseFile,
   onCapturePhoto,
   selectingFile,
@@ -135,6 +144,7 @@ function ApplicationContent({
   onSignOut,
 }: MobileApplicationProps) {
   const repository = useMemo(() => createRepository(request), [request]);
+  const conduct = useMemo(() => workspaceConductRepository(request), [request]);
   const sources = useMemo(
     () =>
       createSourceRecordsRepository(
@@ -176,25 +186,51 @@ function ApplicationContent({
   const [tab, setTab] = useState<Tab>("today");
   const [sourceKind, setSourceKind] = useState<SourceKind>("ip_docket");
   const [stacks, setStacks] = useState<Record<Tab, Route[]>>({
-    today: initialFilesMatterId
-      ? [
-          { type: "home" },
-          { type: "matter", matterId: initialFilesMatterId, section: "Files" },
-        ]
-      : [{ type: "home" }],
+    today: initialAccount
+      ? [{ type: "home" }, { type: "account" }]
+      : initialFilesMatterId
+        ? [
+            { type: "home" },
+            {
+              type: "matter",
+              matterId: initialFilesMatterId,
+              section: "Files",
+            },
+          ]
+        : [{ type: "home" }],
     matters: [{ type: "home" }],
     calendar: [{ type: "home" }],
     work: [{ type: "home" }],
   });
   const stack = stacks[tab],
     route = stack[stack.length - 1];
+  const currentCameraPermissionDenial =
+    cameraPermissionDenial &&
+    route.type === "matter" &&
+    route.section === "Files" &&
+    route.matterId === cameraPermissionDenial.matterId
+      ? cameraPermissionDenial
+      : undefined;
   useEffect(() => {
     if (
-      selectedFile &&
-      !(route.type === "matter" && route.matterId === selectedFile.matterId)
+      (selectedFile &&
+        !(
+          route.type === "matter" && route.matterId === selectedFile.matterId
+        )) ||
+      (cameraPermissionDenial &&
+        !currentCameraPermissionDenial &&
+        readFileSelection().revision === selectionRevision)
     )
       onClearSelectedFile();
-  }, [route, selectedFile, onClearSelectedFile]);
+  }, [
+    route,
+    selectedFile,
+    cameraPermissionDenial,
+    currentCameraPermissionDenial,
+    readFileSelection,
+    selectionRevision,
+    onClearSelectedFile,
+  ]);
   const workAvailable = useRef(false);
   const suspendWork = useRef<(() => void) | null>(null);
   workAvailable.current = route.type === "home" && tab === "work";
@@ -218,10 +254,17 @@ function ApplicationContent({
   };
   const push = (next: Route) =>
     guarded(() =>
-      setStacks((previous) => ({
-        ...previous,
-        [tab]: [...previous[tab], next],
-      })),
+      setStacks((previous) => {
+        if (next.type === "workspace-report") {
+          const parent = previous[tab].at(-1);
+          if (
+            parent?.type !== "matter" ||
+            parent.matterId !== next.subject.matter_id
+          )
+            return previous;
+        }
+        return { ...previous, [tab]: [...previous[tab], next] };
+      }),
     );
   const linkState = recordLinks?.inbox.snapshot;
   const attemptedLink = useRef<{ inbox: RecordLinkInbox; id: number } | null>(
@@ -509,12 +552,22 @@ function ApplicationContent({
               onClose={completeQuickWork}
             />
           ) : route.type === "note" ? (
-            <NoteEditor
-              repository={repository}
-              matter={route.matter}
+            <WorkspaceConductGate repository={conduct} action="notes">
+              <NoteEditor
+                repository={repository}
+                matter={route.matter}
+                guard={leaveGuard}
+                onDone={completeNote}
+                onCancel={pop}
+              />
+            </WorkspaceConductGate>
+          ) : route.type === "workspace-report" ? (
+            <WorkspaceReportScreen
+              key={JSON.stringify(route.subject)}
+              subject={route.subject}
+              repository={conduct}
               guard={leaveGuard}
-              onDone={completeNote}
-              onCancel={pop}
+              onClose={pop}
             />
           ) : route.type === "matter" ? (
             <MatterScreen
@@ -523,6 +576,29 @@ function ApplicationContent({
               matterId={route.matterId}
               initialSection={route.section}
               canWrite={identity.capabilities.includes("matters:write")}
+              currentMembershipId={identity.membership.id}
+              reportNote={(itemId) =>
+                push({
+                  type: "workspace-report",
+                  subject: {
+                    kind: "note",
+                    matter_id: route.matterId,
+                    item_id: itemId,
+                  },
+                })
+              }
+              reportAuthor={(itemId, membershipId) =>
+                push({
+                  type: "workspace-report",
+                  subject: {
+                    kind: "user",
+                    matter_id: route.matterId,
+                    item_id: itemId,
+                    source_kind: "note",
+                    membership_id: membershipId,
+                  },
+                })
+              }
               onSectionChange={(section) =>
                 setStacks((previous) => ({
                   ...previous,
@@ -535,12 +611,15 @@ function ApplicationContent({
               }
               files={{
                 request,
+                conduct,
                 companyId: identity.company.id,
                 userId: identity.user.id,
                 sessionKey,
                 matterId: route.matterId,
                 capabilities: identity.capabilities,
                 selectedFile,
+                cameraPermissionDeniedAtVersion:
+                  currentCameraPermissionDenial?.expectedLifecycleVersion,
                 onChooseFile: (version) =>
                   onChooseFile(route.matterId, version),
                 onCapturePhoto: (version) =>
@@ -550,6 +629,27 @@ function ApplicationContent({
                 readFileSelection,
                 onClearSelectedFile,
                 onOpenFile: (source) => push({ type: "viewer", source }),
+                onReportFile: (itemId) =>
+                  push({
+                    type: "workspace-report",
+                    subject: {
+                      kind: "file",
+                      matter_id: route.matterId,
+                      item_id: itemId,
+                    },
+                  }),
+                onReportUploader: (itemId, membershipId) =>
+                  push({
+                    type: "workspace-report",
+                    subject: {
+                      kind: "user",
+                      matter_id: route.matterId,
+                      item_id: itemId,
+                      source_kind: "file",
+                      membership_id: membershipId,
+                    },
+                  }),
+                currentMembershipId: identity.membership.id,
                 guard: leaveGuard,
               }}
               addNote={(matter) => push({ type: "note", matter })}
@@ -660,6 +760,7 @@ function ApplicationContent({
         </View>
         {route.type !== "note" &&
         route.type !== "quick-work" &&
+        route.type !== "workspace-report" &&
         route.type !== "viewer" ? (
           <View
             style={{

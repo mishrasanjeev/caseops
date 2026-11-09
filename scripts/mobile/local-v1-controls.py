@@ -491,8 +491,9 @@ class RegisteredOwner:
                 http.cookies.clear()
                 http.headers["Authorization"] = "Bearer " + value["access_token"]
                 if credentials.get("totp_secret"):
-                    import pyotp
-                    factor = pyotp.TOTP(credentials["totp_secret"]).now()
+                    from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
+
+                    factor = _hotp(credentials["totp_secret"], int(time.time()) // TOTP_PERIOD_SECONDS)
                     stepped = bounded_http(http, "POST", "/api/auth/mfa/step-up", {"code": factor, "purpose": "step_up", "method": "totp"})
                     assert stepped.status_code == 200, "V1_OWNER_NORMAL_MFA_REQUIRED"
                 self.clients[actor] = http

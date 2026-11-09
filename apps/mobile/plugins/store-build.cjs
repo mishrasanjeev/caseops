@@ -91,17 +91,30 @@ function readStoreBuildSettings(env, links, options) {
   const baseline = readJson(reference(build.value.baseline));
   return { ...validateStoreBuild(build.value, baseline.value, links, options), ref, build, baseline };
 }
+function storeNumberReservations(build) {
+  iosBuild(build.iosBuildNumber);
+  androidBuild(build.androidVersionCode);
+  shape(build.identities, ['iosBundleIdentifier', 'androidPackageName'], 'STORE_IDENTITIES_REQUIRED');
+  const { iosBundleIdentifier, androidPackageName } = build.identities;
+  const valid = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9_-]+){2,}$/.test(value);
+  if (!valid(androidPackageName) || (iosBundleIdentifier !== null && !valid(iosBundleIdentifier))) fail('STORE_IDENTITIES_REQUIRED');
+  const records = [];
+  if (iosBundleIdentifier !== null) {
+    records.push({ platform: 'ios', appId: iosBundleIdentifier, value: build.iosBuildNumber });
+  }
+  records.push({ platform: 'android', appId: androidPackageName, value: String(build.androidVersionCode) });
+  return records;
+}
+
 // Reserve before any future build or secret access. Partial reservations survive failure.
 function reserveBuildNumbers(root, build, requestSha256) {
-  iosBuild(build.iosBuildNumber); androidBuild(build.androidVersionCode);
-  shape(build.identities, ['iosBundleIdentifier', 'androidPackageName'], 'STORE_IDENTITIES_REQUIRED');
-  for (const value of Object.values(build.identities)) if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9_-]+){2,}$/.test(value)) fail('STORE_IDENTITIES_REQUIRED');
+  const records = storeNumberReservations(build);
   if (!path.isAbsolute(root) || fs.realpathSync(root) !== root || !/^[a-f0-9]{64}$/.test(requestSha256)) fail('EXPLICIT_CANONICAL_RESERVATION_ROOT_REQUIRED');
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink() || (process.platform !== 'win32' && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid()))) fail('OWNED_PRIVATE_RESERVATION_ROOT_REQUIRED');
-  for (const [platform, appId, value] of [['ios', build.identities.iosBundleIdentifier, build.iosBuildNumber], ['android', build.identities.androidPackageName, String(build.androidVersionCode)]]) {
+  for (const { platform, appId, value } of records) {
     const identity = createHash('sha256').update(JSON.stringify([platform, appId])).digest('hex');
     fs.writeFileSync(path.join(root, identity + '-' + platform + '-' + value + '.json'), JSON.stringify({ requestSha256, platform, value }) + '\n', { flag: 'wx', mode: 0o600 });
   }
 }
-module.exports = { readHashed, readJson, reference, validateStoreBuild, readStoreBuildSettings, reserveBuildNumbers };
+module.exports = { readHashed, readJson, reference, validateStoreBuild, readStoreBuildSettings, storeNumberReservations, reserveBuildNumbers };

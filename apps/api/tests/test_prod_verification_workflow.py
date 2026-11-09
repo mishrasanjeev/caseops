@@ -915,9 +915,10 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
     assert not (tmp_path / "test-results").exists()
     if release_contract == "current":
         assert result.returncode == 0, result.stderr
+        # Nov 7 Teams/contracts each add desktop and mobile tester cases: 97 + 4.
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 2,
-            "partitions": {"tester": 97, "tester-catalog": 18,
+            "partitions": {"tester": 101, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13-a": 40,
                            "test-legal-write-oct13-b": 11},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",

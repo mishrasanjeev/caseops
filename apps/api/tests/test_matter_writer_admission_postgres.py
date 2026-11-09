@@ -56,6 +56,7 @@ from caseops_api.services import (
     matters,
 )
 from caseops_api.services.private_retrieval import ensure_active_private_generation
+from tests.fixtures_historical_attachments import seed_historical_attachment
 from tests.test_document_finalizer_overlap_20261009_postgres import _PassiveOverlapTiming
 from tests.test_postgres_validation import (
     _ensure_migrations,  # noqa: F401
@@ -301,13 +302,13 @@ def race(pg_engine, request, tmp_path_factory, autoflush):
                 timing.stop()
 
 
-def _fixture(engine, source="matter", *, active=True):
+def _fixture(engine, source="matter", *, active=True, historical_attachment=False):
     with Session(engine) as seed:
         company = _seed_company(seed)
         actor = _seed_membership(seed, company, role="admin")
         owner = _seed_membership(seed, company, role="owner")
         matter = _seed_matter(seed, company)
-        attachment = MatterAttachment(
+        attachment_values = dict(
             matter_id=matter,
             uploaded_by_membership_id=actor,
             original_filename="admission.txt",
@@ -317,9 +318,14 @@ def _fixture(engine, source="matter", *, active=True):
             sha256_hex="a" * 64,
             document_type="other",
         )
-        seed.add(attachment)
-        seed.flush()
-        target_id = attachment.id
+        if historical_attachment:
+            attachment_id = seed_historical_attachment(seed, **attachment_values)
+        else:
+            attachment = MatterAttachment(**attachment_values)
+            seed.add(attachment)
+            seed.flush()
+            attachment_id = attachment.id
+        target_id = attachment_id
         target_type = DocumentProcessingTargetType.MATTER_ATTACHMENT
         if source == "ip":
             taxonomy = IpDocumentTaxonomyEntry(
@@ -374,7 +380,7 @@ def _fixture(engine, source="matter", *, active=True):
             actor=actor,
             owner=owner,
             matter=matter,
-            attachment=attachment.id,
+            attachment=attachment_id,
             job=job.id,
             target_id=target_id,
             updated=seed.get(Matter, matter).updated_at,

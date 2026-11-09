@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `68d09f71f4702d2f71d2e5211be52ff5b8d7d8ccdb616dbb52e7938e8fb6cf4b`
-- SQL tables: `362`
-- SQL columns: `5787`
-- ORM indexes: `1824`
-- Alembic/raw index declarations: `1601`
+- Canonical map SHA-256: `58cb91bb9951c2377b3d61937c8b8f1647e1e12b2dc7c8a20a94f33985b26bbd`
+- SQL tables: `364`
+- SQL columns: `5804`
+- ORM indexes: `1827`
+- Alembic/raw index declarations: `1604`
 - Non-SQL data classes: `16`
 
 ## Boundary
@@ -253,7 +253,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_activity` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `matter_attachment_annotations` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_attachment_chunks` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
-| `matter_attachments` | `tenant_restricted_legal_content` | 50 | `registry_fail_closed` |
+| `matter_attachments` | `tenant_restricted_legal_content` | 51 | `registry_fail_closed` |
 | `matter_billing_profiles` | `billing_provider_evidence` | 29 | `registry_fail_closed` |
 | `matter_billing_rates` | `billing_provider_evidence` | 14 | `registry_fail_closed` |
 | `matter_bulk_import_jobs` | `tenant_restricted_legal_content` | 22 | `registry_fail_closed` |
@@ -383,6 +383,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `user_notification_preferences` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `users` | `platform_operational_reference` | 7 | `registry_fail_closed` |
 | `voyage_usage` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
+| `workspace_conduct_acceptances` | `security_identity_control` | 4 | `registry_fail_closed` |
+| `workspace_conduct_reports` | `security_identity_control` | 12 | `registry_fail_closed` |
 
 ## Known non-SQL data classes
 

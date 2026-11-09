@@ -25,6 +25,14 @@ function id(value: unknown, field = "identity"): string {
 function optional(value: unknown, field: string): string | null {
   return value === undefined || value === null ? null : string(value, field);
 }
+export function reportableMembershipId(value: unknown): string | undefined {
+  if (
+    typeof value === "string" &&
+    /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value) &&
+    value !== "00000000-0000-0000-0000-000000000000"
+  )
+    return value;
+}
 function integer(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
     throw new ContractError(field);
@@ -241,14 +249,17 @@ export type Note = {
   body: string;
   created_at: string;
   author_name: string | null;
+  author_membership_id?: string;
 };
 export function decodeNote(value: unknown): Note {
   const row = object(value, "note");
+  const author = reportableMembershipId(row.author_membership_id);
   return {
     id: id(row.id),
     body: string(row.body, "note body", 4000),
     created_at: string(row.created_at, "note timestamp"),
     author_name: optional(row.author_name, "note author"),
+    ...(author ? { author_membership_id: author } : {}),
   };
 }
 export type Attachment = {

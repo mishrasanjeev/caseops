@@ -833,3 +833,32 @@ test('TXT readiness does not excuse unreadable or wrong content once the native 
     assert.deepEqual(f.clicks, [`files-open-${f.anchor.attachmentId}`]);
   }
 });
+
+
+test('iOS Files fact refuses a late identity read before any follow-up native request', async (t) => {
+  let now = 0;
+  const reads = [];
+  t.mock.method(performance, 'now', () => now);
+  const id = 'files-matter-code', type = 'XCUIElementTypeStaticText';
+  const target = {
+    elementId: 'files-fact',
+    async getAttribute(key) {
+      reads.push(key);
+      if (key === 'name') { now = 1506; return id; }
+      return type;
+    },
+    async isDisplayed() { reads.push('displayed'); return true; },
+  };
+  const context = { platform: 'ios', driver: {
+    $$: async (query) => { reads.push(query); return [target]; },
+    getElementRect: async () => { reads.push('element rect'); return { x: 0, y: 20, width: 200, height: 80 }; },
+    getWindowRect: async () => { reads.push('window rect'); return { x: 0, y: 0, width: 400, height: 800 }; },
+    waitUntil: async (condition, { timeout, interval }) => {
+      assert.equal(timeout, 1500);
+      assert.equal(interval, 150);
+      assert.equal(await condition(), true);
+    },
+  } };
+  await assert.rejects(findIosFileFact(context, id, type), /IOS_FILES_FACT_NOT_VISIBLE/);
+  assert.deepEqual(reads, ['~files-matter-code', 'name']);
+});

@@ -21,7 +21,7 @@ from alembic.script import ScriptDirectory
 from alembic.util import CommandError
 from sqlalchemy import ColumnDefault, MetaData, Table, create_engine, event, select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session, registry, sessionmaker
+from sqlalchemy.orm import Session, registry
 
 from alembic import command
 from caseops_api.core.automated_test_context import (
@@ -58,6 +58,11 @@ from caseops_api.services.compliance_tail_protocol import (
     bind_compliance_run_context,
 )
 from caseops_api.services.llm import LLMCompletion, LLMProviderError
+from tests.fixtures_historical_attachments import (
+    HISTORICAL_ATTACHMENT_LOAD,
+    NATIVE_ATTACHMENT_COLUMN,
+    historical_attachment_sessions,
+)
 from tests.test_compliance_participant_fence_20261010_postgres import _mutate, _seed, _UploadPhase
 from tests.test_document_execution_protocol_20261010_postgres import (
     _historical_identity_columns,
@@ -199,9 +204,11 @@ def tail_database(pg_engine, monkeypatch):
             pass
 
         mapper.map_imperatively(LegacyRun, table)
-        fixture = _fixture(engine, active=False)
+        fixture = _fixture(engine, active=False, historical_attachment=True)
         with Session(engine) as session:
-            attachment = session.get(MatterAttachment, fixture.attachment)
+            attachment = session.get(
+                MatterAttachment, fixture.attachment, options=(HISTORICAL_ATTACHMENT_LOAD,),
+            )
             attachment.document_type = "order_judgment"
             attachment.processing_status = "indexed"
             attachment.extracted_text = _TEXT
@@ -286,6 +293,10 @@ def _install(database, *, frozen_in_flight=False):
     if target != "20261010_0003":
         for row in before["matter_compliance_extraction_runs"]:
             row["persistence_protocol"] = None
+    if target == database.current_head:
+        for row in before["index"]:
+            assert NATIVE_ATTACHMENT_COLUMN not in row
+            row[NATIVE_ATTACHMENT_COLUMN] = False
     assert _snapshot(database) == before, "Installing a protocol must not rewrite historical rows"
     with database.engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == target
@@ -388,10 +399,14 @@ def _invoke(module, database, source):
                     actor_membership_id=fixture.actor,
                 )
             else:
+                options = (
+                    (HISTORICAL_ATTACHMENT_LOAD,) if module is not compliance_extraction else ()
+                )
+                attachment = session.get(MatterAttachment, fixture.attachment, options=options)
                 result = module.run_compliance_extraction_for_attachment(
                     session,
                     matter=matter,
-                    attachment=session.get(MatterAttachment, fixture.attachment),
+                    attachment=attachment,
                     actor_membership_id=fixture.actor,
                 )
             session.commit()
@@ -464,7 +479,11 @@ def test_actual_full_3db_extraction_cannot_create_tail_outputs(
     if outcome == "missing_source":
         with Session(database.engine) as session:
             session.get(MatterCourtOrder, database.fixture.order).order_text = None
-            session.get(MatterAttachment, database.fixture.attachment).extracted_text = None
+            attachment = session.get(
+                MatterAttachment, database.fixture.attachment,
+                options=(HISTORICAL_ATTACHMENT_LOAD,),
+            )
+            attachment.extracted_text = None
             session.commit()
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(_invoke, legacy, database, source)
@@ -491,7 +510,8 @@ def test_actual_full_3db_worker_post_index_tail_is_rejected(tail_database, monke
     worker = _load_frozen(
         "document_jobs_3dbf.py", "c4acf5992cf7e73c62702c2420a7468beb1358723dca4db4f674bc179cf0f78f"
     )
-    worker.get_session_factory = lambda: sessionmaker(bind=database.engine, expire_on_commit=False)
+    worker_factory = historical_attachment_sessions(database.engine)
+    worker.get_session_factory = lambda: worker_factory
     monkeypatch.setattr(document_processing, "parse_attachment", lambda *_: _parsed(_TEXT))
     worker.embed_matter_attachment_chunks = lambda *_a, **_kw: 0
     original = legacy.run_compliance_extraction_for_attachment
@@ -1034,7 +1054,7 @@ def test_native_context_validation_is_fail_closed_and_bounded(tail_database, var
 )
 def test_native_cross_tenant_source_or_actor_cannot_use_matching_context(tail_database, field):
     database = tail_database
-    other = _fixture(database.engine, active=False)
+    other = _fixture(database.engine, active=False, historical_attachment=True)
     with Session(database.engine) as session:
         order = MatterCourtOrder(
             matter_id=other.matter,
@@ -1201,7 +1221,7 @@ def test_native_model_run_link_requires_exact_tenant_target_and_purpose(
     tail_database, field, operation
 ):
     database = tail_database
-    other = _fixture(database.engine, active=False)
+    other = _fixture(database.engine, active=False, historical_attachment=True)
     command.upgrade(database.cfg, "head")
     with Session(database.engine) as session:
         model = ModelRun(

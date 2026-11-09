@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -164,6 +165,53 @@ def test_workspace_hides_legacy_manual_scheduler_runs_but_keeps_real_intake(
     runs = workspace.json()["ingestion_runs"]
     assert [run["id"] for run in runs] == [intake["run"]["id"]]
     assert not any(run["idempotency_key"].startswith("scheduler:") for run in runs)
+
+
+def test_workspace_hides_a_run_whose_capture_lists_are_not_arrays(
+    client: TestClient,
+) -> None:
+    _assert_non_array_capture_run_is_hidden(client)
+
+
+@pytest.mark.postgres
+def test_workspace_hides_a_non_array_capture_run_on_postgres(
+    isolated_postgres_client: TestClient,
+) -> None:
+    # PostgreSQL's json_array_elements_text raises on a non-array; SQLite does not.
+    _assert_non_array_capture_run_is_hidden(isolated_postgres_client)
+
+
+def _assert_non_array_capture_run_is_hidden(client: TestClient) -> None:
+    bootstrap, headers, docket, application = _fixture(client, "MALFORMEDRUN")
+    _profile(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recipient_id=bootstrap["membership"]["id"],
+    )
+    malformed = _ingest(
+        client,
+        headers=headers,
+        key="malformed-run-intake-0001",
+        publication=_publication(application_id=application["id"]),
+    )
+    intact = _ingest(
+        client,
+        headers=headers,
+        key="malformed-run-intake-0002",
+        publication=_publication(
+            application_id=application["id"], application_number="TM-1234567"
+        ),
+    )
+    with get_session_factory()() as session:
+        row = session.get(IpJournalIngestionRun, malformed["run"]["id"])
+        # A capture list that is not an array must not fail the workspace read.
+        row.publication_ids_json = {"unexpected": "object"}
+        row.hit_ids_json = None
+        session.commit()
+    workspace = client.get("/api/ip/watch", headers=headers)
+    assert workspace.status_code == 200, workspace.text
+    assert [run["id"] for run in workspace.json()["ingestion_runs"]] == [intact["run"]["id"]]
 
 
 def _set_watch_rollout(monkeypatch, enabled: bool) -> None:

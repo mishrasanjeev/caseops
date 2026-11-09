@@ -1762,7 +1762,7 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
 def _tester_canonical_rows():
     rows = []
     partitions = {
-        "tester": {"ordinary-prod.spec.ts": 97},
+        "tester": {"ordinary-prod.spec.ts": 101},
         "tester-catalog": {evidence.TESTER_CATALOG_FILE: 18},
         "tester-index": evidence.INDEX_FILES,
         "test-legal-write-oct13-a": evidence.OCT13_FILES,
@@ -1790,7 +1790,7 @@ def _tester_canonical_rows():
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.OCT13_FILES == {
@@ -1803,12 +1803,12 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
         "ram-2026-10-22-prod.spec.ts": 1,
     }
-    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 172
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 176
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
@@ -2558,7 +2558,7 @@ def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
         assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
     assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
     assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
-    assert len(evidence._tester_inventory(canonical)) == 172
+    assert len(evidence._tester_inventory(canonical)) == 176
 
 
 @pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
@@ -2735,11 +2735,15 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 714, "app-mobile": 53}
-APP_REQUIRED_CONTROL_CASES = (
+APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
         "control audit follows fieldset, first-legend and option-group disabled states",
+    )),
+    ("app-chromium", "watch-acl-query-states.spec.ts", (
+        "watch-acl-query-states.spec.ts",
+        "Watch removes revoked source evidence from the workspace and report after reload",
     )),
 )
 
@@ -2780,26 +2784,27 @@ def _app_arguments(project):
     ]
 
 
-def test_app_required_control_case_keeps_its_independent_literal_identity():
-    assert evidence.APP_REQUIRED_CASES == APP_REQUIRED_CONTROL_CASES
+def test_app_required_cases_keep_their_independent_literal_identities():
+    assert evidence.APP_REQUIRED_CASES == APP_REQUIRED_NATIVE_CASES
 
 
 @pytest.mark.parametrize("damage", ["file", "title"])
-def test_app_inventory_rejects_a_replaced_required_control_case_at_unchanged_counts(
-    app_envelopes, damage
+@pytest.mark.parametrize("required_file", [item[1] for item in APP_REQUIRED_NATIVE_CASES])
+def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
+    app_envelopes, damage, required_file
 ):
     canonical = evidence._json(
         app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
     )
     required = [
         row for row in canonical["tests"]
-        if row["file"] == "control-crawl-contract.spec.ts"
+        if row["file"] == required_file
     ]
     assert len(required) == 1
     if damage == "file":
-        required[0]["file"] = "replaced-control-contract.spec.ts"
+        required[0]["file"] = "replaced-app-case.spec.ts"
     else:
-        required[0]["title_path"][-1] = "replaced control contract"
+        required[0]["title_path"][-1] = "replaced required App case"
     assert Counter(row["project_name"] for row in canonical["tests"]) == APP_COUNTS
     with pytest.raises(evidence.EvidenceError, match="app_canonical_inventory_mismatch"):
         evidence._app_inventory(canonical)
@@ -2846,7 +2851,7 @@ def app_capture(capture):
     all_suites = []
     for project, count in APP_COUNTS.items():
         skips = [item for item in evidence.APP_EXPECTED_SKIPS if item[0] == project]
-        pinned = skips + [item for item in APP_REQUIRED_CONTROL_CASES if item[0] == project]
+        pinned = skips + [item for item in APP_REQUIRED_NATIVE_CASES if item[0] == project]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]
@@ -2958,20 +2963,20 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all767_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all774_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
-    assert receipt["completed"] and receipt["test_count"] == 767
+    assert receipt["completed"] and receipt["test_count"] == 774
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [
-        ("ci-app-chromium", "app-chromium", 714),
-        ("ci-app-mobile", "app-mobile", 53),
+        ("ci-app-chromium", "app-chromium", 719),
+        ("ci-app-mobile", "app-mobile", 55),
     ]
     assert [r["outcomes"] for r in receipt["roles"]] == [
-        {"expected": 694, "skipped": 20},
-        {"expected": 52, "skipped": 1},
+        {"expected": 699, "skipped": 20},
+        {"expected": 54, "skipped": 1},
     ]
     assert receipt["config_sha256"] == evidence._hash(state.root / "playwright.app.config.ts")
     assert len(receipt["canonical_identity_sha256"]) == 64
@@ -3270,7 +3275,7 @@ def test_app_union_cli_emits_a_machine_readable_receipt(app_envelopes, monkeypat
     code = evidence.main()
     assert code == 0
     receipt = json.loads(capsys.readouterr().out)
-    assert receipt["app_project_union"] == 1 and receipt["test_count"] == 767
+    assert receipt["app_project_union"] == 1 and receipt["test_count"] == 774
 
 
 @pytest.mark.parametrize(

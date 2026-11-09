@@ -21,10 +21,10 @@
 #   scripts/deploy-prod.sh                 # tag with current git HEAD short SHA
 #   scripts/deploy-prod.sh <commit-sha>    # assert this SHA is current HEAD
 #
-# Pre-reqs: gcloud authenticated, project set to perfect-period-305406,
-# region set to asia-south1, and API/web build contexts clean for the
-# HEAD you intend to ship. Cloud Build uploads current files, so dirty
-# contexts are rejected before any gcloud call.
+# Pre-reqs: gcloud authenticated with access to perfect-period-305406,
+# local main checked out at current origin/main, and clean API/web build
+# contexts. This script selects the project and asia-south1 region. Cloud
+# Build uploads current files, so dirty contexts are rejected before gcloud.
 
 set -euo pipefail
 
@@ -281,8 +281,18 @@ echo "  rule governance from ${IP_RULE_GOVERNANCE_STATE_FILE}: enabled=${IP_RULE
 
 assert_current_main() {
   local phase="$1"
-  local origin_main_sha
+  local current_branch local_main_sha origin_main_sha
 
+  if ! current_branch=$(git symbolic-ref --quiet --short HEAD) || \
+      [[ "${current_branch}" != "main" ]]; then
+    echo "ERROR: production deploy requires checked-out local main at ${phase}."
+    exit 1
+  fi
+  if ! local_main_sha=$(git rev-parse --verify 'refs/heads/main^{commit}' 2>/dev/null) || \
+      [[ "${local_main_sha}" != "${HEAD_SHA}" ]]; then
+    echo "ERROR: local main does not match candidate ${HEAD_SHA} at ${phase}."
+    exit 1
+  fi
   if ! git fetch --quiet origin main; then
     echo "ERROR: could not refresh origin/main at ${phase}; refusing production mutation."
     exit 1
@@ -1137,8 +1147,8 @@ echo "  stale API/web revision tags cleared; 100% traffic remains on latest."
 # doesn't return the new image tag, so you don't think you deployed
 # when you actually didn't.
 echo "--- 6/6 staleness sweep ---"
-LIVE_API_TAG=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
-LIVE_WEB_TAG=$(gcloud run services describe caseops-web --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
+LIVE_API_TAG=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
+LIVE_WEB_TAG=$(gcloud run services describe caseops-web --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[0].image)' | grep -oE "[a-f0-9]+$")
 if [[ "${LIVE_API_TAG}" != "${TAG}" || "${LIVE_WEB_TAG}" != "${TAG}" ]]; then
   echo "STALENESS DETECTED: api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} expected=${TAG}"
   exit 1
@@ -1431,15 +1441,15 @@ echo "  api=${LIVE_API_TAG} revision=${LIVE_API_REVISION} web=${LIVE_WEB_TAG} (m
 # it. If the sidecar is missing, fail the deploy script — the operator
 # must re-run scripts/eg003-apply-clamav.sh before the deploy is
 # considered safe.
-SIDECAR_PRESENT=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[].name)' | tr ';' '\n' | grep -c '^clamav$' || true)
+SIDECAR_PRESENT=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[].name)' | tr ';' '\n' | grep -c '^clamav$' || true)
 if [[ "${SIDECAR_PRESENT}" != "1" ]]; then
   echo "EG-003 REGRESSION: clamav sidecar missing from caseops-api. Run scripts/eg003-apply-clamav.sh and redeploy."
   exit 1
 fi
-CLAMAV_PROBE_DELAY=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.initialDelaySeconds)')
-CLAMAV_PROBE_PERIOD=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.periodSeconds)')
-CLAMAV_PROBE_TIMEOUT=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.timeoutSeconds)')
-CLAMAV_PROBE_FAILURES=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.failureThreshold)')
+CLAMAV_PROBE_DELAY=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.initialDelaySeconds)')
+CLAMAV_PROBE_PERIOD=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.periodSeconds)')
+CLAMAV_PROBE_TIMEOUT=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.timeoutSeconds)')
+CLAMAV_PROBE_FAILURES=$(gcloud run services describe caseops-api --project "${PROJECT}" --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.failureThreshold)')
 # Cloud Run omits zero-valued protobuf fields when serializing a service, so
 # an empty initialDelaySeconds is the canonical representation of zero.
 CLAMAV_PROBE_DELAY=${CLAMAV_PROBE_DELAY:-0}

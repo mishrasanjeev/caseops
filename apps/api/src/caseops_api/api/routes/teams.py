@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -14,6 +14,7 @@ from caseops_api.schemas.teams import (
     TeamCreateRequest,
     TeamListResponse,
     TeamMembershipCreateRequest,
+    TeamMembershipLeadUpdateRequest,
     TeamRecord,
     TeamScopingResponse,
     TeamScopingUpdateRequest,
@@ -28,6 +29,7 @@ from caseops_api.services.teams import (
     remove_team_member,
     set_team_scoping,
     update_team,
+    update_team_member_lead,
 )
 
 router = APIRouter()
@@ -122,18 +124,51 @@ async def post_team_member(
     "/{team_id}/members/{membership_id}",
     response_model=TeamRecord,
     summary="Remove a member from a team",
+    responses={409: {"description": "The team membership or access changed."}},
 )
 async def delete_team_member(
     team_id: str,
     membership_id: str,
     context: TeamManager,
     session: DbSession,
+    expected_team_membership_id: Annotated[
+        str | None,
+        Query(min_length=1, max_length=36, description="Remove only this team membership row."),
+    ] = None,
 ) -> TeamRecord:
     result = remove_team_member(
         session,
         context=context,
         team_id=team_id,
         membership_id=membership_id,
+        expected_team_membership_id=expected_team_membership_id,
+    )
+    session.commit()
+    return result
+
+
+@router.patch(
+    "/{team_id}/members/{team_membership_id}/lead",
+    response_model=TeamRecord,
+    summary="Update the lead flag of an existing team membership",
+    responses={
+        404: {"description": "Team not found."},
+        409: {"description": "The team membership changed or is no longer active."},
+    },
+)
+async def patch_team_member_lead(
+    team_id: str,
+    team_membership_id: str,
+    payload: TeamMembershipLeadUpdateRequest,
+    context: TeamManager,
+    session: DbSession,
+) -> TeamRecord:
+    result = update_team_member_lead(
+        session,
+        context=context,
+        team_id=team_id,
+        team_membership_id=team_membership_id,
+        is_lead=payload.is_lead,
     )
     session.commit()
     return result

@@ -5347,12 +5347,27 @@ export async function addTeamMember(input: {
   });
 }
 
+export async function updateTeamMemberLead(input: {
+  teamId: string;
+  teamMembershipId: string;
+  isLead: boolean;
+}): Promise<Team> {
+  return apiRequest(`/api/teams/${input.teamId}/members/${input.teamMembershipId}/lead`, {
+    method: "PATCH",
+    body: { is_lead: input.isLead },
+  });
+}
+
 export async function removeTeamMember(input: {
   teamId: string;
   membershipId: string;
+  expectedTeamMembershipId?: string;
 }): Promise<Team> {
+  const query = input.expectedTeamMembershipId
+    ? `?${new URLSearchParams({ expected_team_membership_id: input.expectedTeamMembershipId })}`
+    : "";
   return apiRequest(
-    `/api/teams/${input.teamId}/members/${input.membershipId}`,
+    `/api/teams/${input.teamId}/members/${input.membershipId}${query}`,
     { method: "DELETE" },
   );
 }
@@ -6515,7 +6530,7 @@ export async function comparePlaybook(input: {
 
 export type ContractRedlineChange = {
   index: number;
-  kind: "insertion" | "deletion" | "formatting";
+  kind: "insertion" | "deletion" | "move_from" | "move_to" | "formatting";
   author: string | null;
   timestamp: string | null;
   text: string;
@@ -6533,6 +6548,8 @@ export async function fetchContractAttachmentRedline(input: {
   paragraph_count: number;
   insertion_count: number;
   deletion_count: number;
+  move_count: number;
+  uninterpreted_revision_count: number;
   author_counts: Record<string, number>;
   changes: ContractRedlineChange[];
 }> {
