@@ -3,8 +3,23 @@ import path from "node:path";
 
 import { e2eEnv, repoRoot } from "./env";
 
+export type StatuteDropdownFixtureAct = {
+  id: string;
+  short_name: string;
+  long_name: string;
+  section_count: number;
+  catalog_section_count: number;
+  positive_section_id: string;
+  pending_section_id: string;
+};
+
+export type StatuteDropdownFixture = {
+  target: StatuteDropdownFixtureAct;
+  competitor: StatuteDropdownFixtureAct;
+};
+
 /** Synthetic layout data, never legal-source evidence or a production seed. */
-export function seedStatuteDropdownFixture(web: string, api: string): void {
+export function seedStatuteDropdownFixture(web: string, api: string): StatuteDropdownFixture {
   for (const origin of [web, api]) {
     const url = new URL(origin);
     if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
@@ -17,9 +32,12 @@ export function seedStatuteDropdownFixture(web: string, api: string): void {
   const script = `
 from datetime import UTC, datetime
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
+from sqlalchemy import select
 from sqlalchemy.engine import make_url
+from caseops_api.api.routes.statutes import _is_selectable_statute_section
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
@@ -35,18 +53,19 @@ elif os.environ.get("CASEOPS_B5_FIXTURE_DOCKER") != "1" or database.host not in 
     raise RuntimeError("Synthetic dropdown fixtures refuse remote database storage")
 now = datetime.now(UTC)
 with get_session_factory()() as session:
-    for index in range(40):
-        key = f"b5-layout-{index:02}"
+    for index in range(41):
+        competitor = index == 40
+        key = "b5-layout-short-decoy" if competitor else f"b5-layout-{index:02}"
         if session.get(Statute, key) is not None:
             continue
-        session.add(Statute(id=key, short_name=f"ZZZ Layout {index:02}",
-            long_name="Synthetic dropdown fixture, not an enactment: " + "long readable caption " * 6,
+        session.add(Statute(id=key, short_name="ZZZ Short decoy" if competitor else f"ZZZ Layout {index:02}",
+            long_name="Short synthetic caption" if competitor else "Synthetic dropdown fixture, not an enactment: " + "long readable caption " * 6,
             enacted_year=2026, jurisdiction="india", source_url="https://example.invalid/synthetic",
             issuing_body="Synthetic local fixture", source_status="official",
             verification_status="verified_official", exact_source_version="synthetic-b5-20261111",
             is_active=True, created_at=now, updated_at=now))
         session.flush()
-        for number in range(1, 82 if index == 39 else 3):
+        for number in range(1, 84 if competitor else 82 if index == 39 else 3):
             verified = number % 2 == 1
             text = f"Synthetic layout fixture {index}/{number}; not legal text."
             session.add(StatuteSection(id=f"{key}-{number}", statute_id=key,
@@ -61,6 +80,19 @@ with get_session_factory()() as session:
                 link_health_status="available" if verified else "unchecked", link_last_checked_at=now if verified else None,
                 ordinal=number, is_active=True, created_at=now, updated_at=now))
     session.commit()
+
+    def describe(key):
+        act = session.get(Statute, key)
+        sections = list(session.scalars(select(StatuteSection).where(
+            StatuteSection.statute_id == act.id, StatuteSection.is_active.is_(True)
+        ).order_by(StatuteSection.ordinal)))
+        verified = [row for row in sections if _is_selectable_statute_section(row)]
+        pending = next(row for row in sections if row.verification_status == "unverified")
+        return dict(id=act.id, short_name=act.short_name, long_name=act.long_name,
+            section_count=len(verified), catalog_section_count=len(sections),
+            positive_section_id=verified[-1].id, pending_section_id=pending.id)
+
+    print(json.dumps(dict(target=describe("b5-layout-39"), competitor=describe("b5-layout-short-decoy"))))
 `;
   const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot,
     "apps", "api", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
@@ -70,4 +102,5 @@ with get_session_factory()() as session:
     env: { ...process.env, ...e2eEnv, PYTHONDONTWRITEBYTECODE: "1", PYTHONPATH: path.join(repoRoot, "apps/api/src") },
   });
   if (result.status !== 0) throw new Error(`Synthetic dropdown setup failed: ${result.stderr}`);
+  return JSON.parse(result.stdout) as StatuteDropdownFixture;
 }

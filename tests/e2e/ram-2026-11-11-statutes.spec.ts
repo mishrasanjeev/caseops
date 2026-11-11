@@ -5,7 +5,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
-import { seedStatuteDropdownFixture } from "./support/statute-dropdown-fixture";
+import { seedStatuteDropdownFixture, type StatuteDropdownFixtureAct } from "./support/statute-dropdown-fixture";
 
 test.use({ trace: "off", screenshot: "off", video: "off" });
 
@@ -15,9 +15,15 @@ function required(key: string): string {
   return value;
 }
 const isLocal = (url: URL) => ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
-type Act = { id: string; short_name: string; section_count: number; catalog_section_count: number };
-type Section = { id: string; section_number: string; verification_status: string; selection_state: string };
-type Sections = { sections: Section[]; catalog_sections: Section[] };
+type Act = { id: string; short_name: string; long_name: string; section_count: number; catalog_section_count: number };
+type Section = { id: string; statute_id: string; section_number: string; verification_status: string };
+type Sections = {
+  statute: Pick<Act, "id" | "short_name" | "long_name">;
+  sections: Section[];
+  catalog_sections: { id: string; statute_id: string; selection_state: string }[];
+  verified_section_count: number;
+  catalog_section_count: number;
+};
 
 async function contained(control: Locator, page: Page) {
   await expect(control).toBeVisible();
@@ -136,7 +142,7 @@ for (const phone of [false, true]) {
     }
     const sha = local ? e2eEnv.CASEOPS_RELEASE_SHA : required("CASEOPS_EXPECTED_RELEASE_SHA");
     await assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
-    if (local) seedStatuteDropdownFixture(web.origin, api.origin);
+    const fixture = local ? seedStatuteDropdownFixture(web.origin, api.origin) : undefined;
     const nonce = randomUUID();
     const credentials = local ? { slug: `b5-statutes-${nonce.slice(0, 8)}`, email: `b5-${nonce}@example.com`, password: `Synthetic!${nonce}` }
       : { slug: required("CASEOPS_RAM_PROD_SLUG"), email: required("CASEOPS_RAM_PROD_EMAIL"), password: required("CASEOPS_RAM_PROD_PASSWORD") };
@@ -170,13 +176,54 @@ for (const phone of [false, true]) {
       .sort((a, b) => b.catalog_section_count - a.catalog_section_count);
     expect(candidates.length, "Bound the reviewed catalog; never truncate candidate discovery").toBeLessThanOrEqual(64);
     let selected: { act: Act; catalog: Sections } | undefined;
-    for (const act of candidates) {
-      const response = await request.get(`${api.origin}/api/statutes/${act.id}/sections`, { headers });
-      expect(response.status()).toBe(200);
-      const sections = await response.json() as Sections;
-      if (sections.sections.length && sections.catalog_sections.some(s => s.selection_state === "verification_pending")) {
-        selected = { act, catalog: sections };
-        break;
+    if (local) {
+      expect(fixture, "Local discovery must not fall back to a different catalog record").toBeTruthy();
+      const ownedFixture = fixture!;
+      async function readFixture(expected: StatuteDropdownFixtureAct) {
+        const matches = catalog.statutes.filter(act => act.id === expected.id);
+        expect(matches, "The API must serve exactly the seeded fixture identity").toHaveLength(1);
+        const act = matches[0];
+        expect(act).toMatchObject({ id: expected.id, short_name: expected.short_name, long_name: expected.long_name,
+          section_count: expected.section_count, catalog_section_count: expected.catalog_section_count });
+        expect(candidates.map(candidate => candidate.id)).toContain(act.id);
+        const response = await request.get(`${api.origin}/api/statutes/${act.id}/sections`, { headers });
+        expect(response.status()).toBe(200);
+        const sections = await response.json() as Sections;
+        expect(sections.statute).toMatchObject({ id: act.id, short_name: act.short_name, long_name: act.long_name });
+        expect(sections.catalog_section_count).toBe(expected.catalog_section_count);
+        expect(sections.verified_section_count).toBe(expected.section_count);
+        expect(sections.catalog_sections).toHaveLength(expected.catalog_section_count);
+        expect(sections.sections).toHaveLength(expected.section_count);
+        expect(sections.sections.every(section => section.statute_id === act.id)).toBe(true);
+        expect(sections.catalog_sections.every(section => section.statute_id === act.id)).toBe(true);
+        expect(sections.sections.at(-1)).toMatchObject({ id: expected.positive_section_id, verification_status: "verified_official" });
+        expect(sections.catalog_sections.find(section => section.id === expected.pending_section_id))
+          .toMatchObject({ selection_state: "verification_pending" });
+        return { act, catalog: sections };
+      }
+      selected = await readFixture(ownedFixture.target);
+      const competitor = await readFixture(ownedFixture.competitor);
+      expect(selected.act.catalog_section_count).toBe(81);
+      expect(selected.act.section_count).toBe(41);
+      expect(selected.act.long_name.length).toBeGreaterThan(100);
+      expect(competitor.act.catalog_section_count).toBe(83);
+      expect(competitor.act.section_count).toBe(42);
+      expect((competitor.act.short_name + competitor.act.long_name).length).toBeLessThan(100);
+      // Both qualify, but descending-count discovery cannot choose our long
+      // fixture first, even when unrelated app suites add further Acts.
+      expect(candidates.indexOf(competitor.act)).toBeLessThan(candidates.indexOf(selected.act));
+      expect(candidates[0].id).not.toBe(selected.act.id);
+      expect(selected.act.id).toBe(ownedFixture.target.id);
+    } else {
+      // Production discovers retained legal records and never seeds synthetic data.
+      for (const act of candidates) {
+        const response = await request.get(`${api.origin}/api/statutes/${act.id}/sections`, { headers });
+        expect(response.status()).toBe(200);
+        const sections = await response.json() as Sections;
+        if (sections.sections.length && sections.catalog_sections.some(s => s.selection_state === "verification_pending")) {
+          selected = { act, catalog: sections };
+          break;
+        }
       }
     }
     expect(selected, "A verified positive and a genuinely pending negative in the same Act are required; never synthesize production law").toBeDefined();
@@ -187,6 +234,10 @@ for (const phone of [false, true]) {
     expect(positive, "Verified positive must exist").toBeTruthy();
     expect(positive.verification_status).toMatch(/^verified_(official|licensed)$/);
     expect(pending, "Retained genuinely pending negative must exist").toBeTruthy();
+    if (local) {
+      expect(positive.id).toBe(fixture!.target.positive_section_id);
+      expect(pending.id).toBe(fixture!.target.pending_section_id);
+    }
     // No production catalogue write, fixture seed or provider request is permitted.
     const created = await request.post(`${api.origin}/api/matters/`, { headers, data: {
       title: `Statute dropdown QA ${nonce}`, matter_code: `B5-${nonce}`, practice_area: "Civil", forum_level: "high_court",

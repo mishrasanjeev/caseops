@@ -145,6 +145,32 @@ and audit events before changing those controls.
     phases without changing storage or authentication behavior. Keep both
     failed attempts and the actual endpoint positive/tenant/401 assertions.
 
+### November 12: Shared Statute Fixture Identity
+
+Hosted CI43072309660 on candidate5550145e (synthetic mergefb037277, same
+tree5d145ee9) retained723 desktop cases:702pass/20skip/1fail, retry0. The
+BUG-002 journey failed the unchanged long-caption assertion at line251.
+Primary evidence remains `outputs/bugs5-20261111/hosted-ci-555-chromium-native-01/`;
+the wrapper's incomplete result and secondary missing-report error do not erase
+the complete native failure inventory.
+
+The local seed created a long Act, but the test discarded its identity and
+ranked the shared catalog by section count. Another qualifying short-caption
+Act could win after other app journeys populated the same catalog. This is a
+test-fixture identity defect, not evidence to weaken the layout assertion or
+change legal data. The candidate now binds local discovery to the returned
+server ID, verifies its name/count/positive/pending API inventory, and retains
+a separate83-section short-caption decoy above the original81-section long
+fixture. Fresh and pre-decoy replay regressions preserve the original forty
+Acts'2/81-section counts and retained row values. Production keeps dynamic
+read-only catalog discovery and never runs this synthetic seed.
+
+Source-only correction: nine focused Python cases and the existing desktop/
+phone journeys are **UNEXECUTED** while the parent's Docker gate owns the
+runtime window. Original keyboard/scroll/bounds/recovery/attachment/reload and
+both>100-character assertions remain required. BUG-002 remains **Inconclusive**;
+this fixture candidate is not a product fix or release acceptance.
+
 ## Release And Regression Gate
 
 ### Prior Release Residuals Reconciled November 11

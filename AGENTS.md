@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Shared-catalog browser fixtures must retain their returned server identity.
+  A larger section count does not identify the owned long-caption Act. Prove
+  exact API identity, verified/pending inventory and idempotent setup beside a
+  higher-ranked competing fixture; keep production discovery read-only and
+  preserve the original keyboard, layout and persisted-attachment assertions.
+
 - A PDF export response, loaded worker and enabled Download button do not prove
   visible PDF pages. Test the real renderer under production CSP, including
   canvas ink, text and pagination. Pass already-authorized Blob bytes directly
