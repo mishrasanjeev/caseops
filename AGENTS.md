@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A PDF export response, loaded worker and enabled Download button do not prove
+  visible PDF pages. Test the real renderer under production CSP, including
+  canvas ink, text and pagination. Pass already-authorized Blob bytes directly
+  to the renderer instead of fetching a local object URL through a blocked
+  connect-src path. Audit adjacent viewers; never relax CSP to hide this defect.
+
 - A reviewed message preview must bind the actor, recipient, source versions,
   supplied inputs and exact rendered content. If authoritative facts change,
   reject send with no outbox, audit-of-send or transport effect and require a

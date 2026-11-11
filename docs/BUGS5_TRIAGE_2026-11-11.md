@@ -96,6 +96,17 @@ and audit events before changing those controls.
    storage root before launch, and rerun the complete intended inventory. The
    five original cases now pass in attempt03, but do not cover the newly found
    lifecycle overlap until the replacement tests execute.
+10. **Mocks hid a real browser/CSP boundary.** The first fresh built preflight
+    on51d64c93 executed all12 cases:5passed/7failed, no skips/retries. Both draft
+    exports and workers returned200, but the renderer's Blob-URL fetch was
+    blocked by CSP. Unit component mocks and an enabled download button had
+    not proved a visible PDF. Consume the already-authorized Blob directly in
+    draft and contract viewers, keep CSP unchanged and rerun actual canvas,
+    text, pagination and exact-byte proof at both widths. Other retained
+    failures exposed a canonical trailing-slash mismatch after successful
+    Matter creation, unscoped contract selectors and mixed pointer/keyboard
+    focus in the statute test. Preserve the native failures and complete12
+    replacement inventory; do not increase timeouts or remove assertions.
 
 ## Release And Regression Gate
 
