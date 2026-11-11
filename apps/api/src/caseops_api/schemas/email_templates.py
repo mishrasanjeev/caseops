@@ -109,6 +109,9 @@ class MatterEmailPreviewRequest(EmailRenderRequest):
     template_id: str | None = Field(default=None, min_length=1, max_length=36)
     subject: str | None = Field(default=None, min_length=2, max_length=400)
     body: str | None = Field(default=None, min_length=2, max_length=20000)
+    recipient_email: EmailStr
+    recipient_name: str | None = Field(default=None, max_length=255)
+    client_id: str | None = None
 
     @model_validator(mode="after")
     def require_message(self) -> MatterEmailPreviewRequest:
@@ -122,9 +125,12 @@ class MatterEmailPreviewRequest(EmailRenderRequest):
         return self
 
 
-class EmailSendRequest(MatterEmailPreviewRequest):
-    """Explicit manual/template message; delivery stores the exact rendered text."""
+class MatterEmailPreviewResponse(EmailRenderResponse):
+    preview_token: str | None = None
+    preview_expires_at: datetime | None = None
 
-    recipient_email: EmailStr
-    recipient_name: str | None = Field(default=None, max_length=255)
-    client_id: str | None = None
+
+class EmailSendRequest(MatterEmailPreviewRequest):
+    """Delivery requires a current server-issued preview for the exact message."""
+
+    preview_token: str = Field(min_length=1, max_length=256)

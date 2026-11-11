@@ -10284,6 +10284,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/communications/email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Current Matter Email Templates */
+        get: operations["list_current_matter_email_templates_api_matters__matter_id__communications_email_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/communications/import-email": {
         parameters: {
             query?: never;
@@ -10295,6 +10312,23 @@ export interface paths {
         put?: never;
         /** Manually import one inbound email into an explicitly selected matter. */
         post: operations["import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/communications/preview-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Current Matter Email */
+        post: operations["preview_current_matter_email_api_matters__matter_id__communications_preview_email_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23329,22 +23363,28 @@ export interface components {
         EmailRenderResponse: {
             /** Body */
             body: string;
+            /** Invalid Placeholders */
+            invalid_placeholders?: string[];
             /** Missing Variables */
             missing_variables?: string[];
+            /** Resolved Variables */
+            resolved_variables?: {
+                [key: string]: string;
+            };
             /** Subject */
             subject: string;
         };
         /**
          * EmailSendRequest
-         * @description Compose & send action — pick a template, fill variables, send.
-         *
-         *     Creates a ``communications`` row with status=queued (or sent on
-         *     SendGrid 2xx). The SendGrid event webhook then promotes status
-         *     to delivered / opened / bounced as events arrive.
+         * @description Delivery requires a current server-issued preview for the exact message.
          */
         EmailSendRequest: {
+            /** Body */
+            body?: string | null;
             /** Client Id */
             client_id?: string | null;
+            /** Preview Token */
+            preview_token: string;
             /**
              * Recipient Email
              * Format: email
@@ -23352,8 +23392,10 @@ export interface components {
             recipient_email: string;
             /** Recipient Name */
             recipient_name?: string | null;
+            /** Subject */
+            subject?: string | null;
             /** Template Id */
-            template_id: string;
+            template_id?: string | null;
             /** Variables */
             variables?: {
                 [key: string]: string;
@@ -40203,6 +40245,47 @@ export interface components {
             score: number;
             /** Snippet */
             snippet: string;
+        };
+        /** MatterEmailPreviewRequest */
+        MatterEmailPreviewRequest: {
+            /** Body */
+            body?: string | null;
+            /** Client Id */
+            client_id?: string | null;
+            /**
+             * Recipient Email
+             * Format: email
+             */
+            recipient_email: string;
+            /** Recipient Name */
+            recipient_name?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Template Id */
+            template_id?: string | null;
+            /** Variables */
+            variables?: {
+                [key: string]: string;
+            };
+        };
+        /** MatterEmailPreviewResponse */
+        MatterEmailPreviewResponse: {
+            /** Body */
+            body: string;
+            /** Invalid Placeholders */
+            invalid_placeholders?: string[];
+            /** Missing Variables */
+            missing_variables?: string[];
+            /** Preview Expires At */
+            preview_expires_at?: string | null;
+            /** Preview Token */
+            preview_token?: string | null;
+            /** Resolved Variables */
+            resolved_variables?: {
+                [key: string]: string;
+            };
+            /** Subject */
+            subject: string;
         };
         /**
          * MatterExecutiveSummary
@@ -72636,6 +72719,37 @@ export interface operations {
             };
         };
     };
+    list_current_matter_email_templates_api_matters__matter_id__communications_email_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post: {
         parameters: {
             query?: never;
@@ -72658,6 +72772,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundEmailImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_matter_email_api_matters__matter_id__communications_preview_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterEmailPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterEmailPreviewResponse"];
                 };
             };
             /** @description Validation Error */

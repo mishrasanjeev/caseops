@@ -8306,6 +8306,7 @@ export async function sendMatterEmail(input: {
   recipient_name?: string | null;
   variables: Record<string, string>;
   client_id?: string | null;
+  preview_token: string;
 }): Promise<CommunicationRecord> {
   const { matterId, ...rest } = input;
   const data = await apiRequest<unknown>(
@@ -8318,6 +8319,7 @@ export async function sendMatterEmail(input: {
         recipient_name: rest.recipient_name,
         variables: rest.variables,
         client_id: rest.client_id,
+        preview_token: rest.preview_token,
       },
     },
   );

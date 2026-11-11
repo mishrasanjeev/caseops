@@ -62,12 +62,17 @@ from caseops_api.schemas.email_templates import (
     EmailSendRequest,
     EmailTemplateListResponse,
     MatterEmailPreviewRequest,
+    MatterEmailPreviewResponse,
 )
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.communication_email_preview import (
+    issue_preview_token,
+    require_preview_token,
+)
 from caseops_api.services.document_jobs import enqueue_processing_job
 from caseops_api.services.document_storage import (
     delete_stored_document,
@@ -980,14 +985,18 @@ def list_matter_email_templates(
 def _render_matter_email(
     session: Session, *, context: SessionContext, matter: Matter,
     payload: MatterEmailPreviewRequest,
+    lock_template: bool = False,
 ) -> tuple[EmailRenderResponse, EmailTemplate | None]:
     template = None
     if payload.template_id is not None:
-        template = session.scalar(select(EmailTemplate).where(
+        statement = select(EmailTemplate).where(
             EmailTemplate.id == payload.template_id,
             EmailTemplate.company_id == context.company.id,
             EmailTemplate.is_active.is_(True),
-        ))
+        ).execution_options(populate_existing=True)
+        if lock_template:
+            statement = statement.with_for_update(of=EmailTemplate)
+        template = session.scalar(statement)
         if template is None:
             raise HTTPException(status_code=404, detail="Email template not found or archived.")
     # Explicit message edits never mutate the reusable template.
@@ -1016,12 +1025,20 @@ def _render_matter_email(
 def preview_matter_email(
     session: Session, *, context: SessionContext, matter_id: str,
     payload: MatterEmailPreviewRequest,
-) -> EmailRenderResponse:
+) -> MatterEmailPreviewResponse:
     matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session, matter=matter, operation="preview an email", lock_for_write=False,
     )
-    return _render_matter_email(session, context=context, matter=matter, payload=payload)[0]
+    rendered, template = _render_matter_email(
+        session, context=context, matter=matter, payload=payload,
+    )
+    result = MatterEmailPreviewResponse(**rendered.model_dump())
+    if not rendered.missing_variables and not rendered.invalid_placeholders:
+        result.preview_token, result.preview_expires_at = issue_preview_token(
+            context=context, matter=matter, template=template, payload=payload, rendered=rendered,
+        )
+    return result
 
 
 def send_matter_email(
@@ -1045,7 +1062,11 @@ def send_matter_email(
     )
 
     rendered, template = _render_matter_email(
-        session, context=context, matter=matter, payload=payload,
+        session, context=context, matter=matter, payload=payload, lock_template=True,
+    )
+    require_preview_token(
+        payload.preview_token, context=context, matter=matter, template=template,
+        payload=payload, rendered=rendered,
     )
     if rendered.missing_variables or rendered.invalid_placeholders:
         raise HTTPException(

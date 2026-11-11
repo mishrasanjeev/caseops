@@ -25,10 +25,10 @@ from caseops_api.schemas.communications import (
     InboundEmailImportResponse,
 )
 from caseops_api.schemas.email_templates import (
-    EmailRenderResponse,
     EmailSendRequest,
     EmailTemplateListResponse,
     MatterEmailPreviewRequest,
+    MatterEmailPreviewResponse,
 )
 from caseops_api.services.communications import (
     create_matter_communication,
@@ -132,11 +132,11 @@ async def list_current_matter_email_templates(
     return list_matter_email_templates(session, context=context, matter_id=matter_id)
 
 
-@router.post("/{matter_id}/communications/preview-email", response_model=EmailRenderResponse)
+@router.post("/{matter_id}/communications/preview-email", response_model=MatterEmailPreviewResponse)
 async def preview_current_matter_email(
     matter_id: str, payload: MatterEmailPreviewRequest,
     context: CommunicationsWriter, session: DbSession,
-) -> EmailRenderResponse:
+) -> MatterEmailPreviewResponse:
     return preview_matter_email(session, context=context, matter_id=matter_id, payload=payload)
 
 

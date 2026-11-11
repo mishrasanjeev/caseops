@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, Loader2, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { apiErrorMessage } from "@/lib/api/config";
@@ -10,7 +10,7 @@ import type { EmailTemplateRecord } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 
 export type EmailSubmission = MatterEmailMessage & {
-  recipient_email: string; recipient_name: string | null;
+  preview_token: string;
 };
 
 const known = new Set(["client_name", "hearing_date", "matter_title", "matter_code"]);
@@ -27,29 +27,67 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [recipient, setRecipient] = useState("");
   const [name, setName] = useState("");
-  const [preview, setPreview] = useState<{ key: string; data: MatterEmailPreview } | null>(null);
+  const revision = useRef(0);
+  const [preview, setPreview] = useState<{ key: string; revision: number; data: MatterEmailPreview } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const message: MatterEmailMessage = { template_id: templateId || null, subject, body, variables };
-  const key = JSON.stringify(message);
-  const current = preview?.key === key ? preview.data : null;
+  const message: MatterEmailMessage = {
+    template_id: templateId || null, subject, body, variables,
+    recipient_email: recipient.trim(), recipient_name: name.trim() || null,
+  };
+  const key = JSON.stringify({ matterId, ...message });
+  const current = preview?.key === key && preview.revision === revision.current ? preview.data : null;
   const selected = templates.find((t) => t.id === templateId);
-  const customVariables = [...new Set([
-    ...(selected?.variables.map((v) => v.name) ?? []),
-    ...Array.from(`${subject}\n${body}`.matchAll(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g), (m) => m[1]),
-  ])].filter((v) => !known.has(v)).slice(0, 40);
-  const validMessage = subject.trim().length >= 2 && body.trim().length >= 2;
-  const ready = !!current && !current.missing_variables.length && !current.invalid_placeholders.length;
+  const declared = new Set(selected?.variables.map((v) => v.name) ?? []);
+  const tokenPattern = /(?<!\{)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}(?!\})/g;
+  const text = `${subject}\n${body}`;
+  const tokens = [...new Set(Array.from(text.matchAll(tokenPattern), (m) => m[1]))];
+  const invalidTokens = tokens.filter((v) => !known.has(v) && !declared.has(v));
+  if (/\{\{|\}\}|\{\[|\]\}|\[[A-Za-z_][A-Za-z0-9_]* not set\]/.test(text.replace(tokenPattern, ""))) {
+    invalidTokens.push("Malformed or nested placeholder");
+  }
+  const customVariables = tokens.filter((v) => !known.has(v) && declared.has(v)).slice(0, 40);
+  const validMessage = subject.trim().length >= 2 && body.trim().length >= 2 && !!recipient.trim() && !invalidTokens.length;
+  const ready = !!current?.preview_token && !!current.preview_expires_at
+    && Date.parse(current.preview_expires_at) > Date.now()
+    && !current.missing_variables.length && !current.invalid_placeholders.length && !invalidTokens.length;
+
+  function invalidatePreview() {
+    revision.current += 1;
+    setPreview(null);
+    setError(null);
+  }
+
+  useEffect(() => {
+    invalidatePreview();
+    return () => { revision.current += 1; };
+  }, [matterId]);
+  useEffect(() => {
+    if (!preview?.data.preview_token || !preview.data.preview_expires_at) return;
+    const timer = setTimeout(() => {
+      if (revision.current === preview.revision) {
+        invalidatePreview();
+        setError("Email preview expired. Preview the message and recipient again.");
+      }
+    }, Math.max(0, Date.parse(preview.data.preview_expires_at) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [preview]);
 
   async function showPreview() {
     if (!validMessage || previewing) return;
     setPreview(null);
     setError(null);
     setPreviewing(true);
+    const requestedRevision = revision.current;
     try {
-      setPreview({ key, data: await previewMatterEmail(matterId, message) });
+      const data = await previewMatterEmail(matterId, message);
+      if (revision.current === requestedRevision) {
+        setPreview({ key, revision: requestedRevision, data });
+      }
     } catch (err) {
-      setError(apiErrorMessage(err, "Could not preview email. Try again."));
+      if (revision.current === requestedRevision) {
+        setError(apiErrorMessage(err, "Could not preview email. Try again."));
+      }
     } finally {
       setPreviewing(false);
     }
@@ -59,8 +97,10 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
     <h2 className="mb-3 text-base font-semibold">Compose &amp; send</h2>
     <form onSubmit={(e) => {
       e.preventDefault();
-      if (ready && !submitting && !previewing && recipient.trim()) {
-        onSubmit({ ...message, recipient_email: recipient.trim(), recipient_name: name.trim() || null });
+      if (ready && preview?.revision === revision.current
+        && Date.parse(current!.preview_expires_at!) > Date.now()
+        && !submitting && !previewing && recipient.trim()) {
+        onSubmit({ ...message, preview_token: current!.preview_token! });
       }
     }}>
       <fieldset disabled={submitting} className="flex min-w-0 flex-col gap-3">
@@ -70,8 +110,9 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium">Template
             <select className={field} value={templateId} data-testid="comm-send-template" onChange={(e) => {
               const t = templates.find((item) => item.id === e.target.value);
+              invalidatePreview();
               setTemplateId(e.target.value); setSubject(t?.subject_template ?? "");
-              setBody(t?.body_template ?? ""); setVariables({}); setPreview(null); setError(null);
+              setBody(t?.body_template ?? ""); setVariables({});
             }}>
               <option value="">Manual message</option>
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -81,21 +122,24 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
         </div>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Recipient email
-            <input className={field} type="email" required value={recipient} onChange={(e) => setRecipient(e.target.value)} data-testid="comm-send-recipient-email" />
+            <input className={field} type="email" required value={recipient} onChange={(e) => { invalidatePreview(); setRecipient(e.target.value); }} data-testid="comm-send-recipient-email" />
           </label>
           <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Recipient name (optional)
-            <input className={field} maxLength={255} value={name} onChange={(e) => setName(e.target.value)} data-testid="comm-send-recipient-name" />
+            <input className={field} maxLength={255} value={name} onChange={(e) => { invalidatePreview(); setName(e.target.value); }} data-testid="comm-send-recipient-name" />
           </label>
         </div>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Subject
-          <input className={field} required maxLength={400} value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="comm-send-subject" />
+          <input className={field} required maxLength={400} value={subject} onChange={(e) => { invalidatePreview(); setSubject(e.target.value); }} data-testid="comm-send-subject" />
         </label>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Message
-          <textarea className={field} rows={7} required maxLength={20000} value={body} onChange={(e) => setBody(e.target.value)} data-testid="comm-send-body" />
+          <textarea className={field} rows={7} required maxLength={20000} value={body} onChange={(e) => { invalidatePreview(); setBody(e.target.value); }} data-testid="comm-send-body" />
         </label>
         {customVariables.map((v) => <label key={v} className="flex min-w-0 flex-col gap-1 text-xs font-medium">{selected?.variables.find((item) => item.name === v)?.label || v}
-          <input className={field} maxLength={2000} value={variables[v] ?? ""} onChange={(e) => setVariables((old) => ({ ...old, [v]: e.target.value }))} data-testid={`comm-send-var-${v}`} />
+          <input className={field} maxLength={2000} value={variables[v] ?? ""} onChange={(e) => { invalidatePreview(); setVariables((old) => ({ ...old, [v]: e.target.value })); }} data-testid={`comm-send-var-${v}`} />
         </label>)}
+        {invalidTokens.length ? <p role="alert" className="break-words text-sm">
+          Unsupported placeholders: {invalidTokens.join(", ")}. Replace them with message text or a supported template placeholder.
+        </p> : null}
         {error ? <p role="alert" className="text-sm">{error}</p> : null}
         {current ? <div className="min-w-0 space-y-2 border-t border-[var(--color-line)] pt-3" data-testid="comm-send-preview-result">
           <h3 className="text-sm font-semibold">Preview</h3>

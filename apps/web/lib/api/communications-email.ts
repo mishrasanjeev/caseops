@@ -8,6 +8,8 @@ export type MatterEmailMessage = {
   subject?: string;
   body?: string;
   variables: Record<string, string>;
+  recipient_email: string;
+  recipient_name: string | null;
 };
 
 const previewSchema = z.object({
@@ -15,6 +17,8 @@ const previewSchema = z.object({
   missing_variables: z.array(z.string()),
   invalid_placeholders: z.array(z.string()),
   resolved_variables: z.record(z.string(), z.string()),
+  preview_token: z.string().nullable(),
+  preview_expires_at: z.string().nullable(),
 });
 export type MatterEmailPreview = z.infer<typeof previewSchema>;
 
@@ -32,7 +36,7 @@ export async function previewMatterEmail(matterId: string, message: MatterEmailM
 }
 
 export async function deliverMatterEmail(matterId: string, message: MatterEmailMessage & {
-  recipient_email: string; recipient_name: string | null;
+  preview_token: string;
 }) {
   return communicationRecord.parse(await apiRequest<unknown>(
     `/api/matters/${matterId}/communications/send-email`,

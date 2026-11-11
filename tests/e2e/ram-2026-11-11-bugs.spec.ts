@@ -158,10 +158,11 @@ for (const phone of [false, true]) {
         await compose.getByTestId("comm-send-preview").click();
         const response = await rendered;
         expect(response.request().headers()["x-caseops-automated-test"], "Preview keeps the no-paid marker").toBe("no-paid-providers");
-        return json<{ subject: string; body: string; missing_variables: string[]; invalid_placeholders: string[] }>(response, "Matter-scoped preview from the expected API");
+        return json<{ subject: string; body: string; missing_variables: string[]; invalid_placeholders: string[]; preview_token: string | null }>(response, "Matter-scoped preview from the expected API");
       }
       const missing = await preview();
       expect(missing.missing_variables).toEqual(["hearing_date"]);
+      expect(missing.preview_token).toBeNull();
       await expect(compose.getByRole("alert")).toContainText("hearing_date");
       await expect(compose.getByTestId("comm-send-preview-result")).toContainText("Hi QA Client");
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
@@ -169,9 +170,8 @@ for (const phone of [false, true]) {
       // Preserve the exact syntax of the retained production communication.
       await compose.getByLabel("Subject", { exact: true }).fill("Status update on your matter {[client_name]}");
       await compose.getByLabel("Message", { exact: true }).fill("Hi {[client_name]}, the next hearing is on {[hearing_date]}.");
-      const legacy = await preview();
-      expect(legacy.invalid_placeholders.length).toBeGreaterThan(0);
-      await expect(compose.getByRole("alert")).toContainText("unsupported placeholders");
+      await expect(compose.getByRole("alert")).toContainText("Unsupported placeholders");
+      await expect(compose.getByTestId("comm-send-preview")).toBeDisabled();
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
 
       await compose.getByTestId("comm-send-template").selectOption("");
@@ -181,12 +181,39 @@ for (const phone of [false, true]) {
       expect(manual.body).toBe("Hi QA Client, no hearing date is confirmed.");
       expect(manual.missing_variables).toEqual([]);
       expect(manual.invalid_placeholders).toEqual([]);
+      expect(manual.preview_token).toBeTruthy();
       await expect(compose.getByTestId("comm-send-preview-result")).toContainText(manual.body);
       await expect(compose.getByTestId("comm-send-submit")).toBeEnabled();
       await compose.getByLabel("Subject", { exact: true }).fill("Reviewed manual update");
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
       await preview();
       await expect(compose.getByTestId("comm-send-submit")).toBeEnabled();
+      await compose.getByLabel("Recipient email", { exact: true }).fill("changed-recipient@example.com");
+      await compose.getByLabel("Recipient email", { exact: true }).fill("no-delivery@example.com");
+      await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
+      await preview();
+      // Another authorized writer changes this run's source after review.
+      const beforeChange = await json<CreatedMatter>(await request.get(`${api.origin}/api/matters/${matterId}`, {
+        headers, maxRetries: 0, maxRedirects: 0,
+      }), "Read this execution's source version");
+      expect(beforeChange.matter_code === matterCode, "Source change owns the synthetic matter").toBe(true);
+      await release();
+      await json(await request.patch(`${api.origin}/api/matters/${matterId}`, {
+        headers, maxRetries: 0, maxRedirects: 0,
+        data: { client_name: "Updated QA Client", expected_updated_at: beforeChange.updated_at },
+      }), "Change only this execution's source after preview");
+      await release();
+      const stale = responseFor(`${communicationsPath}/send-email`);
+      await compose.getByTestId("comm-send-submit").click();
+      const staleResponse = await stale;
+      expect(staleResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      const staleProblem = await json<{ detail: string }>(staleResponse, "Changed source requires a new preview", 409);
+      expect(staleProblem.detail).toContain("Email preview expired or changed");
+      await expect(page.getByText(staleProblem.detail, { exact: true })).toBeVisible();
+      const updated = await preview();
+      expect(updated.body).toBe("Hi Updated QA Client, no hearing date is confirmed.");
+      expect(updated.preview_token).toBeTruthy();
+      await expect(compose.getByTestId("comm-send-preview-result")).toContainText(updated.body);
       await release();
       const refused = responseFor(`${communicationsPath}/send-email`);
       await compose.getByTestId("comm-send-submit").click();

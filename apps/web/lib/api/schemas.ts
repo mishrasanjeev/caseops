@@ -4385,6 +4385,8 @@ export const emailRenderResponse = z.object({
   subject: z.string(),
   body: z.string(),
   missing_variables: z.array(z.string()).default([]),
+  invalid_placeholders: z.array(z.string()).default([]),
+  resolved_variables: z.record(z.string(), z.string()).default({}),
 });
 
 export type EmailTemplateVariable = z.infer<typeof emailTemplateVariable>;
