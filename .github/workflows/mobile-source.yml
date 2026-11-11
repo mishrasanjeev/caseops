@@ -226,25 +226,6 @@ jobs:
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         working-directory: apps/mobile
         run: node ../../scripts/mobile/npm-tooling.mjs ci
-      - name: Select official HTTPS Ubuntu archives for browser prerequisites
-        run: |
-          python3 - <<'PY_ARCHIVES'
-          from pathlib import Path
-          import os, stat, subprocess
-          mirrors = Path('/etc/apt/apt-mirrors.txt')
-          original = ('http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                      'https://archive.ubuntu.com/ubuntu/\tpriority:2\n'
-                      'https://security.ubuntu.com/ubuntu/\tpriority:3\n')
-          approved = ('https://archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                      'https://security.ubuntu.com/ubuntu/\tpriority:2\n')
-          info = mirrors.lstat()
-          assert stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022
-          assert mirrors.read_text() == original, 'UNREVIEWED_UBUNTU_MIRROR_CONFIGURATION'
-          subprocess.run(['sudo', 'tee', str(mirrors)], input=approved, text=True,
-                         stdout=subprocess.DEVNULL, check=True, timeout=10)
-          assert mirrors.read_text() == approved, 'UBUNTU_MIRROR_WRITE_MISMATCH'
-          print('Selected official HTTPS Ubuntu archives; package signature policy unchanged.')
-          PY_ARCHIVES
       - name: Install the locked Chromium test browser
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -256,7 +237,40 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium
+        run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium
+      - name: Verify Playwright Chromium runtime
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        timeout-minutes: 2
+        run: |
+          node <<'NODE'
+          const { chromium } = require("@playwright/test");
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              const page = await browser.newPage();
+              await page.setContent("<title>CaseOps CI browser check</title>");
+              if ((await page.title()) !== "CaseOps CI browser check") {
+                throw new Error("Playwright Chromium did not execute the smoke page");
+              }
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
       - name: Type-check both platform adapters
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -440,25 +454,6 @@ jobs:
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         run: node scripts/mobile/npm-tooling.mjs run build:web
-      - name: Select official HTTPS Ubuntu archives for browser prerequisites
-        run: |
-          python3 - <<'PY_ARCHIVES'
-          from pathlib import Path
-          import os, stat, subprocess
-          mirrors = Path('/etc/apt/apt-mirrors.txt')
-          original = ('http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                      'https://archive.ubuntu.com/ubuntu/\tpriority:2\n'
-                      'https://security.ubuntu.com/ubuntu/\tpriority:3\n')
-          approved = ('https://archive.ubuntu.com/ubuntu/\tpriority:1\n'
-                      'https://security.ubuntu.com/ubuntu/\tpriority:2\n')
-          info = mirrors.lstat()
-          assert stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022
-          assert mirrors.read_text() == original, 'UNREVIEWED_UBUNTU_MIRROR_CONFIGURATION'
-          subprocess.run(['sudo', 'tee', str(mirrors)], input=approved, text=True,
-                         stdout=subprocess.DEVNULL, check=True, timeout=10)
-          assert mirrors.read_text() == approved, 'UBUNTU_MIRROR_WRITE_MISMATCH'
-          print('Selected official HTTPS Ubuntu archives; package signature policy unchanged.')
-          PY_ARCHIVES
       - env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -469,7 +464,40 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium
+        run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium
+      - name: Verify Playwright Chromium runtime
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        timeout-minutes: 2
+        run: |
+          node <<'NODE'
+          const { chromium } = require("@playwright/test");
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              const page = await browser.newPage();
+              await page.setContent("<title>CaseOps CI browser check</title>");
+              if ((await page.title()) !== "CaseOps CI browser check") {
+                throw new Error("Playwright Chromium did not execute the smoke page");
+              }
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
       - env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}

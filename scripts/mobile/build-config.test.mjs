@@ -241,7 +241,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   const isRoot = (step) => !step['working-directory'] || step['working-directory'] === '.';
   const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs ci --include=dev');
   const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci');
-  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
+  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium');
   const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs run typecheck');
   const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs test');
   assert.ok(rootInstall >= 0 && mobileInstall >= 0 && browserInstall >= 0);
@@ -261,19 +261,20 @@ test('mobile source CI installs the renderer browser and both locked dependency 
     NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
     NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
   }, 'BUILT_BROWSER_MOCKS_REQUIRE_EXPLICIT_ISOLATED_POLICY_WITHOUT_PRODUCTION_CONFIG');
-  const archiveName = 'Select official HTTPS Ubuntu archives for browser prerequisites';
-  const archiveSteps = ['source', 'browser-handoff'].map(job => {
+  const mainCI = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8'));
+  const canonicalRuntime = mainCI.jobs['e2e-projects'].steps.find(step => step.name === 'Verify Playwright Chromium runtime');
+  assert.ok(canonicalRuntime && canonicalRuntime.run.includes('await chromium.launch({ headless: true })'));
+  for (const job of ['source', 'browser-handoff']) {
     const steps = workflow.jobs[job].steps;
-    const archive = steps.findIndex(step => step.name === archiveName);
-    const chromium = steps.findIndex(step => step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
-    assert.ok(archive >= 0 && archive < chromium, 'OFFICIAL_ARCHIVES_REQUIRED_BEFORE_BROWSER_PREREQUISITES');
-    return steps[archive].run;
-  });
-  assert.equal(archiveSteps[0], archiveSteps[1], 'SAME_REVIEWED_ARCHIVE_CONFIGURATION_REQUIRED');
-  assert.ok(archiveSteps[0].includes("assert mirrors.read_text() == original, 'UNREVIEWED_UBUNTU_MIRROR_CONFIGURATION'"));
-  assert.ok(archiveSteps[0].includes("approved = ('https://archive.ubuntu.com/ubuntu/\\tpriority:1\\n'\n            'https://security.ubuntu.com/ubuntu/\\tpriority:2\\n')"));
-  assert.ok(archiveSteps[0].includes("assert mirrors.read_text() == approved, 'UBUNTU_MIRROR_WRITE_MISMATCH'"));
-  assert.ok(!/AllowUnauthenticated|Verify-Peer|trusted=yes|--fix-missing/.test(archiveSteps[0]));
+    const chromium = steps.findIndex(step => step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium');
+    const runtime = steps.findIndex(step => step.name === canonicalRuntime.name);
+    assert.ok(chromium >= 0 && runtime === chromium + 1, 'NATIVE_BROWSER_RUNTIME_REQUIRED_AFTER_DOWNLOAD');
+    assert.deepEqual(steps[runtime], canonicalRuntime, 'EXACT_CANONICAL_BROWSER_RUNTIME_CHECK_REQUIRED');
+    assert.equal(workflow.jobs[job]['runs-on'], mainCI.jobs['e2e-projects']['runs-on']);
+    assert.ok(!steps.some(step => /install-deps|--with-deps|apt-get|apt-mirrors/.test(step.run ?? '')));
+    for (const step of steps) assert.notEqual(step['continue-on-error'], true);
+    assert.ok(!Object.hasOwn(workflow.jobs[job].env, 'PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS'));
+  }
   const dependencySteps = workflow.jobs['dependency-closure'].steps;
   const protectedArchive = dependencySteps.findIndex(step => step.name === 'Protect the exact pinned public npm archive on Windows');
   const dependencyInstall = dependencySteps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund');
