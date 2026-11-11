@@ -66,9 +66,9 @@ layout-only version, then uses real submit/approve routes. Its synthetic citatio
 count is a fixture, not verified legal authority or evidence of content quality.
 It compares every rendered page's nonblank canvas and the downloaded artifact
 hash, changes profile, reloads, and checks persisted content/reviews are unchanged.
-Every browser API request must retain the no-paid-providers marker. Non-loopback
-targets and generation requests fail before acceptance. This is not a production
-mutation or production acceptance spec.
+Every browser API request must retain the no-paid-providers marker. The local
+fixture branch rejects non-loopback targets and generation requests. The
+read-only production branch added below does not enter this fixture flow.
 
 ## Evidence Limits
 
@@ -98,3 +98,53 @@ Production acceptance remains **Inconclusive**. Placeholder court/party text,
 irrelevant authorities, drafting quality and jurisdiction/document-specific
 reviewed legal-profile data remain separate unresolved dependencies. This patch
 does not certify legal suitability or close the whole BUG001 report.
+
+## Read-Only Production Follow-Up
+
+The same two stable cases now dispatch to a separate production journey when
+the configured web base URL is non-loopback. Local fixture statements remain
+unchanged. The production branch requires exactly `https://caseops.ai` and
+`https://api.caseops.ai`, the actual reporting QA account, and these inputs:
+
+```text
+PROD_API_BASE_URL=https://api.caseops.ai
+CASEOPS_EXPECTED_RELEASE_SHA=<exact 40-hex serving API/web SHA>
+CASEOPS_RAM_PROD_SLUG=test-legal
+CASEOPS_RAM_PROD_EMAIL=<actual reporting account email>
+CASEOPS_RAM_PROD_PASSWORD=<reporter's existing secret>
+```
+
+The reported retained Matter/draft IDs are pinned in the policy helper; optional
+`CASEOPS_B5_DRAFT_MATTER_ID` / `CASEOPS_B5_DRAFT_ID` inputs must match those same
+owner-reported IDs. The version is selected from a fresh authorized draft GET,
+never from fixture configuration. No local Python, database or model environment
+is used on this branch. Canonical configuration must explicitly set trace,
+screenshot and video to `off`, workers to 1 and retries to 0.
+
+The only permitted browser POST is one normal reporter login, with its CORS
+preflight. Drafting support reads are allowlisted; bootstrap, generation,
+retrieval/provider calls, approval, submission, finalization and all other writes
+are blocked before transport. Requests retain the authoritative no-paid marker.
+Serving API/web SHA is checked before login and again before the result.
+
+If the persisted citation/review state legitimately blocks PDF export, the UI
+guard, disabled download and unchanged record are asserted. A metadata-only
+`PARITYUNVERIFIED` receipt is attached and the case deliberately **fails** with
+that explicit outcome. This guard is not a positive parity result or a skip.
+Other export failures remain failures, not misclassified citation guards.
+
+If the existing export gate permits the read, the actual PDF preview is checked
+across its complete bounded page inventory with nonblank canvas-pixel checks.
+Version/profile request identity and resolved profile response identity are
+asserted, followed by hash parity at the real application's blob-anchor download
+handoff. A capturing listener prevents native saving and hashes the blob only
+in memory; native downloads are disabled as a second fence. No exported PDF,
+screenshot, video, trace, private DOM/body, credentials or filename is saved by
+this journey. Only hashes, page counts, public profile keys and status metadata
+are attached. Selecting `generic`, reloading, fresh record fingerprint equality
+and exact release identity complete the conditional positive read-only path.
+
+The production branch has not been executed as part of this source follow-up.
+Its 26 offline policy/memory-handoff cases and TypeScript/discovery checks are
+supporting evidence only. Whole BUG001 legal-content/profile quality remains
+open even after a future positive read-only parity result.

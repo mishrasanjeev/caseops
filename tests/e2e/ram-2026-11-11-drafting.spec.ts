@@ -7,6 +7,7 @@ import { devices, expect, request, test, type APIRequestContext } from "@playwri
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { localTransportHeaders } from "./support/cost-controls";
+import { productionDraftPdfJourney } from "./support/draft_pdf_production_20261111";
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 async function json(api: APIRequestContext, url: string, method = "GET", data?: object) {
@@ -16,6 +17,10 @@ async function json(api: APIRequestContext, url: string, method = "GET", data?: 
 }
 
 for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] phone" : "desktop"}: persisted approved draft PDF preview and export parity`, async ({ browser, baseURL }, info) => {
+  if (baseURL && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(baseURL).hostname)) {
+    await productionDraftPdfJourney(browser, baseURL, info, phone);
+    return;
+  }
   if (!baseURL || ![baseURL, apiBaseUrl].every(value => {
     const url = new URL(value);
     return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
