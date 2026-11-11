@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -210,6 +211,14 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   const [sectionId, setSectionId] = useState<string>("");
   const [relevance, setRelevance] = useState<Relevance>("cited");
   const queryClient = useQueryClient();
+  const setDialogOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setStatuteId("");
+      setSectionId("");
+      setRelevance("cited");
+    }
+  };
 
   const statutesQuery = useQuery({
     queryKey: ["statutes", "list"],
@@ -219,7 +228,12 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   });
   const sectionsQuery = useQuery({
     queryKey: ["statutes", statuteId, "sections"],
-    queryFn: () => listStatuteSections(statuteId),
+    queryFn: async ({ signal }) => {
+      const result = await listStatuteSections(statuteId);
+      // The client has no transport cancellation; do not admit abandoned reads.
+      signal.throwIfAborted();
+      return result;
+    },
     enabled: open && Boolean(statuteId),
     staleTime: 30 * 60_000,
   });
@@ -227,9 +241,13 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
     (statute) => statute.section_count > 0,
   );
   const allStatutes = statutesQuery.data?.statutes ?? [];
-  const sections = sectionsQuery.data?.sections ?? [];
+  const sectionsReady = sectionsQuery.isSuccess && !sectionsQuery.isFetching;
+  const sections = sectionsReady ? sectionsQuery.data.sections : [];
   const selectableSectionIds = new Set(sections.map((section) => section.id));
-  const catalogSections = sectionsQuery.data?.catalog_sections ?? sections;
+  const catalogSections = sectionsReady ? sectionsQuery.data.catalog_sections ?? sections : [];
+  const canAttach = statutesQuery.isSuccess && !statutesQuery.isFetching
+    && selectableStatutes.some((statute) => statute.id === statuteId)
+    && selectableSectionIds.has(sectionId);
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -242,10 +260,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
         queryKey: ["matter", matterId, "statute-references"],
       });
       toast.success("Statute reference attached.");
-      setOpen(false);
-      setStatuteId("");
-      setSectionId("");
-      setRelevance("cited");
+      setDialogOpen(false);
     },
     onError: (e: unknown) =>
       toast.error(
@@ -254,7 +269,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setDialogOpen}>
       <DialogTrigger asChild>
         <Button className="w-full shrink-0 sm:w-auto" data-testid="matter-statute-add-trigger">
           <Plus className="h-4 w-4" aria-hidden /> Add reference
@@ -349,7 +364,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
             <Select
               value={sectionId}
               onValueChange={setSectionId}
-              disabled={!statuteId || sectionsQuery.isPending}
+              disabled={!statuteId || sectionsQuery.isFetching || sectionsQuery.isError}
             >
               <SelectTrigger
                 id={`${fieldId}-section`}
@@ -358,7 +373,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 <SelectValue
                   placeholder={!statuteId
                     ? "Select an Act first"
-                    : sectionsQuery.isPending
+                    : sectionsQuery.isFetching
                       ? "Loading sections…"
                       : sectionsQuery.isError
                         ? "Could not load verified sections"
@@ -393,7 +408,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 ))}
               </SelectContent>
             </Select>
-            {statuteId && !sectionsQuery.isPending && !sectionsQuery.isError ? (
+            {statuteId && sectionsReady ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
                 data-testid="matter-statute-section-coverage"
@@ -407,13 +422,27 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
               </span>
             ) : null}
             {sectionsQuery.isError ? (
-              <span
-                className="text-xs text-[var(--color-danger-700)]"
-                data-testid="matter-statute-sections-error"
-              >
-                Verified sections could not be loaded. Retry by selecting the
-                Act again.
-              </span>
+              <div className="flex min-w-0 flex-col items-start gap-2">
+                <span
+                  role="alert"
+                  className="text-xs text-[var(--color-danger-700)]"
+                  data-testid="matter-statute-sections-error"
+                >
+                  Verified sections could not be loaded for this Act. Use Retry
+                  sections to try again.
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={sectionsQuery.isFetching}
+                  onClick={() => {
+                    setSectionId("");
+                    void sectionsQuery.refetch({ cancelRefetch: false });
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden /> Retry sections
+                </Button>
+              </div>
             ) : null}
           </div>
           <div className="flex min-w-0 flex-col gap-1 text-sm">
@@ -443,12 +472,12 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+          <Button variant="ghost" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>
           <Button
             onClick={() => addMutation.mutate()}
-            disabled={!sectionId || addMutation.isPending}
+            disabled={!canAttach || addMutation.isPending}
             data-testid="matter-statute-add-submit"
           >
             {addMutation.isPending ? (

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,11 +34,25 @@ vi.mock("sonner", () => ({
 
 import MatterStatutesPage from "@/app/app/matters/[id]/statutes/page";
 
-function withClient(children: ReactNode) {
-  const client = new QueryClient({
+function withClient(children: ReactNode, client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  })) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function recoveryCatalog() {
+  listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+  listStatutesMock.mockResolvedValue({ statutes: [
+    { id: "first", short_name: "First", long_name: "Synthetic first Act", section_count: 1 },
+    { id: "second", short_name: "Second", long_name: "Synthetic second Act", section_count: 1 },
+  ] });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 async function openOptions(name: string) {
@@ -348,12 +362,219 @@ describe("MatterStatutesPage", () => {
     expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
   });
 
+  it("recovers sections for the same selected Act through an explicit retry", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({ statutes: [
+      { id: "verified", short_name: "Verified", long_name: "Synthetic Act", section_count: 1 },
+    ] });
+    const recovered = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockRejectedValueOnce(new Error("section load unavailable"))
+      .mockReturnValueOnce(recovered.promise);
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic Act/ }));
+    expect(await screen.findByTestId("matter-statute-sections-error")).toHaveTextContent("Use Retry sections to try again");
+    expect(screen.queryByTestId("matter-statute-catalog-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-statute-no-selectable-acts")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry sections" }));
+    expect(listStatuteSectionsMock.mock.calls).toEqual([["verified"], ["verified"]]);
+    expect(listStatutesMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("combobox", { name: "Act" })).toHaveTextContent("Synthetic Act");
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    await act(async () => recovered.resolve({ sections: [{ id: "recovered", section_number: "Section 1" }] }));
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Section 1" }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+    expect(screen.queryByTestId("matter-statute-sections-error")).not.toBeInTheDocument();
+  });
+
+  it("selects long Act and section captions by keyboard, skips disabled options and restores Escape focus", async () => {
+    const longAct = `Synthetic long Act ${"readable caption ".repeat(8)}`.trim();
+    const longSection = `Verified provision ${"readable section caption ".repeat(8)}`.trim();
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({ statutes: [
+      { id: "first", short_name: "First", long_name: "First synthetic Act", section_count: 1 },
+      { id: "pending", short_name: "Pending", long_name: "Pending synthetic Act", section_count: 0 },
+      { id: "last", short_name: "Last", long_name: longAct, section_count: 2 },
+    ] });
+    const first = { id: "s-first", section_number: "Section 1", section_label: "First" };
+    const last = { id: "s-last", section_number: "Section 3", section_label: longSection };
+    listStatuteSectionsMock.mockResolvedValue({ sections: [first, last], catalog_sections: [
+      first, { id: "s-pending", section_number: "Section 2", section_label: "Pending" }, last,
+    ] });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    const actTrigger = screen.getByRole("combobox", { name: "Act" });
+    await waitFor(() => expect(actTrigger).toBeEnabled());
+    actTrigger.focus();
+    await user.keyboard(" ");
+    let list = screen.getByRole("listbox");
+    const firstAct = within(list).getByRole("option", { name: /First synthetic Act/ });
+    const lastAct = within(list).getByRole("option", { name: /Synthetic long Act/ });
+    await waitFor(() => expect(firstAct).toHaveFocus());
+    await user.keyboard("{End}");
+    await waitFor(() => expect(lastAct).toHaveFocus());
+    await user.keyboard("{ArrowUp}");
+    await waitFor(() => expect(firstAct).toHaveFocus());
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(lastAct).toHaveFocus());
+    expect(lastAct).toHaveTextContent(longAct);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(actTrigger).toHaveFocus());
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(actTrigger).toHaveTextContent("Select an Act");
+    await user.keyboard(" ");
+    list = screen.getByRole("listbox");
+    await waitFor(() => expect(within(list).getByRole("option", { name: /First synthetic Act/ })).toHaveFocus());
+    await user.keyboard("{End}");
+    await waitFor(() => expect(within(list).getByRole("option", { name: /Synthetic long Act/ })).toHaveFocus());
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(actTrigger).toHaveFocus());
+    expect(actTrigger).toHaveTextContent(longAct);
+    const sectionTrigger = screen.getByRole("combobox", { name: "Section" });
+    await waitFor(() => expect(sectionTrigger).toBeEnabled());
+    sectionTrigger.focus();
+    await user.keyboard(" ");
+    list = screen.getByRole("listbox");
+    const firstSection = within(list).getByRole("option", { name: /Section 1/ });
+    const lastSection = within(list).getByRole("option", { name: /Section 3/ });
+    await waitFor(() => expect(firstSection).toHaveFocus());
+    await user.keyboard("{End}");
+    await waitFor(() => expect(lastSection).toHaveFocus());
+    await user.keyboard("{ArrowUp}");
+    await waitFor(() => expect(firstSection).toHaveFocus());
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(lastSection).toHaveFocus());
+    expect(lastSection).toHaveClass("whitespace-normal", "[overflow-wrap:anywhere]");
+    expect(lastSection).toHaveTextContent(longSection);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(sectionTrigger).toHaveFocus());
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    await user.keyboard(" ");
+    list = screen.getByRole("listbox");
+    await waitFor(() => expect(within(list).getByRole("option", { name: /Section 1/ })).toHaveFocus());
+    await user.keyboard("{End}");
+    await waitFor(() => expect(within(list).getByRole("option", { name: /Section 3/ })).toHaveFocus());
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(sectionTrigger).toHaveFocus());
+    expect(sectionTrigger).toHaveTextContent(longSection);
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
+  it.each(["resolve", "reject"] as const)("ignores a late %s from a retry after the selected Act changes", async (outcome) => {
+    recoveryCatalog();
+    const stale = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockRejectedValueOnce(new Error("initial failure"))
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce({ sections: [{ id: "second-current", section_number: "Current second provision" }] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />, client));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    const retry = await screen.findByRole("button", { name: "Retry sections" });
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+    await user.click(retry);
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic second Act/ }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" })).toBeEnabled());
+    await act(async () => {
+      if (outcome === "resolve") stale.resolve({ sections: [{ id: "stale", section_number: "Abandoned first provision" }] });
+      else stale.reject(new Error("late first failure"));
+    });
+    expect(listStatuteSectionsMock.mock.calls).toEqual([["first"], ["first"], ["second"]]);
+    expect(client.getQueryData(["statutes", "first", "sections"])).toBeUndefined();
+    expect(screen.queryByTestId("matter-statute-sections-error")).not.toBeInTheDocument();
+    const choices = await openOptions("Section");
+    expect(within(choices).queryByRole("option", { name: /Abandoned/ })).not.toBeInTheDocument();
+    fireEvent.click(within(choices).getByRole("option", { name: "Current second provision" }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
+  it.each(["resolve", "reject"] as const)("does not restore a closed dialog from a late retry %s", async (outcome) => {
+    recoveryCatalog();
+    const stale = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockRejectedValueOnce(new Error("initial failure"))
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce({ sections: [{ id: "fresh", section_number: "Fresh reopened provision" }] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />, client));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    await user.click(await screen.findByRole("button", { name: "Retry sections" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByTestId("matter-statute-add-trigger"));
+    await act(async () => {
+      if (outcome === "resolve") stale.resolve({ sections: [{ id: "stale", section_number: "Abandoned provision" }] });
+      else stale.reject(new Error("late closed failure"));
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Act" })).toHaveTextContent("Select an Act");
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Retry sections" })).not.toBeInTheDocument();
+    expect(client.getQueryData(["statutes", "first", "sections"])).toBeUndefined();
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Fresh reopened provision" }));
+    expect(listStatuteSectionsMock.mock.calls).toEqual([["first"], ["first"], ["first"]]);
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
+  it("does not cache a retry response after unmount", async () => {
+    recoveryCatalog();
+    const stale = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockRejectedValueOnce(new Error("initial failure")).mockReturnValueOnce(stale.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    const view = render(withClient(<MatterStatutesPage />, client));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    await user.click(await screen.findByRole("button", { name: "Retry sections" }));
+    view.unmount();
+    await act(async () => stale.resolve({ sections: [{ id: "stale", section_number: "Abandoned provision" }] }));
+    expect(client.getQueryData(["statutes", "first", "sections"])).toBeUndefined();
+    expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks a cached selection during a failed refetch and clears it on retry", async () => {
+    recoveryCatalog();
+    const fresh = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockResolvedValueOnce({ sections: [{ id: "old", section_number: "Original provision" }] })
+      .mockRejectedValueOnce(new Error("refresh failure"))
+      .mockReturnValueOnce(fresh.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />, client));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Original provision" }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+    await act(async () => { await client.invalidateQueries({ queryKey: ["statutes", "first", "sections"], exact: true }); });
+    const retry = await screen.findByRole("button", { name: "Retry sections" });
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+    await user.click(retry);
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+    await act(async () => fresh.resolve({ sections: [{ id: "fresh", section_number: "Replacement provision" }] }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" })).toBeEnabled());
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Replacement provision" }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
   it("distinguishes a catalog load failure from a genuinely empty verified catalog", async () => {
     listMatterStatuteReferencesMock.mockResolvedValue({
       matter_id: "m-1",
       references: [],
     });
-    listStatutesMock.mockRejectedValue(new Error("catalog unavailable"));
+    listStatutesMock.mockRejectedValueOnce(new Error("catalog unavailable")).mockResolvedValueOnce({ statutes: [
+      { id: "verified", short_name: "Verified", long_name: "Recovered catalog Act", section_count: 1 },
+    ] });
     const user = userEvent.setup();
     render(withClient(<MatterStatutesPage />));
 
@@ -365,5 +586,14 @@ describe("MatterStatutesPage", () => {
       screen.queryByTestId("matter-statute-no-selectable-acts"),
     ).toBeNull();
     expect(screen.getByTestId("matter-statute-act-select")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Retry sections" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByTestId("matter-statute-add-trigger"));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Act" })).toBeEnabled());
+    expect(screen.queryByTestId("matter-statute-catalog-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-statute-no-selectable-acts")).not.toBeInTheDocument();
+    expect(listStatutesMock).toHaveBeenCalledTimes(2);
+    expect(listStatuteSectionsMock).not.toHaveBeenCalled();
   });
 });

@@ -58,6 +58,47 @@ async function openAndScroll(page: Page, name: string, screenshot?: string) {
   return list;
 }
 
+async function keyboardChoose(page: Page, field: "Act" | "Section", id: string) {
+  const trigger = page.getByRole("combobox", { name: field, exact: true });
+  const list = page.getByRole("listbox", { name: field, exact: true });
+  await expect(list).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(list).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Add statute reference" })).toBeVisible();
+  await trigger.press("Space");
+  await expect(list).toBeVisible();
+  await expect.poll(() => list.getByRole("option").evaluateAll(options => options.some(option => option === document.activeElement))).toBe(true);
+  const enabled = list.locator('[role="option"]:not([aria-disabled="true"])');
+  const identities = await enabled.evaluateAll(options => options.map(option => option.getAttribute("data-value")));
+  expect(identities).toContain(id);
+  if (field === "Act") {
+    expect(identities.length, "Bound keyboard catalog traversal without truncating it").toBeLessThanOrEqual(128);
+    await page.keyboard.press("Home");
+    await expect(enabled.first()).toBeFocused();
+    for (let index = 1; index <= identities.indexOf(id); index += 1) {
+      await page.keyboard.press("ArrowDown");
+      await expect(enabled.nth(index)).toBeFocused();
+    }
+  } else {
+    // The positive is the API's final verified provision. End/ArrowUp/Down
+    // must ignore any pending provisions interspersed in the same catalog.
+    expect(identities.at(-1)).toBe(id);
+    await page.keyboard.press("End");
+    await expect(enabled.last()).toBeFocused();
+    if (identities.length > 1) {
+      await page.keyboard.press("ArrowUp");
+      await expect(enabled.nth(identities.length - 2)).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await expect(enabled.last()).toBeFocused();
+    }
+  }
+  await expect(list.locator(`[data-value="${id}"]`)).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(list).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+}
+
 for (const phone of [false, true]) {
   test.describe(phone ? "Phone" : "Desktop", () => {
   test.use({ isMobile: phone, hasTouch: phone });
@@ -135,8 +176,42 @@ for (const phone of [false, true]) {
       });
       expect(denied.status(), "Pending source must remain rejected by the API").toBe(409);
       expect((await denied.json()).type).toBe("statute_section_not_verified");
+      let failCatalog = true;
+      let failSections = true;
+      let failedSectionReads = 0;
+      let recoveredSectionReads = 0;
+      if (local) {
+        // Fault injection never supplies legal data and cannot run in production.
+        const unavailable = { status: 503, contentType: "application/problem+json", body: JSON.stringify({
+          type: "about:blank", title: "Local fixture unavailable", status: 503, detail: "Deterministic loopback read failure.",
+        }) };
+        await page.route(url => url.origin === api.origin && url.pathname === "/api/statutes", async route => {
+          if (failCatalog) await route.fulfill(unavailable);
+          else await route.continue();
+        });
+        await page.route(url => url.origin === api.origin && url.pathname === `/api/statutes/${target.id}/sections`, async route => {
+          if (failSections) {
+            failedSectionReads += 1;
+            await route.fulfill(unavailable);
+          } else {
+            recoveredSectionReads += 1;
+            await route.continue();
+          }
+        });
+      }
       await page.goto(`${web.origin}/app/matters/${matter.id}/statutes`);
       await page.getByTestId("matter-statute-add-trigger").click();
+      if (local) {
+        await expect(page.getByTestId("matter-statute-catalog-error")).toBeVisible();
+        await expect(page.getByTestId("matter-statute-act-select")).toBeDisabled();
+        await expect(page.getByTestId("matter-statute-no-selectable-acts")).toHaveCount(0);
+        await expect(page.getByTestId("matter-statute-sections-error")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Retry sections", exact: true })).toHaveCount(0);
+        failCatalog = false;
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(page.getByTestId("matter-statute-add-trigger")).toBeFocused();
+        await page.getByTestId("matter-statute-add-trigger").click();
+      }
       await expect(page.getByTestId("matter-statute-catalog-coverage")).toBeVisible();
       const dialog = page.getByRole("dialog", { name: "Add statute reference" });
       await contained(dialog, page);
@@ -146,7 +221,24 @@ for (const phone of [false, true]) {
       const act = acts.locator(`[data-value="${target.id}"]`);
       await expect(act).not.toHaveAttribute("aria-disabled", "true");
       await act.scrollIntoViewIfNeeded();
-      await act.click();
+      if (local) expect((await act.textContent())!.length).toBeGreaterThan(100);
+      await keyboardChoose(page, "Act", target.id);
+      if (local) {
+        await expect(page.getByTestId("matter-statute-sections-error")).toBeVisible();
+        await expect(page.getByTestId("matter-statute-section-select")).toBeDisabled();
+        await expect(page.getByTestId("matter-statute-add-submit")).toBeDisabled();
+        await expect(page.getByTestId("matter-statute-catalog-error")).toHaveCount(0);
+        const failures = failedSectionReads;
+        expect(failures).toBeGreaterThan(0);
+        await page.getByRole("combobox", { name: "Act", exact: true }).press("Space");
+        await keyboardChoose(page, "Act", target.id);
+        expect(failedSectionReads, "Reselecting the current Act does not trigger Radix onValueChange").toBe(failures);
+        failSections = false;
+        await page.getByRole("button", { name: "Retry sections", exact: true }).click();
+        await expect(page.getByRole("combobox", { name: "Section", exact: true })).toBeEnabled();
+        await expect(page.getByTestId("matter-statute-sections-error")).toHaveCount(0);
+        expect(recoveredSectionReads, "One explicit same-Act recovery read").toBe(1);
+      }
       const sections = await openAndScroll(page, "Section", local ? info.outputPath("section-open.png") : undefined);
       if (local) await page.screenshot({ path: info.outputPath("section-bottom.png") });
       const negative = sections.locator(`[data-value="${pending.id}"]`);
@@ -157,8 +249,22 @@ for (const phone of [false, true]) {
       await section.scrollIntoViewIfNeeded();
       await contained(section, page);
       await expect(section).not.toHaveAttribute("aria-disabled", "true");
-      await section.click();
+      if (local) expect((await section.textContent())!.length).toBeGreaterThan(100);
+      await keyboardChoose(page, "Section", positive.id);
       await expect(page.getByRole("combobox", { name: "Section", exact: true })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByTestId("matter-statute-add-trigger")).toBeFocused();
+      await page.getByTestId("matter-statute-add-trigger").click();
+      await expect(page.getByRole("combobox", { name: "Act", exact: true })).toContainText("Select an Act");
+      await expect(page.getByRole("combobox", { name: "Section", exact: true })).toBeDisabled();
+      await expect(page.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      await page.getByRole("combobox", { name: "Act", exact: true }).press("Space");
+      await keyboardChoose(page, "Act", target.id);
+      const sectionTrigger = page.getByRole("combobox", { name: "Section", exact: true });
+      await expect(sectionTrigger).toBeEnabled();
+      await sectionTrigger.press("Space");
+      await keyboardChoose(page, "Section", positive.id);
       const relevance = page.getByRole("combobox", { name: "Relevance", exact: true });
       await relevance.press("Space");
       const relevanceOptions = page.getByRole("listbox", { name: "Relevance", exact: true });
@@ -201,6 +307,7 @@ for (const phone of [false, true]) {
       } });
       expect(disposed.status()).toBe(200);
     }
+    info.annotations.push({ type: "caseops-b5-proof", description: "workflow-outcome" });
   });
   });
 }
