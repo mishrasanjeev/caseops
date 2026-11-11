@@ -4642,6 +4642,137 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
     assert "DONE abcdef1" not in result.stdout
 
 
+_WEB_DIRTY_CLOSURE_REGRESSIONS = (
+    ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
+    ("e2e-env", "tests/e2e/support/env.ts"),
+    ("ram-bugs4", "tests/e2e/support/ram-bugs4.ts"),
+    ("retained-assistant", "tests/e2e/support/retained-assistant-evidence.ts"),
+    ("draft-pdf-oracle", "tests/e2e/support/draft_pdf_oracle_20261111.ts"),
+    ("draft-pdf-production-policy", "tests/e2e/support/draft_pdf_production_policy_20261111.ts"),
+)
+
+
+def _literal_build_path(value: str) -> str:
+    assert re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*/?", value), (
+        f"Build input must be a literal repository path: {value!r}"
+    )
+    assert not {".", ".."}.intersection(value.split("/")), "Build input escapes its root"
+    return value.rstrip("/")
+
+
+def _deploy_dirty_build_paths(script: str) -> set[str]:
+    matches = re.findall(r"(?ms)^DIRTY_BUILD_CONTEXT=\$\((.*?)\)\n", script)
+    assert len(matches) == 1 and len(matches[0]) <= 16_384, "Expected one bounded dirty guard"
+    try:
+        arguments = shlex.split(matches[0].replace("\\\n", ""), comments=True)
+        api_sources = [shlex.split(value, comments=True) for value in re.findall(
+            r"(?m)^API_SOURCE_DIR=(.*)$", script,
+        )]
+    except ValueError as exc:
+        raise AssertionError("Dirty guard must contain literal git status arguments") from exc
+    assert arguments[:5] == ["git", "status", "--porcelain", "--untracked-files=all", "--"]
+    assert api_sources == [["apps/api"]], "API context must remain the reviewed literal root"
+    assert 0 < len(arguments[5:]) <= 128, "Dirty guard path count must be bounded"
+    paths = [_literal_build_path("apps/api" if value == "${API_SOURCE_DIR}" else value)
+             for value in arguments[5:]]
+    assert len(paths) == len(set(paths)), "Duplicate dirty-build path"
+    return set(paths)
+
+
+def _docker_copy_build_inputs(root: Path) -> set[str]:
+    required = set()
+    for file, context in (("apps/api/Dockerfile", "apps/api/"), ("apps/web/Dockerfile", "")):
+        source = (root / file).read_text(encoding="utf-8")
+        assert len(source) <= 65_536, "Docker COPY inventory must be bounded"
+        for line in source.replace("\\\n", "").splitlines():
+            words = shlex.split(line, comments=True)
+            if not words or words[0] != "COPY":
+                continue
+            if any(word.startswith("--from=") for word in words[1:]):
+                continue
+            sources = [word for word in words[1:-1] if not word.startswith("--chown=")]
+            assert sources, "COPY must name a local build input"
+            required.update(_literal_build_path(context + value) for value in sources)
+    assert required, "Docker COPY input inventory must not be empty"
+    return required
+
+
+def _assert_deploy_dirty_build_closure(script: str, required: set[str]) -> None:
+    paths = _deploy_dirty_build_paths(script)
+    missing = sorted(value for value in required if not any(
+        value == path or value.startswith(path + "/") for path in paths
+    ))
+    assert not missing, f"Missing dirty-build inputs: {missing}"
+    assert {path for path in paths if path == "tests" or path.startswith("tests/")} == {
+        path for path in required if path.startswith("tests/")
+    }, "Test dirty guard must name only its exact dependency closure"
+
+
+def test_deploy_dirty_guard_covers_every_copy_and_external_unit_input() -> None:
+    required = _docker_copy_build_inputs(REPO_ROOT) | _web_external_unit_dependencies(REPO_ROOT)
+    _assert_deploy_dirty_build_closure(_read_repo_text("scripts/deploy-prod.sh"), required)
+
+
+@pytest.mark.parametrize("case,path", _WEB_DIRTY_CLOSURE_REGRESSIONS)
+def test_deploy_dirty_guard_rejects_each_omission_even_when_named_in_comments(
+    case: str, path: str,
+) -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+    required = _docker_copy_build_inputs(REPO_ROOT) | _web_external_unit_dependencies(REPO_ROOT)
+    _assert_deploy_dirty_build_closure(script, required)
+    changed = script.replace(f'  "{path}" \\\n', "")
+    assert changed != script, f"Missing regression input: {case}"
+    changed += f"\n# This comment must not authorize {path}\n"
+    with pytest.raises(AssertionError, match=f"Missing dirty-build inputs: .*{re.escape(path)}"):
+        _assert_deploy_dirty_build_closure(changed, required)
+
+
+@pytest.mark.parametrize("argument", [
+    '"$(printf tests/e2e)"', '`printf tests/e2e`', '"${OTHER_ROOT}"',
+    '"tests/**"', '"../outside"', '"/absolute"', '; printf ignored',
+])
+def test_deploy_dirty_guard_rejects_nonliteral_shell_arguments(argument: str) -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh").replace(
+        '  "tests/e2e/support/run-id.ts")', f'  "tests/e2e/support/run-id.ts" {argument})',
+    )
+    with pytest.raises(AssertionError):
+        _deploy_dirty_build_paths(script)
+
+
+def test_deploy_dirty_guard_rejects_a_future_uncovered_unit_input() -> None:
+    required = _docker_copy_build_inputs(REPO_ROOT) | _web_external_unit_dependencies(REPO_ROOT)
+    future = "tests/e2e/support/future-unit-input.ts"
+    with pytest.raises(AssertionError, match=f"Missing dirty-build inputs: .*{re.escape(future)}"):
+        _assert_deploy_dirty_build_closure(
+            _read_repo_text("scripts/deploy-prod.sh"), required | {future},
+        )
+
+
+def test_deploy_dirty_guard_rejects_whole_test_tree_admission() -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh").replace(
+        '  "tests/e2e/support/run-id.ts")', '  "tests/e2e/support/run-id.ts" tests)',
+    )
+    required = _docker_copy_build_inputs(REPO_ROOT) | _web_external_unit_dependencies(REPO_ROOT)
+    with pytest.raises(AssertionError, match="only its exact dependency closure"):
+        _assert_deploy_dirty_build_closure(script, required)
+
+
+@pytest.mark.parametrize("missing_cli", ["git", "gcloud", "gh", "curl", "sleep", "python"])
+def test_deploy_fixture_stops_before_launch_if_any_fake_cli_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing_cli: str,
+) -> None:
+    write = _write_fake_executable
+
+    def write_except_missing(path: Path, source: str) -> None:
+        if path.name != missing_cli:
+            write(path, source)
+
+    monkeypatch.setattr(sys.modules[__name__], "_write_fake_executable", write_except_missing)
+    result = _run_deploy_with_fakes(tmp_path)
+    assert result.returncode == 99, result.stdout + result.stderr
+    assert not (tmp_path / "gcloud.log").exists(), "Missing fake must stop before release actions"
+
+
 @pytest.mark.parametrize(
     ("case", "mutation_path", "mutation", "reject"),
     [
@@ -4671,6 +4802,7 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
          "modify", True),
         ("public-release-identity", "tests/e2e/support/public-release-identity.ts",
          "modify", True),
+        *((case, path, "modify", True) for case, path in _WEB_DIRTY_CLOSURE_REGRESSIONS),
         ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
         ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
          "delete", True),
@@ -4729,6 +4861,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
         ]),
     }
     initial_paths.update(_web_npm_tooling_inputs(REPO_ROOT))
+    initial_paths.update(path for _, path in _WEB_DIRTY_CLOSURE_REGRESSIONS)
     for relative in initial_paths:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -4749,6 +4882,9 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
     result = _run_deploy_with_fakes(tmp_path, native_status_root=repository)
     status_arguments = (tmp_path / "native-status-args.txt").read_text().splitlines()
     assert status_arguments[:4] == ["status", "--porcelain", "--untracked-files=all", "--"]
+    assert set(status_arguments[4:]) == _deploy_dirty_build_paths(
+        _read_repo_text("scripts/deploy-prod.sh"),
+    )
     filtered = git(*status_arguments).stdout
     calls = tmp_path / "gcloud.log"
     evidence = os.environ.get("CASEOPS_DEPLOY_NATIVE_EVIDENCE")
