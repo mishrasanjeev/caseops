@@ -43,6 +43,7 @@
     "glob": "file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz"
   },
   "overrides": {
+    "node-forge": "1.4.3",
     "zod": "$zod",
     "deepmerge": "$deepmerge",
     "glob": "$glob",

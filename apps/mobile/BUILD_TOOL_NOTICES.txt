@@ -1,8 +1,8 @@
 CaseOps mobile build-tool notices
 
-node-forge 1.4.1
-Source: https://github.com/digitalbazaar/forge/tree/8a917370ec51731e817c2d547b7329a58f8210af
-Package: https://registry.npmjs.org/node-forge/-/node-forge-1.4.1.tgz
+node-forge 1.4.3
+Source: https://github.com/digitalbazaar/forge/tree/936b24d939dc7261ee37982576f9cf2b410084ee
+Package: https://registry.npmjs.org/node-forge/-/node-forge-1.4.3.tgz
 Licence selection: BSD-3-Clause. Original dual-licence text retained below.
 This package is used by Expo command-line and certificate build tools.
 This notice does not classify the final application bundle.

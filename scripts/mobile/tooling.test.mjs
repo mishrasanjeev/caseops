@@ -6153,6 +6153,19 @@ test('iOS local archive admission accepts the current full lock and refuses stal
   assert.equal(accepted.expectedSha256, '49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8');
   assert.equal(createHash('sha256').update(accepted.bytes).digest('hex'), accepted.expectedSha256); accepted.bytes.fill(0);
   const lock = path.join(root, 'apps/mobile/package-lock.json'), bytes = fs.readFileSync(lock), open = fs.openSync; let archiveOpens = 0;
+  const old = JSON.parse(bytes);
+  Object.assign(old.packages['node_modules/node-forge'], { version: '1.4.1',
+    resolved: 'https://registry.npmjs.org/node-forge/-/node-forge-1.4.1.tgz',
+    integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
+  const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
+  assert.equal(oldBytes.length, bytes.length);
+  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), 'd15da4b402622883d58f0c61cd5b8fd7bc95cb36bb8ead1b3cc46b1b596c5def');
+  try {
+    fs.writeFileSync(lock, oldBytes);
+    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
+  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+  assert.equal(archiveOpens, 0);
   try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
     assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);

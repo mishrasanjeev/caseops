@@ -1180,8 +1180,20 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
           return { id: response.value.id };
         } };
     } };
-    assert.deepEqual(await calendarClient.requestCalendar(planned, chain),
-      { status: 201, requestId: 'synthetic-calendar-ack', projection: { id: other } });
+    try {
+      assert.deepEqual(await calendarClient.requestCalendar(planned, chain),
+        { status: 201, requestId: 'synthetic-calendar-ack', projection: { id: other } });
+    } catch (error) {
+      t.diagnostic(JSON.stringify({ scope: 'synthetic-loopback-calendar-failure',
+        upstreamRequests: seen.map(row => ({ method: row.method, route: row.route === calendarPath ? 'calendar'
+          : row.route === '/api/auth/login' ? 'login' : row.route === '/api/matters/' ? 'matter' : row.route === route ? 'task' : 'unknown',
+        noPaidMarker: row.marker === 'no-paid-providers' })),
+        calendarBodiesReceived: calendarReceived.length,
+        acknowledgedStatuses: events.filter(row => row.type === 'producer_http_ack').map(row => row.status),
+        permitsIssued: events.filter(row => row.type === 'producer_exact_route_permit').length,
+        permitsConsumed: events.filter(row => row.type === 'producer_exact_route_consumed').length }));
+      throw error;
+    }
     await assert.rejects(calendarClient.requestCalendar(planned, chain), /HTTP_INCOMPLETE_NO_REPLAY/);
     assert.equal(accepted, 1);
     assert.deepEqual(calendarReceived, [exact]);
