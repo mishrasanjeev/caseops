@@ -1731,6 +1731,50 @@ class GatewayTests(unittest.TestCase):
             gateway_module.runtime_source_bytes(source, digest)
         self.assertEqual(len(closed), 1)
 
+    def test_runtime_sibling_creation_does_not_change_the_held_source_identity(self):
+        parent = self.root.resolve() / "source-namespace"
+        parent.mkdir(mode=0o700)
+        source = parent / "runtime.py"
+        body = b"# owned synthetic source\n"
+        source.write_bytes(body)
+        before = source.stat()
+        read, changed = os.read, []
+        def create_sibling(descriptor, extent):
+            value = read(descriptor, extent)
+            if not changed:
+                changed.append(True)
+                (parent / "unrelated-directory").mkdir(mode=0o700)
+                (parent / "unrelated-file").write_bytes(b"public sibling")
+            return value
+        with patch.object(gateway_module.os, "read", create_sibling):
+            self.assertEqual(gateway_module.runtime_source_bytes(source, hashlib.sha256(body).hexdigest()), body)
+        self.assertTrue(changed)
+        self.assertEqual(tuple(getattr(before, key) for key in gateway_module._SOURCE_METADATA),
+                         tuple(getattr(source.stat(), key) for key in gateway_module._SOURCE_METADATA))
+
+    @unittest.skipIf(os.name == "nt", "POSIX directory modes; actual Windows ACL acceptance is separate")
+    def test_posix_runtime_parent_permission_change_still_refuses_and_closes(self):
+        parent = self.root.resolve() / "permission-namespace"
+        parent.mkdir(mode=0o700)
+        source = parent / "runtime.py"
+        source.write_bytes(b"# public source\n")
+        read, close, changed, closed = os.read, os.close, [], []
+        def change_mode(descriptor, extent):
+            value = read(descriptor, extent)
+            if not changed:
+                changed.append(True)
+                parent.chmod(0o750)
+            return value
+        def record_close(descriptor):
+            closed.append(descriptor)
+            close(descriptor)
+        try:
+            with patch.object(gateway_module.os, "read", change_mode), patch.object(gateway_module.os, "close", record_close), self.assertRaisesRegex(AssertionError, "NAMESPACE"):
+                gateway_module.runtime_source_bytes(source)
+        finally:
+            parent.chmod(0o700)
+        self.assertEqual(len(closed), 1)
+
     def test_native_missing_marker_denied_before_transport(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
             status, _ = self.request("GET", "/api/matters/")

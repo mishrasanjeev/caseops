@@ -121,6 +121,7 @@ def request_headers(values):
 
 
 _SOURCE_METADATA = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+_SOURCE_NAMESPACE_IDENTITY = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")
 
 
 def source_named_identity_equal(descriptor, named, platform_name=os.name):
@@ -141,7 +142,9 @@ def runtime_source_bytes(path, expected=None):
         for parent in reversed(path.parents):
             value = parent.lstat()
             assert stat.S_ISDIR(value.st_mode) and not stat.S_ISLNK(value.st_mode)
-            result.append((str(parent), metadata(value)))
+            # Sibling creation changes a directory's size, links and timestamps
+            # without changing this source's namespace or access controls.
+            result.append((str(parent), tuple(getattr(value, key) for key in _SOURCE_NAMESPACE_IDENTITY)))
         return result
     namespace = ancestors()
     named = path.lstat()
