@@ -61,6 +61,7 @@ tests/fixtures/statutes/**
 !tests/fixtures/node-default-tls-probe.cjs
 !tests/e2e/
 tests/e2e/**
+!tests/e2e/ram-2026-11-11-bugs.spec.ts
 !tests/e2e/support/
 tests/e2e/support/**
 !tests/e2e/support/prod-failure-diagnostics.ts
@@ -74,6 +75,8 @@ tests/e2e/support/**
 !tests/e2e/support/retained-assistant-evidence.ts
 !tests/e2e/support/draft_pdf_oracle_20261111.ts
 !tests/e2e/support/draft_pdf_production_policy_20261111.ts
+!tests/e2e/support/env.ts
+!tests/e2e/support/ram-bugs4.ts
 
 apps/web/node_modules/
 apps/web/.next/

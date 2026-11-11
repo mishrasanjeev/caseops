@@ -76,6 +76,11 @@ COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-release-identity.ts
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
+# The communications contract unit parses its dated journey as an AST input.
+# Retain that source and its exact transitive imports in the builder only.
+COPY tests/e2e/ram-2026-11-11-bugs.spec.ts /app/tests/e2e/ram-2026-11-11-bugs.spec.ts
+COPY tests/e2e/support/env.ts /app/tests/e2e/support/env.ts
+COPY tests/e2e/support/ram-bugs4.ts /app/tests/e2e/support/ram-bugs4.ts
 # Colocated licence units read this finite API attribution/declaration closure.
 # These inputs are builder-only; no API code, fonts or vendor archives enter runner.
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/

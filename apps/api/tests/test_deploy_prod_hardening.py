@@ -1444,6 +1444,38 @@ def test_public_release_identity_static_import_closure() -> None:
     } <= _web_external_unit_dependencies(REPO_ROOT)
 
 
+def test_web_communications_ast_read_follows_complete_fixture_closure() -> None:
+    unit = _read_repo_text("apps/web/lib/communications-journey.test.ts")
+    assert "ts.createSourceFile(" in unit
+    assert 'new URL("../../../tests/e2e/ram-2026-11-11-bugs.spec.ts", import.meta.url)' in unit
+    assert {
+        "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+        "tests/e2e/support/env.ts",
+        "tests/e2e/support/ram-bugs4.ts",
+    } <= _web_external_unit_dependencies(REPO_ROOT)
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+@pytest.mark.parametrize("path", [
+    "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+    "tests/e2e/support/env.ts",
+    "tests/e2e/support/ram-bugs4.ts",
+])
+def test_web_communications_ast_read_closure_rejects_each_omission(
+    boundary: str, path: str,
+) -> None:
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    ignore = _read_repo_text(".dockerignore" if boundary == "copy" else boundary)
+    if boundary == "copy":
+        dockerfile = dockerfile.replace(f"COPY {path} /app/{path}", "")
+        message = f"Missing builder input: {re.escape(path)}"
+    else:
+        ignore = ignore.replace(f"!{path}\n", "")
+        message = f"Missing context input: {re.escape(path)}"
+    with pytest.raises(AssertionError, match=message):
+        _assert_web_builder_inputs(dockerfile, ignore, _web_external_unit_dependencies(REPO_ROOT))
+
+
 @pytest.mark.parametrize("helper", [
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
     "ip-import-acknowledgements.ts", "public-release-identity.ts",
