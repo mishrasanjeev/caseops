@@ -97,16 +97,20 @@ def test_write_shard_file_uses_test_root_relative_paths(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == "tests/nested/test_beta.py\n"
 
 
-@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("playwright_file", [
+    None,
+    "tests/test_prod_playwright_evidence.py",
+    "tests/test_batch5_release_wiring.py",
+])
 @pytest.mark.parametrize("temporal", [False, True])
 @pytest.mark.parametrize("newline", ["\n", "\r\n"])
 def test_offline_dependency_cli_uses_exact_inventory_without_rg_or_node(
-    tmp_path, required, temporal, newline,
+    tmp_path, playwright_file, temporal, newline,
 ):
     selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
     names = ["tests/test_ordinary.py"]
-    if required:
-        names.append("tests/test_prod_playwright_evidence.py")
+    if playwright_file:
+        names.append(playwright_file)
     if temporal:
         names.append("tests/test_durable_workflows.py")
     selected.write_bytes((newline.join(names) + newline).encode())
@@ -116,9 +120,22 @@ def test_offline_dependency_cli_uses_exact_inventory_without_rg_or_node(
         env=dict(os.environ, PATH=""), check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert output.read_text(encoding="utf-8") == (
-        f"retained=true\nrequires_playwright={str(required).lower()}\n"
+        f"retained=true\nrequires_playwright={str(bool(playwright_file)).lower()}\n"
         f"requires_temporal={str(temporal).lower()}\n")
     assert f"selected files: {len(names)}" in result.stdout
+
+
+@pytest.mark.parametrize("filename", [
+    "tests/test_batch5_release_wiring_copy.py",
+    "tests/test_prod_playwright_evidence_copy.py",
+])
+def test_offline_dependency_does_not_admit_similarly_named_files(tmp_path, filename):
+    selected, output = tmp_path / "selected.txt", tmp_path / "github-output.txt"
+    selected.write_text(filename + "\n", encoding="utf-8")
+    assert not pytest_shard_plan.write_ci_dependency_output(selected, output)
+    assert output.read_text(encoding="utf-8") == (
+        "requires_playwright=false\nrequires_temporal=false\n"
+    )
 
 
 @pytest.mark.parametrize("inventory", ["", "tests/test_a.py\ntests/test_a.py\n",
