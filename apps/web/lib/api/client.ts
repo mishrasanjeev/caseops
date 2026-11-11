@@ -497,7 +497,7 @@ export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {
 async function authenticatedBinaryRequest<T>(
   path: string, init: Omit<ApiRequestInit, "body">,
   consume: (response: Response, signal: AbortSignal) => Promise<T>,
-  _retry = false, cache?: RequestCache,
+  _retry = false, cache?: RequestCache, cookieCaller = init.token === undefined,
 ): Promise<T> {
   const { method = "GET", headers = {}, signal, timeoutMs } = init;
   signal?.throwIfAborted();
@@ -570,7 +570,7 @@ async function authenticatedBinaryRequest<T>(
       return authenticatedBinaryRequest(
         path,
         fresh ? { ...init, token: fresh } : init,
-        consume, true, cache,
+        consume, true, cache, cookieCaller,
       );
     }
   }
@@ -586,7 +586,7 @@ async function authenticatedBinaryRequest<T>(
         window.location.pathname.startsWith("/portal/sign-in/");
       if (!onPortalSignIn) window.location.assign("/portal/sign-in");
     } else if (
-      explicitToken === undefined &&
+      cookieCaller &&
       !window.location.pathname.startsWith("/sign-in")
     ) {
       const next = encodeURIComponent(

@@ -478,4 +478,22 @@ describe("apiBlobDataRequest", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it.each([false, true])("retains original cookie-signin intent after refresh, explicit token %s", async (explicit) => {
+    const localStorage = window.localStorage;
+    localStorage.setItem("caseops.session.context", "{}");
+    const assign = vi.fn();
+    vi.stubGlobal("window", { localStorage, dispatchEvent: vi.fn(), location: {
+      origin: "http://localhost:3000", pathname: "/app/contracts/source", search: "", assign,
+    } });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Expired" }, 401))
+      .mockResolvedValueOnce(response({ access_token: "refreshed", token_type: "bearer", company: {}, user: {}, membership: {} }, 200))
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Still invalid" }, 401));
+    await expect(apiBlobDataRequest("/api/private/source", explicit ? { token: "explicit" } : {}))
+      .rejects.toMatchObject({ status: 401 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    if (explicit) expect(assign).not.toHaveBeenCalled();
+    else expect(assign).toHaveBeenCalledWith("/sign-in?next=%2Fapp%2Fcontracts%2Fsource");
+  });
 });
