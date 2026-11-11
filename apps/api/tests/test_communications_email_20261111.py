@@ -277,7 +277,10 @@ def test_preview_template_and_matter_scope_and_archived_send(client, monkeypatch
     matter = _create_matter(client, headers, "B5-SCOPE", hearing_date="2026-11-20")
     template = _create_template(client, headers)
     path = f"/api/matters/{matter}/communications"
-    assert client.get(f"{path}/email-templates", headers=headers).status_code == 200
+    template_path = f"/api/matters/{matter}/communications/email-templates"
+    client.cookies.clear()
+    assert client.get(template_path).status_code == 401
+    assert client.get(template_path, headers=headers).status_code == 200
     archived = client.delete(f"/api/admin/email-templates/{template['id']}", headers=headers)
     assert archived.status_code == 200
     calls = []
@@ -476,5 +479,7 @@ def test_preview_and_send_keep_cross_tenant_and_terminal_matter_fences(client, m
         }
         response = client.post(f"{path}/{action}", headers=other_headers, json=payload)
         assert response.status_code == 404, response.text
-    assert client.get(f"{path}/email-templates", headers=other_headers).status_code == 404
+    assert client.get(
+        f"/api/matters/{matter_id}/communications/email-templates", headers=other_headers
+    ).status_code == 404
     assert calls == []

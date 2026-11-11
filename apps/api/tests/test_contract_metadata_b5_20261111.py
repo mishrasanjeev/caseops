@@ -245,7 +245,7 @@ def test_private_preview_and_original_download_keep_bytes_and_tenant_acl(
     assert download.content == content
     assert download.headers["cache-control"] == "private, no-store"
     assert f"original.{kind}" in download.headers["content-disposition"]
-    preview_path = path + f"/{attachment['id']}/preview"
+    preview_path = f"/api/contracts/{contract['id']}/attachments/{attachment['id']}/preview"
     preview = client.get(preview_path, headers=headers)
     assert preview.status_code == 200, preview.text
     assert preview.content == content
