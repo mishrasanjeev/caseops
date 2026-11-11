@@ -583,7 +583,7 @@ function DraftBody({
               ) : bodyView === "pdf" ? (
                 <div id="draft-pdf-panel" role="tabpanel" aria-labelledby="draft-pdf-tab" className="min-w-0">
                   <p className="mb-3 text-xs text-[var(--color-mute)]">Court-profile rules are unverified for filing. Lawyer review is required.</p>
-                  <DraftPdfPreview url={pdfArtifact.url} error={pdfArtifact.error} retry={pdfArtifact.retry} />
+                  <DraftPdfPreview url={pdfArtifact.url} file={pdfArtifact.file} error={pdfArtifact.error} retry={pdfArtifact.retry} />
                 </div>
               ) : (
                 <div id="draft-text-panel" role="tabpanel" aria-labelledby="draft-text-tab"><pre

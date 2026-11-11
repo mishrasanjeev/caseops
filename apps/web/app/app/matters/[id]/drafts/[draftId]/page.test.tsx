@@ -70,7 +70,7 @@ vi.mock("@/components/drafting/DraftPdfPreview", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/components/drafting/DraftPdfPreview")>(),
   useDraftPdfArtifact: pdfArtifactMock,
   downloadDraftPdf: downloadPdfMock,
-  DraftPdfPreview: ({ url }: { url: string | null }) => <div data-testid="real-pdf-preview" data-url={url} />,
+  DraftPdfPreview: ({ url, file }: { url: string | null; file: Blob | null }) => <div data-testid="real-pdf-preview" data-url={url} data-file-type={file?.type} />,
 }));
 
 vi.mock("@/components/drafting/FilingChecklistCard", () => ({
@@ -134,7 +134,7 @@ const BASE_DRAFT = {
 
 describe("MatterDraftDetailPage", () => {
   beforeEach(() => {
-    pdfArtifactMock.mockReset().mockImplementation((source) => ({ url: source ? "blob:approved-pdf" : null, error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false }));
+    pdfArtifactMock.mockReset().mockImplementation((source) => ({ url: source ? "blob:approved-pdf" : null, file: source ? new Blob(["%PDF-synthetic"], { type: "application/pdf" }) : null, error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false }));
     downloadPdfMock.mockReset();
     approveDraftMock.mockReset();
     draftFilingBundleUrlMock.mockReset();
@@ -470,6 +470,7 @@ describe("MatterDraftDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
     expect(screen.queryByTestId("draft-body-readonly")).not.toBeInTheDocument();
     expect(screen.getByTestId("real-pdf-preview")).toHaveAttribute("data-url", "blob:approved-pdf");
+    expect(screen.getByTestId("real-pdf-preview")).toHaveAttribute("data-file-type", "application/pdf");
     expect(screen.getByText(/Court-profile rules are unverified/)).toBeVisible();
     await userEvent.click(screen.getByTestId("draft-download-pdf"));
     expect(downloadPdfMock).toHaveBeenCalledWith("blob:approved-pdf", BASE_DRAFT.title, 1);

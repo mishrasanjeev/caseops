@@ -33,6 +33,7 @@ describe("BUG001 revision-bound PDF bytes", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include", cache: "no-store", headers: { Accept: "application/pdf" } });
     expect(await (create.mock.calls[0] as unknown as [Blob])[0].text()).toBe("%PDF-synthetic");
+    expect(hook.result.current.file).toBe((create.mock.calls[0] as unknown as [Blob])[0]);
     hook.unmount();
     expect(revoke).toHaveBeenCalledWith("blob:approved-pdf");
   });
@@ -46,6 +47,7 @@ describe("BUG001 revision-bound PDF bytes", () => {
     hook.rerender({ source: change === "edit" ? null : `https://api.test/export.pdf?version_id=${change === "version" ? "v2" : "v1"}${change === "profile" ? "&court_profile=generic" : ""}`,
       review: change === "review" ? "draft:true" : "approved:false" });
     expect(hook.result.current.url).toBeNull();
+    expect(hook.result.current.file).toBeNull();
     expect(revoke).toHaveBeenCalledWith("blob:approved-pdf");
   });
 

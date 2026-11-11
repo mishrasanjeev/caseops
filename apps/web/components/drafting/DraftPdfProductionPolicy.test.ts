@@ -1,7 +1,7 @@
-import { Blob } from "node:buffer";
+import { Blob as NodeBlob } from "node:buffer";
 import { createHash, webcrypto } from "node:crypto";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { allowedProductionDraftRead, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings, reportedDraftTarget } from "../../../../tests/e2e/support/draft_pdf_production_policy_20261111";
 
@@ -65,15 +65,22 @@ describe("BUG001 production-only read boundary", () => {
 });
 
 describe("BUG001 memory-only download proof", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Blob", NodeBlob);
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL = vi.fn(() => "blob:https://caseops.ai/synthetic");
+      static revokeObjectURL = vi.fn();
+    });
+  });
   it("observes the real anchor handoff, prevents native saving, and retains only digest metadata", async () => {
-    const bytes = new Blob(["%PDF-synthetic-unit-bytes"]);
+    const bytes = new Blob(["%PDF-synthetic-unit-bytes"], { type: "application/pdf" });
     vi.stubGlobal("crypto", webcrypto);
-    const fetch = vi.fn().mockResolvedValue({ arrayBuffer: () => bytes.arrayBuffer() });
+    const fetch = vi.fn().mockRejectedValue(new Error("CSP forbids blob URL fetches"));
     vi.stubGlobal("fetch", fetch);
     const cleanup = capturePdfDownloadsInMemory();
     try {
       const anchor = document.createElement("a");
-      anchor.href = "blob:https://caseops.ai/synthetic";
+      anchor.href = URL.createObjectURL(bytes);
       anchor.download = "synthetic.pdf";
       document.body.append(anchor);
       const event = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -81,7 +88,7 @@ describe("BUG001 memory-only download proof", () => {
       expect(event.defaultPrevented).toBe(true);
       const expected = createHash("sha256").update(Buffer.from(await bytes.arrayBuffer())).digest("hex");
       await vi.waitFor(() => expect((window as unknown as { __bug001Download: object }).__bug001Download).toEqual({ count: 1, bytes: bytes.size, hash: expected, invalid: false }));
-      expect(fetch).toHaveBeenCalledWith(anchor.href);
+      expect(fetch).not.toHaveBeenCalled();
       anchor.remove();
     } finally { cleanup(); }
   });
@@ -97,6 +104,22 @@ describe("BUG001 memory-only download proof", () => {
       expect(anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(false);
       expect(fetch).not.toHaveBeenCalled();
       expect((window as unknown as { __bug001Download: { invalid: boolean } }).__bug001Download.invalid).toBe(true);
+      anchor.remove();
+    } finally { cleanup(); }
+  });
+  it("rejects a revoked Blob identity without attempting a CSP-blocked fetch fallback", () => {
+    const fetch = vi.fn().mockRejectedValue(new Error("CSP forbids blob URL fetches"));
+    vi.stubGlobal("fetch", fetch);
+    const cleanup = capturePdfDownloadsInMemory();
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(new Blob(["%PDF-synthetic"], { type: "application/pdf" }));
+      URL.revokeObjectURL(anchor.href);
+      anchor.download = "synthetic.pdf";
+      document.body.append(anchor);
+      expect(anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(false);
+      expect((window as unknown as { __bug001Download: { invalid: boolean } }).__bug001Download.invalid).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
       anchor.remove();
     } finally { cleanup(); }
   });

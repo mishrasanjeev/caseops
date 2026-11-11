@@ -87,7 +87,8 @@ def test_pdf_api_pins_persisted_version_and_preserves_gates(client, monkeypatch)
     monkeypatch.setattr("caseops_api.services.drafting.build_provider", no_model)
     token = str(bootstrap_company(client)["access_token"])
     headers = auth_headers(token)
-    matter_id = _create_matter(client, token, "SYNTHETIC-B5-PDF")
+    matter_code = "SYNTHETIC-B5-PDF"
+    matter_id = _create_matter(client, token, matter_code)
     created = _create_draft(client, token, matter_id)
     with get_session_factory()() as session:
         draft = session.get(Draft, created["id"])

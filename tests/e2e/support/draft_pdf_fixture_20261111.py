@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -42,7 +43,9 @@ def main():
             or url.password
         ):
             raise ValueError("Loopback HTTP fixture only")
-    for key in ("run", "company_id", "membership_id", "matter_id", "draft_id"):
+    if not re.fullmatch(r"\d{8}-\d{6}-[0-9a-f]{6}", data["run"]):
+        raise ValueError("Canonical synthetic run ID required")
+    for key in ("company_id", "membership_id", "matter_id", "draft_id"):
         UUID(data[key])
     if (
         os.environ.get("CASEOPS_ENV") != "e2e"

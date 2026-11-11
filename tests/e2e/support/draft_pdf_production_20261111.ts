@@ -14,7 +14,7 @@ const fingerprint = (draft: Draft) => hash(JSON.stringify(draft));
 const mediaOff = (value: unknown) => value === "off";
 
 export async function productionDraftPdfJourney(browser: Browser, baseURL: string, info: TestInfo, phone: boolean) {
-  let stage = "configuration", failure: string | undefined;
+  let failure: string | undefined;
   let parityUnverified = false;
   const settings = productionDraftSettings(baseURL, process.env);
   expect(info.config.workers, "Production mutation boundaries are serialized").toBe(1);
@@ -62,8 +62,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     return route.continue();
   });
   page.on("download", () => { nativeDownloads++; });
+  let stage = "release-before-login";
   try {
-    stage = "release-before-login";
     await release();
     stage = "reporter-login";
     const listPath = `/app/matters/${settings.matterId}/drafts`;

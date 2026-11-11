@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -7,6 +7,7 @@ import { devices, expect, request, test, type APIRequestContext } from "@playwri
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { localTransportHeaders } from "./support/cost-controls";
+import { runId } from "./support/run-id";
 import { productionDraftPdfJourney } from "./support/draft_pdf_production_20261111";
 import { assertDraftPdfRender } from "./support/draft_pdf_render_proof_20261111";
 import type { DraftPdfProfile } from "./support/draft_pdf_oracle_20261111";
@@ -29,7 +30,7 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
     const url = new URL(value);
     return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
   })) throw new Error("This synthetic fixture is strictly loopback-only.");
-  const run = randomUUID(), slug = `b5draft-${run}`, email = `${slug}@example.com`, password = `Synthetic!${run}aA9`;
+  const run = runId(), slug = `b5draft-${run}`, email = `${slug}@example.com`, password = `Synthetic!${run}aA9`;
   const api = await request.newContext({ extraHTTPHeaders: localTransportHeaders(apiBaseUrl) });
   const context = await browser.newContext({ ...(phone ? devices["Pixel 5"] : { viewport: { width: 1280, height: 1000 } }),
     baseURL, extraHTTPHeaders: localTransportHeaders(baseURL) });

@@ -7,7 +7,7 @@ import { apiBlobDataRequest } from "@/lib/api/client";
 
 const PdfPages = dynamic(() => import("./DraftPdfPages"), { ssr: false });
 
-type Artifact = { identity: string; url: string; digest: string };
+type Artifact = { identity: string; url: string; digest: string; file: Blob };
 type Owner = { identity: string; controller: AbortController; artifact: Artifact | null; validating: boolean };
 
 async function readPdf(source: string, signal: AbortSignal) {
@@ -50,7 +50,8 @@ export function useDraftPdfArtifact(source: string | null, reviewIdentity: strin
     void readPdf(source, owner.controller.signal).then(async (bytes) => {
       const hash = await digest(bytes);
       if (owner.controller.signal.aborted || active.current !== owner || currentIdentity.current !== owner.identity) return;
-      owner.artifact = { identity, url: URL.createObjectURL(new Blob([bytes], { type: "application/pdf" })), digest: hash };
+      const file = new Blob([bytes], { type: "application/pdf" });
+      owner.artifact = { identity, url: URL.createObjectURL(file), digest: hash, file };
       setArtifact(owner.artifact);
     }).catch((error: unknown) => {
       if (!owner.controller.signal.aborted) setFailure({ identity,
@@ -65,6 +66,7 @@ export function useDraftPdfArtifact(source: string | null, reviewIdentity: strin
 
   return {
     url: artifact?.identity === identity ? artifact.url : null,
+    file: artifact?.identity === identity ? artifact.file : null,
     error: failure?.identity === identity ? failure.message : null,
     validating,
     revalidate: async () => {
@@ -93,14 +95,14 @@ export function useDraftPdfArtifact(source: string | null, reviewIdentity: strin
   };
 }
 
-export function DraftPdfPreview({ url, error, retry }: {
-  url: string | null; error: string | null; retry: () => void;
+export function DraftPdfPreview({ url, file, error, retry }: {
+  url: string | null; file: Blob | null; error: string | null; retry: () => void;
 }) {
   if (error) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
     <p>{error}</p><button type="button" className="underline" onClick={retry}>Retry PDF preview</button>
   </div>;
-  if (!url) return <p role="status" className="text-sm">Loading PDF preview...</p>;
-  return <PdfPages key={url} url={url} />;
+  if (!url || !file) return <p role="status" className="text-sm">Loading PDF preview...</p>;
+  return <PdfPages key={url} file={file} />;
 }
 
 export function downloadDraftPdf(url: string, title: string, revision: number) {

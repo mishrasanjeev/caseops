@@ -62,22 +62,38 @@ export function citationReviewExportGuard(status: number, problem: unknown, draf
 export function capturePdfDownloadsInMemory() {
   const state = window as unknown as { __bug001Download: { count: number; hash: string | null; bytes: number; invalid: boolean } };
   state.__bug001Download = { count: 0, hash: null, bytes: 0, invalid: false };
+  const blobs = new Map<string, Blob>();
+  const create = URL.createObjectURL, revoke = URL.revokeObjectURL;
+  const remember = (value: Blob | MediaSource) => {
+    const url = create.call(URL, value);
+    if (value instanceof Blob) blobs.set(url, value);
+    return url;
+  };
+  const forget = (url: string) => { blobs.delete(url); revoke.call(URL, url); };
+  URL.createObjectURL = remember;
+  URL.revokeObjectURL = forget;
   const capture = (event: MouseEvent) => {
     const anchor = event.target instanceof Element ? event.target.closest("a[download]") as HTMLAnchorElement | null : null;
     if (!anchor) return;
     event.preventDefault();
     state.__bug001Download.count++;
     state.__bug001Download.hash = null;
-    if (!anchor.href.startsWith("blob:") || !anchor.download.endsWith(".pdf")) {
+    const file = blobs.get(anchor.href);
+    if (!anchor.href.startsWith("blob:") || !anchor.download.endsWith(".pdf") || !file || file.type !== "application/pdf") {
       state.__bug001Download.invalid = true;
       return;
     }
-    void fetch(anchor.href).then(response => response.arrayBuffer()).then(async bytes => {
+    void file.arrayBuffer().then(async bytes => {
       const digest = await crypto.subtle.digest("SHA-256", bytes);
       state.__bug001Download.bytes = bytes.byteLength;
       state.__bug001Download.hash = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
     }).catch(() => { state.__bug001Download.invalid = true; });
   };
   document.addEventListener("click", capture, true);
-  return () => document.removeEventListener("click", capture, true);
+  return () => {
+    document.removeEventListener("click", capture, true);
+    if (URL.createObjectURL === remember) URL.createObjectURL = create;
+    if (URL.revokeObjectURL === forget) URL.revokeObjectURL = revoke;
+    blobs.clear();
+  };
 }
