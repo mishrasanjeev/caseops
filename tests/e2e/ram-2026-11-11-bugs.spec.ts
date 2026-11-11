@@ -140,7 +140,7 @@ for (const phone of [false, true]) {
       await dialog.getByLabel("Practice area", { exact: true }).fill("Civil");
       await dialog.getByLabel("Client name", { exact: true }).fill("QA Client");
       await release();
-      const matterSaved = responseFor("/api/matters");
+      const matterSaved = responseFor("/api/matters/");
       await dialog.getByRole("button", { name: "Create matter", exact: true }).click();
       const matter = await json<CreatedMatter>(await matterSaved, "UI-created synthetic matter");
       matterId = matter.id;
