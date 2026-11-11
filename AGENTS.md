@@ -4067,6 +4067,9 @@ requirements when using the fallback.
   consumer, including Python CLI negative controls, not just Vitest manifests.
   Reconcile the exact added identities and complete consumer suites; retain
   literal contract/version assertions and missing/older-version refusals.
+  New production partitions must also join trusted-checkout and maintenance-
+  resume role inventories; a green final writer cannot substitute for a missing
+  or failed role. Retain historical counts separately from current additions.
 - A cross-tenant Bearer regression must not reuse a higher-priority auth
   cookie left by another fixture actor. Clear the owned cookie jar after
   bootstrap/login, verify the effective principal before the denial, and
@@ -4104,3 +4107,8 @@ requirements when using the fallback.
   main at native group boundaries. A healthy checkout can keep testing a
   superseded tree for hours. Preserve its partial evidence and resolve any
   concurrent branch work without force-pushing; never transfer a pass.
+- Windows fixture roots must leave space for real tenant/document UUID paths.
+  Check that a fresh short basetemp's parent exists before launching pytest;
+  retain path/setup failures rather than changing product storage or skipping
+  attachment acceptance. An anonymous HTTP probe must clear session cookies,
+  not merely omit its Bearer header.

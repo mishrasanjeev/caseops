@@ -125,6 +125,19 @@ and audit events before changing those controls.
     preserve each independent negative check and include every uploaded input
     in the pre-cloud dirty-source fence. A green local build with extra working
     files cannot prove the production upload closure.
+13. **A new production role changes every release consumer.** Hosted native
+    shards exposed stale current-inventory assertions in evidence, trusted-
+    checkout and private-maintenance-resume tests. Preserve the old774-case
+    baseline, reconcile the eight actual additions and require the new role
+    in the source resume guard as well as the final writer. Unknown, missing,
+    failed and duplicated roles must continue to reject certification.
+14. **A verification fixture is not automatically a product reproduction.**
+    The route-anchor rerun first retained four Windows file-replace errors
+    under this chat's overlong temp root and one anonymous assertion carrying
+    a bootstrap cookie. Its next short-root attempt lacked a parent and
+    retained24 setup errors. Corrected complete03 passes all35 cases/all105
+    phases without changing storage or authentication behavior. Keep both
+    failed attempts and the actual endpoint positive/tenant/401 assertions.
 
 ## Release And Regression Gate
 
