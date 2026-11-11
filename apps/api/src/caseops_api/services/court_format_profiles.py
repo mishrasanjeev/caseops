@@ -1,33 +1,17 @@
-"""PG-005 Sprint 3 (2026-05-01) — court-specific PDF format profiles.
+"""Legacy court-labelled layout presets, not verified filing requirements.
 
-Each profile captures the page-layout rules a fee-earner needs for
-filing-grade PDF output: margins, font sizing, line spacing, page-
-numbering style, and the court header line on the first page.
-
-Why not WeasyPrint / HTML+CSS:
-
-- ``fpdf2`` is already a dep (used by ``services.matter_summary_export``).
-- WeasyPrint ships native Cairo/Pango/GObject system bindings; adding
-  it would force a Dockerfile rebuild + apt-get install train.
-- Legal pleadings are predominantly text + small tables. fpdf2's
-  programmatic API gives us exact margin / page-number control, which
-  is what court rules actually demand.
-
-Court rules sources (verifiable):
-
-- Supreme Court Rules 2013, Order IV (Form of pleadings).
-- Delhi High Court (Original Side) Rules 2018, Chapter II.
-- Bombay High Court (Original Side) Rules 1980, Rule 50.
-
-When a court rule isn't pinned in our profile, we fall back to the
-generic profile (1" margins, 11pt, 1.2 line spacing). A senior advocate
-reviewing the output can override the profile via the export-route
-query param.
+These presets have no pinned official source bytes, rule edition, effective
+date, document-category applicability or legal-review record. Their numeric
+settings are application defaults, not a certification of current court rules.
+Unknown courts use the generic preset. Lawyer review remains necessary even
+after content approval. A layout digest identifies settings, not legal validity.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
@@ -53,7 +37,7 @@ class CourtRequiredFieldFinding:
 
 @dataclass(frozen=True)
 class CourtFormatProfile:
-    """Programmatic format spec for a court's filing-grade PDF.
+    """Programmatic layout preset for a review PDF.
 
     All units in millimetres unless otherwise noted; fpdf2 takes mm.
     """
@@ -89,6 +73,12 @@ class CourtFormatProfile:
     # Whether cause titles number the parties (SC: numbered; tribunal:
     # often plain).
     cause_title_numbered: bool = True
+
+    @property
+    def layout_digest(self) -> str:
+        return hashlib.sha256(
+            json.dumps(asdict(self), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
 
 
 _COURT_NAME_ALIASES = (

@@ -63,6 +63,13 @@ vi.mock("@/components/drafting/DraftCompareView", () => ({
   DraftCompareView: () => <div data-testid="draft-compare" />,
 }));
 
+const { pdfArtifactMock, downloadPdfMock } = vi.hoisted(() => ({ pdfArtifactMock: vi.fn(), downloadPdfMock: vi.fn() }));
+vi.mock("@/components/drafting/DraftPdfPreview", () => ({
+  useDraftPdfArtifact: pdfArtifactMock,
+  downloadDraftPdf: downloadPdfMock,
+  DraftPdfPreview: ({ url }: { url: string | null }) => <div data-testid="real-pdf-preview" data-url={url} />,
+}));
+
 vi.mock("@/components/drafting/FilingChecklistCard", () => ({
   FilingChecklistCard: ({ courtProfile }: { courtProfile?: string }) => (
     <div
@@ -122,6 +129,8 @@ const BASE_DRAFT = {
 
 describe("MatterDraftDetailPage", () => {
   beforeEach(() => {
+    pdfArtifactMock.mockReset().mockReturnValue({ url: "blob:approved-pdf", error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false });
+    downloadPdfMock.mockReset();
     approveDraftMock.mockReset();
     draftFilingBundleUrlMock.mockReset();
     draftPdfUrlMock.mockReset();
@@ -432,13 +441,29 @@ describe("MatterDraftDetailPage", () => {
       "data-court-profile",
       "supreme_court",
     );
-    expect(screen.getByTestId("draft-download-pdf")).toHaveAttribute(
-      "href",
-      "https://api.test/draft.pdf?court_profile=supreme_court",
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(
+      "https://api.test/draft.pdf?court_profile=supreme_court&version_id=v-1", "approved:false:Bail application",
     );
     expect(screen.getByTestId("draft-download-filing-bundle")).toHaveAttribute(
       "href",
       "https://api.test/bundle.zip?court_profile=supreme_court",
     );
+  });
+
+  it("BUG001 separates draft text from the version-pinned PDF and downloads its exact bytes", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    expect(screen.queryByTestId("real-pdf-preview")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(screen.queryByTestId("draft-body-readonly")).not.toBeInTheDocument();
+    expect(screen.getByTestId("real-pdf-preview")).toHaveAttribute("data-url", "blob:approved-pdf");
+    expect(screen.getByText(/Court-profile rules are unverified/)).toBeVisible();
+    await userEvent.click(screen.getByTestId("draft-download-pdf"));
+    expect(downloadPdfMock).toHaveBeenCalledWith("blob:approved-pdf", BASE_DRAFT.title, 1);
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-1", "approved:false:Bail application");
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
   });
 });

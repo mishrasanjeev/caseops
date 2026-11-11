@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/Card";
 import { DraftCompareView } from "@/components/drafting/DraftCompareView";
 import { FilingChecklistCard } from "@/components/drafting/FilingChecklistCard";
+import { DraftPdfPreview, downloadDraftPdf, useDraftPdfArtifact } from "@/components/drafting/DraftPdfPreview";
 import { DraftFindings, parseDraftSummary } from "@/components/app/DraftFindings";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -192,7 +193,7 @@ function CourtProfileSelector({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="flex min-w-[220px] flex-col gap-1">
+    <div className="flex w-full min-w-0 flex-col gap-1 sm:w-56">
       <label
         htmlFor="court-profile-select"
         className="text-xs font-medium text-[var(--color-mute)]"
@@ -201,7 +202,7 @@ function CourtProfileSelector({
       </label>
       <select
         id="court-profile-select"
-        className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm text-[var(--color-ink)]"
+        className="w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm text-[var(--color-ink)]"
         value={value}
         disabled={loading}
         onChange={(event) => onChange(event.target.value)}
@@ -273,6 +274,7 @@ function DraftBody({
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(currentVersion?.body ?? "");
   const [focusNote, setFocusNote] = useState("");
+  const [bodyView, setBodyView] = useState<"text" | "pdf">("text");
   useEffect(() => {
     setEditBody(currentVersion?.body ?? "");
     setEditing(false);
@@ -299,6 +301,14 @@ function DraftBody({
   const selectedProfile = profilesQuery.data?.find(
     (profile) => profile.key === courtProfileKey,
   );
+  const pdfSource = currentVersion && !editing
+    ? (() => {
+        const url = new URL(draftPdfUrl(matterId, draft.id, exportCourtProfile));
+        url.searchParams.set("version_id", currentVersion.id);
+        return url.toString();
+      })()
+    : null;
+  const pdfArtifact = useDraftPdfArtifact(pdfSource, `${draft.status}:${draft.review_required}:${draft.title}`);
 
   const verifiedCount = currentVersion?.verified_citation_count ?? 0;
 
@@ -418,7 +428,12 @@ function DraftBody({
               </Button>
               <Button
                 variant="outline"
-                href={draftPdfUrl(matterId, draft.id, exportCourtProfile)}
+                disabled={!pdfArtifact.url || editing || pdfArtifact.validating}
+                onClick={async () => {
+                  const url = await pdfArtifact.revalidate();
+                  if (url && currentVersion) downloadDraftPdf(url, draft.title, currentVersion.revision);
+                  else setBodyView("pdf");
+                }}
                 data-testid="draft-download-pdf"
               >
                 <Download className="h-4 w-4" aria-hidden /> Download PDF
@@ -462,8 +477,8 @@ function DraftBody({
         );
       })()}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle as="h2">Draft body</CardTitle>
             <CardDescription>
@@ -471,6 +486,21 @@ function DraftBody({
                 ? `Generated ${new Date(currentVersion.created_at).toLocaleString()}`
                 : "No version yet — generate one to populate the editor."}
             </CardDescription>
+            {currentVersion && !editing ? <div role="tablist" aria-label="Draft view" className="flex flex-wrap gap-2"
+              onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? "text" : event.key === "End" ? "pdf" : bodyView === "text" ? "pdf" : "text";
+                setBodyView(next);
+                document.getElementById(`draft-${next}-tab`)?.focus();
+              }}>
+              <button type="button" role="tab" id="draft-text-tab" aria-controls="draft-text-panel"
+                aria-selected={bodyView === "text"} tabIndex={bodyView === "text" ? 0 : -1} className="px-3 py-2 text-sm underline-offset-4 aria-selected:underline"
+                onClick={() => setBodyView("text")}>Draft text</button>
+              <button type="button" role="tab" id="draft-pdf-tab" aria-controls="draft-pdf-panel"
+                aria-selected={bodyView === "pdf"} tabIndex={bodyView === "pdf" ? 0 : -1} className="px-3 py-2 text-sm underline-offset-4 aria-selected:underline"
+                onClick={() => setBodyView("pdf")}>PDF preview</button>
+            </div> : null}
           </CardHeader>
           <CardContent>
             {currentVersion ? (
@@ -530,13 +560,18 @@ function DraftBody({
                     </div>
                   </div>
                 </form>
+              ) : bodyView === "pdf" ? (
+                <div id="draft-pdf-panel" role="tabpanel" aria-labelledby="draft-pdf-tab" className="min-w-0">
+                  <p className="mb-3 text-xs text-[var(--color-mute)]">Court-profile rules are unverified for filing. Lawyer review is required.</p>
+                  <DraftPdfPreview url={pdfArtifact.url} error={pdfArtifact.error} retry={pdfArtifact.retry} />
+                </div>
               ) : (
-                <pre
-                  className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-[var(--color-ink-2)]"
+                <div id="draft-text-panel" role="tabpanel" aria-labelledby="draft-text-tab"><pre
+                  className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-[var(--color-ink-2)]"
                   data-testid="draft-body-readonly"
                 >
                   {currentVersion.body}
-                </pre>
+                </pre></div>
               )
             ) : (
               <p className="text-sm text-[var(--color-mute)]">
