@@ -69,7 +69,7 @@ jobs:
             $stream.Position = 0
             $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
             if ($actual -ne $expected -or $stream.Length -ne 4043346) { throw 'NPM_ARCHIVE_CHANGED' }
-            Write-Output 'Protected only the held, digest-pinned public npm archive; installer ACL checks remain mandatory.'
+            Write-Output 'Protected only the held, digest-pinned public installer archive; installer ACL checks remain mandatory.'
           } finally { $hash.Dispose(); $stream.Dispose() }
       - name: Install this platform's exact locked mobile graph
         env:
