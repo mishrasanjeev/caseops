@@ -413,8 +413,17 @@ def test_actual_configs_discover_all_four_b5_files_with_disjoint_desktop_mobile_
 ):
     cli = Path(
         os.environ.get("CASEOPS_TEST_PLAYWRIGHT_CLI", ROOT / "node_modules/@playwright/test/cli.js")
-    )
+    ).resolve()
     assert cli.is_file(), "Current source metadata needs an installed Playwright runtime."
+    runtime_index = cli.with_name("index.js")
+    assert runtime_index.is_file()
+    # Ancestor worktrees can have a different Playwright copy ahead of NODE_PATH.
+    package = tmp_path / "node_modules/@playwright/test"
+    package.mkdir(parents=True)
+    (package / "index.js").write_text(
+        f"module.exports = require({json.dumps(str(runtime_index))});\n",
+        encoding="utf-8",
+    )
     node = shutil.which("node")
     assert node
     for filename in (

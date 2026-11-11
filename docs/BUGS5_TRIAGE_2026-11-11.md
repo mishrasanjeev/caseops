@@ -77,6 +77,25 @@ and audit events before changing those controls.
 6. **Model output shape was confused with quality.** Citations, provenance,
    jurisdiction, legal relevance and independent benchmark review are separate
    from HTTP200, seven clauses or valid JSON. Do not train away missing evidence.
+7. **First candidate tests still missed security-sensitive interleavings.**
+   Independent review found that message facts could change after preview,
+   contract locks could conflict with lifecycle actor locks, duplicate viewer
+   controls could reuse authorized bytes after revocation, and body reads could
+   outlive abort/deadline handling. A green mocked or sequential path would not
+   detect these. These candidates are not released or accepted; repair and
+   deterministic race/revocation tests are mandatory before the full gate.
+8. **A new convenience path contradicted an old safety contract.** Eager PDF
+   acquisition on a passive draft view conflicts with the retained production
+   journey's no-export fence. Existing dated journeys are part of integration
+   acceptance, not obsolete tests to weaken. Explicit PDF intent, authenticated
+   recovery and exact source-byte proof must remain separate from passive reads.
+9. **Test setup failures wasted acceptance time.** The first PostgreSQL attempt
+   never reached assertions because its internal Docker network did not expose
+   the requested loopback port; the second had an absent temporary parent path.
+   Preserve both failures, positively probe the bounded database connection and
+   storage root before launch, and rerun the complete intended inventory. The
+   five original cases now pass in attempt03, but do not cover the newly found
+   lifecycle overlap until the replacement tests execute.
 
 ## Release And Regression Gate
 
