@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -565,6 +565,146 @@ describe("MatterStatutesPage", () => {
     expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
     fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Replacement provision" }));
     expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
+  it("keeps a cold paused section read disabled and resumes it after reconnect", async () => {
+    recoveryCatalog();
+    const response = deferred<{ sections: Array<{ id: string; section_number: string }> }>();
+    listStatuteSectionsMock.mockReturnValue(response.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["matter", "m-1", "statute-references"], { matter_id: "m-1", references: [] });
+    client.setQueryData(["statutes", "list"], { statutes: [
+      { id: "first", short_name: "First", long_name: "Synthetic first Act", section_count: 1 },
+    ] });
+    const previousOnline = onlineManager.isOnline();
+    const user = userEvent.setup();
+    let view: ReturnType<typeof render> | undefined;
+    try {
+      onlineManager.setOnline(false);
+      view = render(withClient(<MatterStatutesPage />, client));
+      await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+      fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+      await waitFor(() => expect(client.getQueryState(["statutes", "first", "sections"])).toMatchObject({
+        status: "pending", fetchStatus: "paused", data: undefined,
+      }));
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled());
+      expect(screen.getByRole("combobox", { name: "Section" })).toHaveTextContent("Waiting for connection");
+      expect(screen.getByTestId("matter-statute-sections-paused")).toHaveTextContent("Reconnect");
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      expect(screen.queryByTestId("matter-statute-section-coverage")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("matter-statute-sections-error")).not.toBeInTheDocument();
+      expect(listStatuteSectionsMock).not.toHaveBeenCalled();
+      await act(async () => onlineManager.setOnline(true));
+      await waitFor(() => expect(listStatuteSectionsMock).toHaveBeenCalledExactlyOnceWith("first"));
+      expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+      await act(async () => response.resolve({ sections: [{ id: "fresh", section_number: "Fresh online provision" }] }));
+      fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Fresh online provision" }));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+      expect(screen.queryByTestId("matter-statute-sections-paused")).not.toBeInTheDocument();
+      expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
+    } finally {
+      view?.unmount();
+      client.clear();
+      onlineManager.setOnline(previousOnline);
+    }
+  });
+
+  it("does not admit cached sections while a refresh is paused offline", async () => {
+    recoveryCatalog();
+    const original = { sections: [{ id: "old", section_number: "Cached provision" }] };
+    const response = deferred<typeof original>();
+    listStatuteSectionsMock.mockResolvedValueOnce(original).mockReturnValueOnce(response.promise);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const previousOnline = onlineManager.isOnline();
+    const user = userEvent.setup();
+    let view: ReturnType<typeof render> | undefined;
+    let refresh: Promise<void> | undefined;
+    try {
+      onlineManager.setOnline(true);
+      view = render(withClient(<MatterStatutesPage />, client));
+      await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+      fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+      fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Cached provision" }));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+      await act(async () => {
+        onlineManager.setOnline(false);
+        refresh = client.invalidateQueries({ queryKey: ["statutes", "first", "sections"], exact: true });
+      });
+      await waitFor(() => expect(client.getQueryState(["statutes", "first", "sections"])).toMatchObject({
+        status: "success", fetchStatus: "paused", data: original,
+      }));
+      await waitFor(() => expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled());
+      expect(screen.getByRole("combobox", { name: "Section" })).toBeDisabled();
+      expect(screen.getByTestId("matter-statute-sections-paused")).toHaveTextContent("Reconnect");
+      expect(screen.queryByTestId("matter-statute-section-coverage")).not.toBeInTheDocument();
+      expect(listStatuteSectionsMock).toHaveBeenCalledTimes(1);
+      await act(async () => onlineManager.setOnline(true));
+      await waitFor(() => expect(listStatuteSectionsMock).toHaveBeenCalledTimes(2));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      await act(async () => {
+        response.resolve({ sections: [{ id: "fresh", section_number: "Current online provision" }] });
+        await refresh;
+      });
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Section" })).toBeEnabled());
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Current online provision" }));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+      expect(screen.queryByTestId("matter-statute-sections-paused")).not.toBeInTheDocument();
+      expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
+    } finally {
+      view?.unmount();
+      client.clear();
+      onlineManager.setOnline(previousOnline);
+      await refresh;
+    }
+  });
+
+  it("blocks admission while the cached Act catalog is paused and resumes after reconnect", async () => {
+    recoveryCatalog();
+    const catalog = { statutes: [
+      { id: "first", short_name: "First", long_name: "Synthetic first Act", section_count: 1 },
+    ] };
+    const response = deferred<typeof catalog>();
+    listStatutesMock.mockResolvedValueOnce(catalog).mockReturnValueOnce(response.promise);
+    listStatuteSectionsMock.mockResolvedValue({ sections: [{ id: "verified", section_number: "Verified provision" }] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const previousOnline = onlineManager.isOnline();
+    const user = userEvent.setup();
+    let view: ReturnType<typeof render> | undefined;
+    let refresh: Promise<void> | undefined;
+    try {
+      onlineManager.setOnline(true);
+      view = render(withClient(<MatterStatutesPage />, client));
+      await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+      fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+      fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: "Verified provision" }));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+      await act(async () => {
+        onlineManager.setOnline(false);
+        refresh = client.invalidateQueries({ queryKey: ["statutes", "list"], exact: true });
+      });
+      await waitFor(() => expect(client.getQueryState(["statutes", "list"])).toMatchObject({
+        status: "success", fetchStatus: "paused", data: catalog,
+      }));
+      await waitFor(() => expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled());
+      expect(screen.getByRole("combobox", { name: "Act" })).toBeDisabled();
+      expect(screen.getByTestId("matter-statute-catalog-paused")).toHaveTextContent("Reconnect");
+      expect(screen.queryByTestId("matter-statute-no-selectable-acts")).not.toBeInTheDocument();
+      expect(listStatutesMock).toHaveBeenCalledTimes(1);
+      await act(async () => onlineManager.setOnline(true));
+      await waitFor(() => expect(listStatutesMock).toHaveBeenCalledTimes(2));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      await act(async () => { response.resolve(catalog); await refresh; });
+      await waitFor(() => expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled());
+      expect(screen.queryByTestId("matter-statute-catalog-paused")).not.toBeInTheDocument();
+      expect(listStatuteSectionsMock).toHaveBeenCalledExactlyOnceWith("first");
+      expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
+    } finally {
+      view?.unmount();
+      client.clear();
+      onlineManager.setOnline(previousOnline);
+      await refresh;
+    }
   });
 
   it("distinguishes a catalog load failure from a genuinely empty verified catalog", async () => {

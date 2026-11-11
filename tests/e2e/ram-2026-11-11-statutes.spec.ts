@@ -178,6 +178,7 @@ for (const phone of [false, true]) {
       expect((await denied.json()).type).toBe("statute_section_not_verified");
       let failCatalog = true;
       let failSections = true;
+      let failedCatalogReads = 0;
       let failedSectionReads = 0;
       let recoveredSectionReads = 0;
       if (local) {
@@ -185,14 +186,16 @@ for (const phone of [false, true]) {
         const unavailable = { status: 503, contentType: "application/problem+json", body: JSON.stringify({
           type: "about:blank", title: "Local fixture unavailable", status: 503, detail: "Deterministic loopback read failure.",
         }) };
-        await page.route(url => url.origin === api.origin && url.pathname === "/api/statutes", async route => {
-          if (failCatalog) await route.fulfill(unavailable);
-          else await route.continue();
+        await page.route(url => url.origin === api.origin && url.pathname === "/api/statutes/", async route => {
+          if (failCatalog && route.request().method() === "GET") {
+            await route.fulfill(unavailable);
+            failedCatalogReads += 1;
+          } else await route.continue();
         });
         await page.route(url => url.origin === api.origin && url.pathname === `/api/statutes/${target.id}/sections`, async route => {
-          if (failSections) {
-            failedSectionReads += 1;
+          if (failSections && route.request().method() === "GET") {
             await route.fulfill(unavailable);
+            failedSectionReads += 1;
           } else {
             recoveredSectionReads += 1;
             await route.continue();
@@ -202,6 +205,7 @@ for (const phone of [false, true]) {
       await page.goto(`${web.origin}/app/matters/${matter.id}/statutes`);
       await page.getByTestId("matter-statute-add-trigger").click();
       if (local) {
+        await expect.poll(() => failedCatalogReads, "The canonical catalog GET must actually be intercepted").toBeGreaterThan(0);
         await expect(page.getByTestId("matter-statute-catalog-error")).toBeVisible();
         await expect(page.getByTestId("matter-statute-act-select")).toBeDisabled();
         await expect(page.getByTestId("matter-statute-no-selectable-acts")).toHaveCount(0);
@@ -224,6 +228,7 @@ for (const phone of [false, true]) {
       if (local) expect((await act.textContent())!.length).toBeGreaterThan(100);
       await keyboardChoose(page, "Act", target.id);
       if (local) {
+        await expect.poll(() => failedSectionReads, "The selected Act's section GET must actually be intercepted").toBeGreaterThan(0);
         await expect(page.getByTestId("matter-statute-sections-error")).toBeVisible();
         await expect(page.getByTestId("matter-statute-section-select")).toBeDisabled();
         await expect(page.getByTestId("matter-statute-add-submit")).toBeDisabled();

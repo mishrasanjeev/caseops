@@ -241,13 +241,25 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
     (statute) => statute.section_count > 0,
   );
   const allStatutes = statutesQuery.data?.statutes ?? [];
-  const sectionsReady = sectionsQuery.isSuccess && !sectionsQuery.isFetching;
+  const catalogReady = statutesQuery.isSuccess && statutesQuery.fetchStatus === "idle";
+  const sectionsReady = sectionsQuery.isSuccess && sectionsQuery.fetchStatus === "idle";
   const sections = sectionsReady ? sectionsQuery.data.sections : [];
   const selectableSectionIds = new Set(sections.map((section) => section.id));
   const catalogSections = sectionsReady ? sectionsQuery.data.catalog_sections ?? sections : [];
-  const canAttach = statutesQuery.isSuccess && !statutesQuery.isFetching
+  const canAttach = catalogReady
     && selectableStatutes.some((statute) => statute.id === statuteId)
     && selectableSectionIds.has(sectionId);
+  const sectionPlaceholder = !statuteId
+    ? "Select an Act first"
+    : sectionsQuery.isPaused
+      ? "Waiting for connection…"
+      : sectionsQuery.isPending || sectionsQuery.isFetching
+        ? "Loading sections…"
+        : sectionsQuery.isError
+          ? "Could not load verified sections"
+          : sections.length === 0
+            ? "No verified sections available"
+            : "Select a section…";
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -293,20 +305,22 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 setStatuteId(value);
                 setSectionId("");
               }}
-              disabled={statutesQuery.isPending || statutesQuery.isError}
+              disabled={!catalogReady}
             >
               <SelectTrigger
                 id={`${fieldId}-act`}
                 data-testid="matter-statute-act-select"
               >
                 <SelectValue
-                  placeholder={statutesQuery.isPending
-                    ? "Loading verified Acts…"
-                    : statutesQuery.isError
-                      ? "Could not load verified Acts"
-                      : selectableStatutes.length === 0
-                        ? "No verified Acts available"
-                        : "Select an Act…"}
+                  placeholder={statutesQuery.isPaused
+                    ? "Waiting for connection…"
+                    : statutesQuery.isPending || statutesQuery.isFetching
+                      ? "Loading verified Acts…"
+                      : statutesQuery.isError
+                        ? "Could not load verified Acts"
+                        : selectableStatutes.length === 0
+                          ? "No verified Acts available"
+                          : "Select an Act…"}
                 />
               </SelectTrigger>
               <SelectContent aria-label="Act">
@@ -327,7 +341,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 ))}
               </SelectContent>
             </Select>
-            {!statutesQuery.isPending && !statutesQuery.isError ? (
+            {catalogReady ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
                 data-testid="matter-statute-catalog-coverage"
@@ -339,7 +353,11 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 visible but disabled.
               </span>
             ) : null}
-            {statutesQuery.isError ? (
+            {statutesQuery.isPaused ? (
+              <span role="status" className="text-xs text-[var(--color-mute)]" data-testid="matter-statute-catalog-paused">
+                The Act catalog is waiting for a connection. Reconnect to continue.
+              </span>
+            ) : statutesQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-danger-700)]"
                 data-testid="matter-statute-catalog-error"
@@ -347,7 +365,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 The verified statute catalog could not be loaded. Retry by
                 reopening this dialog.
               </span>
-            ) : !statutesQuery.isPending && selectableStatutes.length === 0 ? (
+            ) : catalogReady && selectableStatutes.length === 0 ? (
               <span
                 className="text-xs text-[var(--color-warn-700)]"
                 data-testid="matter-statute-no-selectable-acts"
@@ -362,32 +380,20 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
               Section
             </label>
             <Select
-              value={sectionId}
+              value={sectionsReady ? sectionId : ""}
               onValueChange={setSectionId}
-              disabled={!statuteId || sectionsQuery.isFetching || sectionsQuery.isError}
+              disabled={!statuteId || !sectionsReady}
             >
               <SelectTrigger
                 id={`${fieldId}-section`}
                 data-testid="matter-statute-section-select"
               >
-                <SelectValue
-                  placeholder={!statuteId
-                    ? "Select an Act first"
-                    : sectionsQuery.isFetching
-                      ? "Loading sections…"
-                      : sectionsQuery.isError
-                        ? "Could not load verified sections"
-                        : sections.length === 0
-                          ? "No verified sections available"
-                          : "Select a section…"}
-                />
+                <SelectValue placeholder={sectionPlaceholder} />
               </SelectTrigger>
               <SelectContent aria-label="Section">
                 {catalogSections.length === 0 ? (
                   <SelectEmpty>
-                    {sectionsQuery.isError
-                      ? "Could not load verified sections"
-                      : "No verified sections available"}
+                    {sectionPlaceholder}
                   </SelectEmpty>
                 ) : null}
                 {catalogSections.map((sec) => (
@@ -421,7 +427,11 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 through the UI or API.
               </span>
             ) : null}
-            {sectionsQuery.isError ? (
+            {statuteId && sectionsQuery.isPaused ? (
+              <span role="status" className="text-xs text-[var(--color-mute)]" data-testid="matter-statute-sections-paused">
+                Sections are waiting for a connection. Reconnect to continue.
+              </span>
+            ) : sectionsQuery.isError ? (
               <div className="flex min-w-0 flex-col items-start gap-2">
                 <span
                   role="alert"
@@ -434,7 +444,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={sectionsQuery.isFetching}
+                  disabled={sectionsQuery.fetchStatus !== "idle"}
                   onClick={() => {
                     setSectionId("");
                     void sectionsQuery.refetch({ cancelRefetch: false });
