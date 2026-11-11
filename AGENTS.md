@@ -4112,3 +4112,9 @@ requirements when using the fallback.
   retain path/setup failures rather than changing product storage or skipping
   attachment acceptance. An anonymous HTTP probe must clear session cookies,
   not merely omit its Bearer header.
+- Independent agents may review and implement in parallel, but heavy local
+  suites and startup-budget checks need one coordinated execution window.
+  A failed beforeAll can leave skipped/unexecuted tests with zero failed-test
+  counters. Inspect native suite errors, retain the incomplete inventory and
+  replay it within the original budgets before the complete serialized gate;
+  neither resource overlap nor a later subset pass authorizes certification.
