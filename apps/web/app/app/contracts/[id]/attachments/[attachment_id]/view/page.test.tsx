@@ -3,20 +3,23 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 
-const { workspace, blob } = vi.hoisted(() => ({ workspace: vi.fn(), blob: vi.fn() }));
+const { workspace, blob, previewInput } = vi.hoisted(() => ({ workspace: vi.fn(), blob: vi.fn(), previewInput: vi.fn() }));
 vi.mock("@/lib/api/endpoints", () => ({ fetchContractWorkspace: workspace }));
 vi.mock("@/lib/api/contracts", () => ({ fetchContractAttachmentBlob: blob }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "c1", attachment_id: "a1" }) }));
-vi.mock("next/dynamic", () => ({ default: (_load: unknown) => (props: { filename?: string; url?: string }) => <div data-testid="private-viewer" data-url={props.url}>
+vi.mock("next/dynamic", () => ({ default: (_load: unknown) => (props: { filename?: string; url?: string; file?: Blob }) => {
+  previewInput(props);
+  return <div data-testid="private-viewer" data-url={props.url}>
   {props.filename ? <a href={props.url}>Cached download bypass</a> : null}
-</div> }));
+</div>;
+} }));
 
 import Viewer from "./page";
 import { ApiError } from "@/lib/api/config";
 import { apiBlobDataRequest } from "@/lib/api/client";
 
 beforeEach(() => {
-  workspace.mockReset(); blob.mockReset();
+  workspace.mockReset(); blob.mockReset(); previewInput.mockReset();
   workspace.mockResolvedValue({ attachments: [{ id: "a1", original_filename: "source.pdf", content_type: "application/pdf", size_bytes: 1024, sha256_hex: "a".repeat(64), processing_status: "indexed" }] });
   blob.mockResolvedValue(new Blob(["private original"]));
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:private"), revokeObjectURL: vi.fn() }));
@@ -28,6 +31,7 @@ function setup() {
 it("passes only authenticated local bytes to the PDF viewer and reauthorizes original downloads", async () => {
   const { unmount } = setup();
   expect(await screen.findByTestId("private-viewer")).toHaveAttribute("data-url", "blob:private");
+  expect(previewInput).toHaveBeenLastCalledWith(expect.objectContaining({ file: await blob.mock.results[0].value }));
   expect(blob).toHaveBeenCalledWith("c1", "a1", expect.objectContaining({ sha256_hex: "a".repeat(64) }), expect.any(AbortSignal), true);
   expect(screen.queryByRole("link", { name: "Cached download bypass" })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Download original" }));

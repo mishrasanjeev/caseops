@@ -77,7 +77,7 @@ export default function ContractAttachmentViewerPage() {
         {revoked ? <p role="alert">Document access is no longer available.</p>
           : file.isError ? <QueryErrorState title="Could not preview this document" error={file.error} onRetry={file.refetch} />
           : !file.data || !objectUrl ? <p role="status">Preparing document...</p>
-          : isPdf ? <PDFViewer key={attachmentId} url={objectUrl} className="min-h-0 min-w-0 flex-1" />
+          : isPdf ? <PDFViewer key={attachmentId} url={objectUrl} file={file.data} className="min-h-0 min-w-0 flex-1" />
           : isDocx ? <DocxViewer key={attachmentId} blob={file.data} filename={name} />
           : <p>This file type cannot be previewed inline.</p>}
       </>}
