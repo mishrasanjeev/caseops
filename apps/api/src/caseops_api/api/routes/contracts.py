@@ -16,6 +16,7 @@ from caseops_api.api.dependencies import (
 from caseops_api.schemas.contract_obligation_context import ContractObligationContextPage
 from caseops_api.schemas.contracts import (
     ContractAttachmentMetadataUpdateRequest,
+    ContractAttachmentPreviewRecord,
     ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
@@ -30,6 +31,7 @@ from caseops_api.schemas.contracts import (
     ContractPlaybookRuleCreateRequest,
     ContractPlaybookRuleRecord,
     ContractRecord,
+    ContractTermReviewRequest,
     ContractTermSuggestionCreateRequest,
     ContractTermSuggestionRecord,
     ContractUpdateRequest,
@@ -375,6 +377,7 @@ async def post_current_company_contract_term_suggestion(
 async def accept_current_company_contract_term_suggestion(
     contract_id: str,
     suggestion_id: str,
+    payload: ContractTermReviewRequest,
     context: ContractEditor,
     session: DbSession,
 ) -> ContractTermSuggestionRecord:
@@ -384,6 +387,7 @@ async def accept_current_company_contract_term_suggestion(
         contract_id=contract_id,
         suggestion_id=suggestion_id,
         accepted=True,
+        expected_updated_at=payload.expected_updated_at,
     )
 
 
@@ -617,6 +621,49 @@ async def download_current_company_contract_attachment(
         path=storage_path,
         media_type=attachment.content_type or "application/octet-stream",
         filename=attachment.original_filename,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get(
+    "/{contract_id}/attachments/{attachment_id}/preview",
+    response_model=ContractAttachmentPreviewRecord,
+    summary="Validate a private DOCX for the integrated viewer",
+)
+async def preview_current_company_contract_attachment(
+    contract_id: str,
+    attachment_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> ContractAttachmentPreviewRecord:
+    from pathlib import Path
+    from xml.etree.ElementTree import ParseError
+    from zipfile import BadZipFile
+    from zlib import error as ZlibError
+
+    from fastapi import HTTPException
+
+    from caseops_api.services.matters import _validate_docx_preview_archive
+
+    attachment, path = get_contract_attachment_download(
+        session, context=context, contract_id=contract_id, attachment_id=attachment_id,
+    )
+    if not attachment.original_filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=415, detail="Only DOCX files support this preview check.")
+    if Path(path).stat().st_size > 32 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="This document is too large for inline preview; download it instead.",
+        )
+    try:
+        await run_in_threadpool(_validate_docx_preview_archive, path)
+    except (BadZipFile, ParseError, ValueError, ZlibError, NotImplementedError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="This DOCX could not be rendered safely; download the original instead.",
+        ) from exc
+    return ContractAttachmentPreviewRecord(
+        attachment_id=attachment.id, filename=attachment.original_filename,
     )
 
 

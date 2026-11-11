@@ -84,6 +84,7 @@ def test_ft_lw_021_controlled_contract_type_persists_and_legacy_freeform_survive
         f"/api/contracts/{contract['id']}/metadata",
         headers=auth_headers(token),
         json={
+            "expected_updated_at": contract["updated_at"],
             "contract_type": "Distribution side letter",
             "contract_type_key": "other",
             "contract_type_notes": "Distribution side letter",
@@ -174,6 +175,7 @@ def test_sec_lw_007_term_suggestions_do_not_overwrite_canonical_dates_until_acce
     accept_response = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions/{suggestion['id']}/accept",
         headers=auth_headers(token),
+        json={"expected_updated_at": contract["updated_at"]},
     )
 
     assert accept_response.status_code == 200, accept_response.text
@@ -240,11 +242,13 @@ def test_term_suggestion_terminal_states_are_safe_and_idempotent(
     first_accept = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions/{suggestion_id}/accept",
         headers=auth_headers(token),
+        json={"expected_updated_at": contract["updated_at"]},
     )
     assert first_accept.status_code == 200, first_accept.text
     second_accept = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions/{suggestion_id}/accept",
         headers=auth_headers(token),
+        json={"expected_updated_at": contract["updated_at"]},
     )
     assert second_accept.status_code == 200, second_accept.text
     assert second_accept.json()["status"] == "accepted"
@@ -286,6 +290,7 @@ def test_term_suggestion_terminal_states_are_safe_and_idempotent(
     accept_after_reject = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions/{rejected_id}/accept",
         headers=auth_headers(token),
+        json={"expected_updated_at": contract["updated_at"]},
     )
     assert accept_after_reject.status_code == 409
     current_after_rejected = client.get(
@@ -364,6 +369,7 @@ def test_ungrounded_term_suggestion_cannot_be_canonicalized(
     accept_response = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions/{suggestion_id}/accept",
         headers=auth_headers(token),
+        json={"expected_updated_at": contract["updated_at"]},
     )
     assert accept_response.status_code == 422
     current = client.get(

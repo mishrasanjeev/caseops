@@ -6239,6 +6239,7 @@ export async function uploadContractAttachment(input: {
 
 export async function updateContractMetadata(input: {
   contractId: string;
+  expected_updated_at: string;
   contract_type?: string;
   contract_type_key?: ContractTypeKey | null;
   contract_type_notes?: string | null;
@@ -6303,10 +6304,11 @@ export async function createContractTermSuggestion(input: {
 export async function acceptContractTermSuggestion(input: {
   contractId: string;
   suggestionId: string;
+  expected_updated_at: string;
 }): Promise<ContractTermSuggestionRecord> {
   return apiRequest<ContractTermSuggestionRecord>(
     `/api/contracts/${input.contractId}/term-suggestions/${input.suggestionId}/accept`,
-    { method: "POST", body: {} },
+    { method: "POST", body: { expected_updated_at: input.expected_updated_at } },
   );
 }
 

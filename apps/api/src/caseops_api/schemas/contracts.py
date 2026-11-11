@@ -82,6 +82,9 @@ class ContractCreateRequest(BaseModel):
 
 
 class ContractUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_updated_at: datetime | None = None
     title: str | None = Field(default=None, min_length=3, max_length=255)
     linked_matter_id: str | None = None
     owner_membership_id: str | None = None
@@ -103,6 +106,15 @@ class ContractUpdateRequest(BaseModel):
     @classmethod
     def normalize_optional_text(cls, value: object) -> object:
         return _blank_to_none(value)
+
+    @model_validator(mode="after")
+    def validate_metadata_edit(self) -> ContractUpdateRequest:
+        metadata_fields = set(ContractMetadataUpdateRequest.model_fields) - {"expected_updated_at"}
+        if self.model_fields_set & metadata_fields:
+            ContractMetadataUpdateRequest.model_validate(self.model_dump(
+                exclude_unset=True, include=metadata_fields | {"expected_updated_at"},
+            ))
+        return self
 
 
 class ContractRecord(BaseModel):
@@ -173,6 +185,11 @@ class ContractAttachmentRecord(BaseModel):
     processed_at: datetime | None
     latest_job: DocumentProcessingJobRecord | None
     created_at: datetime
+
+
+class ContractAttachmentPreviewRecord(BaseModel):
+    attachment_id: str
+    filename: str
 
 
 class ContractClauseCreateRequest(BaseModel):
@@ -268,6 +285,12 @@ class ContractActivityRecord(BaseModel):
 
 
 class ContractMetadataUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_updated_at: datetime
+    title: str | None = Field(default=None, min_length=3, max_length=255)
+    counterparty_name: str | None = Field(default=None, min_length=2, max_length=255)
+    summary: str | None = Field(default=None, max_length=4000)
     contract_type: str | None = Field(default=None, min_length=2, max_length=120)
     contract_type_key: ContractTypeKeyLiteral | None = None
     contract_type_notes: str | None = Field(default=None, max_length=1000)
@@ -275,6 +298,13 @@ class ContractMetadataUpdateRequest(BaseModel):
     expires_on: date | None = None
     renewal_on: date | None = None
     auto_renewal: bool | None = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> ContractMetadataUpdateRequest:
+        for field in ("title", "contract_type", "auto_renewal", "expected_updated_at"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null.")
+        return self
 
     @field_validator("contract_type_key", "contract_type_notes", mode="before")
     @classmethod
@@ -383,6 +413,10 @@ class ContractTermSuggestionCreateRequest(BaseModel):
         ):
             raise ValueError("At least one suggested contract term is required.")
         return self
+
+
+class ContractTermReviewRequest(BaseModel):
+    expected_updated_at: datetime
 
 
 class ContractTermSuggestionRecord(BaseModel):
