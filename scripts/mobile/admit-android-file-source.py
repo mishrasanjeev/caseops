@@ -119,12 +119,29 @@ def validate_workspace(workspace, seed, asset, expected):
     return {key: source[key] for key in ("id", "matter_id", "original_filename", "sha256_hex", "size_bytes", "content_type")}
 
 
-def add_exact_route(previous, route):
-    require(isinstance(previous, dict) and set(previous) == {"routes"} and isinstance(previous["routes"], list) and
-            len(previous["routes"]) <= 100 and len(set(previous["routes"])) == len(previous["routes"]) and
-            all(isinstance(value, str) and "*" not in value for value in previous["routes"]), "Exact existing route inventory required")
+def add_exact_route(previous, route, run_id=None):
+    require(isinstance(previous, dict) and "routes" in previous and
+            set(previous) <= {"routes", "coreMatterReadAdmission"} and
+            isinstance(previous["routes"], list) and len(previous["routes"]) <= 100 and
+            all(isinstance(value, str) and "*" not in value for value in previous["routes"]) and
+            len(set(previous["routes"])) == len(previous["routes"]), "Exact existing route inventory required")
+    if "coreMatterReadAdmission" in previous:
+        # Preserve the current exact-query fence; never replace it with a bare
+        # collection route when adding an acknowledged private source download.
+        scope = previous["coreMatterReadAdmission"]
+        require(isinstance(scope, dict) and set(scope) == {"runId", "stage", "targetSha256"} and
+                isinstance(run_id, str) and re.fullmatch(r"[a-z0-9-]{8,140}-core-[a-f0-9]{8}", run_id) and
+                scope["runId"] == run_id and "GET /api/matters/" not in previous["routes"],
+                "Current core matter read admission required")
+        stage, targets = scope["stage"], scope["targetSha256"]
+        require(isinstance(stage, str) and stage in ("consent", "full-core") and
+                isinstance(targets, list) and len(targets) == {"consent": 2, "full-core": 9}[stage] and
+                all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value) for value in targets) and
+                len(set(targets)) == len(targets) and
+                targets[0] == sha(b"/api/matters/?limit=25"), "Exact core matter read targets required")
+    require(isinstance(route, str) and "*" not in route, "Exact uploaded source route required")
     require(route not in previous["routes"], "Uploaded source route was already admitted; never replay")
-    return {"routes": sorted(previous["routes"] + [route])}
+    return {**previous, "routes": sorted(previous["routes"] + [route])}
 
 
 def checked_run(command, input_text=None, timeout=10, result_log=None):
@@ -345,7 +362,7 @@ def container_admit(request, root=Path("/fixture-state")):
         route = "GET " + route_path
         route_file = root / "gateway-routes.json"
         previous_bytes, previous_ref = read_bound(route_file)
-        updated = add_exact_route(json.loads(previous_bytes), route)
+        updated = add_exact_route(json.loads(previous_bytes), route, current["gatewayRunId"])
         prefix = f"android-file-source-{claim_id[:16]}"
         before_name, after_name = prefix + ".routes-before.json", prefix + ".routes-after.json"
         new_file(root / before_name, previous_bytes)
