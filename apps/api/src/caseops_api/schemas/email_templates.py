@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+
+EmailVariables = dict[
+    Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=80)],
+    Annotated[str, Field(max_length=2000)],
+]
 
 
 class EmailTemplateVariable(BaseModel):
@@ -87,25 +92,39 @@ class EmailRenderRequest(BaseModel):
     fully-substituted subject + body without sending — used for the
     Compose dialog's preview pane."""
 
-    variables: dict[str, str] = Field(default_factory=dict)
+    variables: EmailVariables = Field(default_factory=dict, max_length=40)
 
 
 class EmailRenderResponse(BaseModel):
     subject: str
     body: str
     missing_variables: list[str] = Field(default_factory=list)
+    invalid_placeholders: list[str] = Field(default_factory=list)
+    resolved_variables: dict[str, str] = Field(default_factory=dict)
 
 
-class EmailSendRequest(BaseModel):
-    """Compose & send action — pick a template, fill variables, send.
+class MatterEmailPreviewRequest(EmailRenderRequest):
+    model_config = ConfigDict(extra="forbid")
 
-    Creates a ``communications`` row with status=queued (or sent on
-    SendGrid 2xx). The SendGrid event webhook then promotes status
-    to delivered / opened / bounced as events arrive.
-    """
+    template_id: str | None = Field(default=None, min_length=1, max_length=36)
+    subject: str | None = Field(default=None, min_length=2, max_length=400)
+    body: str | None = Field(default=None, min_length=2, max_length=20000)
 
-    template_id: str
+    @model_validator(mode="after")
+    def require_message(self) -> MatterEmailPreviewRequest:
+        if self.template_id is None and not (
+            self.subject and self.subject.strip() and self.body and self.body.strip()
+        ):
+            raise ValueError("Choose a template or enter a subject and message.")
+        for text in (self.subject, self.body):
+            if text is not None and not text.strip():
+                raise ValueError("Subject and message cannot be blank.")
+        return self
+
+
+class EmailSendRequest(MatterEmailPreviewRequest):
+    """Explicit manual/template message; delivery stores the exact rendered text."""
+
     recipient_email: EmailStr
     recipient_name: str | None = Field(default=None, max_length=255)
-    variables: dict[str, str] = Field(default_factory=dict)
     client_id: str | None = None

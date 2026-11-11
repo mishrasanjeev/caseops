@@ -24,7 +24,9 @@ from fastapi.testclient import TestClient
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
-def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> str:
+def _create_matter(
+    client: TestClient, headers: dict[str, str], code: str, *, hearing_date: str | None = None,
+) -> str:
     resp = client.post(
         "/api/matters",
         headers=headers,
@@ -33,6 +35,8 @@ def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> st
             "title": f"Matter {code}",
             "practice_area": "Civil",
             "forum_level": "high_court",
+            "client_name": "Hari Gupta",
+            "next_hearing_on": hearing_date,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -179,7 +183,7 @@ def test_send_email_503_when_sendgrid_not_configured(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-002")
+    matter_id = _create_matter(client, headers, "M11-S2-002", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     resp = client.post(
@@ -209,7 +213,7 @@ def test_send_email_happy_path_writes_communications_row(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-003")
+    matter_id = _create_matter(client, headers, "M11-S2-003", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     fake_response = httpx.Response(
@@ -260,7 +264,7 @@ def test_sendgrid_webhook_promotes_communications_row(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-WEBHOOK")
+    matter_id = _create_matter(client, headers, "M11-S2-WEBHOOK", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     fake = httpx.Response(

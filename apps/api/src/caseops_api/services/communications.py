@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Communication,
@@ -56,7 +57,12 @@ from caseops_api.schemas.communications import (
     InboundEmailImportRequest,
     InboundEmailImportResponse,
 )
-from caseops_api.schemas.email_templates import EmailSendRequest
+from caseops_api.schemas.email_templates import (
+    EmailRenderResponse,
+    EmailSendRequest,
+    EmailTemplateListResponse,
+    MatterEmailPreviewRequest,
+)
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
@@ -68,7 +74,7 @@ from caseops_api.services.document_storage import (
     persist_matter_attachment,
     sanitize_filename,
 )
-from caseops_api.services.email_templates import render_template
+from caseops_api.services.email_templates import list_email_templates, render_template
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matter_write_fence import (
@@ -964,6 +970,60 @@ def import_inbound_email(
     )
 
 
+def list_matter_email_templates(
+    session: Session, *, context: SessionContext, matter_id: str,
+) -> EmailTemplateListResponse:
+    _load_matter(session, context=context, matter_id=matter_id)
+    return list_email_templates(session, context=context)
+
+
+def _render_matter_email(
+    session: Session, *, context: SessionContext, matter: Matter,
+    payload: MatterEmailPreviewRequest,
+) -> tuple[EmailRenderResponse, EmailTemplate | None]:
+    template = None
+    if payload.template_id is not None:
+        template = session.scalar(select(EmailTemplate).where(
+            EmailTemplate.id == payload.template_id,
+            EmailTemplate.company_id == context.company.id,
+            EmailTemplate.is_active.is_(True),
+        ))
+        if template is None:
+            raise HTTPException(status_code=404, detail="Email template not found or archived.")
+    # Explicit message edits never mutate the reusable template.
+    message = EmailTemplate(
+        subject_template=(
+            payload.subject if payload.subject is not None else template.subject_template
+        ),
+        body_template=payload.body if payload.body is not None else template.body_template,
+        variables_json=[
+            {**v, "required": False}
+            if payload.subject is not None or payload.body is not None else v
+            for v in (template.variables_json or [])
+        ] if template else [],
+    )
+    known = {
+        "client_name": matter.client_name or "",
+        "hearing_date": matter.next_hearing_on.isoformat() if matter.next_hearing_on else "",
+        "matter_title": matter.title,
+        "matter_code": matter.matter_code,
+    }
+    rendered = render_template(template=message, variables={**payload.variables, **known})
+    rendered.resolved_variables = known
+    return rendered, template
+
+
+def preview_matter_email(
+    session: Session, *, context: SessionContext, matter_id: str,
+    payload: MatterEmailPreviewRequest,
+) -> EmailRenderResponse:
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session, matter=matter, operation="preview an email", lock_for_write=False,
+    )
+    return _render_matter_email(session, context=context, matter=matter, payload=payload)[0]
+
+
 def send_matter_email(
     session: Session,
     *,
@@ -971,20 +1031,11 @@ def send_matter_email(
     matter_id: str,
     payload: EmailSendRequest,
 ) -> CommunicationRecord:
-    """Phase B M11 slice 2 — Compose & send.
+    """Render the current matter facts and explicit message before dispatch.
 
-    Picks the named template, renders it with the user-supplied
-    variables, dispatches via SendGrid, and writes the resulting
-    ``communications`` row. The webhook handler later transitions
-    ``status`` from ``sent`` → ``delivered`` / ``opened`` /
-    ``bounced`` as events arrive (matched by external_message_id).
-
-    Refuses to send when:
-
-    - the template doesn't belong to the caller's company (404)
-    - the template declares required variables the caller did not
-      supply (400 — actionable detail lists the missing names)
-    - SendGrid isn't configured in this env (503)
+    The same tenant, operational-state, suppression and transport boundaries
+    apply to manual messages and template-based messages. Preview is never
+    trusted as delivery authority; unresolved tokens fail before transport.
     """
     matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
@@ -993,27 +1044,23 @@ def send_matter_email(
         operation="send an email",
     )
 
-    template = session.scalar(
-        select(EmailTemplate).where(
-            EmailTemplate.id == payload.template_id,
-            EmailTemplate.company_id == context.company.id,
-            EmailTemplate.is_active.is_(True),
-        )
+    rendered, template = _render_matter_email(
+        session, context=context, matter=matter, payload=payload,
     )
-    if template is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email template not found or archived.",
-        )
-
-    rendered = render_template(template=template, variables=payload.variables)
-    if rendered.missing_variables:
+    if rendered.missing_variables or rendered.invalid_placeholders:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Required template variables are missing: "
-                + ", ".join(rendered.missing_variables)
+                "Email not sent. Missing values or unsupported placeholders: "
+                + ", ".join(rendered.missing_variables + rendered.invalid_placeholders)
+                + ". Update the matter or edit the message, then preview again."
             ),
+        )
+
+    if paid_providers_blocked_for_request():
+        raise HTTPException(
+            status_code=409,
+            detail="Email delivery is disabled during automated verification. No email was sent.",
         )
 
     settings = get_settings()
@@ -1074,10 +1121,11 @@ def send_matter_email(
         occurred_at=now,
         external_message_id=message_id,
         metadata_json={
-            "template_id": template.id,
-            "template_name": template.name,
+            "template_id": template.id if template else None,
+            "template_name": template.name if template else None,
+            "composition_mode": "template" if template else "manual",
             "send_error": error,
-        } if (template or error) else None,
+        },
         created_by_membership_id=context.membership.id,
     )
     session.add(row)
@@ -1215,5 +1263,7 @@ __all__ = [
     "create_matter_communication",
     "import_inbound_email",
     "list_matter_communications",
+    "list_matter_email_templates",
+    "preview_matter_email",
     "send_matter_email",
 ]
