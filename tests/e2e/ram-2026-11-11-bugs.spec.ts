@@ -53,7 +53,9 @@ type CreatedMatter = { id: string; matter_code: string; status: string; updated_
 type CreatedTemplate = { id: string; company_id: string; name: string; created_by_membership_id: string; is_active: boolean };
 
 for (const phone of [false, true]) {
-  test(`${phone ? "[mobile] " : ""}BUG-003 communications resolved preview and missing-value guard ${phone ? "phone" : "desktop"}`, async ({ page, request, baseURL }) => {
+  test(`${phone ? "[mobile] " : ""}BUG-003 communications resolved preview and missing-value guard ${phone ? "phone" : "desktop"}`, {
+    annotation: { type: "caseops-b5-proof", description: "preview-no-paid-guard" },
+  }, async ({ page, request, baseURL }) => {
     const web = new URL(baseURL ?? required("CASEOPS_WEB_BASE_URL"));
     const local = loopback(web);
     const api = new URL(local
