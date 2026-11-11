@@ -116,13 +116,29 @@ for (const mobile of [false, true]) {
         }
         await page.getByRole("button", { name: "Zoom in", exact: true }).click();
         await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-        const downloading = page.waitForResponse((r) => r.url() === `${apiPath}/attachments/${attachment.id}/download`);
+        const downloadUrl = `${apiPath}/attachments/${attachment.id}/download`;
+        const firstAtDownloadUrl = page.waitForResponse((r) => r.url() === downloadUrl);
+        const downloading = page.waitForResponse((r) => r.url() === downloadUrl && r.request().method() === "GET");
         const fileDownload = page.waitForEvent("download");
         await page.getByRole("button", { name: "Download original", exact: true }).click();
         const original = await downloading;
         expect(original.status()).toBe(200);
-        expect(createHash("sha256").update(await original.body()).digest("hex")).toBe(createHash("sha256").update(source.buffer).digest("hex"));
-        expect((await fileDownload).suggestedFilename()).toBe(source.name);
+        expect(original.request().method()).toBe("GET");
+        expect(original.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+        const downloaded = await fileDownload;
+        expect(await downloaded.failure()).toBeNull();
+        expect(downloaded.suggestedFilename()).toBe(source.name);
+        const savedPath = await downloaded.path();
+        if (!savedPath) throw new Error("The synthetic original was not downloaded by the browser.");
+        const savedBytes = await readFile(savedPath);
+        const savedHash = createHash("sha256").update(savedBytes).digest("hex");
+        expect(savedBytes.length).toBe(source.buffer.length);
+        expect(savedHash).toBe(createHash("sha256").update(source.buffer).digest("hex"));
+        await info.attach(`b5-original-download-${source.name}`, {
+          body: JSON.stringify({ firstObservedMethod: (await firstAtDownloadUrl).request().method(),
+            selectedMethod: original.request().method(), status: original.status(), bytes: savedBytes.length, sha256: savedHash }),
+          contentType: "application/json",
+        });
         await expectNoPageOverflow(page);
         await page.getByRole("link", { name: "Back to contract", exact: true }).click();
       }

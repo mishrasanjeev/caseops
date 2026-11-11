@@ -89,7 +89,9 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
       await page.waitForURL(/\/app(?:[/?]|$)/);
       const pdfResponses: Array<{ url: string; bytes: Buffer; profile: string }> = [];
       page.on("response", async response => {
-        if (new URL(response.url()).pathname.endsWith("/export.pdf") && response.status() === 200) {
+        if (new URL(response.url()).origin === new URL(apiBaseUrl).origin
+          && new URL(response.url()).pathname === `${new URL(draftApi).pathname}/export.pdf`
+          && response.request().method() === "GET" && response.status() === 200) {
           pdfResponses.push({ url: response.url(), bytes: await response.body(), profile: response.headers()["x-caseops-court-profile"] });
         }
       });

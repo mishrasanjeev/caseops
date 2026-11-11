@@ -171,14 +171,14 @@ for (const phone of [false, true]) {
 
       // Preserve the exact syntax of the retained production communication.
       await compose.getByLabel("Subject", { exact: true }).fill("Status update on your matter {[client_name]}");
-      await compose.getByLabel("Message", { exact: true }).fill("Hi {[client_name]}, the next hearing is on {[hearing_date]}.");
+      await compose.getByRole("textbox", { name: "Message", exact: true }).fill("Hi {[client_name]}, the next hearing is on {[hearing_date]}.");
       await expect(compose.getByRole("alert")).toContainText("Unsupported placeholders");
       await expect(compose.getByTestId("comm-send-preview")).toBeDisabled();
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
 
       await compose.getByTestId("comm-send-template").selectOption("");
       await compose.getByLabel("Subject", { exact: true }).fill("Reviewed update");
-      await compose.getByLabel("Message", { exact: true }).fill("Hi {{client_name}}, no hearing date is confirmed.");
+      await compose.getByRole("textbox", { name: "Message", exact: true }).fill("Hi {{client_name}}, no hearing date is confirmed.");
       const manual = await preview();
       expect(manual.body).toBe("Hi QA Client, no hearing date is confirmed.");
       expect(manual.missing_variables).toEqual([]);
