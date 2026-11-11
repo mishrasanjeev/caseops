@@ -1,3 +1,14 @@
+## 2026-11-11 - Workbook 5
+
+Candidate-only, release NO-GO. [Twenty-report triage](BUGS5_TRIAGE_2026-11-11.md)
+separates actual missing contract edit/view/term actions and a retained email
+placeholder leak from enhancements, unconfirmed retrieval/provider reports and
+verified-source/evaluation dependencies. Source/script/SDK success cannot close
+the broader legal-quality, full corpus, all-India directory, official registry
+sync or calibrated prediction requests. Add complete discovered desktop/phone
+browser regressions for each bounded repair and keep the original acceptance
+boundaries open until exact deployed proof. No native-app change is in scope.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in

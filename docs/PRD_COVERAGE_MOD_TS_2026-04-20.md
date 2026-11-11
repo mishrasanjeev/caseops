@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## November 11 Workbook 5 Coverage Pending
+
+Existing J07/M06, J10/M09, J03/J08/M10 and J05/M05 own draft PDF parity,
+contract editing/viewing/manual term review, email composition/template safety
+and verified statute-picker usability. These are bounded implementation tracks,
+not completed coverage. [The 20-report matrix](BUGS5_TRIAGE_2026-11-11.md) retains
+the wider obligation/redline/research/data/provider/model-quality acceptance
+requests separately. Every new dated spec must be collected by standard app,
+Docker and exact-production configs; a test file alone is not executed coverage.
+
 ## November 2 Disclosure Work Coverage Pending
 
 IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and

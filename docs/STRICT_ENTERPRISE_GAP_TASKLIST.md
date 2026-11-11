@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## QA-B5-2026-11-11: Workflow And Claim Coverage
+
+**Partially implemented; release NO-GO.** Source and component tests did not
+prevent missing user-visible contract Edit/View/Add paths or retained unresolved
+email placeholders. Candidate fixes must add original-record-shaped regression,
+permissions/stale-write/negative evidence and discovered desktop/phone journeys.
+[The source-bound assessment](BUGS5_TRIAGE_2026-11-11.md) also distinguishes
+verified legal-source completion, legal/model quality, actual recipient delivery
+and complete deployed certification. A current merged release has failed
+production verification; old stale checkpoints and green components cannot close
+that gate. Native/MacBook and other projects are outside this task.
+
 ## PRIV-RETENTION-2026-11-06 — Retired private-index generations retain customer data
 
 **Partially implemented.** B4-ADJ-40 in the strict bug list. Retired

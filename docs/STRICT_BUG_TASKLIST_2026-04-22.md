@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 11 Workbook 5: Not Closed
+
+The reporting tester's production2816 record confirms missing core contract
+metadata editing, indexed-PDF viewing and manual term entry, plus a retained
+email with literal `{[client_name]}`/`{[hearing_date]}`. These are Not fixed at
+the initial live baseline. Draft parity and long statute-option layout require
+their own exact browser reproduction. See [all 20 report assessments and the
+reopen analysis](BUGS5_TRIAGE_2026-11-11.md), including unimplemented enhancements,
+source-data gaps and exact closure criteria. Candidate patches/tests are not
+production acceptance. Do not modify Matter lifecycle controls without a
+persisted lifecycle/audit reproduction; this workbook supplies no such event.
+
 ## November 8 B4-ADJ-07 Mobile Retirement Regression
 
 CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at

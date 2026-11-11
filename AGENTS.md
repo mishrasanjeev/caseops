@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A workbook row can mix a defect, a new workflow and a legal/source-quality
+  claim. Preserve all three acceptance boundaries: fixing one control cannot
+  close court-rule validity, model quality, source completeness or delivery.
+  Reproduce the actual persisted syntax and document, not only a convenient
+  fixture. See `docs/BUGS5_TRIAGE_2026-11-11.md` for the dated failure analysis.
+
 - A per-key LIMIT does not bound PostgreSQL index work when the plan scans
   a tenant prefix and filters the rest of the key. Retain actual first-page
   and cursor plans under stale/fresh statistics and custom/generic/auto
