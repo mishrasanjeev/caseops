@@ -56,14 +56,34 @@ test('attestation binds exact read-only simctl mapping to actual app/provider me
   assert.throws(() => attestIosFilesContainers({ udid: UDID, devicesRoot: f.devicesRoot, run: f.run }), /CONTAINER_METADATA_IDENTITY_MISMATCH/);
 });
 
-test('staging records provider metadata only after a settle window and allows only ctime to move meanwhile', async (t) => {
-  const f = fixture(t);
-  // Simulate the provider daemon's post-write ingestion: an attribute write
-  // moves only ctime shortly after the file appears.
-  const { spawn } = await import('node:child_process');
-  const touch = spawn(process.execPath, ['-e', `setTimeout(() => { const fs = require('fs'); for (const name of fs.readdirSync(process.argv[1])) for (const dir of [require('path').join(process.argv[1], name)]) if (fs.statSync(dir).isDirectory()) for (const file of fs.readdirSync(dir)) fs.chmodSync(require('path').join(dir, file), 0o600); }, 300);`, f.containers.provider.storagePath]);
-  const result = stageIosFilesAssets({ ...f.options, settleMs: 1200 });
-  await new Promise((resolve) => touch.on('exit', resolve));
+function duringProviderSettling(f, mutate, action) {
+  const wait = Atomics.wait;
+  let applied = false;
+  Atomics.wait = (...args) => {
+    const result = wait(...args);
+    if (!applied) {
+      const files = f.assets.map(asset => path.join(f.containers.provider.storagePath, 'CaseOpsFiles-unit-run-1234', asset.filename));
+      // The first real settle sleep follows complete descriptor writes. Prove
+      // both public payloads exist before simulating the provider's ingestion.
+      for (let i = 0; i < files.length; i++) assert.equal(sha(readFileSync(files[i])), f.assets[i].sha256);
+      mutate(files);
+      applied = true;
+    }
+    return result;
+  };
+  try { return action(); }
+  finally { Atomics.wait = wait; }
+}
+
+test('staging records provider metadata only after a settle window and allows only ctime to move meanwhile', (t) => {
+  const f = fixture(t), wait = Atomics.wait;
+  let mutations = 0;
+  const result = duringProviderSettling(f, files => {
+    for (const file of files) fs.chmodSync(file, 0o600);
+    mutations++;
+  }, () => stageIosFilesAssets({ ...f.options, settleMs: 1200 }));
+  assert.equal(Atomics.wait, wait);
+  assert.equal(mutations, 1);
   assert.equal(result.staging.providerSettleMs, 1200);
   for (const asset of result.staging.assets) {
     const now = fs.statSync(asset.path, { bigint: true });
@@ -88,12 +108,14 @@ test('a provider original may gain only the OS last-used attribute, which moves 
   assert.throws(() => assertProviderPreserved(staged, () => []), /PROVIDER_ORIGINAL_METADATA_CHANGED/);
 });
 
-test('staging refuses a provider original whose size changes while settling', async (t) => {
-  const f = fixture(t);
-  const { spawn } = await import('node:child_process');
-  const grow = spawn(process.execPath, ['-e', `setTimeout(() => { const fs = require('fs'), path = require('path'); for (const name of fs.readdirSync(process.argv[1])) { const dir = path.join(process.argv[1], name); if (fs.statSync(dir).isDirectory()) { const file = fs.readdirSync(dir)[0]; fs.appendFileSync(path.join(dir, file), 'x'); } } }, 300);`, f.containers.provider.storagePath]);
-  assert.throws(() => stageIosFilesAssets({ ...f.options, settleMs: 1200 }), /PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING/);
-  await new Promise((resolve) => grow.on('exit', resolve));
+test('staging refuses a provider original whose size changes while settling', (t) => {
+  const f = fixture(t), wait = Atomics.wait;
+  let mutations = 0;
+  assert.throws(() => duringProviderSettling(f, files => {
+    fs.appendFileSync(files[0], 'x'); mutations++;
+  }, () => stageIosFilesAssets({ ...f.options, settleMs: 1200 })), /PROVIDER_ORIGINAL_CHANGED_WHILE_SETTLING/);
+  assert.equal(Atomics.wait, wait);
+  assert.equal(mutations, 1);
   assert.throws(() => stageIosFilesAssets({ ...f.options, output: path.join(f.root, 'unbounded.json'), runId: 'unit-run-5678', settleMs: 60000 }), /BOUNDED_PROVIDER_SETTLE_REQUIRED/);
 });
 
