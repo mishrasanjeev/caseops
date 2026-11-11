@@ -1249,6 +1249,7 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
         "Prod Playwright (test-legal-write-oct13-b)",
         "Prod Playwright (batch3)",
         "Prod Playwright (batch4)",
+        "Prod Playwright (batch5)",
         "Prod Playwright (test-legal-readonly)",
         "Prod Playwright (legacy)",
         "Prod Playwright (supporting)",
@@ -1269,6 +1270,7 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
         "Prod Playwright (test-legal-write-oct13-b)",
         "Prod Playwright (batch3) (batch3)": "Prod Playwright (batch3)",
         "Prod Playwright (batch4) (batch4)": "Prod Playwright (batch4)",
+        "Prod Playwright (batch5) (batch5)": "Prod Playwright (batch5)",
     })
     completed: list[datetime] = []
     successful: set[str] = set()

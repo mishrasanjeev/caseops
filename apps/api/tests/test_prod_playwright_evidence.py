@@ -2813,7 +2813,7 @@ def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
         required[0]["file"] = "replaced-app-case.spec.ts"
     else:
         required[0]["title_path"][-1] = "replaced required App case"
-    assert Counter(row["project_name"] for row in canonical["tests"]) == APP_COUNTS
+    assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
     with pytest.raises(evidence.EvidenceError, match="app_canonical_inventory_mismatch"):
         evidence._app_inventory(canonical)
 

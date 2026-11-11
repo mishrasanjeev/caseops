@@ -16,6 +16,7 @@ HELPER = ROOT / "scripts/trusted_release_checkout.py"
 CONSUMERS = (
     "prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13-a",
     "prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester",
+    "prod-batch5-tester",
     "scheduled-statute-verification", "record-release-evidence",
 )
 
