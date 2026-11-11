@@ -29,7 +29,11 @@ for (const mobile of [false, true]) {
     await verifyReportedContractControls(page, request, rt, info);
     const title = `Synthetic contract B5 ${runId()}`;
     await page.goto(`${rt.web.origin}/app/contracts`);
-    await page.getByTestId("new-contract-trigger").click();
+    const repositoryHeader = page.getByRole("main").locator("header").filter({
+      has: page.getByRole("heading", { name: "Contract repository", exact: true }),
+    });
+    await expect(repositoryHeader.getByTestId("new-contract-trigger")).toBeVisible();
+    await repositoryHeader.getByTestId("new-contract-trigger").click();
     await page.getByLabel("Title", { exact: true }).fill(title);
     await page.getByLabel("Code", { exact: true }).fill(`B5-${runId()}`);
     await page.getByRole("button", { name: "Create contract", exact: true }).click();
@@ -68,7 +72,8 @@ for (const mobile of [false, true]) {
         const staleSave = stalePage.waitForResponse((r) => r.url() === `${apiPath}/metadata` && r.request().method() === "PATCH");
         await stalePage.getByRole("button", { name: "Save contract", exact: true }).click();
         expect((await staleSave).status()).toBe(409);
-        await expect(stalePage.getByRole("alert")).toContainText("Reload before saving");
+        await expect(stalePage.getByRole("region", { name: "Contract details", exact: true })
+          .getByRole("alert")).toContainText("Reload before saving");
         await stalePage.getByRole("button", { name: "Reload contract", exact: true }).click();
         await expect(stalePage.getByRole("heading", { name: details.title, exact: true })).toBeVisible();
       } finally { await stalePage.close(); }
