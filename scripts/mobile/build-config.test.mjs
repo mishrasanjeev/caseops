@@ -238,7 +238,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   const isRoot = (step) => !step['working-directory'] || step['working-directory'] === '.';
   const rootInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs ci --include=dev');
   const mobileInstall = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci');
-  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
+  const browserInstall = steps.findIndex(step => isRoot(step) && step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium');
   const typecheck = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs run typecheck');
   const tests = steps.findIndex(step => step['working-directory'] === 'apps/mobile' && step.run === 'node ../../scripts/mobile/npm-tooling.mjs test');
   assert.ok(rootInstall >= 0 && mobileInstall >= 0 && browserInstall >= 0);
