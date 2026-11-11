@@ -80,6 +80,31 @@ and audit events before changing those controls.
 
 ## Release And Regression Gate
 
+### Prior Release Residuals Reconciled November 11
+
+Exact2816 QA42626416270 retained five failed executions: both widths of the
+November7 Contract and Teams journeys received `caseops-qa` credentials although
+their authorization contract requires `test-legal`; they failed before their
+business workflows. Preserve that tenant fence and route all four cases to a
+properly credentialed, required release role. They are not reproduced parser,
+Teams or mobile product defects.
+
+The original Watch desktop journey was independently replayed from a clean,
+exact2816 checkout against serving2816. It again failed the original line338:
+the publication mark matched **four visible report rows** belonging to distinct
+retained profiles. The API had already proved this run's hit, paused profile,
+Not relevant disposition, exact reason and source snapshot. This newly retained
+strict-mode diagnostic establishes selector ambiguity, not lost assessment or
+provider failure. The corrected journey binds the rendered row to the exact
+API-proven hit in the report's preserved row order, asserts full row cardinality,
+and retains mark, disposition, exact reason, reload, scope and layout assertions.
+Do not change the renderer or delete old tenant evidence to hide a test defect.
+
+The old failed run and its18 unexecuted Batch4 mobile/governance cases remain
+historical evidence. Later read-only monitoring and current green main
+CI42613717583/Security43017042497 do not supply that missing whole-release proof.
+Full corrected local Docker and new exact-release production replay are owed.
+
 The bounded contract tracks extend US-007 and US-029..031, with FT-013/014 and
 FT-050..054. Communications extends US-035/036 and FT-046..048. Cross-tenant,
 matter/source access and revoked-session acceptance retain SEC-002..005;

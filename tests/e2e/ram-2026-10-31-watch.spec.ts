@@ -328,14 +328,22 @@ async function journey(
     const report = await uiJson(response, "Report retained manual Watch evidence");
     expect(report.summary.automated_coverage_available).toBe(false);
     expect(report.freshness.unavailable_sources).toContain("ip_watch_provider");
-    const retained = report.rows.find((row: { hit_id: string }) => row.hit_id === ownHit.id);
+    const retainedIndex = report.rows.findIndex((row: { hit_id: string }) => row.hit_id === ownHit.id);
+    const retained = report.rows[retainedIndex];
     expect(retained, "The new reviewed capture is in the bounded current report").toBeTruthy();
     expect(retained.profile_id).toBe(profile.id);
     expect(retained.profile_status).toBe("paused");
     expect(retained.assessment.disposition).toBe("not_relevant");
     expect(retained.assessment.reason).toBe(`BUG-014 journey ${label} retired`);
     expect(retained.source_snapshot).toEqual(ownHit.source_snapshot_json);
-    await expect(page.getByRole("row").filter({ hasText: mark })).toContainText("Not relevant");
+    // One publication can match several retained profiles. Bind the visible
+    // row to the API-proven hit in the report's preserved display order.
+    const visibleRows = page.getByTestId("ip-report-result").locator("tbody > tr");
+    await expect(visibleRows).toHaveCount(report.rows.length);
+    const visibleHit = visibleRows.nth(retainedIndex);
+    await expect(visibleHit).toContainText(mark);
+    await expect(visibleHit).toContainText("Not relevant");
+    await expect(visibleHit).toContainText(`BUG-014 journey ${label} retired`);
     await expect(page.getByText("Only retained journal-watch records are included; automated journal coverage is unavailable.")).toBeVisible();
     await checkLayout();
   };
