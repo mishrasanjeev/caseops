@@ -5,6 +5,15 @@
   canvas ink, text and pagination. Pass already-authorized Blob bytes directly
   to the renderer instead of fetching a local object URL through a blocked
   connect-src path. Audit adjacent viewers; never relax CSP to hide this defect.
+- Keep browser runtime origins out of canonical unit-test environments. Reconcile
+  the full native failure messages before treating an origin mismatch as a CSRF
+  defect. For browser downloads, bind the observed response to the actual HTTP
+  method, not a same-URL preflight, and verify the completed native file's bytes;
+  a DevTools body lookup failure does not establish corrupt downloaded content.
+- A unit's filesystem-read fixture adds a build input even without an import.
+  Reconcile its explicit builder COPY, both upload allowlists and the deployment
+  dirty-input fence, including transitive inputs. Negative omission tests must
+  start from a fully admitted baseline, not all fail on the same missing input.
 
 - A reviewed message preview must bind the actor, recipient, source versions,
   supplied inputs and exact rendered content. If authoritative facts change,

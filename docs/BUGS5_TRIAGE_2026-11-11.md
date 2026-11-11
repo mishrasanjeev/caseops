@@ -107,6 +107,24 @@ and audit events before changing those controls.
     Matter creation, unscoped contract selectors and mixed pointer/keyboard
     focus in the statute test. Preserve the native failures and complete12
     replacement inventory; do not increase timeouts or remove assertions.
+11. **The verification harness introduced its own failures.** Preflight02 mixed
+    browser-only API origins into the unit environment. Every one of its12
+    failures in303files/2927cases is an exact-origin mismatch; the CSRF header
+    was present. Preserve that failed run, use a separate canonical unit
+    environment and rerun all files. Replacement04 passes all2927 in303files,
+    then a fresh build, but its12 browser cases still have9pass/3fail. The two
+    remaining compose failures use exact wrapping-label lookup despite a
+    visible correctly named Message textbox. The phone contract failure is a
+    DevTools body-lookup error, not a proven content mismatch; require an exact
+    GET and verify the real completed browser download, retaining observed
+    method metadata rather than assuming its cause.
+12. **New fixture reads were not reconciled across release boundaries.** The
+    communications AST test introduces three undeclared builder inputs. All25
+    hosted hardening failures share that missing baseline, including negative
+    tests intended to remove other inputs. Restore the narrow complete closure,
+    preserve each independent negative check and include every uploaded input
+    in the pre-cloud dirty-source fence. A green local build with extra working
+    files cannot prove the production upload closure.
 
 ## Release And Regression Gate
 
