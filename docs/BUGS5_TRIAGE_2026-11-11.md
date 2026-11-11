@@ -125,6 +125,12 @@ and audit events before changing those controls.
     preserve each independent negative check and include every uploaded input
     in the pre-cloud dirty-source fence. A green local build with extra working
     files cannot prove the production upload closure.
+    The first repair still missed the native fixture-image fingerprint and
+    eight root-input CI triggers. This was another incomplete adjacent audit,
+    not an excuse to waive those guards. Reconcile all47COPY/import inputs and
+    both root filters across Docker/cloud admission, deploy dirty checks,
+    fixture fingerprints and both trigger events. Preserve every original
+    scope and add independent missing-input/changed-byte/trigger negatives.
 13. **A new production role changes every release consumer.** Hosted native
     shards exposed stale current-inventory assertions in evidence, trusted-
     checkout and private-maintenance-resume tests. Preserve the old774-case

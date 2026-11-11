@@ -4057,6 +4057,9 @@ requirements when using the fallback.
   type-check input. Admit its finite import closure in Docker and Cloud Build
   ignore files and explicit builder COPY inputs, while excluding it from the
   runtime image. Checkout-only tests/builds cannot prove that upload contract.
+  Reconcile that same closure with fixture-image fingerprints and both push/PR
+  workflow triggers. Closing the deploy dirty-file guard alone does not cover
+  every image producer or prevent a stale fixture from being reused.
 - A successful paginated response can carry an authorization change through
   redacted rows rather than an HTTP error. Invalidate the earlier cached
   private prefix and pending callbacks, retain only freshly authorized data,
