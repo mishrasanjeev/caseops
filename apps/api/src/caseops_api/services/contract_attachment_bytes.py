@@ -8,7 +8,7 @@ import os
 import stat
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePath
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 from zlib import error as ZlibError
@@ -20,10 +20,31 @@ from caseops_api.db.models import Contract, ContractAttachment
 from caseops_api.db.session import CaseOpsSession
 from caseops_api.services.contracts import lock_contract_actor
 from caseops_api.services.document_storage import resolve_storage_path
+from caseops_api.services.file_security import ALLOWED_UPLOADS, DEFAULT_MAX_BYTES
 from caseops_api.services.session_context import SessionContext
 
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
+MAX_ORIGINAL_SOURCE_BYTES = DEFAULT_MAX_BYTES
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _source_mime(filename: str, declared: str | None, *, preview: bool) -> str:
+    mime = (declared or "").split(";", 1)[0].strip().lower() or None
+    extension = PurePath(filename).suffix.lower()
+    kind = next((item for item in ALLOWED_UPLOADS if item.extension == extension), None)
+    if kind is not None and mime is not None and mime not in kind.content_types:
+        raise HTTPException(
+            status_code=415, detail="The source MIME conflicts with its admitted type."
+        )
+    if extension == ".pdf":
+        return "application/pdf"
+    if extension == ".docx":
+        return DOCX_MIME
+    if preview:
+        raise HTTPException(
+            status_code=415, detail="Only source-verified PDF and DOCX previews are supported."
+        )
+    return mime or "application/octet-stream"
 
 
 @dataclass(frozen=True)
@@ -132,21 +153,17 @@ def get_contract_source_bytes(
     lock_contract_actor(session, context=context)
     snapshot = _source(session, context, contract_id, attachment_id)
     filename, content_type, size, digest, storage_key = snapshot
-    if not 0 < size <= MAX_SOURCE_BYTES:
+    limit = MAX_SOURCE_BYTES if preview else MAX_ORIGINAL_SOURCE_BYTES
+    if not 0 < size <= limit:
         raise HTTPException(
-            status_code=413, detail="This document exceeds the private viewer limit."
+            status_code=413,
+            detail=(
+                "This document exceeds the private viewer limit; download the original instead."
+                if preview
+                else "This document exceeds the admitted original-download limit."
+            ),
         )
-    mime = (content_type or "application/octet-stream").lower().strip()
-    lower_name = filename.lower()
-    if preview and not (
-        lower_name.endswith(".pdf")
-        and mime == "application/pdf"
-        or lower_name.endswith(".docx")
-        and mime == DOCX_MIME
-    ):
-        raise HTTPException(
-            status_code=415, detail="Only source-verified PDF and DOCX previews are supported."
-        )
+    mime = _source_mime(filename, content_type, preview=preview)
     # GCS cache acquisition and archive work must not retain actor/database locks.
     session.require_read_only_transaction()
     session.rollback()

@@ -13,6 +13,7 @@ vi.mock("next/dynamic", () => ({ default: (_load: unknown) => (props: { filename
 
 import Viewer from "./page";
 import { ApiError } from "@/lib/api/config";
+import { apiBlobDataRequest } from "@/lib/api/client";
 
 beforeEach(() => {
   workspace.mockReset(); blob.mockReset();
@@ -83,4 +84,26 @@ it("aborts a pending download when the viewer unmounts", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Download original" }));
   view.unmount();
   expect(signal?.aborted).toBe(true);
+});
+
+it.each(["oversize", "truncated", "stalled"])("clears cached preview for a real 403 with %s error body", async (kind) => {
+  setup();
+  await screen.findByTestId("private-viewer");
+  const body = kind === "oversize" ? "x".repeat(65537)
+    : kind === "truncated" ? new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError("Truncated")); } })
+    : new ReadableStream<Uint8Array>();
+  const fetchMock = vi.fn().mockResolvedValue(new Response(body, { status: 403, headers: { "content-type": "application/problem+json" } }));
+  vi.stubGlobal("fetch", fetchMock);
+  blob.mockImplementationOnce(async (_c, _a, _source, signal) =>
+    (await apiBlobDataRequest("/api/private/denied", { signal, timeoutMs: 40 })).blob);
+  try {
+    await userEvent.click(screen.getByRole("button", { name: "Download original" }));
+    await screen.findByText("Document access is no longer available.");
+    expect(screen.queryByTestId("private-viewer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Cached download bypass" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download original" })).toBeDisabled();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:private");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally { vi.unstubAllGlobals(); }
 });

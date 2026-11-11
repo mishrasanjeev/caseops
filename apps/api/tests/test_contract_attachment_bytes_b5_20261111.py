@@ -16,7 +16,7 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_legalworkspace_contract_metadata import _create_contract
 
 
-def _uploaded(client, data=None):
+def _uploaded(client, data=None, *, filename="source.docx", content_type=sources.DOCX_MIME):
     auth = bootstrap_company(client)
     token = str(auth["access_token"])
     contract = _create_contract(client, token)
@@ -32,9 +32,9 @@ def _uploaded(client, data=None):
         headers=auth_headers(token),
         files={
             "file": (
-                "source.docx",
+                filename,
                 data,
-                sources.DOCX_MIME,
+                content_type,
             )
         },
     )
@@ -130,6 +130,8 @@ def test_source_mime_size_and_archive_are_fail_closed(client, problem):
     assert response.status_code == {"mime": 415, "limit": 413, "archive": 422}[problem], (
         response.text
     )
+    if problem == "mime":
+        assert client.get(path + "/download", headers=headers).status_code == 415
 
 
 def test_file_acquisition_releases_transaction_and_rechecks_revoked_actor(client, monkeypatch):
@@ -156,3 +158,81 @@ def test_file_acquisition_releases_transaction_and_rechecks_revoked_actor(client
     response = client.get(path + "/preview", headers=headers)
     assert response.status_code == 403, response.text
     assert b"Synthetic immutable source" not in response.content
+
+
+@pytest.mark.parametrize("size_mib,admission_mib", [(33, 40), (50, 50)])
+def test_admitted_large_original_remains_downloadable_above_inline_limit(
+    client,
+    monkeypatch,
+    size_mib,
+    admission_mib,
+):
+    from fpdf import FPDF
+
+    from caseops_api.core.settings import get_settings
+
+    monkeypatch.setenv("CASEOPS_MAX_ATTACHMENT_SIZE_BYTES", str(admission_mib * 1024 * 1024))
+    get_settings.cache_clear()
+    document = FPDF()
+    document.add_page()
+    document.set_font("Helvetica", size=12)
+    document.cell(0, 10, text="Synthetic large-file byte-retention fixture.")
+    original = bytes(document.output())
+    size = size_mib * 1024 * 1024
+    footer = original[original.rfind(b"startxref") :]
+    data = original + b"\n%" + b"x" * (size - len(original) - len(footer) - 3) + b"\n" + footer
+    assert len(data) == size
+    _, headers, path, _, _, attachment = _uploaded(
+        client,
+        data,
+        filename="large-source.pdf",
+        content_type="application/pdf",
+    )
+    # Lowering a later admission setting must not strand an already admitted source.
+    monkeypatch.setenv("CASEOPS_MAX_ATTACHMENT_SIZE_BYTES", str(40 * 1024 * 1024))
+    get_settings.cache_clear()
+    preview = client.get(path + "/preview", headers=headers)
+    assert preview.status_code == 413, preview.text
+    assert "download the original" in preview.json()["detail"]
+    download = client.get(path + "/download", headers=headers)
+    assert download.status_code == 200, download.text
+    assert download.content == data
+    assert hashlib.sha256(download.content).hexdigest() == attachment["sha256_hex"]
+
+
+@pytest.mark.parametrize(
+    "kind,declared",
+    [
+        ("pdf", "Application/PDF; charset=binary"),
+        ("docx", sources.DOCX_MIME + "; version=1"),
+        ("docx", "application/octet-stream"),
+        ("docx", "application/zip; profile=office"),
+    ],
+)
+def test_admitted_mime_parameters_and_docx_aliases_use_canonical_preview_and_download(
+    client,
+    kind,
+    declared,
+):
+    data = None
+    expected = sources.DOCX_MIME
+    if kind == "pdf":
+        from fpdf import FPDF
+
+        document = FPDF()
+        document.add_page()
+        document.set_font("Helvetica", size=12)
+        document.cell(0, 10, text="Synthetic MIME normalization fixture.")
+        data = bytes(document.output())
+        expected = "application/pdf"
+    _, headers, path, _, data, _ = _uploaded(
+        client,
+        data,
+        filename=f"source.{kind}",
+        content_type=declared,
+    )
+    for action in ("preview", "download"):
+        response = client.get(path + "/" + action, headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == expected
+        assert response.content == data

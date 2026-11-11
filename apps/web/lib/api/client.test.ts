@@ -456,6 +456,53 @@ describe("apiBlobDataRequest", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["declared-oversize", "oversize", "truncated"])("preserves known 403 when its body is %s", async (kind) => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    const headers: Record<string, string> = { "content-type": "application/problem+json" };
+    if (kind === "declared-oversize") headers["content-length"] = "65537";
+    const body = kind === "truncated"
+      ? new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError("Body truncated")); } })
+      : "x".repeat(65537);
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 403, headers }));
+    await expect(apiBlobDataRequest("/api/private/denied")).rejects.toMatchObject({
+      name: "ApiError", status: 403, detail: "Request failed (403).", data: null, problemType: null,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves known 403 when the total deadline interrupts a stalled error body", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 403 }));
+    const operation = apiBlobDataRequest("/api/private/stalled-denial", { timeoutMs: 2_000 });
+    const assertion = expect(operation).rejects.toMatchObject({ name: "ApiError", status: 403, data: null, problemType: null });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+    expect(cancel).toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("preserves known 403 if caller cancellation wins the outer body guard", async () => {
+    const controller = new AbortController();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => { started = resolve; });
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ pull: started }), { status: 403 }));
+    const operation = apiBlobDataRequest("/api/private/aborted-denial", { signal: controller.signal });
+    await reading;
+    controller.abort(new DOMException("Viewer closed", "AbortError"));
+    await expect(operation).rejects.toMatchObject({ name: "ApiError", status: 403, data: null, problemType: null });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invent a refresh problem type for an unreadable known 401", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError("Body truncated")); } }), { status: 401 }));
+    await expect(apiBlobDataRequest("/api/private/truncated-auth", { token: "explicit" }))
+      .rejects.toMatchObject({ status: 401, data: null, problemType: null });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it.each([true, false])("enforces the byte cap with declared length %s", async (declared) => {
     vi.mocked(fetch).mockResolvedValue(new Response("too many source bytes", { headers: declared ? { "content-length": "21" } : {} }));
     await expect(apiBlobDataRequest("/api/private/oversized", { maxBytes: 4 })).rejects.toMatchObject({ name: "NetworkError", message: expect.stringContaining("allowed size") });

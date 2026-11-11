@@ -424,6 +424,11 @@ export async function apiBlobRequest(
 
 export type ApiBlobData = { blob: Blob; headers: Headers; status: number };
 export type ApiBlobDataInit = Omit<ApiRequestInit, "body"> & { maxBytes?: number };
+type BinaryResponseStatus = { status?: number };
+
+function statusOnlyError(status: number): ApiError {
+  return new ApiError(status, `Request failed (${status}).`, null, null);
+}
 
 function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -473,6 +478,7 @@ export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {
     throw new RangeError("Binary size and timeout limits must be positive.");
   }
   const controller = new AbortController();
+  const observed: BinaryResponseStatus = {};
   let timedOut = false;
   const cancel = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) cancel();
@@ -484,8 +490,10 @@ export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {
   try {
     return await abortable(authenticatedBinaryRequest(path, { ...init, signal: controller.signal },
       async (response, signal) => ({ blob: await binaryBody(response, signal, maxBytes),
-        headers: response.headers, status: response.status }), false, "no-store"), controller.signal);
+        headers: response.headers, status: response.status }), false, "no-store", init.token === undefined, observed), controller.signal);
   } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (observed.status !== undefined) throw statusOnlyError(observed.status);
     if (timedOut) throw new NetworkError(`The workspace API did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Try again.`, error);
     throw error;
   } finally {
@@ -498,6 +506,7 @@ async function authenticatedBinaryRequest<T>(
   path: string, init: Omit<ApiRequestInit, "body">,
   consume: (response: Response, signal: AbortSignal) => Promise<T>,
   _retry = false, cache?: RequestCache, cookieCaller = init.token === undefined,
+  observed: BinaryResponseStatus = {},
 ): Promise<T> {
   const { method = "GET", headers = {}, signal, timeoutMs } = init;
   signal?.throwIfAborted();
@@ -526,6 +535,7 @@ async function authenticatedBinaryRequest<T>(
       },
       timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
       async (response, bodySignal) => {
+        observed.status = response.ok ? undefined : response.status;
         if (response.ok) value = await consume(response, bodySignal);
         else {
           const text = await (await binaryBody(response, bodySignal, 64 * 1024)).text();
@@ -539,6 +549,7 @@ async function authenticatedBinaryRequest<T>(
       },
     );
   } catch (error) {
+    if (observed.status !== undefined) throw statusOnlyError(observed.status);
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
@@ -565,12 +576,13 @@ async function authenticatedBinaryRequest<T>(
     AUTH_REFRESH_TRIGGERS.has(problemType) &&
     !path.endsWith(REFRESH_PATH)
   ) {
+    observed.status = undefined;
     const fresh = await refreshAccessToken();
     if (fresh || explicitToken === undefined) {
       return authenticatedBinaryRequest(
         path,
         fresh ? { ...init, token: fresh } : init,
-        consume, true, cache, cookieCaller,
+        consume, true, cache, cookieCaller, observed,
       );
     }
   }
