@@ -148,3 +148,59 @@ The production branch has not been executed as part of this source follow-up.
 Its 26 offline policy/memory-handoff cases and TypeScript/discovery checks are
 supporting evidence only. Whole BUG001 legal-content/profile quality remains
 open even after a future positive read-only parity result.
+
+## Independent Review Corrections
+
+The passive Draft text view no longer creates a PDF source URL. An explicit PDF
+tab action grants acquisition only for the currently displayed source/review
+identity. Returning to text, editing/cancelling, reload, source replacement or a
+review/title change clears that request. Changing a court preset while still in
+text view does not export. The older retained October 22 production journey's
+prohibited-export fence is unchanged.
+
+Draft PDF reads now use Banach's additive `apiBlobDataRequest` contract rather
+than a direct fetch. Its authenticated cookie/refresh/sign-in path, one complete
+30-second request/body budget, caller cancellation, no-store semantics and 32 MiB
+cap are reused. Existing `apiBlobRequest` Response callers are not changed by
+drafting. Shared client source/tests remain Banach-owned; original dependency
+commit: `18f362adaecdf24571590cef75bbe708bb9a6711`.
+Banach's shared-only follow-up `81f1ae5103c9b2e65fe2470f7bb55a64c4122155`
+retains original cookie-caller intent through a refresh retry, so a second 401
+still recovers to sign-in without redirecting explicit-token callers.
+
+Both of the same two Playwright cases declare exactly this native annotation,
+including discovery and failure paths:
+
+```text
+type: caseops-b5-proof
+description: retained-readonly
+```
+
+This matches the configuration owner's `BATCH5_PROOF_SCOPES` contract. It is not
+a full drafting/content workflow claim, even when synthetic local setup creates
+and approves its own layout-only fixture.
+
+The old greater-than-50-dark-pixels check has been replaced. The new oracle
+waits for each page's canvas and text layer, reconciles the complete persisted
+body/title/citation text in order across all pages, checks every footer and the
+selected preset's paper/printable bounds, and requires actual high-contrast ink
+for every printable text run. It rejects header-only renders, omitted final
+paragraphs, low/white body text, clipped text and incorrect continuation pages.
+Profile changes render and download the replacement artifact and compare its
+fresh authorized bytes; reload still starts in passive text view with no export.
+
+An offline real-PDF/PDF.js canvas control passed at desktop and 393px phone
+widths. Whitening only the body leaves the complete text layer and dark headers
+intact but correctly fails the new contrast check. No application server or
+production requests were used for this control. It is supporting oracle proof,
+not execution of the two built-app user journeys.
+
+The earlier composed selection passed 99 cases; after the body-boundary/review
+warning and shared second-401 regressions, the final selection passed all 103
+cases (23 artifact, 14 page, 14 oracle, 26 production-policy and 26 shared-client).
+Native discovery still contains exactly 2 annotated browser cases.
+Production and full legal/content suitability remain unverified.
+
+The pure oracle remains at `tests/e2e/support/draft_pdf_oracle_20261111.ts` and
+has no imports or transitive dependencies. The parent owns its finite builder
+COPY/upload allowlisting; no root build/config/upload files are changed here.

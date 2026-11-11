@@ -129,7 +129,7 @@ const BASE_DRAFT = {
 
 describe("MatterDraftDetailPage", () => {
   beforeEach(() => {
-    pdfArtifactMock.mockReset().mockReturnValue({ url: "blob:approved-pdf", error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false });
+    pdfArtifactMock.mockReset().mockImplementation((source) => ({ url: source ? "blob:approved-pdf" : null, error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false }));
     downloadPdfMock.mockReset();
     approveDraftMock.mockReset();
     draftFilingBundleUrlMock.mockReset();
@@ -441,6 +441,9 @@ describe("MatterDraftDetailPage", () => {
       "data-court-profile",
       "supreme_court",
     );
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
     expect(pdfArtifactMock).toHaveBeenLastCalledWith(
       "https://api.test/draft.pdf?court_profile=supreme_court&version_id=v-1", "approved:false:Bail application",
     );
@@ -455,6 +458,9 @@ describe("MatterDraftDetailPage", () => {
     useCapabilityMock.mockReturnValue(true);
     render(withClient(<DraftDetailPage />));
     await screen.findByTestId("draft-body-readonly");
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("draft-download-pdf")).toBeDisabled();
     expect(screen.queryByTestId("real-pdf-preview")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
     expect(screen.queryByTestId("draft-body-readonly")).not.toBeInTheDocument();
@@ -465,5 +471,42 @@ describe("MatterDraftDetailPage", () => {
     expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-1", "approved:false:Bail application");
     await userEvent.click(screen.getByTestId("draft-edit-toggle"));
     expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+  });
+
+  it("BUG001 passive text, remount and edit cancellation do not acquire a PDF", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    const first = render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    first.unmount();
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(draftPdfUrlMock).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "Draft text" }));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+  });
+
+  it("BUG001 replacing the version requires another explicit PDF action", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    const replacement = { ...BASE_DRAFT, current_version_id: "v-2", versions: [
+      ...BASE_DRAFT.versions, { ...BASE_DRAFT.versions[0], id: "v-2", revision: 2, body: "Replacement source." },
+    ] };
+    fetchDraftMock.mockResolvedValue(replacement);
+    generateDraftVersionMock.mockResolvedValue(replacement);
+    await userEvent.click(screen.getByTestId("draft-generate"));
+    await waitFor(() => expect(screen.getByTestId("draft-current-revision")).toHaveTextContent("Revision 2"));
+    expect(pdfArtifactMock.mock.calls.some(([source]) => source?.includes("version_id=v-2"))).toBe(false);
+    expect(screen.getByTestId("draft-body-readonly")).toHaveTextContent("Replacement source.");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-2", "approved:false:Bail application");
   });
 });

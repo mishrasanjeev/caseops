@@ -1,37 +1,17 @@
 import { createHash } from "node:crypto";
 
-import { devices, expect, type Browser, type Page, type Response, type TestInfo } from "@playwright/test";
+import { devices, expect, type Browser, type Response, type TestInfo } from "@playwright/test";
 
 import { authContext, draft as draftSchema, type Draft } from "../../../apps/web/lib/api/schemas";
 import { noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 import { allowedProductionDraftRead, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
+import { assertDraftPdfRender } from "./draft_pdf_render_proof_20261111";
+import type { DraftPdfProfile } from "./draft_pdf_oracle_20261111";
 
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 const fingerprint = (draft: Draft) => hash(JSON.stringify(draft));
 const mediaOff = (value: unknown) => value === "off";
-
-async function renderedPages(page: Page) {
-  await expect(page.getByTestId("draft-download-pdf")).toBeEnabled();
-  await expect(page.locator("[data-testid=draft-pdf-preview] canvas")).toBeVisible();
-  const pages = Number((await page.getByTestId("draft-pdf-pagination").innerText()).split(" of ")[1]);
-  expect(Number.isInteger(pages) && pages >= 1 && pages <= 200, "Complete bounded PDF page inventory").toBe(true);
-  for (let index = 1; index <= pages; index++) {
-    await expect(page.getByTestId("draft-pdf-pagination")).toHaveText(`Page ${index} of ${pages}`);
-    await expect(page.getByRole("region", { name: "PDF page canvas" })).toHaveAttribute("data-rendered-page", String(index));
-    const canvas = page.locator("[data-testid=draft-pdf-preview] canvas");
-    await canvas.scrollIntoViewIfNeeded();
-    await expect.poll(() => canvas.evaluate(node => {
-      const canvas = node as HTMLCanvasElement;
-      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
-      let ink = 0;
-      for (let offset = 0; offset < data.length; offset += 4) if (data[offset] < 200 && data[offset + 1] < 200 && data[offset + 2] < 200 && data[offset + 3] > 0) ink++;
-      return ink;
-    })).toBeGreaterThan(50);
-    if (index < pages) await page.getByRole("button", { name: "Next PDF page" }).click();
-  }
-  return pages;
-}
 
 export async function productionDraftPdfJourney(browser: Browser, baseURL: string, info: TestInfo, phone: boolean) {
   let stage = "configuration", failure: string | undefined;
@@ -46,6 +26,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     acceptDownloads: false, extraHTTPHeaders: noPaidProviderHeaders });
   const page = await context.newPage();
   let logins = 0, nativeDownloads = 0, blockedExternal = 0;
+  let pdfActionAllowed = false, passiveExports = 0;
   const violations = new Set<string>();
   const draftPath = `/api/matters/${settings.matterId}/drafts/${settings.draftId}`;
   const exportPath = `${draftPath}/export.pdf`;
@@ -67,6 +48,11 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
   await context.addInitScript(capturePdfDownloadsInMemory);
   await context.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method();
+    if (url.origin === settings.api && url.pathname === exportPath && !pdfActionAllowed) {
+      passiveExports++;
+      violations.add("passive-export");
+      return route.abort("blockedbyclient");
+    }
     const decision = productionDraftRequestPolicy(url.href, method, request.headers()["x-caseops-automated-test"], settings);
     if (decision === "external") { blockedExternal++; return route.abort("blockedbyclient"); }
     if (decision === "blocked" || (decision === "login" && ++logins > 1)) {
@@ -99,6 +85,13 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       "Exact reported draft and tenant").toBe(true);
     const version = before.versions.find(row => row.id === before.current_version_id);
     if (!version) throw new Error("Persisted current version is absent.");
+    const catalogue = await read("/api/drafting/court-profiles") as { profiles: Array<DraftPdfProfile & { key: string }> };
+    const profileFor = (key: string | null) => {
+      const profile = catalogue.profiles.find(row => row.key === key);
+      if (!profile) throw new Error("Resolved profile metadata is absent.");
+      return profile;
+    };
+    const source = { title: before.title, body: version.body, citations: version.citations, reviewRequired: before.review_required };
     const unchanged = async () => expect(fingerprint(await readDraft()) === fingerprint(before), "Retained content and review state remain unchanged").toBe(true);
     const pinned = async (response: Response, profile?: string) => {
       expect(await response.finished(), "PDF transport completes").toBeNull();
@@ -111,6 +104,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await page.goto(`${settings.web}/app/matters/${settings.matterId}/drafts/${settings.draftId}`);
     await expect(page.getByTestId("draft-current-revision")).toHaveText(`Revision ${version.revision}`);
     expect(await page.getByTestId("draft-body-readonly").textContent() === version.body, "Visible text is retained source content").toBe(true);
+    expect(passiveExports, "Passive Draft text view must not export").toBe(0);
+    pdfActionAllowed = true;
     await page.getByRole("tab", { name: "PDF preview" }).click();
     const initial = await initialPdf;
     await pinned(initial);
@@ -156,7 +151,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     };
     stage = "auto-profile-parity";
     const auto = await checkedPdf(initial);
-    const autoPages = await renderedPages(page);
+    const autoPages = await assertDraftPdfRender(page, profileFor(auto.profile), source);
     await memoryDownload(auto, 1);
     stage = "selected-profile-parity";
     await expect(page.getByTestId("court-profile-select").locator('option[value="generic"]')).toHaveCount(1);
@@ -164,16 +159,21 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await page.getByTestId("court-profile-select").selectOption("generic");
     const selected = await checkedPdf(await selectedPdf, "generic");
     expect(auto.profile === "generic" || selected.hash !== auto.hash, "A different resolved preset changes the exported snapshot").toBe(true);
-    const selectedPages = await renderedPages(page);
+    const selectedPages = await assertDraftPdfRender(page, profileFor(selected.profile), source);
     await memoryDownload(selected, 2, "generic");
     stage = "reload-parity";
+    pdfActionAllowed = false;
+    await page.getByRole("tab", { name: "Draft text" }).click();
+    await expect(page.getByTestId("draft-download-pdf")).toBeDisabled();
     const reloadedPdf = receipt();
     await page.reload();
     await expect(page.getByTestId("draft-current-revision")).toHaveText(`Revision ${version.revision}`);
     expect(await page.getByTestId("draft-body-readonly").textContent() === version.body, "Reload preserves source content").toBe(true);
+    expect(passiveExports, "Reloaded Draft text view must not export").toBe(0);
+    pdfActionAllowed = true;
     await page.getByRole("tab", { name: "PDF preview" }).click();
     expect((await checkedPdf(await reloadedPdf)).hash === auto.hash, "Reload preserves automatic-profile bytes").toBe(true);
-    expect(await renderedPages(page)).toBe(autoPages);
+    expect(await assertDraftPdfRender(page, profileFor(auto.profile), source)).toBe(autoPages);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
     await unchanged();
     await release();

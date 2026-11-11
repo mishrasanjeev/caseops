@@ -275,11 +275,21 @@ function DraftBody({
   const [editBody, setEditBody] = useState(currentVersion?.body ?? "");
   const [focusNote, setFocusNote] = useState("");
   const [bodyView, setBodyView] = useState<"text" | "pdf">("text");
+  const pdfIdentity = JSON.stringify([currentVersion?.id, draft.status, draft.review_required, draft.title]);
+  const [pdfRequestedIdentity, setPdfRequestedIdentity] = useState<string | null>(null);
+  const selectBodyView = (view: "text" | "pdf") => {
+    setBodyView(view);
+    setPdfRequestedIdentity(view === "pdf" ? pdfIdentity : null);
+  };
   useEffect(() => {
     setEditBody(currentVersion?.body ?? "");
     setEditing(false);
     setFocusNote("");
   }, [currentVersion?.id, currentVersion?.body]);
+  useEffect(() => {
+    setBodyView("text");
+    setPdfRequestedIdentity(null);
+  }, [pdfIdentity, currentVersion?.body]);
 
   const status: DraftStatus = draft.status;
   const isLocked = status === "finalized" || status === "filed" || status === "served";
@@ -301,7 +311,7 @@ function DraftBody({
   const selectedProfile = profilesQuery.data?.find(
     (profile) => profile.key === courtProfileKey,
   );
-  const pdfSource = currentVersion && !editing
+  const pdfSource = currentVersion && !editing && bodyView === "pdf" && pdfRequestedIdentity === pdfIdentity
     ? (() => {
         const url = new URL(draftPdfUrl(matterId, draft.id, exportCourtProfile));
         url.searchParams.set("version_id", currentVersion.id);
@@ -395,7 +405,10 @@ function DraftBody({
           {canEdit ? (
             <Button
               variant="outline"
-              onClick={() => setEditing((value) => !value)}
+              onClick={() => {
+                selectBodyView("text");
+                setEditing((value) => !value);
+              }}
               disabled={transitioning}
               data-testid="draft-edit-toggle"
             >
@@ -491,15 +504,15 @@ function DraftBody({
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                 event.preventDefault();
                 const next = event.key === "Home" ? "text" : event.key === "End" ? "pdf" : bodyView === "text" ? "pdf" : "text";
-                setBodyView(next);
+                selectBodyView(next);
                 document.getElementById(`draft-${next}-tab`)?.focus();
               }}>
               <button type="button" role="tab" id="draft-text-tab" aria-controls="draft-text-panel"
                 aria-selected={bodyView === "text"} tabIndex={bodyView === "text" ? 0 : -1} className="px-3 py-2 text-sm underline-offset-4 aria-selected:underline"
-                onClick={() => setBodyView("text")}>Draft text</button>
+                onClick={() => selectBodyView("text")}>Draft text</button>
               <button type="button" role="tab" id="draft-pdf-tab" aria-controls="draft-pdf-panel"
                 aria-selected={bodyView === "pdf"} tabIndex={bodyView === "pdf" ? 0 : -1} className="px-3 py-2 text-sm underline-offset-4 aria-selected:underline"
-                onClick={() => setBodyView("pdf")}>PDF preview</button>
+                onClick={() => selectBodyView("pdf")}>PDF preview</button>
             </div> : null}
           </CardHeader>
           <CardContent>

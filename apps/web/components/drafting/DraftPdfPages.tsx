@@ -16,6 +16,7 @@ export default function DraftPdfPages({ url }: { url: string }) {
   const [zoom, setZoom] = useState(1);
   const [failed, setFailed] = useState(false);
   const [renderedPage, setRenderedPage] = useState(0);
+  const [textPage, setTextPage] = useState(0);
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -37,7 +38,7 @@ export default function DraftPdfPages({ url }: { url: string }) {
       <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
     </div>
     <div ref={container} className="relative min-w-0 overflow-x-auto bg-[var(--color-bg)]"
-      tabIndex={0} role="region" aria-label="PDF page canvas" data-rendered-page={renderedPage}>
+      tabIndex={0} role="region" aria-label="PDF page canvas" data-rendered-page={renderedPage} data-text-page={textPage}>
       <Document file={url} onLoadSuccess={({ numPages }) => setTotal(numPages)}
         onLoadError={() => setFailed(true)} loading={<p role="status">Loading PDF pages...</p>}
         error={<p role="alert">PDF pages could not be displayed. The PDF download remains available.</p>}>
@@ -45,6 +46,7 @@ export default function DraftPdfPages({ url }: { url: string }) {
           : width > 0 && total > 0 ? <Page pageNumber={page} width={Math.min(width, 850) * zoom}
           renderTextLayer renderAnnotationLayer={false} onRenderError={() => setFailed(true)}
           onRenderSuccess={() => setRenderedPage(page)}
+          onRenderTextLayerSuccess={() => setTextPage(page)}
           error={<p role="alert">This PDF page could not be displayed.</p>} /> : null}
       </Document>
     </div>

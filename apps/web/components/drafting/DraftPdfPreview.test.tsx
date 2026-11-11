@@ -12,6 +12,7 @@ describe("BUG001 revision-bound PDF bytes", () => {
   const create = vi.fn(() => "blob:approved-pdf");
   const revoke = vi.fn();
   beforeEach(() => {
+    window.localStorage.clear();
     fetchMock.mockReset(); create.mockClear(); revoke.mockClear();
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("Blob", NodeBlob);
@@ -73,7 +74,7 @@ describe("BUG001 revision-bound PDF bytes", () => {
   });
 
   it.each([401, 403, 404, 422, 503])("preserves a %s gate without retries or stale PDF", async (status) => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Review or permission required." }), { status }));
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "Review or permission required." }), { status, headers: { "content-type": "application/problem+json" } }));
     const hook = renderHook(() => useDraftPdfArtifact("https://api.test/pdf", "draft:true"));
     await waitFor(() => expect(hook.result.current.error).toBe("Review or permission required."));
     expect(hook.result.current.url).toBeNull();
@@ -105,7 +106,7 @@ describe("BUG001 revision-bound PDF bytes", () => {
   });
 
   it.each([401, 403, 404, 422])("discards a retained artifact after download-time %s denial", async (status) => {
-    fetchMock.mockResolvedValueOnce(pdf()).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Access or review revoked." }), { status }));
+    fetchMock.mockResolvedValueOnce(pdf()).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Access or review revoked." }), { status, headers: { "content-type": "application/problem+json" } }));
     const hook = renderHook(() => useDraftPdfArtifact("https://api.test/pdf", "approved:false"));
     await waitFor(() => expect(hook.result.current.url).toBeTruthy());
     let url: string | null = "unexpected";
@@ -140,5 +141,35 @@ describe("BUG001 revision-bound PDF bytes", () => {
     else hook.rerender({ source: "https://api.test/new-profile" });
     await act(async () => { resolveCheck(pdf()); expect(await pending).toBeNull(); });
     expect(revoke).toHaveBeenCalledWith("blob:approved-pdf");
+  });
+
+  it("uses shared single-refresh recovery for an expired binary session", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ type: "expired_token", detail: "Expired session." }), {
+      status: 401, headers: { "content-type": "application/problem+json" },
+    })).mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "fresh-draft-token", company: {}, user: {}, membership: {} }), {
+      headers: { "content-type": "application/json" },
+    })).mockResolvedValueOnce(pdf());
+    const hook = renderHook(() => useDraftPdfArtifact("https://api.test/export.pdf?version_id=v1", "approved:false"));
+    await waitFor(() => expect(hook.result.current.url).toBe("blob:approved-pdf"));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/api\/auth\/refresh$/);
+    expect(fetchMock.mock.calls[2][1].headers).toMatchObject({ Authorization: "Bearer fresh-draft-token" });
+  });
+
+  it("does not bypass a policy denial following a successful authentication refresh", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ type: "expired_token", detail: "Expired session." }), {
+      status: 401, headers: { "content-type": "application/problem+json" },
+    })).mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "fresh-draft-token", company: {}, user: {}, membership: {} }), {
+      headers: { "content-type": "application/json" },
+    })).mockResolvedValueOnce(new Response(JSON.stringify({ type: "permission_denied", detail: "Draft access revoked." }), {
+      status: 403, headers: { "content-type": "application/problem+json" },
+    }));
+    const hook = renderHook(() => useDraftPdfArtifact("https://api.test/export.pdf?version_id=v1", "approved:false"));
+    await waitFor(() => expect(hook.result.current.error).toBe("Draft access revoked."));
+    expect(hook.result.current.url).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

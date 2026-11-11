@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
-import { consumeResponseWithTimeout } from "@/lib/api/client";
+import { apiBlobDataRequest } from "@/lib/api/client";
 
 const PdfPages = dynamic(() => import("./DraftPdfPages"), { ssr: false });
 
@@ -11,18 +11,13 @@ type Artifact = { identity: string; url: string; digest: string };
 type Owner = { identity: string; controller: AbortController; artifact: Artifact | null; validating: boolean };
 
 async function readPdf(source: string, signal: AbortSignal) {
-  return consumeResponseWithTimeout(source, {
-    credentials: "include", cache: "no-store", signal, headers: { Accept: "application/pdf" },
-  }, 30_000, async (response) => {
-    if (!response.ok) {
-      const problem = await response.json().catch(() => null);
-      throw new Error(typeof problem?.detail === "string" ? problem.detail : "PDF preview is unavailable. Try again.");
-    }
-    if (response.headers.get("content-type")?.split(";")[0] !== "application/pdf") {
-      throw new Error("The server did not return a PDF. Try again.");
-    }
-    return response.arrayBuffer();
+  const response = await apiBlobDataRequest(source, {
+    signal, timeoutMs: 30_000, maxBytes: 32 * 1024 * 1024, headers: { Accept: "application/pdf" },
   });
+  if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/pdf") {
+    throw new Error("The server did not return a PDF. Try again.");
+  }
+  return response.blob.arrayBuffer();
 }
 
 async function digest(bytes: ArrayBuffer) {
