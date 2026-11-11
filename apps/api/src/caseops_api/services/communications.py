@@ -995,7 +995,7 @@ def _render_matter_email(
             EmailTemplate.is_active.is_(True),
         ).execution_options(populate_existing=True)
         if lock_template:
-            statement = statement.with_for_update(of=EmailTemplate)
+            statement = statement.with_for_update(read=True, of=EmailTemplate)
         template = session.scalar(statement)
         if template is None:
             raise HTTPException(status_code=404, detail="Email template not found or archived.")
