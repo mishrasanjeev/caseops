@@ -58,4 +58,13 @@ describe("BUG001 complete source/geometry/contrast oracle", () => {
     expect(assessDraftPdf([full()], { ...profile, page_format: "unknown" }, source).paper).toBe(false);
     expect(assessDraftPdf([{ ...full(), height: 420 }], profile, source).paper).toBe(false);
   });
+  it("rejects a footer-only trailing page even with correctly renumbered footers", () => {
+    const first = full();
+    first.runs[first.runs.length - 1].text = "Page 1 of 2";
+    const result = assessDraftPdf([first, probe([], "Page 2 of 2")], profile, source);
+    expect(result.sourceComplete).toBe(true);
+    expect(result.pagination).toBe(true);
+    expect(result).toHaveProperty("pageContent", false);
+    expect(Object.values(result).every(Boolean)).toBe(false);
+  });
 });

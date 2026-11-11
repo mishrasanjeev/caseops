@@ -35,7 +35,7 @@ export function productionDraftSettings(baseURL: string, env: Record<string, str
 export function allowedProductionDraftRead(pathname: string): boolean {
   const matter = `/api/matters/${reportedDraftTarget.matterId}`;
   const draft = `${matter}/drafts/${reportedDraftTarget.draftId}`;
-  return ["/api/auth/me", "/api/build", "/api/drafting/court-profiles", matter, `${matter}/drafts`,
+  return ["/api/auth/me", "/api/build", "/api/drafting/court-profiles", matter, `${matter}/workspace`, `${matter}/drafts`,
     draft, `${draft}/compare`, `${draft}/filing-checklist`, `${draft}/export.pdf`].includes(pathname);
 }
 

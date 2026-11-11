@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -277,7 +277,9 @@ function DraftBody({
   const [bodyView, setBodyView] = useState<"text" | "pdf">("text");
   const pdfIdentity = JSON.stringify([currentVersion?.id, draft.status, draft.review_required, draft.title]);
   const [pdfRequestedIdentity, setPdfRequestedIdentity] = useState<string | null>(null);
+  const pdfCompletionEpoch = useRef(0);
   const selectBodyView = (view: "text" | "pdf") => {
+    pdfCompletionEpoch.current++;
     setBodyView(view);
     setPdfRequestedIdentity(view === "pdf" ? pdfIdentity : null);
   };
@@ -287,9 +289,11 @@ function DraftBody({
     setFocusNote("");
   }, [currentVersion?.id, currentVersion?.body]);
   useEffect(() => {
+    pdfCompletionEpoch.current++;
     setBodyView("text");
     setPdfRequestedIdentity(null);
   }, [pdfIdentity, currentVersion?.body]);
+  useEffect(() => () => { pdfCompletionEpoch.current++; }, []);
 
   const status: DraftStatus = draft.status;
   const isLocked = status === "finalized" || status === "filed" || status === "served";
@@ -319,6 +323,8 @@ function DraftBody({
       })()
     : null;
   const pdfArtifact = useDraftPdfArtifact(pdfSource, `${draft.status}:${draft.review_required}:${draft.title}`);
+  const currentPdfSource = useRef(pdfSource);
+  currentPdfSource.current = pdfSource;
 
   const verifiedCount = currentVersion?.verified_citation_count ?? 0;
 
@@ -430,7 +436,7 @@ function DraftBody({
                 selectedProfile={selectedProfile}
                 value={courtProfileKey}
                 loading={profilesQuery.isLoading}
-                onChange={setCourtProfileKey}
+                onChange={(value) => { pdfCompletionEpoch.current++; setCourtProfileKey(value); }}
               />
               <Button
                 variant="outline"
@@ -443,9 +449,10 @@ function DraftBody({
                 variant="outline"
                 disabled={!pdfArtifact.url || editing || pdfArtifact.validating}
                 onClick={async () => {
+                  const epoch = pdfCompletionEpoch.current, source = pdfSource;
                   const url = await pdfArtifact.revalidate();
+                  if (!source || epoch !== pdfCompletionEpoch.current || source !== currentPdfSource.current) return;
                   if (url && currentVersion) downloadDraftPdf(url, draft.title, currentVersion.revision);
-                  else setBodyView("pdf");
                 }}
                 data-testid="draft-download-pdf"
               >

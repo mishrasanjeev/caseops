@@ -12,7 +12,8 @@ export const canonicalDraftText = (text: string) => text.normalize("NFC").replac
 
 export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfProfile, source: DraftPdfSource) {
   const result = { sourceComplete: false, titleComplete: false, citationsComplete: false,
-    pagination: probes.length > 0 && probes.length <= 200, printableBounds: true, contrast: true, paper: true };
+    pagination: probes.length > 0 && probes.length <= 200, pageContent: probes.length > 0,
+    printableBounds: true, contrast: true, paper: true };
   // These release-owned presets currently expose A4 only. Unknown paper is not
   // silently treated as A4, nor is this a claim about a court's filing rules.
   if (profile.page_format !== "A4" || ![profile.margin_left_mm, profile.margin_right_mm,
@@ -36,6 +37,7 @@ export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfPro
         || top < profile.margin_top_mm - 0.8 || bottom > 297 - profile.margin_bottom_mm + 0.8) result.printableBounds = false;
     }
     const expectedFooter = profile.page_number_format.replaceAll("{n}", String(index + 1)).replaceAll("{total}", String(probes.length));
+    if (!printable.some(text => /[\p{L}\p{N}]/u.test(text))) result.pageContent = false;
     if (canonicalDraftText(footer.join("")) !== canonicalDraftText(expectedFooter)) result.pagination = false;
     texts.push(printable.join(""));
   }

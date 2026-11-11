@@ -54,6 +54,14 @@ describe("BUG001 production-only read boundary", () => {
     expect(citationReviewExportGuard(503, guard, "draft", 0)).toBe(false);
     expect(citationReviewExportGuard(422, { detail: "Unsupported characters" }, "draft", 0)).toBe(false);
   });
+  it("admits only the exact reported Matter workspace GET, never other records or writes", () => {
+    const workspace = `/api/matters/${reportedDraftTarget.matterId}/workspace`;
+    expect(allowedProductionDraftRead(workspace)).toBe(true);
+    expect(productionDraftRequestPolicy(`${settings.api}${workspace}`, "GET", "no-paid-providers", settings)).toBe("read");
+    expect(allowedProductionDraftRead("/api/matters/another-matter/workspace")).toBe(false);
+    expect(productionDraftRequestPolicy(`${settings.api}${workspace}`, "PATCH", "no-paid-providers", settings)).toBe("blocked");
+    expect(productionDraftRequestPolicy(`${settings.api}${workspace}`, "POST", "no-paid-providers", settings)).toBe("blocked");
+  });
 });
 
 describe("BUG001 memory-only download proof", () => {

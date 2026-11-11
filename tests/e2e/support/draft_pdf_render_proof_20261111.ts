@@ -23,6 +23,7 @@ export async function assertDraftPdfRender(page: Page, profile: DraftPdfProfile,
   expect(assessment.titleComplete, "Persisted title appears in the PDF").toBe(true);
   expect(assessment.citationsComplete, "All recorded citation text appears after the source body").toBe(true);
   expect(assessment.pagination, "Every PDF page has the expected pagination").toBe(true);
+  expect(assessment.pageContent, "Every PDF page has meaningful non-footer content").toBe(true);
   expect(assessment.paper && assessment.printableBounds, "Text stays within the selected preset's printable bounds").toBe(true);
   expect(assessment.contrast, "Every printable text run has visible high-contrast ink").toBe(true);
   return pages;

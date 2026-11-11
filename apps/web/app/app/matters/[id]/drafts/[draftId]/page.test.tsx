@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Blob as NodeBlob } from "node:buffer";
+import { webcrypto } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/config";
@@ -64,7 +66,8 @@ vi.mock("@/components/drafting/DraftCompareView", () => ({
 }));
 
 const { pdfArtifactMock, downloadPdfMock } = vi.hoisted(() => ({ pdfArtifactMock: vi.fn(), downloadPdfMock: vi.fn() }));
-vi.mock("@/components/drafting/DraftPdfPreview", () => ({
+vi.mock("@/components/drafting/DraftPdfPreview", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/drafting/DraftPdfPreview")>(),
   useDraftPdfArtifact: pdfArtifactMock,
   downloadDraftPdf: downloadPdfMock,
   DraftPdfPreview: ({ url }: { url: string | null }) => <div data-testid="real-pdf-preview" data-url={url} />,
@@ -80,6 +83,8 @@ vi.mock("@/components/drafting/FilingChecklistCard", () => ({
 }));
 
 import DraftDetailPage from "@/app/app/matters/[id]/drafts/[draftId]/page";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -508,5 +513,35 @@ describe("MatterDraftDetailPage", () => {
     expect(screen.getByTestId("draft-body-readonly")).toHaveTextContent("Replacement source.");
     await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
     expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-2", "approved:false:Bail application");
+  });
+
+  it("BUG001 a cancelled deferred download cannot reopen PDF after switching to Draft text", async () => {
+    const real = await vi.importActual<typeof import("@/components/drafting/DraftPdfPreview")>("@/components/drafting/DraftPdfPreview");
+    pdfArtifactMock.mockImplementation(real.useDraftPdfArtifact);
+    vi.stubGlobal("Blob", NodeBlob);
+    vi.stubGlobal("crypto", webcrypto);
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL = vi.fn(() => "blob:deferred-pdf");
+      static revokeObjectURL = vi.fn();
+    });
+    let complete!: (response: Response) => void;
+    const fetch = vi.fn().mockResolvedValueOnce(new Response("%PDF-synthetic", { headers: { "content-type": "application/pdf" } }))
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve; }));
+    vi.stubGlobal("fetch", fetch);
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    await waitFor(() => expect(screen.getByTestId("draft-download-pdf")).toBeEnabled());
+    await userEvent.click(screen.getByTestId("draft-download-pdf"));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await userEvent.click(screen.getByRole("tab", { name: "Draft text" }));
+    await act(async () => { complete(new Response("%PDF-synthetic", { headers: { "content-type": "application/pdf" } })); });
+    expect(screen.getByRole("tab", { name: "Draft text" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("draft-body-readonly")).toHaveTextContent(BASE_DRAFT.versions[0].body);
+    expect(screen.queryByTestId("real-pdf-preview")).not.toBeInTheDocument();
+    expect(downloadPdfMock).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
