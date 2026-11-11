@@ -50,7 +50,7 @@ BUILDER_INPUTS = {
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
-        "ip-portfolio-export-completion", "run-id",
+        "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -166,6 +166,17 @@ class NativeUploadTests(unittest.TestCase):
         self.assertTrue(sources)
         missing = sources - BUILDER_INPUTS - self.required
         self.assertFalse(missing, f"Dockerfile COPY inputs not declared: {sorted(missing)}")
+
+    def test_colocated_retained_evidence_helper_has_explicit_builder_admission(self):
+        helper = "tests/e2e/support/retained-assistant-evidence.ts"
+        test_source = (ROOT / "apps/web/lib/retained-assistant-evidence.test.ts").read_text(encoding="utf-8")
+        self.assertIn('from "../../../tests/e2e/support/retained-assistant-evidence"', test_source)
+        self.assertIn(helper, BUILDER_INPUTS)
+        dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
+        self.assertIn(f"COPY {helper} /app/{helper}", dockerfile.splitlines())
+        for name in (".dockerignore", ".gcloudignore"):
+            lines = (ROOT / name).read_text(encoding="utf-8").splitlines()
+            self.assertIn(f"!{helper}", lines)
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

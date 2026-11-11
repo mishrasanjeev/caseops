@@ -49,9 +49,9 @@ test("IPLF-038B generates internal reports and exposes unavailable sources", asy
   await page.getByLabel("Report", { exact: true }).selectOption("watch");
   await expect(page.getByLabel("Keyword")).toHaveCount(0);
   await page.getByRole("button", { name: "Generate" }).click();
-  await expect(page.getByText("Report source unavailable")).toBeVisible();
+  await expect(page.getByText("No matching records")).toBeVisible();
   await expect(page.getByText(/Unavailable sources: Ip watch provider/)).toBeVisible();
-  await expect(page.getByText("IP watch operations are not activated for this workspace.")).toBeVisible();
+  await expect(page.getByText("No retained journal-watch records match your access; automated journal coverage is unavailable.")).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app/ip/reports");

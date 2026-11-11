@@ -1488,6 +1488,12 @@ export default function ContractDetailPage() {
                       deletions
                     </div>
                     <div>
+                      <span className="font-semibold text-[var(--color-ink-2)]">
+                        {redlineQuery.data.move_count}
+                      </span>{" "}
+                      {redlineQuery.data.move_count === 1 ? "moved passage" : "moved passages"}
+                    </div>
+                    <div>
                       {redlineQuery.data.paragraph_count} paragraphs
                     </div>
                     {Object.entries(redlineQuery.data.author_counts).map(
@@ -1498,13 +1504,33 @@ export default function ContractDetailPage() {
                       ),
                     )}
                   </div>
-                  {redlineQuery.data.changes.length === 0 ? (
+                  {redlineQuery.data.uninterpreted_revision_count > 0 ? (
+                    <div
+                      role="status"
+                      data-testid="contract-redline-uninterpreted"
+                      className="flex items-start gap-2 rounded-md border border-[var(--color-warn-border)] bg-[var(--color-warn-bg)] p-3 text-sm text-[var(--color-warn-text)]"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                      <span>
+                        {redlineQuery.data.uninterpreted_revision_count} tracked{" "}
+                        {redlineQuery.data.uninterpreted_revision_count === 1
+                          ? "revision is"
+                          : "revisions are"}{" "}
+                        not shown here (images, table structure, numbering or
+                        property changes, merge conflicts, or changes in headers,
+                        footers, notes or comments). Review them in Word before
+                        relying on this list.
+                      </span>
+                    </div>
+                  ) : null}
+                  {redlineQuery.data.changes.length === 0 &&
+                  redlineQuery.data.uninterpreted_revision_count === 0 ? (
                     <EmptyState
                       icon={CheckCircle2}
                       title="Clean document"
                       description="No tracked changes detected in this DOCX."
                     />
-                  ) : (
+                  ) : redlineQuery.data.changes.length === 0 ? null : (
                     <ul className="flex flex-col gap-2">
                       {redlineQuery.data.changes.map((change) => (
                         <RedlineRow key={change.index} change={change} />
@@ -1724,9 +1750,9 @@ function FindingIcon({ status }: { status: string }) {
 
 function RedlineRow({ change }: { change: ContractRedlineChange }) {
   const color =
-    change.kind === "insertion"
+    change.kind === "insertion" || change.kind === "move_to"
       ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-      : change.kind === "deletion"
+      : change.kind === "deletion" || change.kind === "move_from"
         ? "bg-rose-50 text-rose-800 border-rose-200"
         : "bg-slate-100 text-slate-800 border-slate-200";
   const label =
@@ -1734,7 +1760,11 @@ function RedlineRow({ change }: { change: ContractRedlineChange }) {
       ? "Inserted"
       : change.kind === "deletion"
         ? "Deleted"
-        : "Formatting";
+        : change.kind === "move_from"
+          ? "Moved from"
+          : change.kind === "move_to"
+            ? "Moved to"
+            : "Formatting";
   return (
     <li className="rounded-lg border border-[var(--color-line)] bg-white p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
@@ -1752,9 +1782,9 @@ function RedlineRow({ change }: { change: ContractRedlineChange }) {
         {change.context_before}
         <strong
           className={
-            change.kind === "deletion"
+            change.kind === "deletion" || change.kind === "move_from"
               ? "text-rose-700 line-through"
-              : change.kind === "insertion"
+              : change.kind === "insertion" || change.kind === "move_to"
                 ? "text-emerald-700"
                 : "text-slate-700"
           }

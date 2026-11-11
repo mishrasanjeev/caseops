@@ -58,10 +58,9 @@ def _answer_with_controls(client: TestClient, monkeypatch, *, write: bool = Fals
     assert turn["citations"]
     if not write:
         assert any(citation["source_id"] == seeded.document_id for citation in turn["citations"])
-    navigation = next(
-        action for action in turn["proposed_actions"] if action["action_type"] == "navigation"
-    )
-    assert navigation["target_label"] and navigation["href"]
+    assert not any(action["action_type"] == "navigation" for action in turn["proposed_actions"])
+    citation = turn["citations"][0]
+    navigation = {"target_label": citation["label"], "href": citation["source_url"]}
     # Retained provider suggestions can contain private labels too. Seed the
     # historical manifest, not a simplified response or a frontend-only mock.
     suggestion = f"Find evidence about {navigation['target_label']}"
@@ -80,6 +79,16 @@ def _answer_with_controls(client: TestClient, monkeypatch, *, write: bool = Fals
         saved.retrieval_manifest_json = {
             **saved.retrieval_manifest_json,
             "suggested_searches": [suggestion],
+            "proposed_actions": [
+                *saved.retrieval_manifest_json["proposed_actions"],
+                {
+                    **navigation,
+                    "proposal_id": "legacy-source-open",
+                    "action_type": "navigation",
+                    "label": f"Open {navigation['target_label']}",
+                    "requires_confirmation": False,
+                },
+            ],
         }
         session.commit()
     return seeded, body, proposal, navigation, suggestion

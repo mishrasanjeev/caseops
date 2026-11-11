@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { safePostLoginPath } from "@/lib/safe-next-path";
 
 export type AssistantScopeType =
   | "tenant"
@@ -164,6 +165,13 @@ export type AssistantSessionExport = {
   retention_disposition: string;
 };
 
+export type AssistantTurnPage = {
+  items: AssistantTurn[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export function searchAssistantScopes(query: string, limit = 12) {
   const params = new URLSearchParams({ q: query.trim(), limit: String(limit) });
   return apiRequest<{ query: string; items: AssistantScopeOption[]; truncated: boolean }>(
@@ -229,10 +237,52 @@ export function askWorkspaceAssistant(
   );
 }
 
-export function listAssistantTurns(sessionId: string) {
-  return apiRequest<{ items: AssistantTurn[]; limit: number; offset: number; has_more: boolean }>(
-    `/api/workspace-assistant/sessions/${sessionId}/turns?limit=50&offset=0`,
+export function listAssistantTurns(
+  sessionId: string,
+  options: { limit?: number; offset?: number; snapshot?: boolean; latest?: boolean } = {},
+) {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50
+    || !Number.isInteger(offset) || offset < 0 || offset > 10000
+    || (options.snapshot && offset !== 0)
+    || (options.latest && (options.snapshot || offset !== 0))) {
+    throw new RangeError("Invalid assistant history page.");
+  }
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (options.snapshot) params.set("snapshot", "true");
+  // The newest page, in conversation order; has_more means older turns exist.
+  if (options.latest) params.set("latest", "true");
+  return apiRequest<AssistantTurnPage>(
+    `/api/workspace-assistant/sessions/${sessionId}/turns?${params}`,
   );
+}
+
+export function safeAssistantCitationHref(candidate: unknown): string {
+  // Assistant sources resolve workspace records, not external authority URLs.
+  // Reject the login helper's fallback instead of navigating to it.
+  if (typeof candidate !== "string" || candidate.length > 2048
+    || safePostLoginPath(candidate) !== candidate) {
+    throw new Error("The citation destination is unavailable. Reopen the conversation and try again.");
+  }
+  const path = new URL(candidate, "https://caseops.invalid").pathname;
+  if (!/^\/app(?:\/(?:clients|matters(?:\/[A-Za-z0-9_-]{1,36})?|ip(?:\/documents)?))?$/.test(path)) {
+    throw new Error("The citation destination is unavailable. Reopen the conversation and try again.");
+  }
+  return candidate;
+}
+
+export async function openAssistantCitation(sessionId: string, citationId: string) {
+  const response = await apiRequest<{ citation_id: string; source_url: string }>(
+    `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
+    { method: "POST" },
+  );
+  if (response?.citation_id !== citationId || typeof response.source_url !== "string"
+    || !response.source_url.trim()) {
+    throw new Error("The citation destination is unavailable. Reopen the conversation and try again.");
+  }
+  safeAssistantCitationHref(response.source_url);
+  return response;
 }
 
 export function previewAssistantAction(

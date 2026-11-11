@@ -144,8 +144,8 @@ def test_watch_workspace_totals_follow_tenant_wall_and_auth(client: TestClient) 
         client, headers=headers, key="watch-paging-walled", publication=entry, cost_minor=0
     )
     walled_hits = [hit for hit in captured["hits"] if hit["profile_id"] == walled_profile["id"]]
-    open_hits = len(captured["hits"]) - len(walled_hits)
     assert len(walled_hits) == 1
+    assert len(captured["hits"]) > len(walled_hits)  # The source matched the open ALPHA watch.
 
     owner_view = _page(client, headers, 0)
     assert owner_view["profile_total"] == OTHER_PROFILES + 2
@@ -155,11 +155,13 @@ def test_watch_workspace_totals_follow_tenant_wall_and_auth(client: TestClient) 
     member_pages = _every_page(client, member)
     member_view = member_pages[0]
     assert member_view["profile_total"] == OTHER_PROFILES + 1
-    assert member_view["hit_total"] == ALPHA_ENTRIES + open_hits
+    assert member_view["hit_total"] == member_view["publication_total"] == ALPHA_ENTRIES
     listed_profiles = {row["id"] for page in member_pages for row in page["profiles"]}
     listed_hits = {row["id"] for page in member_pages for row in page["hits"]}
     assert walled_profile["id"] not in listed_profiles
-    assert walled_hits[0]["id"] not in listed_hits
+    assert listed_hits.isdisjoint({hit["id"] for hit in captured["hits"]})
+    assert all(captured["publications"][0]["id"] != publication["id"]
+               for page in member_pages for publication in page["publications"])
     assert len(listed_hits) == member_view["hit_total"]
     walled_scope = client.get(
         "/api/ip/watch", headers=member, params={"docket_id": walled, "limit": str(PAGE)}

@@ -11,7 +11,9 @@ redline DOCX parsing) are exercised here.
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.services.contract_intelligence import (
@@ -530,10 +532,7 @@ def test_structured_with_retry_quota_returns_actionable_503_without_retry_or_raw
         raise AssertionError("expected HTTPException 503 for provider quota")
 
 
-def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
-    # Build a tiny DOCX in-memory with tracked changes; python-docx has no
-    # high-level API to author ins/del, so we write the XML by hand and
-    # ship the minimal DOCX skeleton via zipfile.
+def _redline_docx_with_body(body: str) -> bytes:
     from zipfile import ZIP_DEFLATED, ZipFile
 
     content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -548,12 +547,9 @@ def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>"""
 
-    document = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    document = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p><w:r><w:t xml:space="preserve">Liability shall be capped at </w:t></w:r><w:ins w:id="1" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t xml:space="preserve">24 </w:t></w:r></w:ins><w:del w:id="2" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:delText xml:space="preserve">12 </w:delText></w:r></w:del><w:r><w:t>months of fees.</w:t></w:r></w:p>
-    <w:p><w:r><w:t>Governing law is India.</w:t></w:r></w:p>
-  </w:body>
+  <w:body>{body}</w:body>
 </w:document>"""
 
     buf = BytesIO()
@@ -561,9 +557,16 @@ def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
         zf.writestr("[Content_Types].xml", content_types)
         zf.writestr("_rels/.rels", rels)
         zf.writestr("word/document.xml", document)
-    buf.seek(0)
+    return buf.getvalue()
 
-    result = parse_redline_docx(source=buf.read(), attachment_name="liability.docx")
+
+def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
+    source = _redline_docx_with_body("""
+    <w:p><w:r><w:t xml:space="preserve">Liability shall be capped at </w:t></w:r><w:ins w:id="1" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t xml:space="preserve">24 </w:t></w:r></w:ins><w:del w:id="2" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:delText xml:space="preserve">12 </w:delText></w:r></w:del><w:r><w:t>months of fees.</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Governing law is India.</w:t></w:r></w:p>
+    """)
+
+    result = parse_redline_docx(source=source, attachment_name="liability.docx")
     kinds = [c.kind for c in result.changes]
     assert "insertion" in kinds
     assert "deletion" in kinds
@@ -572,6 +575,382 @@ def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
     assert result.author_counts.get("Counsel") == 2
     # Changes are paragraph-scoped.
     assert all(c.paragraph_index == 0 for c in result.changes)
+    assert result.paragraph_count == 2
+
+
+def test_parse_redline_docx_recovers_table_only_changes() -> None:
+    source = _redline_docx_with_body("""
+    <w:tbl><w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid><w:tr>
+      <w:tc><w:p><w:ins w:id="1" w:author="Buyer"><w:r><w:t>Added fee</w:t></w:r></w:ins></w:p></w:tc>
+      <w:tc><w:p><w:del w:id="2" w:author="Seller"><w:r><w:delText>Old fee</w:delText></w:r></w:del></w:p></w:tc>
+    </w:tr></w:tbl>
+    """)
+    result = parse_redline_docx(source=source, attachment_name="table.docx")
+    assert result.attachment_name == "table.docx"
+    assert result.paragraph_count == 2
+    assert result.insertion_count == 1
+    assert result.deletion_count == 1
+    assert result.author_counts == {"Buyer": 1, "Seller": 1}
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.text)
+        for change in result.changes
+    ] == [(1, 0, "insertion", "Added fee"), (2, 1, "deletion", "Old fee")]
+
+
+def test_parse_redline_docx_preserves_mixed_body_table_order() -> None:
+    source = _redline_docx_with_body("""
+    <w:p><w:r><w:t>Unchanged introduction.</w:t></w:r></w:p>
+    <w:p><w:ins w:id="1"><w:r><w:t>Body before</w:t></w:r></w:ins></w:p>
+    <w:tbl><w:tr>
+      <w:tc><w:p><w:ins w:id="2"><w:r><w:t>Table first</w:t></w:r></w:ins></w:p></w:tc>
+      <w:tc><w:p><w:del w:id="3"><w:r><w:delText>Table second</w:delText></w:r></w:del></w:p></w:tc>
+    </w:tr></w:tbl>
+    <w:p><w:ins w:id="4"><w:r><w:t>Body after</w:t></w:r></w:ins></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert result.paragraph_count == 5
+    assert [change.index for change in result.changes] == [1, 2, 3, 4]
+    assert [change.paragraph_index for change in result.changes] == [1, 2, 3, 4]
+    assert [change.text for change in result.changes] == [
+        "Body before", "Table first", "Table second", "Body after",
+    ]
+    assert [change.kind for change in result.changes] == [
+        "insertion", "insertion", "deletion", "insertion",
+    ]
+
+
+def test_parse_redline_docx_nested_merged_tables_are_visited_once() -> None:
+    source = _redline_docx_with_body("""
+    <w:tbl><w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid><w:tr>
+      <w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>
+        <w:p><w:ins w:id="1" w:author="Counsel"><w:r><w:t>Outer before</w:t></w:r></w:ins></w:p>
+        <w:tbl><w:tr>
+          <w:tc><w:p><w:del w:id="2" w:author="Counsel"><w:r><w:delText>Inner first</w:delText></w:r></w:del></w:p></w:tc>
+          <w:tc><w:p><w:ins w:id="3" w:author="Counsel"><w:r><w:t>Inner second</w:t></w:r></w:ins></w:p></w:tc>
+        </w:tr></w:tbl>
+        <w:p><w:ins w:id="4" w:author="Counsel"><w:r><w:t>Outer after</w:t></w:r></w:ins></w:p>
+      </w:tc>
+    </w:tr><w:tr>
+      <w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>
+        <w:p><w:ins w:id="5" w:author="Counsel"><w:r><w:t>Outer next</w:t></w:r></w:ins></w:p>
+      </w:tc>
+    </w:tr></w:tbl>
+    """)
+    result = parse_redline_docx(source=source)
+    assert result.paragraph_count == 5
+    assert result.insertion_count == 4
+    assert result.deletion_count == 1
+    assert result.author_counts == {"Counsel": 5}
+    assert [change.index for change in result.changes] == [1, 2, 3, 4, 5]
+    assert [change.paragraph_index for change in result.changes] == [0, 1, 2, 3, 4]
+    assert [change.text for change in result.changes] == [
+        "Outer before", "Inner first", "Inner second", "Outer after", "Outer next",
+    ]
+
+
+def test_parse_redline_docx_nested_paragraph_owns_its_changes() -> None:
+    source = _redline_docx_with_body("""
+    <w:p><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>
+      <w:txbxContent><w:p><w:ins w:id="1" w:author="Counsel"><w:r><w:t>Text box edit</w:t></w:r></w:ins></w:p></w:txbxContent>
+    </v:textbox></v:shape></w:pict></w:r></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert result.paragraph_count == 2
+    assert result.insertion_count == 1
+    assert result.deletion_count == 0
+    assert result.author_counts == {"Counsel": 1}
+    assert [(change.index, change.paragraph_index, change.text) for change in result.changes] == [
+        (1, 1, "Text box edit"),
+    ]
+
+
+def test_parse_redline_docx_table_insertion_does_not_capture_text_box_paragraph() -> None:
+    payload = _redline_docx_with_body("""
+    <w:tbl><w:tr><w:tc><w:p>
+      <w:ins w:id="1" w:author="Buyer"><w:r><w:t xml:space="preserve">Added </w:t></w:r>
+        <w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>
+          <w:txbxContent><w:p>
+            <w:r><w:t>Unchanged text box text.</w:t></w:r>
+            <w:del w:id="2" w:author="Seller"><w:r><w:delText>Removed from text box</w:delText></w:r></w:del>
+          </w:p></w:txbxContent>
+        </v:textbox></v:shape></w:pict></w:r>
+        <w:r><w:t>fee</w:t></w:r>
+      </w:ins>
+    </w:p></w:tc></w:tr></w:tbl>
+    """)
+    source = BytesIO(payload)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Added fee"),
+        (2, 1, "deletion", "Seller", "Removed from text box"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (2, 1, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1}
+    assert source.getvalue() == payload
+
+
+def test_parse_redline_docx_same_paragraph_tokens_belong_to_nearest_revision() -> None:
+    source = _redline_docx_with_body("""
+    <w:p>
+      <w:ins w:id="1" w:author="Buyer">
+        <w:smartTag><w:r><w:t xml:space="preserve">Added </w:t></w:r></w:smartTag>
+        <w:del w:id="2" w:author="Seller"><w:r><w:delText>Removed</w:delText></w:r></w:del>
+        <w:r><w:rPr><w:rPrChange w:id="3" w:author="Style"><w:rPr/></w:rPrChange></w:rPr>
+          <w:instrText>FIELD</w:instrText><w:t> result</w:t>
+        </w:r>
+      </w:ins>
+      <w:ins w:id="4" w:author="No own text">
+        <w:ins w:id="5" w:author="Reviewer"><w:r><w:t>Independent text</w:t></w:r></w:ins>
+      </w:ins>
+    </w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Added FIELD result"),
+        (2, 0, "deletion", "Seller", "Removed"),
+        (3, 0, "formatting", "Style", ""),
+        (4, 0, "insertion", "Reviewer", "Independent text"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (1, 2, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1, "Style": 1, "Reviewer": 1}
+
+
+def test_parse_redline_docx_word_text_box_fallback_is_not_read_twice() -> None:
+    # Word 2010+ writes a text box as a DrawingML choice plus a VML fallback
+    # copy of the same paragraphs; only one copy is the document.
+    txbx = (
+        '<w:txbxContent><w:p><w:pPr><w:pPrChange w:id="8" w:author="Style"><w:pPr/></w:pPrChange></w:pPr>'
+        '<w:ins w:id="9" w:author="Counsel" w:date="2026-04-18T12:00:00Z">'
+        "<w:r><w:t>Cap is 24 months</w:t></w:r></w:ins></w:p></w:txbxContent>"
+    )
+    source = _redline_docx_with_body(f"""
+    <w:p xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+      xmlns:v="urn:schemas-microsoft-com:vml"><w:r><mc:AlternateContent>
+      <mc:Choice Requires="wps"><w:drawing><wps:wsp><wps:txbx>{txbx}</wps:txbx></wps:wsp></w:drawing></mc:Choice>
+      <mc:Fallback><w:pict><v:shape><v:textbox>{txbx}</v:textbox></v:shape></w:pict></mc:Fallback>
+    </mc:AlternateContent></w:r></w:p>
+    <w:p><w:del w:id="10" w:author="Seller"><w:r><w:delText>Old cap</w:delText></w:r></w:del></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 1, "insertion", "Counsel", "Cap is 24 months"),
+        (2, 2, "deletion", "Seller", "Old cap"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
+    assert result.author_counts == {"Counsel": 1, "Seller": 1}
+    # The paragraph-property change is counted once, not again in its fallback copy.
+    assert result.uninterpreted_revision_count == 1
+
+
+def test_parse_redline_docx_reports_moves_and_a_move_only_file_is_not_clean() -> None:
+    source = _redline_docx_with_body("""
+    <w:p><w:moveFromRangeStart w:id="1" w:name="move1" w:author="Counsel"/>
+      <w:moveFrom w:id="2" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t>Indemnity survives termination.</w:t></w:r></w:moveFrom>
+      <w:moveFromRangeEnd w:id="1"/></w:p>
+    <w:p><w:r><w:t>Governing law is India.</w:t></w:r></w:p>
+    <w:p><w:moveToRangeStart w:id="3" w:name="move1" w:author="Counsel"/>
+      <w:moveTo w:id="4" w:author="Counsel" w:date="2026-04-18T12:00:00Z"><w:r><w:t>Indemnity survives termination.</w:t></w:r>
+        <w:del w:id="5" w:author="Seller"><w:r><w:delText> for two years</w:delText></w:r></w:del></w:moveTo>
+      <w:moveToRangeEnd w:id="3"/></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "move_from", "Counsel", "Indemnity survives termination."),
+        (2, 2, "move_to", "Counsel", "Indemnity survives termination."),
+        (3, 2, "deletion", "Seller", "for two years"),
+    ]
+    assert result.changes[0].timestamp == "2026-04-18T12:00:00+00:00"
+    # One passage moved: its source and destination are one move.
+    assert (result.move_count, result.insertion_count, result.deletion_count) == (1, 0, 1)
+    assert result.author_counts == {"Counsel": 2, "Seller": 1}
+    assert result.uninterpreted_revision_count == 0
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [
+        '<w:pPr><w:pPrChange w:id="1" w:author="Style"><w:pPr/></w:pPrChange></w:pPr>',
+        '<w:pPr><w:sectPr><w:sectPrChange w:id="1" w:author="Style"><w:sectPr/></w:sectPrChange></w:sectPr></w:pPr>',
+        # An inserted image has no text.
+        '<w:ins w:id="1" w:author="Buyer"><w:r><w:drawing/></w:r></w:ins>',
+        # A deleted paragraph mark merges two paragraphs.
+        '<w:pPr><w:rPr><w:del w:id="1" w:author="Buyer"/></w:rPr></w:pPr>',
+        # A numbering change.
+        '<w:pPr><w:numPr><w:ins w:id="1" w:author="Buyer"/></w:numPr></w:pPr>',
+    ],
+    ids=[
+        "paragraph-properties", "section-properties", "inserted-image",
+        "deleted-paragraph-mark", "numbering",
+    ],
+)
+def test_parse_redline_docx_counts_revisions_it_does_not_interpret(revision: str) -> None:
+    result = parse_redline_docx(
+        source=_redline_docx_with_body(f"<w:p>{revision}<w:r><w:t>Body.</w:t></w:r></w:p>"),
+    )
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+@pytest.mark.parametrize(
+    "row_properties, cell_properties",
+    [
+        ('<w:trPr><w:ins w:id="1" w:author="Buyer"/></w:trPr>', ""),
+        ("", '<w:tcPr><w:cellIns w:id="1" w:author="Buyer"/></w:tcPr>'),
+        ("", '<w:tcPr><w:cellDel w:id="1" w:author="Buyer"/></w:tcPr>'),
+        ("", '<w:tcPr><w:cellMerge w:id="1" w:author="Buyer" w:vMerge="cont"/></w:tcPr>'),
+    ],
+    ids=["inserted-row", "inserted-cell", "deleted-cell", "merged-cell"],
+)
+def test_parse_redline_docx_counts_table_structure_revisions(
+    row_properties: str, cell_properties: str,
+) -> None:
+    result = parse_redline_docx(source=_redline_docx_with_body(
+        f"<w:tbl><w:tr>{row_properties}<w:tc>{cell_properties}<w:p/></w:tc></w:tr></w:tbl>"
+    ))
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+def test_parse_redline_docx_counts_revisions_in_parts_it_does_not_read() -> None:
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    package = BytesIO(_redline_docx_with_body("<w:p><w:r><w:t>Body.</w:t></w:r></w:p>"))
+    rebuilt = BytesIO()
+    with ZipFile(package) as original, ZipFile(rebuilt, "w", ZIP_DEFLATED) as zf:
+        for item in original.infolist():
+            data = original.read(item)
+            if item.filename == "[Content_Types].xml":
+                data = data.replace(
+                    b"</Types>",
+                    b'<Override PartName="/word/header1.xml" ContentType="application/'
+                    b'vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>',
+                )
+            zf.writestr(item, data)
+        zf.writestr(
+            "word/_rels/document.xml.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/header" Target="header1.xml"/></Relationships>',
+        )
+        zf.writestr(
+            "word/header1.xml",
+            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:p><w:del w:id="1" w:author="Seller"><w:r><w:delText>Confidential</w:delText>'
+            "</w:r></w:del></w:p></w:hdr>",
+        )
+    result = parse_redline_docx(source=rebuilt.getvalue())
+    assert result.changes == []
+    assert result.uninterpreted_revision_count == 1
+
+
+@pytest.mark.parametrize("tag", ["w14:conflictIns", "w14:conflictDel"])
+def test_parse_redline_docx_does_not_attribute_unsupported_revision_subtrees(tag: str) -> None:
+    source = _redline_docx_with_body(f"""
+    <w:p xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+      <w:ins w:id="1" w:author="Buyer">
+        <{tag} w:id="2" w:author="Unsupported reviewer">
+          <w:r><w:t>Unsupported text</w:t></w:r>
+          <w:del w:id="3" w:author="Unsupported reviewer"><w:r><w:delText>Wrapped deletion</w:delText></w:r></w:del>
+          <w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>
+            <w:txbxContent><w:p>
+              <w:ins w:id="4" w:author="Unsupported reviewer"><w:r><w:t>Wrapped text box edit</w:t></w:r></w:ins>
+            </w:p></w:txbxContent>
+          </v:textbox></v:shape></w:pict></w:r>
+        </{tag}>
+        <w:r><w:t>Independent text</w:t></w:r>
+      </w:ins>
+    </w:p>
+    <w:p><w:del w:id="5" w:author="Seller"><w:r><w:delText>Independent deletion</w:delText></w:r></w:del></w:p>
+    """)
+    result = parse_redline_docx(source=source)
+    assert [
+        (change.index, change.paragraph_index, change.kind, change.author, change.text)
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Buyer", "Independent text"),
+        (2, 2, "deletion", "Seller", "Independent deletion"),
+    ]
+    assert (result.paragraph_count, result.insertion_count, result.deletion_count) == (3, 1, 1)
+    assert result.author_counts == {"Buyer": 1, "Seller": 1}
+    # The skipped subtree is surfaced, never reported as a clean file.
+    assert result.uninterpreted_revision_count == 1
+
+
+@pytest.mark.parametrize("source_kind", ["bytes", "stream", "path"])
+def test_parse_redline_docx_preserves_table_change_metadata(
+    tmp_path: Path, source_kind: str,
+) -> None:
+    payload = _redline_docx_with_body("""
+    <w:tbl><w:tr><w:tc><w:p>
+      <w:r><w:t>Surrounding text.</w:t></w:r>
+      <w:ins w:id="1" w:author="Buyer" w:date="2026-04-18T12:00:00Z"><w:r><w:t xml:space="preserve"> Added </w:t></w:r></w:ins>
+      <w:del w:id="2" w:author="Seller" w:date="unparseable-date"><w:r><w:delText>Removed</w:delText></w:r></w:del>
+      <w:r><w:rPr><w:rPrChange w:id="3" w:author="Style" w:date="2026-04-18T17:30:00.000007+05:30"><w:rPr/></w:rPrChange></w:rPr></w:r>
+      <w:ins w:id="4"><w:r><w:t>No metadata</w:t></w:r></w:ins>
+      <w:ins w:id="5" w:author="Skipped"><w:r><w:t xml:space="preserve">   </w:t></w:r></w:ins>
+    </w:p></w:tc></w:tr></w:tbl>
+    """)
+    if source_kind == "bytes":
+        source = payload
+    elif source_kind == "stream":
+        source = BytesIO(payload)
+    else:
+        source = tmp_path / "metadata.docx"
+        source.write_bytes(payload)
+    result = parse_redline_docx(source=source, attachment_name="metadata.docx")
+    assert result.attachment_name == "metadata.docx"
+    assert result.paragraph_count == 1
+    assert result.insertion_count == 2
+    assert result.deletion_count == 1
+    assert result.author_counts == {"Buyer": 1, "Seller": 1, "Style": 1}
+    assert [
+        (
+            change.index, change.paragraph_index, change.kind, change.text,
+            change.author, change.timestamp, change.context_before, change.context_after,
+        )
+        for change in result.changes
+    ] == [
+        (1, 0, "insertion", "Added", "Buyer", "2026-04-18T12:00:00+00:00", "", ""),
+        (2, 0, "deletion", "Removed", "Seller", "unparseable-date", "", ""),
+        (3, 0, "formatting", "", "Style", "2026-04-18T17:30:00.000007+05:30", "", ""),
+        (4, 0, "insertion", "No metadata", None, None, "", ""),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("body", "paragraph_count"),
+    [
+        ("<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Clean cell.</w:t></w:r></w:p></w:tc></w:tr></w:tbl>", 1),
+        ("<w:p/><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/>", 3),
+        ("<w:tbl><w:tr><w:tc><w:p/><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/></w:tc></w:tr></w:tbl>", 3),
+    ],
+    ids=["table-only", "mixed", "nested-table"],
+)
+def test_parse_redline_docx_clean_tables_have_no_changes(
+    body: str, paragraph_count: int,
+) -> None:
+    result = parse_redline_docx(source=_redline_docx_with_body(body))
+    assert result.paragraph_count == paragraph_count
+    assert result.changes == []
+    assert result.author_counts == {}
+    assert result.insertion_count == 0
+    assert result.deletion_count == 0
+    assert result.move_count == 0
+    assert result.uninterpreted_revision_count == 0
 
 
 def test_parse_redline_docx_empty_on_clean_document() -> None:

@@ -22,7 +22,9 @@ function result(status: "staged" | "committed", version: number): IpImportPrevie
 }
 
 describe("acknowledged IP import batches", () => {
-  beforeEach(() => call.mockReset());
+  beforeEach(() => {
+    call.mockReset();
+  });
 
   it("continues successful batches with server version and publishes truthful progress", async () => {
     const progress = vi.fn();

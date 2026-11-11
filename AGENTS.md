@@ -1,5 +1,57 @@
 # CaseOps agent instructions
 
+- A per-key LIMIT does not bound PostgreSQL index work when the plan scans
+  a tenant prefix and filters the rest of the key. Retain actual first-page
+  and cursor plans under stale/fresh statistics and custom/generic/auto
+  preparation. Keep exact authorized keys, ordered composite index bounds
+  and a fixed SQL limit; prove misses never hydrate a successor.
+
+- An undated portfolio import row cannot schedule a source-date reminder.
+  Preserve the locked docket write check, then skip current-version and
+  source-provenance hydration for the absent date only. Dated and corrected
+  reminders still revalidate their canonical facts. Distinguish fixture import
+  latency from tracker latency and keep the original 90-second request budget.
+
+- When a direct citation link becomes an audited action, update every dated
+  local and production journey together. Prove the named button, the actual
+  authorization request and same-origin destination, and that both the new
+  action and any legacy citation link disappear after revocation. A Next.js
+  runtime API override cannot replace the browser bundle's build-time origin.
+
+- A target-state specification is not a reproduced bug inventory. Preserve its
+  exact source edition and acceptance IDs, distinguish headings/data fields from
+  issue rows, and classify existing capability, enhancement, software defect and
+  external dependency separately. A visible tab or passing API cannot close its
+  workflow, and a safe legal-source abstention cannot be removed to manufacture
+  success. Carry each original criterion into persisted desktop/mobile proof;
+  never relabel proposed scenarios or mapped tests as executed acceptance.
+
+- A Vitest setup hook must not implicitly return a mock while resetting it.
+  Returned functions are cleanup callbacks, so `beforeEach(() => mock.mockReset())`
+  can invoke the mock during teardown and turn an expected rejection into a
+  misleading failure. Use a block returning void; retain the original exact-error
+  assertion and inspect setup/call/cleanup evidence before changing product code.
+
+- A server-backed checkbox must reflect the requested value while its single
+  mutation is pending, disable sibling writes, and restore the persisted value
+  after rejection. A jsdom click with an immediate mock cannot prove the real
+  native checkbox interaction; retain deferred-response/rollback tests and the
+  browser's check/uncheck assertions instead of replacing them with blind clicks.
+
+- Standalone Playwright preflights need a unique output directory for each
+  invocation, not just unique JSON/XML filenames. The default results cleanup
+  can discard a prior failure's DOM context even when its native report survives.
+  Reconcile added case IDs and both independent source-inventory and evidence
+  writer guards before freezing the release candidate.
+
+- Retained evidence readers must validate, bound and hash bytes from the same
+  open descriptor. Checking a pathname and then reopening it permits replacement
+  after admission; regress leaf replacement and growth, not just digest mismatch.
+- An additional audit action in a cross-account report changes data lineage even
+  without a schema change. Update its governance entry, render both generated
+  views and exercise the actual aggregation without changing recipients,
+  permissions or retention.
+
 - Execute every new or changed Playwright journey against the current built
   local app before freezing an expensive full gate. Discovery and jsdom tests
   do not prove browser locator semantics. A wrapping select label can include
@@ -3957,3 +4009,54 @@ requirements when using the fallback.
   annotations before freezing a long candidate. Keep fixture expectations
   initialized on every path and preserve the scanner instead of suppressing a
   test-code finding. Earlier source-bound gates remain historical evidence.
+- A colocated frontend unit test's external helper is also a production image
+  type-check input. Admit its finite import closure in Docker and Cloud Build
+  ignore files and explicit builder COPY inputs, while excluding it from the
+  runtime image. Checkout-only tests/builds cannot prove that upload contract.
+- A successful paginated response can carry an authorization change through
+  redacted rows rather than an HTTP error. Invalidate the earlier cached
+  private prefix and pending callbacks, retain only freshly authorized data,
+  and keep redacted history and exports usable. Prove the real source change,
+  continuation, old-export/search races and persisted reload; an error-only
+  regression cannot cover this boundary.
+- Browser inventory changes must update every independent release-contract
+  consumer, including Python CLI negative controls, not just Vitest manifests.
+  Reconcile the exact added identities and complete consumer suites; retain
+  literal contract/version assertions and missing/older-version refusals.
+- A cross-tenant Bearer regression must not reuse a higher-priority auth
+  cookie left by another fixture actor. Clear the owned cookie jar after
+  bootstrap/login, verify the effective principal before the denial, and
+  preserve the original status, persisted state, audit and owner readback.
+  Do not change production authentication precedence to repair the test.
+- An edit to an existing membership is not an invitation or admission.
+  Bind it to the current relationship row and reject a removed or replaced
+  row. Prove concurrent remove/re-add, stale UI recovery, unchanged record
+  visibility and no false admission audit. Lock the tenant before the actor
+  where a write also inserts tenant-referenced audit evidence.
+- Every private-derived control needs the same revocation boundary as the
+  answer and its citations, even on abstention. A clean later history page
+  does not reauthorize a previously loaded page from a different source.
+  Exercise that split-source case and a real parent dispose/reopen race;
+  unchanged document bytes alone do not establish unchanged lifecycle.
+- Report rows, totals and freshness cutoffs must share one authorization
+  snapshot. Verify a permission change across the count/page boundary and
+  cover adjacent detail, source and mutation paths, not only the report UI.
+  In a redacted report, prove source identities and source-value cells, not
+  generic row text: a retained search criterion can repeat the restricted
+  candidate's label without authorizing that candidate's record.
+- A browser ACL mutation probe must prove its effective actor and satisfy
+  the existing CSRF boundary before asserting a resource-level denial. Use
+  the shared valid local colleague fixture rather than inventing an email
+  domain that fails admission. Preserve those fixture failures separately.
+- Tracked DOCX text belongs to its nearest paragraph and revision. Test a
+  nested deletion inside an inserted table-cell text box and preserve the
+  original downloadable bytes and authors without duplicating text.
+- An inline disclosure can be present in the DOM and still land below the
+  mobile viewport after asynchronous admission. Reveal the resulting field
+  and inline validation error without opening the touch keyboard or stealing
+  focus. Assert viewport intersection before any test click or fill that
+  would scroll to the field automatically.
+- During a long local release gate, check both remote PR head and canonical
+  main at native group boundaries. A healthy checkout can keep testing a
+  superseded tree for hours. Preserve its partial evidence and resolve any
+  concurrent branch work without force-pushing; never transfer a pass.

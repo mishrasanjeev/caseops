@@ -513,6 +513,7 @@ def test_usage_without_trusted_history_is_unknown_not_inferred_from_rows(client)
     "case_tracking.refresh", "case_tracking.bookmark_created", "mailbox.gmail.imported",
     "mailbox.gmail.watch_started", "mailbox.outlook_candidate.created",
     "domain_outbox.dead_letter.replayed", "calendar_event_sync.drift_reconciliation_decided",
+    "team_membership.updated",
 ])
 def test_successful_human_business_actions_remain_meaningful(client, action) -> None:
     assert client.app is not None

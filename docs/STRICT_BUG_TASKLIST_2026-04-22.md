@@ -1,5 +1,140 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 8 B4-ADJ-07 Mobile Retirement Regression
+
+CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at
+393px but the reason textarea remained below the viewport. The superseded
+`dfd6870e` candidate passed its own hosted browser replay with an inline
+reason/error reveal. Main independently merged B4-ADJ-45 in #608 with a
+panel reveal and a stronger bottom-edge setup. #597 adopts that exact main
+implementation and regression instead of combining two scroll effects.
+The earlier candidate's green checks do not certify the reconciled tree.
+
+## November 8 PR #597 Review Fixes
+
+**Inconclusive; release proof pending.** An independent review of `7dfc0b29`
+found four defects, now fixed in code with regression tests (details in
+[the AI requirements ledger](AI_REQUIREMENTS_TRIAGE_2026-11-07.md#november-8-review-fixes)):
+
+- Redline: Word text-box changes reported twice; moves dropped, so a move-only
+  file read "Clean document"; other revision kinds never surfaced.
+- Assistant: a reopened conversation showed its oldest 50 turns; a transient
+  error cleared the conversation and the typed question.
+- Watch: a non-array run capture would fail the PostgreSQL workspace read.
+- Watch report contract changed shape under the same version (now v2).
+
+Full Docker, hosted CI and exact-serving production acceptance on the final
+head are still required before any of these is Properly fixed.
+
+## November 8 Patent Disclosure Physical Work
+
+**Inconclusive; deployment held.** IPLF-090A/UJ-02/NFT-005 and J14/M14.
+Exact #597 Docker06 at `2f81e6be` recorded one stale mixed-tenant
+statistics failure after 1,383 passing native cases. The family-page
+admission/readback completed, but current disclosure hydration charged
+482,401 first-page and 487,001 cursor units vs the unchanged <50,000
+bound. Plans used the registry index's company prefix in 100 loops,
+removing 4,819 or 4,865 rows by filter per loop. This is measured work,
+not an elapsed-time or threshold issue. Keep the interrupted suffix
+and full failed plans; the Docker browser stage did not run.
+
+The candidate fixes the tenant and both bounds of the admitted
+`(family_id, version)` suffix in the lateral lookup. It orders only
+the suffix and uses a fixed SQL one-row limit, with all three exact
+outer checks, current ACL/lifecycle/source guards and SQLite unchanged.
+No index, migration, optimizer setting, plan threshold or retry change.
+The existing full native patent suite must prove the observed variant,
+all competing modes and successor denial. Full Docker, hosted CI,
+canonical deploy and exact-serving proof remain separate.
+
+## November 8 Portfolio Import Resume Gate
+
+**Inconclusive; production not changed.** IPLF-032/UJ-02/NFT-005
+within existing J14/M14 scope. Exact #597 `591eb82b` had a local Docker
+call failure before the retained-width tracker could read: fixture import
+resume took 92.761 seconds against the existing 90-second limit. The
+interrupted gate retained three complete groups and a partial fourth:
+1,898 passed, one failed, later native and browser cases unexecuted.
+Hosted green on the earlier tree does not override that result.
+
+IMP-REM-01 reproduces the unnecessary current-version read with no
+renewal date and preserves locked write denial. The candidate moves
+only the absent-date return after docket authorization. The PostgreSQL
+materialization profile still proves actual import, readback, provenance
+and replay and now also checks zero undated reminder-provenance reads
+and no reminder intent. Dated and corrected source checks are unchanged.
+The structural work reduction is not yet an elapsed-time diagnosis;
+the original 1,345-record test, full replacement gate and exact-serving
+browser proof remain required.
+
+## November 7 Requirements Triage And Bounded Candidates
+
+**Inconclusive; new production acceptance pending.** The owner-supplied v2.1
+specification is a target-state baseline, not 767 bugs. AI-B01..04 identify
+team-lead audit omission, table-cell redline omission, cached assistant citation
+opening and first-50 history truncation; AI-E01 adds missing team membership
+controls. AI-B05 connects the retained Watch report under current record access;
+the pinned baseline fails the retained-summary reproduction and 19 candidate
+report cases pass. AI-B06 recursively renders report cells without machine
+states or internal identity/hash fields. Broader
+enhancement and legal/provider dependencies stay separate. Current component
+evidence is 163 API cases (8 Teams/35 contracts/17 lifecycle/19 IP reports/84
+activity reports), 2,728 frontend cases at dce01cf3 and 655 evidence controls.
+Browser run01 failed four;
+run02 passed three/failed one; run03 passed six; run04 passed six/failed two
+at nested report rendering; run05 passed eight and runs06/07 passed all ten. These
+are built-app SQLite preflights. No Docker, deployed fix or complete
+requirement closure is inferred.
+See [the complete evaluation](AI_REQUIREMENTS_TRIAGE_2026-11-07.md). Preserve all
+earlier failed UI/setup receipts and existing lifecycle fences. Two
+independent reviews found open stale
+membership, Assistant private-source, Watch visibility and redline boundaries
+on candidate `722fe7fe`. The superseded Docker run retained 102 completed
+database cases and did not run browsers. Do not treat that prefix or the
+earlier focused counts as acceptance of a replacement.
+
+## November 8 Release 9cd90aff: #599, #600 and #601 Live; B4-ADJ-42 Properly Fixed
+
+`main` at 9cd90aff (#599 B4-ADJ-42 width proof, #600 mobile welcome and record
+navigation, #601 Play-signed Android App Links) serves `caseops-api-00523-r9k`
+with image tag `9cd90af`. A peer release created revisions 00522 and 00523;
+this session's own deploy-prod attempts failed closed before any build or
+mutation (read-only worker preflight gcloud deadline, then "main advanced
+during release"), so they did not overlap the change. Security run
+42466390480 succeeded; main CI 42466390396 succeeded on attempt 3, after two
+attempts failed only on GitHub release 504s while installing uv.
+
+- B4-ADJ-42 Status: Properly fixed. Prod-verify 42471824330 on the exact
+  release passed every group. In `test-legal-write-oct13-b` (11 expected,
+  0 skipped, 0 failed), "IP18 current-source tracker filters saved views
+  export and full continuation" passed at 1280px and 393px. Both cases issue
+  the three unnarrowed fact-filtered reads against the retained test-legal
+  tenant and require each to finish under 15 s.
+- #600 ships no web or API code; native and device acceptance remains as
+  recorded in its PR.
+- #601 still needs the production association and a Play-installed device
+  sign-in check.
+
+## November 8 B4-ADJ-45: Document Retire Panel Opens Off Screen
+
+Found when hosted CI on PR #597's merge with main (run 42457749671) failed the
+`app-mobile` case "B4-ADJ-07 [mobile] the retire panel, its field error and the
+history card fit 393px": the "Reason for retiring" field had a viewport ratio
+of 0 at 393px. PR #597 changes no IP document code; the cause is on `main`.
+
+- Root cause: the retire panel opens under the Retire button and never brings
+  itself into view. When Retire is the last thing on screen (Playwright scrolls
+  only far enough to show the button; a phone user meets the same position),
+  the reason field and the blockers open below the fold and the tap appears to
+  do nothing. The earlier green runs depended on where the card happened to sit.
+- Fix: the panel scrolls itself into view (`block: "nearest"`, no motion under
+  reduced-motion) when it opens and again when the reliance check settles.
+- Regression: a component test asserts both scrolls target the panel and fails
+  without the fix; the B4-ADJ-07 journey now puts Retire on the bottom edge of
+  the screen before tapping it, on desktop and at 393px.
+- B4-ADJ-45 Status: Inconclusive until hosted `app-mobile` and
+  `app-chromium` pass on the fix and a release ships it.
+
 ## November 8 Release 61aa6bbe: B4-ADJ-40 Drained, Maintenance Resumed, B4-ADJ-42 Deployed
 
 Release 61aa6bbe (#598 fact-filter estimate, JIT comment correction) was

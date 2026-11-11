@@ -1,10 +1,50 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./cost-controls";
 import { expectStatus } from "./iplf058b";
 
 export const PRIVATE_ACCESS_HIDDEN_NOTICE =
   "This answer is hidden because access to one or more cited workspace records changed.";
+
+export function assistantCitationButton(page: Page, label: string) {
+  return page.getByTestId("assistant-turns").getByRole("button", {
+    name: `Open source: ${label}`, exact: true,
+  });
+}
+
+export async function expectNoAssistantDirectSourceLinks(page: Page, label: string): Promise<void> {
+  const turns = page.getByTestId("assistant-turns");
+  for (const name of [label, `Open ${label}`]) {
+    await expect(turns.getByRole("link", { name, exact: true })).toHaveCount(0);
+  }
+}
+
+export async function expectAssistantCitationHidden(page: Page, label: string): Promise<void> {
+  await expect(assistantCitationButton(page, label)).toHaveCount(0);
+  await expectNoAssistantDirectSourceLinks(page, label);
+}
+
+export async function expectAuthorizedAssistantCitationOpen(
+  page: Page,
+  { label, sessionId, citationId }: { label: string; sessionId: string; citationId: string },
+): Promise<void> {
+  const origin = new URL(page.url()).origin;
+  await expectNoAssistantDirectSourceLinks(page, label);
+  const opened = page.waitForResponse((response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname === `/api/workspace-assistant/sessions/${sessionId}/citations/${citationId}/open`,
+  );
+  await assistantCitationButton(page, label).click();
+  const response = await opened;
+  await expectStatus(response, 200, "open the authorized answer citation from the browser");
+  expect(await response.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+  const citation = await response.json();
+  expect(citation.citation_id).toBe(citationId);
+  expect(typeof citation.source_url).toBe("string");
+  const destination = new URL(citation.source_url, origin);
+  expect(destination.origin).toBe(origin);
+  await expect(page).toHaveURL(destination.href);
+}
 
 type QaIdentity = {
   company: { id: string; slug: string; tenant_key: string; is_active: boolean };
@@ -50,6 +90,7 @@ export function selectPrivateAccessAnswer(
   expect(answer.citations).toHaveLength(1);
   expect(answer.citations[0].source_type).toBe("matter_document");
   expect(answer.citations[0].source_id).toBe(documentId);
+  expect(answer.proposed_actions).not.toContainEqual(expect.objectContaining({ action_type: "navigation" }));
   return answer;
 }
 

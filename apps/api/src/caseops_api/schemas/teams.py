@@ -61,6 +61,12 @@ class TeamMembershipCreateRequest(BaseModel):
     is_lead: bool = False
 
 
+class TeamMembershipLeadUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_lead: bool = Field(strict=True)
+
+
 class TeamScopingUpdateRequest(BaseModel):
     enabled: bool
 

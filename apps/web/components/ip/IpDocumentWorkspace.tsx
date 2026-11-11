@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Archive, Download, FileText, Link2, Upload } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
@@ -962,11 +962,19 @@ function RetireDocumentPanel({
   const blockedNoteId = `${panelId}-blocked`;
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const preview = useQuery({
     queryKey: ["ip", "documents", document.id, "retirement"],
     queryFn: () => fetchIpDocumentRetirement(document.id),
     staleTime: 0,
   });
+  // The panel opens under the Retire button, which on a phone is often the
+  // last thing on screen. Bring it into view when it opens and again when the
+  // reliance check settles and the reason field or blockers replace the status.
+  useEffect(() => {
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    panelRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [preview.status]);
   const retire = useMutation({
     mutationFn: () => {
       const trimmed = reason.trim();
@@ -1002,6 +1010,7 @@ function RetireDocumentPanel({
   const blocked = !!data && (!data.may_retire || blockers.length > 0 || data.already_retired);
   return (
     <section
+      ref={panelRef}
       id={panelId}
       aria-label={`Retire ${document.title}`}
       className="mt-3 flex min-w-0 flex-col gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm"

@@ -24,6 +24,7 @@ from caseops_api.db.models import (
     IpIdentifier,
     IpImportRow,
     IpTrademarkParticularVersion,
+    NotificationDeliveryIntent,
     TrademarkApplication,
     User,
 )
@@ -32,7 +33,7 @@ from caseops_api.schemas.ip_operations import (
     IpDocketCreateRequest,
     IpDocketRecordResponse,
 )
-from caseops_api.services import ip_imports, ip_operations
+from caseops_api.services import ip_imports, ip_operations, ip_renewals
 from caseops_api.services.ip_nice_classes import nice_catalogue_in_force
 from caseops_api.services.session_context import SessionContext
 from tests.sql_observation import is_read_only_select
@@ -294,8 +295,15 @@ def test_bulk_http_new_rows_do_not_serialize_discarded_docket_dtos(
     assert preview["job"]["valid_rows"] == 3
     assert all(row["validation_status"] == "valid" for row in preview["rows"])
     key = f"import-profile-{uuid4().hex}"
+    source_reads = []
+    read_source = ip_renewals._imported_source_row
 
-    with _rich_probe(monkeypatch) as observed:
+    def observe_source(session, **kwargs):
+        source_reads.append(kwargs["docket_id"])
+        return read_source(session, **kwargs)
+
+    with monkeypatch.context() as patch, _rich_probe(monkeypatch) as observed:
+        patch.setattr(ip_renewals, "_imported_source_row", observe_source)
         result = _commit(client, actor, preview, key=key)
     _complete_probe(observed)
     record_property("bulk_rich_serialization", json.dumps(_summary(observed), sort_keys=True))
@@ -306,6 +314,11 @@ def test_bulk_http_new_rows_do_not_serialize_discarded_docket_dtos(
     assert len(set(ids)) == 3 and all(ids)
     assert all(row["commit_status"] == "committed" for row in result["rows"])
     with get_session_factory()() as session:
+        assert session.scalar(select(NotificationDeliveryIntent.id).where(
+            NotificationDeliveryIntent.company_id == company_id,
+            NotificationDeliveryIntent.schedule_source_type == "ip_portfolio_renewal",
+            NotificationDeliveryIntent.schedule_source_id.in_(ids),
+        ).limit(1)) is None
         for row in result["rows"]:
             _assert_imported(
                 session, company_id=company_id,
@@ -333,6 +346,8 @@ def test_bulk_http_new_rows_do_not_serialize_discarded_docket_dtos(
         "Bulk import discarded rich docket DTOs; expected zero rich calls. "
         + json.dumps(_summary(observed), sort_keys=True)
     )
+    record_property("undated_reminder_provenance_lookups", len(source_reads))
+    assert source_reads == [], "Undated rows cannot schedule source-date reminders."
 
 
 def test_public_http_create_keeps_complete_default_dto(

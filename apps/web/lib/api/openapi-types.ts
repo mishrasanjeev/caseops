@@ -14636,6 +14636,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/teams/{team_id}/members/{team_membership_id}/lead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the lead flag of an existing team membership */
+        patch: operations["patch_team_member_lead_api_teams__team_id__members__team_membership_id__lead_patch"];
+        trace?: never;
+    };
     "/api/teams/scoping": {
         parameters: {
             query?: never;
@@ -47607,8 +47624,11 @@ export interface components {
             context_before: string;
             /** Index */
             index: number;
-            /** Kind */
-            kind: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "insertion" | "deletion" | "move_from" | "move_to" | "formatting";
             /** Paragraph Index */
             paragraph_index: number;
             /** Text */
@@ -47632,8 +47652,12 @@ export interface components {
             deletion_count: number;
             /** Insertion Count */
             insertion_count: number;
+            /** Move Count */
+            move_count: number;
             /** Paragraph Count */
             paragraph_count: number;
+            /** Uninterpreted Revision Count */
+            uninterpreted_revision_count: number;
         };
         /**
          * ResolvedBenchMember
@@ -49327,6 +49351,11 @@ export interface components {
             is_lead: boolean;
             /** Membership Id */
             membership_id: string;
+        };
+        /** TeamMembershipLeadUpdateRequest */
+        TeamMembershipLeadUpdateRequest: {
+            /** Is Lead */
+            is_lead: boolean;
         };
         /** TeamMembershipRecord */
         TeamMembershipRecord: {
@@ -81289,7 +81318,10 @@ export interface operations {
     };
     delete_team_member_api_teams__team_id__members__membership_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Remove only this team membership row. */
+                expected_team_membership_id?: string | null;
+            };
             header?: never;
             path: {
                 membership_id: string;
@@ -81307,6 +81339,63 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TeamRecord"];
                 };
+            };
+            /** @description The team membership or access changed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_team_member_lead_api_teams__team_id__members__team_membership_id__lead_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                team_membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMembershipLeadUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRecord"];
+                };
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The team membership changed or is no longer active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -81785,8 +81874,10 @@ export interface operations {
     get_assistant_turns_api_workspace_assistant_sessions__session_id__turns_get: {
         parameters: {
             query?: {
+                latest?: boolean;
                 limit?: number;
                 offset?: number;
+                snapshot?: boolean;
             };
             header?: never;
             path: {

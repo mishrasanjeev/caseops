@@ -15,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { TeamMembersDialog } from "@/components/teams/TeamMembersDialog";
 import { Button } from "@/components/ui/Button";
 import {
   Card,
@@ -197,16 +198,16 @@ function TeamRow({
 }) {
   return (
     <li className="rounded-xl border border-[var(--color-line)] bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-[var(--color-mute)]">
+      <div className="flex min-w-0 flex-col items-start justify-between gap-3 sm:flex-row">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
             <span className="rounded-full border border-[var(--color-line)] bg-[var(--color-bg-2)] px-2 py-0.5 font-medium capitalize text-[var(--color-ink-2)]">
               {KIND_LABEL[team.kind]}
             </span>
             {!team.is_active ? <StatusBadge status="archived" /> : null}
-            <span className="font-mono">{team.slug}</span>
+            <span className="min-w-0 break-all font-mono">{team.slug}</span>
           </div>
-          <h3 className="mt-1 text-sm font-semibold text-[var(--color-ink)]">
+          <h3 className="mt-1 break-words text-sm font-semibold text-[var(--color-ink)]">
             {team.name}
           </h3>
           {team.description ? (
@@ -227,20 +228,23 @@ function TeamRow({
             ))}
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onDelete}
-          disabled={deleting}
-          data-testid={`team-delete-${team.slug}`}
-        >
-          {deleting ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <Trash2 className="h-4 w-4" aria-hidden />
-          )}
-          Delete
-        </Button>
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
+          <TeamMembersDialog team={team} />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            disabled={deleting}
+            data-testid={`team-delete-${team.slug}`}
+          >
+            {deleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Trash2 className="h-4 w-4" aria-hidden />
+            )}
+            Delete
+          </Button>
+        </div>
       </div>
     </li>
   );
