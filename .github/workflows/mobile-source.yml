@@ -40,6 +40,37 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - uses: ./.github/actions/node-trust
         id: node_trust
+      - name: Protect the exact pinned public npm archive on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        timeout-minutes: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz'
+          $item = Get-Item -LiteralPath $archive -Force
+          if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 4043346) { throw 'NPM_ARCHIVE_TYPE_OR_EXTENT' }
+          $rights = [Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions
+          $stream = [IO.FileStream]::new($archive, [IO.FileMode]::Open, $rights, [IO.FileShare]::Read, 4096, [IO.FileOptions]::None)
+          $hash = [Security.Cryptography.SHA256]::Create()
+          try {
+            $expected = 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'
+            $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+            if ($actual -ne $expected) { throw 'NPM_ARCHIVE_DIGEST' }
+            $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+            $acl = [Security.AccessControl.FileSecurity]::new()
+            $acl.SetAccessRuleProtection($true, $false)
+            foreach ($sid in @($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+              $principal = [Security.Principal.SecurityIdentifier]::new($sid)
+              $rule = [Security.AccessControl.FileSystemAccessRule]::new($principal, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow)
+              $acl.AddAccessRule($rule)
+            }
+            $stream.SetAccessControl($acl)
+            if (-not $stream.GetAccessControl().AreAccessRulesProtected) { throw 'NPM_ARCHIVE_ACL_NOT_PROTECTED' }
+            $stream.Position = 0
+            $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+            if ($actual -ne $expected -or $stream.Length -ne 4043346) { throw 'NPM_ARCHIVE_CHANGED' }
+            Write-Output 'Protected only the held, digest-pinned public npm archive; installer ACL checks remain mandatory.'
+          } finally { $hash.Dispose(); $stream.Dispose() }
       - name: Install this platform's exact locked mobile graph
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}

@@ -102,7 +102,10 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
   assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
+  const protection = job.steps.find(step => step.name === 'Protect the exact pinned public npm archive on Windows');
+  assert.ok(protection && typeof protection.run === 'string');
   assert.deepEqual(commands, [
+    protection.run,
     'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund',
     'node ../../scripts/mobile/npm-tooling.mjs ls --all --json --long > installed-dependencies.json',
     'node ../../scripts/mobile/npm-tooling.mjs --cli-health > npm-cli-dependencies.json',
@@ -271,6 +274,22 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(archiveSteps[0].includes("approved = ('https://archive.ubuntu.com/ubuntu/\\tpriority:1\\n'\n            'https://security.ubuntu.com/ubuntu/\\tpriority:2\\n')"));
   assert.ok(archiveSteps[0].includes("assert mirrors.read_text() == approved, 'UBUNTU_MIRROR_WRITE_MISMATCH'"));
   assert.ok(!/AllowUnauthenticated|Verify-Peer|trusted=yes|--fix-missing/.test(archiveSteps[0]));
+  const dependencySteps = workflow.jobs['dependency-closure'].steps;
+  const protectedArchive = dependencySteps.findIndex(step => step.name === 'Protect the exact pinned public npm archive on Windows');
+  const dependencyInstall = dependencySteps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund');
+  assert.ok(protectedArchive >= 0 && protectedArchive < dependencyInstall);
+  const protection = dependencySteps[protectedArchive];
+  assert.equal(protection.if, "runner.os == 'Windows'");
+  assert.equal(protection.shell, 'powershell');
+  assert.ok(protection.run.includes('[IO.FileShare]::Read'));
+  assert.ok(protection.run.includes('$stream.SetAccessControl($acl)'));
+  assert.ok(protection.run.includes('$stream.GetAccessControl().AreAccessRulesProtected'));
+  assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
+  assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
+  assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
+  assert.ok(protection.run.includes("'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'"));
+  assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
+  assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });
 
 const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
