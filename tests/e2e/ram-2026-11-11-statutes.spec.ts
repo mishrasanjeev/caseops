@@ -62,22 +62,43 @@ async function keyboardChoose(page: Page, field: "Act" | "Section", id: string) 
   const trigger = page.getByRole("combobox", { name: field, exact: true });
   const list = page.getByRole("listbox", { name: field, exact: true });
   await expect(list).toBeVisible();
+  // The wheel probe leaves a mouse over the options. Radix pointer-leave can
+  // focus the listbox, changing the origin of the next arrow key.
+  await page.mouse.move(0, 0);
   await page.keyboard.press("Escape");
   await expect(list).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await expect(page.getByRole("dialog", { name: "Add statute reference" })).toBeVisible();
   await trigger.press("Space");
   await expect(list).toBeVisible();
-  await expect.poll(() => list.getByRole("option").evaluateAll(options => options.some(option => option === document.activeElement))).toBe(true);
   const enabled = list.locator('[role="option"]:not([aria-disabled="true"])');
   const identities = await enabled.evaluateAll(options => options.map(option => option.getAttribute("data-value")));
   expect(identities).toContain(id);
+  await list.evaluate(element => {
+    element.addEventListener("keydown", event => {
+      const key = (event as KeyboardEvent).key;
+      if (!["Home", "End", "ArrowUp", "ArrowDown"].includes(key)) return;
+      const choices = Array.from(element.querySelectorAll('[role="option"]:not([aria-disabled="true"])'));
+      // Retain only the numeric sender position, never a record caption or ID.
+      element.setAttribute("data-keyboard-from-index", String(choices.indexOf(event.target as Element)));
+    });
+  });
+  // Positioning restores the selected option asynchronously. An arbitrary
+  // hovered option is not evidence that this restoration has completed.
+  const selected = list.locator('[role="option"][data-state="checked"]:not([aria-disabled="true"])');
+  const selectedCount = await selected.count();
+  expect(selectedCount).toBeLessThanOrEqual(1);
+  await expect(selectedCount === 1 ? selected : enabled.first()).toBeFocused();
   if (field === "Act") {
     expect(identities.length, "Bound keyboard catalog traversal without truncating it").toBeLessThanOrEqual(128);
+    await page.keyboard.press("End");
+    await expect(enabled.last()).toBeFocused();
     await page.keyboard.press("Home");
     await expect(enabled.first()).toBeFocused();
     for (let index = 1; index <= identities.indexOf(id); index += 1) {
+      await expect(enabled.nth(index - 1)).toBeFocused();
       await page.keyboard.press("ArrowDown");
+      await expect(list).toHaveAttribute("data-keyboard-from-index", String(index - 1));
       await expect(enabled.nth(index)).toBeFocused();
     }
   } else {
@@ -88,8 +109,10 @@ async function keyboardChoose(page: Page, field: "Act" | "Section", id: string) 
     await expect(enabled.last()).toBeFocused();
     if (identities.length > 1) {
       await page.keyboard.press("ArrowUp");
+      await expect(list).toHaveAttribute("data-keyboard-from-index", String(identities.length - 1));
       await expect(enabled.nth(identities.length - 2)).toBeFocused();
       await page.keyboard.press("ArrowDown");
+      await expect(list).toHaveAttribute("data-keyboard-from-index", String(identities.length - 2));
       await expect(enabled.last()).toBeFocused();
     }
   }
