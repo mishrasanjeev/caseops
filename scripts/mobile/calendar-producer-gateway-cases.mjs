@@ -8,6 +8,7 @@ import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { createSecureContext } from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { openProducerRouteFile } from './native-producer-route-file.mjs';
 
@@ -81,11 +82,12 @@ async function fixture(t, { gatewayNow, producerCreatesPermits = false } = {}) {
     once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) }),
     exited.then(([status, signal]) => { throw new Error('Isolated gateway exited before readiness: ' + (signal ?? status) + '\n' + startupError); }),
   ]);
-  const port = Number(String(ready).trim()), ca = readFileSync(cert);
+  const port = Number(String(ready).trim());
+  const secureContext = createSecureContext({ ca: readFileSync(cert), minVersion: 'TLSv1.2' });
   assert.ok(port >= 1024 && port <= 65535);
 
-  const probe = (method, route, { token, payload, bearer = auth, headers = {} } = {}) => new Promise((resolve, reject) => {
-    const request = https.request({ hostname: '127.0.0.1', port, path: route, ca, rejectUnauthorized: true, method, agent: false,
+  const probe = (method, route, { token, payload, bearer = auth, headers = {}, tlsContext = secureContext } = {}) => new Promise((resolve, reject) => {
+    const request = https.request({ hostname: '127.0.0.1', port, path: route, secureContext: tlsContext, rejectUnauthorized: true, method, agent: false,
       headers: { 'X-CaseOps-Automated-Test': marker, Authorization: bearer, ...(token ? { [permitHeader]: token } : {}),
         ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': String(payload.length) } : {}), ...headers },
     }, response => {
@@ -113,6 +115,9 @@ async function fixture(t, { gatewayNow, producerCreatesPermits = false } = {}) {
 
 test('calendar one-use permit framing and hashes reach the real isolated TLS gateway', async t => {
   const { cache, routeFile, baseline, seen, probe, issue, spent } = await fixture(t);
+  await assert.rejects(probe('GET', readRoute, { tlsContext: createSecureContext({ minVersion: 'TLSv1.2' }) }),
+    error => error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT');
+  assert.deepEqual(seen, [], 'UNTRUSTED_TLS_MUST_NOT_REACH_UPSTREAM');
   const bare = await probe('POST', writeRoutes[0], { payload: body });
   assert.equal(bare.status, 403);
   assert.deepEqual(seen, []);
