@@ -258,6 +258,19 @@ test('mobile source CI installs the renderer browser and both locked dependency 
     NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
     NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
   }, 'BUILT_BROWSER_MOCKS_REQUIRE_EXPLICIT_ISOLATED_POLICY_WITHOUT_PRODUCTION_CONFIG');
+  const archiveName = 'Select official HTTPS Ubuntu archives for browser prerequisites';
+  const archiveSteps = ['source', 'browser-handoff'].map(job => {
+    const steps = workflow.jobs[job].steps;
+    const archive = steps.findIndex(step => step.name === archiveName);
+    const chromium = steps.findIndex(step => step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install --with-deps chromium');
+    assert.ok(archive >= 0 && archive < chromium, 'OFFICIAL_ARCHIVES_REQUIRED_BEFORE_BROWSER_PREREQUISITES');
+    return steps[archive].run;
+  });
+  assert.equal(archiveSteps[0], archiveSteps[1], 'SAME_REVIEWED_ARCHIVE_CONFIGURATION_REQUIRED');
+  assert.ok(archiveSteps[0].includes("assert mirrors.read_text() == original, 'UNREVIEWED_UBUNTU_MIRROR_CONFIGURATION'"));
+  assert.ok(archiveSteps[0].includes("approved = ('https://archive.ubuntu.com/ubuntu/\\tpriority:1\\n'\n            'https://security.ubuntu.com/ubuntu/\\tpriority:2\\n')"));
+  assert.ok(archiveSteps[0].includes("assert mirrors.read_text() == approved, 'UBUNTU_MIRROR_WRITE_MISMATCH'"));
+  assert.ok(!/AllowUnauthenticated|Verify-Peer|trusted=yes|--fix-missing/.test(archiveSteps[0]));
 });
 
 const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
