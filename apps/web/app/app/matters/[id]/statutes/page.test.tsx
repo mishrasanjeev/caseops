@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,17 +8,19 @@ const {
   listMatterStatuteReferencesMock,
   listStatutesMock,
   listStatuteSectionsMock,
+  addMatterStatuteReferenceMock,
 } = vi.hoisted(() => ({
   listMatterStatuteReferencesMock: vi.fn(),
   listStatutesMock: vi.fn(),
   listStatuteSectionsMock: vi.fn(),
+  addMatterStatuteReferenceMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   listMatterStatuteReferences: listMatterStatuteReferencesMock,
   listStatutes: listStatutesMock,
   listStatuteSections: listStatuteSectionsMock,
-  addMatterStatuteReference: vi.fn(),
+  addMatterStatuteReference: addMatterStatuteReferenceMock,
   deleteMatterStatuteReference: vi.fn(),
 }));
 
@@ -39,11 +41,55 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+async function openOptions(name: string) {
+  const trigger = screen.getByRole("combobox", { name });
+  await waitFor(() => expect(trigger).toBeEnabled());
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+  return screen.getByRole("listbox");
+}
+
 describe("MatterStatutesPage", () => {
   beforeEach(() => {
     listMatterStatuteReferencesMock.mockReset();
     listStatutesMock.mockReset();
     listStatuteSectionsMock.mockReset();
+    addMatterStatuteReferenceMock.mockReset();
+  });
+
+  it("BUG-002 uses a bounded portalled list for long Act captions inside the modal", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    const statutes = Array.from({ length: 60 }, (_, index) => ({
+      id: `synthetic-${index}`,
+      short_name: `Fixture ${index}`,
+      long_name: `Synthetic local layout fixture ${"Long caption ".repeat(12)}`,
+      section_count: 1,
+      catalog_section_count: 2,
+    }));
+    listStatutesMock.mockResolvedValue({ statutes });
+    listStatuteSectionsMock.mockResolvedValue({ sections: [] });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    const trigger = await screen.findByTestId("matter-statute-act-select");
+    // Native selects cannot wrap their OS-owned popup; jsdom cannot prove geometry.
+    expect(trigger.tagName).toBe("BUTTON");
+    expect(trigger).toHaveAccessibleName("Act");
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(trigger).toBeEnabled());
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    const listbox = screen.getByRole("listbox");
+    expect(listbox).toHaveAccessibleName("Act");
+    expect(dialog).not.toContainElement(listbox);
+    expect(listbox).toHaveClass(
+      "max-h-[min(var(--radix-select-content-available-height),22rem)]",
+      "max-w-[min(var(--radix-select-content-available-width),32rem)]",
+    );
+    const last = within(listbox).getAllByRole("option").at(-1)!;
+    expect(last).toHaveTextContent("Fixture 59");
+    expect(last).toHaveClass("whitespace-normal", "[overflow-wrap:anywhere]");
+    fireEvent.click(last);
+    expect(trigger).toHaveTextContent("Fixture 59");
+    expect(listStatuteSectionsMock).toHaveBeenCalledWith("synthetic-59");
   });
 
   it("renders empty state + 'Add reference' trigger when no refs exist", async () => {
@@ -141,15 +187,16 @@ describe("MatterStatutesPage", () => {
     render(withClient(<MatterStatutesPage />));
 
     await user.click(await screen.findByTestId("matter-statute-add-trigger"));
-    const select = await screen.findByTestId("matter-statute-act-select");
+    const select = await openOptions("Act");
     expect(
       within(select).getByRole("option", { name: /Catalog-only Act/ }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
     expect(
       within(select).getByRole("option", {
         name: /Source-backed Act \(2 verified of 2 catalogued\)/,
       }),
-    ).toBeInTheDocument();
+    ).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(select, { key: "Escape" });
     expect(
       screen.getByTestId("matter-statute-catalog-coverage"),
     ).toHaveTextContent("2 verified of 22 catalogued sections across 2 Acts");
@@ -200,19 +247,15 @@ describe("MatterStatutesPage", () => {
     render(withClient(<MatterStatutesPage />));
 
     await user.click(await screen.findByTestId("matter-statute-add-trigger"));
-    await user.selectOptions(
-      screen.getByTestId("matter-statute-act-select"),
-      "verified-act",
-    );
-    const sectionSelect = await screen.findByTestId(
-      "matter-statute-section-select",
-    );
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Source-backed Act/ }));
+    const sectionSelect = await openOptions("Section");
     expect(
       within(sectionSelect).getByRole("option", { name: /Section 1/ }),
-    ).toBeEnabled();
+    ).not.toHaveAttribute("aria-disabled", "true");
     expect(
       within(sectionSelect).getByRole("option", { name: /Section 2/ }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(sectionSelect, { key: "Escape" });
     expect(
       screen.getByTestId("matter-statute-section-coverage"),
     ).toHaveTextContent("1 verified of 2 catalogued sections");
@@ -243,6 +286,66 @@ describe("MatterStatutesPage", () => {
     expect(
       await screen.findByTestId("matter-statute-no-selectable-acts"),
     ).toHaveTextContent("No Acts currently have source-verified sections");
+  });
+
+  it("attaches only a verified choice and clears that choice when the Act changes", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({ statutes: [
+      { id: "first", short_name: "First", long_name: "Synthetic first Act", section_count: 1 },
+      { id: "second", short_name: "Second", long_name: "Synthetic second Act", section_count: 1 },
+    ] });
+    listStatuteSectionsMock.mockImplementation((id: string) => Promise.resolve({
+      sections: [{ id: `${id}-verified`, section_number: "Section 1", section_label: "Verified" }],
+      catalog_sections: [
+        { id: `${id}-verified`, section_number: "Section 1", section_label: "Verified" },
+        { id: `${id}-pending`, section_number: "Section 2", section_label: "Pending" },
+      ],
+    }));
+    addMatterStatuteReferenceMock.mockResolvedValue({ id: "reference" });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic first Act/ }));
+    let options = await openOptions("Section");
+    const pending = within(options).getByRole("option", { name: /Section 2/ });
+    expect(pending).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(pending);
+    expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
+    fireEvent.keyDown(options, { key: "Escape" });
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    options = await openOptions("Section");
+    fireEvent.click(within(options).getByRole("option", { name: /Section 1/ }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic second Act/ }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Section" })).not.toHaveTextContent("Section 1");
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: /Section 1/ }));
+    fireEvent.click(within(await openOptions("Relevance")).getByRole("option", { name: /context/ }));
+    await user.click(screen.getByTestId("matter-statute-add-submit"));
+    await waitFor(() => expect(addMatterStatuteReferenceMock).toHaveBeenCalledExactlyOnceWith("m-1", {
+      section_id: "second-verified", relevance: "context",
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByTestId("matter-statute-add-trigger"));
+    expect(screen.getByRole("combobox", { name: "Act" })).toHaveTextContent("Select an Act");
+    expect(screen.getByRole("combobox", { name: "Relevance" })).toHaveTextContent("cited");
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+  });
+
+  it("keeps section-load failures distinct from an empty catalog and cannot submit", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({ statutes: [
+      { id: "verified", short_name: "Verified", long_name: "Synthetic Act", section_count: 1 },
+    ] });
+    listStatuteSectionsMock.mockRejectedValue(new Error("section load unavailable"));
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    fireEvent.click(within(await openOptions("Act")).getByRole("option", { name: /Synthetic Act/ }));
+    expect(await screen.findByTestId("matter-statute-sections-error")).toHaveTextContent("Verified sections could not be loaded");
+    expect(screen.getByRole("combobox", { name: "Section" })).toHaveTextContent("Could not load verified sections");
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    expect(addMatterStatuteReferenceMock).not.toHaveBeenCalled();
   });
 
   it("distinguishes a catalog load failure from a genuinely empty verified catalog", async () => {

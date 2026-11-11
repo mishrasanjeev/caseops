@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -45,6 +45,14 @@ import {
 } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import {
+  Select,
+  SelectContent,
+  SelectEmpty,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   addMatterStatuteReference,
@@ -101,8 +109,8 @@ export default function MatterStatutesPage() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div>
+      <CardHeader className="flex flex-col items-start justify-between gap-3 space-y-0 sm:flex-row">
+        <div className="min-w-0">
           <CardTitle>Statutes referenced</CardTitle>
           <CardDescription>
             Sections this matter relies on or distinguishes. The drafting flow
@@ -196,6 +204,7 @@ function RefRow({
 }
 
 function AddReferenceDialog({ matterId }: { matterId: string }) {
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [statuteId, setStatuteId] = useState<string>("");
   const [sectionId, setSectionId] = useState<string>("");
@@ -247,7 +256,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button data-testid="matter-statute-add-trigger">
+        <Button className="w-full shrink-0 sm:w-auto" data-testid="matter-statute-add-trigger">
           <Plus className="h-4 w-4" aria-hidden /> Add reference
         </Button>
       </DialogTrigger>
@@ -258,40 +267,51 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
             Pick the Act → Section, then how this matter relates to it.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Act</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-act`} className="font-medium">
+              Act
+            </label>
+            <Select
               value={statuteId}
-              onChange={(e) => {
-                setStatuteId(e.target.value);
+              onValueChange={(value) => {
+                setStatuteId(value);
                 setSectionId("");
               }}
               disabled={statutesQuery.isPending || statutesQuery.isError}
-              data-testid="matter-statute-act-select"
             >
-              <option value="">
-                {statutesQuery.isPending
-                  ? "Loading verified Acts…"
-                  : statutesQuery.isError
-                    ? "Could not load verified Acts"
-                    : selectableStatutes.length === 0
-                      ? "No verified Acts available"
-                      : "Select an Act…"}
-              </option>
-              {allStatutes.map((s) => (
-                <option
-                  key={s.id}
-                  value={s.id}
-                  disabled={s.section_count === 0}
-                >
-                  {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
-                  {s.catalog_section_count ?? s.section_count} catalogued
-                  {s.section_count === 0 ? "; verification pending" : ""})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id={`${fieldId}-act`}
+                data-testid="matter-statute-act-select"
+              >
+                <SelectValue
+                  placeholder={statutesQuery.isPending
+                    ? "Loading verified Acts…"
+                    : statutesQuery.isError
+                      ? "Could not load verified Acts"
+                      : selectableStatutes.length === 0
+                        ? "No verified Acts available"
+                        : "Select an Act…"}
+                />
+              </SelectTrigger>
+              <SelectContent aria-label="Act">
+                {allStatutes.length === 0 ? (
+                  <SelectEmpty>No verified Acts available</SelectEmpty>
+                ) : null}
+                {allStatutes.map((s) => (
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    data-value={s.id}
+                    disabled={s.section_count === 0}
+                  >
+                    {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
+                    {s.catalog_section_count ?? s.section_count} catalogued
+                    {s.section_count === 0 ? "; verification pending" : ""})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {!statutesQuery.isPending && !statutesQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
@@ -321,43 +341,58 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 attach.
               </span>
             ) : null}
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Section</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm disabled:opacity-50"
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-section`} className="font-medium">
+              Section
+            </label>
+            <Select
               value={sectionId}
-              onChange={(e) => setSectionId(e.target.value)}
+              onValueChange={setSectionId}
               disabled={!statuteId || sectionsQuery.isPending}
-              data-testid="matter-statute-section-select"
             >
-              <option value="">
-                {!statuteId
-                  ? "Select an Act first"
-                  : sectionsQuery.isPending
-                    ? "Loading sections…"
-                    : sectionsQuery.isError
+              <SelectTrigger
+                id={`${fieldId}-section`}
+                data-testid="matter-statute-section-select"
+              >
+                <SelectValue
+                  placeholder={!statuteId
+                    ? "Select an Act first"
+                    : sectionsQuery.isPending
+                      ? "Loading sections…"
+                      : sectionsQuery.isError
+                        ? "Could not load verified sections"
+                        : sections.length === 0
+                          ? "No verified sections available"
+                          : "Select a section…"}
+                />
+              </SelectTrigger>
+              <SelectContent aria-label="Section">
+                {catalogSections.length === 0 ? (
+                  <SelectEmpty>
+                    {sectionsQuery.isError
                       ? "Could not load verified sections"
-                      : sections.length === 0
-                        ? "No verified sections available"
-                        : "Select a section…"}
-              </option>
-              {catalogSections.map((sec) => (
-                <option
-                  key={sec.id}
-                  value={sec.id}
-                  disabled={!selectableSectionIds.has(sec.id)}
-                >
-                  {sec.section_number}
-                  {sec.section_label ? ` — ${sec.section_label}` : ""}
-                  {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
-                    ? " (historical repealed-law edition)" : ""}
-                  {!selectableSectionIds.has(sec.id)
-                    ? " — verification pending; not attachable"
-                    : ""}
-                </option>
-              ))}
-            </select>
+                      : "No verified sections available"}
+                  </SelectEmpty>
+                ) : null}
+                {catalogSections.map((sec) => (
+                  <SelectItem
+                    key={sec.id}
+                    value={sec.id}
+                    data-value={sec.id}
+                    disabled={!selectableSectionIds.has(sec.id)}
+                  >
+                    {sec.section_number}
+                    {sec.section_label ? ` — ${sec.section_label}` : ""}
+                    {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
+                      ? " (historical repealed-law edition)" : ""}
+                    {!selectableSectionIds.has(sec.id)
+                      ? " — verification pending; not attachable"
+                      : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {statuteId && !sectionsQuery.isPending && !sectionsQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
@@ -380,24 +415,32 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 Act again.
               </span>
             ) : null}
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Relevance</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-relevance`} className="font-medium">
+              Relevance
+            </label>
+            <Select
               value={relevance}
-              onChange={(e) => setRelevance(e.target.value as Relevance)}
-              data-testid="matter-statute-relevance-select"
+              onValueChange={(value) => setRelevance(value as Relevance)}
             >
-              <option value="cited">cited (we rely on it)</option>
-              <option value="opposing">
-                opposing (other side relies on it)
-              </option>
-              <option value="context">
-                context (in scope but not load-bearing)
-              </option>
-            </select>
-          </label>
+              <SelectTrigger
+                id={`${fieldId}-relevance`}
+                data-testid="matter-statute-relevance-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent aria-label="Relevance">
+                <SelectItem value="cited">cited (we rely on it)</SelectItem>
+                <SelectItem value="opposing">
+                  opposing (other side relies on it)
+                </SelectItem>
+                <SelectItem value="context">
+                  context (in scope but not load-bearing)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { openStatuteOptions, statuteOption } from "./support/statute-picker";
 
 const BASE = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3100";
 const LOCAL = ["127.0.0.1", "localhost"].includes(new URL(BASE).hostname);
@@ -96,7 +97,7 @@ test.describe("Ram September 10 statute reference acceptance", () => {
         await page.goto(matterUrl);
         await page.getByTestId("matter-statute-add-trigger").click();
         const picker = page.getByTestId("matter-statute-act-select");
-        const option = picker.locator(`option[value="${id}"]`);
+        const option = statuteOption(await openStatuteOptions(page, "act"), id);
         await expect(option, "The reported Act must remain in the catalog").toBeAttached();
         const response = await api.get(`${API}/api/statutes/${id}/sections`, { headers: headers() });
         expect(response.status(), await response.text()).toBe(200);
@@ -107,11 +108,12 @@ test.describe("Ram September 10 statute reference acceptance", () => {
         expect(section, `${id} ${number}: positive verified provision`).toBeDefined();
         const pinned = sources.find(row => row.statute_id === id && row.section_number === number);
         expect(pinned, "The source must be owned by this exact release").toBeDefined();
-        await expect(option).toBeEnabled();
-        await picker.selectOption(id);
+        await expect(option).not.toHaveAttribute("aria-disabled", "true");
+        await option.click();
         const sections = page.getByTestId("matter-statute-section-select");
-        await expect(sections.locator(`option[value="${section.id}"]`)).toBeEnabled();
-        await sections.selectOption(section.id);
+        const sectionOption = statuteOption(await openStatuteOptions(page, "section"), section.id);
+        await expect(sectionOption).not.toHaveAttribute("aria-disabled", "true");
+        await sectionOption.click();
         const submit = page.getByTestId("matter-statute-add-submit");
         await expect(submit).toBeEnabled();
         for (const control of [picker, sections, submit]) {
