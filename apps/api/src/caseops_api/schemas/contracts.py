@@ -187,11 +187,6 @@ class ContractAttachmentRecord(BaseModel):
     created_at: datetime
 
 
-class ContractAttachmentPreviewRecord(BaseModel):
-    attachment_id: str
-    filename: str
-
-
 class ContractClauseCreateRequest(BaseModel):
     title: str = Field(min_length=2, max_length=255)
     clause_type: str = Field(min_length=2, max_length=120)

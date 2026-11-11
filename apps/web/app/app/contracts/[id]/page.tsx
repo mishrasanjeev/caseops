@@ -606,7 +606,7 @@ export default function ContractDetailPage() {
                               {a.notes}
                             </div>
                           ) : null}
-                          <div className="text-xs text-[var(--color-mute)]">
+                          <div className="break-all text-xs text-[var(--color-mute)]">
                             {a.content_type ?? "—"} · {(a.size_bytes / 1024).toFixed(0)} KB
                           </div>
                         </div>

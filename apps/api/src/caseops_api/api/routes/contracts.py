@@ -5,8 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
-from fastapi.responses import FileResponse
-from starlette.concurrency import run_in_threadpool
+from fastapi.responses import Response
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -16,7 +15,6 @@ from caseops_api.api.dependencies import (
 from caseops_api.schemas.contract_obligation_context import ContractObligationContextPage
 from caseops_api.schemas.contracts import (
     ContractAttachmentMetadataUpdateRequest,
-    ContractAttachmentPreviewRecord,
     ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
@@ -48,6 +46,7 @@ from caseops_api.schemas.contracts import (
     TenantPlaybookRuleUpdateRequest,
     TenantPlaybookUpdateRequest,
 )
+from caseops_api.services.contract_attachment_bytes import get_contract_source_bytes
 from caseops_api.services.contract_obligation_context import list_contract_obligation_context
 from caseops_api.services.contract_redline import parse_redline_docx
 from caseops_api.services.contracts import (
@@ -59,7 +58,6 @@ from caseops_api.services.contracts import (
     create_contract_playbook_rule,
     create_contract_term_suggestion,
     get_contract,
-    get_contract_attachment_download,
     get_contract_workspace,
     list_contract_legal_references,
     list_contracts,
@@ -100,7 +98,7 @@ DocumentManager = Annotated[SessionContext, Depends(require_capability('document
     response_model=ContractListResponse,
     summary="List contracts for the current company",
 )
-async def current_company_contracts(
+def current_company_contracts(
     context: CurrentContext,
     session: DbSession,
     limit: int | None = None,
@@ -110,7 +108,7 @@ async def current_company_contracts(
 
 
 @router.post("/", response_model=ContractRecord, summary="Create a contract in the current company")
-async def create_current_company_contract(
+def create_current_company_contract(
     payload: ContractCreateRequest,
     context: ContractCreator,
     session: DbSession,
@@ -130,7 +128,7 @@ async def create_current_company_contract(
     response_model=TenantPlaybookListResponse,
     summary="List tenant-managed contract playbooks",
 )
-async def list_current_company_tenant_playbooks(
+def list_current_company_tenant_playbooks(
     context: CurrentContext,
     session: DbSession,
     include_archived: bool = False,
@@ -147,7 +145,7 @@ async def list_current_company_tenant_playbooks(
     response_model=TenantPlaybookDetail,
     summary="Create a tenant-managed contract playbook",
 )
-async def create_current_company_tenant_playbook(
+def create_current_company_tenant_playbook(
     payload: TenantPlaybookCreateRequest,
     context: ContractRuleManager,
     session: DbSession,
@@ -160,7 +158,7 @@ async def create_current_company_tenant_playbook(
     response_model=TenantPlaybookDetail,
     summary="Fetch a tenant-managed contract playbook with rules",
 )
-async def get_current_company_tenant_playbook(
+def get_current_company_tenant_playbook(
     playbook_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -175,7 +173,7 @@ async def get_current_company_tenant_playbook(
     response_model=TenantPlaybookDetail,
     summary="Update or archive a tenant-managed contract playbook",
 )
-async def update_current_company_tenant_playbook(
+def update_current_company_tenant_playbook(
     playbook_id: str,
     payload: TenantPlaybookUpdateRequest,
     context: ContractRuleManager,
@@ -191,7 +189,7 @@ async def update_current_company_tenant_playbook(
     response_model=list[TenantPlaybookRuleRecord],
     summary="List rules for a tenant-managed contract playbook",
 )
-async def list_current_company_tenant_playbook_rules(
+def list_current_company_tenant_playbook_rules(
     playbook_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -210,7 +208,7 @@ async def list_current_company_tenant_playbook_rules(
     response_model=TenantPlaybookRuleRecord,
     summary="Add a rule to a tenant-managed contract playbook",
 )
-async def create_current_company_tenant_playbook_rule(
+def create_current_company_tenant_playbook_rule(
     playbook_id: str,
     payload: TenantPlaybookRuleCreateRequest,
     context: ContractRuleManager,
@@ -226,7 +224,7 @@ async def create_current_company_tenant_playbook_rule(
     response_model=TenantPlaybookRuleRecord,
     summary="Update or archive a tenant-managed contract playbook rule",
 )
-async def update_current_company_tenant_playbook_rule(
+def update_current_company_tenant_playbook_rule(
     playbook_id: str,
     rule_id: str,
     payload: TenantPlaybookRuleUpdateRequest,
@@ -243,7 +241,7 @@ async def update_current_company_tenant_playbook_rule(
 
 
 @router.get("/{contract_id}", response_model=ContractRecord, summary="Get a contract by id")
-async def get_current_company_contract(
+def get_current_company_contract(
     contract_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -256,7 +254,7 @@ async def get_current_company_contract(
     response_model=ContractWorkspaceResponse,
     summary="Get the full contract workspace",
 )
-async def get_current_company_contract_workspace(
+def get_current_company_contract_workspace(
     contract_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -265,7 +263,7 @@ async def get_current_company_contract_workspace(
 
 
 @router.patch("/{contract_id}", response_model=ContractRecord, summary="Update a contract")
-async def patch_current_company_contract(
+def patch_current_company_contract(
     contract_id: str,
     payload: ContractUpdateRequest,
     context: ContractEditor,
@@ -279,7 +277,7 @@ async def patch_current_company_contract(
     response_model=ContractRecord,
     summary="Update contract metadata",
 )
-async def patch_current_company_contract_metadata(
+def patch_current_company_contract_metadata(
     contract_id: str,
     payload: ContractMetadataUpdateRequest,
     context: ContractEditor,
@@ -298,7 +296,7 @@ async def patch_current_company_contract_metadata(
     response_model=list[ContractLegalReferenceRecord],
     summary="List legal references for a contract",
 )
-async def get_current_company_contract_legal_references(
+def get_current_company_contract_legal_references(
     contract_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -315,7 +313,7 @@ async def get_current_company_contract_legal_references(
     response_model=ContractLegalReferenceRecord,
     summary="Add a legal reference to a contract",
 )
-async def post_current_company_contract_legal_reference(
+def post_current_company_contract_legal_reference(
     contract_id: str,
     payload: ContractLegalReferenceCreateRequest,
     context: ContractEditor,
@@ -334,7 +332,7 @@ async def post_current_company_contract_legal_reference(
     response_model=ContractLegalReferenceRecord,
     summary="Update a contract legal reference",
 )
-async def patch_current_company_contract_legal_reference(
+def patch_current_company_contract_legal_reference(
     contract_id: str,
     reference_id: str,
     payload: ContractLegalReferenceUpdateRequest,
@@ -355,7 +353,7 @@ async def patch_current_company_contract_legal_reference(
     response_model=ContractTermSuggestionRecord,
     summary="Create a reviewable contract term suggestion",
 )
-async def post_current_company_contract_term_suggestion(
+def post_current_company_contract_term_suggestion(
     contract_id: str,
     payload: ContractTermSuggestionCreateRequest,
     context: ContractEditor,
@@ -374,7 +372,7 @@ async def post_current_company_contract_term_suggestion(
     response_model=ContractTermSuggestionRecord,
     summary="Accept a contract term suggestion",
 )
-async def accept_current_company_contract_term_suggestion(
+def accept_current_company_contract_term_suggestion(
     contract_id: str,
     suggestion_id: str,
     payload: ContractTermReviewRequest,
@@ -396,7 +394,7 @@ async def accept_current_company_contract_term_suggestion(
     response_model=ContractTermSuggestionRecord,
     summary="Reject a contract term suggestion",
 )
-async def reject_current_company_contract_term_suggestion(
+def reject_current_company_contract_term_suggestion(
     contract_id: str,
     suggestion_id: str,
     context: ContractEditor,
@@ -416,7 +414,7 @@ async def reject_current_company_contract_term_suggestion(
     response_model=ContractClauseRecord,
     summary="Add a clause to a contract",
 )
-async def post_current_company_contract_clause(
+def post_current_company_contract_clause(
     contract_id: str,
     payload: ContractClauseCreateRequest,
     context: ContractEditor,
@@ -435,7 +433,7 @@ async def post_current_company_contract_clause(
     response_model=ContractObligationRecord,
     summary="Add an obligation to a contract",
 )
-async def post_current_company_contract_obligation(
+def post_current_company_contract_obligation(
     contract_id: str,
     payload: ContractObligationCreateRequest,
     context: ContractEditor,
@@ -472,7 +470,7 @@ def current_contract_obligations(
     response_model=ContractPlaybookRuleRecord,
     summary="Add a playbook rule to a contract",
 )
-async def post_current_company_contract_playbook_rule(
+def post_current_company_contract_playbook_rule(
     contract_id: str,
     payload: ContractPlaybookRuleCreateRequest,
     context: ContractRuleManager,
@@ -491,7 +489,7 @@ async def post_current_company_contract_playbook_rule(
     response_model=ContractAttachmentRecord,
     summary="Upload an attachment into a contract workspace",
 )
-async def post_current_company_contract_attachment(
+def post_current_company_contract_attachment(
     contract_id: str,
     file: Annotated[UploadFile, File(...)],
     background_tasks: BackgroundTasks,
@@ -514,8 +512,7 @@ async def post_current_company_contract_attachment(
         document_date=document_date,
         notes=notes,
     )
-    await run_in_threadpool(
-        dispatch_document_processing_job,
+    dispatch_document_processing_job(
         session=session,
         background_tasks=background_tasks,
         job_id=job_id,
@@ -528,7 +525,7 @@ async def post_current_company_contract_attachment(
     response_model=ContractAttachmentRecord,
     summary="Update contract attachment metadata",
 )
-async def patch_current_company_contract_attachment_metadata(
+def patch_current_company_contract_attachment_metadata(
     contract_id: str,
     attachment_id: str,
     payload: ContractAttachmentMetadataUpdateRequest,
@@ -549,7 +546,7 @@ async def patch_current_company_contract_attachment_metadata(
     response_model=ContractAttachmentRecord,
     summary="Retry contract attachment processing",
 )
-async def retry_current_company_contract_attachment_processing(
+def retry_current_company_contract_attachment_processing(
     contract_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
@@ -563,8 +560,7 @@ async def retry_current_company_contract_attachment_processing(
         attachment_id=attachment_id,
         action="retry",
     )
-    await run_in_threadpool(
-        dispatch_document_processing_job,
+    dispatch_document_processing_job(
         session=session,
         background_tasks=background_tasks,
         job_id=job_id,
@@ -577,7 +573,7 @@ async def retry_current_company_contract_attachment_processing(
     response_model=ContractAttachmentRecord,
     summary="Reindex a contract attachment",
 )
-async def reindex_current_company_contract_attachment(
+def reindex_current_company_contract_attachment(
     contract_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
@@ -591,8 +587,7 @@ async def reindex_current_company_contract_attachment(
         attachment_id=attachment_id,
         action="reindex",
     )
-    await run_in_threadpool(
-        dispatch_document_processing_job,
+    dispatch_document_processing_job(
         session=session,
         background_tasks=background_tasks,
         job_id=job_id,
@@ -602,68 +597,53 @@ async def reindex_current_company_contract_attachment(
 
 @router.get(
     "/{contract_id}/attachments/{attachment_id}/download",
-    response_class=FileResponse,
+    response_class=Response,
     summary="Download a contract attachment",
 )
-async def download_current_company_contract_attachment(
+def download_current_company_contract_attachment(
     contract_id: str,
     attachment_id: str,
     context: CurrentContext,
     session: DbSession,
-) -> FileResponse:
-    attachment, storage_path = get_contract_attachment_download(
+) -> Response:
+    source = get_contract_source_bytes(
         session,
         context=context,
         contract_id=contract_id,
         attachment_id=attachment_id,
     )
-    return FileResponse(
-        path=storage_path,
-        media_type=attachment.content_type or "application/octet-stream",
-        filename=attachment.original_filename,
-        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
-    )
+    return _source_response(source, inline=False)
 
 
 @router.get(
     "/{contract_id}/attachments/{attachment_id}/preview",
-    response_model=ContractAttachmentPreviewRecord,
-    summary="Validate a private DOCX for the integrated viewer",
+    response_class=Response,
+    summary="Read exact verified private PDF or validated DOCX preview bytes",
 )
-async def preview_current_company_contract_attachment(
+def preview_current_company_contract_attachment(
     contract_id: str,
     attachment_id: str,
     context: CurrentContext,
     session: DbSession,
-) -> ContractAttachmentPreviewRecord:
-    from pathlib import Path
-    from xml.etree.ElementTree import ParseError
-    from zipfile import BadZipFile
-    from zlib import error as ZlibError
-
-    from fastapi import HTTPException
-
-    from caseops_api.services.matters import _validate_docx_preview_archive
-
-    attachment, path = get_contract_attachment_download(
+) -> Response:
+    source = get_contract_source_bytes(
         session, context=context, contract_id=contract_id, attachment_id=attachment_id,
+        preview=True,
     )
-    if not attachment.original_filename.lower().endswith(".docx"):
-        raise HTTPException(status_code=415, detail="Only DOCX files support this preview check.")
-    if Path(path).stat().st_size > 32 * 1024 * 1024:
-        raise HTTPException(
-            status_code=413,
-            detail="This document is too large for inline preview; download it instead.",
-        )
-    try:
-        await run_in_threadpool(_validate_docx_preview_archive, path)
-    except (BadZipFile, ParseError, ValueError, ZlibError, NotImplementedError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="This DOCX could not be rendered safely; download the original instead.",
-        ) from exc
-    return ContractAttachmentPreviewRecord(
-        attachment_id=attachment.id, filename=attachment.original_filename,
+    return _source_response(source, inline=True)
+
+
+def _source_response(source, *, inline: bool) -> Response:
+    from urllib.parse import quote
+
+    disposition = "inline" if inline else "attachment"
+    return Response(
+        content=source.data, media_type=source.content_type,
+        headers={
+            "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+            "X-CaseOps-Source-SHA256": source.sha256_hex,
+            "Content-Disposition": f"{disposition}; filename*=utf-8''{quote(source.filename)}",
+        },
     )
 
 
@@ -672,26 +652,24 @@ async def preview_current_company_contract_attachment(
     response_model=RedlineParseResponse,
     summary="Parse tracked changes out of a counterparty-redlined DOCX",
 )
-async def parse_contract_attachment_redline(
+def parse_contract_attachment_redline(
     contract_id: str,
     attachment_id: str,
     context: CurrentContext,
     session: DbSession,
 ) -> RedlineParseResponse:
-    # Reuse the download path for tenant-scoped fetch + auth; the
-    # parser is a pure function over the bytes returned here.
-    attachment, storage_path = get_contract_attachment_download(
+    source = get_contract_source_bytes(
         session,
         context=context,
         contract_id=contract_id,
         attachment_id=attachment_id,
     )
     result = parse_redline_docx(
-        source=storage_path,
-        attachment_name=attachment.original_filename,
+        source=source.data,
+        attachment_name=source.filename,
     )
     return RedlineParseResponse(
-        attachment_id=attachment.id,
+        attachment_id=attachment_id,
         attachment_name=result.attachment_name,
         paragraph_count=result.paragraph_count,
         insertion_count=result.insertion_count,
@@ -734,7 +712,7 @@ async def parse_contract_attachment_redline(
         "beyond a redacted audit row."
     ),
 )
-async def compare_current_company_contract_against_tenant_playbook(
+def compare_current_company_contract_against_tenant_playbook(
     contract_id: str,
     payload: TenantPlaybookCompareRequest,
     context: ContractEditor,

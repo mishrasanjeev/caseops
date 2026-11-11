@@ -53,6 +53,10 @@ from caseops_api.schemas.contracts import (
     ContractWorkspaceResponse,
 )
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
@@ -63,6 +67,7 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
     sanitize_filename,
 )
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -448,7 +453,10 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
 def _get_locked_contract(
     session: Session, *, context: SessionContext, contract_id: str,
     new_linked_matter_id: str | None = None,
+    owner_membership_id: str | None = None,
 ) -> Contract:
+    lock_contract_actor(session, context=context, capability="contracts:edit",
+                        additional_membership_ids=(owner_membership_id,))
     observed = session.execute(select(Contract.linked_matter_id).where(
         Contract.id == contract_id, Contract.company_id == context.company.id,
     )).one_or_none()
@@ -471,7 +479,7 @@ def _get_locked_contract(
         select(Contract)
         .where(Contract.id == contract_id, Contract.company_id == context.company.id)
         .options(raiseload("*"))
-        .with_for_update()
+        .with_for_update(of=Contract, key_share=True)
         .execution_options(populate_existing=True)
     )
     if contract is None:
@@ -482,6 +490,30 @@ def _get_locked_contract(
             detail="The contract's linked matter changed. Reload before saving.",
         )
     return contract
+
+
+def lock_contract_actor(
+    session: Session, *, context: SessionContext, capability: str | None = None,
+    additional_membership_ids: tuple[str | None, ...] = (),
+) -> None:
+    """Use the lifecycle writer's principal fence before any parent/child lock."""
+    company_id, actor_id, user_id = context.company.id, context.membership.id, context.user.id
+    actors = lock_company_memberships_for_assignment(
+        session, company_id=company_id,
+        membership_ids=(actor_id, *additional_membership_ids),
+    )
+    actor = actors.get(actor_id)
+    if actor is None or actor.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Contract access is no longer available.")
+    if capability is not None:
+        require_locked_membership_capability(session, actor, capability)
+    session.refresh(context.company)
+    current = get_session_context(session, actor_id, token_issued_at=context.token_issued_at)
+    if current.company.id != company_id or current.user.id != user_id:
+        raise HTTPException(status_code=403, detail="Contract access is no longer available.")
+    context.company, context.membership, context.user = (
+        current.company, current.membership, current.user,
+    )
 
 
 def _assert_contract_version(contract: Contract, expected: datetime | None) -> None:
@@ -859,6 +891,8 @@ def create_contract(
     context: SessionContext,
     payload: ContractCreateRequest,
 ) -> ContractRecord:
+    lock_contract_actor(session, context=context, capability="contracts:create",
+                        additional_membership_ids=(payload.owner_membership_id,))
     existing_contract = session.scalar(
         select(Contract).where(
             Contract.company_id == context.company.id,
@@ -1017,7 +1051,8 @@ def update_contract(
     # keeps lifecycle disposal and contract linking in one deterministic lock
     # order and makes the operational check authoritative through commit.
     contract = _get_locked_contract(session, context=context, contract_id=contract_id,
-                                    new_linked_matter_id=raw_updates.get("linked_matter_id"))
+                                    new_linked_matter_id=raw_updates.get("linked_matter_id"),
+                                    owner_membership_id=raw_updates.get("owner_membership_id"))
     _assert_contract_version(contract, payload.expected_updated_at)
     before_values = {field: getattr(contract, field) for field in raw_updates}
     metadata_before = _contract_metadata_snapshot(contract)
@@ -1348,7 +1383,7 @@ def create_contract_term_suggestion(
     contract_id: str,
     payload: ContractTermSuggestionCreateRequest,
 ) -> ContractTermSuggestionRecord:
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id)
     source_attachment_id = _validated_contract_attachment_id(
         session,
         context=context,

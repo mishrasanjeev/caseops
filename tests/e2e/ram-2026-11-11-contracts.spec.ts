@@ -20,7 +20,9 @@ async function syntheticDocx() {
 }
 
 for (const mobile of [false, true]) {
-  test(`${mobile ? "[mobile] " : ""}B5-CON-005-006-009 metadata, private previews and reviewed terms persist`, async ({ page, request, baseURL }, info) => {
+  test(`${mobile ? "[mobile] " : ""}B5-CON-005-006-009 metadata, private previews and reviewed terms persist`, {
+    annotation: { type: "caseops-b5-proof", description: "workflow-outcome" },
+  }, async ({ page, request, baseURL }, info) => {
     test.setTimeout(240_000);
     const rt = await prepareTester(page, request, baseURL, mobile ? { width: 393, height: 851 } : { width: 1366, height: 900 });
     const title = `Synthetic contract B5 ${runId()}`;
@@ -92,6 +94,8 @@ for (const mobile of [false, true]) {
           await expect(page.frameLocator('[data-testid="docx-preview-frame"]').getByText(/Synthetic QA source, not a legal agreement/)).toBeVisible();
           await expect(page.frameLocator('[data-testid="docx-preview-frame"]').locator("section.docx")).toHaveCount(2);
         } else {
+          await expect(page.getByTestId("pdf-open-original")).toHaveCount(0);
+          await expect(page.getByTestId("pdf-download-original")).toHaveCount(0);
           const canvas = page.getByTestId("pdf-viewer").locator("canvas");
           await expect(canvas).toBeVisible();
           await expect.poll(() => canvas.evaluate((node: HTMLCanvasElement) => {
@@ -106,10 +110,12 @@ for (const mobile of [false, true]) {
         await page.getByRole("button", { name: "Zoom in", exact: true }).click();
         await page.getByRole("button", { name: "Zoom out", exact: true }).click();
         const downloading = page.waitForResponse((r) => r.url() === `${apiPath}/attachments/${attachment.id}/download`);
+        const fileDownload = page.waitForEvent("download");
         await page.getByRole("button", { name: "Download original", exact: true }).click();
         const original = await downloading;
         expect(original.status()).toBe(200);
         expect(createHash("sha256").update(await original.body()).digest("hex")).toBe(createHash("sha256").update(source.buffer).digest("hex"));
+        expect((await fileDownload).suggestedFilename()).toBe(source.name);
         await expectNoPageOverflow(page);
         await page.getByRole("link", { name: "Back to contract", exact: true }).click();
       }

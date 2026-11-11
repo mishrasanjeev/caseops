@@ -247,7 +247,10 @@ def test_private_preview_and_original_download_keep_bytes_and_tenant_acl(
     assert f"original.{kind}" in download.headers["content-disposition"]
     preview_path = path + f"/{attachment['id']}/preview"
     preview = client.get(preview_path, headers=headers)
-    assert preview.status_code == (200 if kind == "docx" else 415), preview.text
+    assert preview.status_code == 200, preview.text
+    assert preview.content == content
+    assert preview.headers["content-type"] == mime
+    assert preview.headers["x-caseops-source-sha256"] == attachment["sha256_hex"]
     other = _create_contract(client, token, "B5-OTHER")
     assert (
         client.get(
