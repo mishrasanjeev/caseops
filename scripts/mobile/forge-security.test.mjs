@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import test from 'node:test';
 
 const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
@@ -129,17 +130,30 @@ for (const state of ['before-handshake', 'after-close', 'after-close-notify']) {
   });
 }
 
-test('Forge HTTP header and cookie trimming stay bounded on hostile whitespace', () => {
-  const child = spawnSync(process.execPath, ['--input-type=commonjs', '-e', `
+test('Forge HTTP header and cookie trimming stay bounded on hostile whitespace', async () => {
+  // Keep startup and parsing inside the original bound without starting another
+  // operating-system process. Workers inherit the host trust bootstrap unchanged.
+  let worker;
+  let timer;
+  try {
+    await new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('BOUNDED_FORGE_HEADER_AND_COOKIE_PARSE')), 1500);
+      worker = new Worker(`
     const assert = require('node:assert/strict');
-    const forge = require('node-forge/lib/http');
-    const util = require('node-forge/lib/util');
+    const { workerData } = require('node:worker_threads');
+    const forge = require(workerData.http);
+    const util = require(workerData.util);
     const value = 'a' + '\\t '.repeat(80000) + 'X';
     const response = forge.createResponse();
     assert.equal(response.readHeader(util.createBuffer('HTTP/1.1 200 OK\\r\\nX-CaseOps: ' + value + '\\r\\nSet-Cookie: fixture=' + value + '\\r\\n\\r\\n')), true);
     assert.equal(response.getField('X-CaseOps'), value);
     assert.equal(response.getCookies()[0].value, value);
-  `], { cwd: app, encoding: 'utf8', timeout: 1500, maxBuffer: 16384 });
-  assert.equal(child.error, undefined, 'BOUNDED_FORGE_HEADER_AND_COOKIE_PARSE');
-  assert.equal(child.status, 0, child.stderr);
+      `, { eval: true, workerData: { http: require.resolve('node-forge/lib/http'), util: require.resolve('node-forge/lib/util') } });
+      worker.once('error', reject);
+      worker.once('exit', code => code === 0 ? resolve() : reject(new Error(`FORGE_PARSER_WORKER_EXIT_${code}`)));
+    });
+  } finally {
+    clearTimeout(timer);
+    if (worker) await worker.terminate();
+  }
 });
