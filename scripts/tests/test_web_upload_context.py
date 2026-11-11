@@ -51,6 +51,8 @@ BUILDER_INPUTS = {
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
         "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
+        "draft_pdf_oracle_20261111",
+        "draft_pdf_production_policy_20261111",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -177,6 +179,27 @@ class NativeUploadTests(unittest.TestCase):
         for name in (".dockerignore", ".gcloudignore"):
             lines = (ROOT / name).read_text(encoding="utf-8").splitlines()
             self.assertIn(f"!{helper}", lines)
+
+    def test_colocated_draft_pdf_oracle_has_explicit_builder_admission(self):
+        dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
+        runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
+        for stem, unit in (
+            ("draft_pdf_oracle_20261111", "DraftPdfOracle.test.ts"),
+            ("draft_pdf_production_policy_20261111", "DraftPdfProductionPolicy.test.ts"),
+        ):
+            with self.subTest(helper=stem):
+                helper = f"tests/e2e/support/{stem}.ts"
+                source = (ROOT / "apps/web/components/drafting" / unit).read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(f'from "../../../../tests/e2e/support/{stem}"', source)
+                self.assertIn(helper, BUILDER_INPUTS)
+                self.assertIn(f"COPY {helper} /app/{helper}", dockerfile.splitlines())
+                self.assertNotIn(helper, runner)
+                for name in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(
+                        f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines()
+                    )
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

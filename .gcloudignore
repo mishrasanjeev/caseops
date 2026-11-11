@@ -70,6 +70,8 @@ scripts/mobile/*
 !tests/e2e/support/ip-portfolio-export-completion.ts
 !tests/e2e/support/run-id.ts
 !tests/e2e/support/retained-assistant-evidence.ts
+!tests/e2e/support/draft_pdf_oracle_20261111.ts
+!tests/e2e/support/draft_pdf_production_policy_20261111.ts
 
 apps/web/node_modules/
 apps/web/.next/

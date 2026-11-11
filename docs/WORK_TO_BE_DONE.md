@@ -8,6 +8,10 @@ the broader legal-quality, full corpus, all-India directory, official registry
 sync or calibrated prediction requests. Add complete discovered desktop/phone
 browser regressions for each bounded repair and keep the original acceptance
 boundaries open until exact deployed proof. No native-app change is in scope.
+The same audit retains eight legacy binary-success body/deadline consumers and
+the pre-existing Matter lock across email transport as separate open adjacent
+work. See the explicit inventory in the triage; do not infer global closure from
+the new draft/contract helper or from emulated email acceptance.
 
 ## 2026-11-07 - Owner AI Requirements
 

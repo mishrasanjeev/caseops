@@ -11,6 +11,12 @@ verified legal-source completion, legal/model quality, actual recipient delivery
 and complete deployed certification. A current merged release has failed
 production verification; old stale checkpoints and green components cannot close
 that gate. Native/MacBook and other projects are outside this task.
+Open adjacent boundaries: eight legacy authenticated binary-success consumers
+still finish body reads outside `apiBlobRequest`'s deadline; Matter email
+transport still owns its parent lock during external I/O. The new private
+draft/contract helper and template shared-reader fence do not close those
+larger contracts. Their explicit inventories and acceptance are retained in the
+triage rather than silently waived.
 
 ## PRIV-RETENTION-2026-11-06 — Retired private-index generations retain customer data
 

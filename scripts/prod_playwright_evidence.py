@@ -44,7 +44,7 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 723, "app-mobile": 59}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
 BATCH5_CONTRACT_VERSION = 1
 BATCH5_FILES = tuple(
@@ -55,9 +55,14 @@ BATCH5_MOVED_CASES = (
     ("ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"),
     ("ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"),
 )
-# Pin each file's (desktop, mobile) counts after the four agents integrate.
-# An unreviewed inventory must refuse acceptance, never infer a passing count.
-BATCH5_CASE_COUNTS = {}
+# Actual integrated collection retains all774 app and423 production originals.
+# These are each file's observed (desktop, mobile) additions, not inferred runs.
+BATCH5_CASE_COUNTS = {
+    "ram-2026-11-11-statutes.spec.ts": (1, 1),
+    "ram-2026-11-11-drafting.spec.ts": (1, 1),
+    "ram-2026-11-11-contracts.spec.ts": (1, 1),
+    "ram-2026-11-11-bugs.spec.ts": (1, 1),
+}
 BATCH5_PROOF_SCOPES = {
     "ram-2026-11-11-statutes.spec.ts": "workflow-outcome",
     "ram-2026-11-11-contracts.spec.ts": "workflow-outcome",

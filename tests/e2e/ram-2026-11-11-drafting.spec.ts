@@ -18,7 +18,7 @@ async function json(api: APIRequestContext, url: string, method = "GET", data?: 
   return response.json();
 }
 
-for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] phone" : "desktop"}: persisted approved draft PDF preview and export parity`, {
+for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] phone" : "desktop"}: persisted draft PDF preview and export parity`, {
   annotation: { type: "caseops-b5-proof", description: "retained-readonly" },
 }, async ({ browser, baseURL }, info) => {
   if (baseURL && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(baseURL).hostname)) {

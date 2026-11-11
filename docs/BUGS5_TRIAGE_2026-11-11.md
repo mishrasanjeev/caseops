@@ -143,6 +143,26 @@ and other projects remain untouched. All automated application requests use
 `X-CaseOps-Automated-Test: no-paid-providers`; no synthetic email/lead/provider
 credit spending is authorized by this regression task.
 
+### Adjacent Boundaries Still Open
+
+The new private draft/contract binary path consumes the complete response under
+one authentication/deadline/cancellation boundary. Eight older successful-body
+consumers still use the unread `apiBlobRequest` Response contract: Matter bulk
+update templates, IP pleading DOCX and filing bundles, Matter attachment preview
+acquisition, IP portfolio exports, IP import errors, generic bulk-import errors
+and Notice downloads. Their successful body consumption remains outside that
+helper's deadline, tracked in [issue613](https://github.com/mishrasanjeev/caseops/issues/613).
+This audit does not certify them as repaired. A separate
+bounded migration must preserve each source's supported sizes, cancellation,
+headers, original bytes and authorization before closing that class globally.
+
+The existing Matter email transport still retains its parent lock across
+SendGrid I/O. The new template fence now permits compatible readers and excludes
+edit/archive, proven by two actual PostgreSQL cases, but does not certify
+transaction-free recipient delivery or exactly-once external sending. Keep the
+transport risk open; committing before send without durable admission/recovery
+would weaken lifecycle protection rather than resolve it.
+
 ## Primary Source Context
 
 - Income Tax Department transition FAQ:

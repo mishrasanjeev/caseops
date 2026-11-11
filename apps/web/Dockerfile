@@ -84,6 +84,8 @@ COPY apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json /app/apps/api/ve
 COPY apps/api/vendor/uharfbuzz-0.57.0/LICENSE apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING /app/apps/api/vendor/uharfbuzz-0.57.0/
 COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 COPY tests/e2e/support/retained-assistant-evidence.ts /app/tests/e2e/support/retained-assistant-evidence.ts
+COPY tests/e2e/support/draft_pdf_oracle_20261111.ts /app/tests/e2e/support/draft_pdf_oracle_20261111.ts
+COPY tests/e2e/support/draft_pdf_production_policy_20261111.ts /app/tests/e2e/support/draft_pdf_production_policy_20261111.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 

@@ -3869,6 +3869,23 @@ export interface paths {
         patch: operations["patch_current_company_contract_attachment_metadata_api_contracts__contract_id__attachments__attachment_id__metadata_patch"];
         trace?: never;
     };
+    "/api/contracts/{contract_id}/attachments/{attachment_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read exact verified private PDF or validated DOCX preview bytes */
+        get: operations["preview_current_company_contract_attachment_api_contracts__contract_id__attachments__attachment_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts/{contract_id}/attachments/{attachment_id}/redline": {
         parameters: {
             query?: never;
@@ -21572,12 +21589,23 @@ export interface components {
             contract_type_key?: ("agreement" | "nda" | "addendum" | "purchase_order" | "master_services_agreement" | "statement_of_work" | "lease" | "employment" | "settlement" | "amendment" | "other") | null;
             /** Contract Type Notes */
             contract_type_notes?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
             /** Effective On */
             effective_on?: string | null;
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
             /** Expires On */
             expires_on?: string | null;
             /** Renewal On */
             renewal_on?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** ContractObligation */
         ContractObligation: {
@@ -21919,6 +21947,14 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ContractTermReviewRequest */
+        ContractTermReviewRequest: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+        };
         /** ContractTermSuggestionCreateRequest */
         ContractTermSuggestionCreateRequest: {
             /** Evidence Json */
@@ -21998,6 +22034,8 @@ export interface components {
             currency?: string | null;
             /** Effective On */
             effective_on?: string | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Expires On */
             expires_on?: string | null;
             /** Jurisdiction */
@@ -58914,6 +58952,36 @@ export interface operations {
             };
         };
     };
+    preview_current_company_contract_attachment_api_contracts__contract_id__attachments__attachment_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     parse_contract_attachment_redline_api_contracts__contract_id__attachments__attachment_id__redline_get: {
         parameters: {
             query?: never;
@@ -59366,7 +59434,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractTermReviewRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

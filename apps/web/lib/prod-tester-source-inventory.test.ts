@@ -190,7 +190,8 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
 }
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
-  // Exact774-case metadata scope:15s constructor/20s new hooks and units. The
+  // The retained774-case baseline is checked apart from the eight B5 additions.
+  // Keep the15s constructor/20s hooks and units. The
   // established production collector above keeps its literal8s bound unchanged.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {

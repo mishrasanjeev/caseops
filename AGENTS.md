@@ -7,14 +7,20 @@
 - Binary authorization and cancellation cover the complete body, not just
   response headers. Bind document safety validation to the displayed bytes,
   reauthorize every download control and revoke stale object URLs. Passive
-  document viewing must not initiate a separately gated export.
+  document viewing must not initiate a separately gated export. Preserve an
+  already-known denial if its error body fails; keep preview limits separate
+  from valid original downloads and normalize MIME exactly as upload admission.
+- A cancelled async control completion cannot reopen a view the user left.
+  Bind completion to the current intent as well as source identity. PDF parity
+  must reject footer-only continuation pages, not merely find the body somewhere.
 - Adding a parent lock requires testing overlap with lifecycle and actor/access
   writers, including audit foreign-key locks. Match the canonical actor/parent
   lock order and prove an unrelated HTTP request stays responsive while a lock
   is held; threaded service tests alone do not cover async route starvation.
 - Persistent report fixtures can legitimately share display labels. Bind browser
   assertions to the exact API-proven record and retained row cardinality, not a
-  unique-looking label. Preserve old tenant evidence and the failed selector
+  unique-looking label; UI grouping need not preserve API order. Preserve old
+  tenant evidence and the failed selector
   diagnosis instead of deleting fixtures or relaxing the business assertion.
 
 - A workbook row can mix a defect, a new workflow and a legal/source-quality

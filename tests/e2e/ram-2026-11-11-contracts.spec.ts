@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import { expectNoPageOverflow, json, prepareTester } from "./support/ram-bugs4";
 import { repoRoot } from "./support/env";
 import { runId } from "./support/run-id";
+import { verifyReportedContractControls } from "./support/bugs5_contract_reported_20261111";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 
@@ -25,6 +26,7 @@ for (const mobile of [false, true]) {
   }, async ({ page, request, baseURL }, info) => {
     test.setTimeout(240_000);
     const rt = await prepareTester(page, request, baseURL, mobile ? { width: 393, height: 851 } : { width: 1366, height: 900 });
+    await verifyReportedContractControls(page, request, rt, info);
     const title = `Synthetic contract B5 ${runId()}`;
     await page.goto(`${rt.web.origin}/app/contracts`);
     await page.getByTestId("new-contract-trigger").click();
