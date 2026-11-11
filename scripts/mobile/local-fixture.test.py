@@ -2021,7 +2021,7 @@ class UsbReverseOriginTests(unittest.TestCase):
         files_module = load('usb_files_loader', 'prepare-android-files-fixture.py')
         for producer_module in (bootstrap_module, extend_module, fixture_module, files_module):
             with self.subTest(producer=Path(producer_module.__file__).name), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory); producer = root / Path(producer_module.__file__).name; helper = root / 'local-transport.py'
+                root = Path(directory).resolve(); producer = root / Path(producer_module.__file__).name; helper = root / 'local-transport.py'
                 original = (Path(producer_module.__file__).parent / 'local-transport.py').read_bytes()
                 producer.write_bytes(Path(producer_module.__file__).read_bytes()); helper.write_bytes(original)
                 spec = importlib.util.spec_from_file_location('usb_source_control', producer)

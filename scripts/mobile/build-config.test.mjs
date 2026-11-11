@@ -406,7 +406,7 @@ test('Windows native staging is short, outside sources, module-isolated and part
 });
 
 function fixture(t) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-'));
+  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'public-ca.pem');
   writeFileSync(file, certificate);
