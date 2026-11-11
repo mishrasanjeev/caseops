@@ -104,31 +104,108 @@ const bookmark = {
 };
 
 describe("CaseTrackingPage", () => {
-  it("cancels stale Matter reads and invalidates every hearing surface after refresh", async () => {
+  it.each(["month", "week", "day", "summary"])(
+    "cancels stale Matter and %s Calendar reads and invalidates every hearing surface after refresh",
+    async (calendarView) => {
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, staleTime: 30_000, refetchOnWindowFocus: false },
+          mutations: { retry: false },
+        },
+      });
+      const matterSurfaces = [
+        ["matters", "list", {}], ["matters", "dashboard-overview"],
+        ["matters", "hearings-aggregate"], ["matters", "portfolio"],
+        ["matters", "matter-1", "workspace"],
+      ];
+      const calendarSurfaces = [
+        ["calendar", "month", "2026-11-01", "2026-11-30"],
+        ["calendar", "week", "2026-11-09", "2026-11-15"],
+        ["calendar", "day", "2026-11-11", "2026-11-11"],
+        ["calendar", "summary", "2026-01-01", "2026-12-31"],
+      ];
+      const unrelatedSurfaces = [
+        ["calendar", "connections"], ["calendar", "sync-status"],
+        ["calendar", "email-invitation-candidates"], ["mailbox", "gmail", "status"],
+      ];
+      const originalMatter = { next_hearing_on: null };
+      const originalCalendar = { events: [], days: [] };
+      for (const key of matterSurfaces) client.setQueryData(key, originalMatter);
+      for (const key of calendarSurfaces) client.setQueryData(key, originalCalendar);
+      for (const key of unrelatedSurfaces) client.setQueryData(key, { retained: true });
+      const calendarKey = calendarSurfaces.find(key => key[1] === calendarView)!;
+      let finishOldMatter!: (value: { next_hearing_on: string }) => void;
+      let finishOldCalendar!: (value: { events: string[]; days: string[] }) => void;
+      // Ignore abort signals deliberately: late transport completion must not overwrite the cache.
+      const oldMatterRead = client.fetchQuery({
+        queryKey: matterSurfaces[0], staleTime: 0,
+        queryFn: () => new Promise<{ next_hearing_on: string }>(resolve => { finishOldMatter = resolve; }),
+      }).catch(() => undefined);
+      const oldCalendarRead = client.fetchQuery({
+        queryKey: calendarKey, staleTime: 0,
+        queryFn: () => new Promise<{ events: string[]; days: string[] }>(resolve => { finishOldCalendar = resolve; }),
+      }).catch(() => undefined);
+      listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [bookmark] });
+      listCaseTrackingUpdatesMock.mockResolvedValue({ updates: [] });
+      refreshCaseTrackingBookmarkMock.mockResolvedValue({ bookmark, created_updates: [] });
+      const page = render(<QueryClientProvider client={client}><CaseTrackingPage /></QueryClientProvider>);
+      try {
+        expect(client.getQueryState(matterSurfaces[0])?.fetchStatus).toBe("fetching");
+        expect(client.getQueryState(calendarKey)?.fetchStatus).toBe("fetching");
+        await userEvent.click(await screen.findByRole("button", { name: /^Refresh$/ }));
+        await waitFor(() => expect(client.getMutationCache().getAll().at(-1)?.state.status).toBe("success"));
+        for (const key of [...matterSurfaces, ...calendarSurfaces]) {
+          expect.soft(client.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
+        }
+        for (const key of unrelatedSurfaces) {
+          expect.soft(client.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(false);
+        }
+        finishOldMatter({ next_hearing_on: "2026-01-01" });
+        finishOldCalendar({ events: ["stale hearing"], days: ["stale count"] });
+        await Promise.all([oldMatterRead, oldCalendarRead]);
+        expect.soft(client.getQueryData(matterSurfaces[0])).toEqual(originalMatter);
+        expect.soft(client.getQueryData(calendarKey)).toEqual(originalCalendar);
+        expect.soft(client.getQueryState(calendarKey)?.isInvalidated).toBe(true);
+        const fetchCurrentCalendar = vi.fn().mockResolvedValue({ events: ["updated hearing"], days: ["updated count"] });
+        await client.fetchQuery({ queryKey: calendarKey, queryFn: fetchCurrentCalendar });
+        expect.soft(fetchCurrentCalendar).toHaveBeenCalledOnce();
+        expect.soft(client.getQueryData(calendarKey)).toEqual({ events: ["updated hearing"], days: ["updated count"] });
+        expect(screen.queryByText(/Could not refresh/i)).not.toBeInTheDocument();
+      } finally {
+        finishOldMatter({ next_hearing_on: "2026-01-01" });
+        finishOldCalendar({ events: ["stale hearing"], days: ["stale count"] });
+        await Promise.all([oldMatterRead, oldCalendarRead]);
+        page.unmount();
+        client.clear();
+      }
+    },
+  );
+
+  it("preserves unrelated in-flight Calendar connection reads after refresh", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const surfaces = [
-      ["matters", "list", {}], ["matters", "dashboard-overview"],
-      ["matters", "hearings-aggregate"], ["matters", "portfolio"],
-      ["matters", "matter-1", "workspace"],
-    ];
-    for (const key of surfaces) client.setQueryData(key, { next_hearing_on: null });
-    let finishOldRead!: (value: { next_hearing_on: string }) => void;
-    const oldRead = client.fetchQuery({
-      queryKey: surfaces[0],
-      queryFn: () => new Promise<{ next_hearing_on: string }>(resolve => { finishOldRead = resolve; }),
-    }).catch(() => undefined);
-    listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [bookmark] });
-    listCaseTrackingUpdatesMock.mockResolvedValue({ updates: [] });
-    refreshCaseTrackingBookmarkMock.mockResolvedValue({ bookmark, created_update_count: 1 });
-    render(<QueryClientProvider client={client}><CaseTrackingPage /></QueryClientProvider>);
-    await userEvent.click(await screen.findByRole("button", { name: /^Refresh$/ }));
-    await waitFor(() => {
-      for (const key of surfaces) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    const key = ["calendar", "connections"];
+    client.setQueryData(key, { connections: [] });
+    let finishConnections!: (value: { connections: string[] }) => void;
+    const connectionsRead = client.fetchQuery({
+      queryKey: key,
+      queryFn: () => new Promise<{ connections: string[] }>(resolve => { finishConnections = resolve; }),
     });
-    finishOldRead({ next_hearing_on: "2026-01-01" });
-    await oldRead;
-    expect(client.getQueryData(surfaces[0])).toEqual({ next_hearing_on: null });
-    expect(screen.queryByText(/Could not refresh/i)).not.toBeInTheDocument();
+    listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [bookmark] });
+    const page = render(<QueryClientProvider client={client}><CaseTrackingPage /></QueryClientProvider>);
+    try {
+      await userEvent.click(await screen.findByRole("button", { name: /^Refresh$/ }));
+      await waitFor(() => expect(client.getMutationCache().getAll().at(-1)?.state.status).toBe("success"));
+      expect(client.getQueryState(key)?.fetchStatus).toBe("fetching");
+      expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+      finishConnections({ connections: ["retained connection"] });
+      await connectionsRead;
+      expect(client.getQueryData(key)).toEqual({ connections: ["retained connection"] });
+    } finally {
+      finishConnections({ connections: ["retained connection"] });
+      await connectionsRead;
+      page.unmount();
+      client.clear();
+    }
   });
 
   it("distinguishes scheduled QA exclusion from live human availability", async () => {
