@@ -1891,8 +1891,18 @@ def _assert_app_project_workflow(workflow):
         for key in step.get("env", {}):
             assert "secrets." not in str(step["env"][key])
     raw, native = steps["Upload Playwright report"], steps["Upload App native evidence"]
+    ordered_names = [step.get("name") for step in browser["steps"]]
+    assert ordered_names.index("Reconcile app native Playwright evidence") < ordered_names.index(
+        "Upload App native evidence"
+    ) < ordered_names.index("Upload Playwright report")
+    assert native.get("timeout-minutes") == 2
+    assert raw.get("timeout-minutes") == 3
     assert raw["if"] == native["if"] == "always()"
     assert raw["with"]["name"] == "playwright-report-${{ matrix.project }}"
+    assert raw["with"]["path"].splitlines() == [
+        "playwright-report/", "test-results/",
+        "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
+    ]
     assert native["with"] == {
         "name": "playwright-native-${{ matrix.project }}",
         "path": "test-results/prod-native-evidence/ci-${{ matrix.project }}/",
@@ -1976,6 +1986,11 @@ def test_app_project_matrix_keeps_isolated_original_budgets_and_complete_native_
         "wrong_source",
         "missing_native",
         "missing_needs",
+        "late_native_upload",
+        "missing_native_upload_bound",
+        "missing_report_upload_bound",
+        "raw_path_omission",
+        "ignored_upload_failure",
     ],
 )
 def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(damage):
@@ -2009,6 +2024,18 @@ def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(
         steps["Upload Playwright report"]["with"]["name"] = "playwright-report"
     elif damage == "missing_native":
         steps["Upload App native evidence"]["with"]["if-no-files-found"] = "warn"
+    elif damage == "late_native_upload":
+        native = steps["Upload App native evidence"]
+        browser["steps"].remove(native)
+        browser["steps"].append(native)
+    elif damage == "missing_native_upload_bound":
+        del steps["Upload App native evidence"]["timeout-minutes"]
+    elif damage == "missing_report_upload_bound":
+        del steps["Upload Playwright report"]["timeout-minutes"]
+    elif damage == "raw_path_omission":
+        steps["Upload Playwright report"]["with"]["path"] = "playwright-report/\n"
+    elif damage == "ignored_upload_failure":
+        steps["Upload Playwright report"]["continue-on-error"] = True
     elif damage in {"shared_download", "missing_download"}:
         downloads = [
             s for s in aggregate["steps"] if s.get("uses") == "actions/download-artifact@v4"
