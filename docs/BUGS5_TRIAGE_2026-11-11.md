@@ -416,6 +416,52 @@ runtime window. Original keyboard/scroll/bounds/recovery/attachment/reload and
 both>100-character assertions remain required. BUG-002 remains **Inconclusive**;
 this fixture candidate is not a product fix or release acceptance.
 
+### November12: Empty Legacy Seek And Local Tooling Scope
+
+Hosted7b CI43261707175 retained4108 PostgreSQL cases:4107pass/1callfailure,
+all12324phases. The application comparison wrongly required10002 charged
+rows for an absent version3. Custom/auto legitimately executed one empty
+unique-index seek (0rows/3blocks); generic scanned10002rows. All12 populated
+legacy witnesses remained10002. Exact results matched, but the later current
+budget assertions were UNREACHED. Retained measurements satisfying a limit
+are not executed assertions. The failure, journal and native plans remain.
+
+The test-only correction binds15 controls to exact stage/mode/cardinality,
+keeps12 populated historical witnesses, and gives3 missing-version controls
+executed-plan/exact-empty-result checks plus unchanged common upper budgets.
+All15 current per-key/total/buffer checks now execute before old comparisons.
+No runtime query, fixture row, index hint, timeout, work limit,404, ACL, source
+or lifecycle assertion is weakened. Replacement execution is still owed.
+
+Before this correction, localCF focusedPN02 passed127cases/381phases/0skips
+including61migration cases, original scale/successor failures, exact version
+and ACL/lifecycle controls. It ended naturally18:21:30UTC with matching source
+seals and owned cleanup. This is focused proof, not full Docker acceptance.
+
+Local shared-tooling04 is FAILED and retained:452tooling=356P/95F/1OSskip;
+57npm=53P/3deadlineF/1POSIXskip; PS5.1/7 each13field-validator passes. The full
+tooling file belongs to CI's Ubuntu source job, not the Windows installed
+job. Running POSIX/Mac assumptions without its complete graph on Windows was
+this agent's harness mistake. Each failed result still needs classification;
+do not flatten them into95 product bugs or silently discard them. The npm
+deadlines are genuine local failures, not all the same case identities as03.
+Short TMP did not cure them. Budgets and permission/namespace fences remain
+unchanged. Canonical hosted native Windows checks are separate evidence.
+App/MacBook scope and installed mobile graph are untouched.
+
+The wrong-platform run still required inspecting every failed record. Its
+same-inode command race could not be dismissed as a dependency failure.
+Fresh isolated race01 reported refusal but failed only in fixture cleanup:
+Windows has no getuid descriptor, and restoring undefined threw before the
+environment was reset. Six shared test restorers now delete absent properties;
+CI-PLATFORM-01 proves both present/absent restoration after an intentional body
+failure, including SystemRoot/platform/spawn identity. No runtime guard changed.
+Fresh race03 executes the original owner refusal, new restoration regression
+and original same-inode race together:3P/0F/0S. Exact mapped refusal remains
+CI_TRUST_RUNNER_COMMAND_CHANGED with injected byte88/same inode. This is
+uncommitted-source diagnostic proof, not all95 failures cleared or release
+acceptance. Canonical Linux/Windows gates and full Docker remain required.
+
 ## Release And Regression Gate
 
 ### Prior Release Residuals Reconciled November 11

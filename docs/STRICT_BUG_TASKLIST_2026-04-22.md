@@ -1,5 +1,31 @@
 # Strict Bug Task List - 2026-04-22
 
+## November13 (IST): Comparison And Tooling Evidence Correction
+
+CF focusedPN02 passes127cases/all381phases,0F/0S, including the full61-case
+migration module and original scale/successor cases. Source seals match; owned
+resources retired. This supersedes the earlier SQLite fixture's unexecuted
+repair status, not full Docker or production acceptance.
+
+Hosted7b PostgreSQL4108=4107P/1F exposes an invalid missing-version historical
+work lower bound. Keep all12 populated legacy10002-row witnesses and current
+query budgets/ACL/source/lifecycle/404 checks; bind the3 expected-empty profiles
+by stage/mode/cardinality and prove execution/results without demanding a scan.
+Execute current budgets before old comparisons. This test correction is source
+only until replacement execution; retain hosted failure and unreached checks.
+
+Local Windows tooling04 remains FAILED:452=356P/95F/1skip (Ubuntu-only inventory
+misapplied locally), npm57=53P/3deadlineF/1POSIXskip, both PS13-field suites pass.
+Short TMP did not cure genuine npm deadlines. Retain all full errors; no budget,
+permission or namespace waiver and no app/Mac source/dependency changes. The
+canonical hosted Windows installed72 and Linux source gates are separate.
+Local workstation performance remains open in issue619; no repair is claimed.
+Independent inspection of all95 found a shared fixture cleanup contamination.
+Test-only absent/present descriptor restoration now has a new regression;
+fresh Windows owner/cleanup/same-inode chain3P/0F/0S, original runtime refusal
+unchanged. This does not clear the wrong-platform full run or issue619.
+See BUGS5 triage and the dated sidecar for exact failures and scope.
+
 ## November 12 Disclosure Hydration Reopening: Issue616
 
 Later7949 API11 fails three SQLite setup paths before chain assertions because

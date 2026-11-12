@@ -348,9 +348,15 @@ def _legacy_application_control(
         (row["id"], row["company_id"], row["application_id"], row["version"])
         for row in expected_rows
     )
-    return _application_hydration_plans(
+    profiles = _application_hydration_plans(
         session, legacy, evidence, f"{stage}_legacy", expected_rows, admitted=admitted
     )
+    return [
+        (plan, stage, mode, len(expected_rows))
+        for mode, (plan, _) in zip(
+            ("force_custom_plan", "force_generic_plan", "auto"), profiles, strict=True
+        )
+    ]
 
 
 def test_stale_53_version_statistics_bound_application_list_and_detail_hydration(
@@ -443,10 +449,6 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
         _retain_patent_evidence(evidence, kind="application_catalog_after_reads", catalog=after)
         assert _assert_training_statistics(after) == trained
         assert len(seen) == len(set(seen)) == 200 and len(plans) == len(old_plans) == 15
-        for plan, _admitted in old_plans:
-            nodes = [node for node in _plan_nodes(plan["Plan"])
-                     if node.get("Relation Name") == IpPatentApplicationVersion.__tablename__]
-            assert nodes and sum(_plan_work(node) for node in nodes) == 10_002
         # Match _assert_patent_disclosure_hydration_work: one version per admitted key,
         # with the same <50,000 total-work / <10,000 root-shared-block budgets.
         # Do not require the application's different SQL to use LATERAL or a named index.
@@ -455,6 +457,25 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
                      if node.get("Relation Name") == IpPatentApplicationVersion.__tablename__]
             assert nodes and sum(_plan_work(node) for node in nodes) <= admitted
             _assert_patent_plan_common_work(plan)
+        expected_controls = [
+            (stage, mode, count)
+            for stage, count in (
+                ("page_0", 100), ("page_1", 100), ("detail_current", 1),
+                ("detail_1", 1), ("detail_3", 0),
+            )
+            for mode in ("force_custom_plan", "force_generic_plan", "auto")
+        ]
+        assert [(stage, mode, count) for _, stage, mode, count in old_plans] == expected_controls
+        for plan, _stage, _mode, expected_count in old_plans:
+            nodes = [node for node in _plan_nodes(plan["Plan"])
+                     if node.get("Relation Name") == IpPatentApplicationVersion.__tablename__]
+            assert nodes and any(node.get("Actual Loops", 0) > 0 for node in nodes)
+            if expected_count:
+                assert sum(_plan_work(node) for node in nodes) == len(versions)
+            else:
+                # An absent version may use an empty index seek or a filtering scan.
+                # Exact empty results were reconciled in every mode above.
+                _assert_patent_plan_common_work(plan)
 
 
 def test_application_hydration_preserves_acl_source_lifecycle_and_exact_versions(

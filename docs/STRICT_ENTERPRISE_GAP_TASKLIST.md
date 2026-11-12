@@ -1,5 +1,29 @@
 # Strict Enterprise Gap Tasklist
 
+## November13 (IST): Unreached Assertions And Wrong-Platform Evidence
+
+PN02 atCF passes127cases/381phases with complete native inventory/origin/XML
+and owned cleanup. Full Docker06 remains4083P/1F and all784browsers unexecuted.
+Hosted7b native4108 has one missing-version legacy comparison failure, with
+the later current-budget assertion loop UNREACHED, not passed. Candidate
+measurements alone do not execute assertions. Keep current bounds unchanged
+and check them before historical comparisons; an executed empty index seek
+may charge0rows. The narrow test correction still requires replacement proof.
+
+Shared local04 has complete failed evidence, not certification. Full tooling452
+belongs to Ubuntu source CI; Windows execution without its graph/POSIX context
+has95 failures that must not be relabelled as95product bugs or silently dropped.
+Whole npm57 retains3 genuine deadlines in short TMP, with changed failing case
+identities versus03. Keep original30sec budget and all trust fences; no full
+local Windows repair claim. Hosted Windows installed72 and both PS field suites
+are distinct components. Issue619 tracks the open local performance failure.
+Do not modify Mac/app code to green a server harness.
+All95 full errors were inspected, not discarded. An absent getuid descriptor
+caused cleanup to leave SystemRoot contaminated. Test-only restoration and
+CI-PLATFORM-01 now prove a fresh3-case Windows owner/cleanup/tamper chain;
+the unchanged runtime guard refuses the injected same-inode byte edit. Full
+canonical gates are still owed; no app or security-boundary weakening.
+
 ## November12 Shared CI Follow-Up Evidence
 
 At7949d13a, Security43249131963 and matched CodeQL43249131982 pass.

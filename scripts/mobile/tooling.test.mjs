@@ -3453,6 +3453,11 @@ test('all Windows owner queries refuse an arbitrary token-default group with imp
   }
 });
 
+function restoreProcessDescriptor(name, descriptor) {
+  if (descriptor === undefined) delete process[name];
+  else Object.defineProperty(process, name, descriptor);
+}
+
 test('Windows ownership refusal precedes descriptor bytes and closes every opened source', () => {
   // This is an actual filesystem/constructor composition with injected Windows
   // OS proof responses. It is not an actual Windows ACL acceptance claim on Mac.
@@ -3483,7 +3488,7 @@ test('Windows ownership refusal precedes descriptor bytes and closes every opene
     }
   } finally {
     fs.openSync = originalOpen; fs.readSync = originalRead; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
-    Object.defineProperty(process, 'getuid', originalUid); Object.defineProperty(process, 'platform', originalPlatform);
+    restoreProcessDescriptor('getuid', originalUid); restoreProcessDescriptor('platform', originalPlatform);
     if (originalSystemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = originalSystemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -3532,7 +3537,7 @@ test('CI Windows ACL completion markers are mandatory before writing even when S
     cp.spawnSync = () => { calls++; return { status: 0, stdout: 'SAFE', stderr: completed }; }; syncBuiltinESMExports();
     assert.equal(appendCITrustOutputs(file, root, ciTrustValues).appendedKeys, 9); assert.equal(calls, 4);
   } finally {
-    cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    cp.spawnSync = original; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
   }
 }));
@@ -4684,7 +4689,7 @@ test('Windows owner refusal exposes only fixed existing-source classes before an
     }
   } finally {
     fs.openSync = open; fs.readSync = read; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
-    Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -4706,7 +4711,7 @@ test('Windows parent-directory owner refusal stays distinct from existing code a
     assert.equal(sawCode, true); assert.equal(directories, 1); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
     for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
   } finally {
-    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -4749,7 +4754,7 @@ function ciSourceWindowsProofs(change) {
     const rows = Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
     change?.(rows, calls, options); return { status: 0, stdout: JSON.stringify(rows), stderr: '' };
   }; syncBuiltinESMExports();
-  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
+  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
 }
 
 test('CI runtime copies retain exact reviewed Git blobs with independent readonly owned files', async () => ciSourceFixture(async ({ source, parent, api }) => {
@@ -5039,8 +5044,36 @@ async function ciFreshParentFixture(callback, setup = null) {
     return args.at(-1).includes("[Console]::Out.Write('SAFE')") ? { status: 0, stdout: 'SAFE', stderr } : { status: 0, stdout: '{"ownerMatches":true,"writeScopeSafe":true}', stderr };
   }; syncBuiltinESMExports();
   try { return await callback({ root, workspace, output, environment, calls }); }
-  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
+  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
 }
+
+test('CI-PLATFORM-01 failed fixture restores absent and present process descriptors and environment', async () => {
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot;
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), spawn = cp.spawnSync;
+  try {
+    for (const absent of [false, true]) {
+      if (absent) delete process.getuid;
+      else Object.defineProperty(process, 'getuid', { configurable: true, enumerable: false, writable: false, value: () => 1000 });
+      const expected = Object.getOwnPropertyDescriptor(process, 'getuid');
+      const failure = new Error('synthetic fixture body failure');
+      await assert.rejects(ciFreshParentFixture(async () => {
+        assert.equal(process.platform, 'win32');
+        assert.equal(process.env.SystemRoot, '/owned-public-windows-system');
+        throw failure;
+      }), error => error === failure);
+      assert.deepEqual(Object.getOwnPropertyDescriptor(process, 'getuid'), expected);
+      assert.deepEqual(Object.getOwnPropertyDescriptor(process, 'platform'), platform);
+      assert.equal(process.env.SystemRoot, systemRoot);
+      assert.equal(cp.spawnSync, spawn);
+    }
+  } finally {
+    restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
+    cp.spawnSync = spawn; syncBuiltinESMExports();
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+  }
+});
 test('CI fresh-parent setup precedes every staged child and payload without using an environment-selected path', async () => {
   let observed = false;
   await ciFreshParentFixture(async ({ environment, calls }) => {
@@ -5527,7 +5560,7 @@ test('CI runner final callback refuses a same-inode edit after verified payload 
     try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
     finally { fs.realpathSync.native = native; fs.lstatSync = lstat; trace.restore(); } trace.closed();
     const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
-    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', verifiedEditedByte, namedDevZeroSimulation: true }));
+    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', refusalCode: observedError ? ciTrustFailureCode(observedError) : null, verifiedEditedByte, namedDevZeroSimulation: true }));
     assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(verifiedEditedByte, 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
   });
 });

@@ -4212,3 +4212,20 @@ requirements when using the fallback.
   enforcement on every fixture connection. Preserve ordinary-session rejection
   and the original data/catalog assertions; a setup exception cannot prove a
   migration's refusal or rollback behavior.
+- An executed missing-version index seek can charge zero rows. Bind historical
+  performance controls to their exact stage, planner mode and expected result
+  cardinality; never require an empty result to perform a tenant-wide scan.
+  Keep populated historical witnesses and every current-query work/buffer,
+  result, ACL and missing-row boundary. Run current-query assertions before
+  legacy comparisons so a failing control cannot hide unexecuted acceptance.
+- Match a local tooling inventory to its declared CI operating system and
+  complete dependency closure before running it. Retain wrong-platform,
+  missing-dependency and real deadline failures separately. Do not repair
+  Mac-only assumptions from a server task, call a setup refusal an audit
+  verdict, or raise a preparation budget to conceal slow local storage.
+- A platform fixture must restore absent process properties by deletion, not
+  Object.defineProperty with an undefined descriptor. Prove present and absent
+  descriptor restoration after a body failure, including environment and native
+  command mocks. An early cleanup exception can contaminate later security
+  tests; preserve that failed run and replay the original race in a fresh
+  process before changing or weakening the production guard.
