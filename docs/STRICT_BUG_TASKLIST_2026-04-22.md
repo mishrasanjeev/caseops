@@ -6211,3 +6211,17 @@ settings restoration, normal exact-member logout and session deletion. The
 independent reconciliation retains the original rejection counter. This focused
 dirty-harness proof earns zero full-case credit; complete replacement acceptance
 and the release NO-GO remain unchanged.
+
+
+### 2026-11-12 native Core rules setup
+
+J20/M22 / US-MOB-01..08 remain Partially implemented, Inconclusive and release
+NO-GO. The full c8dd iOS Core23 run had 8 passing cases, 14 failed phases and
+8 unexecuted calls; all 23 sessions were closed. NATIVE-09 reached Add note, then
+the missing policy GET blocked its editor. Exact read admission and synthetic
+native consent setup now have focused actual Simulator proof; a complete
+replacement run is still pending. See
+[the dated evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md).
+The 300b CodeQL analyses and independent alert verdict pass without waiver;
+main CI, remaining native inventories, signing and store submission are not
+inferred from that result.

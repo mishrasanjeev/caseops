@@ -105,3 +105,16 @@ all owned fixture/source database absence were independently reconciled in
 `ci-codeql-protocol-native-02/reconciled-proof.json` under the same task cache.
 The first145-case proof remains separately source-bound. A fresh CodeQL analysis
 and alert verdict are still required; no alert is dismissed or waived.
+
+
+## Independent CodeQL follow-up
+
+Head 300b7c0f19583270f8417020c80376d661272e38 was analyzed at merge revision
+825675ca9f0f5cb5250d5c9552739765c4dad8c2. The actual Actions, JavaScript/TypeScript
+and Python analyses each succeeded with zero results. The complete returned
+seven-alert PR inventory reports each most-recent instance fixed, including
+842–844, with no dismissals. Those instances retain the original finding commit;
+they are not required to masquerade as findings on the new merge. Original raw
+analyses/alerts and corrected reconciliation remain under
+`codeql-300b-alert-verdict-01` and `codeql-300b-alert-verdict-02.json` in the task
+cache. Main CI and native/store gates remain independent.
