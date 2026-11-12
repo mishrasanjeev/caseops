@@ -3716,3 +3716,12 @@ separate frame-release and thread-control-flow repair; complete 140 host
 diagnostic/launcher cases passed. Fresh hosted alert verdicts are still pending.
 See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md). Native
 platform completion and store submission remain unverified; release NO-GO.
+
+### 2026-11-13 — API coverage shard 13 cleanup-double regression
+
+The hosted shard failed two offline journal tests because their database
+double omitted the canonical post-DROP absence read. The complete original
+25-case module reproduced both failures; the complete replacement passes
+27 cases, including retained-database and lost-observation refusal controls.
+Canonical fixture behavior is unchanged. Verdict: Partially fixed; fresh
+full hosted CI remains required. See [journal evidence](mobile/CI_DATABASE_JOURNAL_2026-11-13.md).
