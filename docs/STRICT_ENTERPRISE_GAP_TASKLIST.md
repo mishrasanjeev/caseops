@@ -1,5 +1,20 @@
 # Strict Enterprise Gap Tasklist
 
+## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
+
+**Partially implemented; release NO-GO.** Issue616/fullDocker06 at2b7 retains
+the original disclosure work-bound failure despite all52hosted CI jobs green.
+A bounded authorized parent page still triggers100tenant-wide version scans
+when pre-import statistics reflect53versions/40tenants. Actual totalwork1000701
+and59900blocks exceed the original50000/10000 limits, not just elapsed time.
+The draft full composite-key seek is isolated and unexecuted; require retained
+stale-statistics red/green, all actual hydration-plan modes, missing-version and
+ACL/source controls, complete replacement Docker/CI and exact-production proof.
+Adjacent application hydration is an exposure, not yet a reproduced defect.
+No schema, planner, security or threshold relaxation. Existing canonical owner
+IPLF-080B/UJ-29/PAT-01/IP-SCOPE/NFT-005/J14-M14; prior032/090A note labels do
+not transfer ownership. Frozen full06 is continuing to retain all failures.
+
 ## QA-B5-2026-11-11: Workflow And Claim Coverage
 
 **Partially implemented; release NO-GO.** Source and component tests did not

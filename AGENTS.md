@@ -4168,3 +4168,10 @@ requirements when using the fallback.
   current session version, not source readiness; retained stale sources do not
   transfer ownership or justify blocking a safe archive. Keep strict source
   assertions on the workflow itself and prove cleanup independently.
+- A bounded parent page does not bound later disclosure hydration. Stale
+  version-table statistics can make a tenant-only secondary index scan an
+  entire import for each admitted key. Retain the actual catalog and every
+  custom/generic/auto hydration plan, regress the pre-import statistics state,
+  and seek the complete unique tenant/family/version identity without weakening
+  access checks, work limits or missing-row rejection. Fresh-statistics passes
+  and elapsed-time improvements cannot substitute for bounded charged work.

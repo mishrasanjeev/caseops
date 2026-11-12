@@ -1,5 +1,25 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 12 Disclosure Hydration Reopening: Issue616
+
+**Not fixed on candidate2b7; release NO-GO.** FullDocker06's retained real
+PostgreSQL call failure charges1,000,701 total work and59,900blocks on both
+custom/generic first-page disclosure hydration, against unchanged50000/10000
+bounds. A company-only secondary index scans10002rows for each100admitted keys
+under53-row/40-tenant stale statistics. The earlier suffix-range patch did not
+bound this distribution; small fresh CI shards did not exercise it. Preserve
+all42plans and full SQL/bindings/catalog evidence in patent-work-failure-01.
+
+The isolated, unexecuted repair orders and seeks the full unique tenant/family/
+version key and retains exact outer identity/cardinality/ACL/lifecycle/source
+checks. New deterministic stale-statistics, first/cursor and custom/generic/auto
+regressions plus adjacent application-loader plan coverage are pending. Do not
+analyze away the retained state, change budgets or add planner hints. Full06
+continues frozen; no merge/deploy from CIgreen. Full replacement and exact
+production journeys remain required. Canonical ownership is IPLF-080B/UJ-29,
+PAT-01/IP-SCOPE and NFT-005/J14-M14. Prior032/UJ-02 and090A performance-note
+labels are historical ownership drift, not authority to change those products.
+
 ## November 11 Workbook 5: Not Closed
 
 The reporting tester's production2816 record confirms missing core contract

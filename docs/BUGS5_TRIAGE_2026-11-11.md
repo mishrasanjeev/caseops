@@ -53,6 +53,39 @@ source-data completion and production acceptance are separate fields.
 
 ## Why Reports Reopen
 
+### November 12 Full Docker Disclosure-Work Failure (Unreleased)
+
+Canonical ownership correction: PROGRAM_MANIFEST/generated JOURNEYS allocate
+this patent-family loader to IPLF-080B/UJ-29/PAT-01/IP-SCOPE, with NFT-005 and
+J14/M14 verification. Prior032/UJ-02 and090A performance-note labels are retained
+as historical drift, not authority to expand neutral import or Other IP scope.
+
+FullDocker06 remains active at exact2b7, despite all52hosted CI jobs succeeding
+and its784browsers completing763P/21explicitS/0F/0retry. Its first two native
+groups passed1022 cases/all3066 phases. Group03 then exposed an actual retained
+patent-scale failure: disclosure-version hydration charged1,000,701 work units
+against the original50,000 bound, with59,900blocks against10,000. Both first-page
+custom and generic plans scanned10,002 tenant version rows for each100 admitted
+keys through the company/registry index. Primary page admission and auto/cursor
+plans passed; do not misclassify this as a page-count or timing-only defect.
+
+The retained catalog had53version rows in its statistics,40distinct tenant/
+family identities, and over10,000 modifications since analysis. Reusing a
+runtime tenant equality plus bounds on only family/version left the tenant-only
+index viable under that stale distribution. Fresh or differently ordered
+fixtures did not prove this later hydration path safe. This is why a prior
+source/CI pass cannot close every future planner/data-history variant.
+
+The proposed repair is isolated from the active run: seek and order the complete
+company/family/version unique identity, retaining exact outer identity checks
+and unchanged authorization/lifecycle/source behavior. Deterministic stale
+disclosure-statistics and complete-key regressions are being added; none has
+executed yet. The original failed row, all42printed plans, full2.68MB catalog/
+execution evidence and hashes remain in outputs/bugs5-20261111/patent-work-failure-01.
+FullDocker06 continues unchanged to retain its full failure inventory. No
+source edit in that active checkout, changed threshold, planner hint, analyzed-
+away fixture, main merge or production deployment is authorized by this draft.
+
 ### November 12 Browser-Fixture And Analysis Correction
 
 The c671 built preflight completed all303 frontend files/2951 tests, both

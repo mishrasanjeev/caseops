@@ -20,6 +20,15 @@ provider, relevance or calibrated predictive-quality dependencies.
 
 ## November 2 Disclosure Work Coverage Pending
 
+November12 reopening evidence: canonical IPLF-080B/UJ-29/PAT-01/IP-SCOPE with
+NFT-005/J14-M14 remains NO-GO (prior032/UJ-02/090A note labels are drift)
+after fullDocker06 group03 exposed first-page custom/generic disclosure
+hydration1,000,701chargedwork/59,900blocks. Parent paging was bounded; the
+later lookup used a tenant-only secondary index100times. Retain53-row/40-tenant
+pre-import statistics and the complete captured plans. An isolated complete
+tenant/family/version-key repair and new deterministic regression are drafted,
+not executed, merged or deployed. No native-app/readthrough/Mac ownership change.
+
 IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and
 its actual custom/generic/auto work, not only authorized family-page selection.
 The exact1c fresh Docker failure is retained. Existing scale/integrity profiles

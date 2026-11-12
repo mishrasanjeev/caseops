@@ -673,17 +673,17 @@ def list_patent_families(
             name="admitted_patent_disclosure_keys",
         ).data(version_keys)
         key_columns = (
+            IpPatentFamilyVersion.company_id,
             IpPatentFamilyVersion.family_id,
             IpPatentFamilyVersion.version,
         )
         indexed_key = tuple_(*key_columns)
-        admitted_key = tuple_(wanted_versions.c.family_id, wanted_versions.c.version)
-        # Fix the tenant and bound both ends of the admitted key. Ordering
-        # only the suffix gives the company-only indexes no useful sort prefix.
+        admitted_key = tuple_(company_key, wanted_versions.c.family_id, wanted_versions.c.version)
+        # Seek the complete unique key: a separate tenant equality can make a
+        # stale company-only index look cheap for every admitted disclosure.
         picked_version = (
             select(IpPatentFamilyVersion)
             .where(
-                IpPatentFamilyVersion.company_id == company_key,
                 indexed_key >= admitted_key,
                 indexed_key <= admitted_key,
             )

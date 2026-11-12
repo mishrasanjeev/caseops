@@ -21,6 +21,16 @@ the finite mock-backed controls. Release guard1356 passes and API/page component
 passes still require a fresh14-case built desktop/phone selection, complete
 canonical Docker/green CI/protected main/exact deployment and live replay.
 
+FullDocker06 continuation is NO-GO: group03 retained a disclosure hydration
+work-bound failure after1022complete native passes, although exact2b7 CI52jobs
+and all784web cases succeeded with21explicit skips. The isolated complete-key
+draft must reproduce stale version-table statistics, retain all original
+budgets/ACL/missing-row behavior, and pass focused plus complete replacement
+gates before integration. The active2b7 full run remains unchanged; no main or
+production action. Canonical ownership is IPLF-080B/UJ-29/PAT-01/IP-SCOPE plus
+NFT-005/J14-M14; historical032/UJ-02/090A note labels do not transfer ownership.
+This is not MacBook app work.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in
