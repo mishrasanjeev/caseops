@@ -11,7 +11,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.test_prod_playwright_evidence import BASE, ROOT, _tester_canonical_rows, evidence
+from tests.test_prod_playwright_evidence import (
+    BASE,
+    BATCH5_BUGS_CASES,
+    BATCH5_BUGS_FILE,
+    ROOT,
+    _tester_canonical_rows,
+    evidence,
+)
 from tests.test_prod_playwright_evidence import capture as _native_capture
 from tests.test_prod_playwright_evidence import verified_tester_union as _verified_tester_union
 
@@ -19,13 +26,33 @@ capture = _native_capture
 verified_tester_union = _verified_tester_union
 
 
+def _reviewed_batch5_counts():
+    return {
+        "ram-2026-11-11-statutes.spec.ts": (1, 1),
+        "ram-2026-11-11-drafting.spec.ts": (1, 1),
+        "ram-2026-11-11-contracts.spec.ts": (1, 1),
+        "ram-2026-11-11-bugs.spec.ts": (2, 2),
+    }
+
+
+def _batch5_fixture_cases(file, width):
+    if file == BATCH5_BUGS_FILE:
+        return BATCH5_BUGS_CASES[width]
+    title = dict(evidence.BATCH5_MOVED_CASES).get(file, f"B5 {file} workflow")
+    scope = {
+        "ram-2026-11-11-statutes.spec.ts": "workflow-outcome",
+        "ram-2026-11-11-contracts.spec.ts": "workflow-outcome",
+        "ram-2026-11-11-drafting.spec.ts": "retained-readonly",
+    }.get(file, "legacy-workflow-outcome")
+    return ((("[mobile] " if width else "") + title, scope),)
+
+
 @pytest.fixture
 def batch5_capture(capture, monkeypatch):
     state = capture
-    counts = {file: (1, 1) for file in evidence.BATCH5_FILES}
+    counts = _reviewed_batch5_counts()
     monkeypatch.setattr(evidence, "BATCH5_CASE_COUNTS", counts)
     counts = evidence._batch5_counts()
-    moved_titles = dict(evidence.BATCH5_MOVED_CASES)
     config = state.root / "playwright.prod-ram.config.ts"
     config.write_text("// exact offline B5 configuration\n", encoding="utf-8")
     (state.root / "playwright.app.config.ts").write_text("// offline app config\n")
@@ -47,16 +74,18 @@ def batch5_capture(capture, monkeypatch):
             if not pair[index]:
                 continue
             (state.root / file).touch()
-            spec = copy.deepcopy(state.discovery["suites"][0]["specs"][0])
-            spec.update(
-                id=f"{project}-{file}",
-                file=file,
-                title=("[mobile] " if index else "")
-                + moved_titles.get(file, f"B5 {file} workflow"),
-            )
-            spec["tests"][0].update(projectId=project, projectName=project)
-            template["suites"].append({"title": file, "specs": [spec]})
-    template["stats"].update(skipped=12)
+            cases = _batch5_fixture_cases(file, index)
+            assert len(cases) == pair[index]
+            for ordinal, (title, _scope) in enumerate(cases):
+                spec = copy.deepcopy(state.discovery["suites"][0]["specs"][0])
+                spec.update(
+                    id=f"{project}-{file}" + (f"-{ordinal}" if ordinal else ""),
+                    file=file,
+                    title=title,
+                )
+                spec["tests"][0].update(projectId=project, projectName=project)
+                template["suites"].append({"title": file, "specs": [spec]})
+    template["stats"].update(skipped=len(template["suites"]))
     state.batch5_canonical = copy.deepcopy(template)
     state.batch5_documents = {}
     for role, project in evidence.BATCH5_PROJECTS.items():
@@ -69,11 +98,11 @@ def batch5_capture(capture, monkeypatch):
         discovery["stats"].update(skipped=len(discovery["suites"]))
         runtime = copy.deepcopy(discovery)
         for suite in runtime["suites"]:
+            width = list(evidence.BATCH5_PROJECTS.values()).index(project)
+            scopes = dict(_batch5_fixture_cases(suite["title"], width))
             annotation = {
                 "type": "caseops-b5-proof",
-                "description": evidence.BATCH5_PROOF_SCOPES.get(
-                    suite["title"], "legacy-workflow-outcome"
-                ),
+                "description": scopes[suite["specs"][0]["title"]],
             }
             suite["specs"][0]["tests"][0].update(
                 status="expected",
@@ -140,6 +169,13 @@ def test_batch5_inventory_cannot_infer_unreviewed_counts_or_change_historical_pi
     }
     assert evidence.APP_BASE_PROJECT_COUNTS == {"app-chromium": 719, "app-mobile": 55}
     assert len(evidence.APP_EXPECTED_SKIPS) == 21
+    assert evidence.BATCH5_CASE_COUNTS == _reviewed_batch5_counts()
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 724, "app-mobile": 60}
+    assert sum(evidence.BATCH5_CASE_COUNTS[BATCH5_BUGS_FILE]) == 4
+    assert sum(sum(pair) for pair in evidence.BATCH5_CASE_COUNTS.values()) == 8 + 2
+    assert evidence.BATCH5_CASE_PROOF_SCOPES == {
+        BATCH5_BUGS_FILE: dict(case for cases in BATCH5_BUGS_CASES for case in cases),
+    }
 
 
 @pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
@@ -152,8 +188,63 @@ def test_batch5_full_native_envelopes_bind_canonical_collection_and_actual_posit
     receipt = evidence._json(state.root / evidence.EVIDENCE / role / "completion.json")
     assert receipt["completed"] and receipt["canonical_discovery_exit"] == 0
     assert evidence.TESTER_CANONICAL_FILES.issubset(receipt["sha256"])
-    assert receipt["test_count"] == 6
+    assert receipt["test_count"] == 7
     assert len(receipt["batch5_proof_scopes"]) == receipt["test_count"]
+    proofs = {row["id"]: row["scope"] for row in receipt["batch5_proof_scopes"]}
+    result = evidence._json(state.root / evidence.EVIDENCE / role / "results.json")
+    width = list(evidence.BATCH5_PROJECTS).index(role)
+    assert {(row["title_path"][-1], proofs[row["id"]]) for row in result["tests"]
+            if row["file"] == BATCH5_BUGS_FILE} == set(BATCH5_BUGS_CASES[width])
+
+
+@pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
+@pytest.mark.parametrize("damage", ["renamed", "duplicate_comms", "duplicate_assistant"])
+def test_batch5_mixed_file_requires_both_exact_semantics_at_unchanged_counts(
+    batch5_capture, role, damage,
+):
+    state = batch5_capture
+    project = evidence.BATCH5_PROJECTS[role]
+    documents = (state.batch5_canonical, *state.batch5_documents[role])
+    for document in documents:
+        specs = [suite["specs"][0] for suite in document["suites"]
+                 if suite["specs"][0]["file"] == BATCH5_BUGS_FILE
+                 and suite["specs"][0]["tests"][0]["projectName"] == project]
+        assert len(specs) == 2 and specs[0]["id"] != specs[1]["id"]
+        if damage == "renamed":
+            specs[1]["title"] += " changed identity"
+        elif damage == "duplicate_comms":
+            specs[1]["title"] = specs[0]["title"]
+        else:
+            specs[0]["title"] = specs[1]["title"]
+    assert state.batch5_run(role) == 1
+    receipt = evidence._json(state.root / evidence.EVIDENCE / role / "exit.json")
+    assert receipt["incomplete_reason"] == "batch5_required_case_identity_mismatch"
+
+
+@pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
+@pytest.mark.parametrize("case", ["communications", "assistant"])
+@pytest.mark.parametrize("damage", ["swapped", "missing", "both", "workflow_outcome"])
+def test_batch5_mixed_proof_annotations_cannot_reclassify_either_guard(
+    batch5_capture, role, case, damage,
+):
+    state = batch5_capture
+    runtime = state.batch5_documents[role][1]
+    specs = [suite["specs"][0] for suite in runtime["suites"]
+             if suite["specs"][0]["file"] == BATCH5_BUGS_FILE]
+    target = specs[case == "assistant"]["tests"][0]
+    alternate = ("preview-no-paid-guard" if case == "assistant"
+                 else "assistant-research-no-paid-guard")
+    if damage == "missing":
+        target["annotations"] = []
+    elif damage == "both":
+        target["annotations"].append({"type": "caseops-b5-proof", "description": alternate})
+    else:
+        target["annotations"][0]["description"] = (
+            "workflow-outcome" if damage == "workflow_outcome" else alternate
+        )
+    assert state.batch5_run(role) == 1
+    receipt = evidence._json(state.root / evidence.EVIDENCE / role / "exit.json")
+    assert receipt["incomplete_reason"] == "batch5_proof_scope_mismatch"
 
 
 @pytest.mark.parametrize(
@@ -235,25 +326,23 @@ def test_batch5_release_union_preserves_all176_original_cases_plus_additions(
 ):
     # Envelope validation is independently exercised above; this checks the union afterward.
     state = verified_tester_union
-    monkeypatch.setattr(
-        evidence, "BATCH5_CASE_COUNTS", {file: (1, 1) for file in evidence.BATCH5_FILES}
-    )
+    monkeypatch.setattr(evidence, "BATCH5_CASE_COUNTS", _reviewed_batch5_counts())
     core = _tester_canonical_rows()
     batch5 = []
-    titles = dict(evidence.BATCH5_MOVED_CASES)
     for width, project in enumerate(evidence.BATCH5_PROJECTS.values()):
         for file in evidence._batch5_counts():
-            title = ("[mobile] " if width else "") + titles.get(file, f"B5 {file} workflow")
-            row = copy.deepcopy(core[0])
-            row.update(
-                id=f"{project}-{file}:0",
-                native_spec_id=f"{project}-{file}",
-                file=file,
-                title_path=[file, title],
-                project_id=project,
-                project_name=project,
-            )
-            batch5.append(row)
+            for ordinal, (title, _scope) in enumerate(_batch5_fixture_cases(file, width)):
+                spec_id = f"{project}-{file}" + (f"-{ordinal}" if ordinal else "")
+                row = copy.deepcopy(core[0])
+                row.update(
+                    id=f"{spec_id}:0",
+                    native_spec_id=spec_id,
+                    file=file,
+                    title_path=[file, title],
+                    project_id=project,
+                    project_name=project,
+                )
+                batch5.append(row)
     if damage == "missing_moved":
         batch5.pop()
     elif damage == "renamed_moved":
@@ -280,8 +369,8 @@ def test_batch5_release_union_preserves_all176_original_cases_plus_additions(
     else:
         receipt = evidence.validate_batch5_release_union(state.root, roles, BASE)
         assert receipt["original_case_count"] == 176
-        assert receipt["new_batch5_case_count"] == 8
-        assert receipt["test_count"] == 184
+        assert receipt["new_batch5_case_count"] == 8 + 2
+        assert receipt["test_count"] == 176 + 8 + 2
 
 
 def test_batch5_workflow_is_serial_correctly_authenticated_and_required_for_certification():
@@ -445,10 +534,17 @@ def test_actual_configs_discover_all_four_b5_files_with_disjoint_desktop_mobile_
         'export const apiBaseUrl = "http://127.0.0.1:8000";\n'
     )
     for file in evidence.BATCH5_FILES:
+        cases = ([case for width in BATCH5_BUGS_CASES for case in width]
+                 if file == BATCH5_BUGS_FILE else
+                 [("B5 desktop workflow", "workflow-outcome"),
+                  ("[mobile] B5 phone workflow", "workflow-outcome")])
         (support.parent / file).write_text(
             'import { test } from "@playwright/test";\n'
-            'test("B5 desktop workflow", async () => {});\n'
-            'test("[mobile] B5 phone workflow", async () => {});\n'
+            + "".join(
+                f"test({json.dumps(title)}, {{ annotation: {{ type: 'caseops-b5-proof', "
+                f"description: {json.dumps(scope)} }} }}, async () => {{}});\n"
+                for title, scope in cases
+            ),
         )
     (support.parent / "ram-2026-11-11-unreviewed.spec.ts").write_text(
         'import { test } from "@playwright/test"; test("Wrong file", async () => {});\n'
@@ -479,7 +575,7 @@ def test_actual_configs_discover_all_four_b5_files_with_disjoint_desktop_mobile_
         if config == "playwright.prod-ram.config.ts"
         else {"app-chromium", "app-mobile"}
     )
-    assert len(rows) == 8
+    assert len(rows) == 8 + 2
     assert {row[0] for row in rows} == set(evidence.BATCH5_FILES)
     assert {row[2] for row in rows} == expected_projects
     assert all(
@@ -487,4 +583,4 @@ def test_actual_configs_discover_all_four_b5_files_with_disjoint_desktop_mobile_
         for _, title, project, attempts in rows
     )
     for project in expected_projects:
-        assert len([row for row in rows if row[2] == project]) == 4
+        assert len([row for row in rows if row[2] == project]) == 5

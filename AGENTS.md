@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Use representative questions already supplied in a report before declaring
+  reproduction input missing. Label newly chosen scenarios as such. Pair factual
+  assistant requests with true legal/mixed requests and negated legal language;
+  a generic mocked answer cannot prove relevance or authorize weakening the
+  legal-evidence boundary.
+- A research URL's state includes both its query and mode. Regress same-query
+  mode changes and cleared/back navigation alongside staged filter edits, and
+  ensure a corpus recovery link cannot silently initiate a licensed-provider
+  search. A request payload alone is not relevance or legal-analysis proof.
+
 - Shared-catalog browser fixtures must retain their returned server identity.
   A larger section count does not identify the owned long-caption Act. Prove
   exact API identity, verified/pending inventory and idempotent setup beside a
@@ -4127,3 +4137,25 @@ requirements when using the fallback.
   counters. Inspect native suite errors, retain the incomplete inventory and
   replay it within the original budgets before the complete serialized gate;
   neither resource overlap nor a later subset pass authorizes certification.
+- A bounded JSON byte count does not bound decoder nesting. Treat malformed
+  or excessively nested retained JSON as row-local unsupported content while
+  preserving original bytes and valid siblings. Prove every shared string-list
+  consumer, optional typed payloads, reload and the real PostgreSQL path; do not
+  raise recursion limits or silently substitute an empty successful record.
+  Check tighter caller/encryption/base64 bounds before declaring an adjacent
+  parser vulnerable; a failing fixture assumption before the HTTP call is not
+  a successful product reproduction.
+- Intent regressions need both normative and incidental-language controls.
+  Legal-team labels are not legal advice; negating case law does not authorize
+  a mixed legal request. Preserve the whole-factual restriction boundary and
+  existing legal signals, test actual HTTP routing and citations, and never
+  describe finite mock-backed examples as general legal-answer quality.
+- On Windows, named stat and descriptor stat may expose different ctime
+  semantics. Retain and compare native creation and change timestamps alongside
+  full file/volume identity; never drop a timestamp, tolerate differences or
+  accept evidence only after close. Regress both capture and reader with actual
+  metadata-only races, hardlinks/reparse points and the original tamper checks.
+  Byte-hashed fixtures must also open both descriptors in binary mode: Windows
+  text translation can alter the supposedly immutable UTF-8 buffer. Assert
+  exact LF bytes and partial-write extent, and retain platform fixture failures
+  separately from native guard or product failures; never weaken OS protections.

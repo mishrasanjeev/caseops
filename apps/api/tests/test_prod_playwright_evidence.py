@@ -2739,6 +2739,23 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
 APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+BATCH5_BUGS_FILE = "ram-2026-11-11-bugs.spec.ts"
+BATCH5_BUGS_CASES = (
+    (
+        ("BUG-003 communications resolved preview and missing-value guard desktop",
+         "preview-no-paid-guard"),
+        ("B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation desktop",
+         "assistant-research-no-paid-guard"),
+    ),
+    (
+        ("[mobile] BUG-003 communications resolved preview and missing-value guard phone",
+         "preview-no-paid-guard"),
+        ("[mobile] B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation phone",
+         "assistant-research-no-paid-guard"),
+    ),
+)
 
 
 def _app_reviewed_counts():
@@ -2818,6 +2835,29 @@ def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
         evidence._app_inventory(canonical)
 
 
+@pytest.mark.parametrize("width", [0, 1])
+@pytest.mark.parametrize("damage", ["renamed", "duplicate_comms", "duplicate_assistant"])
+def test_app_inventory_keeps_both_mixed_b5_semantics_at_unchanged_counts(
+    app_envelopes, width, damage,
+):
+    canonical = evidence._json(
+        app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
+    )
+    project = tuple(APP_COUNTS)[width]
+    rows = [row for row in canonical["tests"]
+            if row["file"] == BATCH5_BUGS_FILE and row["project_name"] == project]
+    assert len(rows) == 2 and rows[0]["id"] != rows[1]["id"]
+    if damage == "renamed":
+        rows[1]["title_path"][-1] += " changed identity"
+    elif damage == "duplicate_comms":
+        rows[1]["title_path"] = list(rows[0]["title_path"])
+    else:
+        rows[0]["title_path"] = list(rows[1]["title_path"])
+    assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
+    with pytest.raises(evidence.EvidenceError, match="batch5_required_case_identity_mismatch"):
+        evidence._app_inventory(canonical)
+
+
 @pytest.mark.parametrize("role,project", APP_ROLES.items())
 @pytest.mark.parametrize(
     "damage", ["config", "project", "missing", "extra", "duplicate", "workers", "retry", "output"]
@@ -2860,7 +2900,8 @@ def app_capture(capture):
     for width, (project, count) in enumerate(_app_reviewed_counts().items()):
         skips = [item for item in evidence.APP_EXPECTED_SKIPS if item[0] == project]
         pinned = skips + [item for item in APP_REQUIRED_NATIVE_CASES if item[0] == project]
-        added = [(file, f"{'[mobile] ' if width else ''}B5 {file} case {number}")
+        added = [(file, BATCH5_BUGS_CASES[width][number][0] if file == BATCH5_BUGS_FILE else
+                  f"{'[mobile] ' if width else ''}B5 {file} case {number}")
                  for file, pair in evidence.BATCH5_CASE_COUNTS.items()
                  for number in range(pair[width])]
         for index in range(count):

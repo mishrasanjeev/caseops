@@ -44,7 +44,7 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 723, "app-mobile": 59}
+APP_PROJECT_COUNTS = {"app-chromium": 724, "app-mobile": 60}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
 BATCH5_CONTRACT_VERSION = 1
 BATCH5_FILES = tuple(
@@ -55,19 +55,31 @@ BATCH5_MOVED_CASES = (
     ("ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"),
     ("ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"),
 )
-# Actual integrated collection retains all774 app and423 production originals.
-# These are each file's observed (desktop, mobile) additions, not inferred runs.
+# Keep the observed774 app and423 production baselines separate from additions.
+# Reviewed declarations must match fresh native collection before acceptance.
 BATCH5_CASE_COUNTS = {
     "ram-2026-11-11-statutes.spec.ts": (1, 1),
     "ram-2026-11-11-drafting.spec.ts": (1, 1),
     "ram-2026-11-11-contracts.spec.ts": (1, 1),
-    "ram-2026-11-11-bugs.spec.ts": (1, 1),
+    "ram-2026-11-11-bugs.spec.ts": (2, 2),
 }
 BATCH5_PROOF_SCOPES = {
     "ram-2026-11-11-statutes.spec.ts": "workflow-outcome",
     "ram-2026-11-11-contracts.spec.ts": "workflow-outcome",
     "ram-2026-11-11-drafting.spec.ts": "retained-readonly",
     "ram-2026-11-11-bugs.spec.ts": "preview-no-paid-guard",
+}
+BATCH5_CASE_PROOF_SCOPES = {
+    "ram-2026-11-11-bugs.spec.ts": {
+        "BUG-003 communications resolved preview and missing-value guard desktop":
+        "preview-no-paid-guard",
+        "[mobile] BUG-003 communications resolved preview and missing-value guard phone":
+        "preview-no-paid-guard",
+        ("B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation desktop"): "assistant-research-no-paid-guard",
+        ("[mobile] B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation phone"): "assistant-research-no-paid-guard",
+    },
 }
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -401,6 +413,18 @@ def _batch5_rows(rows, projects, *, include_moved=True):
         if any(row["title_path"] != [file, expected_titles[row["project_name"]]]
                for row in rows if row["file"] == file):
             raise EvidenceError("batch5_moved_case_identity_mismatch")
+    for file, cases in BATCH5_CASE_PROOF_SCOPES.items():
+        expected_cases = Counter(
+            (project, (file, title))
+            for project, index in projects.items() for title in cases
+            if ("[mobile]" in title) == (index == 1)
+        )
+        actual_cases = Counter(
+            (row["project_name"], tuple(row["title_path"]))
+            for row in rows if row["file"] == file
+        )
+        if actual_cases != expected_cases:
+            raise EvidenceError("batch5_required_case_identity_mismatch")
     return rows
 
 
@@ -436,7 +460,15 @@ def _batch5_proofs(document):
         annotations = row["annotations"] + row["results"][0]["annotations"]
         declared = {item.get("description") for item in annotations if item["type"] == "caseops-b5-proof"}
         moved = row["file"] in {file for file, _ in BATCH5_MOVED_CASES}
-        expected = "legacy-workflow-outcome" if moved else BATCH5_PROOF_SCOPES[row["file"]]
+        cases = BATCH5_CASE_PROOF_SCOPES.get(row["file"])
+        if cases is not None:
+            if len(row["title_path"]) != 2 or row["title_path"][0] != row["file"]:
+                raise EvidenceError("batch5_required_case_identity_mismatch")
+            expected = cases.get(row["title_path"][1])
+            if expected is None:
+                raise EvidenceError("batch5_required_case_identity_mismatch")
+        else:
+            expected = "legacy-workflow-outcome" if moved else BATCH5_PROOF_SCOPES[row["file"]]
         if (not moved and declared != {expected}) or (moved and declared and declared != {expected}):
             raise EvidenceError("batch5_proof_scope_mismatch")
         scopes.append({"id": row["id"], "file": row["file"], "scope": expected})
@@ -1937,7 +1969,8 @@ def main() -> int:
             counts = _batch5_counts()
             _batch5_source_hashes(ROOT)
             print(json.dumps({"batch5_contract": BATCH5_CONTRACT_VERSION, "files": counts,
-                              "roles": BATCH5_PROJECTS, "proof_scopes": BATCH5_PROOF_SCOPES}))
+                              "roles": BATCH5_PROJECTS, "proof_scopes": BATCH5_PROOF_SCOPES,
+                              "case_proof_scopes": BATCH5_CASE_PROOF_SCOPES}))
             return 0
         if options.mode == "validate":
             validation = (

@@ -10,6 +10,14 @@ the wider obligation/redline/research/data/provider/model-quality acceptance
 requests separately. Every new dated spec must be collected by standard app,
 Docker and exact-production configs; a test file alone is not executed coverage.
 
+November12 adds J05/J09/M04/M07 and M15 recovery/intent controls without claiming
+a new legal-research engine. Actual components:220 API,32 Research page, final27
+JSON-boundary and1356 release-consumer passes (overlaps are not summed as unique
+coverage). Proposed app784/prod433 inventories preserve774/423 originals; two
+new assistant/research journeys are unexecuted until the exact fresh built,
+Docker and deployed gates run. Source-bound controls do not close legal-source,
+provider, relevance or calibrated predictive-quality dependencies.
+
 ## November 2 Disclosure Work Coverage Pending
 
 IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and

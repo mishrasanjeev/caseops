@@ -19,7 +19,6 @@ from caseops_api.db import session as session_module
 from caseops_api.db.models import Statute, StatuteSection
 from tests.test_auth_company import auth_headers, bootstrap_company
 
-
 ROOT = Path(__file__).resolve().parents[3]
 ORIGINAL_IDS = [f"b5-layout-{index:02}" for index in range(40)]
 DECOY_ID = "b5-layout-short-decoy"
@@ -114,7 +113,9 @@ def test_fresh_and_pre_decoy_seeds_preserve_original_counts_and_replay(seed_loca
         ).where(StatuteSection.statute_id.in_(ORIGINAL_IDS)).group_by(StatuteSection.statute_id)).all())
     assert counts == {key: 81 if key == "b5-layout-39" else 2 for key in ORIGINAL_IDS}
     if preexisting == "legacy":
-        assert snapshot(ORIGINAL_IDS) == prior, "Do not repair retained fixture rows or their provenance"
+        assert snapshot(ORIGINAL_IDS) == prior, (
+            "Do not repair retained fixture rows or their provenance"
+        )
     retained = snapshot([*ORIGINAL_IDS, DECOY_ID])
     assert seed_local() == fixture
     assert snapshot([*ORIGINAL_IDS, DECOY_ID]) == retained
@@ -158,7 +159,10 @@ def test_api_proves_exact_long_fixture_despite_higher_ranked_short_competitor(cl
         assert {row["statute_id"] for row in sections["catalog_sections"]} == {expected["id"]}
         assert sections["sections"][-1]["id"] == expected["positive_section_id"]
         assert sections["sections"][-1]["verification_status"] == "verified_official"
-        pending = next(row for row in sections["catalog_sections"] if row["id"] == expected["pending_section_id"])
+        pending = next(
+            row for row in sections["catalog_sections"]
+            if row["id"] == expected["pending_section_id"]
+        )
         assert pending["selection_state"] == "verification_pending"
     assert len(fixture["target"]["long_name"]) > 100
     assert len(fixture["competitor"]["short_name"] + fixture["competitor"]["long_name"]) < 100
@@ -187,6 +191,9 @@ def test_seed_rejects_non_e2e_or_unowned_storage_before_session(
         calls.append("session")
         raise AssertionError("Rejected fixture storage must never open a session")
 
-    with pytest.raises(RuntimeError, match="isolated e2e runtime|belong to this test checkout|remote database storage"):
+    with pytest.raises(
+        RuntimeError,
+        match="isolated e2e runtime|belong to this test checkout|remote database storage",
+    ):
         execute_seed(seed_source, monkeypatch, settings, forbidden_session)
     assert calls == []

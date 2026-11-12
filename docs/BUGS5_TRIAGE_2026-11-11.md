@@ -42,8 +42,8 @@ source-data completion and production acceptance are separate fields.
 | B5-010 / BUG-010 | Extended playbook risk/replacement drafting enhancement and acceptance request, not reproduced broken comparison. | J10/M09; FT-051 | Compare an actual tenant-approved playbook, trace clause deviations and reviewer decisions; independently review legal replacement quality. No generic risk label proves legal validity. |
 | B5-011 / BUG-011 | Native amendment/version/redline authoring enhancement. Existing Redline reads tracked changes in uploaded DOCX; it does not promise every metadata edit is a Word revision. | J04/J10/M03/M09 | Distinguish immutable original document, uploaded Word revisions, proposed app edits, accepted text and version history. Exact insertion/deletion/replacement/export acceptance before broader closure. |
 | B5-012 / BUG-012 | Configuration/evidence dependency unless eligible active versions are proven missing from options. Existing empty states, governance link and disabled calculate action are intentional. | J08/M08; IP governed deadlines | Inspect exact jurisdiction/scope/status of persisted rule/calendar versions. Positive approved synthetic local workflow and negative pending/mismatch/permission tests. Do not invent or activate a legal rule in production. |
-| B5-013 / BUG-013 | Retrieval report needing the exact question/session; research-response enhancement. A selected Matter is not proof that permitted verified evidence answers the question. | J05/J09/M04/M07; AST acceptance | Preserve policy/ACL/lifecycle/source manifests; reproduce query and source sufficiency; prove supported answer and safe abstention/recovery without paid automated calls. |
-| B5-014 / BUG-014 | Unspecified search reliability report plus structured research-report enhancement. Cards alone are not a defect. | J05/M04/M15; US-010..013; FT-020..022; NFT-002/004/015 | Per-mode exact query/filters/candidate identity/relevance benchmark; source-grounded synthesis tested separately. No fabricated missing judgments or citations. |
+| B5-013 / BUG-013 | Confirmed representative intent-routing gaps plus research-response enhancement. Original workbook supplies the applicable Acts/sections question; a chosen scenario does not reconstruct a missing original turn. | J05/J09/M04/M07; AST acceptance | Preserve policy/ACL/lifecycle/source manifests; prove recorded facts, legal/mixed abstention, citations and recovery through HTTP and desktop/phone without paid automated calls. Legal relevance/provider quality remains separate. |
+| B5-014 / BUG-014 | Confirmed legacy query-alias and URL-mode recovery gaps plus structured research-report enhancement. Cards alone are not a defect. | J05/M04/M15; US-010..013; FT-020..022; NFT-002/004/015 | Per-mode query/filters/back-navigation/candidate identity and separate source-relevance benchmark. No silent licensed request or fabricated judgment/citation. |
 | B5-015 / BUG-015 | Engineering-process enhancement. Existing suites/CI are real, but do not prove autonomous exhaustive diagnosis or safe automatic production repair. | J14/M14 | Route/workflow inventory, retained actual results, independent review and guarded release. Automatic code changes cannot bypass security, source, provider-cost or release gates. |
 | B5-016 / BUG-016 | Compact-layout enhancement. No exact card/record/viewport supplied. Horizontal-only carousels are not the acceptance requirement. | J03/J09/J13/M02/M07/M12; NFT-013/014 | Define affected lists; accessible compact/expanded presentation, all records/actions reachable by keyboard and phone, meaningful title widths and no overlap. |
 | B5-017 / ENH-017 | Reviewed directory/source coverage and update-feed enhancement. Forum-catalog hierarchy and judge directory are distinct existing data models. | J06/M05; US-060/062; FT-089/092/093 | Official source/edition/permission/update strategy, canonical identities, transfers/history, bounded synchronization and coverage accounting. Do not label a partial seed all-India complete. |
@@ -52,6 +52,90 @@ source-data completion and production acceptance are separate fields.
 | B5-020 / ENH-020 | Evidence/benchmark dependency plus proposed ML enhancement. Actual page honestly reports sample0 and missing bench IDs/aggregate snapshots. | J06/J09/M05/M07; predictive source controls | Supported descriptive source-backed aggregate and negative empty/weak sample; no invented probability, judge favorability or cross-tenant training. A trained model alone cannot establish calibrated legal usefulness. |
 
 ## Why Reports Reopen
+
+### November 12 Representative-Question Correction (Component Evidence Only)
+
+The owner directed this task to choose representative questions rather than
+wait for another tester transcript. The earlier missing-query dependency was
+overstated: row013 already supplies "What are the applicable sections and Acts
+in this matter?". Use that example plus known synthetic fixture facts; do not
+claim that a newly chosen scenario reconstructs an unavailable original session.
+
+Red API regressions confirmed that the workspace-facts assistant's substring
+legal gate rejects a factual summary containing "without adding case law",
+while plural Acts/sections are absent from the gate's terms. The first24-case
+red run had8 call failures. Paired regression cases cover supported facts with
+true legal and mixed-request abstention;
+generic mock output or a successful citation alone is not relevant legal analysis.
+Do not introduce a blanket negation bypass or expand the workspace-facts prompt
+into an unverified legal-research engine.
+
+Research read only `q` despite the assistant's retained `query` links, and
+compared only query text. Same-query mode-only navigation and clearing could
+retain stale criteria. Ten failures in the32-case red page run reproduced the
+gaps; all32 pass after the repair, including all seven modes, staged filters,
+clearing and no implicit licensed provider. Two actual desktop/phone journeys
+are added to the finite required inventories but remain unexecuted.
+
+The first65-case intent replacement passed but independently failed review on
+incidental legal-team/law-firm wording. A revised80-case module plus existing
+assistant9 and retained-read26 ran completely:115 passed/all345 phases/0skips,
+unchanged source. Further review found three untested legal-question variants;
+the corrected90-case replacement passed in the complete220-case integrated
+component (all660 phases, zero skips). These finite
+mock-backed cases prove routing/source binding, not general NLU/legal quality.
+
+Full Docker05 on exact5550145e completed4084 PostgreSQL cases:4079 passed,
+5 failed,0skipped. All782 browsers were unexecuted. One uncaught retained-JSON
+RecursionError was repaired narrowly with15 passing SQLite cases; unchanged
+PostgreSQL replay remains owed. Four query-plan matrices refused metadata
+evidence before completing their460-label/36-HTTP inventories. Current Windows
+native observations demonstrate named ctime/descriptor ctime disagreement;
+the old in-flight first failing clause was not retained. A native creation/change
+adapter with all identity/hash/EXCL/race fences is drafted, not yet accepted.
+Neither raw first-plan work5/cap400 nor a passed component certifies a matrix.
+
+The first complete native81 helper run failed59P/22F. After the native timestamp
+adapter, an owned traced capture proved an independent byte-mode defect:
+512 expected bytes became538, exactly26 LF-to-CRLF translations. Explicit
+binary capture/read descriptors retain the original buffer/hash contract.
+The complete Windows replacement was78P/3 old platform-fixture failures:
+one unavailable symlink privilege and two Windows open-handle rename denials.
+Those failures remain retained, not relabelled as passes or skipped. All63 new
+native cases passed on Windows at that candidate. An offline, network-disabled
+Linux replacement ran all81 exact-source helper cases, all243 phases passed
+without skips. Final Windows native63 passed in that same220-case component.
+The real PostgreSQL matrices remain required; helper passes are not query-plan
+or release certification.
+
+The adjacent encrypted-cursor audit did not establish a reachable recursion
+defect. Its4000-character canonical token ceiling admits at most1486 nested
+arrays with the current28-byte nonce/tag overhead. That input parsed on both
+Windows3.13.14 and Linux3.13.16 and remains an unsupported payload shape. An
+initial23-case test attempt was15P/8fixture failures: four incorrect decoder
+assumptions stopped before HTTP and four asserted the wrong pre-RFC7807 shape.
+None is a product reproduction. The corrected27-case module passed/all81phases,
+zero skips. Its12 HTTP controls cover balanced and unclosed maximum-length
+inputs plus malformed JSON across all four routes, typed problem responses,
+private/no-store headers and unchanged readable records. The cursor service
+is intentionally unchanged. The release-safety module's3 non-PG cases also
+passed; its2 PostgreSQL concurrency cases remain owed in full native acceptance.
+
+All five release-consumer modules completed1356 cases/all4068 phases with zero
+failures/skips and unchanged source:663 evidence,77 trusted checkout,504 resume,
+58 scheduler and54 Batch5 wiring. These deterministic reporter/guard tests are
+not real application E2E. New browser declarations are784 app/433 production,
+retaining all774/423 originals plus10 additions. Dedicated Batch5 roles require
+7 desktop and7 phone cases with distinct communications versus assistant proof
+annotations. Fresh actual collection/build/browser and full Docker remain owed.
+Full API `ruff check src tests` also passed after four formatting-only fixture
+findings; the fixture AST hash is unchanged and its complete9-case module was
+replayed successfully (all27 phases). No assertion or accepted legal data changed.
+
+PR614 remains draft at53cb3837 with newer uncommitted changes. Hosted53cb CI
+last read queued/zero jobs; its cancel request was refused as completed. The
+owner will check the account UI later. No cause, green result, deployment or
+fixed verdict is inferred; local verification continues without bypassing CI.
 
 These are engineering failures to prevent, not an allegation that every
 Disposed Matter silently reactivated. No workbook row supplies a persisted

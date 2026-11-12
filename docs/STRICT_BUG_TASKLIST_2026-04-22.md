@@ -12,6 +12,16 @@ source-data gaps and exact closure criteria. Candidate patches/tests are not
 production acceptance. Do not modify Matter lifecycle controls without a
 persisted lifecycle/audit reproduction; this workbook supplies no such event.
 
+November12: representative API/page red tests confirm assistant intent and
+legacy-query/mode navigation gaps; the original Acts/sections question was
+already in the workbook. Current components include90 intent cases within a
+complete220-case API pass,32 Research page passes,27 retained-JSON/cursor controls
+and1356 complete release-consumer passes. Full Docker05 failed4079P/5F before
+all782 browser cases. Narrow parser and Windows evidence/byte-mode repairs have
+source-bound component proof, not a replacement full gate or deployed closure.
+Preserve the three original Windows platform-fixture failures separately from
+the Linux81 and native Windows63 passes; no OS security policy was relaxed.
+
 ## November 8 B4-ADJ-07 Mobile Retirement Regression
 
 CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at

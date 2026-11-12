@@ -197,9 +197,9 @@ def _strings(row, name):
     raw = _text(row, name)
     try:
         value = json.loads(raw)
-    except ValueError as exc:
-        # The standard parser also refuses overly long integer tokens with a
-        # plain ValueError. Preserve the bounded-text classification above.
+    except (ValueError, RecursionError) as exc:
+        # Bounded JSON can still exceed nesting or integer-token limits.
+        # Preserve the bounded-text classification above.
         raise _Unsupported("unsupported_legacy") from exc
     if type(value) is not list or any(type(item) is not str for item in value):
         raise _Unsupported("unsupported_legacy")

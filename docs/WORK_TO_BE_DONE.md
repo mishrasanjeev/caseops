@@ -13,6 +13,14 @@ the pre-existing Matter lock across email transport as separate open adjacent
 work. See the explicit inventory in the triage; do not infer global closure from
 the new draft/contract helper or from emulated email acceptance.
 
+November12 continuation: current candidate repairs representative assistant
+intent, retained `query`/canonical `q` and mode-navigation recovery, and row-local
+deep retained JSON. Preserve actual red/green and failed full-Docker evidence;
+do not claim legal research/model relevance or original-turn reproduction from
+the finite mock-backed controls. Release guard1356 passes and API/page component
+passes still require a fresh14-case built desktop/phone selection, complete
+canonical Docker/green CI/protected main/exact deployment and live replay.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in

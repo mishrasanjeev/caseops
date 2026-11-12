@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import * as navigation from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -167,6 +168,136 @@ describe("ResearchPage", () => {
     render(withClient(<ResearchPage />));
     expect(screen.getByTestId("research-query-input")).toBeInTheDocument();
     expect(screen.getByTestId("research-query-submit")).toBeInTheDocument();
+  });
+
+  it.each(["q", "query"])("loads the encoded research question from the %s link parameter", async (key) => {
+    const question = "What are the applicable sections and Acts in this matter?";
+    const searchParams = vi.spyOn(navigation, "useSearchParams").mockReturnValue(
+      new URLSearchParams({ [key]: question, mode: "contextual" }) as ReturnType<typeof navigation.useSearchParams>,
+    );
+    try {
+      render(withClient(<ResearchPage />));
+      await waitFor(() => expect(searchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ query: question, mode: "contextual", offset: 0 }),
+      ));
+      expect(screen.getByTestId("research-query-input")).toHaveValue(question);
+      expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+    } finally {
+      searchParams.mockRestore();
+    }
+  });
+
+  it("prefers the canonical q parameter when a legacy query parameter is also present", async () => {
+    const searchParams = vi.spyOn(navigation, "useSearchParams").mockReturnValue(
+      new URLSearchParams({ q: "Madras High Court", query: "conflicting legacy question", mode: "court" }) as ReturnType<typeof navigation.useSearchParams>,
+    );
+    try {
+      render(withClient(<ResearchPage />));
+      await waitFor(() => expect(searchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ query: "Madras High Court", mode: "court" }),
+      ));
+      expect(screen.getByTestId("research-query-input")).toHaveValue("Madras High Court");
+    } finally {
+      searchParams.mockRestore();
+    }
+  });
+
+  it("routes an incoming corpus question away from the staged licensed source without a provider call", async () => {
+    const searchParams = vi.spyOn(navigation, "useSearchParams").mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof navigation.useSearchParams>,
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => <QueryClientProvider client={client}><ResearchPage /></QueryClientProvider>;
+    try {
+      const view = render(tree());
+      fireEvent.click(screen.getByTestId("research-source-indian-kanoon"));
+      await screen.findByText("Powered by Indian Kanoon. Licensed access is active for this workspace.");
+      expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+      searchParams.mockReturnValue(new URLSearchParams({ q: "Madras", mode: "court" }) as ReturnType<typeof navigation.useSearchParams>);
+      view.rerender(tree());
+      await waitFor(() => expect(searchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ query: "Madras", mode: "court" }),
+      ));
+      expect(screen.getByTestId("research-source-caseops-corpus")).toHaveAttribute("aria-pressed", "true");
+      expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+    } finally {
+      searchParams.mockRestore();
+      client.clear();
+    }
+  });
+
+  it.each([
+    ["keyword", "bail custody parity"],
+    ["contextual", "Does prolonged custody support bail on these recorded facts?"],
+    ["exact_citation", "2026:MHC:811"],
+    ["party", "Aster Labs"],
+    ["court", "Madras High Court"],
+    ["judge", "Justice M. Sundar"],
+    ["act_section", "Section 483 BNSS"],
+  ])("submits the selected %s mode and staged court filter", async (mode, question) => {
+    render(withClient(<ResearchPage />));
+    fireEvent.click(screen.getByTestId(`research-mode-${mode.replace("_", "-")}`));
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: question },
+    });
+    fireEvent.change(screen.getByTestId("research-filter-court"), {
+      target: { value: "Madras" },
+    });
+    expect(searchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+    await waitFor(() => expect(searchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ query: question, mode, courtName: "Madras", offset: 0 }),
+    ));
+    expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "keyword", "contextual", "exact_citation", "party", "court", "judge", "act_section",
+  ])("applies a same-query URL navigation to %s without retaining the previous mode", async (mode) => {
+    const query = "Madras";
+    const oldMode = mode === "keyword" ? "party" : "keyword";
+    const params = (nextMode: string) => new URLSearchParams({ q: query, mode: nextMode }) as ReturnType<typeof navigation.useSearchParams>;
+    const searchParams = vi.spyOn(navigation, "useSearchParams").mockReturnValue(params(oldMode));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => <QueryClientProvider client={client}><ResearchPage /></QueryClientProvider>;
+    try {
+      const view = render(tree());
+      await waitFor(() => expect(searchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ query, mode: oldMode }),
+      ));
+      searchParams.mockReturnValue(params(mode));
+      view.rerender(tree());
+      await waitFor(() => expect(searchMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ query, mode, offset: 0 }),
+      ));
+      expect(screen.getByTestId(`research-mode-${mode.replace("_", "-")}`))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+    } finally {
+      searchParams.mockRestore();
+      client.clear();
+    }
+  });
+
+  it("clears the previous submitted query after navigation back to the empty research URL", async () => {
+    const searchParams = vi.spyOn(navigation, "useSearchParams").mockReturnValue(
+      new URLSearchParams({ q: "Madras", mode: "court" }) as ReturnType<typeof navigation.useSearchParams>,
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => <QueryClientProvider client={client}><ResearchPage /></QueryClientProvider>;
+    try {
+      const view = render(tree());
+      await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1));
+      searchParams.mockReturnValue(new URLSearchParams() as ReturnType<typeof navigation.useSearchParams>);
+      view.rerender(tree());
+      await waitFor(() => expect(screen.getByTestId("research-query-input")).toHaveValue(""));
+      expect(screen.getByTestId("research-query-submit")).toBeDisabled();
+      expect(searchMock).toHaveBeenCalledTimes(1);
+      expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+    } finally {
+      searchParams.mockRestore();
+      client.clear();
+    }
   });
 
   it("runs a readiness-gated licensed search with attribution and source access", async () => {

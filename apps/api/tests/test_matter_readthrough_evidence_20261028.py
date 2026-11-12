@@ -6,6 +6,9 @@ import json
 import os
 import re
 import stat
+from dataclasses import dataclass
+from functools import lru_cache
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,16 +25,204 @@ _FIELDS = (
 )
 _IDENTITY = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink")
 _MAX_CAPTURE_BYTES = 16 * 1024**2
+_WINDOWS = os.name == "nt"
+_REPARSE = 0x400
+_WINDOWS_FIELDS = (
+    "st_birthtime_ns",
+    "st_file_attributes",
+    "st_reparse_tag",
+    "native_volume",
+    "native_file_id",
+)
+
+
+@dataclass(frozen=True)
+class _WindowsStat:
+    raw: object
+    st_ctime_ns: int
+    st_birthtime_ns: int
+    native_volume: int
+    native_file_id: int
+
+    def __getattr__(self, key):
+        return getattr(self.raw, key)
+
+
+@lru_cache(maxsize=1)
+def _windows_api():
+    import ctypes
+    from ctypes import wintypes
+
+    class Basic(ctypes.Structure):
+        _fields_ = [
+            ("creation", ctypes.c_longlong),
+            ("access", ctypes.c_longlong),
+            ("write", ctypes.c_longlong),
+            ("change", ctypes.c_longlong),
+            ("attributes", wintypes.DWORD),
+        ]
+
+    class Standard(ctypes.Structure):
+        _fields_ = [
+            ("allocation", ctypes.c_longlong),
+            ("size", ctypes.c_longlong),
+            ("links", wintypes.DWORD),
+            ("delete_pending", ctypes.c_ubyte),
+            ("directory", ctypes.c_ubyte),
+        ]
+
+    class Identity(ctypes.Structure):
+        _fields_ = [("volume", ctypes.c_ulonglong), ("file_id", ctypes.c_ubyte * 16)]
+
+    class Tag(ctypes.Structure):
+        _fields_ = [("attributes", wintypes.DWORD), ("reparse_tag", wintypes.DWORD)]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    query = kernel.GetFileInformationByHandleEx
+    query.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+    query.restype = wintypes.BOOL
+    create = kernel.CreateFileW
+    create.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = (wintypes.HANDLE,)
+    close.restype = wintypes.BOOL
+    return SimpleNamespace(
+        ctypes=ctypes,
+        query=query,
+        create=create,
+        close=close,
+        Basic=Basic,
+        Standard=Standard,
+        Identity=Identity,
+        Tag=Tag,
+    )
+
+
+def _windows_file_info(handle):
+    api = _windows_api()
+
+    def query(kind, cls):
+        value = cls()
+        if not api.query(handle, kind, api.ctypes.byref(value), api.ctypes.sizeof(value)):
+            raise api.ctypes.WinError(api.ctypes.get_last_error())
+        return value
+
+    basic = query(0, api.Basic)
+    standard = query(1, api.Standard)
+    identity = query(18, api.Identity)
+    tag = query(9, api.Tag)
+    final = query(0, api.Basic)
+    if any(
+        getattr(basic, key) != getattr(final, key)
+        for key in ("creation", "write", "change", "attributes")
+    ) or basic.attributes != tag.attributes:
+        raise ValueError("PLAN_EVIDENCE_CHANGED")
+
+    def ns(value):
+        return (value - 116444736000000000) * 100
+
+    return {
+        "creation_ns": ns(basic.creation),
+        "change_ns": ns(basic.change),
+        "write_ns": ns(basic.write),
+        "volume": identity.volume,
+        "file_id": int.from_bytes(bytes(identity.file_id), "little"),
+        "size": standard.size,
+        "links": standard.links,
+        "directory": bool(standard.directory),
+        "delete_pending": bool(standard.delete_pending),
+        "attributes": tag.attributes,
+        "reparse_tag": tag.reparse_tag,
+    }
+
+
+def _windows_snapshot(value, native):
+    # Observed on Windows CPython 3.13.14: lstat.ctime is creation time,
+    # fstat.ctime is change time. Validate either exact view and retain both.
+    if (
+        value.st_ino != native["file_id"]
+        or value.st_dev not in {0, native["volume"]}
+        or value.st_size != native["size"]
+        or value.st_nlink != native["links"]
+        or value.st_mtime_ns != native["write_ns"]
+        or value.st_birthtime_ns != native["creation_ns"]
+        or value.st_ctime_ns not in {native["creation_ns"], native["change_ns"]}
+        or value.st_file_attributes != native["attributes"]
+        or value.st_reparse_tag != native["reparse_tag"]
+        or stat.S_ISDIR(value.st_mode) != native["directory"]
+        or native["delete_pending"]
+    ):
+        raise ValueError("PLAN_EVIDENCE_CHANGED")
+    if native["attributes"] & _REPARSE or native["reparse_tag"]:
+        raise ValueError("PLAN_EVIDENCE_FILE")
+    return _WindowsStat(
+        value,
+        native["change_ns"],
+        native["creation_ns"],
+        native["volume"],
+        native["file_id"],
+    )
+
+
+def _fstat(fd, *, io):
+    value = io.fstat(fd)
+    if not _WINDOWS:
+        return value
+    import msvcrt
+
+    return _windows_snapshot(value, _windows_file_info(msvcrt.get_osfhandle(fd)))
+
+
+def _lstat(path):
+    value = path.lstat()
+    if not _WINDOWS:
+        return value
+    if value.st_file_attributes & _REPARSE or value.st_reparse_tag:
+        raise ValueError("PLAN_EVIDENCE_FILE")
+    api = _windows_api()
+    name = os.fspath(path)
+    if not name.startswith("\\\\?\\"):
+        name = "\\\\?\\UNC\\" + name[2:] if name.startswith("\\\\") else "\\\\?\\" + name
+    # Read attributes without following a reparse leaf, including directories.
+    handle = api.create(name, 0x80, 0x7, None, 3, 0x00200000 | 0x02000000, None)
+    if handle is None or handle == api.ctypes.c_void_p(-1).value:
+        raise api.ctypes.WinError(api.ctypes.get_last_error())
+    try:
+        return _windows_snapshot(value, _windows_file_info(handle))
+    finally:
+        if not api.close(handle):
+            raise api.ctypes.WinError(api.ctypes.get_last_error())
+
+
+def _fields(value):
+    return (*_FIELDS, *_WINDOWS_FIELDS) if isinstance(value, _WindowsStat) else _FIELDS
+
+
+def _identity(value):
+    if isinstance(value, _WindowsStat):
+        return (*_IDENTITY, "st_birthtime_ns", "native_volume", "native_file_id")
+    return _IDENTITY
 
 
 def _meta(value):
-    return tuple(getattr(value, key) for key in _FIELDS)
+    return tuple(getattr(value, key) for key in _fields(value))
 
 
 def _named_equal(named, opened, *, windows):
+    if isinstance(named, _WindowsStat) != isinstance(opened, _WindowsStat):
+        return False
     return all(
         getattr(named, key) == getattr(opened, key)
-        for key in _FIELDS
+        for key in _fields(named)
         if not (windows and key == "st_dev")
     )
 
@@ -41,15 +232,23 @@ def _namespace(path):
         raise ValueError("PLAN_EVIDENCE_NAMESPACE")
     result = {}
     for parent in path.parents:
-        value = parent.lstat()
-        if not stat.S_ISDIR(value.st_mode) or stat.S_ISLNK(value.st_mode):
+        value = _lstat(parent)
+        if (
+            not stat.S_ISDIR(value.st_mode)
+            or stat.S_ISLNK(value.st_mode)
+            or getattr(value, "st_file_attributes", 0) & _REPARSE
+        ):
             raise ValueError("PLAN_EVIDENCE_NAMESPACE")
         result[parent] = value
     return result
 
 
 def _regular(value):
-    if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1:
+    if (
+        not stat.S_ISREG(value.st_mode)
+        or value.st_nlink != 1
+        or getattr(value, "st_file_attributes", 0) & _REPARSE
+    ):
         raise ValueError("PLAN_EVIDENCE_FILE")
     if os.name != "nt" and value.st_uid != os.getuid():
         raise ValueError("PLAN_EVIDENCE_FILE")
@@ -87,17 +286,18 @@ def capture_plan(path, row, *, io=os):
         os.O_WRONLY
         | os.O_CREAT
         | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
         | getattr(os, "O_NONBLOCK", 0),
         0o600,
     )
     try:
-        opened = io.fstat(fd)
+        opened = _fstat(fd, io=io)
         _regular(opened)
         if os.name != "nt":
             io.fchmod(fd, 0o600)
-            opened = io.fstat(fd)
-        named = path.lstat()
+            opened = _fstat(fd, io=io)
+        named = _lstat(path)
         _regular(named)
         if opened.st_size != 0 or not _named_equal(named, opened, windows=os.name == "nt"):
             raise ValueError("PLAN_EVIDENCE_CHANGED")
@@ -108,9 +308,9 @@ def capture_plan(path, row, *, io=os):
             # generally leaves that count unchanged. Only this owned EXCL
             # creation may change the immediate parent's extent/timestamps.
             fields = (
-                tuple(key for key in _IDENTITY if key != "st_nlink")
+                tuple(key for key in _identity(original) if key != "st_nlink")
                 if parent == path.parent
-                else _FIELDS
+                else _fields(original)
             )
             if any(getattr(original, key) != getattr(after_create[parent], key) for key in fields):
                 raise ValueError("PLAN_EVIDENCE_NAMESPACE")
@@ -126,15 +326,18 @@ def capture_plan(path, row, *, io=os):
                 raise ValueError("PLAN_EVIDENCE_WRITE_INCOMPLETE")
             remaining = remaining[count:]
         io.fsync(fd)
-        final, named = io.fstat(fd), path.lstat()
+        final, named = _fstat(fd, io=io), _lstat(path)
         _regular(final)
         _regular(named)
         if (
             not _named_equal(named, final, windows=os.name == "nt")
-            or any(getattr(final, key) != getattr(opened, key) for key in _IDENTITY)
-            or any(getattr(named, key) != getattr(initial_named, key) for key in _IDENTITY)
+            or any(getattr(final, key) != getattr(opened, key) for key in _identity(opened))
+            or any(
+                getattr(named, key) != getattr(initial_named, key)
+                for key in _identity(initial_named)
+            )
             or final.st_size != len(payload)
-            or _meta(io.fstat(fd)) != _meta(final)
+            or _meta(_fstat(fd, io=io)) != _meta(final)
             or {p: _meta(s) for p, s in _namespace(path).items()}
             != {p: _meta(s) for p, s in after_create.items()}
         ):
@@ -150,13 +353,17 @@ def load_captured_plan(path, reference, *, io=os):
     if path.name != reference["basename"]:
         raise ValueError("PLAN_EVIDENCE_REFERENCE")
     parents = {p: _meta(s) for p, s in _namespace(path).items()}
-    fd = io.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    fd = io.open(
+        path,
+        os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+    )
     try:
-        opened = io.fstat(fd)
+        opened = _fstat(fd, io=io)
         _regular(opened)
         if opened.st_size != reference["sizeBytes"]:
             raise ValueError("PLAN_EVIDENCE_EXTENT")
-        named = path.lstat()
+        named = _lstat(path)
         _regular(named)
         if not _named_equal(named, opened, windows=os.name == "nt"):
             raise ValueError("PLAN_EVIDENCE_CHANGED")
@@ -166,10 +373,10 @@ def load_captured_plan(path, reference, *, io=os):
             if not value:
                 break
             held.extend(value)
-        final_named = path.lstat()
+        final_named = _lstat(path)
         if (
             len(held) != reference["sizeBytes"]
-            or _meta(io.fstat(fd)) != _meta(opened)
+            or _meta(_fstat(fd, io=io)) != _meta(opened)
             or _meta(final_named) != _meta(named)
             or not _named_equal(final_named, opened, windows=os.name == "nt")
             or parents != {p: _meta(s) for p, s in _namespace(path).items()}
