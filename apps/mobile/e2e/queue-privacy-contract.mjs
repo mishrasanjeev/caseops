@@ -8,7 +8,7 @@ export const QP = Object.freeze({ inventoryId:'native-queue-privacy-2026-10-27-v
   cases:Object.freeze(['QUEUE-01','PRIVACY-01']), phases:6,sessions:2,serialMs:480000,transportMs:60000,readMs:10000,transitionMs:20000,pollMs:200,
   caseControls:Object.freeze({'QUEUE-01':24,'PRIVACY-01':24}),totalControls:49,nativeControls:160,authoritativeReads:24,
   capabilities:Object.freeze(['readQueue','readOwnPrivacy','changeAnchor','armPrivacyAckLoss','readControlReceipt','readNativeRequest','closeCaseControls','closeRunControls']),
-  baseSha256:'5b5f06482f0c0454f4d5f8198453142affb346dbb062e1fe6dc8a27bbf0e2723' });
+  baseSha256:'2e059750ce290b460cf3c2eab37721ba48a4e5edd2f291757287df667d228765' });
 export const hash=b=>createHash('sha256').update(b).digest('hex');
 export const canonical=v=>JSON.stringify(v,Object.keys(v).sort());
 export function collectQP(platform,scenarios){

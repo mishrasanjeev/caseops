@@ -209,6 +209,7 @@ export async function resolveAndroidComposeQueueSegment(c, group, label, probe =
   assert.ok(['true', 'false'].includes(checked), 'QP_ANDROID_QUEUE_CHECKED_STATE_REQUIRED');
   const selected = checked === 'true';
   assert.equal(await probe(() => parent.getAttribute('clickable')), selected ? 'false' : 'true', 'QP_ANDROID_QUEUE_PARENT_CLICKABILITY');
+  if (c.queueViewportDiagnostics === true) c.record({ type: 'qp_android_queue_segment', group, label, selected });
   return { parent, selected };
 }
 
@@ -275,9 +276,20 @@ export async function androidQueuePage(c, page) {
     const matches = (actual, prefix) => actual.length === prefix.length && actual.every((id, i) => id === prefix[i]);
     const empty = () => visible(c.driver, selector('android', 'text', 'No matching tasks'), probe);
     const footer = id => visible(c.driver, selector('android', 'id', id), probe);
+    let previousSample;
+    const trace = (sample, stage, step) => {
+      if (c.queueViewportDiagnostics !== true) return;
+      const sampleSha256 = hash(Buffer.from(JSON.stringify(sample)));
+      if (stage === 'prefix' && sampleSha256 === previousSample) return;
+      previousSample = sampleSha256;
+      c.record({ type: 'qp_android_queue_viewport', stage, step,
+        expectedCount: expected.length, expectedPageSha256: hash(Buffer.from(JSON.stringify(expected))),
+        sampleSha256, sampleRanks: sample.map(id => expected.indexOf(id)) });
+    };
     let sample;
     for (;;) {
       sample = await queueViewportRows(c, probe);
+      trace(sample, 'prefix', 0);
       if (expected.length ? sample.length && matches(sample, expected.slice(0, sample.length)) : !sample.length && await empty()) break;
       await probe(() => pause(200));
     }
@@ -288,6 +300,7 @@ export async function androidQueuePage(c, page) {
       if (!more || n === ANDROID_SCROLL_LIMIT) break;
       more = await androidScroll(c, scope, 'down', probe);
       sample = await queueViewportRows(c, probe);
+      trace(sample, 'scroll', n + 1);
     }
     assert.equal(more, false, 'QP_ANDROID_QUEUE_FOOTER_NOT_REACHED');
     assert.equal(seen.end, expected.length, 'QP_EXACT_NATIVE_PAGE_IDENTITIES');

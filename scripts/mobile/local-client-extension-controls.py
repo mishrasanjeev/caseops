@@ -16,7 +16,7 @@ import time
 from urllib.parse import urlencode
 
 PROFILE = "native-client-extensions-v1"
-BASE_SHA256 = "5b5f06482f0c0454f4d5f8198453142affb346dbb062e1fe6dc8a27bbf0e2723"
+BASE_SHA256 = "2e059750ce290b460cf3c2eab37721ba48a4e5edd2f291757287df667d228765"
 CASE_IDS = (
     "CX28-CAM-01", "CX28-CAM-02", "CX28-CAM-03", "CX28-CAM-04", "CX28-CAM-05", "CX28-CAM-06",
     "CX28-LOCK-01", "CX28-LOCK-02", "CX28-LOCK-03", "CX28-LOCK-04", "CX28-LOCK-05",
@@ -331,6 +331,7 @@ def from_environment(root, run_id, *, environment=None, verified_implementation_
     v = json.loads(verified_registration_bytes)
     assert sha(verified_registration_bytes) == env["CASEOPS_MOBILE_V1_REGISTRATION_SHA256"]
     validate_registration(v, source=env["CASEOPS_RELEASE_SHA"], run=run_id, now=time.time())
+    claim = base_module.create_attempt_claim(root, v["runId"], "cx-operation")
     assert v["implementationSha256"] == verified_implementation_sha256
     calls = {"count": 0}; original = base_module.bounded_http
     def charged(*args, **kwargs):
@@ -363,15 +364,6 @@ def from_environment(root, run_id, *, environment=None, verified_implementation_
         try: close_journal()
         except BaseException: error.add_note("CX_JOURNAL_CLEANUP_UNVERIFIED_DURING_OWNER_SETUP")
         raise
-    def claim(identity):
-        target = root / ("cx-operation-" + sha(identity.encode()) + ".json")
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        try:
-            pending = memoryview(canonical({"operationIdSha256": sha(identity.encode()), "noReplay": True}))
-            while pending:
-                count = os.write(fd, pending); assert count > 0; pending = pending[count:]
-            os.fsync(fd)
-        finally: os.close(fd)
     try:
         return Controls(v, env["CASEOPS_MOBILE_V1_REGISTRATION_SHA256"], authority, owner=owner, base=base_module,
                         persist=persist, claim=claim, close_journal=close_journal)

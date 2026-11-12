@@ -44,6 +44,35 @@ class Owner:
 
 
 class ControlTests(unittest.TestCase):
+    def test_durable_claims_are_run_scoped_exclusive_private_and_preserve_old_runs(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            for prefix in ('v1-control-attempt','qp-attempt','cx-operation'):
+                first=M.create_attempt_claim(root,'first-owned-run',prefix)
+                second=M.create_attempt_claim(root,'second-owned-run',prefix)
+                for identity in ('native:privacy-one-post','owner:QUEUE-01:changeAnchor:synthetic'):
+                    first(identity)
+                    before={p.name:p.read_bytes()for p in root.iterdir()}
+                    with self.assertRaises(FileExistsError):first(identity)
+                    with self.assertRaises(FileExistsError):M.create_attempt_claim(root,'first-owned-run',prefix)(identity)
+                    second(identity)
+                    self.assertTrue(all((root/name).read_bytes()==data for name,data in before.items()))
+            self.assertEqual(len(list(root.iterdir())),12)
+            for file in root.iterdir():
+                self.assertEqual(file.stat().st_mode&0o777,0o600)
+                self.assertIs(json.loads(file.read_text())['noReplay'],True)
+
+    def test_durable_claim_write_failure_stays_consumed_and_invalid_scope_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            for run,prefix in (('', 'qp-attempt'),('owned','../escape'),('owned','unknown')):
+                with self.assertRaises(AssertionError):M.create_attempt_claim(root,run,prefix)
+            self.assertEqual(list(root.iterdir()),[])
+            claim=M.create_attempt_claim(root,'owned','qp-attempt')
+            with patch.object(M.os,'fsync',side_effect=OSError('synthetic failed persistence')):
+                with self.assertRaises(OSError):claim('native:privacy-one-post')
+            with self.assertRaises(FileExistsError):claim('native:privacy-one-post')
+
     def setUp(self):
         self.owner, self.events, self.claims = Owner(), [], []
         self.manager = M.V1Controls(registration(), "b" * 64, "d" * 64, owner=self.owner,

@@ -276,6 +276,51 @@ class Protocol(unittest.TestCase):
             v=registration();edit(v)
             with self.assertRaises(AssertionError):p.validate_registration(v,source='a'*40,run=v['runId'],now=time.time())
 class Loader(unittest.TestCase):
+    def test_actual_loader_scopes_native_and_owner_claims_to_the_registered_run(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw).resolve()
+            # A retained older run consumed this claim. Never remove or replace
+            # it to admit a fresh synthetic account in a different run.
+            legacy=root/('qp-attempt-'+p.sha(b'native:privacy-one-post')+'.json')
+            legacy.write_bytes(b'{"retained":"earlier-run"}')
+            before=legacy.read_bytes();receipts=[]
+            class Http:
+                def __init__(self,*_args,**_kwargs):pass
+                def __enter__(self):return self
+                def __exit__(self,*_args):pass
+            for n in (1,2):
+                v=registration();v['runId']='qp-'+format(n,'024x');v['registrationId']=format(n,'032x')
+                secret=root/('authority-'+str(n)+'.json');secret.write_text(json.dumps({'control_secret':'b'*64}));secret.chmod(0o600)
+                v['authorityEvidence']={'path':str(secret),'sha256':p.sha(secret.read_bytes()),'uid':os.getuid()}
+                v['implementationSha256']='c'*64;encoded=json.dumps(v).encode()
+                env={'CASEOPS_ENV':'local','CASEOPS_RELEASE_SHA':'a'*40,'CASEOPS_MOBILE_V1_CONTROLS':'1','CASEOPS_MOBILE_V1_PROFILE':p.PROFILE,
+                     'CASEOPS_MOBILE_V1_REGISTRATION_SHA256':p.sha(encoded)}
+                expected={k:v['actors']['member'][k]for k in ('userId','membershipId','companyId')}
+                def http(_client,_method,url):
+                    value=({'user':{'id':expected['userId']},'membership':{'id':expected['membershipId']},'company':{'id':expected['companyId']}}
+                           if url=='/api/auth/me' else {'release_sha':'a'*40,'revision':'api-rev'if url.endswith('/api/build')else'web-rev'})
+                    return SimpleNamespace(status_code=200,json=lambda:value)
+                base=load('qp_claim_base_'+str(n),'local-v1-controls.py')
+                with patch.dict(sys.modules,{'httpx':SimpleNamespace(Client=Http)}),patch.object(base,'bounded_http',side_effect=http):
+                    c=p.from_environment(root,v['runId'],environment=env,verified_implementation_sha256='c'*64,verified_registration_bytes=encoded,base_module=base)
+                    try:
+                        # RegisteredOwner uses stable recipe labels too. They
+                        # must be exclusive within this run, independent across runs.
+                        c.owner.claim('owner:QUEUE-01:changeAnchor:synthetic')
+                        with self.assertRaises(FileExistsError):c.owner.claim('owner:QUEUE-01:changeAnchor:synthetic')
+                        c.arms['synthetic']={'id':'synthetic','caseId':'PRIVACY-01','consumed':False,'closed':False}
+                        body=json.dumps({'operation_id':uid(90),'confirmation':'request_account_deletion'}).encode()
+                        c.validate_native_request('POST',p.PRIVACY,native=True,body=body,query='',authorization='Bearer cnat_SYNTHETIC')
+                        self.assertTrue(c.privacy_admitted)
+                        with self.assertRaisesRegex(AssertionError,'REPLAY'):c.validate_native_request('POST',p.PRIVACY,native=True,body=body,query='',authorization='Bearer cnat_SYNTHETIC')
+                        # A new in-memory manager cannot bypass a durable claim
+                        # belonging to the same registered run.
+                        with self.assertRaises(FileExistsError):c.claim('native:privacy-one-post')
+                        receipts.append(c.registration['runId'])
+                    finally:c.close()
+            self.assertEqual(receipts,['qp-'+format(n,'024x')for n in (1,2)])
+            self.assertEqual(legacy.read_bytes(),before)
+
     def test_actual_constructor_failure_closes_owned_journal_even_if_owner_close_fails(self):
         for fail_owner in (False, True):
             with self.subTest(ownerFailure=fail_owner), tempfile.TemporaryDirectory() as raw:

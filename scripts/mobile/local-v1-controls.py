@@ -143,6 +143,37 @@ def create_journal(root, identity):
     return persist, close
 
 
+def create_attempt_claim(root, run_id, prefix):
+    """One durable attempt per registered run, including stable owner labels.
+
+    Keep every older claim. Reconstructing a manager in the same run must not
+    permit replay; a different disposable run must not inherit that attempt.
+    """
+    assert isinstance(run_id, str) and 0 < len(run_id) <= 200
+    assert prefix in ("v1-control-attempt", "qp-attempt", "cx-operation")
+    def claim(identity):
+        assert isinstance(identity, str) and 0 < len(identity) <= 512
+        scope = sha(canonical({"runId": run_id, "operationId": identity}))
+        target = root / f"{prefix}-{scope}.json"
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            pending = memoryview(canonical({"runIdSha256": sha(run_id.encode()),
+                                            "operationIdSha256": sha(identity.encode()), "noReplay": True}))
+            while pending:
+                count = os.write(descriptor, pending)
+                assert count > 0
+                pending = pending[count:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    return claim
+
+
 def bounded_http(http, method, route, body=None):
     """One normal request, finite read time and retained bytes; no redirect/retry."""
     started, chunks, size = time.monotonic(), [], 0
@@ -744,6 +775,7 @@ def from_environment(root, run_id, *, environment=None, factory=None, verified_i
         assert sha(verified_registration_bytes) == reference["sha256"], "V1_VERIFIED_REGISTRATION_BYTES_REQUIRED"
         value = json.loads(verified_registration_bytes.decode("utf-8", "strict"))
     validate_registration(value, source=env["CASEOPS_RELEASE_SHA"], run=run_id, now=time.time())
+    claim = create_attempt_claim(root, value["runId"], "v1-control-attempt")
     assert re.fullmatch(r"[a-f0-9]{64}", verified_implementation_sha256 or ""), "V1_VERIFIED_RUNTIME_SOURCE_REQUIRED"
     assert value["implementationSha256"] == verified_implementation_sha256, "V1_CONTROL_IMPLEMENTATION_CHANGED"
     # Verify actual API AND web identities before opening any actor/authority file.
@@ -760,9 +792,6 @@ def from_environment(root, run_id, *, environment=None, factory=None, verified_i
     owner = RegisteredOwner(value, root) if factory is None else factory(value, root)
     observer = readonly_notification_observer(value)
     persist, close_journal = create_journal(root, value["registrationId"])
-    def claim(identity):
-        with (root / f"v1-control-attempt-{sha(identity.encode())}.json").open("x", encoding="utf-8") as output:
-            output.write(json.dumps({"operationId": identity, "automaticRetry": False}))
     owner.claim = claim
     try:
         return V1Controls(value, reference["sha256"], secret, owner=owner, observer=observer, persist=persist, claim=claim, close_journal=close_journal)

@@ -12,7 +12,7 @@ import threading
 import time
 
 PROFILE = "queue-privacy-v1"
-BASE_SHA256 = "5b5f06482f0c0454f4d5f8198453142affb346dbb062e1fe6dc8a27bbf0e2723"
+BASE_SHA256 = "2e059750ce290b460cf3c2eab37721ba48a4e5edd2f291757287df667d228765"
 CASES = {"QUEUE-01": 24, "PRIVACY-01": 24}
 CAPABILITIES = ("readQueue", "readOwnPrivacy", "changeAnchor", "armPrivacyAckLoss",
                 "readControlReceipt", "readNativeRequest", "closeCaseControls", "closeRunControls")
@@ -201,6 +201,7 @@ def from_environment(root,run_id,*,environment=None,verified_implementation_sha2
     assert base_module is not None and env.get("CASEOPS_MOBILE_V1_PROFILE")==PROFILE,"QP_VERIFIED_BASE_REQUIRED"
     v=json.loads(verified_registration_bytes);assert sha(verified_registration_bytes)==env["CASEOPS_MOBILE_V1_REGISTRATION_SHA256"]
     validate_registration(v,source=env["CASEOPS_RELEASE_SHA"],run=run_id,now=time.time())
+    claim=base_module.create_attempt_claim(root,v["runId"],"qp-attempt")
     assert v["implementationSha256"]==verified_implementation_sha256
     # This is a private copy of the descriptor-compiled helper module, never the
     # ordinary old17 module. Charge every authentication/admission/owner HTTP call.
@@ -241,8 +242,6 @@ def from_environment(root,run_id,*,environment=None,verified_implementation_sha2
             r=charged(h,"GET","/api/auth/me");assert r.status_code==200;value=r.json()
             return {"userId":value["user"]["id"],"membershipId":value["membership"]["id"],"companyId":value["company"]["id"]}
     persist,close=base_module.create_journal(root,v["registrationId"])
-    def claim(identity):
-        with (root/("qp-attempt-"+sha(identity.encode())+".json")).open("x",encoding="utf-8")as f:f.write(json.dumps({"identitySha256":sha(identity.encode()),"noReplay":True}))
     try:
         owner.claim=claim
         return Controls(v,sha(verified_registration_bytes),authority,base=base_module,owner=owner,persist=persist,claim=claim,close_journal=close,principal=principal,http_count=lambda:calls["count"])

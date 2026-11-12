@@ -1,3 +1,15 @@
+## 2026-11-12 — disposable native attempt claim isolation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual9d Android/iOS Simulator builds
+passed. Both Android Queue/Privacy calls failed; all setup/teardown pairs ran,
+and postflight rejected an incomplete gateway ledger. A retained older QA claim
+reproduces the Privacy admission collision. Candidate run-scoped durable claims
+preserve same-run replay refusal across all three profiles without deleting old
+evidence. A focused unchanged-build Queue diagnostic passed but does not explain
+or erase the full-run failure; opt-in rank/digest diagnostics preserve every
+native assertion and deadline. See [exact evidence and open gates](mobile/NATIVE_RUN_CLAIMS_2026-11-12.md).
+
 # Strict Enterprise Gap Tasklist
 
 ## PRIV-RETENTION-2026-11-06 — Retired private-index generations retain customer data

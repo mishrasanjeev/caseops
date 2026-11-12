@@ -613,6 +613,22 @@ test('Android queue reaches the exact page through all measured overlapping visi
   assert.deepEqual(current.gestures.slice(8), [...Array(8).fill('up'), ...Array(8).fill('down')]);
 });
 
+test('opted-in Queue viewport diagnostics retain ordered ranks without extra native reads or raw identities', async () => {
+  const current = androidViewportDouble(), events = [];
+  current.c.queueViewportDiagnostics = true;
+  current.c.record = row => events.push(row);
+  await androidQueuePage(current.c, current.page);
+  const samples = events.filter(row => row.type === 'qp_android_queue_viewport');
+  assert.equal(samples.length, androidViewportRanks.length);
+  assert.deepEqual(samples.map(row => row.sampleRanks), androidViewportRanks.map(ids => ids.map(n => n - 1)));
+  assert.ok(samples.every(row => /^[a-f0-9]{64}$/.test(row.expectedPageSha256) && row.expectedCount === 25));
+  assert.equal(JSON.stringify(events).includes(id(1)), false);
+  assert.deepEqual(current.gestures, Array(8).fill('down'));
+  const silent = androidViewportDouble();
+  silent.c.record = () => { throw Error('Unarmed diagnostics must stay inactive'); };
+  await androidQueuePage(silent.c, silent.page);
+});
+
 test('Android queue rejects skipped, reordered, duplicate, excluded and unbound rows, or an incorrect footer', async () => {
   for (const [sample, reason] of [
     [[3, 4, 5, 6], /QP_EXACT_NATIVE_PAGE_IDENTITIES/],
