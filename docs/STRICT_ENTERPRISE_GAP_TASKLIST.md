@@ -4876,3 +4876,11 @@ See [V1 fixture foundations](mobile/V1_FIXTURE_FOUNDATIONS_2026-11-13.md).
 Explicit local rollout and nonbillable entitlement contracts are implemented;
 actual PostgreSQL and remaining V1/CX native acceptance are unverified. NO-GO;
 no store submission or native case credit.
+
+### 2026-11-13 — diagnostic review follow-up
+
+Hosted ea68f74b PostgreSQL shard 9 passed. CodeQL findings 845/846 required a
+separate frame-release and thread-control-flow repair; complete 140 host
+diagnostic/launcher cases passed. Fresh hosted alert verdicts are still pending.
+See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md). Native
+platform completion and store submission remain unverified; release NO-GO.

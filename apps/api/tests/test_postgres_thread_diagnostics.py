@@ -53,6 +53,32 @@ def test_observer_finishing_before_original_sixty_seconds_cancels_without_output
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize("failure_type", [SystemExit, KeyboardInterrupt])
+def test_thread_control_flow_propagates_and_close_cannot_report_publication(
+    monkeypatch, tmp_path, failure_type,
+):
+    original = failure_type("unit-thread-control-flow")
+    escaped = []
+
+    def fail_publication(*_args):
+        raise original
+
+    monkeypatch.setattr(diagnostics, "_write", fail_publication)
+    monkeypatch.setattr(
+        diagnostics.threading, "excepthook", lambda args: escaped.append(args.exc_value),
+    )
+    observer = diagnostics.TimedFrames(tmp_path, "synthetic-control-flow", after=0.01)
+    observer.start()
+    observer.thread.join(2)
+    assert escaped == [original]
+    assert observer.failure is original
+    with pytest.raises(RuntimeError, match="publication failed") as failure:
+        observer.close()
+    assert failure.value.__cause__ is original
+    assert not observer.thread.is_alive()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_exclusive_publication_preserves_existing_failure_and_never_replays(tmp_path):
     digest = "a" * 64
     diagnostics._write(tmp_path, digest, {"original": True})

@@ -89,3 +89,25 @@ with 140 passes/seven fixture failures on a noexec temp mount and an interpreter
 without locally installed pytest. Those failures were corrected in the test
 runtime/source closure and the whole inventory repeated. None is relabeled a
 passed full run. New hosted CI remains required before release sign-off.
+
+
+## 2026-11-13 — diagnostic review follow-up
+
+The ea68f74b hosted native PostgreSQL shard 9 passed. CodeQL separately reported
+845 (unused frame assignment) and 846 (a swallowed BaseException in the observer
+thread); a successful analysis workflow does not clear those alert verdicts.
+The observer now deletes its held loop-frame reference explicitly. Ordinary
+publication exceptions are retained; SystemExit/KeyboardInterrupt propagate to
+the normal thread exception hook and are retained through sys.exception() in
+finally so close still fails. Both original exception identities and actual
+thread propagation are regressed. The original hook/cleanup preservation logic,
+60-second threshold, fatal-signal handler and all workflow budgets remain.
+
+The complete diagnostic and launcher modules passed 140 host cases with pinned
+CPython 3.13.17 and an isolated pytest environment, including every actual child
+shard invocation. A preceding run retained three failures caused by this Mac's
+PATH omitting the installed GNU sha256sum; the unchanged complete selection was
+replayed with its real Homebrew GNU binary. This is host control evidence, not
+new PostgreSQL or Android/iOS acceptance. Fresh hosted analysis and independent
+alert verdicts remain required; the original native crash root cause remains
+Inconclusive without a core backtrace.
