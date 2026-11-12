@@ -315,7 +315,6 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                 {error}
               </p>
             )}
-            {notice && <p role="status">{notice}</p>}
             {handoffExpired && !error && (
               <p role="alert">
                 This app handoff is no longer available. Return to CaseOps and
@@ -348,12 +347,20 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                   {parsed.platform === "ios" ? "iPhone" : "Android"} app. The
                   app uses your current workspace permissions.
                 </p>
+                {notice && (
+                  <p id="native-connection-notice" role="status">
+                    {notice}
+                  </p>
+                )}
                 {hasHandoff ? (
                   <div className="space-y-3">
                     <Button
                       id="native-app-open"
                       className="min-h-12 w-full"
                       disabled={opening}
+                      aria-describedby={
+                        notice ? "native-connection-notice" : undefined
+                      }
                       onClick={openApp}
                     >
                       <ArrowRight aria-hidden className="mr-2 h-4 w-4" />
@@ -414,6 +421,9 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                     autoFocus={!pending}
                     className="min-h-12 w-full"
                     disabled={pending}
+                    aria-describedby={
+                      notice ? "native-connection-notice" : undefined
+                    }
                     onClick={() => void connect()}
                   >
                     {pending ? (

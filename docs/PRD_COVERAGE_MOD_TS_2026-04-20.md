@@ -1946,3 +1946,17 @@ public-policy exception;40 consumer/MFA/traffic checks passed, retaining every
 negative guard. Fresh native acceptance remains pending. Binaries/backend stay
 6fbcad12; this host-consumer revision is recorded separately, with no source
 guard relaxed or older failed report upgraded. See [dated evidence](mobile/NATIVE_AUTH_PUBLIC_POLICY_PROOF_2026-11-13.md).
+
+
+## 2026-11-13 — native MFA status viewport
+
+J20/M22 / US-MOB-01..08 / Android NATIVE-13: **Partially implemented**,
+bug **Partially fixed**, release **NO-GO**. The actual rebuilt Android Core run
+retains 12 passed calls and 11 unexecuted calls after the MFA success status
+was offscreen. Native fixed-control/frame observations revealed the exact
+message after one upward scroll; the gateway acknowledged MFA and identity
+reads with 200. The browser status now accompanies its connection action and
+is its accessible description. The complete 35-case component suite and web
+TypeScript passed; replacement native/production acceptance remains pending.
+No native assertions, timeouts, MFA/PKCE or authorization rules were relaxed.
+See [exact evidence and limits](mobile/NATIVE_MFA_STATUS_VIEWPORT_2026-11-13.md).

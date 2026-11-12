@@ -96,6 +96,9 @@ describe("native browser handoff consent", () => {
     render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     const open = await screen.findByRole("button", { name: "Open CaseOps" });
+    expect(open).toHaveAccessibleDescription(
+      "Sign-in is ready. Open CaseOps to finish.",
+    );
     expect(mocks.open).not.toHaveBeenCalled();
     expect(document.querySelector('a[href^="caseops:"]')).toBeNull();
     expect(document.body.innerHTML).not.toContain("c".repeat(43));
@@ -372,6 +375,11 @@ describe("native browser handoff consent", () => {
     expect(screen.getByRole("button", { name: "Connect app" })).toBeEnabled();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Connect app" })).toHaveFocus(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Connect app" }),
+    ).toHaveAccessibleDescription(
+      "Code verified. Select Connect app to continue.",
     );
   });
 
