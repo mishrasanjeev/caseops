@@ -19,6 +19,8 @@ import {
 } from "@/lib/native-authorization";
 import { DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from '@/lib/native-link-policy.cjs';
 
+const MFA_VERIFIED_NOTICE = "Code verified. Select Connect app to continue.";
+
 export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?: NativeLinkPolicy }) {
   const params = useSearchParams();
   const parsed = parseNativeAuthorization(params.toString(), policy);
@@ -264,7 +266,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
       setContext(current);
       setContextQuery(query);
       setMfaRequired(false);
-      setNotice("Code verified. Select Connect app to continue.");
+      setNotice(MFA_VERIFIED_NOTICE);
     } catch (cause) {
       if (owner !== epoch.current) return;
       if (isApiErrorShape(cause) && cause.status === 401) {
@@ -409,6 +411,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                   </form>
                 ) : !handoffExpired ? (
                   <Button
+                    autoFocus={!pending && notice === MFA_VERIFIED_NOTICE}
                     className="min-h-12 w-full"
                     disabled={pending}
                     onClick={() => void connect()}

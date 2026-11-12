@@ -1,5 +1,28 @@
 # Strict Bug Task List - 2026-04-22
 
+## November 12 Native MFA continuation focus
+
+**Inconclusive; native replacement and production verification pending.**
+J20/M22, US-MOB-01/02, MOB-01/02. Actual installed Android build b260802d
+completed NATIVE-01..20; NATIVE-21 setup failed finding Connect after the
+verified-code notice, NATIVE-22 setup failed, and NATIVE-23 was blocked.
+The original 69-phase report is retained under
+`native-release-20261111-ZzEIol4V/canonical-b260/core-full-01/current-full/core-reports/2026-11-12T02-59-30-888Z-android-2527f2a1`.
+Later bounded public-landmark observations found the verified notice with no
+accessible Connect button while the keyboard was reported open; one normal
+Back exposed the enabled button. These are post-failure observations, not the
+original failure frame or proof of its exact cause.
+
+The candidate focuses the newly mounted Connect button only after successful
+MFA and pending work have ended. It neither grants consent automatically nor
+replays authorization. The existing complete 33-case NativeSignIn component
+module first failed the added focus assertion (32 passed/1 failed), then passed
+33/33 with the candidate. Retained logs: `native-mfa-focus-original-unit-02.log`
+and `native-mfa-focus-candidate-unit-01.log` in the same private release cache.
+This proves DOM focus, not Firefox keyboard behavior, native acceptance or a
+store release. Preserve the original deadlines and independently replay both
+platforms; the complete 83 cases per platform and distribution remain open.
+
 ## November 8 B4-ADJ-07 Mobile Retirement Regression
 
 CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at

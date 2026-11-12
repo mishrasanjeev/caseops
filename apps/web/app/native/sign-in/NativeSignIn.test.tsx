@@ -327,6 +327,8 @@ describe("native browser handoff consent", () => {
     expect(
       screen.queryByRole("button", { name: "Connect app" }),
     ).not.toBeInTheDocument();
+    field.focus();
+    expect(field).toHaveFocus();
     fireEvent.change(field, { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
@@ -339,6 +341,9 @@ describe("native browser handoff consent", () => {
       "/api/auth/me",
     ]);
     expect(screen.getByRole("button", { name: "Connect app" })).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Connect app" })).toHaveFocus(),
+    );
   });
 
   it("does not mistake an ordinary forbidden response for an MFA challenge", async () => {
@@ -464,10 +469,13 @@ describe("native browser handoff consent", () => {
     expect(
       await screen.findByRole("button", { name: "Connect app" }),
     ).toBeVisible();
-    finish({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
+    await act(async () => {
+      finish({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
+    });
     await waitFor(() =>
       expect(screen.queryByText(/Code verified/)).not.toBeInTheDocument(),
     );
+    expect(screen.getByRole("button", { name: "Connect app" })).not.toHaveFocus();
     expect(mocks.api.mock.calls.map((call) => call[0])).toEqual([
       "/api/auth/me",
       "/api/auth/native/authorize",

@@ -1,3 +1,15 @@
+## 2026-11-12 — native core acceptance follow-up
+
+J20/M22 remains **Partially implemented; release NO-GO**. Actual b260802d
+Android APK and iOS Simulator app builds succeeded. Android's complete dated
+core attempt passed 20/23 calls; fresh sign-in after device-session revocation
+failed before Connect, leaving three calls unverified. A verified-code focus
+candidate passes its complete 33-case component module; Firefox/device replay
+and all remaining native inventories are pending. The original failure and
+post-failure diagnostics remain distinct in the bug ledger. Live Play Console
+still shows changes not submitted for review. No signed release or store
+publication is established by these builds.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in

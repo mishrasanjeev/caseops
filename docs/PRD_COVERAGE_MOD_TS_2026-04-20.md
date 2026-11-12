@@ -1,5 +1,15 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+## November 12 Native sign-in continuation
+
+J20/M22, US-MOB-01/02 and MOB-01/02 remain **Partially implemented**.
+The actual b260802d Android core run passed 20 calls and left three unverified;
+the iOS Simulator binary built but its current full native suite is unrun.
+The candidate's successful-MFA focus behavior has 33/33 component checks,
+separate from pending Firefox keyboard, full Android/iOS and production proof.
+See the November 12 native MFA entry in the strict bug ledger. No store release
+or complete 83-case platform acceptance is claimed.
+
 ## November 2 Disclosure Work Coverage Pending
 
 IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and
