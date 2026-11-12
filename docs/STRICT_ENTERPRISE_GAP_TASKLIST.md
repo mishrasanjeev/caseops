@@ -4700,3 +4700,8 @@ Status: **Partially implemented; release NO-GO**. QA40 records a successful630b8
 ### Native release follow-up — metadata fixture runtime readiness (November 12, 2026)
 
 Status: **Inconclusive; release NO-GO**. QA41 retains the exact fc4c4201 hosted PowerShell-backed Vitest timeout and the unsuccessful Mac AST optimization experiment. An explicit dependency readiness step exercises only synthetic SDK operations before the unchanged real-source metadata tests. It supplies no cold-start performance, native app or store verdict. Complete replacement frontend coverage and hosted verification remain required; do not rerun the unchanged timing race and relabel its earlier failure as passed.
+
+
+### November 12: Windows trust preparation remains an explicit release blocker
+
+**Inconclusive; release NO-GO.** QA42 retains c30eb82a's Windows installed-audit setup timeout and unexecuted inventory. A separate fixed SDK readiness step prepares only Windows PowerShell5.1; it neither handles the GitHub command file nor relaxes the existing hardening/overall deadlines or security predicates. Fresh native Windows setup plus its complete installed graph/audit must pass. c30's full local web coverage/build and actual Android APK build do not provide native-suite, Windows or store acceptance.

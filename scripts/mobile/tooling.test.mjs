@@ -3421,7 +3421,58 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
-  assert.equal(action.runs.steps[0].id, 'prepare');
+  assert.equal(action.runs.steps.length, 2);
+  const [windowsRuntime, prepare] = action.runs.steps;
+  assert.equal(windowsRuntime.if, "${{ runner.os == 'Windows' }}");
+  assert.equal(windowsRuntime.shell, 'bash');
+  assert.equal(prepare.id, 'prepare');
+  const runtimeProgram = windowsRuntime.run.match(/^node <<'CASEOPS_WINDOWS_RUNTIME'\n([\s\S]+)\nCASEOPS_WINDOWS_RUNTIME\n?$/)?.[1];
+  assert.ok(runtimeProgram, 'Exact bounded Windows SDK readiness program required');
+  const ready = { status: 0, signal: null, stdout: 'CASEOPS_WINDOWS_POWERSHELL_5_1_READY', stderr: '' };
+  const runtimeCases = [
+    ['ready', ready, true],
+    ['timeout', { ...ready, error: { code: 'ETIMEDOUT' }, status: null }, false],
+    ['signal', { ...ready, signal: 'SIGTERM' }, false],
+    ['failure', { ...ready, status: 1 }, false],
+    ['extra-output', { ...ready, stdout: ready.stdout + '\nUNREVIEWED' }, false],
+    ['unexpected-stderr', { ...ready, stderr: 'UNREVIEWED' }, false],
+  ];
+  for (const [id, result, accepted] of runtimeCases) {
+    let calls = 0;
+    const messages = [];
+    const scopedProcess = { platform: 'win32', env: { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'true', CI: 'true', GITHUB_OUTPUT: 'PRIVATE_COMMAND_PATH', UNRELATED_SECRET: 'MUST_NOT_PROPAGATE' } };
+    const context = { process: scopedProcess, console: { log: value => messages.push(value) }, require: name => {
+      if (name === 'node:assert/strict') return assert;
+      if (name === 'node:path') return path;
+      assert.equal(name, 'node:child_process');
+      return { spawnSync: (executable, args, options) => {
+        calls++;
+        assert.equal(executable, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+        assert.deepEqual(Array.from(args.slice(0, 4)), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']);
+        assert.equal(args.length, 5);
+        assert.match(args[4], /PSVersion\.Major -ne 5/);
+        assert.match(args[4], /Language\.Parser\]::ParseInput\('\$caseops = 6 \* 7'/);
+        assert.doesNotMatch(args[4], /CASEOPS_TRUST_ACL_PATH|CASEOPS_COMMAND_|GITHUB_OUTPUT|GetAccessControl|SetAccessControl|SetOwner|ReadAll|WriteAll|Invoke-WebRequest|Invoke-RestMethod|Start-Sleep|Add-Type/);
+        assert.deepEqual({ ...options.env }, { SystemRoot: 'C:\\Windows', WINDIR: 'C:\\Windows' });
+        assert.equal(options.timeout, 10000); assert.equal(options.maxBuffer, 4096); assert.equal(options.windowsHide, true); assert.equal(options.encoding, 'utf8');
+        assert.equal(options.shell, undefined);
+        return result;
+      } };
+    } };
+    if (accepted) {
+      runInNewContext(runtimeProgram, context);
+      assert.deepEqual(messages.map(value => JSON.parse(value)), [{ sdk: 'WindowsPowerShell', version: '5.1', ready: true }]);
+    } else {
+      assert.throws(() => runInNewContext(runtimeProgram, context), /CI_WINDOWS_RUNTIME_NOT_READY/, id);
+      assert.deepEqual(messages, [], id);
+    }
+    assert.equal(calls, 1, id);
+  }
+  for (const [platform, environment] of [['linux', { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'true', CI: 'true' }], ['win32', { SystemRoot: 'relative', GITHUB_ACTIONS: 'true', CI: 'true' }], ['win32', { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'false', CI: 'true' }]]) {
+    let calls = 0;
+    assert.throws(() => runInNewContext(runtimeProgram, { process: { platform, env: environment }, require: name => name === 'node:assert/strict' ? assert : name === 'node:path' ? path : { spawnSync: () => { calls++; } }, console: { log: () => assert.fail('Refused setup cannot announce readiness') } }), /CI_WINDOWS_RUNTIME_/);
+    assert.equal(calls, 0);
+  }
 });
 
 
