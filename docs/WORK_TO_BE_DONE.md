@@ -1,3 +1,17 @@
+## 2026-11-12 — native Queue terminal publication and auth lease preparation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both actual718e QA builds passed.
+Android PRIVACY-01 passed completely and is independently reconciled as one
+case; QUEUE-01 failed awaiting detail, with paired cleanup and passed postflight.
+Later read-only geometry did not reproduce clipping. Three regressions reproduce
+an independent controller publication race; the candidate releases the completed
+read lease before publishing without invalidating its first callbacks or a
+successor lease. Hash-bound pre-registration auth retains original observations
+and verifies the exact runtime transition without extending budgets. All57
+Queue/Privacy Node cases pass; full source/native replacement remains required.
+See [evidence and remaining gates](mobile/NATIVE_QUEUE_PUBLICATION_2026-11-12.md).
+
 ## 2026-11-12 — disposable native attempt claim isolation
 
 J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;

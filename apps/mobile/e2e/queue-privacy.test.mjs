@@ -12,14 +12,143 @@ import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDe
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
 import { androidQueuePage, assertQPPrivacyControlsAbsent, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
-import { admitQPBeforeMembers,pendingQPRequest,withQPActor,logoutQPAccount } from '../../../scripts/mobile/run-queue-privacy.mjs';
+import { admitQPBeforeMembers,pendingQPRequest,withQPActor,logoutQPAccount,resolveQPAuthDockerReceipt } from '../../../scripts/mobile/run-queue-privacy.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
 import { composeQPRegistration } from '../../../scripts/mobile/queue-privacy-registration.mjs';
 import { pendingQueuePrivacyHost,runQueuePrivacyProducer } from '../../../scripts/mobile/produce-queue-privacy-fixture.mjs';
 import { createProducerStore,producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
 import { spawnSync } from 'node:child_process';
 import * as queueEvidence from './queue-privacy.mjs';
+import { createMatterWorkQueueController, createMatterWorkQueueRepository } from '../src/domain/matter-work-queue.ts';
 const ROOT=path.resolve(fileURLToPath(new URL('../../../',import.meta.url))),id=n=>'00000000-0000-4000-8000-'+n.toString(16).padStart(12,'0');
+
+function beforeRegistrationAuthDouble(bind){
+ const objects=new Map(),reads=[],r=(name,value)=>{const ref={path:'/synthetic/'+name+'.json',sha256:'e'.repeat(64)};if(value!==undefined)objects.set(ref.path,value);return ref;};
+ const sha=bind?.source.sourceSha??'a'.repeat(40),project=bind?.isolation.project??'caseops-mobile-20261112-01234567',run=bind?.isolation.gatewayRunId??'qp-'+'1'.repeat(24),source=bind?.source??{sourceSha:sha,sourceFingerprint:'b'.repeat(64),inputFileCount:244,sourceDirty:false};
+ const container=(service,n)=>({id:n.toString(16).padStart(64,'0'),name:`/${project}-${service}-1`,image:'sha256:'+'c'.repeat(64),project,networks:[project+'_private'],mounts:[{type:'bind',name:null,source:'/owned/'+service,destination:'/fixture-state',readWrite:service==='gateway'}]});
+ const oldRuntime={kind:'actual-qp-runtime-inventory',sourceSha:sha,project,runId:run,containers:['api','gateway','migrate','postgres','scanner','valkey','web'].map((s,n)=>container(s,n+1))};
+ const newRuntime=structuredClone(oldRuntime);newRuntime.containers[1].id='f'.repeat(64);
+ const receipt=runtime=>({environment:'docker-integration',syntheticDataOnly:true,productionAccessed:false,metroLaunched:false,backendSha:sha,webSha:sha,project,gatewayRunId:run,
+  backendRevision:'exact-api',webRevision:'exact-web',source:{api:{head:sha,fingerprint:'api',dirty:false},web:{head:sha,fingerprint:'web',dirty:false}},apiOrigin:'https://10.0.2.2:9743',webOrigin:'https://10.0.2.2:4743',gatewayUrl:'https://127.0.0.1:9743',webGatewayUrl:'https://127.0.0.1:4743',publicCA:'/owned/ca.crt',composeSha256:'d'.repeat(64),fixtureSourceHashes:{gateway:'c'.repeat(64)},gatewayImplementationSha256:'c'.repeat(64),tlsProof:{strictDefaultTLS:true,verificationDisabled:false},apiWebPostgresScannerNetworkInternal:true,
+  containers:runtime.containers.map(({mounts,...value})=>structuredClone(value))});
+ const generated=receipt(newRuntime),after=bind?.isolation??generated;
+ if(bind)Object.assign(after,{...generated,...after,containers:generated.containers});
+ const before={...structuredClone(after),containers:receipt(oldRuntime).containers},beforeRef=r('before-receipt',before),afterRef=bind?.q.dockerReceipt??r('after-receipt',after);
+ objects.set(afterRef.path,after);
+ const controls=bind?.controls??{gatewayImplementationEvidence:r('implementation'),registrationEvidence:r('registration')};
+ const q=bind?.q??{dockerReceipt:afterRef,controlsEvidence:r('controls'),members:[{authObservation:r('member-auth')},{authObservation:r('foreign-auth')}]};
+ const oldConfig={CASEOPS_MOBILE_PROJECT:project,CASEOPS_MOBILE_GATEWAY_RUN_ID:run,CASEOPS_MOBILE_API_SHA:sha,CASEOPS_MOBILE_WEB_SHA:sha,CASEOPS_MOBILE_V1_CONTROLS:'0',UNCHANGED_PUBLIC_ORIGIN:before.apiOrigin};
+ const newConfig={...oldConfig,CASEOPS_MOBILE_V1_CONTROLS:'1',CASEOPS_MOBILE_V1_PROFILE:QP.profile,CASEOPS_MOBILE_V1_IMPLEMENTATION_SHA256:controls.gatewayImplementationEvidence.sha256,CASEOPS_MOBILE_V1_REGISTRATION_SHA256:controls.registrationEvidence.sha256,CASEOPS_MOBILE_V1_REGISTRATION:'/fixture-state/'+path.basename(controls.registrationEvidence.path)};
+ const oldStatus={runId:run,lastSequence:0,requests:[],markerRejected:0,routeRejected:0,overflow:false,implementationSha256:before.gatewayImplementationSha256,v1ControlsEnabled:false};
+ const newStatus={...oldStatus,v1ControlsEnabled:true,v1ControlProfile:QP.profile,v1ControlsImplementationSha256:controls.gatewayImplementationEvidence.sha256,v1RegistrationSha256:controls.registrationEvidence.sha256};
+ const activation={sourceSha:sha,project,runId:run,finalDockerReceipt:afterRef,registrationEvidence:controls.registrationEvidence,controlsEvidence:q.controlsEvidence,actualActiveGateway:true,actualNativeAcceptance:false,secondsRemaining:478};
+ const transition={schemaVersion:1,kind:'actual-qp-auth-before-registration',sourceSha:sha,beforeDockerReceipt:beforeRef,afterDockerReceipt:afterRef,
+  beforeRuntimeEvidence:r('runtime-before',oldRuntime),afterRuntimeEvidence:r('runtime-after',newRuntime),beforeConfiguration:r('config-before',oldConfig),afterConfiguration:r('config-after',newConfig),beforeGatewayStatus:r('status-before',oldStatus),afterGatewayStatus:r('status-after',newStatus),activationEvidence:r('activation',activation),authObservations:q.members.map(m=>m.authObservation)};
+ q.preRegistrationAuthEvidence=r('transition',transition);
+ const io={read:ref=>{reads.push(ref.path);assert.ok(objects.has(ref.path));return objects.get(ref.path);},source,isolation:after,controls};
+ return{q,io,objects,reads,transition,before,after,oldRuntime,newRuntime,oldConfig,newConfig,oldStatus,newStatus,activation,beforeRef,run:()=>resolveQPAuthDockerReceipt(q,io)};
+}
+
+test('Queue pre-registration auth keeps the original observation receipt and requires an exact unchanged runtime transition',()=>{
+ const x=beforeRegistrationAuthDouble(),before=JSON.stringify([...x.objects]);const actual=x.run();
+ assert.deepEqual(actual,x.beforeRef);assert.equal(JSON.stringify([...x.objects]),before,'evidence objects remain unchanged');
+ const legacy=beforeRegistrationAuthDouble();delete legacy.q.preRegistrationAuthEvidence;assert.deepEqual(legacy.run(),legacy.q.dockerReceipt);assert.equal(legacy.reads.length,0);
+ legacy.q.preRegistrationAuthEvidence=null;assert.deepEqual(legacy.run(),legacy.q.dockerReceipt);assert.equal(legacy.reads.length,0);
+ assert.equal(QP.serialMs,480000);assert.equal(QP.totalControls,49);
+});
+
+test('Queue pre-registration auth rejects source, process, mount, configuration, ledger, actor and lease substitutions',()=>{
+ const mutations=[
+  x=>x.transition.extra=true,x=>x.transition.sourceSha='f'.repeat(40),x=>x.transition.afterDockerReceipt=x.beforeRef,
+  x=>x.transition.authObservations.reverse(),x=>x.transition.beforeDockerReceipt=x.q.dockerReceipt,
+  x=>x.before.backendRevision='other-api',x=>x.before.publicCA='/other/ca',x=>delete x.before.composeSha256,
+  x=>x.before.productionAccessed=true,x=>x.before.tlsProof.verificationDisabled=true,
+  x=>x.newRuntime.containers[0].id='d'.repeat(64),x=>x.newRuntime.containers[0].mounts[0].source='/other/data',
+  x=>x.newRuntime.containers[1].mounts[0].readWrite=false,x=>x.oldRuntime.containers.pop(),
+  x=>x.oldRuntime.containers.push(structuredClone(x.oldRuntime.containers[0])),
+  x=>x.newConfig.UNCHANGED_PUBLIC_ORIGIN='https://elsewhere.invalid',x=>x.oldConfig.CASEOPS_MOBILE_V1_CONTROLS='1',
+  x=>x.newConfig.CASEOPS_MOBILE_V1_REGISTRATION='/fixture-state/other.json',
+  x=>x.newStatus.v1RegistrationSha256='a'.repeat(64),x=>x.oldStatus.overflow=true,x=>x.oldStatus.markerRejected=1,
+  x=>x.newStatus.v1ControlsImplementationSha256='a'.repeat(64),
+  x=>x.oldStatus.requests.push({sequence:1}),x=>x.activation.secondsRemaining=480,
+  x=>x.activation.actualNativeAcceptance=true,x=>x.activation.finalDockerReceipt=x.beforeRef,
+ ];
+ for(const mutate of mutations){const x=beforeRegistrationAuthDouble();mutate(x);assert.throws(x.run);}
+});
+
+test('invalid pre-registration auth evidence refuses complete Queue admission before either credential reader',async()=>{
+ const x=await admissionDouble();try{
+  x.q.preRegistrationAuthEvidence={path:'/synthetic/unreviewed-auth-transition.json',sha256:'e'.repeat(64)};
+  x.map.set(x.q.preRegistrationAuthEvidence.path,{kind:'unreviewed'});
+  await assert.rejects(x.run());assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);
+ }finally{x.close();}
+});
+
+test('complete Queue admission accepts pre-registration observations only through their unchanged source/runtime transition',async()=>{
+ const x=await admissionDouble();try{
+  const bound=beforeRegistrationAuthDouble({q:x.q,source:x.source,isolation:x.map.get(x.q.dockerReceipt.path),controls:x.controls});
+  for(const [file,value]of bound.objects)x.map.set(file,value);
+  for(const member of x.q.members)x.map.get(member.authObservation.path).dockerReceipt=bound.beforeRef;
+  const result=await x.run();assert.equal(result.members.length,2);assert.equal(x.calls.filter(value=>value.startsWith('PRIVATE:')).length,2);
+  for(const member of x.q.members)assert.deepEqual(x.map.get(member.authObservation.path).dockerReceipt,bound.beforeRef);
+  assert.deepEqual(x.q.dockerReceipt,bound.transition.afterDockerReceipt);
+  x.q.preRegistrationAuthEvidence=null;
+  await assert.rejects(x.run());assert.equal(x.calls.filter(value=>value.startsWith('PRIVATE:')).length,2);
+ }finally{x.close();}
+});
+
+test('Queue terminal publication permits the first visible ready-row action without a second render or retry',async()=>{
+ const fixture=producerDouble();let controller;
+ try{
+  const dataset=await fixture.run(),page=dataset.pages[0].value,calls=[],ready=[];let selection;
+  const repository=createMatterWorkQueueRepository(async(path)=>{calls.push(path);return structuredClone(page);},dataset.membershipId);
+  controller=createMatterWorkQueueController(repository,()=>true);
+  controller.subscribe(()=>{
+   const view=controller.getSnapshot();
+   if(view.phase==='ready'){
+    ready.push(view.busy);
+    if(!selection)selection=()=>controller.showTask(view,view.page.items[0]);
+   }
+  });
+  controller.activate();const loaded=controller.firstPage(controller.getSnapshot());await loaded;
+  const selected=await selection();
+  assert.equal(selected,true,'the callback exposed by the first ready observation must remain current');
+  assert.deepEqual(ready,[false]);assert.equal(calls.length,2);assert.equal(controller.getSnapshot().phase,'detail');
+ }finally{controller?.dispose();fixture.close();}
+});
+
+test('Queue terminal publication leaves a newly admitted continuation lease owned after the preceding read completes',async()=>{
+ const fixture=producerDouble();let controller,resolveContinuation;
+ try{
+  const dataset=await fixture.run(),calls=[],pending=new Promise(resolve=>{resolveContinuation=resolve;});let continuation,attempted=false;
+  const repository=createMatterWorkQueueRepository(async(path,init)=>{
+   calls.push({path,signal:init.signal});return calls.length===1?structuredClone(dataset.pages[0].value):pending;
+  },dataset.membershipId);
+  controller=createMatterWorkQueueController(repository,()=>true);
+  controller.subscribe(()=>{const view=controller.getSnapshot();if(view.phase==='ready'&&!attempted){attempted=true;continuation=controller.nextPage(view);}});
+  controller.activate();await controller.firstPage(controller.getSnapshot());
+  assert.equal(calls.length,2);assert.equal(controller.getSnapshot().phase,'loading');assert.equal(controller.getSnapshot().busy,true);assert.equal(calls[1].signal.aborted,false);
+  resolveContinuation(structuredClone(dataset.pages[1].value));const continued=await continuation;assert.equal(continued,true);
+  assert.equal(controller.getSnapshot().phase,'ready');assert.equal(controller.getSnapshot().busy,false);
+  assert.deepEqual(controller.getSnapshot().page.items.map(x=>x.id),dataset.pages[1].value.items.map(x=>x.id));
+ }finally{resolveContinuation?.(structuredClone({}));controller?.dispose();fixture.close();}
+});
+
+test('Queue terminal publication makes its explicit error reload usable and still rejects a retained old view',async()=>{
+ const fixture=producerDouble();let controller;
+ try{
+  const dataset=await fixture.run(),calls=[],errors=[];let reload;
+  const repository=createMatterWorkQueueRepository(async(path)=>{calls.push(path);if(calls.length===1)throw Error('synthetic bounded read failure');return structuredClone(dataset.pages[0].value);},dataset.membershipId);
+  controller=createMatterWorkQueueController(repository,()=>true);
+  controller.subscribe(()=>{const view=controller.getSnapshot();if(view.phase==='error'){
+   errors.push({busy:view.busy,page:view.page,selected:view.selected});
+   if(!reload)reload=()=>controller.firstPage(view);
+  }});
+  controller.activate();const old=controller.getSnapshot();await controller.firstPage(old);const reloaded=await reload();assert.equal(reloaded,true);
+  assert.deepEqual(errors,[{busy:false,page:null,selected:null}]);assert.equal(calls.length,2);assert.equal(controller.getSnapshot().phase,'ready');
+  const refused=await controller.firstPage(old);assert.equal(refused,false);assert.equal(calls.length,2);
+ }finally{controller?.dispose();fixture.close();}
+});
 function observedCursorExchange() {
  const delivered=hash(Buffer.from('independently-encrypted-native-cursor'));
  const page={sequence:10,method:'GET',route:'/api/matter-work-queue',status:200,

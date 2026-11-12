@@ -19,19 +19,21 @@ import { gatewayBaseline,validateTraffic } from '../../apps/mobile/e2e/traffic.m
 import { appiumSessionEvent,configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 import { androidSessionTransport,verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from './queue-privacy-controls.mjs';
+import { resolveQPAuthDockerReceipt } from './queue-privacy-auth-transition.mjs';
+export { resolveQPAuthDockerReceipt } from './queue-privacy-auth-transition.mjs';
 import { v1PrivateReference } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export function qpInputPaths(root=ROOT){return [...new Set([...OBSERVER_SOURCE_INPUTS,
  ...fs.readdirSync(path.join(root,'apps/mobile/e2e')).filter(n=>/\.(mjs|json)$/.test(n)).map(n=>'apps/mobile/e2e/'+n),
  'scripts/mobile/run-queue-privacy.mjs','scripts/mobile/prepare-queue-privacy-fixture.mjs','scripts/mobile/queue-privacy-controls.mjs',
- 'scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/native-producer-route-file.mjs','scripts/mobile/native-producer-route-provenance.mjs','scripts/mobile/client-extension-public-input.mjs',
+ 'scripts/mobile/queue-privacy-registration.mjs','scripts/mobile/queue-privacy-auth-transition.mjs','scripts/mobile/produce-queue-privacy-fixture.mjs','scripts/mobile/native-producer-host.mjs','scripts/mobile/native-producer-admission.mjs','scripts/mobile/native-producer-route-file.mjs','scripts/mobile/native-producer-route-provenance.mjs','scripts/mobile/client-extension-public-input.mjs',
  'scripts/mobile/run-v1-workflows.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/android-files-privacy.mjs',
  'scripts/mobile/local-gateway.py','scripts/mobile/local-v1-controls.py','scripts/mobile/local-queue-privacy-controls.py','compose.mobile-local.yml'])].sort();}
 export function qpHarnessFingerprint(root=ROOT){const h=createHash('sha256');for(const name of qpInputPaths(root))h.update(name+'\0').update(fs.readFileSync(path.join(root,name))).update('\0');return h.digest('hex');}
 export function pendingQPRequest(){return{schemaVersion:1,inventoryId:QP.inventoryId,profile:QP.profile,readyForLive:false,preparedOnly:true,platform:'PENDING',repoRoot:ROOT,
  expectedSourceSha:null,expectedSourceFingerprint:null,expectedInputFileCount:null,expectedBinaryHash:null,expectedHarnessFingerprint:null,
  fixtureEvidence:null,buildReceipt:null,dockerReceipt:null,deviceEvidence:null,installedEvidence:null,producerEvidence:null,controlsEvidence:null,codeClosure:null,
- members:[{fixtureEvidence:null,credentialEvidence:null,authObservation:null},{fixtureEvidence:null,credentialEvidence:null,authObservation:null}],reportRoot:null};}
+ members:[{fixtureEvidence:null,credentialEvidence:null,authObservation:null},{fixtureEvidence:null,credentialEvidence:null,authObservation:null}],preRegistrationAuthEvidence:null,reportRoot:null};}
 function validateQPOrigins(fixture, isolation, environment) {
  for (const key of ['gatewayUrl', 'webGatewayUrl']) {
   const url = localUrl(isolation[key]);
@@ -51,7 +53,7 @@ function validateQPOrigins(fixture, isolation, environment) {
  assert.equal(isolation.tlsProof?.verificationDisabled, false, 'QP_STRICT_GATEWAY_TLS_REQUIRED');
 }
 
-function validateQPPublicActor(f, auth, { fixture, actor, source, isolation, request }) {
+function validateQPPublicActor(f, auth, { fixture, actor, source, isolation, request, authDockerReceipt }) {
  for (const key of ['backendSha', 'webSha', 'binarySourceSha']) assert.equal(f[key], source.sourceSha);
  assert.equal(f.binarySourceFingerprint, source.sourceFingerprint);
  for (const key of ['appId', 'appPath', 'udid', 'deviceName', 'platformVersion', 'apiOrigin', 'gatewayUrl', 'webGatewayUrl',
@@ -81,7 +83,7 @@ function validateQPPublicActor(f, auth, { fixture, actor, source, isolation, req
  if (auth.platform !== undefined) assert.equal(auth.platform, request.platform);
  if (auth.mode !== undefined) assert.equal(auth.mode, f.auth.mode);
  if (auth.webOrigin !== undefined) assert.equal(auth.webOrigin, f.auth.webOrigin);
- assert.deepEqual(auth.importedSource, source); assert.deepEqual(auth.buildReceipt, request.buildReceipt); assert.deepEqual(auth.dockerReceipt, request.dockerReceipt);
+ assert.deepEqual(auth.importedSource, source); assert.deepEqual(auth.buildReceipt, request.buildReceipt); assert.deepEqual(auth.dockerReceipt, authDockerReceipt);
  assert.equal(auth.mfaStage, f.auth.mfaStage); assert.equal(auth.iosConsent, f.auth.iosConsent);
 }
 
@@ -127,9 +129,10 @@ export async function admitQPBeforeMembers(q,dependencies={}){
  assert.equal(installed.udid,actual.udid);assert.equal(installed.binaryHash??installed.installedApkSha256,actual.binaryHash);assert.deepEqual(installed.buildReceipt,q.buildReceipt);
  if(q.platform==='android')validateAndroidLayoutEvidence(fixture,actual,device,installed);else assert.equal(actual.deviceTypeIdentifier,device.deviceTypeIdentifier);
  if(installed.appDataPath)assert.equal(actual.appDataPath,installed.appDataPath);
+ const authDockerReceipt=resolveQPAuthDockerReceipt(q,{read:io.read,source,isolation,controls});
  const publics=q.members.map((m,i)=>{
   const f=io.read(m.fixtureEvidence),auth=io.read(m.authObservation),name=i?'second-company':'member';
-  validateQPPublicActor(f,auth,{fixture,actor:registration.actors[name],source,isolation,request:q});
+  validateQPPublicActor(f,auth,{fixture,actor:registration.actors[name],source,isolation,request:q,authDockerReceipt});
   assert.deepEqual(m.credentialEvidence,controls.actorCredentialMappings[name].hostEvidence);
   return{entry:m,fixture:f};});
  assert.notEqual(publics[0].fixture.companyId,publics[1].fixture.companyId);assert.equal(publics[0].fixture.membershipId,fixture.membershipId);
