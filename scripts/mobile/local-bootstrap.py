@@ -92,6 +92,33 @@ def validated_config(config, requested_platform=None, requested_mode=None):
             'CASEOPS_MOBILE_API_ORIGIN': value['apiOrigin'], 'CASEOPS_MOBILE_WEB_ORIGIN': value['webOrigin']}
 
 
+
+def v1_governed_profile(config, *, now=None, allow_expired=False):
+    """Explicit disposable V1 acceptance only; never inherit production rollouts."""
+    keys = ("CASEOPS_MOBILE_V1_GOVERNED_RUN_ID", "CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG",
+            "CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT")
+    if not any(key in config for key in keys):
+        return None
+    assert all(key in config and isinstance(config[key], str) for key in keys), "Complete explicit V1 governed profile required"
+    validated_config(config)
+    run, slug, expiry = (config[key] for key in keys)
+    assert re.fullmatch(r"v1-[a-f0-9]{24}", run) and config.get("CASEOPS_MOBILE_GATEWAY_RUN_ID") == run, "Exact V1 governed gateway epoch required"
+    assert re.fullmatch(r"test-mobile-v1-[a-f0-9]{12}", slug), "Fresh disposable V1 slug required"
+    assert re.fullmatch(r"caseops-mobile-[a-z0-9-]{8,80}", config.get("CASEOPS_MOBILE_PROJECT", "")), "Owned mobile project required"
+    source = config.get("CASEOPS_MOBILE_API_SHA", "")
+    assert re.fullmatch(r"[a-f0-9]{40}", source) and config.get("CASEOPS_MOBILE_WEB_SHA") == source, "Exact V1 governed source required"
+    expires = datetime.fromisoformat(expiry)
+    assert expires.tzinfo is not None and expires.utcoffset().total_seconds() == 0, "UTC V1 governed expiry required"
+    observed = time.time() if now is None else now
+    assert type(allow_expired) is bool
+    assert type(observed) in (int, float) and expires.timestamp() - observed <= 14400 and (allow_expired or expires.timestamp() > observed), "Bounded nonexpired V1 governed profile required"
+    environment = {"CASEOPS_IP_WORKSPACE_ENABLED": "true", "CASEOPS_IP_RULE_GOVERNANCE_ENABLED": "true",
+                   "CASEOPS_IP_WORKSPACE_ROLLOUT_EXPIRES_AT": expiry,
+                   "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT": expiry,
+                   "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "test-legal,test-mobile-other," + slug}
+    return {"schemaVersion": 1, "kind": "isolated-native-v1-governed-profile", "runId": run,
+            "sourceSha": source, "companySlug": slug, "expiresAt": expiry, "apiEnvironment": environment}
+
 def normalized_locale(value):
     assert isinstance(value, str) and len(value) <= 64, "Observed device locale required"
     base, separator, modifier = value.partition("@")
@@ -353,7 +380,7 @@ def ios_scanner_platform():
     return "linux/amd64" if sys.platform == "darwin" and machine().lower() in {"arm64", "aarch64"} else None
 
 
-def compose(cache, config):
+def compose(cache, config, *, allow_expired_v1=False):
     config = validated_config(config)
     env = os.environ.copy()
     # Do not inherit credentials/provider settings from another developer shell.
@@ -367,10 +394,13 @@ def compose(cache, config):
     platform = config["CASEOPS_MOBILE_PLATFORM"]
     scanner_platform = ios_scanner_platform()
     loopback_app = platform == 'ios' or _LOCAL_TRANSPORT['policy'](config)['mode'] == 'usb-reverse'
-    if loopback_app or scanner_platform:
+    governed = v1_governed_profile(config, allow_expired=allow_expired_v1)
+    if loopback_app or scanner_platform or governed:
         # Keep canonical image pins and inherited TLS/CORS/network fences intact.
         override = {"services": {service: {"environment": {"CASEOPS_PUBLIC_APP_URL": config["CASEOPS_MOBILE_WEB_ORIGIN"]}}
                                  for service in ("api", "migrate")} if loopback_app else {}}
+        if governed:
+            override["services"].setdefault("api", {}).setdefault("environment", {}).update(governed["apiEnvironment"])
         if scanner_platform:
             override["services"]["scanner"] = {"platform": scanner_platform}
         content = json.dumps(override, sort_keys=True)
@@ -499,11 +529,19 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
     assert web["revision"] == config["CASEOPS_MOBILE_WEB_REVISION"]
     ids = run(command + ["ps", "-aq"], env=env).splitlines()
     containers = []
+    governed = v1_governed_profile(config)
+    governed_api = None
     for container in ids:
         body = json.loads(run(["docker", "inspect", container]))[0]
         containers.append({"id": body["Id"], "name": body["Name"], "image": body["Image"],
                            "networks": sorted(body["NetworkSettings"]["Networks"]),
                            "project": body["Config"]["Labels"]["com.docker.compose.project"]})
+        if governed and body["Name"].endswith("-api-1"):
+            expected = governed["apiEnvironment"]
+            selected = [item.split("=", 1) for item in body["Config"]["Env"] if item.split("=", 1)[0] in expected]
+            assert len(selected) == len(expected) and dict(selected) == expected, "Actual API governed profile mismatch"
+            assert governed_api is None, "Unique governed API container required"
+            governed_api = {"apiContainerId": body["Id"], "apiImage": body["Image"], "observedApiEnvironment": dict(selected)}
         if body["Name"].endswith(("-api-1", "-web-1")):
             names = {item.split("=", 1)[0] for item in body["Config"]["Env"]}
             assert not names.intersection({"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CASEOPS_OPENAI_API_KEY",
@@ -530,11 +568,14 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
     receipt["fixtureSourceHashes"] = {path.relative_to(REPO).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                                       for path in sorted((REPO / "scripts/mobile").glob("local-*")) if path.is_file()}
     receipt["composeSha256"] = hashlib.sha256((REPO / "compose.mobile-local.yml").read_bytes()).hexdigest()
-    if config['CASEOPS_MOBILE_PLATFORM'] == 'ios' or _LOCAL_TRANSPORT['policy'](config)['mode'] == 'usb-reverse':
+    if governed or config['CASEOPS_MOBILE_PLATFORM'] == 'ios' or _LOCAL_TRANSPORT['policy'](config)['mode'] == 'usb-reverse':
         compose_files = [Path(command[index + 1]) for index, value in enumerate(command) if value == "-f"]
         assert len(compose_files) == 2 and compose_files[0] == REPO / "compose.mobile-local.yml", "Exact iOS Compose inputs required"
         override = compose_files[1]
         receipt["platformComposeOverride"] = {"path": str(override), "sha256": hashlib.sha256(override.read_bytes()).hexdigest()}
+    if governed:
+        assert governed_api is not None, "Actual governed API observation required"
+        receipt["v1GovernedProfile"] = {**governed, **governed_api, "composeOverride": receipt["platformComposeOverride"]}
     receipt["tlsProof"] = tls_probe(cache, config, negative_controls=not core_ledger)
     receipt["webMarkerTransportSourcePresent"] = "NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE" in (REPO / "apps/web/lib/api/client.ts").read_text(encoding="utf-8")
     internal = run(["docker", "network", "inspect", f"{config['CASEOPS_MOBILE_PROJECT']}_default", "--format", "{{.Internal}}"])
@@ -555,9 +596,16 @@ def finish(cache, config, source, args, suffix="", *, core_ledger=False):
 
 def main(args):
     cache = args.cache.resolve()
+    governed_args = {"CASEOPS_MOBILE_V1_GOVERNED_RUN_ID": getattr(args, "v1_governed_run_id", None),
+                     "CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG": getattr(args, "v1_governed_company_slug", None),
+                     "CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT": getattr(args, "v1_governed_expires_at", None)}
+    if any(value is not None for value in governed_args.values()):
+        assert args.action == "up" and all(isinstance(value, str) for value in governed_args.values()), "V1 governed profile needs all three explicit fresh-up arguments"
+    else:
+        governed_args = {}
     if args.action != "up":
         config = validated_config(json.loads((cache / "config.json").read_text()), getattr(args, "platform", "android"), getattr(args, "android_transport_mode", None))
-        command, env = compose(cache, config)
+        command, env = (compose(cache, config, allow_expired_v1=True) if args.action == "stop" else compose(cache, config))
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3)
         if args.action == "extend":
             extend_fixture(cache, config, args, stamp)
@@ -661,6 +709,10 @@ def main(args):
         source = before[service]
         config[f"CASEOPS_MOBILE_{service.upper()}_SHA"] = source["head"] if not source["dirty"] else "unavailable"
         config[f"CASEOPS_MOBILE_{service.upper()}_REVISION"] = f"{project}-{service}-{source['fingerprint'][:12]}"
+    if governed_args:
+        config.update(governed_args)
+        config["CASEOPS_MOBILE_GATEWAY_RUN_ID"] = governed_args["CASEOPS_MOBILE_V1_GOVERNED_RUN_ID"]
+        v1_governed_profile(config)
     config["CASEOPS_MOBILE_WEB_DOCKERFILE"] = prepare_web_dockerfile(cache)
     write_new(cache / "config.json", config)
     capacity = run(["docker", "run", "--rm", "--name", f"{project}-capacity", "--network", "none", "alpine:3.20", "df", "-Pk", "/"])
@@ -696,6 +748,9 @@ def argument_parser():
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--api-port", type=int, default=8443)
     parser.add_argument("--web-port", type=int, default=3443)
+    parser.add_argument("--v1-governed-run-id")
+    parser.add_argument("--v1-governed-company-slug")
+    parser.add_argument("--v1-governed-expires-at")
     parser.add_argument("--mfa", action="store_true")
     parser.add_argument("--udid")
     parser.add_argument("--platform", choices=PLATFORMS, default="android",

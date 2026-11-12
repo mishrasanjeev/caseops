@@ -2312,5 +2312,114 @@ class ComposeStartupOrderTests(unittest.TestCase):
         self.assertEqual(conditions, {"migrate": "service_completed_successfully", "valkey": "service_healthy", "scanner": "service_healthy"})
 
 
+
+class V1GovernedProfileTests(unittest.TestCase):
+    NOW = 1794495600
+
+    def config(self, platform="android"):
+        run = "v1-" + "a" * 24
+        return {"CASEOPS_MOBILE_PLATFORM": platform, "CASEOPS_MOBILE_API_PORT": "8443",
+                "CASEOPS_MOBILE_WEB_PORT": "3443", "CASEOPS_MOBILE_PROJECT": "caseops-mobile-v1-" + "a" * 12,
+                "CASEOPS_MOBILE_API_SHA": "b" * 40, "CASEOPS_MOBILE_WEB_SHA": "b" * 40,
+                "CASEOPS_MOBILE_GATEWAY_RUN_ID": run,
+                "CASEOPS_MOBILE_V1_GOVERNED_RUN_ID": run,
+                "CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG": "test-mobile-v1-" + "a" * 12,
+                "CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT": bootstrap_module.datetime.fromtimestamp(
+                    self.NOW + 3600, bootstrap_module.UTC).isoformat()}
+
+    def test_optional_profile_is_explicit_and_does_not_inherit_ambient_rollouts(self):
+        with patch.dict(os.environ, self.config(), clear=True):
+            self.assertIsNone(bootstrap_module.v1_governed_profile({}, now=self.NOW))
+        for key in ("RUN_ID", "COMPANY_SLUG", "EXPIRES_AT"):
+            config = self.config()
+            del config["CASEOPS_MOBILE_V1_GOVERNED_" + key]
+            with self.assertRaises(AssertionError):
+                bootstrap_module.v1_governed_profile(config, now=self.NOW)
+
+    def test_profile_is_exactly_two_local_rollouts_with_a_bounded_expiry_and_slug(self):
+        for platform in ("android", "ios"):
+            config = self.config(platform)
+            profile = bootstrap_module.v1_governed_profile(config, now=self.NOW)
+            self.assertEqual(profile["kind"], "isolated-native-v1-governed-profile")
+            self.assertEqual(profile["sourceSha"], "b" * 40)
+            self.assertEqual(profile["runId"], config["CASEOPS_MOBILE_GATEWAY_RUN_ID"])
+            self.assertEqual(profile["apiEnvironment"], {
+                "CASEOPS_IP_WORKSPACE_ENABLED": "true",
+                "CASEOPS_IP_RULE_GOVERNANCE_ENABLED": "true",
+                "CASEOPS_IP_WORKSPACE_ROLLOUT_EXPIRES_AT": config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"],
+                "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT": config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"],
+                "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "test-legal,test-mobile-other," + config["CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG"]})
+
+    def test_invalid_epoch_source_slug_expiry_and_remote_origin_refuse_before_compose(self):
+        edits = [("CASEOPS_MOBILE_V1_GOVERNED_RUN_ID", "v1-" + "c" * 24),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG", "test-legal"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG", "test-mobile-v1-" + "a" * 12 + ",foreign"),
+                 ("CASEOPS_MOBILE_API_SHA", "unavailable"),
+                 ("CASEOPS_MOBILE_WEB_SHA", "c" * 40),
+                 ("CASEOPS_MOBILE_API_ORIGIN", "https://caseops.ai"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT", "2026-11-12T15:00:00"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT", "not-a-time")]
+        for key, value in edits:
+            with self.subTest(key=key, value=value):
+                config = self.config(); config[key] = value
+                with self.assertRaises((AssertionError, ValueError)):
+                    bootstrap_module.v1_governed_profile(config, now=self.NOW)
+        config = self.config()
+        self.assertIsNotNone(bootstrap_module.v1_governed_profile(config, now=self.NOW + 3599))
+        for observation in (self.NOW + 3600, self.NOW + 3601, self.NOW - 10801):
+            with self.assertRaises(AssertionError):
+                bootstrap_module.v1_governed_profile(config, now=observation)
+
+    def test_generated_compose_profile_changes_only_api_rollouts_and_existing_platform_fields(self):
+        for platform in ("android", "ios"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, patch.object(
+                    bootstrap_module, "machine", return_value="x86_64"), patch.object(
+                    bootstrap_module.time, "time", return_value=self.NOW):
+                root = Path(directory); (root / "compose-secrets.json").write_text("{}")
+                config = self.config(platform)
+                canonical = (bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes()
+                command, environment = bootstrap_module.compose(root, config)
+                override = next(root.glob(platform + "-compose-*.json"))
+                actual = json.loads(override.read_text())
+                api = bootstrap_module.v1_governed_profile(config, now=self.NOW)["apiEnvironment"]
+                expected = {"services": {"api": {"environment": dict(api)}}}
+                if platform == "ios":
+                    expected["services"]["api"]["environment"]["CASEOPS_PUBLIC_APP_URL"] = "https://127.0.0.1:3443"
+                    expected["services"]["migrate"] = {"environment": {"CASEOPS_PUBLIC_APP_URL": "https://127.0.0.1:3443"}}
+                self.assertEqual(actual, expected)
+                self.assertEqual(command.count("-f"), 2)
+                self.assertEqual((bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes(), canonical)
+                self.assertNotIn("CASEOPS_IP_WORKSPACE_ENABLED", environment)
+                before = override.read_bytes()
+                bootstrap_module.compose(root, config)
+                self.assertEqual(override.read_bytes(), before)
+                override.write_text('{"services":{}}')
+                with self.assertRaisesRegex(AssertionError, "override changed"):
+                    bootstrap_module.compose(root, config)
+
+    def test_expired_profile_still_allows_only_canonical_stop_without_an_expiry_extension(self):
+        config = self.config()
+        original = config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"]
+        with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_module.time, "time", return_value=self.NOW + 3601):
+            root = Path(directory); (root / "compose-secrets.json").write_text("{}")
+            (root / "config.json").write_text(json.dumps(config))
+            with self.assertRaisesRegex(AssertionError, "nonexpired"):
+                bootstrap_module.compose(root, config)
+            calls = []
+            def command(argv, **options):
+                calls.append(list(argv))
+                if argv[-2:] == ["ps", "-aq"]:
+                    return ""
+                self.assertEqual(argv[-3:], ["stop", "--timeout", "20"])
+                return ""
+            with patch.object(bootstrap_module, "run", side_effect=command):
+                bootstrap_module.main(argparse.Namespace(action="stop", cache=root, platform="android"))
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(json.loads((root / "config.json").read_text())["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"], original)
+            for action in ("resume", "rebuild-api"):
+                with patch.object(bootstrap_module, "run") as denied, self.assertRaisesRegex(AssertionError, "nonexpired"):
+                    bootstrap_module.main(argparse.Namespace(action=action, cache=root, platform="android"))
+                denied.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

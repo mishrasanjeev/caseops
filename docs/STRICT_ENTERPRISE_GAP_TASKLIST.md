@@ -4825,3 +4825,11 @@ settings restoration, normal exact-member logout and session deletion. The
 independent reconciliation retains the original rejection counter. This focused
 dirty-harness proof earns zero full-case credit; complete replacement acceptance
 and the release NO-GO remain unchanged.
+
+
+### 2026-11-13 — native V1 fixture foundations (partial)
+
+See [V1 fixture foundations](mobile/V1_FIXTURE_FOUNDATIONS_2026-11-13.md).
+Explicit local rollout and nonbillable entitlement contracts are implemented;
+actual PostgreSQL and remaining V1/CX native acceptance are unverified. NO-GO;
+no store submission or native case credit.

@@ -186,6 +186,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     ['Verify QA-only Android observer merged manifest projection', 'python3 scripts/mobile/android-observer-manifest.test.py'],
     ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
     ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
+    ['Verify isolated nonbillable V1 entitlement authority', 'python3 scripts/mobile/local-v1-entitlements.test.py'],
     ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
     ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
     ['Verify independent queue and account-request inventory', 'python3 scripts/mobile/queue-privacy.test.py'],
