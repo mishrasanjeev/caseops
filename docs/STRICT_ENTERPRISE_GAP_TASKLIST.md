@@ -4904,3 +4904,15 @@ double omitted the canonical post-DROP absence read. The complete original
 27 cases, including retained-database and lost-observation refusal controls.
 Canonical fixture behavior is unchanged. Verdict: Partially fixed; fresh
 full hosted CI remains required. See [journal evidence](mobile/CI_DATABASE_JOURNAL_2026-11-13.md).
+
+## 2026-11-13 — native stored-session recovery and private Play qualification
+
+J20/M22, US-MOB-01/02/08 remain **Partially implemented; Inconclusive; NO-GO**.
+An actual iOS Files setup stopped after compatibility 200 / native refresh 403 /
+logout 204 and left an idle compatibility panel. One bounded public recheck after
+acknowledged authentication rejection now allows fresh secure sign-in; it never
+replays the rotating token and preserves cleanup, unknown-outcome and policy
+denials. The complete mobile suite passed 690 cases and type-checking passed;
+rebuilt native acceptance remains pending. Google Play version2 is available only
+to the owner on the internal test track, unreviewed and not publicly launched.
+See [dated evidence and limits](mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md).

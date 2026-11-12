@@ -119,6 +119,10 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   let markerRead: (() => Promise<string | null>) | null = null;
   let captureReturn: Promise<null> | null = null;
   let invalidated = () => {};
+  let restoreRefusal: {
+    error: MobileApiError;
+    policy: "supported" | "update_required" | "unavailable";
+  } | null = null;
   const stateListeners = new Set<(state: string) => void>();
   let visibility = "active";
   let policyStatus: "supported" | "update_required" | "unavailable" =
@@ -154,6 +158,13 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
     }
     async restore() {
       events.push("restore-credential");
+      if (restoreRefusal) {
+        serverIdentity = null;
+        serverBinding = null;
+        invalidated();
+        policyStatus = restoreRefusal.policy;
+        throw restoreRefusal.error;
+      }
       if (signedOut) return null;
       serverIdentity = restoreIdentity;
       serverBinding = restoreBinding;
@@ -445,6 +456,16 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   return {
     events,
     browserOpens,
+    refuseStoredSession(
+      error: MobileApiError,
+      nextPolicy: "supported" | "update_required" | "unavailable" = "supported",
+    ) {
+      serverIdentity = null;
+      serverBinding = null;
+      policy = null;
+      marker = null;
+      restoreRefusal = { error, policy: nextPolicy };
+    },
     render,
     async flush() {
       await new Promise((resolve) => setImmediate(resolve));
@@ -1160,4 +1181,97 @@ test("actual App welcome browser lease ends on return from the background, not o
   f.render();
   assert.equal(f.browserOpens.length, 1);
   f.close();
+});
+
+test("actual App returns to secure sign-in after a rejected stored session and a fresh public policy check", async () => {
+  for (const status of [401, 403]) {
+    const f = host();
+    try {
+      f.refuseStoredSession(
+        new MobileApiError("Sign in again.", status, "native_mfa_required"),
+      );
+      f.render();
+      await f.flush();
+      await f.flush();
+      const signIn = f.props("SignInPanel");
+      assert.equal(signIn.busy, false);
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        2,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.equal(f.events.includes("browser-sign-in"), false);
+      assert.doesNotMatch(
+        f.text(),
+        /PrivateApplication|ClientCompatibilityPanel|Synthetic original person/,
+      );
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("actual App keeps cleanup failures and unknown refresh outcomes closed without automatic recovery", async () => {
+  for (const error of [
+    new MobileApiError("Clear failed.", 401, "native_storage_clear_failed"),
+    new MobileApiError("Cleanup failed.", 401, "native_session_cleanup_failed"),
+    new MobileApiError("Lost response.", 0, "network_failure", "unknown"),
+    new MobileApiError("Unknown mutation.", 403, "unknown_refresh", "unknown"),
+  ]) {
+    const f = host();
+    try {
+      f.refuseStoredSession(error);
+      f.render();
+      await f.flush();
+      await f.flush();
+      assert.equal(
+        f.props("ClientCompatibilityPanel").state.status,
+        "checking",
+      );
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        1,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("actual App rechecks the current public policy after session rejection and preserves denial or failure", async () => {
+  for (const policy of ["update_required", "unavailable"] as const) {
+    const f = host();
+    try {
+      f.refuseStoredSession(
+        new MobileApiError("Sign in again.", 403, "native_mfa_required"),
+        policy,
+      );
+      f.render();
+      await f.flush();
+      await f.flush();
+      assert.equal(f.props("ClientCompatibilityPanel").state.status, policy);
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        2,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      f.close();
+    }
+  }
 });

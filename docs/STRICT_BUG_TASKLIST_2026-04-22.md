@@ -6244,3 +6244,15 @@ with fatal crash handling and all budgets/assertions intact, passed a physical
 native exit 0). See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
 New hosted CI is still required; no mobile/store case credit is granted by that
 infrastructure replay.
+
+## 2026-11-13 — native stored-session recovery and private Play qualification
+
+J20/M22, US-MOB-01/02/08 remain **Partially implemented; Inconclusive; NO-GO**.
+An actual iOS Files setup stopped after compatibility 200 / native refresh 403 /
+logout 204 and left an idle compatibility panel. One bounded public recheck after
+acknowledged authentication rejection now allows fresh secure sign-in; it never
+replays the rotating token and preserves cleanup, unknown-outcome and policy
+denials. The complete mobile suite passed 690 cases and type-checking passed;
+rebuilt native acceptance remains pending. Google Play version2 is available only
+to the owner on the internal test track, unreviewed and not publicly launched.
+See [dated evidence and limits](mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md).

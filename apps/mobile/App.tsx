@@ -316,9 +316,30 @@ export default function App() {
 
   const openServerSession = useCallback(async () => {
     runtime.compatibility.admit("/api/auth/me", "GET");
-    if (!runtime.session.identity && !(await runtime.session.restore()))
-      return null;
-    return runtime.session.revalidate();
+    try {
+      if (!runtime.session.identity && !(await runtime.session.restore()))
+        return null;
+      return await runtime.session.revalidate();
+    } catch (cause) {
+      // Session invalidation also retires the public compatibility observation.
+      // Recover only that public policy after acknowledged authentication
+      // rejection and completed local cleanup; never replay the rotating token.
+      if (
+        cause instanceof MobileApiError &&
+        [401, 403].includes(cause.status) &&
+        cause.outcome === "rejected" &&
+        ![
+          "native_storage_clear_failed",
+          "native_session_cleanup_failed",
+        ].includes(cause.code) &&
+        runtime.session.localBinding === null &&
+        runtime.compatibility.getSnapshot().status === "checking" &&
+        alive.current &&
+        foreground.current
+      )
+        await runtime.compatibility.refresh();
+      throw cause;
+    }
   }, [runtime]);
   const publishUnlocked = useCallback(
     (

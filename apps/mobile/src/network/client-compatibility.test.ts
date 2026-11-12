@@ -645,3 +645,110 @@ test("actual compatibility panel has honest unavailable/update/checking states, 
       assert.match(JSON.stringify(tree), /Update CaseOps|2\.0\.0/);
   }
 });
+
+test("actual stored-session rejection clears credentials and retires compatibility before a separate public recovery", async () => {
+  for (const clearFails of [false, true]) {
+    let stored: StoredCredential | null = {
+      refreshToken: "synthetic-refresh",
+      sessionId: "synthetic-session",
+    };
+    const calls: string[] = [];
+    let clears = 0;
+    let gate!: ReturnType<typeof createClientCompatibility>;
+    const transport = new JsonTransport(
+      "https://caseops.ai",
+      false,
+      true,
+      client,
+      async (url, init) => {
+        const target = new URL(url),
+          headers = new Headers(init.headers);
+        assert.equal(
+          headers.get("X-CaseOps-Automated-Test"),
+          "no-paid-providers",
+        );
+        assert.equal(headers.get("Authorization"), null);
+        assert.equal(init.credentials, "omit");
+        calls.push(`${init.method} ${target.pathname}`);
+        if (target.pathname === "/api/auth/native/compatibility") {
+          assert.equal(target.searchParams.get("platform"), "ios");
+          assert.equal(target.searchParams.get("client_version"), "1.10.0");
+          return Response.json(supported);
+        }
+        assert.equal(init.method, "POST");
+        assert.deepEqual(JSON.parse(String(init.body)), {
+          refresh_token: "synthetic-refresh",
+        });
+        if (target.pathname === "/api/auth/native/refresh")
+          return Response.json(
+            {
+              detail:
+                "Native MFA authorization has expired or changed. Sign in again.",
+            },
+            { status: 403 },
+          );
+        assert.equal(target.pathname, "/api/auth/native/logout");
+        return new Response(null, { status: 204 });
+      },
+      20_000,
+      {
+        admit: (p, m) => gate.admit(p, m),
+        incompatible: (b) => gate.incompatible(b),
+      },
+    );
+    const session = new NativeSession(
+      transport,
+      {
+        async read() {
+          return stored;
+        },
+        async write(value) {
+          stored = value;
+        },
+        async clear() {
+          ++clears;
+          if (clearFails) throw new Error("synthetic secure-store failure");
+          stored = null;
+        },
+      },
+      () => 0,
+      () => gate.invalidate(),
+      (p, m) => gate.admit(p, m),
+    );
+    gate = createClientCompatibility(
+      client,
+      (p) => transport.request(p),
+      () => JSON.stringify(session.localBinding),
+      () => {},
+      () => {},
+    );
+    assert.equal(await gate.refresh(), true);
+    await assert.rejects(
+      session.restore(),
+      (error: unknown) =>
+        error instanceof MobileApiError &&
+        (clearFails
+          ? error.code === "native_storage_clear_failed"
+          : error.status === 403),
+    );
+    assert.equal(session.identity, null);
+    assert.equal(session.localBinding, null);
+    assert.equal(clears, 1);
+    assert.equal(stored === null, !clearFails);
+    assert.equal(gate.getSnapshot().status, "checking");
+    assert.deepEqual(calls, [
+      "GET /api/auth/native/compatibility",
+      "POST /api/auth/native/refresh",
+      "POST /api/auth/native/logout",
+    ]);
+    if (!clearFails) {
+      assert.equal(await gate.refresh(), true);
+      assert.equal(calls.at(-1), "GET /api/auth/native/compatibility");
+      assert.equal(
+        calls.filter((x) => x === "POST /api/auth/native/refresh").length,
+        1,
+      );
+      assert.equal(session.identity, null);
+    }
+  }
+});
