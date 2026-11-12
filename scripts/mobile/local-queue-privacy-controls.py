@@ -156,6 +156,15 @@ class Controls:
                 assert q.get("ownership",["mine"])[0] in ("mine","team","unassigned") and q.get("dates",["all"])[0]in("all","dated","undated") and q.get("limit",["25"])[0]=="25"
                 assert "cursor"not in q or len(q["cursor"][0])<=4000
                 row["queryObservation"]={"ownership":q.get("ownership",["mine"])[0],"dates":q.get("dates",["all"])[0],"cursorSha256":sha(q["cursor"][0].encode())if"cursor"in q else None}
+                if status==200:
+                    value=json.loads(data)
+                    assert isinstance(value,dict) and "next_cursor" in value
+                    items=value.get("items");cursor=value["next_cursor"]
+                    assert isinstance(items,list) and len(items)<=25
+                    assert cursor is None or isinstance(cursor,str) and 0<len(cursor)<=4000
+                    assert all(isinstance(item,dict) and isinstance(item.get("id"),str) and item["id"] in self.known_ids for item in items)
+                    row["responseObservation"]={"nextCursorSha256":sha(cursor.encode()) if cursor is not None else None,
+                                                "anchorIdSha256":sha(items[-1]["id"].encode()) if items else None}
             if method=="POST":
                 assert route==PRIVACY and self.privacy_attempted
                 row["bodyObservation"]={"keys":["confirmation","operation_id"],"canonicalSha256":sha(canonical(json.loads(body)))}

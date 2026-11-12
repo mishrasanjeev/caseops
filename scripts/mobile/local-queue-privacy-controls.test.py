@@ -111,6 +111,7 @@ class Protocol(unittest.TestCase):
 
         forwarded = []
         routes = [p.QUEUE + "?ownership=mine&dates=all&limit=25", p.PRIVACY]
+        responses = {routes[0]:b'{"items":[],"next_cursor":null}',routes[1]:b'{"request":null}'}
 
         class Upstream(BaseHTTPRequestHandler):
             def log_message(self, *_args):
@@ -121,7 +122,7 @@ class Protocol(unittest.TestCase):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(b'{"request":null}')
+                self.wfile.write(responses[self.path])
 
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -155,12 +156,12 @@ class Protocol(unittest.TestCase):
             try:
                 with patch.object(g, "upstream_destination", return_value=("127.0.0.1", upstream.server_port)):
                     for route in routes:
-                        self.assertEqual(request("GET", route), (200, b'{"request":null}'))
+                        self.assertEqual(request("GET", route), (200, responses[route]))
                     self.assertEqual(len(self.c.records), 2)
                     self.assertTrue(self.call("closeRunControls")["journalClosed"])
                     closed_bytes = journal_path.read_bytes()
                     for route in routes:
-                        self.assertEqual(request("GET", route), (200, b'{"request":null}'))
+                        self.assertEqual(request("GET", route), (200, responses[route]))
                     status, response = request("GET", "/__caseops_e2e/status")
                     self.assertEqual(status, 200)
                     state = json.loads(response)
@@ -252,8 +253,24 @@ class Protocol(unittest.TestCase):
         self.assertIn(identity,self.claims)
         with self.assertRaises(AssertionError):self.call('changeAnchor',case='QUEUE-01',args={'action':'change'},identity=identity)
     def test_query_observation_retains_only_cursor_digest(self):
-        self.c.after_native('GET',p.QUEUE,native=True,request_id='r',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25&cursor=OPAQUE_PRIVATE_CURSOR',status=200,data=b'{}',intercept=None)
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='r',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25&cursor=OPAQUE_PRIVATE_CURSOR',status=200,data=b'{"items":[],"next_cursor":null}',intercept=None)
         self.assertNotIn('OPAQUE_PRIVATE_CURSOR',json.dumps(self.c.records));self.assertEqual(self.c.records[0]['queryObservation']['cursorSha256'],p.sha(b'OPAQUE_PRIVATE_CURSOR'))
+    def test_queue_response_records_delivered_cursor_and_anchor_digests_only(self):
+        value={'items':[{'id':uid(11)}],'next_cursor':'INDEPENDENT_ENCRYPTED_NATIVE_CURSOR'}
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='native-page',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=json.dumps(value).encode(),intercept=None)
+        self.assertEqual(self.c.records[0]['responseObservation'],{'nextCursorSha256':p.sha(value['next_cursor'].encode()),'anchorIdSha256':p.sha(uid(11).encode())})
+        self.assertNotIn(value['next_cursor'],json.dumps(self.events))
+        self.assertNotIn(uid(11),json.dumps(self.events))
+    def test_queue_response_empty_page_has_explicit_null_cursor_and_anchor(self):
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='native-empty',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=b'{"items":[],"next_cursor":null}',intercept=None)
+        self.assertEqual(self.c.records[0]['responseObservation'],{'nextCursorSha256':None,'anchorIdSha256':None})
+    def test_queue_response_invalid_or_foreign_anchor_never_becomes_evidence(self):
+        for value in ({'items':[]},{'items':[],'next_cursor':''},{'items':[],'next_cursor':'x'*4001},
+                      {'items':[{'id':uid(99)}],'next_cursor':None},{'items':[{}],'next_cursor':None},
+                      {'items':[{'id':uid(11)}]*26,'next_cursor':None}):
+            before=len(self.c.records)
+            with self.assertRaises(AssertionError):self.c.after_native('GET',p.QUEUE,native=True,request_id='invalid-page',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=json.dumps(value).encode(),intercept=None)
+            self.assertEqual(len(self.c.records),before)
     def test_owner_account_mutation_and_wrong_recipe_status_refused(self):
         for edit in (lambda v:v['ownerExactRoutes'].append('POST '+p.PRIVACY),lambda v:v['ownerRecipes'][0]['requests'][2].update(expectedStatuses=[500])):
             v=registration();edit(v)

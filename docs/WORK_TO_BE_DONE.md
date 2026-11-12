@@ -1,3 +1,17 @@
+## 2026-11-12 — native Queue cursor evidence and restoration
+
+J20/M22, US-MOB-07/08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual b09f2523 Android and iOS
+Simulator builds passed. Android's new initial sign-in setup passed, but the
+complete Queue/Privacy run failed later: zero complete cases, Privacy suppressed
+after failed cleanup. The retained journal proves one native stale409 and no
+privacy POST, with closed authority. A serving-API probe reproduces why comparing
+independently encrypted cursor bytes is invalid. The candidate binds the actual
+native response/request digests and explicitly restores one acknowledged test
+change on failure without replaying an unknown mutation. Candidate modules pass
+49 Node and28 Python cases; full source/native replacement gates remain open.
+See [dated evidence and limits](mobile/NATIVE_QUEUE_CURSOR_2026-11-12.md).
+
 ## 2026-11-12 — initial native consent visibility
 
 J20/M22, US-MOB-01/02 and MOB-01/02 remain **Partially implemented; release

@@ -18,7 +18,79 @@ import { composeQPRegistration } from '../../../scripts/mobile/queue-privacy-reg
 import { pendingQueuePrivacyHost,runQueuePrivacyProducer } from '../../../scripts/mobile/produce-queue-privacy-fixture.mjs';
 import { createProducerStore,producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
 import { spawnSync } from 'node:child_process';
+import * as queueEvidence from './queue-privacy.mjs';
 const ROOT=path.resolve(fileURLToPath(new URL('../../../',import.meta.url))),id=n=>'00000000-0000-4000-8000-'+n.toString(16).padStart(12,'0');
+function observedCursorExchange() {
+ const delivered=hash(Buffer.from('independently-encrypted-native-cursor'));
+ const page={sequence:10,method:'GET',route:'/api/matter-work-queue',status:200,
+  queryObservation:{ownership:'mine',dates:'all',cursorSha256:null},
+  responseObservation:{nextCursorSha256:delivered,anchorIdSha256:hash(Buffer.from(id(14)))}};
+ const stale={sequence:11,method:'GET',route:'/api/matter-work-queue',status:409,
+  queryObservation:{ownership:'mine',dates:'all',cursorSha256:delivered}};
+ return {records:[page,stale],scope:{afterSequence:9,staleAfterSequence:10,anchorId:id(14)}};
+}
+test('stale Queue continuation binds the delivered native cursor rather than another encrypted read',()=>{
+ assert.equal(typeof queueEvidence.assertObservedStaleQueueCursor,'function');
+ const x=observedCursorExchange(),ownerCursor=hash(Buffer.from('separately-encrypted-owner-cursor'));
+ assert.notEqual(ownerCursor,x.records[0].responseObservation.nextCursorSha256);
+ const proof=queueEvidence.assertObservedStaleQueueCursor(x.records,x.scope);
+ assert.equal(proof.deliveredCursorSha256,x.records[1].queryObservation.cursorSha256);
+ assert.equal(proof.nativePageSequence,10);assert.equal(proof.staleRequestSequence,11);
+});
+test('stale Queue cursor proof rejects missing, substituted or wrong-anchor native page evidence',()=>{
+ assert.equal(typeof queueEvidence.assertObservedStaleQueueCursor,'function');
+ for(const edit of [x=>delete x.records[0].responseObservation,
+  x=>x.records[0].responseObservation.nextCursorSha256=hash(Buffer.from('another-response')),
+  x=>x.records[0].responseObservation.anchorIdSha256=hash(Buffer.from(id(15))),
+  x=>x.records[0].queryObservation.ownership='team',
+  x=>x.records[0].sequence=9]){
+  const x=observedCursorExchange();edit(x);assert.throws(()=>queueEvidence.assertObservedStaleQueueCursor(x.records,x.scope));
+ }
+});
+test('stale Queue cursor proof preserves exact single request, status, scope and ordering guards',()=>{
+ assert.equal(typeof queueEvidence.assertObservedStaleQueueCursor,'function');
+ for(const edit of [x=>x.records.push({...x.records[1],sequence:12}),x=>x.records[1].status=200,
+  x=>x.records[1].queryObservation.dates='dated',x=>x.records.reverse(),
+  x=>x.records[1].sequence=10,x=>x.records[1].queryObservation.cursorSha256=null]){
+  const x=observedCursorExchange();edit(x);assert.throws(()=>queueEvidence.assertObservedStaleQueueCursor(x.records,x.scope));
+ }
+});
+function anchorControlDouble({changeError,restoreError}={}){
+ const calls=[],events=[],anchor={id:id(14)};
+ const c={caseId:'QUEUE-01',controlCalls:0,record:event=>events.push(event),fixture:{qp:{dataset:{anchor}}},controls:{
+  changeAnchor:async input=>{calls.push(input.action);if(input.action==='change'&&changeError)throw changeError;
+   if(input.action==='restore'&&restoreError)throw restoreError;return {acknowledged:true,id:anchor.id,updatedAt:'2026-11-12T08:00:00Z'};},
+ }};
+ return {c,calls,events};
+}
+test('acknowledged Queue anchor change restores once after the original body fails',async()=>{
+ assert.equal(typeof queueEvidence.withQPAnchorRestoration,'function');
+ const x=anchorControlDouble(),original=new Error('synthetic body failure');
+ await assert.rejects(queueEvidence.withQPAnchorRestoration(x.c,async()=>{throw original;}),error=>error===original);
+ assert.deepEqual(x.calls,['change','restore']);assert.equal(x.c.controlCalls,2);
+});
+test('normal Queue anchor restoration is not replayed by completion cleanup',async()=>{
+ assert.equal(typeof queueEvidence.withQPAnchorRestoration,'function');
+ const x=anchorControlDouble();await queueEvidence.withQPAnchorRestoration(x.c,async({restore})=>{await restore();});
+ assert.deepEqual(x.calls,['change','restore']);
+ assert.deepEqual(x.events,[]);
+});
+test('unknown Queue change or restoration outcomes are never replayed',async()=>{
+ assert.equal(typeof queueEvidence.withQPAnchorRestoration,'function');
+ const unknown=new Error('synthetic unknown mutation');
+ const change=anchorControlDouble({changeError:unknown});
+ await assert.rejects(queueEvidence.withQPAnchorRestoration(change.c,async()=>{}),error=>error===unknown);assert.deepEqual(change.calls,['change']);
+ const restore=anchorControlDouble({restoreError:unknown});
+ await assert.rejects(queueEvidence.withQPAnchorRestoration(restore.c,async({restore})=>{await restore();}),error=>error===unknown);
+ assert.deepEqual(restore.calls,['change','restore']);
+});
+test('Queue body and cleanup failures retain both original errors without another restoration',async()=>{
+ assert.equal(typeof queueEvidence.withQPAnchorRestoration,'function');
+ const original=new Error('synthetic original'),cleanup=new Error('synthetic cleanup'),x=anchorControlDouble({restoreError:cleanup});
+ await assert.rejects(queueEvidence.withQPAnchorRestoration(x.c,async()=>{throw original;}),error=>error instanceof AggregateError&&error.errors[0]===original&&error.errors[1]===cleanup);
+ assert.deepEqual(x.calls,['change','restore']);
+ assert.deepEqual(x.events.map(event=>event.type),['qp_queue_body_failure','qp_queue_restore_failure']);
+});
 function pythonCompleted(child,phase){
  const diagnostic=JSON.stringify({phase,status:child.status,signal:child.signal,errorCode:child.error?.code??null,errorMessage:child.error?.message??null,stdout:child.stdout??'',stderr:child.stderr??''});
  assert.equal(child.error,undefined,diagnostic);assert.equal(child.status,0,diagnostic);
@@ -366,8 +438,20 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
  const state={page:0,ownership:'mine',dates:'all',screen:'work',selected:null,changed:false,actor:'member',privacy:'null',confirmation:false,receipt:null,armed:false};
  const fixture={appId:'ai.caseops.mobile.dev.localacceptance',udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},membershipId:dataset.membershipId,gatewayRunId:'synthetic-qp',gatewayUrl:'https://127.0.0.1:18443',qp:{dataset,nativeSelectors:{observed:true,udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},segments:{}}}};
  for(const[group,labels]of[['Task ownership',['Mine','Team','Unassigned']],['Task dates',['All dates','Dated','Undated']]])fixture.qp.nativeSelectors.segments[group]=Object.fromEntries(labels.map(label=>[label,{group,label,query:'android='+label,labelAttribute:'text'}]));
- const add=(method,route,status=200,extra={})=>{const r={sequence:records.length+1,method,route,status,nativeMarker:true,...extra};records.push(r);return r;};
- const page=(ownership=state.ownership,dates=state.dates,cursor=null)=>{const list=expectedQueue(tasks,ownership,dates,dataset.membershipId,dataset.teamPeerId);return{scope:'matter_tasks',ownership,dates,due_from:null,due_to:null,sort:'due_on_created_at_id',limit:25,items:structuredClone(list.slice(cursor?25:0,cursor?50:25)),next_cursor:!cursor&&list.length>25?'synthetic-next-'+tasks.find(t=>t.id===dataset.anchor.id).updated_at:null};};
+ let cursorSerial=0,deliveredCursor=null;
+ const add=(method,route,status=200,extra={})=>{
+  let observation={};
+  if(method==='GET'&&route==='/api/matter-work-queue'){
+   observation.queryObservation={ownership:state.ownership,dates:state.dates,cursorSha256:state.page&&deliveredCursor?hash(Buffer.from(deliveredCursor)):null};
+   if(status===200){const value=page(state.ownership,state.dates,state.page?'next':null);
+    observation.responseObservation={nextCursorSha256:value.next_cursor?hash(Buffer.from(value.next_cursor)):null,
+     anchorIdSha256:value.items.length?hash(Buffer.from(value.items.at(-1).id)):null};
+    if(!state.page)deliveredCursor=value.next_cursor;
+   }
+  }
+  const r={sequence:records.length+1,method,route,status,nativeMarker:true,...observation,...extra};records.push(r);return r;
+ };
+ const page=(ownership=state.ownership,dates=state.dates,cursor=null)=>{const list=expectedQueue(tasks,ownership,dates,dataset.membershipId,dataset.teamPeerId);return{scope:'matter_tasks',ownership,dates,due_from:null,due_to:null,sort:'due_on_created_at_id',limit:25,items:structuredClone(list.slice(cursor?25:0,cursor?50:25)),next_cursor:!cursor&&list.length>25?'synthetic-next-'+tasks.find(t=>t.id===dataset.anchor.id).updated_at+'-'+(++cursorSerial):null};};
  const current=()=>page(state.ownership,state.dates,state.page?'next':null);
  const receipt={id:id(900),operation_id:id(901),request_type:'account_deletion',status:'received',requested_at:'2026-10-27T12:00:00.123456Z',deletion_completed:false};
  const values=()=>{
@@ -401,7 +485,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
   },elementClick:async key=>{clicks.push(key);
    if(key.startsWith('android=')){const label=key.slice(8);if(['Mine','Team','Unassigned'].includes(label))state.ownership={Mine:'mine',Team:'team',Unassigned:'unassigned'}[label];else state.dates={'All dates':'all',Dated:'dated',Undated:'undated'}[label];state.page=0;add('GET','/api/matter-work-queue');}
    else if(key==='tab-work'){state.screen='work';state.selected=null;state.page=0;state.stale=false;add('GET','/api/matter-work-queue');}
-   else if(key==='queue-next'){if(state.changed){state.stale=true;add('GET','/api/matter-work-queue',409,{queryObservation:{cursorSha256:hash(Buffer.from(page().next_cursor.replace(tasks.find(t=>t.id===dataset.anchor.id).updated_at,dataset.tasks.find(t=>t.id===dataset.anchor.id).updated_at)))}});}else{state.page=1;add('GET','/api/matter-work-queue');}}
+   else if(key==='queue-next'){if(state.changed){state.stale=true;add('GET','/api/matter-work-queue',409,{queryObservation:{ownership:state.ownership,dates:state.dates,cursorSha256:hash(Buffer.from(deliveredCursor))}});}else{state.page=1;add('GET','/api/matter-work-queue');}}
    else if(key==='queue-first'){state.stale=false;state.page=0;add('GET','/api/matter-work-queue');}
    else if(/^queue-task-[a-f0-9-]{36}$/.test(key))state.selected=current().items.find(t=>t.id===key.slice(11));
    else if(key==='queue-back')state.selected=null;else if(key==='queue-open-matter')state.screen='matter';

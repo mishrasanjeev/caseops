@@ -14,6 +14,49 @@ async function fact(c,id){consume(c);return read(c,'id',id,{scroll:true});}
 async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
 async function control(c,name,args={}){assert.ok(++c.controlCalls<=24,'QP_CASE_CONTROL_BOUND');return c.controls[name]({caseId:c.caseId,...args});}
+export function assertObservedStaleQueueCursor(records,{afterSequence,staleAfterSequence,anchorId}){
+ assert.ok(Array.isArray(records)&&records.length<=100&&Number.isSafeInteger(afterSequence)&&afterSequence>=0
+  &&Number.isSafeInteger(staleAfterSequence)&&staleAfterSequence>=afterSequence,'QP_NATIVE_CURSOR_WINDOW_REQUIRED');
+ let previous=afterSequence;
+ for(const row of records){
+  assert.ok(Number.isSafeInteger(row.sequence)&&row.sequence>previous&&row.method==='GET'
+   &&row.route==='/api/matter-work-queue','QP_NATIVE_CURSOR_RECORD_ORDER_REQUIRED');previous=row.sequence;
+ }
+ const pages=records.filter(row=>row.sequence<=staleAfterSequence&&row.status===200
+  &&row.queryObservation?.ownership==='mine'&&row.queryObservation?.dates==='all'&&row.queryObservation?.cursorSha256===null);
+ assert.equal(pages.length,1,'QP_EXACT_DELIVERED_NATIVE_PAGE_REQUIRED');
+ const page=pages[0],response=page.responseObservation;
+ assert.match(response?.nextCursorSha256??'',/^[a-f0-9]{64}$/,'QP_DELIVERED_NATIVE_CURSOR_REQUIRED');
+ assert.equal(response.anchorIdSha256,hash(Buffer.from(anchorId)),'QP_DELIVERED_NATIVE_ANCHOR_REQUIRED');
+ const requests=records.filter(row=>row.sequence>staleAfterSequence);
+ assert.equal(requests.length,1,'QP_SINGLE_STALE_NATIVE_REQUEST_REQUIRED');
+ const request=requests[0];assert.equal(request.status,409,'QP_STALE_NATIVE_REJECTION_REQUIRED');
+ assert.equal(request.queryObservation?.ownership,'mine','QP_STALE_NATIVE_SCOPE_REQUIRED');
+ assert.equal(request.queryObservation?.dates,'all','QP_STALE_NATIVE_SCOPE_REQUIRED');
+ assert.equal(request.queryObservation?.cursorSha256,response.nextCursorSha256,'QP_DELIVERED_CURSOR_MUST_BE_SUBMITTED');
+ return {nativePageSequence:page.sequence,staleRequestSequence:request.sequence,
+  deliveredCursorSha256:response.nextCursorSha256,anchorIdSha256:response.anchorIdSha256};
+}
+export async function withQPAnchorRestoration(c,operation){
+ const changed=await control(c,'changeAnchor',{action:'change'});
+ assert.equal(changed.acknowledged,true);assert.equal(changed.id,c.fixture.qp.dataset.anchor.id);
+ let restoreAttempted=false,bodyFailure;
+ const restore=async()=>{
+  assert.equal(restoreAttempted,false,'QP_ANCHOR_RESTORE_REPLAY_REFUSED');
+  // Consume before dispatch: a lost restoration ACK must never be retried.
+  restoreAttempted=true;const result=await control(c,'changeAnchor',{action:'restore'});
+  assert.equal(result.acknowledged,true);assert.equal(result.id,changed.id);return result;
+ };
+ try{return await operation({changed,restore});}
+ catch(error){bodyFailure=error;c.record?.({type:'qp_queue_body_failure',reason:'QP_QUEUE_BODY_FAILED'});throw error;}
+ finally{
+  if(!restoreAttempted)try{await restore();}catch(cleanupFailure){
+   c.record?.({type:'qp_queue_restore_failure',reason:'QP_QUEUE_RESTORE_FAILED'});
+   if(bodyFailure)throw new AggregateError([bodyFailure,cleanupFailure],'QP_QUEUE_BODY_AND_RESTORE_FAILED');
+   throw cleanupFailure;
+  }
+ }
+}
 const queueSegments = {
   'Task ownership': ['Mine', 'Team', 'Unassigned'],
   'Task dates': ['All dates', 'Dated', 'Undated'],
@@ -320,15 +363,20 @@ export const queuePrivacyScenarios=Object.freeze([
    assert.deepEqual(actual.items.map(x=>x.id),expectedQueue(c.fixture.qp.dataset.tasks,ownership,dates,c.fixture.membershipId,c.fixture.qp.dataset.teamPeerId).slice(0,25).map(x=>x.id));
    if(ownership==='team')assert.match(await fact(c,'queue-ownership-meaning'),/Your own and unassigned tasks are excluded/);
   }
+  const selectionBefore=await traffic(c);
   const current=await selectQueue(c,'mine','all');assert.equal(current.items.at(-1).id,c.fixture.qp.dataset.anchor.id);
-  const changed=await control(c,'changeAnchor',{action:'change'});assert.equal(changed.acknowledged,true);assert.equal(changed.id,c.fixture.qp.dataset.anchor.id);
-  const staleBefore=await traffic(c);await tap(c,'queue-next');await wait(c,'queue-stale');await absent(c,'queue-next');await absent(c,'queue-task-detail');
-  const requests=(await control(c,'readNativeRequest',{method:'GET',route:'/api/matter-work-queue',afterSequence:staleBefore.lastSequence})).requests;
-  assert.equal(requests.length,1);assert.equal(requests[0].status,409);assert.equal(requests[0].queryObservation.cursorSha256,hash(Buffer.from(current.next_cursor)));
-  await tap(c,'queue-first');const fresh=await queue(c,'mine','all');await rows(c,fresh);assert.notEqual(fresh.items.at(-1).id,current.items.at(-1).id);
-  const restored=await control(c,'changeAnchor',{action:'restore'});assert.equal(restored.acknowledged,true);assert.equal(restored.id,changed.id);
-  await tap(c,'queue-first');const reloaded=await queue(c,'mine','all');await rows(c,reloaded);assert.deepEqual(reloaded.items.map(x=>x.id),page.items.map(x=>x.id));
-  assert.equal(reloaded.items.at(-1).due_on,page.items.at(-1).due_on);assert.equal(reloaded.items.at(-1).updated_at,restored.updatedAt);assert.notEqual(restored.updatedAt,page.items.at(-1).updated_at);
+  const changed=await withQPAnchorRestoration(c,async({changed,restore})=>{
+   const staleBefore=await traffic(c);await tap(c,'queue-next');await wait(c,'queue-stale');await absent(c,'queue-next');await absent(c,'queue-task-detail');
+   const requests=(await control(c,'readNativeRequest',{method:'GET',route:'/api/matter-work-queue',afterSequence:selectionBefore.lastSequence})).requests;
+   const proof=assertObservedStaleQueueCursor(requests,{afterSequence:selectionBefore.lastSequence,
+    staleAfterSequence:staleBefore.lastSequence,anchorId:current.items.at(-1).id});
+   event(c,'delivered-native-cursor-rejected',proof);
+   await tap(c,'queue-first');const fresh=await queue(c,'mine','all');await rows(c,fresh);assert.notEqual(fresh.items.at(-1).id,current.items.at(-1).id);
+   const restored=await restore();
+   await tap(c,'queue-first');const reloaded=await queue(c,'mine','all');await rows(c,reloaded);assert.deepEqual(reloaded.items.map(x=>x.id),page.items.map(x=>x.id));
+   assert.equal(reloaded.items.at(-1).due_on,page.items.at(-1).due_on);assert.equal(reloaded.items.at(-1).updated_at,restored.updatedAt);assert.notEqual(restored.updatedAt,page.items.at(-1).updated_at);
+   return changed;
+  });
   await tapQueueTask(c,page.items[0].id);await wait(c,'queue-task-detail');await tap(c,'queue-open-matter');await wait(c,'screen-matter');assert.equal(await fact(c,'matter-code'),page.items[0].matter.matter_code);
   await home(c,'work');await wait(c,'matter-task-queue');await absent(c,'queue-task-detail');
   const native=await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence});assert.equal(native.requests.length,0);
