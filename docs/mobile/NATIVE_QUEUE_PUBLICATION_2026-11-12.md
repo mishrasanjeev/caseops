@@ -68,3 +68,18 @@ source gate, new source-bound binaries and both platform native inventories
 remain required. Historical a82ded25 Core23/Files17 acceptance stays separate.
 V1, client-extension, camera/biometric, production association, distribution
 signing, reviewer readiness, CI and store submission remain open.
+
+## Retained complete source candidate failure
+
+`frozen-source-6bf8c2ab/` completed all20 commands. The harness passed1690 of1692
+cases with its two unchanged platform-specific skips; all17 Python modules
+passed. Mobile units ran686 cases:685 passed and the stalled-private-body
+fixture failed its consumed-chunk zeroing assertion. The fixture constructed
+its Response inside a ten-millisecond request budget without first proving the
+chunk was consumed. An unconsumed queued chunk is not owned by the transport.
+The replacement fixture keeps the exact ten-millisecond deadline, controls
+its timer and clock together, disables stream prefetch, and waits for the
+second read before asserting consumed-byte erasure. It proves no cancellation
+at nine milliseconds and cancellation at ten. Production transport, TLS,
+permissions, byte caps, cancellation and all original assertions are unchanged.
+The original failed report is preserved; a full replacement gate is required.
