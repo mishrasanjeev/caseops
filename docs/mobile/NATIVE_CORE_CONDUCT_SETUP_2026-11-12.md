@@ -63,3 +63,16 @@ used the wrong host runtime/dependency path and remains incomplete; the pinned
 runtime replacement passed. A final source gate on the committed candidate
 remains required. No native, production, signed archive or store pass is inferred
 from these unit contracts.
+
+
+## Complete replacement result
+
+The replacement run finished at 2026-11-12T18:01:47Z: all 23 cases, all 69 phases,
+zero failed/unexecuted/blocked scenarios, 23 unique created/deleted Appium session
+pairs, postflight passed and native exit 0 with no timeout. Independent
+reconciliation is `iosc8dd-core-full-03/reconciled-proof.json` in the task cache.
+It binds the actual cb8fb3d8… Simulator bundle, c8dd source/fingerprint, backend
+receipt, immutable gateway policy and auth/consent preparation. The failed run
+remains separate. This proves the complete Core23 cohort on that Simulator
+candidate; the other 60 cases, distribution signing and store submission are
+still outstanding. Simulator/Appium were stopped after the complete result.
