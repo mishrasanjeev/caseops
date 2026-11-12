@@ -2,6 +2,15 @@
 
 ## Evidence Boundary
 
+Shared-CI continuation at7949: Linux source job131289812797 retained one
+stale npm constructor hash/size reference in the shared host launcher; its
+1568-case harness is1564passed/1failed/3explicit skips. All eleven new portable
+controls pass; the new native Windows case skips on Linux. Refreshing only
+the exact reviewed hash/size pin is a follow-up candidate, not a bypass or
+MacBook/iOS app change. Native Windows and complete later-source gates remain
+required. The686 earlier-source checks pass separately; do not sum overlapping
+harnesses or call this whole CI green.
+
 Source: `CaseOps_Bugs (5).xlsx`, Bug Sheet rows 2-21, SHA256
 `0bc0288a03fb539abd5f9557e4739e1b6282f1c2af090fcd1ace1c0e631a776d`.
 There are 20 populated, distinct reports, not 20 proven software defects.

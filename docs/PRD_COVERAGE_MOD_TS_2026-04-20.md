@@ -1,5 +1,12 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+November12 J14/M14 shared-CI evidence at7949: actual Windows archive permission
+and CLI test passes in72-case installed harness(71P/1POSIXskip); all11new
+portable controls pass on Linux. Linux1568-case source harness retains one
+stale reviewed-source hash/size pin failure, plus3explicit skips. Its exact
+reference update is not changed iOS app behavior or MacBook acceptance. Whole
+later-source CI/Docker/production remain due; separate native advisory618 open.
+
 ## November 11 Workbook 5 Coverage Pending
 
 Existing J07/M06, J10/M09, J03/J08/M10 and J05/M05 own draft PDF parity,

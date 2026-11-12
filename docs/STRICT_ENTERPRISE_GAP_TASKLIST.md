@@ -1,5 +1,22 @@
 # Strict Enterprise Gap Tasklist
 
+## November12 Shared CI Follow-Up Evidence
+
+At7949d13a, Security43249131963 and matched CodeQL43249131982 pass.
+Windows installed job131289812798 passes72actual=71passed/1POSIXskip,
+including the new actual Windows retained-handle/ACL/CLI test. The separate
+Linux source harness is1568=1564passed/1stale-source-pin failure/3explicit
+skips. Update only the shared launcher hash/size reference to reviewed npm
+tooling bytes; keep exact-source and tamper checks unchanged. Later-source
+whole CI/local Docker/deployed acceptance remain required, not certified.
+
+Open [native issue618](https://github.com/mishrasanjeev/caseops/issues/618)
+records one moderate node-forge package finding (four component advisories)
+in the physical native graph. The configured high/critical gate passes, not
+an advisory-free verdict or evidence of server reachability. Preserve this
+for separate MacBook/native release review; do not alter app archives/locks,
+native source or MacBook execution under the server/shared-CI task.
+
 ## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
 
 Shared-CI readiness is separately source-only: actual Windows preparation

@@ -36,6 +36,9 @@ Two Windows pre-audit failures are retained. CI-only exact pinned-archive
 hardening, unchanged whole-operation budgets and12new regression declarations
 still need actual standard tooling/native Windows/green CI acceptance. Default
 readers, trust/owner/byte/namespace fences and apps/mobile bytes remain unchanged.
+The7949 Linux harness exposed a stale shared-host reference to the changed npm
+constructor. Refresh only that exact hash/size, preserving all source-binding
+and tamper checks; native Windows and full later-source CI are still owed.
 
 Current follow-up: exact structured identity equality and two nonunique
 concurrent expression indexes replace range proposals in isolated source.

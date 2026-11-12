@@ -4199,3 +4199,7 @@ requirements when using the fallback.
   absolute end. Do not reset that budget between phases or return success
   after a late final read. Preserve the original failed transport diagnosis
   and prove both cold-start admission and late-success rejection explicitly.
+- Updating shared tooling must also refresh every reviewed hash-and-size
+  reference to those exact source bytes. Keep the consumer's binding and
+  tamper rejection unchanged; a setup refusal from a stale pin is not an app
+  failure or permission to bypass the held-source verification.
