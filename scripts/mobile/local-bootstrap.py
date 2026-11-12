@@ -24,7 +24,7 @@ PLATFORMS = ("android", "ios")
 DEVICE_OUTPUT_LIMIT = 65536
 MARKER = {"X-CaseOps-Automated-Test": "no-paid-providers"}
 CORE_SCREEN_READS = frozenset({"GET /api/auth/native/sessions", "GET /api/account/deletion-requests",
-                               "GET /api/matter-work-queue"})
+                               "GET /api/matter-work-queue", "GET /api/account/workspace-conduct"})
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
              "apps/api/pyproject.toml", "apps/api/uv.lock",

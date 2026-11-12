@@ -402,7 +402,9 @@ jobs:
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
-            -o faulthandler_timeout=60
+            -p tests.postgres_thread_diagnostics
+            --postgres-thread-diagnostics-after=60
+            -o faulthandler_timeout=0
         run: uv run python ../../scripts/pytest_native_receipt.py "postgres-native-exit-${{ matrix.shard }}.json" -- -q -m postgres
 
       - name: Upload exact PostgreSQL collection and results

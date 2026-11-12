@@ -903,6 +903,8 @@ class PortabilityTests(unittest.TestCase):
                 self.assertIn("GET /api/auth/native/sessions", after["routes"])
                 self.assertIn("GET /api/account/deletion-requests", after["routes"])
                 self.assertIn("GET /api/matter-work-queue", after["routes"])
+                self.assertIn("GET /api/account/workspace-conduct", after["routes"])
+                self.assertNotIn("POST /api/account/workspace-conduct/accept", after["routes"])
                 self.assertNotIn("POST /api/account/deletion-requests", after["routes"])
                 self.assertFalse(any(route.startswith("DELETE") for route in after["routes"]))
                 self.assertEqual((root / "seed.json").read_text(), base)
@@ -1299,7 +1301,7 @@ class GatewayTests(unittest.TestCase):
             response = client.getresponse()
             return response.status, response.read()
 
-    def test_initial_fixture_route_inventory_adds_only_exact_compatibility_get(self):
+    def test_initial_fixture_route_inventory_adds_exact_compatibility_and_conduct_gets(self):
         retained = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
                     "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
                     "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
@@ -1307,7 +1309,7 @@ class GatewayTests(unittest.TestCase):
                     "GET /api/matters/unit-matter/workspace", "POST /api/matters/unit-matter/notes",
                     "GET /api/matters/unit-matter/drafts", "GET /api/matters/unit-matter/drafts/unit-draft"}
         actual = fixture_module.initial_gateway_routes("unit-matter", "unit-draft")
-        self.assertEqual(actual, retained | {"GET /api/auth/native/compatibility"})
+        self.assertEqual(actual, retained | {"GET /api/auth/native/compatibility", "GET /api/account/workspace-conduct"})
         (self.root / "gateway-routes.json").write_text(json.dumps({"routes": sorted(actual)}))
         self.assertEqual(self.gateway.allowed(), actual)
 

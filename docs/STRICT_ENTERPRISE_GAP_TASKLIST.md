@@ -4827,6 +4827,49 @@ dirty-harness proof earns zero full-case credit; complete replacement acceptance
 and the release NO-GO remain unchanged.
 
 
+### 2026-11-12 native Core rules setup
+
+J20/M22 / US-MOB-01..08 remain Partially implemented, Inconclusive and release
+NO-GO. The full c8dd iOS Core23 run had 8 passing cases, 14 failed phases and
+8 unexecuted calls; all 23 sessions were closed. NATIVE-09 reached Add note, then
+the missing policy GET blocked its editor. Exact read admission and synthetic
+native consent setup now have focused actual Simulator proof; a complete
+replacement run is still pending. See
+[the dated evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md).
+The 300b CodeQL analyses and independent alert verdict pass without waiver;
+main CI, remaining native inventories, signing and store submission are not
+inferred from that result.
+
+
+### 2026-11-12 Android-first packaging scope
+
+J20/M22 remains Partially implemented / Inconclusive / NO-GO. Schema-v2 reviewed
+store gates now bind the exact shipping platform, preserving all 14 common gates
+and its own native acceptance; the other platform is independent. Complete
+32-case executor contracts pass, with no actual distribution acceptance or
+submission inferred. The LINK-05 qualification/build cycle remains open. See
+[the platform gate record](mobile/STORE_PLATFORM_GATES_2026-11-12.md).
+
+
+### 2026-11-12 replacement iOS Core and CI diagnostic evidence
+
+J20/M22 / US-MOB-01..08 release remains Inconclusive / NO-GO. The separate full
+iOS Core23 replacement now passes all 69 phases, postflight, native exit 0 and
+all 23 unique session cleanups; the old failed run remains retained. See
+[Core evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md). The remaining
+60 iOS cases are not inferred. Android's remaining native work and both store
+submissions remain outstanding.
+
+300b CI shard 9 crashed on SIGSEGV during a partial 60-second thread dump; its
+127 selected cases include only 67 completed passes. The exact crash cause is
+Inconclusive without a core backtrace. An equally timed Python-owned observer,
+with fatal crash handling and all budgets/assertions intact, passed a physical
+60-second qualification plus all 147 affected native Python/PG cases (441 phases,
+native exit 0). See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
+New hosted CI is still required; no mobile/store case credit is granted by that
+infrastructure replay.
+
+
 ### 2026-11-13 — native V1 fixture foundations (partial)
 
 See [V1 fixture foundations](mobile/V1_FIXTURE_FOUNDATIONS_2026-11-13.md).
