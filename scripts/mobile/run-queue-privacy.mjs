@@ -155,9 +155,9 @@ export async function admitQPBeforeMembers(q,dependencies={}){
  return{fixture,isolation,source,actual,members,controls,publicAdmission:{source,installed:actual,beforeMemberRead:true}};
 }
 export async function withQPActor(member,action){const prior=new Map();try{for(const[key,field]of[['emailEnv','email'],['passwordEnv','password'],['totpSecretEnv','totp_secret']]){const name=member.fixture.auth[key];prior.set(name,process.env[name]);process.env[name]=member.value[field];}return await action();}finally{for(const[name,value]of prior){if(value===undefined)delete process.env[name];else process.env[name]=value;}}}
-async function logout(c){
+export async function logoutQPAccount(c){
  const open=await visible(c.driver,selector(c.platform,'id','account-open'));if(open)await dispatchNativeClick(c,open,'id','account-open');
- assert.equal(await(await find(c,'id','account-principal')).getText(),c.fixture.principalLabel);const before=await localJson(c.fixture.gatewayUrl+'/__caseops_e2e/status');
+ assert.equal(await(await find(c,'id','account-principal',{scroll:true,scrollDirection:'up'})).getText(),c.fixture.principalLabel);const before=await localJson(c.fixture.gatewayUrl+'/__caseops_e2e/status');
  await dispatchNativeClick(c,await find(c,'id','sign-out',{scroll:true}),'id','sign-out');await c.driver.waitUntil(async()=>!!await visible(c.driver,selector(c.platform,'id','signed-out'))&&!await visible(c.driver,selector(c.platform,'id','session-loading')),{timeout:20000,interval:200});
  const after=await localJson(c.fixture.gatewayUrl+'/__caseops_e2e/status');assert.equal(after.requests.slice(before.lastSequence).filter(r=>r.method==='POST'&&r.route==='/api/auth/native/logout'&&r.status===204).length,1);
  assert.equal((await c.driver.$$(selector(c.platform,'id','privacy-request-receipt'))).length,0);assert.equal((await c.driver.$$(selector(c.platform,'id','queue-task-detail'))).length,0);
@@ -180,13 +180,13 @@ export async function runQueuePrivacy(q){
       ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})}});
     sessionId=driver.sessionId;journal.write({...appiumSessionEvent(sessionId,'created'),id});if(q.platform==='android')verifyAndroidSessionTransport(f,q.platform,driver.capabilities);await configureNativeDriver(driver, q.platform, event => journal.write({ ...event, id }));await driver.switchContext('NATIVE_APP');
     c={fixture:{...f,qp:a.fixture.qp},platform:q.platform,driver,caseId:scenario.id,controls,gatewayBaseline:baseline,nativeOperations:0,controlCalls:0,authoritativeReads:0,record:e=>journal.write({...e,id})};
-    c.switchActor=async actor=>{await logout(c);const member=a.members[actor==='second-company'?1:0];c.fixture={...member.fixture,qp:a.fixture.qp};await withQPActor(member,()=>authenticate(c,{fresh:true}));state.actor=member;};
+    c.switchActor=async actor=>{await logoutQPAccount(c);const member=a.members[actor==='second-company'?1:0];c.fixture={...member.fixture,qp:a.fixture.qp};await withQPActor(member,()=>authenticate(c,{fresh:true}));state.actor=member;};
     await withQPActor(a.members[0],()=>authenticate(c,{fresh:true}));state.actor=a.members[0];setup=true;journal.write({type:'phase_result',id,phase:'setup',status:'passed'});
    }catch(e){cleanupUncertain=true;journal.write({type:'phase_result',id,phase:'setup',status:'failed',reason:safeFailure(e,'QP_SETUP_FAILED')});}
    journal.write({type:'phase_started',id,phase:'call'});if(setup)try{await scenario.run(c);journal.write({type:'phase_result',id,phase:'call',status:'passed'});}catch(e){journal.write({type:'phase_result',id,phase:'call',status:'failed',reason:safeFailure(e,'QP_CALL_FAILED')});}else journal.write({type:'phase_result',id,phase:'call',status:'not-run',reason:'SETUP_FAILED'});
    journal.write({type:'phase_started',id,phase:'teardown'});let clean=true;
    try{const r=await controls.closeCaseControls({caseId:scenario.id});assert.equal(r.allOwnedControlsClosed,true);}catch{clean=false;}
-   if(driver){try{if(setup)await logout(c);}catch{clean=false;}try{await driver.deleteSession();journal.write({...appiumSessionEvent(sessionId,'deleted'),id});}catch{clean=false;}}
+   if(driver){try{if(setup)await logoutQPAccount(c);}catch{clean=false;}try{await driver.deleteSession();journal.write({...appiumSessionEvent(sessionId,'deleted'),id});}catch{clean=false;}}
    else if(requested)clean=false;
    cleanupUncertain||=!clean;journal.write({type:'qp_case_budget',id,nativeControls:c?.nativeOperations,logicalControlCalls:c?.controlCalls,actualTransport:controls.publicState()});journal.write({type:'phase_result',id,phase:'teardown',status:clean?'passed':'failed'});
   }

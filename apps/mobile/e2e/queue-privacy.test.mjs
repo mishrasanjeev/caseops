@@ -12,7 +12,7 @@ import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDe
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
 import { androidQueuePage, assertQPPrivacyControlsAbsent, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
-import { admitQPBeforeMembers,pendingQPRequest,withQPActor } from '../../../scripts/mobile/run-queue-privacy.mjs';
+import { admitQPBeforeMembers,pendingQPRequest,withQPActor,logoutQPAccount } from '../../../scripts/mobile/run-queue-privacy.mjs';
 import { createControls,V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/queue-privacy-controls.mjs';
 import { composeQPRegistration } from '../../../scripts/mobile/queue-privacy-registration.mjs';
 import { pendingQueuePrivacyHost,runQueuePrivacyProducer } from '../../../scripts/mobile/produce-queue-privacy-fixture.mjs';
@@ -569,4 +569,31 @@ test('Android privacy absence rejects a stale control below the status viewport'
   const clean = androidViewportDouble({ initial: 2, status: async () => 'Request received' });
   await assertQPPrivacyControlsAbsent(clean.c, ['privacy-request-start']);
   assert.deepEqual(clean.gestures, ['up', 'up', ...Array(8).fill('down')]);
+});
+
+async function scrolledPrivacyLogout({wrongPrincipal=false,logoutStatus=204}={}) {
+ const originalFetch=globalThis.fetch,clicks=[],swipes=[];let page=5,signedOut=false,reads=0;
+ const element=id=>({elementId:id,isDisplayed:async()=>true,getText:async()=>id==='account-principal'?(wrongPrincipal?'Other synthetic member':'Synthetic member'):id});
+ const driver={
+  $$:async query=>{const id=query.replace(/^id=/,'');
+   if(id==='account-principal'&&!signedOut&&page===0)return[element(id)];
+   if(id==='sign-out'&&!signedOut&&page===5)return[element(id)];
+   if(id==='signed-out'&&signedOut)return[element(id)];return[];},
+  waitUntil:async(condition,{timeoutMsg}={})=>{if(!await condition())throw Error(timeoutMsg||'condition not met');},
+  getWindowRect:async()=>({width:400,height:800}),
+  performActions:async actions=>{const moves=actions[0].actions.filter(x=>x.type==='pointerMove');const up=moves[1].y>moves[0].y;swipes.push(up?'up':'down');page=Math.max(0,Math.min(5,page+(up?-1:1)));},
+  releaseActions:async()=>{},
+  elementClick:async id=>{clicks.push(id);assert.equal(id,'sign-out');assert.equal(page,5);signedOut=true;},
+ };
+ globalThis.fetch=async(_url,options)=>{assert.equal(options.method,'GET');assert.equal(options.headers['X-CaseOps-Automated-Test'],'no-paid-providers');reads++;
+  return new Response(JSON.stringify(reads===1?{lastSequence:0,requests:[]}:{lastSequence:1,requests:[{method:'POST',route:'/api/auth/native/logout',status:logoutStatus}]}),{status:200});};
+ try {await logoutQPAccount({platform:'android',driver,fixture:{principalLabel:'Synthetic member',gatewayUrl:'https://127.0.0.1:9743'}});}
+ finally {globalThis.fetch=originalFetch;if(wrongPrincipal){assert.deepEqual(clicks,[]);assert.equal(reads,0);}else{assert.deepEqual(clicks,['sign-out']);assert.equal(reads,2);}}
+ return {clicks,swipes,reads,signedOut};
+}
+test('Queue privacy logout restores the header from the receipt before one acknowledged sign-out',async()=>{
+ const result=await scrolledPrivacyLogout();assert.deepEqual(result.clicks,['sign-out']);assert.equal(result.signedOut,true);assert.equal(result.reads,2);assert.ok(result.swipes.includes('up'));assert.ok(result.swipes.includes('down'));
+});
+test('Queue privacy logout still refuses another principal and an unacknowledged sign-out',async()=>{
+ await assert.rejects(scrolledPrivacyLogout({wrongPrincipal:true}));await assert.rejects(scrolledPrivacyLogout({logoutStatus:500}));
 });

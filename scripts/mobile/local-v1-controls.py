@@ -109,9 +109,10 @@ def create_journal(root, identity):
         os.close(descriptor)
         raise
     count, closed = 0, False
+    lease = threading.Lock()
     def metadata(value):
         return tuple(getattr(value, key) for key in ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns"))
-    def persist(record):
+    def append(record):
         nonlocal expected, count
         assert not closed and count < 2 * (LIMITS["operations"] + LIMITS["finalCleanupOperations"]) + LIMITS["nativeRecords"]
         assert metadata(expected) == metadata(os.fstat(descriptor)) == metadata(target.lstat())
@@ -127,11 +128,18 @@ def create_journal(root, identity):
         final = os.fstat(descriptor)
         assert final.st_size == expected.st_size + len(data) and metadata(final) == metadata(target.lstat())
         expected, count = final, count + 1
+    def persist(record):
+        # Native response observers and control completions run on different
+        # gateway threads. Own the metadata check, write, fsync and metadata
+        # commit together; neither another append nor close may interleave.
+        with lease:
+            append(record)
     def close():
         nonlocal closed
-        if not closed:
-            closed = True
-            os.close(descriptor)
+        with lease:
+            if not closed:
+                closed = True
+                os.close(descriptor)
     return persist, close
 
 

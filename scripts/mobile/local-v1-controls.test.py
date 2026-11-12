@@ -438,6 +438,57 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(len(descriptors), 1)
             with self.assertRaises(OSError): os.fstat(descriptors[0])
 
+    def test_concurrent_native_and_control_journal_records_share_one_commit(self):
+        self.journal_concurrency(close_second=False)
+
+    def test_journal_close_waits_for_the_owned_append_to_finish(self):
+        self.journal_concurrency(close_second=True)
+
+    def journal_concurrency(self, *, close_second):
+        # Stop the real descriptor after write but before its metadata commit.
+        # A native response and a control completion use this same journal.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            persist, close = M.create_journal(root, "e" * 32)
+            entered, release, attempted, completed = (threading.Event() for _ in range(4))
+            failures = []
+            original_sync = M.os.fsync
+            def sync(fd):
+                if threading.current_thread().name == "native-journal-writer":
+                    entered.set()
+                    if not release.wait(3): raise TimeoutError("synthetic journal release missing")
+                return original_sync(fd)
+            def first():
+                try: persist({"type": "native"})
+                except BaseException as error: failures.append(error)
+            def second():
+                attempted.set()
+                try:
+                    if close_second: close()
+                    else: persist({"type": "control"})
+                except BaseException as error: failures.append(error)
+                finally: completed.set()
+            a = threading.Thread(target=first, name="native-journal-writer")
+            b = threading.Thread(target=second, name="control-journal-writer")
+            with patch.object(M.os, "fsync", side_effect=sync):
+                try:
+                    a.start()
+                    self.assertTrue(entered.wait(2))
+                    b.start()
+                    self.assertTrue(attempted.wait(2))
+                    self.assertFalse(completed.wait(0.05), "parallel journal action escaped the append lease")
+                finally:
+                    release.set()
+                    a.join(3)
+                    if b.ident is not None: b.join(3)
+                    close()
+            self.assertFalse(a.is_alive())
+            self.assertFalse(b.is_alive())
+            self.assertEqual(failures, [])
+            rows = [json.loads(line) for line in (root / ("v1-control-events-" + "e" * 32 + ".jsonl")).read_text().splitlines()]
+            self.assertEqual(rows, [{"type": "native"}] if close_second else [{"type": "native"}, {"type": "control"}])
+            with self.assertRaises(AssertionError): persist({"type": "after-close"})
+
     def test_failed_manager_construction_closes_journal_and_owner_independently(self):
         value = registration(); value["implementationSha256"] = "c" * 64
         value.update(backendRevision="api", webRevision="web")
