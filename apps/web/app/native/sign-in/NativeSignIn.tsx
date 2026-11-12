@@ -411,7 +411,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                   </form>
                 ) : !handoffExpired ? (
                   <Button
-                    autoFocus={!pending && notice === MFA_VERIFIED_NOTICE}
+                    autoFocus={!pending}
                     className="min-h-12 w-full"
                     disabled={pending}
                     onClick={() => void connect()}

@@ -57,6 +57,35 @@ describe("native browser handoff consent", () => {
     vi.useRealTimers();
   });
 
+  it("focuses the initial verified consent control without submitting authorization", async () => {
+    mocks.api.mockResolvedValueOnce(identity);
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    const connect = await screen.findByRole("button", { name: "Connect app" });
+    expect(connect).toHaveFocus();
+    expect(connect).toBeEnabled();
+    expect(screen.getByText(identity.user.email)).toBeVisible();
+    expect(mocks.api.mock.calls.map(([route]) => route)).toEqual(["/api/auth/me"]);
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("does not focus or display a late identity from an earlier authorization request", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.api
+      .mockImplementationOnce(() => new Promise((done) => { finish = done; }))
+      .mockRejectedValueOnce({ name: "ApiError", status: 401, problemType: "unauthorized", detail: "Sign in.", data: null });
+    const view = render(<NativeSignIn policy={LOCAL_POLICY} />);
+    mocks.query = new URLSearchParams({ code_challenge: "c".repeat(43), state: "d".repeat(64), platform: "android", redirect_uri: "caseops://oauth/callback" }).toString();
+    view.rerender(<NativeSignIn policy={LOCAL_POLICY} />);
+    const signIn = await screen.findByRole("link", { name: "Sign in securely" });
+    signIn.focus();
+    await act(async () => { finish(identity); });
+    expect(signIn).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Connect app" })).not.toBeInTheDocument();
+    expect(screen.queryByText(identity.user.email)).not.toBeInTheDocument();
+    expect(mocks.api.mock.calls.map(([route]) => route)).toEqual(["/api/auth/me", "/api/auth/me"]);
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
   it("waits for an explicit app-opening gesture after one acknowledged grant", async () => {
     mocks.api.mockResolvedValueOnce(identity).mockResolvedValueOnce({
       code: "c".repeat(43),
@@ -469,6 +498,10 @@ describe("native browser handoff consent", () => {
     expect(
       await screen.findByRole("button", { name: "Connect app" }),
     ).toBeVisible();
+    // The new request may focus its own initial consent control. A late MFA
+    // result from the old request must still preserve the user's later focus.
+    const anotherAccount = screen.getByRole("link", { name: "Use another account" });
+    anotherAccount.focus();
     await act(async () => {
       finish({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
     });
@@ -476,6 +509,7 @@ describe("native browser handoff consent", () => {
       expect(screen.queryByText(/Code verified/)).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "Connect app" })).not.toHaveFocus();
+    expect(anotherAccount).toHaveFocus();
     expect(mocks.api.mock.calls.map((call) => call[0])).toEqual([
       "/api/auth/me",
       "/api/auth/native/authorize",
