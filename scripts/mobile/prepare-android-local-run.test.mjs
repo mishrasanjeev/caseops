@@ -575,3 +575,22 @@ test('USB Android transport requires canonical separate HTTPS loopback origins, 
   assert.throws(() => validateAndroidTransport(base, 'android', { apiOrigin: base.apiOrigin, webOrigin: 'https://127.0.0.1:4443' }),
     /ANDROID_TRANSPORT_USB_BUILD_ORIGIN_MISMATCH/);
 });
+
+test('a credential-free native compatibility read before the rejected browser refresh preserves the complete auth spine', () => {
+  const rows = recordedBrowserProbeRows();
+  rows.unshift({ method: 'GET', route: '/api/auth/native/compatibility', status: 200, nativeMarker: true, browserHandoff: false });
+  rows.splice(2, 0, { method: 'OPTIONS', route: '/api/auth/refresh', status: 200, nativeMarker: true, browserHandoff: true });
+  const original = structuredClone(rows);
+  assert.deepEqual(validateObservedAndroidAuthTraffic(rows, { mfaRequired: true, mfaStage: 'consent' }),
+    { rejectedPreLoginBrowserRefreshes: 1, loggedOutBrowserIdentityReads: 2 });
+  assert.deepEqual(rows, original);
+});
+
+test('the public compatibility exception does not excuse authenticated identity success, another route or another method', () => {
+  for (const [method, route] of [['GET', '/api/auth/me'], ['HEAD', '/api/auth/native/compatibility'],
+    ['GET', '/api/auth/native/compatibility-extra']]) {
+    const rows = recordedBrowserProbeRows();
+    rows.unshift({ method, route, status: 200, nativeMarker: true, browserHandoff: false });
+    assert.throws(() => validateObservedAndroidAuthTraffic(rows, { mfaRequired: true, mfaStage: 'consent' }), /NO_AUTH_SUCCESS_BEFORE_REJECTED_REFRESH/);
+  }
+});
