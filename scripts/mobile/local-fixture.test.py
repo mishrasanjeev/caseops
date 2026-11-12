@@ -1782,6 +1782,65 @@ class GatewayTests(unittest.TestCase):
             transport.assert_not_called()
         self.assertEqual(self.gateway.state["markerRejected"], 1)
 
+    def test_qa_route_rejection_retains_allowlisted_status_timing_without_private_bytes(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER, "Authorization": "Bearer cnat_SYNTHETIC"}
+        with patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+            status, _ = self.request("POST", "/api/auth/native/refresh?discarded=synthetic-query", headers, b'{"refresh_token":"SYNTHETIC_PRIVATE"}')
+            self.assertEqual(status, 403)
+            upstream.assert_not_called()
+        rows = self.gateway.state["rejectedRequests"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(set(row), {"type", "runId", "rejectionSequence", "routeTemplate", "routeSha256", "status", "authorityClass", "observedAtUnixMs", "decisionMs"})
+        self.assertEqual(row["type"], "qa_route_rejection")
+        self.assertEqual(row["routeTemplate"], "POST /api/auth/native/refresh")
+        self.assertEqual(row["routeSha256"], hashlib.sha256(b"POST /api/auth/native/refresh").hexdigest())
+        self.assertEqual((row["status"], row["authorityClass"], row["rejectionSequence"]), (403, "native", 1))
+        self.assertIs(type(row["observedAtUnixMs"]), int)
+        self.assertGreater(row["observedAtUnixMs"], 0)
+        self.assertGreaterEqual(row["decisionMs"], 0)
+        self.assertLessEqual(row["decisionMs"], 20000)
+        journal = Path(self.gateway.journal.name).read_text()
+        self.assertEqual(json.loads(journal), row)
+        for forbidden in ("SYNTHETIC", "discarded", "refresh_token", "?", "Bearer"):
+            self.assertNotIn(forbidden, journal)
+        self.assertEqual(self.gateway.state["routeRejected"], 1)
+        self.assertEqual(self.gateway.state["requests"], [])
+
+    def test_qa_rejection_unknown_paths_remain_redacted_and_disabled_profiles_keep_no_diagnostic(self):
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        for registration in ({"profile": "queue-privacy-v1", "syntheticDataOnly": False},
+                             {"profile": "source-work-v3", "syntheticDataOnly": True}):
+            self.gateway.v1 = SimpleNamespace(closed=True, registration=registration)
+            status, _ = self.request("GET", "/api/unreviewed/private-value", headers)
+            self.assertEqual(status, 403)
+            self.assertNotIn("rejectedRequests", self.gateway.state)
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        status, _ = self.request("GET", "/api/unreviewed/private-value?query=discarded", headers)
+        self.assertEqual(status, 403)
+        row = self.gateway.state["rejectedRequests"][0]
+        self.assertEqual(row["routeTemplate"], "unclassified")
+        self.assertIsNone(row["routeSha256"])
+        self.assertEqual(row["authorityClass"], "other")
+        self.assertNotIn("private-value", json.dumps(row))
+        self.assertNotIn("query", json.dumps(row))
+
+    def test_qa_rejection_bound_retains_every_earlier_observation_and_fails_closed(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        for _ in range(16):
+            status, _ = self.request("POST", "/api/auth/native/refresh", headers)
+            self.assertEqual(status, 403)
+        retained = list(self.gateway.state["rejectedRequests"])
+        status, _ = self.request("POST", "/api/auth/native/refresh", headers)
+        self.assertEqual(status, 403)
+        self.assertEqual(self.gateway.state["rejectedRequests"], retained)
+        self.assertEqual(len(retained), 16)
+        self.assertEqual(self.gateway.state["routeRejected"], 17)
+        self.assertTrue(self.gateway.state["overflow"])
+        self.assertEqual(len(Path(self.gateway.journal.name).read_text().splitlines()), 16)
+
     def test_unreviewed_paid_route_denied_before_transport(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
             status, _ = self.request("POST", "/api/case-tracking/search", {gateway_module.MARKER_HEADER: gateway_module.MARKER})

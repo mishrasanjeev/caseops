@@ -7,7 +7,7 @@ import { createHash,randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { QP,requireRequest,validateDataset,collectQP,readReference,readBytes,reference,identity,ownerRecipes } from '../../apps/mobile/e2e/queue-privacy-contract.mjs';
-import { queuePrivacyScenarios } from '../../apps/mobile/e2e/queue-privacy.mjs';
+import { withQPAndroidQueueRows, queuePrivacyScenarios } from '../../apps/mobile/e2e/queue-privacy.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
 import { observeLocalQAInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
@@ -187,8 +187,8 @@ export async function runQueuePrivacy(q){
     c.switchActor=async actor=>{await logoutQPAccount(c);const member=a.members[actor==='second-company'?1:0];c.fixture={...member.fixture,qp:a.fixture.qp};await withQPActor(member,()=>authenticate(c,{fresh:true}));state.actor=member;};
     await withQPActor(a.members[0],()=>authenticate(c,{fresh:true}));state.actor=a.members[0];setup=true;journal.write({type:'phase_result',id,phase:'setup',status:'passed'});
    }catch(e){cleanupUncertain=true;journal.write({type:'phase_result',id,phase:'setup',status:'failed',reason:safeFailure(e,'QP_SETUP_FAILED')});}
-   journal.write({type:'phase_started',id,phase:'call'});if(setup)try{await scenario.run(c);journal.write({type:'phase_result',id,phase:'call',status:'passed'});}catch(e){journal.write({type:'phase_result',id,phase:'call',status:'failed',reason:safeFailure(e,'QP_CALL_FAILED')});}else journal.write({type:'phase_result',id,phase:'call',status:'not-run',reason:'SETUP_FAILED'});
-   journal.write({type:'phase_started',id,phase:'teardown'});let clean=true;
+   journal.write({type:'phase_started',id,phase:'call'});if(setup)try{if(q.platform==='android'&&scenario.id==='QUEUE-01')await withQPAndroidQueueRows(c,()=>scenario.run(c));else await scenario.run(c);journal.write({type:'phase_result',id,phase:'call',status:'passed'});}catch(e){journal.write({type:'phase_result',id,phase:'call',status:'failed',reason:safeFailure(e,'QP_CALL_FAILED')});}else journal.write({type:'phase_result',id,phase:'call',status:'not-run',reason:'SETUP_FAILED'});
+   journal.write({type:'phase_started',id,phase:'teardown'});let clean=c?.nativeSettingsCleanupUncertain!==true;
    try{const r=await controls.closeCaseControls({caseId:scenario.id});assert.equal(r.allOwnedControlsClosed,true);}catch{clean=false;}
    if(driver){try{if(setup)await logoutQPAccount(c);}catch{clean=false;}try{await driver.deleteSession();journal.write({...appiumSessionEvent(sessionId,'deleted'),id});}catch{clean=false;}}
    else if(requested)clean=false;

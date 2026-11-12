@@ -13,7 +13,7 @@ const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const SOURCE = fileURLToPath(new URL('./local-gateway.py', import.meta.url));
 // Reviewed with the actual Python Gateway regressions, including the 64-event boundary.
 // A changed implementation requires another review; runtime hashes alone cannot admit it.
-export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = '85c4483c4fe2261c2a02ac26aa7b8f706092e2124099b6f8d84a7fe4d67015c9';
+export const REVIEWED_GATEWAY_IMPLEMENTATION_SHA256 = 'e62bcbec474cee80800b265632df804979cd39717dfa565abec66f6d0791da08';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const coreMatterReadCounts = new Map([['consent', 2], ['full-core', 9]]);
 const inside = (root, file) => {

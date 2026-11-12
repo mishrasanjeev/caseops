@@ -235,6 +235,42 @@ class Gateway:
             elif self.v1.registration.get("profile") == "native-client-extensions-v1":
                 self.state["v1ControlProfile"] = "native-client-extensions-v1"
 
+    def observe_qa_route_rejection(self, method, path, *, native, browser, started):
+        # The explicitly enabled, verified local QP profile owns this diagnostic.
+        # Rejections stay rejections. Never retain a URL query, raw record ID,
+        # credentials, headers or bodies, or widen the admitted route set.
+        registration = getattr(self.v1, "registration", {}) if self.v1 else {}
+        if registration.get("profile") != "queue-privacy-v1" or registration.get("syntheticDataOnly") is not True:
+            return
+        rows = self.state.setdefault("rejectedRequests", [])
+        if len(rows) >= 16:
+            self.state["overflow"] = True
+            return
+        route = method + " " + path
+        fixed = {"POST /api/auth/native/refresh", "POST /api/auth/native/token", "POST /api/auth/native/logout",
+                 "GET /api/auth/native/compatibility", "GET /api/auth/me", "GET /api/me/today",
+                 "GET /api/matter-work-queue", "GET /api/account/deletion-requests", "POST /api/account/deletion-requests"}
+        template = route if route in fixed else None
+        if template is None and method == "GET":
+            match = re.fullmatch(r"/api/matters/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(/workspace|/tasks)?", path)
+            if match:
+                template = "GET /api/matters/{matterId}" + (match[1] or "")
+        elapsed = round((time.monotonic() - started) * 1000, 3)
+        if not 0 <= elapsed <= 20000:
+            self.state["overflow"] = True
+            return
+        event = {"type": "qa_route_rejection", "runId": self.state["runId"], "rejectionSequence": len(rows) + 1,
+                 "routeTemplate": template or "unclassified", "routeSha256": hashlib.sha256(route.encode()).hexdigest() if template else None,
+                 "status": 403, "authorityClass": "native" if native else "browser" if browser else "other",
+                 "observedAtUnixMs": time.time_ns() // 1000000, "decisionMs": elapsed}
+        rows.append(event)
+        try:
+            self.journal.write(json.dumps(event) + "\n")
+            self.journal.flush()
+            os.fsync(self.journal.fileno())
+        except OSError:
+            self.state["overflow"] = True
+
     def route_configuration(self):
         return json.loads((self.root / "gateway-routes.json").read_text())
 
@@ -377,6 +413,7 @@ class Gateway:
                 return self.reply(403, {"code": "PRODUCER_PERMIT_NOT_ADMITTED"})
 
             def handle_request(self):
+                decision_started = time.monotonic()
                 try:
                     target = upstream_target(self.path)
                 except (ValueError, AssertionError):
@@ -462,6 +499,7 @@ class Gateway:
                 if not web and not admitted and not browser and calendar_method is None:
                     with gateway.lock:
                         gateway.state["routeRejected"] += 1
+                        gateway.observe_qa_route_rejection(self.command, path, native=native_bearer, browser=browser, started=decision_started)
                     return self.reply(403, {"code": "ROUTE_NOT_ADMITTED"})
                 if web and path.startswith("/api/") and route != "GET /api/release-identity":
                     return self.reply(403, {"code": "USE_REVIEWED_API_ORIGIN"})

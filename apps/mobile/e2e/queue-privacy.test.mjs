@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { QP,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
+import { QP,QP_AUTH_AND_NATIVE_BASE_ROUTES,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
 import { androidQueuePage, assertQPPrivacyControlsAbsent, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
@@ -317,6 +317,19 @@ async function admissionDouble(){
   reader:file=>{calls.push('PRIVATE:'+file);const c=credentials.find(x=>x.path===file);return{bytes:c.bytes,value:c.value,sha256:'e'.repeat(64),uid:process.getuid()};}};
  return{q,io,map,source,first,second,dataset,controls,registration,credentials,calls,writeEvidence,publicRoot,run:()=>admitQPBeforeMembers(q,io),close:p.close};
 }
+test('Queue normal authentication permits refresh without admitting formal business writes',()=>{
+ assert.equal(Object.isFrozen(QP_AUTH_AND_NATIVE_BASE_ROUTES),true);
+ assert.deepEqual(QP_AUTH_AND_NATIVE_BASE_ROUTES,[
+  'GET /api/account/deletion-requests','GET /api/auth/me','GET /api/auth/native/compatibility',
+  'GET /api/auth/native/sessions','GET /api/build','GET /api/matter-work-queue','GET /api/me/today',
+  'POST /api/auth/native/logout','POST /api/auth/native/refresh','POST /api/auth/native/token',
+ ]);
+ assert.equal(new Set(QP_AUTH_AND_NATIVE_BASE_ROUTES).size,10);
+ assert.deepEqual(QP_AUTH_AND_NATIVE_BASE_ROUTES.filter(route=>!route.startsWith('GET ')),[
+  'POST /api/auth/native/logout','POST /api/auth/native/refresh','POST /api/auth/native/token',
+ ]);
+ assert.equal(QP_AUTH_AND_NATIVE_BASE_ROUTES.some(route=>/billing|provider|\*|\{|notes/.test(route)),false);
+});
 test('literal independent two-case inventory and original17 budgets remain separate',()=>{for(const platform of['android','ios']){const c=collectQueuePrivacy(platform);assert.deepEqual(c.intended,[platform+':QUEUE-01',platform+':PRIVACY-01']);assert.equal(c.expectedPhases,6);assert.equal(c.expectedSessions,2);}assert.equal(QP.totalControls,49);assert.equal(Object.values(QP_CALL_INVENTORY['QUEUE-01']).reduce((a,b)=>a+b),18);assert.equal(Object.values(QP_CALL_INVENTORY['PRIVACY-01']).reduce((a,b)=>a+b),17);const old=fs.readFileSync(path.join(ROOT,'apps/mobile/e2e/v1-workflows-inventory.mjs'),'utf8');assert.match(old,/expectedPhases: 51/);assert.match(old,/264/);});
 test('actual producer creates35tasks and complete74HTTP53POST1PATCH inventory with private peers first',async()=>{const x=producerDouble();try{const d=await x.run();assert.equal(x.calls.length,62);assert.equal(d.requests,74);assert.equal(d.posts,53);assert.equal(d.patches,1);assert.equal(d.admissions,12);assert.equal(d.tasks.length,35);assert.equal(d.pages.length,10);assert.equal(d.tasks.filter(x=>x.role==='excluded').length,4);assert.equal(x.privateFiles.length,2);assert.equal(x.claims.length,1);assert.equal(JSON.stringify(x.events).includes('Aa1!'),false);assert.equal(QP_PRODUCER.requests,74);}finally{x.close();}});
 test('completed task uses the Matter task write status and stays out of every queue page',async()=>{
@@ -590,7 +603,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    if(state.stale){v['queue-stale']='Work or access changed. Reload the work queue.';v['queue-first']='First page';}
    else if(state.selected){const t=state.selected;Object.assign(v,{'queue-task-detail':'Task','queue-task-title':t.title,'queue-task-id':t.id,'queue-task-matter':t.matter.matter_code+' · '+t.matter.title,'queue-task-status':t.status.replaceAll('_',' '),'queue-task-priority':t.priority,'queue-task-due':'No due date recorded','queue-task-assignment':'Assigned to you','queue-task-created':t.created_at,'queue-task-updated':t.updated_at,'queue-task-lifecycle':String(t.matter.lifecycle_version),'queue-back':'Back','queue-open-matter':'Open Matter'});}
    else{for(const t of current().items)v['queue-task-'+t.id]=t.title;if(current().next_cursor)v['queue-next']='Next';v['queue-first']='First page';v['queue-ownership-meaning']='Your own and unassigned tasks are excluded';}
-  }else if(state.screen==='matter'){v['screen-matter']='Matter';v['matter-code']=dataset.matter.matter_code;}
+  }else if(state.screen==='matter'){v['matter-detail']='Matter';v['matter-code']=dataset.matter.matter_code;}
   else if(state.screen==='account'){
    v['account-screen']='Account';v.back='Back';v['privacy-request-state']=state.privacy==='unknown'?'Acknowledgement unconfirmed':state.privacy==='received'?'Request received':'No received request is recorded';
    if(state.confirmation){v['privacy-request-confirmation']='Confirm request';v['privacy-request-confirm']='Confirm';v['privacy-request-cancel']='Cancel';}
@@ -601,7 +614,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
  };
  const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
   attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
- const driver={waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
+ const driver={findElements:async(using,query)=>{assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");const rows=current().items;return (duplicateRow?[...rows,rows[0]]:rows).map((t,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),displayed:'true','attribute/resource-id':'queue-task-'+t.id,'attribute/package':fixture.appId}));},waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
   getElementRect:async()=>({x:4,y:20,width:900,height:1900}),getWindowRect:async()=>({x:0,y:0,width:1080,height:2400}),
   execute:async(command,opts)=>{assert.equal(command,'mobile: scrollGesture');
    assert.equal(opts.elementId,state.screen==='account'?'account-screen':'work-scroll');
@@ -635,6 +648,11 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
  const originalFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({runId:fixture.gatewayRunId,overflow:false,markerRejected:0,routeRejected:0,lastSequence:records.length,requests:structuredClone(records)}));
  return{context,calls,clicks,events,records,run:()=>queuePrivacyScenarios.find(c=>c.id===caseId).run(context),close(){globalThis.fetch=originalFetch;producer.close();}};
 }
+test('Queue Matter navigation binds the actual native accessibility contract',()=>{
+ const screen=fs.readFileSync(path.join(ROOT,'apps/mobile/src/application/screens/MatterScreen.tsx'),'utf8');
+ assert.match(screen,/<ScrollView\b[^>]*\btestID="matter-detail"/s);
+ assert.doesNotMatch(screen,/testID="screen-matter"/);
+});
 test('actual Queue scenario executes every view, nullable detail, stale409 and fresh restoration in a protocol double',async()=>{const x=await workflowDouble('QUEUE-01');try{await x.run();assert.equal(x.calls.filter(v=>v==='readQueue').length,13);assert.equal(x.calls.filter(v=>v==='changeAnchor').length,2);assert.equal(x.context.controlCalls,17);assert.equal(x.events.at(-1).boundary,'queue-complete');assert.equal(x.records.some(r=>r.status===409),true);assert.equal(x.records.some(r=>r.method==='POST'),false);}finally{x.close();}});
 test('actual Privacy scenario retains one202 Unknown then GET reload/revisit and other-user absence in a protocol double',async()=>{const x=await workflowDouble('PRIVACY-01');try{await x.run();assert.equal(x.calls.filter(v=>v==='readControlReceipt').length,1);assert.equal(x.calls.filter(v=>v==='readOwnPrivacy').length,4);assert.equal(x.records.filter(r=>r.method==='POST').length,1);assert.equal(x.clicks.filter(v=>v==='privacy-request-confirm').length,1);assert.equal(x.events.at(-1).boundary,'privacy-complete');}finally{x.close();}});
 test('actual Queue scenario refuses duplicate bound native rows before its Next dispatch',async()=>{const x=await workflowDouble('QUEUE-01',{duplicateRow:true});try{await assert.rejects(x.run(),/QP_DUPLICATE_NATIVE_ROW/);assert.equal(x.clicks.includes('queue-next'),false);}finally{x.close();}});
@@ -698,6 +716,11 @@ function androidViewportDouble({ rankPages = androidViewportRanks, next = true, 
   const gestures = [];
   let position = initial;
   const driver = {
+    async findElements(using, query) {
+      assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");
+      return rankPages[position].map((rank,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),
+        displayed:'true','attribute/resource-id':'queue-task-'+id(rank),'attribute/package':appId}));
+    },
     async $$(query) {
       if (query === 'id=account-screen' || query.includes("/ancestor::*[@class='android.widget.ScrollView']")) return [scope];
       if (query === 'id=screen-work') return position === 0 ? [element()] : [];
@@ -731,6 +754,52 @@ function androidViewportDouble({ rankPages = androidViewportRanks, next = true, 
     page: { items: tasks.slice(0, 25), next_cursor: 'owned cursor' }, gestures };
 }
 
+function nativeQueueBatchDouble(edit=()=>{}){
+ const c=androidViewportDouble(),calls=[];
+ const rows=c.page.items.slice(0,2).map((item,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),
+  displayed:'true','attribute/resource-id':'queue-task-'+item.id,'attribute/package':c.c.fixture.appId}));
+ edit(rows);c.c.driver.findElements=async(using,value)=>{calls.push({using,value});return rows;};return{...c,rows,calls};
+}
+test('Android Queue batch reads the same complete row identity, package and visibility facts in one native command',async()=>{
+ const x=nativeQueueBatchDouble();assert.equal(typeof queueEvidence.readQPAndroidQueueRows,'function');
+ const actual=await queueEvidence.readQPAndroidQueueRows(x.c);assert.deepEqual(actual,x.page.items.slice(0,2).map(item=>item.id));
+ assert.deepEqual(x.calls,[{using:'xpath',value:"//*[starts-with(@resource-id, 'queue-task-')]"}]);
+});
+test('Android Queue batch refuses missing, hidden, foreign, duplicate, unknown and overbound native row evidence',async()=>{
+ for(const edit of [rows=>delete rows[0].displayed,rows=>rows[0].displayed='false',rows=>rows[0]['attribute/package']='foreign.package',
+  rows=>rows[0]['element-6066-11e4-a52e-4f735466cecf']='unbound',rows=>rows[0].ELEMENT=id(4000),
+  rows=>rows[1]['attribute/resource-id']=rows[0]['attribute/resource-id'],rows=>rows[0]['attribute/resource-id']='queue-task-'+id(26),
+  rows=>rows[0].text='PRIVATE_VALUE_MUST_NOT_BE_REQUESTED',rows=>{while(rows.length<=64)rows.push({...rows[0]});}]){
+  const x=nativeQueueBatchDouble(edit);const refused=queueEvidence.readQPAndroidQueueRows(x.c);await assert.rejects(refused);assert.equal(x.calls.length,1);
+ }
+});
+test('Android Queue batch settings are verified and restore the original selector and idle controls',async()=>{
+ assert.equal(typeof queueEvidence.configureQPAndroidQueueRows,'function');
+ const before={shouldUseCompactResponses:true,elementResponseAttributes:'name,text',waitForIdleTimeout:500,disableIdLocatorAutocompletion:true};let state={...before};const writes=[],events=[];
+ const driver={getSettings:async()=>({...state}),updateSettings:async value=>{writes.push(value);state={...state,...value};}};
+ const restore=await queueEvidence.configureQPAndroidQueueRows(driver,e=>events.push(e));
+ assert.equal(state.shouldUseCompactResponses,false);assert.equal(state.elementResponseAttributes,'displayed,attribute/resource-id,attribute/package');
+ assert.equal(state.waitForIdleTimeout,0);assert.equal(state.disableIdLocatorAutocompletion,true);
+ await restore();assert.deepEqual(state,before);const replay=restore();await assert.rejects(replay);assert.equal(writes.length,2);assert.deepEqual(events.map(e=>e.state),['configured','restored']);
+});
+test('Android Queue batch refuses ignored settings and never replays an uncertain restoration',async()=>{
+ const before={shouldUseCompactResponses:true,elementResponseAttributes:'name,text',waitForIdleTimeout:500};let writes=0;
+ const ignored={getSettings:async()=>({...before}),updateSettings:async()=>{writes++;}};
+ const setup=queueEvidence.configureQPAndroidQueueRows(ignored,()=>{});await assert.rejects(setup,/QP_ANDROID_BATCH_SETTINGS_REQUIRED/);assert.equal(writes,2);
+ let state={...before};writes=0;
+ const lost={getSettings:async()=>({...state}),updateSettings:async value=>{writes++;if(writes===2)throw Error('synthetic unknown settings ACK');state={...state,...value};}};
+ const restore=await queueEvidence.configureQPAndroidQueueRows(lost,()=>{});const first=restore();await assert.rejects(first,/unknown settings ACK/);
+ const replay=restore();await assert.rejects(replay,/QP_ANDROID_BATCH_RESTORATION_REPLAY_REFUSED/);assert.equal(writes,2);
+});
+test('Android Queue scope preserves a failed body and an uncertain settings cleanup, then forbids later native setup',async()=>{
+ let settings={shouldUseCompactResponses:true,elementResponseAttributes:'name,text',waitForIdleTimeout:500},writes=0;
+ const c={platform:'android',record:()=>{},driver:{getSettings:async()=>({...settings}),updateSettings:async value=>{writes++;if(writes===2)throw Error('synthetic lost restoration ACK');settings={...settings,...value};}}};
+ const body=Error('synthetic original Queue failure');const run=queueEvidence.withQPAndroidQueueRows(c,async()=>{throw body;});
+ await assert.rejects(run,error=>error instanceof AggregateError&&error.errors[0]===body&&error.code==='QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN');
+ assert.equal(c.nativeSettingsCleanupUncertain,true);assert.equal(writes,2);assert.equal(QP.serialMs,480000);
+ const runner=fs.readFileSync(path.join(ROOT,'scripts/mobile/run-queue-privacy.mjs'),'utf8');
+ assert.match(runner,/let clean=c\?\.nativeSettingsCleanupUncertain!==true/);assert.match(runner,/cleanupUncertain\|\|=!clean/);
+});
 test('Android queue reaches the exact page through all measured overlapping visible ranges and its real footer', async () => {
   const current = androidViewportDouble();
   await androidQueuePage(current.c, current.page);

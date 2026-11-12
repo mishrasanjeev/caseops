@@ -1,3 +1,16 @@
+## 2026-11-12 — native Matter marker and complete rejection diagnostics
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; unmeasured original causes Inconclusive**. Both actual407c QA
+builds and its complete source gate passed. Queue advanced through detail,
+filters, pagination and stale restoration, then waited for a nonexistent Matter
+marker. A corrected double reproduces it and an actual native diagnostic proves
+the real marker and exact Matter code. The full run still credits zero cases;
+Privacy stopped at the failed gateway counter. The candidate preserves normal
+auth refresh, adds bounded secret-free rejection evidence and batches the same
+native row facts without weaker guards or longer budgets. See [evidence and
+remaining gates](mobile/NATIVE_QUEUE_MARKER_2026-11-12.md).
+
 ## 2026-11-12 — native Queue terminal publication and auth lease preparation
 
 J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;

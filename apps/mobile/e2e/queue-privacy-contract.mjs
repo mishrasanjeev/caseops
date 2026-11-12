@@ -4,6 +4,13 @@ import { decodeQueuePage } from '../src/domain/matter-work-queue.ts';
 import { decodeAccountDeletionReceipt } from '../src/domain/privacy-requests.ts';
 export { decodeQueuePage, decodeAccountDeletionReceipt };
 export { readV1Reference as readReference, readV1Bytes as readBytes, v1Reference as reference, v1Identity as identity } from './v1-workflows-contract.mjs';
+// Static normal authentication/read surface, separate from registered business
+// controls. A long native read-only journey can need its ordinary token refresh.
+export const QP_AUTH_AND_NATIVE_BASE_ROUTES = Object.freeze([
+  'GET /api/account/deletion-requests','GET /api/auth/me','GET /api/auth/native/compatibility',
+  'GET /api/auth/native/sessions','GET /api/build','GET /api/matter-work-queue','GET /api/me/today',
+  'POST /api/auth/native/logout','POST /api/auth/native/refresh','POST /api/auth/native/token',
+]);
 export const QP = Object.freeze({ inventoryId:'native-queue-privacy-2026-10-27-v1', profile:'queue-privacy-v1',
   cases:Object.freeze(['QUEUE-01','PRIVACY-01']), phases:6,sessions:2,serialMs:480000,transportMs:60000,readMs:10000,transitionMs:20000,pollMs:200,
   caseControls:Object.freeze({'QUEUE-01':24,'PRIVACY-01':24}),totalControls:49,nativeControls:160,authoritativeReads:24,
