@@ -2,6 +2,13 @@
 
 ## November 12 Disclosure Hydration Reopening: Issue616
 
+Later7949 API11 fails three SQLite setup paths before chain assertions because
+the reused PG fixture opens plain Session. Correct the fixture to use the
+canonical CaseOpsSession plus enforced foreign keys, retain plain-Session
+rejection and every original survivor/catalog/privacy check, and replay the
+whole61-case module. Hosted native original rollback case already passes in
+7949PG11; no full release or later-source acceptance follows from that subset.
+
 J14/M14 shared-CI integration is also pending: owner approved repairing only
 shared Windows trust/setup tooling after actual pre-audit ACL/timeout failures.
 CI-only literal pinned-archive hardening and shared unchanged absolute budgets

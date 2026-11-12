@@ -4203,3 +4203,8 @@ requirements when using the fallback.
   reference to those exact source bytes. Keep the consumer's binding and
   tamper rejection unchanged; a setup refusal from a stale pin is not an app
   failure or permission to bypass the held-source verification.
+- A PostgreSQL fixture helper is not automatically safe for SQLite. Use the
+  actual CaseOpsSession for reliability writes and enable/check foreign-key
+  enforcement on every fixture connection. Preserve ordinary-session rejection
+  and the original data/catalog assertions; a setup exception cannot prove a
+  migration's refusal or rollback behavior.

@@ -2,6 +2,15 @@
 
 ## Evidence Boundary
 
+7949 API shard11 retains three failed SQLite fixture seeds, all before the
+new chained-downgrade assertions: reused PostgreSQL helpers open ordinary
+Session, correctly rejected by SQLite writer serialization. The follow-up
+uses explicit CaseOpsSession only for SQLite, enables/checks foreign keys,
+proves ordinary Session still refuses and preserves all populated rows,
+catalog/revision/refusal-origin assertions. PG helper defaults remain unchanged.
+The complete61-case module and later full gates still need execution; this
+is not a reproduced migration failure or permission to weaken writer safety.
+
 Shared-CI continuation at7949: Linux source job131289812797 retained one
 stale npm constructor hash/size reference in the shared host launcher; its
 1568-case harness is1564passed/1failed/3explicit skips. All eleven new portable

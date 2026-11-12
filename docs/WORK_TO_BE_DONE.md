@@ -39,6 +39,10 @@ readers, trust/owner/byte/namespace fences and apps/mobile bytes remain unchange
 The7949 Linux harness exposed a stale shared-host reference to the changed npm
 constructor. Refresh only that exact hash/size, preserving all source-binding
 and tamper checks; native Windows and full later-source CI are still owed.
+API11 separately retains three new SQLite fixture setup failures, not migration
+refusal reproductions. Use canonical writer sessions and enabled foreign keys,
+preserve plain-session rejection plus all row/catalog/revision assertions and
+rerun the whole migration module and later release inventory before closure.
 
 Current follow-up: exact structured identity equality and two nonunique
 concurrent expression indexes replace range proposals in isolated source.

@@ -23,6 +23,11 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from alembic import command
+from caseops_api.db.session import (
+    CaseOpsSession,
+    _install_sqlite_pragmas,
+    serialize_sqlite_writer,
+)
 from caseops_api.schemas.ip_patents import (
     PatentApplicationCorrectionRequest,
     PatentApplicationCreateRequest,
@@ -100,10 +105,13 @@ def _assert_ready(engine):
 
 
 def _seed_owned_versions(engine):
+    session_type = CaseOpsSession if engine.dialect.name == "sqlite" else Session
     for number in range(2):
-        company, actor, family = _seed(engine)
-        family = _seed_patent_scale_source(engine, company, actor, family)
-        with Session(engine) as session:
+        company, actor, family = _seed(engine, session_type=session_type)
+        family = _seed_patent_scale_source(
+            engine, company, actor, family, session_type=session_type,
+        )
+        with session_type(engine) as session:
             context = _ip_race_context(session, company_id=company, membership_id=actor)
             application = create_patent_application(
                 session, context=context, idempotency_key=str(uuid4()),
@@ -132,6 +140,9 @@ def _seed_owned_versions(engine):
                 ),
             )
     with engine.connect() as connection:
+        if engine.dialect.name == "sqlite":
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         for table, _name, _parent in SPECS:
             assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 4
             assert connection.scalar(text(f"SELECT count(DISTINCT company_id) FROM {table}")) == 2
@@ -289,6 +300,13 @@ def test_identity_chained_restore_forward_refusal_precedes_any_catalog_change(
     kind, destination, tmp_path, monkeypatch,
 ):
     with fresh_engine(kind, tmp_path) as engine:
+        if kind == "sqlite":
+            # Migration connections are separate; enforce production integrity
+            # and writer serialization on this fixture's application writes.
+            _install_sqlite_pragmas(engine)
+            with Session(engine) as unsafe:
+                with pytest.raises(RuntimeError, match="require CaseOpsSession"):
+                    serialize_sqlite_writer(unsafe)
         config = migration_config(engine, monkeypatch)
         command.upgrade(config, HEAD)
         _seed_owned_versions(engine)

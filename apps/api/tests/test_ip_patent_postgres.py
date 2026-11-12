@@ -103,8 +103,9 @@ def test_shared_lifecycle_reclose_and_backdate_on_postgres(isolated_postgres_cli
     run_journey(isolated_postgres_client)
 
 
-def _seed(engine):
-    with Session(engine) as session:
+def _seed(engine, *, session_type=None):
+    session_type = Session if session_type is None else session_type
+    with session_type(engine) as session:
         company_id = _seed_company(session)
         actor_id = _seed_membership(session, company_id, role="admin")
         client = Client(company_id=company_id, name="Patent PG client", client_type="corporate")
@@ -899,9 +900,10 @@ def _seed_patent_family_scale(
     return company_id, actor_id, family_uuid_base
 
 
-def _seed_patent_scale_source(pg_engine, company_id, actor_id, family):
+def _seed_patent_scale_source(pg_engine, company_id, actor_id, family, *, session_type=None):
     # Reuse the real source/link/correction path from the source-worker race fixture.
-    with Session(pg_engine) as session:
+    session_type = Session if session_type is None else session_type
+    with session_type(pg_engine) as session:
         taxonomy = IpDocumentTaxonomyEntry(
             company_id=company_id,
             key=f"scale-source-{uuid4().hex}",
