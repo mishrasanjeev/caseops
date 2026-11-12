@@ -379,12 +379,14 @@ for (const phone of [false, true]) {
     }
 
     const title = `B5 assistant factual QA ${nonce}`;
+    const conversationTitle = `Ask \u00b7 ${title}`;
     const matterCode = `B5R-${nonce.replaceAll("-", "").toUpperCase()}`;
     expect(matterCode).toMatch(/^[A-Z0-9][A-Z0-9-]{0,38}[A-Z0-9]$/);
     let ownedMatter: ResearchMatter | undefined;
     let ownedConversation: Pick<AssistantSessionRecord, "id" | "title"> & {
       matterId: string; sourceVersion: string; companyId: string; membershipId: string; userId: string;
     } | undefined;
+    let workflowFailure: unknown;
     try {
       await page.goto(`${web.origin}/app/matters`);
       await page.getByTestId("new-matter-trigger").first().click();
@@ -419,6 +421,7 @@ for (const phone of [false, true]) {
       expect(matches).toHaveLength(1);
       const scope = matches[0];
       expect(scope.href).toBe(`/app/matters/${matter.id}`);
+      expect(scope.label).toBe(title);
       expect(scope.resource_version).toBeTruthy();
       await page.getByRole("button", { name: `Add ${scope.label}`, exact: true }).click();
       await expect(page.getByTestId("assistant-active-scope")).toContainText(scope.label);
@@ -428,12 +431,12 @@ for (const phone of [false, true]) {
       const started = await starting;
       expect(started.request().postDataJSON().scopes).toHaveLength(1);
       expect(started.request().postDataJSON().scopes).toMatchObject([{ scope_type: "matter", scope_id: matter.id }]);
+      expect(started.request().postDataJSON().title).toBe(conversationTitle);
       let conversation = await json<AssistantSessionRecord>(started, "UI-created exact Matter-scoped conversation", 201);
       ownedConversation = { id: conversation.id, title: conversation.title, matterId: matter.id,
         sourceVersion: scope.resource_version, companyId: actor.company.id, membershipId: actor.membership.id, userId: actor.user.id };
       expect(uuid.test(conversation.id) && conversation.scope_state === "current").toBe(true);
-      expect(conversation.title).toContain(matterCode);
-      expect(conversation.title).toContain(title);
+      expect(conversation.title).toBe(conversationTitle);
       const conversationId = conversation.id;
       expect(conversation.scopes).toMatchObject([{ scope_type: "matter", scope_id: matter.id, resource_version: scope.resource_version }]);
       expect(conversation.scopes).toHaveLength(1);
@@ -617,7 +620,11 @@ for (const phone of [false, true]) {
       await selfAuth(request, headers);
       await selfAuth(page.request, transport);
       await release();
+    } catch (error) {
+      workflowFailure = error;
+      throw error;
     } finally {
+      const cleanupFailures: unknown[] = [];
       try {
         if (ownedConversation) {
           await release();
@@ -626,8 +633,7 @@ for (const phone of [false, true]) {
             && ownedConversation.membershipId === principal.membership.id && ownedConversation.userId === principal.user.id
             && ownedConversation.matterId === ownedMatter?.id && ownedMatter?.company_id === principal.company.id,
           "Archive receipt belongs only to this run's fresh Matter and authenticated creating owner").toBe(true);
-          expect(ownedConversation.title).toContain(matterCode);
-          expect(ownedConversation.title).toContain(title);
+          expect(ownedConversation.title).toBe(conversationTitle);
           const path = `${api.origin}/api/workspace-assistant/sessions/${ownedConversation.id}`;
           // The canonical GET/archive also enforce tenant and creating-member ownership.
           const currentSession = await json<AssistantSessionRecord>(await request.get(path, {
@@ -635,10 +641,7 @@ for (const phone of [false, true]) {
           }), "Read only this execution's conversation and fresh archive version");
           expect(currentSession.id).toBe(ownedConversation.id);
           expect(currentSession.title).toBe(ownedConversation.title);
-          expect(currentSession.scope_state).toBe("current");
-          expect(currentSession.scopes).toHaveLength(1);
-          expect(currentSession.scopes).toMatchObject([{ scope_type: "matter", scope_id: ownedConversation.matterId,
-            resource_version: ownedConversation.sourceVersion }]);
+          // Archiving an owned conversation does not require its sources to remain current.
           let archived = currentSession;
           if (currentSession.status === "active") {
             await release();
@@ -663,7 +666,10 @@ for (const phone of [false, true]) {
           expect(retained.archived_at).toBe(archived.archived_at);
           expect(retained.retention_expires_at).toBe(currentSession.retention_expires_at);
         }
-      } finally {
+      } catch (error) {
+        cleanupFailures.push(error);
+      }
+      try {
         // An archive rejection stays a failure, but cannot suppress owned-Matter cleanup.
         if (ownedMatter) {
           await release();
@@ -686,6 +692,13 @@ for (const phone of [false, true]) {
           expect(disposed.id === current.id && disposed.company_id === actor.company.id && disposed.status === "disposed").toBe(true);
         }
         await release();
+      } catch (error) {
+        cleanupFailures.push(error);
+      }
+      if (cleanupFailures.length) {
+        throw new AggregateError([
+          ...(workflowFailure === undefined ? [] : [workflowFailure]), ...cleanupFailures,
+        ], "Assistant/research workflow or independent owned-fixture cleanup failed");
       }
     }
   });

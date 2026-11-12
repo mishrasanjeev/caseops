@@ -74,6 +74,24 @@ exploitable-security repair or a suppressed alert. Its complete Windows63
 and offline Linux81 helper replays passed all189/243 phases with zero skips.
 That evidence does not close the four PostgreSQL matrices or certify release.
 
+The f881 replacement again passed all303 frontend files/2951 cases, both
+typechecks,81 recovery,29 inventory cases, fresh build and native14 discovery.
+Actual browsers completed12passed/2failed/0skips/0retries. Both native failures
+point to the cleanup's mistaken code-in-conversation-title assertion; cleanup
+masked the original workflow error. Source review confirms the UI uses the
+Matter title as the scope label, with code only in secondary text. Correct
+both title assertions to the exact request/UI title, without changing product
+behavior. Collect workflow and independent cleanup failures together rather
+than allowing a finally error to erase the initial diagnosis. Archive receipt
+ownership remains tenant/actor/Matter-bound, but source readiness is not an
+archive prerequisite. This cleanup change is not a relaxed source assertion
+on the main workflow. Full corrected browser and production proof remain owed.
+
+Direct Matter metadata can support a factual answer while private maintenance
+is held. That path does not establish projection readiness: creation/disposal
+invalidates an existing manifest, and only the canonical post-QA rebuild and
+subsequent clean-cadence/resume evidence can close that separate release gate.
+
 ### November 12 Representative-Question Correction (Component Evidence Only)
 
 The owner directed this task to choose representative questions rather than

@@ -4163,3 +4163,8 @@ requirements when using the fallback.
   contract before awaiting its mutation. Preserve validation-blocked runs as
   fixture failures, not product reproductions; retain unique identifiers and
   prove the corrected complete journey rather than increasing response waits.
+- Cleanup must preserve the primary workflow failure and each independent
+  cleanup error. Archive an owned conversation by its authenticated owner and
+  current session version, not source readiness; retained stale sources do not
+  transfer ownership or justify blocking a safe archive. Keep strict source
+  assertions on the workflow itself and prove cleanup independently.
