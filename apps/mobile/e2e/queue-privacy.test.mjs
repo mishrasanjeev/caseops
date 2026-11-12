@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { QP,QP_AUTH_AND_NATIVE_BASE_ROUTES,QP_CALL_INVENTORY,expectedQueue,validateDataset,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
+import { QP,QP_AUTH_AND_NATIVE_BASE_ROUTES,QP_CALL_INVENTORY,expectedQueue,hash,decodeAccountDeletionReceipt } from './queue-privacy-contract.mjs';
 import { produceQueuePrivacy,pendingProducer,QP_PRODUCER } from './queue-privacy-fixture.mjs';
 import { androidQueuePage, assertQPPrivacyControlsAbsent, collectQueuePrivacy, queuePrivacyScenarios, resolveAndroidComposeQueueSegment, selectQueueSegment, waitForQPPrivacyControl } from './queue-privacy.mjs';
 import { writePrivatePeer,ownerRecipes,composeQPFixture } from '../../../scripts/mobile/prepare-queue-privacy-fixture.mjs';
@@ -613,8 +613,10 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
   }return v;
  };
  const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
-  attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
- const driver={findElements:async(using,query)=>{assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");const rows=current().items;return (duplicateRow?[...rows,rows[0]]:rows).map((t,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),displayed:'true','attribute/resource-id':'queue-task-'+t.id,'attribute/package':fixture.appId}));},waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
+  attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':attribute==='class'&&key.startsWith('queue-task-')?'android.widget.Button':attribute==='clickable'&&key.startsWith('queue-task-')?'true':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
+ let settings={waitForIdleTimeout:500};
+ const driver={getSettings:async()=>({...settings}),updateSettings:async value=>{settings={...settings,...value};},
+  findElements:async(using,query)=>{assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");const rows=current().items;return (duplicateRow?[...rows,rows[0]]:rows).map((t,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),displayed:'true','attribute/resource-id':'queue-task-'+t.id,'attribute/package':fixture.appId}));},waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
   getElementRect:async()=>({x:4,y:20,width:900,height:1900}),getWindowRect:async()=>({x:0,y:0,width:1080,height:2400}),
   execute:async(command,opts)=>{assert.equal(command,'mobile: scrollGesture');
    assert.equal(opts.elementId,state.screen==='account'?'account-screen':'work-scroll');
@@ -624,7 +626,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    if(query===`android=new UiSelector().text("No matching tasks")`)return state.screen==='work'&&!current().items.length?[element(query,'No matching tasks')]:[];
    if(query.startsWith('//*[starts-with(')){const rows=Object.entries(values()).filter(([k])=>/^queue-task-[a-f0-9-]{36}$/.test(k)).map(([k,v])=>element(k,v));return duplicateRow?[...rows,rows[0]]:rows;}
    if(query.startsWith('android='))return[element(query,query.slice(8))];const key=query.replace(/^id=/,'');const v=values();return Object.hasOwn(v,key)?[element(key,v[key])]:[];
-  },elementClick:async key=>{clicks.push(key);
+  },elementClick:async key=>{assert.equal(settings.waitForIdleTimeout,500,'QP_ACTION_REQUIRES_NORMAL_IDLE_BARRIER');clicks.push(key);
    if(key.startsWith('android=')){const label=key.slice(8);if(['Mine','Team','Unassigned'].includes(label))state.ownership={Mine:'mine',Team:'team',Unassigned:'unassigned'}[label];else state.dates={'All dates':'all',Dated:'dated',Undated:'undated'}[label];state.page=0;add('GET','/api/matter-work-queue');}
    else if(key==='tab-work'){state.screen='work';state.selected=null;state.page=0;state.stale=false;add('GET','/api/matter-work-queue');}
    else if(key==='queue-next'){if(state.changed){state.stale=true;add('GET','/api/matter-work-queue',409,{queryObservation:{ownership:state.ownership,dates:state.dates,cursorSha256:hash(Buffer.from(deliveredCursor))}});}else{state.page=1;add('GET','/api/matter-work-queue');}}
@@ -638,6 +640,9 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    else if(key==='privacy-request-reload'){state.privacy='received';add('GET','/api/account/deletion-requests');}
    else if(key==='back')state.screen='home';else throw Error('UNEXPECTED_SYNTHETIC_TAP '+key);
   }};
+ const applyClick=driver.elementClick,scroll=driver.execute;
+ driver.elementClick=async key=>{assert.ok(!/^queue-task-[a-f0-9-]{36}$/.test(key),'ANDROID_TASK_LEGACY_CLICK_FORBIDDEN');return applyClick(key);};
+ driver.execute=async(command,args)=>command==='mobile: clickGesture'?applyClick(args.elementId):scroll(command,args);
  const calls=[],readAttempts=new Map();const controls={readQueue:async args=>{calls.push('readQueue');return{status:200,value:page(args.ownership,args.dates,args.cursor)};},
   changeAnchor:async({action})=>{calls.push('changeAnchor');const t=tasks.find(t=>t.id===dataset.anchor.id);t.due_on=action==='change'?dataset.anchor.changedDueOn:dataset.anchor.due_on;t.updated_at=action==='change'?'2026-10-27T13:00:00.000001Z':'2026-10-27T13:00:00.000002Z';state.changed=action==='change';return{acknowledged:true,id:t.id,updatedAt:t.updated_at};},
   readNativeRequest:async args=>{calls.push('readNativeRequest');if(delayedReadEvidence&&args.method==='GET'){const n=(readAttempts.get(args.afterSequence)||0)+1;readAttempts.set(args.afterSequence,n);if(n<4)return{requests:[]};}return{requests:records.filter(r=>r.sequence>args.afterSequence&&r.method===args.method&&r.route===args.route)};},
@@ -654,6 +659,15 @@ test('Queue Matter navigation binds the actual native accessibility contract',()
  assert.doesNotMatch(screen,/testID="screen-matter"/);
 });
 test('actual Queue scenario executes every view, nullable detail, stale409 and fresh restoration in a protocol double',async()=>{const x=await workflowDouble('QUEUE-01');try{await x.run();assert.equal(x.calls.filter(v=>v==='readQueue').length,13);assert.equal(x.calls.filter(v=>v==='changeAnchor').length,2);assert.equal(x.context.controlCalls,17);assert.equal(x.events.at(-1).boundary,'queue-complete');assert.equal(x.records.some(r=>r.status===409),true);assert.equal(x.records.some(r=>r.method==='POST'),false);}finally{x.close();}});
+test('actual Queue task gesture preserves a lost acknowledgement without a legacy click or second dispatch',async()=>{
+ const x=await workflowDouble('QUEUE-01'),original=x.context.driver.execute,unknown=Error('synthetic lost native gesture ACK');let gestures=0;
+ x.context.driver.execute=async(command,args)=>{if(command==='mobile: clickGesture'){gestures++;throw unknown;}return original(command,args);};
+ try {
+  const run=x.run();await assert.rejects(run,error=>error===unknown);
+  assert.equal(gestures,1);assert.equal(x.clicks.some(key=>/^queue-task-[a-f0-9-]{36}$/.test(key)),false);
+  assert.equal((await x.context.driver.getSettings()).waitForIdleTimeout,500);
+ }finally{x.close();}
+});
 test('actual Privacy scenario retains one202 Unknown then GET reload/revisit and other-user absence in a protocol double',async()=>{const x=await workflowDouble('PRIVACY-01');try{await x.run();assert.equal(x.calls.filter(v=>v==='readControlReceipt').length,1);assert.equal(x.calls.filter(v=>v==='readOwnPrivacy').length,4);assert.equal(x.records.filter(r=>r.method==='POST').length,1);assert.equal(x.clicks.filter(v=>v==='privacy-request-confirm').length,1);assert.equal(x.events.at(-1).boundary,'privacy-complete');}finally{x.close();}});
 test('actual Queue scenario refuses duplicate bound native rows before its Next dispatch',async()=>{const x=await workflowDouble('QUEUE-01',{duplicateRow:true});try{await assert.rejects(x.run(),/QP_DUPLICATE_NATIVE_ROW/);assert.equal(x.clicks.includes('queue-next'),false);}finally{x.close();}});
 test('actual Privacy scenario refuses a wrong rendered receipt after one POST without another confirmation',async()=>{const x=await workflowDouble('PRIVACY-01',{wrongReceipt:true});try{await assert.rejects(x.run());assert.equal(x.clicks.filter(v=>v==='privacy-request-confirm').length,1);assert.equal(x.records.filter(r=>r.method==='POST').length,1);assert.equal(x.events.some(v=>v.boundary==='privacy-complete'),false);}finally{x.close();}});
@@ -714,8 +728,10 @@ function androidViewportDouble({ rankPages = androidViewportRanks, next = true, 
   });
   const view = { x: 2, y: 40, width: 1010, height: 2010 }, window = { x: 0, y: 0, width: 1080, height: 2400 };
   const gestures = [];
-  let position = initial;
+  let position = initial, settings={waitForIdleTimeout:500};
   const driver = {
+    getSettings:async()=>({...settings}),
+    updateSettings:async value=>{settings={...settings,...value};},
     async findElements(using, query) {
       assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");
       return rankPages[position].map((rank,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),
@@ -779,7 +795,7 @@ test('Android Queue batch settings are verified and restore the original selecto
  const driver={getSettings:async()=>({...state}),updateSettings:async value=>{writes.push(value);state={...state,...value};}};
  const restore=await queueEvidence.configureQPAndroidQueueRows(driver,e=>events.push(e));
  assert.equal(state.shouldUseCompactResponses,false);assert.equal(state.elementResponseAttributes,'displayed,attribute/resource-id,attribute/package');
- assert.equal(state.waitForIdleTimeout,0);assert.equal(state.disableIdLocatorAutocompletion,true);
+ assert.equal(state.waitForIdleTimeout,500);assert.equal(state.disableIdLocatorAutocompletion,true);
  await restore();assert.deepEqual(state,before);const replay=restore();await assert.rejects(replay);assert.equal(writes.length,2);assert.deepEqual(events.map(e=>e.state),['configured','restored']);
 });
 test('Android Queue batch refuses ignored settings and never replays an uncertain restoration',async()=>{
@@ -800,9 +816,39 @@ test('Android Queue scope preserves a failed body and an uncertain settings clea
  const runner=fs.readFileSync(path.join(ROOT,'scripts/mobile/run-queue-privacy.mjs'),'utf8');
  assert.match(runner,/let clean=c\?\.nativeSettingsCleanupUncertain!==true/);assert.match(runner,/cleanupUncertain\|\|=!clean/);
 });
+test('Android Queue restores the normal input idle barrier before the next action, including a failed page read',async()=>{
+ const writes=[];let settings={waitForIdleTimeout:500};
+ const c={platform:'android',driver:{getSettings:async()=>({...settings}),updateSettings:async value=>{writes.push(value);settings={...settings,...value};}}};
+ const result=await queueEvidence.withQPAndroidQueuePageIdle(c,async()=>{assert.equal(settings.waitForIdleTimeout,0);return 'complete-page';});
+ assert.equal(result,'complete-page');assert.equal(settings.waitForIdleTimeout,500);
+ const failed=Error('synthetic exact page failure');
+ const run=queueEvidence.withQPAndroidQueuePageIdle(c,async()=>{throw failed;});
+ await assert.rejects(run,error=>error===failed);assert.equal(settings.waitForIdleTimeout,500);
+ assert.deepEqual(writes,[{waitForIdleTimeout:0},{waitForIdleTimeout:500},{waitForIdleTimeout:0},{waitForIdleTimeout:500}]);
+});
+test('Android Queue page refuses an ignored idle setting before row reads and restores only once',async()=>{
+ let calls=0;const writes=[];
+ const c={platform:'android',driver:{getSettings:async()=>({waitForIdleTimeout:500}),updateSettings:async value=>{writes.push(value);}}};
+ const run=queueEvidence.withQPAndroidQueuePageIdle(c,async()=>{calls++;});
+ await assert.rejects(run,/QP_ANDROID_PAGE_IDLE_SETTING_REQUIRED/);assert.equal(calls,0);
+ assert.deepEqual(writes,[{waitForIdleTimeout:0},{waitForIdleTimeout:500}]);
+});
+test('Android Queue outer response cleanup never retries a lost page idle restoration',async()=>{
+ let settings={shouldUseCompactResponses:true,elementResponseAttributes:'name,text',waitForIdleTimeout:500};
+ const writes=[],body=Error('synthetic body failure');
+ const c={platform:'android',driver:{getSettings:async()=>({...settings}),updateSettings:async value=>{
+  writes.push(value);if(Object.keys(value).length===1&&value.waitForIdleTimeout===500)throw Error('synthetic lost idle restoration ACK');
+  settings={...settings,...value};
+ }}};
+ const run=queueEvidence.withQPAndroidQueueRows(c,()=>queueEvidence.withQPAndroidQueuePageIdle(c,async()=>{throw body;}));
+ await assert.rejects(run,error=>error instanceof AggregateError&&error.errors[0]===body&&error.code==='QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN');
+ assert.equal(c.nativeSettingsCleanupUncertain,true);assert.equal(settings.shouldUseCompactResponses,true);assert.equal(settings.elementResponseAttributes,'name,text');
+ assert.equal(writes.filter(x=>Object.hasOwn(x,'waitForIdleTimeout')).length,2);assert.equal(writes.length,4);
+});
 test('Android queue reaches the exact page through all measured overlapping visible ranges and its real footer', async () => {
   const current = androidViewportDouble();
   await androidQueuePage(current.c, current.page);
+  assert.equal((await current.c.driver.getSettings()).waitForIdleTimeout,500);
   assert.deepEqual(current.gestures, Array(8).fill('down'));
   assert.equal(current.c.nativeOperations, 8);
   // Page replacement can leave the viewport at the old footer. Verify again

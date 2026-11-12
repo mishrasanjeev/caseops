@@ -4744,3 +4744,22 @@ Status: **Inconclusive; release NO-GO**. QA41 retains the exact fc4c4201 hosted 
 ### November 12: Windows trust preparation remains an explicit release blocker
 
 **Inconclusive; release NO-GO.** QA42 retains c30eb82a's Windows installed-audit setup timeout and unexecuted inventory. A separate fixed SDK readiness step prepares only Windows PowerShell5.1; it neither handles the GitHub command file nor relaxes the existing hardening/overall deadlines or security predicates. Fresh native Windows setup plus its complete installed graph/audit must pass. c30's full local web coverage/build and actual Android APK build do not provide native-suite, Windows or store acceptance.
+
+
+### Native Queue input follow-up — 2026-11-12
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented**; release
+**NO-GO**. Actual f4942cfd Android and iOS Simulator builds passed. The actual
+f494 Android Queue/Privacy run completed both setups and teardowns with paired
+sessions and passing postflight: Privacy passed completely, Queue failed at
+its first task-detail transition. One current Privacy case is independently
+reconciled; the whole suite remains failed. The ordinary native click had no
+corresponding detail-read request. A separate, source-bound native diagnostic
+found the exact task button fully visible and enabled; one documented Android
+clickGesture opened its exact detail and produced one successful queue read.
+This is measured input-path evidence, not proof of an original network cause.
+The narrower idle-scope candidate alone still failed and is retained. A fresh
+complete page/detail replay of the primary gesture passed, with normal logout,
+session deletion and settings restoration. It has zero full-suite credit. No full-suite,
+distribution-signing or store-submission completion is claimed. See
+`docs/mobile/NATIVE_QUEUE_TOUCH_2026-11-12.md`.

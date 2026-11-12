@@ -6130,3 +6130,22 @@ Status: **Inconclusive; release NO-GO**. On pushed c30eb82a, Mobile source run43
 Prepare the exact Windows PowerShell5.1 SDK in a separate Windows-only composite-action step, with one10-second-bounded, fixed synthetic parser/identity/reflection probe. It has no repository-source or runner-command-file input, ACL mutation, network request, credential inheritance or retry. Readiness cannot substitute for hardening: the actual command-file operation still owns its original4-second child,3.5-second script,10-second hardening and30-second overall preparation limits, unchanged byte/handle/namespace/owner/ACL checks and fail-closed result decoder. Complete regression coverage includes strict output, timeout, signal, exit status, context, executable and isolated-environment guards. Fresh actual Windows execution and full installed-dependency audit are required before upgrading this candidate.
 
 Separate c30 evidence: all292 web modules/2774 cases, coverage, TypeScript and the production build passed locally; fresh hosted web coverage and Next-build steps also passed with QA41 SDK preparation. Its actual ARM64 APK built successfully in539seconds with a source-bound receipt; that is build evidence, not83-case device acceptance or a signed store artifact. The original failed host environment attempts remain retained.
+
+
+### Native Queue input follow-up — 2026-11-12
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented**; release
+**NO-GO**. Actual f4942cfd Android and iOS Simulator builds passed. The actual
+f494 Android Queue/Privacy run completed both setups and teardowns with paired
+sessions and passing postflight: Privacy passed completely, Queue failed at
+its first task-detail transition. One current Privacy case is independently
+reconciled; the whole suite remains failed. The ordinary native click had no
+corresponding detail-read request. A separate, source-bound native diagnostic
+found the exact task button fully visible and enabled; one documented Android
+clickGesture opened its exact detail and produced one successful queue read.
+This is measured input-path evidence, not proof of an original network cause.
+The narrower idle-scope candidate alone still failed and is retained. A fresh
+complete page/detail replay of the primary gesture passed, with normal logout,
+session deletion and settings restoration. It has zero full-suite credit. No full-suite,
+distribution-signing or store-submission completion is claimed. See
+`docs/mobile/NATIVE_QUEUE_TOUCH_2026-11-12.md`.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { setTimeout as pause } from 'node:timers/promises';
 import { collectQP, decodeQueuePage, decodeAccountDeletionReceipt, expectedQueue, hash } from './queue-privacy-contract.mjs';
-import { find, findQuery, read, visible, selector, dispatchNativeClick, home } from './native-ui.mjs';
+import { find, findQuery, read, visible, selector, dispatchNativeClick, nativeAction, home } from './native-ui.mjs';
 import { traffic,delta,readOnlyTraffic } from './journeys.mjs';
 import { displayDay } from '../src/domain/contracts.ts';
 const event=(c,boundary,facts={})=>c.record({type:'queue_privacy_assertion',boundary,...facts});
@@ -240,7 +240,7 @@ export async function configureQPAndroidQueueRows(driver, record) {
   assert.ok(typeof prior.elementResponseAttributes === 'string' && prior.elementResponseAttributes.length <= 256,
     'QP_ANDROID_BATCH_SETTINGS_REQUIRED');
   assert.equal(prior.waitForIdleTimeout,500,'QP_ANDROID_ORIGINAL_IDLE_SETTING_REQUIRED');
-  const original = { shouldUseCompactResponses: prior.shouldUseCompactResponses, elementResponseAttributes: prior.elementResponseAttributes, waitForIdleTimeout:prior.waitForIdleTimeout };
+  const original = { shouldUseCompactResponses: prior.shouldUseCompactResponses, elementResponseAttributes: prior.elementResponseAttributes };
   let restorationAttempted = false;
   const restore = async () => {
     assert.equal(restorationAttempted, false, 'QP_ANDROID_BATCH_RESTORATION_REPLAY_REFUSED');
@@ -251,12 +251,12 @@ export async function configureQPAndroidQueueRows(driver, record) {
     record?.({ type: 'qp_android_queue_response_settings', state: 'restored' });
   };
   try {
-    await driver.updateSettings({ shouldUseCompactResponses: false, elementResponseAttributes: QP_ANDROID_QUEUE_RESPONSE_ATTRIBUTES, waitForIdleTimeout:0 });
+    await driver.updateSettings({ shouldUseCompactResponses: false, elementResponseAttributes: QP_ANDROID_QUEUE_RESPONSE_ATTRIBUTES });
     const actual = await driver.getSettings();
     assert.equal(actual.shouldUseCompactResponses, false, 'QP_ANDROID_BATCH_SETTINGS_REQUIRED');
     assert.equal(actual.elementResponseAttributes, QP_ANDROID_QUEUE_RESPONSE_ATTRIBUTES, 'QP_ANDROID_BATCH_SETTINGS_REQUIRED');
-    assert.equal(actual.waitForIdleTimeout,0,'QP_ANDROID_BATCH_SETTINGS_REQUIRED');
-    record?.({ type: 'qp_android_queue_response_settings', state: 'configured', attributes: QP_ANDROID_QUEUE_RESPONSE_ATTRIBUTES, waitForIdleTimeout:0 });
+    assert.equal(actual.waitForIdleTimeout,500,'QP_ANDROID_BATCH_SETTINGS_REQUIRED');
+    record?.({ type: 'qp_android_queue_response_settings', state: 'configured', attributes: QP_ANDROID_QUEUE_RESPONSE_ATTRIBUTES, waitForIdleTimeout:500 });
   } catch (error) {
     try { await restore(); } catch (cleanup) { const combined=new AggregateError([error, cleanup], 'QP_ANDROID_BATCH_SETUP_AND_RESTORATION_FAILED');combined.code='QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN';throw combined; }
     throw error;
@@ -277,6 +277,34 @@ export async function withQPAndroidQueueRows(c, operation) {
     catch(cleanup) {
       c.nativeSettingsCleanupUncertain=true;
       const combined=new AggregateError(original?[original,cleanup]:[cleanup],'QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN');
+      combined.code='QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN';throw combined;
+    }
+  }
+}
+
+export async function withQPAndroidQueuePageIdle(c, operation) {
+  assert.equal(c.platform,'android');
+  const prior=await c.driver.getSettings();
+  assert.equal(prior.waitForIdleTimeout,500,'QP_ANDROID_ORIGINAL_IDLE_SETTING_REQUIRED');
+  let restorationAttempted=false,original;
+  const restore=async()=>{
+    assert.equal(restorationAttempted,false,'QP_ANDROID_PAGE_IDLE_RESTORATION_REPLAY_REFUSED');
+    restorationAttempted=true;
+    await c.driver.updateSettings({waitForIdleTimeout:500});
+    assert.equal((await c.driver.getSettings()).waitForIdleTimeout,500,'QP_ANDROID_PAGE_IDLE_RESTORATION_REQUIRED');
+    if(c.queueViewportDiagnostics===true)c.record?.({type:'qp_android_queue_page_idle',state:'restored',waitForIdleTimeout:500});
+  };
+  try {
+    await c.driver.updateSettings({waitForIdleTimeout:0});
+    assert.equal((await c.driver.getSettings()).waitForIdleTimeout,0,'QP_ANDROID_PAGE_IDLE_SETTING_REQUIRED');
+    if(c.queueViewportDiagnostics===true)c.record?.({type:'qp_android_queue_page_idle',state:'configured',waitForIdleTimeout:0});
+    return await operation();
+  } catch(error) {original=error;throw error;}
+  finally {
+    try {await restore();}
+    catch(cleanup) {
+      c.nativeSettingsCleanupUncertain=true;
+      const combined=new AggregateError(original?[original,cleanup]:[cleanup],'QP_ANDROID_PAGE_IDLE_CLEANUP_UNCERTAIN');
       combined.code='QP_ANDROID_QUEUE_SETTINGS_CLEANUP_UNCERTAIN';throw combined;
     }
   }
@@ -329,7 +357,9 @@ export async function androidQueuePage(c, page) {
     await revealAndroidWorkHeader(c, view, probe);
     return view;
   });
-  return withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
+  // The read/scroll walk may avoid implicit idle waits. Restore the normal
+  // input barrier before any following radio, pagination or task-detail tap.
+  return withQPAndroidQueuePageIdle(c,()=>withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
     const expected = page.items.map(row => row.id);
     const matches = (actual, prefix) => actual.length === prefix.length && actual.every((id, i) => id === prefix[i]);
     const empty = () => visible(c.driver, selector('android', 'text', 'No matching tasks'), probe);
@@ -371,15 +401,29 @@ export async function androidQueuePage(c, page) {
       assert.equal(await probe(() => next[0].isDisplayed()), true, 'QP_ANDROID_QUEUE_NEXT_NOT_VISIBLE');
       assert.equal(await probe(() => next[0].getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_FOOTER_PACKAGE');
     }
-  });
+  }));
 }
 
-async function tapQueueTask(c, id) {
+export async function tapQPQueueTask(c, id) {
   if (c.platform === 'android') {
     await withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
       const scope = await androidScrollScope(c, 'work', probe);
       await revealAndroidWorkHeader(c, scope, probe);
     });
+    consume(c);
+    const key='queue-task-'+id,element=await find(c,'id',key,{scroll:true});
+    assert.equal(await element.isEnabled(),true);
+    assert.equal(await element.getAttribute('resource-id'),key,'QP_ANDROID_EXACT_TASK_ROW_REQUIRED');
+    assert.equal(await element.getAttribute('package'),c.fixture.appId,'QP_ANDROID_WRONG_ROW_PACKAGE');
+    assert.equal(await element.getAttribute('class'),'android.widget.Button','QP_ANDROID_TASK_BUTTON_REQUIRED');
+    assert.equal(await element.getAttribute('clickable'),'true','QP_ANDROID_TASK_BUTTON_REQUIRED');
+    const frame=await c.driver.getElementRect(element.elementId),window=await c.driver.getWindowRect();
+    assert.ok(containsFrame(window,frame),'QP_ANDROID_TASK_BUTTON_OUTSIDE_WINDOW');
+    nativeAction(c,'click','id',key);
+    // UiAutomator2 documents this primary gesture for native tap failures.
+    // One protocol command only; an unknown acknowledgement is never replayed.
+    await c.driver.execute('mobile: clickGesture',{elementId:element.elementId});
+    return;
   }
   await tap(c, 'queue-task-' + id);
 }
@@ -427,7 +471,7 @@ export const queuePrivacyScenarios=Object.freeze([
   const before=await traffic(c);await home(c,'work');await wait(c,'matter-task-queue');c.selected={ownership:'mine',dates:'all'};
   const page=await queue(c,'mine','all');assert.equal(page.items.length,25);assert.ok(page.next_cursor);await rows(c,page);
   await tap(c,'queue-next');const second=await queue(c,'mine','all',page.next_cursor);assert.equal(second.items.length,2);assert.equal(second.next_cursor,null);await rows(c,second);
-  await tapQueueTask(c,second.items[1].id);await wait(c,'queue-task-detail');await taskFacts(c,second.items[1]);await tap(c,'queue-back');await rows(c,second);
+  await tapQPQueueTask(c,second.items[1].id);await wait(c,'queue-task-detail');await taskFacts(c,second.items[1]);await tap(c,'queue-back');await rows(c,second);
   await tap(c,'queue-first');await rows(c,page);
   for(const ownership of['mine','team','unassigned'])for(const dates of['all','dated','undated']){
    if(ownership==='mine'&&dates==='all')continue;const actual=await selectQueue(c,ownership,dates);
@@ -448,7 +492,7 @@ export const queuePrivacyScenarios=Object.freeze([
    assert.equal(reloaded.items.at(-1).due_on,page.items.at(-1).due_on);assert.equal(reloaded.items.at(-1).updated_at,restored.updatedAt);assert.notEqual(restored.updatedAt,page.items.at(-1).updated_at);
    return changed;
   });
-  await tapQueueTask(c,page.items[0].id);await wait(c,'queue-task-detail');await tap(c,'queue-open-matter');await wait(c,'matter-detail');assert.equal(await fact(c,'matter-code'),page.items[0].matter.matter_code);
+  await tapQPQueueTask(c,page.items[0].id);await wait(c,'queue-task-detail');await tap(c,'queue-open-matter');await wait(c,'matter-detail');assert.equal(await fact(c,'matter-code'),page.items[0].matter.matter_code);
   await home(c,'work');await wait(c,'matter-task-queue');await absent(c,'queue-task-detail');
   const native=await control(c,'readNativeRequest',{method:'POST',route:'/api/account/deletion-requests',afterSequence:before.lastSequence});assert.equal(native.requests.length,0);
   readOnlyTraffic(delta(before,await traffic(c)));event(c,'queue-complete',{firstPageIds:page.items.map(x=>x.id),secondPageIds:second.items.map(x=>x.id),anchor:changed.id,restored:true,staleRejected:true,nativeBusinessWrites:0});

@@ -489,13 +489,13 @@ class ControlTests(unittest.TestCase):
                 return original_sync(fd)
             def first():
                 try: persist({"type": "native"})
-                except BaseException as error: failures.append(error)
+                except Exception as error: failures.append(error)
             def second():
                 attempted.set()
                 try:
                     if close_second: close()
                     else: persist({"type": "control"})
-                except BaseException as error: failures.append(error)
+                except Exception as error: failures.append(error)
                 finally: completed.set()
             a = threading.Thread(target=first, name="native-journal-writer")
             b = threading.Thread(target=second, name="control-journal-writer")

@@ -207,7 +207,7 @@ export async function runQueuePrivacy(q){
  const sessions=journal.events.filter(e=>e.type==='appium_session'),created=sessions.filter(e=>e.state==='created'),deleted=sessions.filter(e=>e.state==='deleted');
  const paired=created.length===2&&deleted.length===2&&new Set(created.map(e=>e.sessionId)).size===2&&created.every(e=>deleted.some(z=>z.id===e.id&&z.sessionId===e.sessionId));
  if(preflight&&!paired)postflight={type:'postflight_result',status:'failed',reason:'QP_EXACT_TWO_SESSION_LIFECYCLE_REQUIRED'};if(postflight)journal.write(postflight);
- journal.write({type:'run_completed',...collection,intendedCount:2});const result=reconcileResults(journal.events,collection.intended);journal.close();const summary={...collection,...result,pairedSessions:paired,nativeExecution:created.length?'actual':'not-run',report,...androidLayoutSummary(a.actual),core23PassedByThisRun:false,files17PassedByThisRun:false,v1SeventeenPassedByThisRun:false};
+ journal.write({type:'run_completed',...collection,nativeExecution:created.length?'actual':'not-run',intendedCount:2});const result=reconcileResults(journal.events,collection.intended);journal.close();const summary={...collection,...result,pairedSessions:paired,nativeExecution:created.length?'actual':'not-run',report,...androidLayoutSummary(a.actual),core23PassedByThisRun:false,files17PassedByThisRun:false,v1SeventeenPassedByThisRun:false};
  fs.writeFileSync(path.join(report,'summary.json'),JSON.stringify(summary,null,2)+'\n',{flag:'wx',mode:0o600});return summary;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
