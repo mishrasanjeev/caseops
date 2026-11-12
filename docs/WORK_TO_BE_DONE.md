@@ -31,6 +31,12 @@ production action. Canonical ownership is IPLF-080B/UJ-29/PAT-01/IP-SCOPE plus
 NFT-005/J14-M14; historical032/UJ-02/090A note labels do not transfer ownership.
 This is not MacBook app work.
 
+Owner subsequently approved shared CI trust/setup repairs, not native app work.
+Two Windows pre-audit failures are retained. CI-only exact pinned-archive
+hardening, unchanged whole-operation budgets and12new regression declarations
+still need actual standard tooling/native Windows/green CI acceptance. Default
+readers, trust/owner/byte/namespace fences and apps/mobile bytes remain unchanged.
+
 Current follow-up: exact structured identity equality and two nonunique
 concurrent expression indexes replace range proposals in isolated source.
 Their55declared migration cases, health/SQLite checks and82physical profiles

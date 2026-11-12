@@ -2,6 +2,13 @@
 
 ## November 12 Disclosure Hydration Reopening: Issue616
 
+J14/M14 shared-CI integration is also pending: owner approved repairing only
+shared Windows trust/setup tooling after actual pre-audit ACL/timeout failures.
+CI-only literal pinned-archive hardening and shared unchanged absolute budgets
+have12declared new tests, including native Windows proof, not execution passes.
+Keep default readers/owner/hash/namespace/TLS guards strict; app/MacBook source
+and dependencies unchanged. Full regression/green CI/production remain required.
+
 F8's hosted original42plan scale component now passes (six disclosure modes
 501work/400blocks), but actual PG8 proves an unreleased partial-catalog rollback
 defect. A deeper downgrade removes both support indexes before a historical

@@ -4189,3 +4189,13 @@ requirements when using the fallback.
   Regenerate and validate every dependent view and projection, proving admitted
   classes and policy decisions unchanged. Updating a map hash alone cannot
   certify the image's shipped governance metadata.
+- A Windows CI preparation or ownership refusal is not a dependency-audit
+  verdict. Preserve its actual phase and native evidence. Repair only the
+  literal pinned CI artifact through verified retained handles; keep default
+  readers strict and never recursively loosen checkout ACLs. A Linux skip
+  cannot certify the corresponding native Windows permission behavior.
+- Preparation deadlines cover cold process startup, native work, independent
+  postconditions and the final filesystem reconciliation under one original
+  absolute end. Do not reset that budget between phases or return success
+  after a late final read. Preserve the original failed transport diagnosis
+  and prove both cold-start admission and late-success rejection explicitly.

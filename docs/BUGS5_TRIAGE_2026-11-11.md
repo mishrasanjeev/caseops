@@ -55,6 +55,19 @@ source-data completion and production acceptance are separate fields.
 
 ### November 12 Full Docker Disclosure-Work Failure (Unreleased)
 
+Owner-authorized shared-CI follow-up: Windows installed-audit attempt1 refused
+unsafe write scope on the pinned public npm archive, while attempt2 timed out
+before audit at command hardening. Neither is a vulnerability verdict. New
+source narrows only that exact CI archive's DACL through retained handles and
+unchanged byte/hash/owner/namespace guards, then uses the unchanged strict
+reader. Default APIs gain no repair authority from environment flags. Original
+30s preparation/10s hardening/3.5s native-work bounds remain; startup and the
+independent owner proof share one end, with final-read expiry rejection.
+Five clock cases and seven archive cases are declared, not executed. Independent
+source review corrected final deadline/clock-fixture and strict decoder issues;
+native Windows and complete standard tooling coverage remain required. No
+apps/mobile bytes, vendor archive, locks, Android/iOS source or MacBook edits.
+
 14:13UTC actual f8 component update: original hosted PG4scale passes with all
 42plans retained; six disclosure modes501work/400blocks, within original
 budgets. This does not certify the entire candidate. Full f8CI is incomplete

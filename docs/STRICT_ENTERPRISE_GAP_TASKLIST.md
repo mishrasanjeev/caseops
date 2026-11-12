@@ -2,6 +2,13 @@
 
 ## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
 
+Shared-CI readiness is separately source-only: actual Windows preparation
+refusals prevented audit, not evidence of vulnerable installed dependencies.
+Owner authorized one literal pinned-artifact DACL hardening path, preserving
+strict default readers and original total deadlines across startup/postchecks.
+No native/app/lock edits or relaxed trust. Twelve new declared controls need
+standard Linux/Windows discovery and actual Windows permission acceptance.
+
 Actual f8 scale component passes501/400, not whole-release acceptance. Hosted
 PG8 confirms concurrent downgrade dropped both new indexes before a deeper
 restore-forward refusal. New source must refuse that entire chain before DDL,

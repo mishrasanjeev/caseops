@@ -20,6 +20,11 @@ provider, relevance or calibrated predictive-quality dependencies.
 
 ## November 2 Disclosure Work Coverage Pending
 
+Additional J14/M14 shared-CI controls are source-only: five deterministic-clock
+and seven archive/Windows-permission declarations, not discovered/executed
+coverage. Keep the literal artifact's unchanged hash/default-reader/owner/ACL
+fences and original absolute budgets. No app/MacBook acceptance is claimed.
+
 F8 original42plan hosted scale component is now positive501work/400blocks,
 not full coverage. Its actual chained-downgrade failure remains retained.
 Follow-up declares61migration cases/18PG including6chain-refusal controls,

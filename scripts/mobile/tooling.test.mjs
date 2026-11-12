@@ -5242,7 +5242,8 @@ test('CI-COMMAND-01 native command hardening keeps bytes and independently reche
     const state = fs.statSync(command, { bigint: true });
     assert.deepEqual(Object.fromEntries(['INO', 'VOLUME', 'BIRTH', 'MTIME', 'LENGTH'].map(key => [key, options.env['CASEOPS_COMMAND_' + key]])), { INO: String(state.ino), VOLUME: String(state.dev), BIRTH: String(state.birthtimeNs), MTIME: String(state.mtimeNs), LENGTH: '17' });
     assert.equal(options.env.CASEOPS_COMMAND_SHA256, createHash('sha256').update('EARLIER=retained\n').digest('base64'));
-    assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096);
+    assert.ok(options.timeout > 0 && options.timeout <= 10000); assert.equal(options.maxBuffer, 4096);
+    assert.match(code, /ElapsedMilliseconds -ge 3500/);
     assert.match(code, /\[IO\.FileMode\]::Open,\$rights,\[IO\.FileShare\]::Read/);
     assert.match(code, /\$f\.SetAccessControl\(\$a\)/); assert.match(code, /\$f\.GetAccessControl\(\)/);
     assert.doesNotMatch(code, /\$f\.GetAccessControl\(\[/);
@@ -5257,6 +5258,100 @@ test('CI-COMMAND-01 native command hardening keeps bytes and independently reche
     return { status: 0, stdout: 'SECURED', stderr: '' };
   } });
 });
+test('CI-COMMAND-07 deterministic cold startup uses only the original whole-operation budget', async t => {
+  const clockBase = performance.now(); let elapsed = 0, hardeningTimeout, owners = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      const result = hardenCITrustRunnerCommand({ ...environment, SystemRoot: process.env.SystemRoot });
+      assert.equal(result.commandFileHardened, true);
+      assert.equal(result.contentsPreserved && result.ownerMatches && result.writeScopeSafe, true);
+      assert.ok(hardeningTimeout > 4500 && hardeningTimeout <= 10000);
+      assert.equal(owners, 1); assert.equal(elapsed, 5000);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: (_fixture, args, options) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) {
+      hardeningTimeout = options.timeout;
+      if (options.timeout <= 4500) return { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' };
+      elapsed += 4500; return { status: 0, stdout: 'SECURED', stderr: '' };
+    }
+    owners++; assert.ok(options.timeout > 0 && options.timeout <= 4000);
+    elapsed += 500; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
+test('CI-COMMAND-08 a late successful hardener cannot reset the original ten-second deadline', async t => {
+  const clockBase = performance.now(); let elapsed = 0;
+  await ciNativeRunnerFixture(async fixture => {
+    const { environment, command } = fixture;
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.equal(fixture.commandCalls, 1);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: () => { elapsed += 10001; return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
+
+test('CI-COMMAND-09 independent owner proof shares the remaining operation budget and late success refuses', async t => {
+  const clockBase = performance.now(); let elapsed = 0, ownerTimeout;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.ok(ownerTimeout > 0 && ownerTimeout <= 1500);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: (_fixture, args, options) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) {
+      elapsed += 8500; return { status: 0, stdout: 'SECURED', stderr: '' };
+    }
+    ownerTimeout = options.timeout; elapsed += 1600;
+    return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
+test('CI-COMMAND-10 expired operation still retains the original failed transport classification', async t => {
+  const clockBase = performance.now(); let elapsed = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT');
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: () => { elapsed += 10001; return { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }; } });
+});
+
+test('CI-COMMAND-11 a stall in the final namespace read cannot return success after the deadline', async t => {
+  const clockBase = performance.now(); let elapsed = 0, afterOwner = false, injected = false;
+  await ciNativeRunnerFixture(async fixture => {
+    const { environment, command } = fixture;
+    const trace = ciSourceTrace(), lstat = fs.lstatSync;
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    fs.lstatSync = (file, ...args) => {
+      const state = lstat(file, ...args);
+      if (afterOwner && !injected && file === path.parse(command).root) {
+        injected = true; elapsed = 10001;
+      }
+      return state;
+    };
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.equal(injected, true); assert.equal(fixture.commandCalls, 2);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { fs.lstatSync = lstat; trace.restore(); t.mock.restoreAll(); }
+    trace.closed();
+  }, { proof: (_fixture, args) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) return { status: 0, stdout: 'SECURED', stderr: '' };
+    afterOwner = true; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
 test('CI-COMMAND-02 hardening refuses missing context foreign command names aliases hardlinks and oversize before dispatch', async () => {
   for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async f => {
     f.environment.SystemRoot = process.env.SystemRoot;
