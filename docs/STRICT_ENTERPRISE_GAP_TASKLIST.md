@@ -4868,3 +4868,12 @@ with fatal crash handling and all budgets/assertions intact, passed a physical
 native exit 0). See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
 New hosted CI is still required; no mobile/store case credit is granted by that
 infrastructure replay.
+
+
+### 2026-11-13 — diagnostic review follow-up
+
+Hosted ea68f74b PostgreSQL shard 9 passed. CodeQL findings 845/846 required a
+separate frame-release and thread-control-flow repair; complete 140 host
+diagnostic/launcher cases passed. Fresh hosted alert verdicts are still pending.
+See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md). Native
+platform completion and store submission remain unverified; release NO-GO.

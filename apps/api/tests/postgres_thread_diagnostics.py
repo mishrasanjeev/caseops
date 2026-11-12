@@ -46,7 +46,7 @@ def _snapshot(case_hash: str, started: float) -> dict:
                     frame = frame.f_back
                 stacks.append({"frames": stack, "truncated": frame is not None})
             finally:
-                frame = None
+                del frame
         return {"event": "postgres_python_thread_diagnostic", "case_sha256": case_hash,
                 "after_seconds": AFTER_SECONDS, "elapsed_seconds": time.monotonic() - started,
                 "thread_count": len(frames), "threads_truncated": len(frames) > MAX_THREADS,
@@ -100,8 +100,14 @@ class TimedFrames:
             return
         try:
             _write(self.root, self.case_hash, _snapshot(self.case_hash, self.started))
-        except BaseException as error:
+        except Exception as error:
             self.failure = error
+        finally:
+            # SystemExit/KeyboardInterrupt must keep their normal thread
+            # propagation and still make close fail, rather than look like a
+            # successfully published observation.
+            if (active_error := sys.exception()) is not None:
+                self.failure = active_error
 
     def start(self):
         self.thread.start()
