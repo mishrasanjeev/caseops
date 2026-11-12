@@ -4159,3 +4159,7 @@ requirements when using the fallback.
   text translation can alter the supposedly immutable UTF-8 buffer. Assert
   exact LF bytes and partial-write extent, and retain platform fixture failures
   separately from native guard or product failures; never weaken OS protections.
+- A browser fixture must satisfy the visible form's actual length and format
+  contract before awaiting its mutation. Preserve validation-blocked runs as
+  fixture failures, not product reproductions; retain unique identifiers and
+  prove the corrected complete journey rather than increasing response waits.

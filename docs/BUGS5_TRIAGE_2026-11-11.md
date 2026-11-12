@@ -53,6 +53,27 @@ source-data completion and production acceptance are separate fields.
 
 ## Why Reports Reopen
 
+### November 12 Browser-Fixture And Analysis Correction
+
+The c671 built preflight completed all303 frontend files/2951 tests, both
+typechecks,81 origin-recovery checks,29 inventory-budget checks, fresh build
+and14 native browser identities. Actual browsers were12passed/2failed, with
+zero skips/retries/global errors. Both new assistant/research journeys stopped
+before fixture creation: the generated42-character Matter code violated the
+existing40-character form maximum. Both snapshots retained the same validation
+alert. This is my fixture defect, not reproduction of a Matter-create or
+assistant product failure. The correction retains the complete random nonce
+with a shorter prefix, asserts the40-character format boundary and checks for
+form validation before awaiting the mutation. No increased response wait or
+automatic mutation retry is introduced. Complete corrected journeys and the
+full exact-source Docker replacement remain required.
+
+CodeQL's successful workflow still reported note838 in the Windows evidence
+test helper. The narrow `ctypes.wintypes` import-style correction is not an
+exploitable-security repair or a suppressed alert. Its complete Windows63
+and offline Linux81 helper replays passed all189/243 phases with zero skips.
+That evidence does not close the four PostgreSQL matrices or certify release.
+
 ### November 12 Representative-Question Correction (Component Evidence Only)
 
 The owner directed this task to choose representative questions rather than

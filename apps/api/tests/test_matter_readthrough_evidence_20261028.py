@@ -51,7 +51,7 @@ class _WindowsStat:
 @lru_cache(maxsize=1)
 def _windows_api():
     import ctypes
-    from ctypes import wintypes
+    import ctypes.wintypes as wintypes
 
     class Basic(ctypes.Structure):
         _fields_ = [

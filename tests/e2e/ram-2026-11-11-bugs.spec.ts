@@ -379,7 +379,8 @@ for (const phone of [false, true]) {
     }
 
     const title = `B5 assistant factual QA ${nonce}`;
-    const matterCode = `B5RESEARCH-${nonce.replaceAll("-", "").toUpperCase()}`;
+    const matterCode = `B5R-${nonce.replaceAll("-", "").toUpperCase()}`;
+    expect(matterCode).toMatch(/^[A-Z0-9][A-Z0-9-]{0,38}[A-Z0-9]$/);
     let ownedMatter: ResearchMatter | undefined;
     let ownedConversation: Pick<AssistantSessionRecord, "id" | "title"> & {
       matterId: string; sourceVersion: string; companyId: string; membershipId: string; userId: string;
@@ -391,6 +392,7 @@ for (const phone of [false, true]) {
       await dialog.getByLabel("Title", { exact: true }).fill(title);
       await dialog.getByLabel("Matter code", { exact: true }).fill(matterCode);
       await dialog.getByLabel("Practice area", { exact: true }).fill("Civil");
+      await expect(dialog.getByRole("alert")).toHaveCount(0);
       await release();
       const researchCreated = responseFor("/api/matters/");
       await dialog.getByRole("button", { name: "Create matter", exact: true }).click();
