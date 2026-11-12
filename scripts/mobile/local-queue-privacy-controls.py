@@ -56,7 +56,7 @@ def validate_registration(v, *, source, run, now):
     assert len({a["userId"] for a in v["actors"].values()}) == 3
     assert len({a["membershipId"] for a in v["actors"].values()}) == 3
     anchor=v["anchor"];assert anchor["id"] in ids and anchor["matterId"] in ids
-    expected={"GET "+QUEUE,"GET "+PRIVACY,"POST "+PRIVACY,"GET /api/matters/"+anchor["matterId"]+"/workspace"}
+    expected={"GET "+QUEUE,"GET "+PRIVACY,"POST "+PRIVACY,"GET /api/matters/"+anchor["matterId"]+"/workspace","GET /api/matters/"+anchor["matterId"]+"/drafts"}
     assert set(v["exactRoutes"]) == expected and len(v["exactRoutes"]) == len(expected)
     allowed={"GET /api/matters/"+anchor["matterId"],"GET /api/matters/"+anchor["matterId"]+"/tasks",
              "PATCH /api/matters/"+anchor["matterId"]+"/tasks/"+anchor["id"]}

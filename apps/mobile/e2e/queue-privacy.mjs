@@ -9,7 +9,8 @@ const consume=c=>assert.ok(++c.nativeOperations<=160,'QP_NATIVE_CONTROL_BOUND');
 const NATIVE_STATE_MS = 20000;
 const ANDROID_SCROLL_LIMIT = 10;
 const ANDROID_SCROLL_PERCENT = 0.65;
-async function tap(c,id){consume(c);const e=await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
+const androidQueueNavigationControls = new Set(['queue-next','queue-first','queue-back','queue-open-matter']);
+async function tap(c,id){if(c.platform==='android'&&androidQueueNavigationControls.has(id))return tapQPQueueNavigation(c,id);consume(c);const e=await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
 async function fact(c,id){consume(c);return read(c,'id',id,{scroll:true});}
 async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
@@ -218,13 +219,14 @@ export async function selectQueueSegment(c, group, label) {
  const r=observed.segments[group]?.[label];assert.ok(r&&r.group===group&&r.label===label);
  if (r.kind === 'android-compose-parent') {
    assert.equal(typeof r.selectedAtObservation, 'boolean', 'QP_ANDROID_QUEUE_OBSERVED_STATE_REQUIRED');
-   const { parent, selected } = await withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
+   const { parent, selected } = await withQPAndroidQueuePageIdle(c,()=>withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
      if (!await visible(c.driver, selector('android', 'id', 'screen-work'), probe)) {
        const scope = await androidScrollScope(c, 'work', probe);
        await revealAndroidWorkHeader(c, scope, probe);
      }
+     while(await visible(c.driver,selector('android','text','Loading current work'),probe))await probe(()=>pause(200));
      return resolveAndroidComposeQueueSegment(c, group, label, probe);
-   });
+   }));
    assert.equal(selected, false, 'QP_ANDROID_QUEUE_TRANSITION_ALREADY_SELECTED');
    consume(c);
    await dispatchNativeClick(c, parent);
@@ -347,6 +349,7 @@ function extendQPAndroidQueueOrder(expected, seen, sample) {
 }
 
 export async function androidQueuePage(c, page) {
+  return withQPAndroidQueuePageIdle(c,async()=>{
   // Keep the original independent queue-ready and exact-page deadlines. A
   // page transition can leave the viewport at the old page's footer.
   const scope = await withinAndroidViewport('QP_NATIVE_STATE_REQUIRED', async (probe) => {
@@ -359,7 +362,7 @@ export async function androidQueuePage(c, page) {
   });
   // The read/scroll walk may avoid implicit idle waits. Restore the normal
   // input barrier before any following radio, pagination or task-detail tap.
-  return withQPAndroidQueuePageIdle(c,()=>withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
+  return withinAndroidViewport('QP_EXACT_NATIVE_PAGE_IDENTITIES', async (probe) => {
     const expected = page.items.map(row => row.id);
     const matches = (actual, prefix) => actual.length === prefix.length && actual.every((id, i) => id === prefix[i]);
     const empty = () => visible(c.driver, selector('android', 'text', 'No matching tasks'), probe);
@@ -401,31 +404,68 @@ export async function androidQueuePage(c, page) {
       assert.equal(await probe(() => next[0].isDisplayed()), true, 'QP_ANDROID_QUEUE_NEXT_NOT_VISIBLE');
       assert.equal(await probe(() => next[0].getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_FOOTER_PACKAGE');
     }
-  }));
+  });
+  });
 }
 
-export async function tapQPQueueTask(c, id) {
-  if (c.platform === 'android') {
-    await withinAndroidViewport('QP_ANDROID_WORK_HEADER_REQUIRED', async (probe) => {
-      const scope = await androidScrollScope(c, 'work', probe);
-      await revealAndroidWorkHeader(c, scope, probe);
-    });
+async function tapQPAndroidQueueControl(c, key, task) {
+    assert.equal(c.platform,'android');
+    assert.ok(task ? /^queue-task-[a-f0-9-]{36}$/.test(key) : androidQueueNavigationControls.has(key),'QP_EXACT_QUEUE_CONTROL_REQUIRED');
     consume(c);
-    const key='queue-task-'+id,element=await find(c,'id',key,{scroll:true});
-    assert.equal(await element.isEnabled(),true);
-    assert.equal(await element.getAttribute('resource-id'),key,'QP_ANDROID_EXACT_TASK_ROW_REQUIRED');
-    assert.equal(await element.getAttribute('package'),c.fixture.appId,'QP_ANDROID_WRONG_ROW_PACKAGE');
-    assert.equal(await element.getAttribute('class'),'android.widget.Button','QP_ANDROID_TASK_BUTTON_REQUIRED');
-    assert.equal(await element.getAttribute('clickable'),'true','QP_ANDROID_TASK_BUTTON_REQUIRED');
-    const frame=await c.driver.getElementRect(element.elementId),window=await c.driver.getWindowRect();
-    assert.ok(containsFrame(window,frame),'QP_ANDROID_TASK_BUTTON_OUTSIDE_WINDOW');
-    nativeAction(c,'click','id',key);
-    // UiAutomator2 documents this primary gesture for native tap failures.
-    // One protocol command only; an unknown acknowledgement is never replayed.
-    await c.driver.execute('mobile: clickGesture',{elementId:element.elementId});
-    return;
-  }
-  await tap(c, 'queue-task-' + id);
+    await withinAndroidViewport('QP_ANDROID_TASK_BUTTON_NOT_SETTLED', async (probe) => {
+      let element, scope, settled;
+      const geometry = async () => {
+        const frame = await probe(() => c.driver.getElementRect(element.elementId));
+        const host = await probe(() => c.driver.getElementRect(scope.elementId));
+        const window = await probe(() => c.driver.getWindowRect());
+        assert.ok(containsFrame(window, host), 'QP_ANDROID_SCROLL_OUTSIDE_WINDOW');
+        return { frame, host, window };
+      };
+      await withQPAndroidQueuePageIdle(c, async () => {
+        scope = await androidScrollScope(c, 'work', probe);
+        element = await visible(c.driver, selector('android', 'id', key), probe);
+        let initial = element && await geometry();
+        // A continuation page can already expose the complete target. Scrolling
+        // back to the heading in that state adds motion before the task press.
+        if (!initial || !containsFrame(initial.host, initial.frame) || !containsFrame(initial.window, initial.frame)) {
+          await revealAndroidWorkHeader(c, scope, probe);
+          element = await probe(() => find(c, 'id', key, { scroll: true }));
+        }
+        let previous, previousAt;
+        for (;;) {
+          const current = await geometry(), now = performance.now();
+          const contained = containsFrame(current.host, current.frame) && containsFrame(current.window, current.frame);
+          if (contained && previous && now - previousAt >= 200 && JSON.stringify(current) === JSON.stringify(previous)) {
+            settled = current;
+            break;
+          }
+          previous = contained ? current : undefined;
+          previousAt = now;
+          await probe(() => pause(200));
+        }
+      });
+      // Restore the ordinary input barrier, then recheck the same handle and
+      // geometry. A moved/stale target is refused before the one dispatch.
+      assert.equal(await probe(() => element.isEnabled()), true);
+      assert.equal(await probe(() => element.getAttribute('resource-id')), key, 'QP_ANDROID_EXACT_TASK_ROW_REQUIRED');
+      assert.equal(await probe(() => element.getAttribute('package')), c.fixture.appId, 'QP_ANDROID_WRONG_ROW_PACKAGE');
+      assert.equal(await probe(() => element.getAttribute('class')), task ? 'android.widget.Button' : 'android.view.View', 'QP_ANDROID_TASK_BUTTON_REQUIRED');
+      assert.equal(await probe(() => element.getAttribute('clickable')), 'true', 'QP_ANDROID_TASK_BUTTON_REQUIRED');
+      assert.deepEqual(await geometry(), settled, 'QP_ANDROID_TASK_BUTTON_MOVED_BEFORE_DISPATCH');
+      nativeAction(c, 'click', 'id', key);
+      // One documented primary gesture; an unknown ACK is never replayed.
+      await probe(() => c.driver.execute('mobile: clickGesture', { elementId: element.elementId }));
+    });
+}
+
+export async function tapQPQueueNavigation(c,id) {
+  assert.ok(androidQueueNavigationControls.has(id),'QP_EXACT_QUEUE_CONTROL_REQUIRED');
+  if(c.platform==='android')return tapQPAndroidQueueControl(c,id,false);
+  return tap(c,id);
+}
+export async function tapQPQueueTask(c,id) {
+  if(c.platform==='android')return tapQPAndroidQueueControl(c,'queue-task-'+id,true);
+  return tap(c,'queue-task-'+id);
 }
 
 async function rows(c,page){
@@ -445,11 +485,12 @@ async function queue(c,ownership,dates,cursor=null){
  assert.ok(++c.authoritativeReads<=24);const r=await control(c,'readQueue',{ownership,dates,...(cursor?{cursor}:{})});assert.equal(r.status,200);
  return decodeQueuePage(r.value,{ownership,dates},c.fixture.membershipId);
 }
-async function taskFacts(c,item){
+export async function taskFacts(c,item){
  const values={'queue-task-title':item.title,'queue-task-id':item.id,'queue-task-matter':`${item.matter.matter_code} · ${item.matter.title}`,
  'queue-task-status':item.status.replaceAll('_',' '),'queue-task-priority':item.priority,'queue-task-due':item.due_on?displayDay(item.due_on):'No due date recorded','queue-task-assignment':'Assigned to you',
  'queue-task-created':item.created_at,'queue-task-updated':item.updated_at,'queue-task-lifecycle':String(item.matter.lifecycle_version)};
- for(const[id,value]of Object.entries(values))assert.equal(await fact(c,id),value,'QP_EXACT_TASK_FACT');
+ const verify=async()=>{for(const[id,value]of Object.entries(values))assert.equal(await fact(c,id),value,'QP_EXACT_TASK_FACT');};
+ if(c.platform==='android')await withQPAndroidQueuePageIdle(c,verify);else await verify();
 }
 async function selectQueue(c,ownership,dates){
  if(c.selected.ownership!==ownership){await selectQueueSegment(c,'Task ownership',{mine:'Mine',team:'Team',unassigned:'Unassigned'}[ownership]);c.selected.ownership=ownership;}

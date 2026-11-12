@@ -1808,6 +1808,27 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.gateway.state["routeRejected"], 1)
         self.assertEqual(self.gateway.state["requests"], [])
 
+    def test_qa_work_draft_rejection_keeps_only_owned_route_template_status_and_timing(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER, "Authorization": "Bearer cnat_SYNTHETIC"}
+        identity = "00000000-0000-4000-8000-000000000123"
+        path = "/api/matters/" + identity + "/drafts"
+        with patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+            status, _ = self.request("GET", path + "?discarded=SYNTHETIC_PRIVATE", headers)
+            self.assertEqual(status, 403)
+            upstream.assert_not_called()
+        row = self.gateway.state["rejectedRequests"][0]
+        self.assertEqual(row["routeTemplate"], "GET /api/matters/{matterId}/drafts")
+        self.assertEqual(row["routeSha256"], hashlib.sha256(("GET " + path).encode()).hexdigest())
+        self.assertEqual((row["status"], row["authorityClass"]), (403, "native"))
+        self.assertGreaterEqual(row["decisionMs"], 0)
+        self.assertLessEqual(row["decisionMs"], 20000)
+        journal = Path(self.gateway.journal.name).read_text()
+        for forbidden in (identity, "discarded", "SYNTHETIC", "Bearer", "?"):
+            self.assertNotIn(forbidden, journal)
+        self.assertEqual(self.gateway.state["routeRejected"], 1)
+        self.assertEqual(self.gateway.state["requests"], [])
+
     def test_qa_rejection_unknown_paths_remain_redacted_and_disabled_profiles_keep_no_diagnostic(self):
         headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
         for registration in ({"profile": "queue-privacy-v1", "syntheticDataOnly": False},

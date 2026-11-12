@@ -21,7 +21,7 @@ def registration():
         'sourceSha':'a'*40,'runId':'qp-'+uid(1),'expiresAt':time.time()+400,'baseImplementationSha256':p.BASE_SHA256,'implementationSha256':'b'*64,
         'capabilities':list(p.CAPABILITIES),'caseControlLimits':p.CASES,'registrationId':'a'*32,'companyId':uid(1),'syntheticIds':[uid(i)for i in range(1,40)],
         'actors':{'owner':actor(2,1),'member':actor(3,1),'second-company':actor(4,5)},'anchor':{'id':tid,'matterId':mid},
-        'exactRoutes':['GET '+p.QUEUE,'GET '+p.PRIVACY,'POST '+p.PRIVACY,'GET /api/matters/'+mid+'/workspace'],'ownerExactRoutes':routes,'ownerRecipes':recipes,
+        'exactRoutes':['GET '+p.QUEUE,'GET '+p.PRIVACY,'POST '+p.PRIVACY,'GET /api/matters/'+mid+'/workspace','GET /api/matters/'+mid+'/drafts'],'ownerExactRoutes':routes,'ownerRecipes':recipes,
         'backendRevision':'api-rev','webRevision':'web-rev','authorityEvidence':{'path':'/synthetic/authority.json','sha256':'a'*64,'uid':os.getuid()}}
 class Owner:
     def __init__(self):self.closed=False;self.calls=[];self.restored=True
@@ -48,6 +48,15 @@ class Protocol(unittest.TestCase):
     def test_registration_positive_preserves_old_limits(self):
         p.validate_registration(self.v,source='a'*40,run=self.v['runId'],now=time.time());self.assertEqual(p.LIMITS['operations'],49);self.assertEqual(sum(p.CASES.values())+1,49)
         old=load('old_unchanged','local-v1-controls.py');self.assertEqual(old.LIMITS['operations'],264);self.assertEqual(sum(old.CASE_LIMITS.values())+1,255)
+    def test_matter_work_drafts_is_one_exact_owned_read_with_no_foreign_or_write_admission(self):
+        p.validate_registration(self.v,source='a'*40,run=self.v['runId'],now=time.time())
+        route='/api/matters/'+self.v['anchor']['matterId']+'/drafts'
+        self.c.route('GET',route)
+        for method,path in [('POST',route),('GET','/api/matters/'+uid(99)+'/drafts'),('GET','/api/matters/*/drafts')]:
+            with self.assertRaisesRegex(AssertionError,'QP_EXACT_ROUTE_REQUIRED'):self.c.route(method,path)
+        for changed in [self.v['exactRoutes'][:-1],self.v['exactRoutes']+['POST '+route],self.v['exactRoutes']+['GET /api/matters/'+uid(99)+'/drafts']]:
+            value={**self.v,'exactRoutes':changed}
+            with self.assertRaises(AssertionError):p.validate_registration(value,source='a'*40,run=self.v['runId'],now=time.time())
     def test_202_ack_loss_retains_exact_original_and_one_receipt_read(self):
         arm=self.arm();intercept=self.native();self.assertTrue(self.ack(intercept));r=self.call('readControlReceipt',args={'id':arm})
         self.assertTrue(r['upstreamAcknowledged']);self.assertEqual(r['upstreamStatus'],202);self.assertEqual(r['requestsForwarded'],1);self.assertEqual(r['responseObservation'],self.value)

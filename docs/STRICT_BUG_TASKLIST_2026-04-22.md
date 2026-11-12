@@ -6149,3 +6149,27 @@ complete page/detail replay of the primary gesture passed, with normal logout,
 session deletion and settings restoration. It has zero full-suite credit. No full-suite,
 distribution-signing or store-submission completion is claimed. See
 `docs/mobile/NATIVE_QUEUE_TOUCH_2026-11-12.md`.
+
+
+## 2026-11-12 — exact native Matter reads and settled Queue input
+
+J20/M22, US-MOB-01..08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both dbd2 actual QA builds and the
+complete source gate passed. Its full Android QP attempt credits zero cases:
+Queue failed a retained unclassified403 after Matter navigation; Privacy stopped
+on the poisoned ledger. Source proves a missing exact owned drafts read, now
+admitted in both registration validators with strict foreign/write refusals.
+Candidate native replays preserve task/First-page input failures; one replay
+proved exact task facts, and a separate gesture reached all25 first-page rows
+before its collector failed. Settled-frame single primary input now covers the
+four fixed Queue navigation controls and task rows, without retries or longer
+bounds.70 JavaScript,30 controls and109 gateway cases pass. Replacement native
+acceptance and both store submissions remain open. See
+[dated evidence](mobile/NATIVE_QUEUE_WORK_READS_2026-11-12.md).
+
+The subsequent expanded native05 replay passed both complete pages, all nine
+filters, exact task facts/Matter identity and one owned drafts GET200, with
+settings restoration, normal exact-member logout and session deletion. The
+independent reconciliation retains the original rejection counter. This focused
+dirty-harness proof earns zero full-case credit; complete replacement acceptance
+and the release NO-GO remain unchanged.

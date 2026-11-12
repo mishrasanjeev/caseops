@@ -252,7 +252,7 @@ class Gateway:
                  "GET /api/matter-work-queue", "GET /api/account/deletion-requests", "POST /api/account/deletion-requests"}
         template = route if route in fixed else None
         if template is None and method == "GET":
-            match = re.fullmatch(r"/api/matters/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(/workspace|/tasks)?", path)
+            match = re.fullmatch(r"/api/matters/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(/workspace|/tasks|/drafts)?", path)
             if match:
                 template = "GET /api/matters/{matterId}" + (match[1] or "")
         elapsed = round((time.monotonic() - started) * 1000, 3)

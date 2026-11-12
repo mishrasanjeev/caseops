@@ -389,6 +389,7 @@ test('public QP registration projects observed actor IDs and exact mount ownersh
   const q={kind:'compose-queue-privacy-registration',preparedOnly:true,datasetEvidence:x.q.producerEvidence,dockerReceipt:x.q.dockerReceipt,buildReceipt:x.q.buildReceipt,codeClosure:x.q.codeClosure,credentialMountEvidence:x.controls.credentialMountEvidence,authorityEvidence:x.controls.authorityEvidence,expiresAt:1200,
    actors:Object.fromEntries(['owner','member','second-company'].map(name=>[name,{...x.dataset.actors[name],credentialEvidence:x.controls.actorCredentialMappings[name].hostEvidence}]))};
   const io={read:x.io.read,bytes:x.io.bytes,snapshot:x.io.snapshot,now:()=>1000},r=composeQPRegistration(q,io);assert.equal(r.privateReads,0);assert.equal(r.registration.actors.member.credentialEvidence.path,'/fixture-state/private0');assert.equal(r.registration.actors.member.credentialEvidence.uid,0);assert.equal(r.descriptor.actorCredentialMappings.member.hostEvidence.uid,process.getuid());assert.equal(r.registration.ownerExactRoutes.length,3);
+  assert.deepEqual(new Set(r.registration.exactRoutes),new Set(['GET /api/matter-work-queue','GET /api/account/deletion-requests','POST /api/account/deletion-requests','GET /api/matters/'+x.dataset.anchor.matterId+'/workspace','GET /api/matters/'+x.dataset.anchor.matterId+'/drafts']));
   const script="import json,sys;from types import ModuleType;from pathlib import Path;p=ModuleType('qp');exec(compile(Path(sys.argv[1]).read_bytes(),sys.argv[1],'exec'),p.__dict__);v=json.load(sys.stdin);p.validate_registration(v,source=v['sourceSha'],run=v['runId'],now=1000)";
   const deadline=performance.now()+10000,python=fixturePython(deadline);
   const native=spawnSync(python,['-c',script,path.join(ROOT,'scripts/mobile/local-queue-privacy-controls.py')],{input:JSON.stringify(r.registration),encoding:'utf8',timeout:producerTimeout(deadline-performance.now()),maxBuffer:65536,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});pythonCompleted(native,'actual-queue-registration-validator');assert.equal(x.calls.some(v=>v.startsWith('PRIVATE:')),false);
@@ -511,7 +512,8 @@ test('measured Android Compose queue labels resolve one contained radio parent a
     selectors[group][label] = { kind: 'android-compose-parent', group, label, selectedAtObservation: checked === 'true' };
   }
   const dispatches = [];
-  const driver = { $$: async (query) => queries.get(query) ?? [], getElementRect: async (id) => frames.get(id),
+  let settings={waitForIdleTimeout:500};
+  const driver = { getSettings:async()=>({...settings}),updateSettings:async value=>{settings={...settings,...value};},$$: async (query) => queries.get(query) ?? [], getElementRect: async (id) => frames.get(id),
     elementClick: async (id) => dispatches.push(id) };
   const udid = 'captured-android-emulator';
   const buildReceipt = { path: '/synthetic/build', sha256: 'a'.repeat(64) };
@@ -613,7 +615,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
   }return v;
  };
  const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
-  attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':attribute==='class'&&key.startsWith('queue-task-')?'android.widget.Button':attribute==='clickable'&&key.startsWith('queue-task-')?'true':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
+  attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':attribute==='class'&&key.startsWith('queue-task-')?'android.widget.Button':attribute==='class'&&['queue-next','queue-first','queue-back','queue-open-matter'].includes(key)?'android.view.View':attribute==='clickable'&&(key.startsWith('queue-task-')||['queue-next','queue-first','queue-back','queue-open-matter'].includes(key))?'true':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
  let settings={waitForIdleTimeout:500};
  const driver={getSettings:async()=>({...settings}),updateSettings:async value=>{settings={...settings,...value};},
   findElements:async(using,query)=>{assert.equal(using,'xpath');assert.equal(query,"//*[starts-with(@resource-id, 'queue-task-')]");const rows=current().items;return (duplicateRow?[...rows,rows[0]]:rows).map((t,index)=>({'element-6066-11e4-a52e-4f735466cecf':id(3000+index),ELEMENT:id(3000+index),displayed:'true','attribute/resource-id':'queue-task-'+t.id,'attribute/package':fixture.appId}));},waitUntil:async fn=>assert.equal(await fn(),true,'SYNTHETIC_STATE_NOT_REACHED'),
@@ -660,11 +662,47 @@ test('Queue Matter navigation binds the actual native accessibility contract',()
 });
 test('actual Queue scenario executes every view, nullable detail, stale409 and fresh restoration in a protocol double',async()=>{const x=await workflowDouble('QUEUE-01');try{await x.run();assert.equal(x.calls.filter(v=>v==='readQueue').length,13);assert.equal(x.calls.filter(v=>v==='changeAnchor').length,2);assert.equal(x.context.controlCalls,17);assert.equal(x.events.at(-1).boundary,'queue-complete');assert.equal(x.records.some(r=>r.status===409),true);assert.equal(x.records.some(r=>r.method==='POST'),false);}finally{x.close();}});
 test('actual Queue task gesture preserves a lost acknowledgement without a legacy click or second dispatch',async()=>{
- const x=await workflowDouble('QUEUE-01'),original=x.context.driver.execute,unknown=Error('synthetic lost native gesture ACK');let gestures=0;
- x.context.driver.execute=async(command,args)=>{if(command==='mobile: clickGesture'){gestures++;throw unknown;}return original(command,args);};
+ const x=await workflowDouble('QUEUE-01'),original=x.context.driver.execute,unknown=Error('synthetic lost native gesture ACK');let gestures=0,taskFrames=0;
+ const originalRect=x.context.driver.getElementRect;
+ x.context.driver.getElementRect=async key=>{
+  const frame=await originalRect(key);
+  if(/^queue-task-[a-f0-9-]{36}$/.test(key)){
+   taskFrames++;
+   // The first observation is moving; only subsequent identical observations
+   // may settle. No task dispatch is admitted from the moving observation.
+   return taskFrames===1?{...frame,y:21,height:1899}:frame;
+  }
+  return frame;
+ };
+ x.context.driver.execute=async(command,args)=>{if(command==='mobile: clickGesture'&&/^queue-task-[a-f0-9-]{36}$/.test(args.elementId)){gestures++;throw unknown;}return original(command,args);};
  try {
   const run=x.run();await assert.rejects(run,error=>error===unknown);
-  assert.equal(gestures,1);assert.equal(x.clicks.some(key=>/^queue-task-[a-f0-9-]{36}$/.test(key)),false);
+  assert.equal(gestures,1);assert.ok(taskFrames>=4);assert.equal(x.clicks.some(key=>/^queue-task-[a-f0-9-]{36}$/.test(key)),false);
+  assert.equal((await x.context.driver.getSettings()).waitForIdleTimeout,500);
+ }finally{x.close();}
+});
+test('Queue task dispatch refuses post-settlement motion and a foreign package without any gesture',async()=>{
+ for(const mode of ['moved','foreign']){
+  const x=await workflowDouble('QUEUE-01');let restored=false,gestures=0;
+  const driver=x.context.driver,update=driver.updateSettings,rect=driver.getElementRect,query=driver.$$;
+  driver.updateSettings=async value=>{await update(value);if(value.waitForIdleTimeout===500)restored=true;};
+  driver.getElementRect=async key=>{const frame=await rect(key);return mode==='moved'&&restored&&key.startsWith('queue-task-')?{...frame,y:frame.y+1}:frame;};
+  driver.$$=async value=>{const elements=await query(value);if(mode==='foreign')for(const e of elements){const attribute=e.getAttribute;e.getAttribute=async name=>name==='package'&&e.elementId.startsWith('queue-task-')?'another.package':attribute(name);}return elements;};
+  driver.execute=async command=>{assert.equal(command,'mobile: clickGesture');gestures++;};
+  try{
+   const id=x.context.fixture.qp.dataset.tasks.find(t=>t.role==='mine').id;
+   await assert.rejects(queueEvidence.tapQPQueueTask(x.context,id),mode==='moved'?/QP_ANDROID_TASK_BUTTON_MOVED_BEFORE_DISPATCH/:/QP_ANDROID_WRONG_ROW_PACKAGE/);
+   assert.equal(gestures,0);assert.equal((await driver.getSettings()).waitForIdleTimeout,500);
+  }finally{x.close();}
+ }
+});
+test('Queue navigation preserves an acknowledged first-page action with a lost transport ACK without replay',async()=>{
+ const x=await workflowDouble('QUEUE-01'),original=x.context.driver.execute,unknown=Error('synthetic lost navigation ACK');let gestures=0;
+ x.context.driver.execute=async(command,args)=>{assert.equal(command,'mobile: clickGesture');gestures++;await original(command,args);throw unknown;};
+ try{
+  await assert.rejects(queueEvidence.tapQPQueueNavigation(x.context,'queue-first'),error=>error===unknown);
+  assert.equal(gestures,1);assert.equal(x.clicks.filter(key=>key==='queue-first').length,1);
+  assert.equal(x.records.filter(row=>row.method==='GET'&&row.route==='/api/matter-work-queue').length,1);
   assert.equal((await x.context.driver.getSettings()).waitForIdleTimeout,500);
  }finally{x.close();}
 });
