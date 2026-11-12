@@ -1,3 +1,17 @@
+## 2026-11-12 — dated PostgreSQL setup verification
+
+J20/M22 release verification remains **Inconclusive; NO-GO**. CI shard3/32
+exceeded its unchanged12-minute budget;41/127 completed cases do not prove green.
+The two repeated historical setup paths now clone separately built, immutable
+dated templates into a fresh database per test. Historical boundaries, native
+DDL and race assertions remain unchanged. All145 cases across the three changed
+modules passed on actual PostgreSQL (435 passing phases,261.903 seconds), with
+fixture/source database absence and original server/database inventory verified.
+The first failed catalogue-ID oracle and original canceled CI artifact remain.
+The separate20-command logout source gate passed. Full new CI, native suites,
+distribution packages and both store submissions remain open; no native case
+credit comes from these database tests. See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
 ## 2026-11-12 — native completion cleanup remains open
 
 J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented; Inconclusive;
