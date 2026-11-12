@@ -3678,3 +3678,13 @@ replacement run is still pending. See
 The 300b CodeQL analyses and independent alert verdict pass without waiver;
 main CI, remaining native inventories, signing and store submission are not
 inferred from that result.
+
+
+### 2026-11-12 Android-first packaging scope
+
+J20/M22 remains Partially implemented / Inconclusive / NO-GO. Schema-v2 reviewed
+store gates now bind the exact shipping platform, preserving all 14 common gates
+and its own native acceptance; the other platform is independent. Complete
+32-case executor contracts pass, with no actual distribution acceptance or
+submission inferred. The LINK-05 qualification/build cycle remains open. See
+[the platform gate record](mobile/STORE_PLATFORM_GATES_2026-11-12.md).
