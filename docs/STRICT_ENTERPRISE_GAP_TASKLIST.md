@@ -4696,3 +4696,7 @@ Status: **Partially implemented; release NO-GO**. QA39 in `docs/STRICT_BUG_TASKL
 ### Native release follow-up — CI artifact timeout isolation (November 12, 2026)
 
 Status: **Partially implemented; release NO-GO**. QA40 records a successful630b81dc browser execution/reconciliation followed by a stalled full-report upload and missing native artifact. Retain invocation-owned native evidence before the large report and bound both uploads without extending the job or weakening failure propagation. Exact artifact paths and all existing consumers remain mandatory. A fresh hosted run and actual downloaded artifact inspection are required; step-success metadata alone does not replace missing native/browser evidence or independently bound Android/iOS83-case acceptance.
+
+### Native release follow-up — metadata fixture runtime readiness (November 12, 2026)
+
+Status: **Inconclusive; release NO-GO**. QA41 retains the exact fc4c4201 hosted PowerShell-backed Vitest timeout and the unsuccessful Mac AST optimization experiment. An explicit dependency readiness step exercises only synthetic SDK operations before the unchanged real-source metadata tests. It supplies no cold-start performance, native app or store verdict. Complete replacement frontend coverage and hosted verification remain required; do not rerun the unchanged timing race and relabel its earlier failure as passed.

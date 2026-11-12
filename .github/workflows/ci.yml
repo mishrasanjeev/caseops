@@ -527,6 +527,10 @@ jobs:
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         run: npm run typecheck:e2e
 
+      - name: Verify PowerShell metadata fixture runtime
+        timeout-minutes: 1
+        run: pwsh -NoProfile -NonInteractive -File tests/e2e/fixtures/metadata-marker-runtime.ps1
+
       - name: Vitest with coverage (AQ-002 reliability + threshold ratchet)
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}

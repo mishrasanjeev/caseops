@@ -1010,6 +1010,32 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     }
 
 
+def test_web_ci_initializes_only_the_powershell_sdk_before_unchanged_metadata_tests() -> None:
+    import yaml
+
+    job = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["web"]
+    steps = job["steps"]
+    ready = next(step for step in steps if step.get("name") == "Verify PowerShell metadata fixture runtime")
+    coverage = next(step for step in steps if step.get("name") == "Vitest with coverage (AQ-002 reliability + threshold ratchet)")
+    assert steps.index(ready) < steps.index(coverage)
+    assert ready == {
+        "name": "Verify PowerShell metadata fixture runtime",
+        "timeout-minutes": 1,
+        "run": "pwsh -NoProfile -NonInteractive -File tests/e2e/fixtures/metadata-marker-runtime.ps1",
+    }
+    source = (REPO_ROOT / "tests/e2e/fixtures/metadata-marker-runtime.ps1").read_text()
+    for required in ("Parser]::ParseInput(", "AssignmentStatementAst", "[ScriptBlock]::Create('6 * 7')", "ConvertTo-Json"):
+        assert required in source
+    for forbidden in ("-RepoRoot", "Read-SourceAst", "Read-ScalarAssignment", "Invoke-RestMethod", "Get-Content", "ReadAllText", "scripts/verify-", "Start-Sleep"):
+        assert forbidden not in source
+    probe = (REPO_ROOT / "apps/web/lib/verification-metadata-markers.test.ts").read_text()
+    assert '"-File", path.join(fixtures, "metadata-marker-probes.ps1"), "-RepoRoot", root' in probe
+    assert 'timeout: 30000' in probe
+    assert 'testTimeout: 15_000' in (REPO_ROOT / "apps/web/vitest.config.ts").read_text()
+    assert coverage["run"] == "npm run test:coverage --workspace @caseops/web"
+    assert "continue-on-error" not in coverage and "if" not in coverage
+
+
 @pytest.mark.parametrize("stage", ["execute", "reconcile"])
 @pytest.mark.parametrize("exit_code", [0, 7])
 @pytest.mark.parametrize("project", ["app-chromium", "app-mobile"])
