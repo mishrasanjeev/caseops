@@ -11,6 +11,8 @@ MIGRATION-ROLLBACK: safe for retained data. Downgrade concurrently drops only
 these shape-checked support indexes; query performance can regress until the
 previous application release is restored. No column, row or constraint changes.
 SQLite is a no-op in both directions. Other dialects are refused.
+Chained downgrade below the restore-forward parent refuses before any DDL or
+revision stamp; a direct rollback to this migration's parent remains available.
 IPLF-080B/UJ-29, NFT-005/J14-M14. Execution/registry evidence is release-owned.
 """
 
@@ -111,10 +113,10 @@ def _ready(state):
 
 def _change(*, remove):
     bind = op.get_bind()
+    if bind.dialect.name not in {"postgresql", "sqlite"}:
+        raise RuntimeError("Unsupported patent version identity index dialect.")
     if bind.dialect.name == "sqlite":
         return
-    if bind.dialect.name != "postgresql":
-        raise RuntimeError("Unsupported patent version identity index dialect.")
     schema = bind.scalar(sa.text("SELECT current_schema()"))
     if not schema:
         raise RuntimeError("Patent version identity index schema is unavailable.")
@@ -145,4 +147,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name in {"postgresql", "sqlite"}:
+        migration = op.get_context()
+        destination = migration.opts.get("destination_rev")
+        if destination is not None:
+            script = migration.opts.get("script")
+            one_step = destination == "-1" and migration.get_current_heads() == (revision,)
+            if not one_step and (
+                script is None or script.as_revision_number(destination) != down_revision
+            ):
+                # The historical parent refuses unconditionally. Refuse here before
+                # our concurrent DDL commits, retaining the refusal's migration origin.
+                raise RuntimeError(
+                    "Restore-forward required: removing native attachment provenance could "
+                    "reenable third-party processing without consent."
+                )
     _change(remove=True)

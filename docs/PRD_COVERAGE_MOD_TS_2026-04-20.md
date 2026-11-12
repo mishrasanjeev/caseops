@@ -20,6 +20,12 @@ provider, relevance or calibrated predictive-quality dependencies.
 
 ## November 2 Disclosure Work Coverage Pending
 
+F8 original42plan hosted scale component is now positive501work/400blocks,
+not full coverage. Its actual chained-downgrade failure remains retained.
+Follow-up declares61migration cases/18PG including6chain-refusal controls,
+with compiled projection/current-head integration corrections. Those changes
+are unexecuted; wholeCI/localDocker/deployed acceptance is still incomplete.
+
 Current isolated source uses two exact structured-identity expression indexes
 and equality hydration for both family and application versions. Migration
 recovery/shape/readiness/SQLite coverage is declared, not executed. Rejected3d

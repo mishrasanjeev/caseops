@@ -4180,3 +4180,12 @@ requirements when using the fallback.
   can scan the full tenant before producing that single row. Reject failed
   candidates even after source review, and keep exact successor rejection
   outside any ordered candidate lookup; do not raise limits or hide bad plans.
+- Adding a concurrent index migration must preserve the entire requested
+  downgrade boundary, not merely its own safe index removal. Preflight a
+  chained target before autocommit DDL when a historical parent is
+  restore-forward-only; prove direct and relative one-step rollback plus
+  refused deeper targets leave rows, catalog and revision unchanged.
+- A governance-map change also changes its compiled runtime projection.
+  Regenerate and validate every dependent view and projection, proving admitted
+  classes and policy decisions unchanged. Updating a map hash alone cannot
+  certify the image's shipped governance metadata.

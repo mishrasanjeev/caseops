@@ -2,6 +2,13 @@
 
 ## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
 
+Actual f8 scale component passes501/400, not whole-release acceptance. Hosted
+PG8 confirms concurrent downgrade dropped both new indexes before a deeper
+restore-forward refusal. New source must refuse that entire chain before DDL,
+retain original rows/catalog/revision/privacy, permit exact/relative parent
+rollback, and ship the matching compiled governance projection. All new repair
+execution and complete release evidence remain due; no production claim.
+
 Current equality/index candidate is UNEXECUTED: structured Text[] identity,
 two nonunique concurrent expression indexes, strict index-health and recovery
 guards, no row rewrite or new retention/provider authority. Rejected3d complete

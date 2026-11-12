@@ -37,6 +37,13 @@ Their55declared migration cases, health/SQLite checks and82physical profiles
 are UNEXECUTED. Complete rejected3d PG4088=4078P/10callF/all12264phases also
 proves the adjacent application scan defect. No release/fixed claim is made.
 
+F8 hosted original42plan scale now passes501work/400blocks, but its actual
+PG8 chained downgrade removed both new indexes before historical refusal.
+The follow-up pre-DDL destination guard,61declaredmigration cases/18PG, exact/
+relative parent replay, matching compiled governance projection and two
+current server-head assertion updates remain unexecuted. Do not weaken the
+existing catalog/row/privacy/revision assertions or describe this as certified.
+
 Hosted3d8152 also fails the original scale case (PG4:127P/1F of128,384phases),
 with six1000702work/59900block plans. The isolated lower-only full-order seek
 and40-plan regression were withdrawn before execution. No source-review or literal-limit

@@ -2,6 +2,15 @@
 
 ## November 12 Disclosure Hydration Reopening: Issue616
 
+F8's hosted original42plan scale component now passes (six disclosure modes
+501work/400blocks), but actual PG8 proves an unreleased partial-catalog rollback
+defect. A deeper downgrade removes both support indexes before a historical
+refusal. New source preflights the entire destination before concurrent DDL;
+61declaredmigration cases/18PG include six chain-refusal controls and both
+direct/relative parent rollback. Compiled projection and stale current-head
+test expectations are corrected without dropping catalog/privacy assertions.
+Execution/fullCI/fullDocker/production remain incomplete; Not fixed/NO-GO.
+
 Current status remains Not fixed/NO-GO. Complete3d PG result is4078P/10callF
 of4088, all12264phases; nine family physical failures and one adjacent
 application scan failure. The current UNEXECUTED exact-array equality/index

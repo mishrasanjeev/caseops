@@ -66,7 +66,8 @@ def _module():
 
 def _apply(engine, operation="upgrade"):
     with engine.connect() as connection:
-        context = MigrationContext.configure(connection, opts={"destination_rev": PARENT})
+        # Direct invocation owns only this migration, not an Alembic target chain.
+        context = MigrationContext.configure(connection)
         with context.begin_transaction(), Operations.context(context):
             getattr(_module(), operation)()
 
@@ -74,6 +75,10 @@ def _apply(engine, operation="upgrade"):
 def _rows(engine):
     with engine.connect() as connection:
         quote = connection.dialect.identifier_preparer.quote
+        if connection.dialect.name == "sqlite":
+            return {table: [dict(row) for row in connection.execute(text(
+                f"SELECT * FROM {quote(table)} ORDER BY id"
+            )).mappings()] for table in DATA_TABLES}
         return {table: connection.scalars(text(
             f"SELECT to_jsonb(r)::text FROM {quote(table)} r ORDER BY id"
         )).all() for table in DATA_TABLES}
@@ -261,20 +266,58 @@ def test_identity_indexes_populated_upgrade_reapply_downgrade_reupgrade(
             _apply(engine)
             assert _assert_ready(engine) == original_oids
             assert schema_catalog(engine) == head and _rows(engine) == rows
-            command.downgrade(config, PARENT)
-            require_revision(engine, PARENT)
-            assert schema_catalog(engine) == parent and _rows(engine) == rows
-            command.upgrade(config, HEAD)
-            _assert_ready(engine)
-            require_revision(engine, HEAD)
-            assert schema_catalog(engine) == head and _rows(engine) == rows
+            for destination in (PARENT, "-1"):
+                command.downgrade(config, destination)
+                require_revision(engine, PARENT)
+                assert schema_catalog(engine) == parent and _rows(engine) == rows
+                command.upgrade(config, HEAD)
+                _assert_ready(engine)
+                require_revision(engine, HEAD)
+                assert schema_catalog(engine) == head and _rows(engine) == rows
         finally:
             event.remove(Engine, "before_cursor_execute", capture)
-        assert len(statements) == 6
+        assert len(statements) == 10
         assert all(
             statement.lstrip().startswith(("CREATE INDEX CONCURRENTLY", "DROP INDEX CONCURRENTLY"))
             for statement in statements
         )
+
+
+@pytest.mark.parametrize("kind", ["sqlite", pytest.param("postgres", marks=pytest.mark.postgres)])
+@pytest.mark.parametrize("destination", ["20261108_0002", "base", "-2"])
+def test_identity_chained_restore_forward_refusal_precedes_any_catalog_change(
+    kind, destination, tmp_path, monkeypatch,
+):
+    with fresh_engine(kind, tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, HEAD)
+        _seed_owned_versions(engine)
+        rows, catalog = _rows(engine), schema_catalog(engine)
+        statements = []
+
+        def capture(connection, _cursor, statement, _parameters, _context, _many):
+            if connection.engine.url.database == engine.url.database:
+                statements.append(statement)
+
+        event.listen(Engine, "before_cursor_execute", capture)
+        try:
+            with pytest.raises(RuntimeError) as refused:
+                command.downgrade(config, destination)
+        finally:
+            event.remove(Engine, "before_cursor_execute", capture)
+        assert str(refused.value) == (
+            "Restore-forward required: removing native attachment provenance could "
+            "reenable third-party processing without consent."
+        )
+        trace = refused.value.__traceback__
+        while trace.tb_next is not None:
+            trace = trace.tb_next
+        assert Path(trace.tb_frame.f_code.co_filename).resolve() == PATH
+        assert trace.tb_frame.f_code.co_name == "downgrade"
+        assert not any(statement.lstrip().upper().startswith(("CREATE ", "DROP ", "ALTER "))
+                       for statement in statements)
+        assert _rows(engine) == rows and schema_catalog(engine) == catalog
+        require_revision(engine, HEAD)
 
 
 @pytest.mark.postgres

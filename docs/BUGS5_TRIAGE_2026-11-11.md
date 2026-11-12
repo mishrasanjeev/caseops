@@ -55,6 +55,18 @@ source-data completion and production acceptance are separate fields.
 
 ### November 12 Full Docker Disclosure-Work Failure (Unreleased)
 
+14:13UTC actual f8 component update: original hosted PG4scale passes with all
+42plans retained; six disclosure modes501work/400blocks, within original
+budgets. This does not certify the entire candidate. Full f8CI is incomplete
+and PG8 proves its new concurrent-index downgrade removed both indexes before
+the historical restore-forward refusal. Retained queue receipts survive but
+catalog equality fails. The isolated follow-up adds a pre-DDL chain-target
+guard, six refusal cases, direct/relative one-step rollback, and restores the
+compiled governance projection. Two historical server current-head assertions
+are advanced; their row/catalog/privacy/revision requirements are unchanged.
+The new migration module now declares61cases/18PG, not collected proof. Full
+local06 remains frozen on2b7; no deployment, fixed verdict or native app change.
+
 The complete rejected hosted run is now reconciled: CI43210993859 has4088
 actual PG cases=4078passed/10call failures/0skips/all12264phases. Nine failures
 are physical family-query work; the adjacent application regression proves
