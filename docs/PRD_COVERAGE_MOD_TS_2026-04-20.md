@@ -20,6 +20,18 @@ provider, relevance or calibrated predictive-quality dependencies.
 
 ## November 2 Disclosure Work Coverage Pending
 
+Current isolated source uses two exact structured-identity expression indexes
+and equality hydration for both family and application versions. Migration
+recovery/shape/readiness/SQLite coverage is declared, not executed. Rejected3d
+hosted4088cases reconcile4078P/10callF; full06 remains on2b7. All82new physical
+plan contexts and fresh full regression/release evidence remain required.
+
+November12 next candidate remains unexecuted after actual3d8152 hosted PG4
+failure1000702work/59900blocks across six first/cursor plan modes. Full-key
+two-sided bounds did not prevent a company-prefix incremental sort. Retain
+the withdrawn lower-only/full-order/literal-one history, exact outer successor rejection,
+40intended plan profiles and unchanged original budgets as pending, not coverage.
+
 November12 reopening evidence: canonical IPLF-080B/UJ-29/PAT-01/IP-SCOPE with
 NFT-005/J14-M14 remains NO-GO (prior032/UJ-02/090A note labels are drift)
 after fullDocker06 group03 exposed first-page custom/generic disclosure

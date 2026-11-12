@@ -2,6 +2,22 @@
 
 ## November 12 Disclosure Hydration Reopening: Issue616
 
+Current status remains Not fixed/NO-GO. Complete3d PG result is4078P/10callF
+of4088, all12264phases; nine family physical failures and one adjacent
+application scan failure. The current UNEXECUTED exact-array equality/index
+candidate preserves all data/security boundaries and declares82physical plan
+profiles plus migration interruption/conflict/replay/downgrade and health
+coverage. The intermediate lower-only range was withdrawn before execution.
+Static review/lint/governance generation is not PostgreSQL or release proof.
+
+The complete-key two-sided candidate3d8152 is also Not fixed: hosted PG4's
+original scale case fails with1000702work/59900blocks in six actual first/
+cursor custom/generic/auto plans. Preserve all42plans; source/lint review did
+not predict bounded executor work. The withdrawn intermediate lower-only seek
+kept literal LIMIT1 plus exact outer identity/cardinality and all successor
+negative cases. Its replacement must prove both rejected shapes physically red
+and its own original-budget plan inventory green before any fixed claim.
+
 **Not fixed on candidate2b7; release NO-GO.** FullDocker06's retained real
 PostgreSQL call failure charges1,000,701 total work and59,900blocks on both
 custom/generic first-page disclosure hydration, against unchanged50000/10000

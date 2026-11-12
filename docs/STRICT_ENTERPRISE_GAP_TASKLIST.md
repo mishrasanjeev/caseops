@@ -2,6 +2,19 @@
 
 ## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
 
+Current equality/index candidate is UNEXECUTED: structured Text[] identity,
+two nonunique concurrent expression indexes, strict index-health and recovery
+guards, no row rewrite or new retention/provider authority. Rejected3d complete
+PG inventory4088=4078P/10callF retains the adjacent application scan finding.
+All82physical profiles and fresh complete regression/release proof remain due.
+Lower-only range was withdrawn without execution. Full06 stays frozen on2b7.
+
+Actual follow-up3d8152 hosted PG4 also fails: complete tuple bounds still admit
+a company-prefix incremental sort,1000702work/59900blocks on six first/cursor
+plan modes. The intermediate lower-only/full-order/literal-one was withdrawn;
+neither a unique constraint nor a LIMIT proves its physical lookup bounded.
+Retain both failed shapes, actual source-bound plans and all original fences.
+
 **Partially implemented; release NO-GO.** Issue616/fullDocker06 at2b7 retains
 the original disclosure work-bound failure despite all52hosted CI jobs green.
 A bounded authorized parent page still triggers100tenant-wide version scans

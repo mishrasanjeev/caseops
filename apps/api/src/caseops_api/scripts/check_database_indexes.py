@@ -15,6 +15,7 @@ from sqlalchemy.engine import Connection
 from caseops_api.db.base import Base
 from caseops_api.db.index_coverage import columns_cover, database_foreign_key_gaps
 from caseops_api.db.session import get_engine
+from caseops_api.db.version_identity import version_identity_index_issues
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 class DeclaredIndex:
     columns: tuple[str, ...] | None
     requires_exact_name: bool
+    postgresql_only: bool = False
 
 
 def _alembic_config_path() -> Path:
@@ -64,6 +66,7 @@ def _declared_indexes() -> dict[str, dict[str, DeclaredIndex]]:
             index.name: DeclaredIndex(
                 columns=_declared_index_columns(index),
                 requires_exact_name=not index._column_flag,  # noqa: SLF001
+                postgresql_only=bool(index.info.get("caseops_postgresql_only")),
             )
             for index in table.indexes
             if index.name and not index.name.startswith("ix_fk_")
@@ -127,6 +130,8 @@ def build_index_health_report(connection: Connection) -> dict[str, Any]:
         }
         actual_columns = tuple(actual_indexes.values())
         for index_name, declared in sorted(expected_indexes.items()):
+            if declared.postgresql_only and connection.dialect.name != "postgresql":
+                continue
             if not declared.requires_exact_name and declared.columns is not None:
                 if any(
                     columns_cover(candidate, declared.columns)
@@ -149,6 +154,7 @@ def build_index_health_report(connection: Connection) -> dict[str, Any]:
                         "actual_columns": list(actual_indexes[index_name]),
                     }
                 )
+    mismatched_declared.extend(version_identity_index_issues(connection))
     versions = []
     if "alembic_version" in table_names:
         versions = list(connection.scalars(sa.text("SELECT version_num FROM alembic_version")))

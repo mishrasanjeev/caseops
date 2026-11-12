@@ -2,7 +2,7 @@
 
 The retained first-page custom/generic plans charged 1,000,701 work and 59,900
 blocks. Recreate their 40-tenant/53-version statistics, not elapsed contention.
-These are proposed regressions; authoring/source review is not execution proof.
+Authoring and source review do not substitute for retained execution proof.
 """
 
 from __future__ import annotations
@@ -14,11 +14,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import event, func, literal, literal_column, select, text, true, tuple_
+from sqlalchemy import Text, event, func, literal, literal_column, select, text, true, tuple_
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import operators
-from sqlalchemy.sql.elements import BindParameter, Tuple
+from sqlalchemy.sql.elements import BindParameter, Cast
 
 from caseops_api.db.models import (
     EthicalWall,
@@ -56,7 +57,7 @@ from tests.test_patent_plan_capture_20261031 import _freeze_patent_execution
 from tests.test_postgres_validation import _ip_race_context
 
 
-def _assert_complete_disclosure_seek(statement, *, company_id, expected_keys):
+def _assert_exact_disclosure_lookup(statement, *, company_id, expected_keys):
     joined, = statement.get_final_froms()
     wanted, lateral = joined.left, joined.right
     assert wanted.name == "admitted_patent_disclosure_keys"
@@ -66,25 +67,24 @@ def _assert_complete_disclosure_seek(statement, *, company_id, expected_keys):
     keys = IpPatentFamilyVersion.__table__.c
     key_columns = [keys.company_id, keys.family_id, keys.version]
 
-    # A tenant-only equality plus a suffix range was the failing shape.
-    assert len(seek._where_criteria) == 2
-    for predicate, operator in zip(seek._where_criteria, (operators.ge, operators.le), strict=True):
-        assert predicate.operator is operator
-        assert isinstance(predicate.left, Tuple) and isinstance(predicate.right, Tuple)
+    # Exactly one structured equality owns the expression-index lookup.
+    assert len(seek._where_criteria) == 1
+    for predicate in seek._where_criteria:
+        assert predicate.operator is operators.eq
+        assert isinstance(predicate.left, array) and isinstance(predicate.right, array)
         assert len(predicate.left.clauses) == len(predicate.right.clauses) == 3
+        assert all(isinstance(item, Cast) and isinstance(item.type, Text)
+                   for item in (*predicate.left.clauses, *predicate.right.clauses))
         assert all(
-            actual.compare(expected)
+            actual.clause.compare(expected)
             for actual, expected in zip(predicate.left.clauses, key_columns, strict=True)
         )
         tenant, family, version = predicate.right.clauses
-        tenant_bind, = tenant.element.selected_columns
+        tenant_bind, = tenant.clause.element.selected_columns
         assert isinstance(tenant_bind, BindParameter) and tenant_bind.value == company_id
-        assert family.compare(wanted.c.family_id) and version.compare(wanted.c.version)
-    assert len(seek._order_by_clauses) == 3
-    assert all(
-        actual.compare(expected)
-        for actual, expected in zip(seek._order_by_clauses, key_columns, strict=True)
-    )
+        assert family.clause.compare(wanted.c.family_id)
+        assert version.clause.compare(wanted.c.version)
+    assert len(seek._order_by_clauses) == 0
     assert not isinstance(seek._limit_clause, BindParameter)
     assert str(seek._limit_clause) == "1"
     assert len(statement._where_criteria) == 3
@@ -102,7 +102,7 @@ def _assert_complete_disclosure_seek(statement, *, company_id, expected_keys):
 
 
 @pytest.mark.parametrize("count", [1, 100], ids=["one-key", "page-keys"])
-def test_disclosure_hydration_sql_seeks_and_orders_the_complete_unique_key(monkeypatch, count):
+def test_disclosure_hydration_sql_matches_the_exact_indexed_identity(monkeypatch, count):
     company_id = str(UUID(int=1))
     families = [
         SimpleNamespace(id=str(UUID(int=100 + index)), docket_id=str(UUID(int=1000 + index)))
@@ -143,7 +143,7 @@ def test_disclosure_hydration_sql_seeks_and_orders_the_complete_unique_key(monke
             context=SimpleNamespace(company=SimpleNamespace(id=company_id)),
             limit=100,
         )
-    _assert_complete_disclosure_seek(
+    _assert_exact_disclosure_lookup(
         captured.value.statement, company_id=company_id,
         expected_keys=[(family.id, docket.current_version) for family, docket in zip(
             families, dockets, strict=True
@@ -174,7 +174,10 @@ def _disclosure_statistics(catalog):
     assert statistics["source_registry_snapshot_id"]["null_frac"] == 1
     for key in ("source_document_id", "source_document_version_id", "source_sha256"):
         assert statistics[key]["null_frac"] == pytest.approx(49 / 53, abs=1e-6)
-    return statistics
+    identity, = [row for row in catalog["statistics"]
+                 if row["tablename"] == "ix_patent_family_versions_identity_key"]
+    assert identity["null_frac"] == 0 and identity["n_distinct"] == -1
+    return statistics, identity
 
 
 def _train_retained_disclosure_statistics(engine, evidence):
@@ -222,18 +225,25 @@ def _train_retained_disclosure_statistics(engine, evidence):
         return _disclosure_statistics(catalog)
 
 
-def _capture_retained_old_disclosure_shape(session, captured, *, company_id, evidence):
-    # Replay 2b7's exact tenant equality + suffix ranges, using the actual
-    # admitted VALUES, not invented IDs, cached compile defaults or a scan surrogate.
+def _capture_retained_old_disclosure_shape(session, captured, *, company_id, evidence, complete):
+    # Retain both rejected two-sided shapes with the actual admitted VALUES,
+    # not invented IDs, cached compile defaults or a scan surrogate.
     joined, = captured.statement.get_final_froms()
     wanted = joined.left
-    suffix = (IpPatentFamilyVersion.family_id, IpPatentFamilyVersion.version)
+    suffix = (
+        (IpPatentFamilyVersion.company_id, IpPatentFamilyVersion.family_id,
+         IpPatentFamilyVersion.version)
+        if complete else (IpPatentFamilyVersion.family_id, IpPatentFamilyVersion.version)
+    )
     indexed_key = tuple_(*suffix)
-    admitted_key = tuple_(wanted.c.family_id, wanted.c.version)
+    tenant = select(literal(company_id)).scalar_subquery()
+    admitted_key = tuple_(
+        *((tenant,) if complete else ()), wanted.c.family_id, wanted.c.version
+    )
     picked = (
         select(IpPatentFamilyVersion)
         .where(
-            IpPatentFamilyVersion.company_id == select(literal(company_id)).scalar_subquery(),
+            *((IpPatentFamilyVersion.company_id == tenant,) if not complete else ()),
             indexed_key >= admitted_key,
             indexed_key <= admitted_key,
         )
@@ -262,7 +272,8 @@ def _capture_retained_old_disclosure_shape(session, captured, *, company_id, evi
         )
         executions.append(item)
         _retain_patent_evidence(
-            evidence, kind="issue_616_old_shape_execution", **_patent_execution_record(item)
+            evidence, kind="issue_616_old_shape_execution", complete_key_range=complete,
+            **_patent_execution_record(item)
         )
 
     connection = session.connection()
@@ -383,17 +394,20 @@ def test_stale_53_version_statistics_bound_first_and_cursor_disclosure_work(
             seen.extend(ids)
             cursor = page.next_cursor
         assert first_disclosure is not None
-        old_execution = _capture_retained_old_disclosure_shape(
-            session, first_disclosure, company_id=company_id, evidence=evidence
-        )
-        old_plans = [
-            _patent_family_page_plan(
-                session, old_execution, limit=None, generic=generic, evidence=evidence,
-                kind="issue_616_retained_old_shape",
-                expected_versions=[(company_id, family_id, 2) for family_id in expected[:100]],
+        old_plans = []
+        for complete in (False, True):
+            old_execution = _capture_retained_old_disclosure_shape(
+                session, first_disclosure, company_id=company_id, evidence=evidence,
+                complete=complete,
             )
-            for generic in (False, True)
-        ]
+            old_plans.extend(
+                _patent_family_page_plan(
+                    session, old_execution, limit=None, generic=generic, evidence=evidence,
+                    kind=f"issue_616_retained_old_shape_complete_{complete}",
+                    expected_versions=[(company_id, family_id, 2) for family_id in expected[:100]],
+                )
+                for generic in (False, True)
+            )
         after = _patent_catalog_snapshot(session)
         _retain_patent_evidence(evidence, kind="catalog_after_pages", catalog=after)
         assert _disclosure_statistics(after) == trained
@@ -438,7 +452,7 @@ def test_stale_53_version_statistics_bound_first_and_cursor_disclosure_work(
             elif kind == "disclosure_version_hydration":
                 _assert_patent_disclosure_hydration_work(plan, limit=100)
         for statement, expected_keys in disclosure_statements:
-            _assert_complete_disclosure_seek(
+            _assert_exact_disclosure_lookup(
                 statement, company_id=company_id, expected_keys=expected_keys
             )
 

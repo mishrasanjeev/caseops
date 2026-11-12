@@ -1,6 +1,6 @@
 """IPLF-080B/UJ-29, NFT-005/J14-M14: adjacent application hydration for #616.
 
-UNEXECUTED: source authoring is not PostgreSQL coverage. The family failure's
+Source authoring is not PostgreSQL coverage. The family failure's
 53-version/40-tenant statistics motivate this independent tuple-IN probe, not a
 LATERAL assertion or an application runtime change; this is not a proven
 application defect. Use disposable migrated PG.
@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import event, func, insert, select, text
+from sqlalchemy import event, func, insert, select, text, tuple_
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -151,7 +151,7 @@ def _application_catalog(session):
         "statistics": "SELECT schemaname, tablename, attname, null_frac, n_distinct, "
         "most_common_vals::text, most_common_freqs, histogram_bounds::text, correlation "
         "FROM pg_stats WHERE schemaname=current_schema() "
-        "AND tablename=ANY(CAST(:tables AS text[]))",
+        "AND tablename=ANY(CAST(:statistics AS text[]))",
         "indexes": "SELECT c.relname, i.indexrelid::regclass::text AS index_name, "
         "i.indisvalid, i.indisready, i.indislive, pg_get_indexdef(i.indexrelid) AS definition "
         "FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid "
@@ -160,7 +160,8 @@ def _application_catalog(session):
     }
     for key, query in queries.items():
         catalog[key].extend(dict(row) for row in session.execute(
-            text(query), {"tables": tables}
+            text(query), {"tables": tables,
+                          "statistics": [*tables, "ix_patent_application_versions_identity_key"]}
         ).mappings())
     return catalog
 
@@ -182,7 +183,10 @@ def _assert_training_statistics(catalog):
         row["indisvalid"] and row["indisready"] and row["indislive"] for row in indexes
     )
     assert any("(company_id, application_id, version)" in row["definition"] for row in indexes)
-    return statistics
+    identity, = [row for row in catalog["statistics"]
+                 if row["tablename"] == "ix_patent_application_versions_identity_key"]
+    assert identity["null_frac"] == 0 and identity["n_distinct"] == -1
+    return statistics, identity
 
 
 def _train_application_statistics(engine, evidence):
@@ -320,6 +324,35 @@ def _application_hydration_plans(
     ), admitted) for generic in (False, True, None)]
 
 
+def _legacy_application_control(
+    session, captured, evidence, stage, expected_rows, *, admitted, company_id,
+):
+    execution, = [item for item in captured if _is_patent_entity_select(
+        item.statement, IpPatentApplicationVersion
+    )]
+    joined, = execution.statement.get_final_froms()
+    wanted = joined.left
+    assert wanted.name == "admitted_patent_application_keys"
+    keys = [tuple(row) for batch in wanted._data for row in batch]
+    assert len(keys) == admitted
+    statement = select(IpPatentApplicationVersion).where(
+        IpPatentApplicationVersion.company_id == company_id,
+        tuple_(
+            IpPatentApplicationVersion.application_id, IpPatentApplicationVersion.version
+        ).in_(keys),
+    )
+    with _capture_application_selects(session, evidence, f"{stage}_legacy") as legacy:
+        rows = list(session.scalars(statement))
+    actual = sorted((row.id, row.company_id, row.application_id, row.version) for row in rows)
+    assert actual == sorted(
+        (row["id"], row["company_id"], row["application_id"], row["version"])
+        for row in expected_rows
+    )
+    return _application_hydration_plans(
+        session, legacy, evidence, f"{stage}_legacy", expected_rows, admitted=admitted
+    )
+
+
 def test_stale_53_version_statistics_bound_application_list_and_detail_hydration(
     unrefreshed_application_engine, request, tmp_path
 ):
@@ -349,7 +382,7 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
         }
         assert len(versions) == 10_002
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
-        plans, seen, cursor = [], [], None
+        plans, old_plans, seen, cursor = [], [], [], None
         for page_number in range(2):
             stage = f"page_{page_number}"
             with _capture_application_selects(session, evidence, stage) as captured:
@@ -372,6 +405,10 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
             plans.extend(_application_hydration_plans(
                 session, captured, evidence, stage, [versions[(app_id, 1)] for app_id in ids],
                 admitted=len(ids),
+            ))
+            old_plans.extend(_legacy_application_control(
+                session, captured, evidence, stage, [versions[(app_id, 1)] for app_id in ids],
+                admitted=len(ids), company_id=company_id,
             ))
             seen.extend(ids)
             cursor = page.next_cursor
@@ -398,10 +435,18 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
             plans.extend(_application_hydration_plans(
                 session, captured, evidence, stage, expected_rows, admitted=1
             ))
+            old_plans.extend(_legacy_application_control(
+                session, captured, evidence, stage, expected_rows, admitted=1,
+                company_id=company_id,
+            ))
         after = _application_catalog(session)
         _retain_patent_evidence(evidence, kind="application_catalog_after_reads", catalog=after)
         assert _assert_training_statistics(after) == trained
-        assert len(seen) == len(set(seen)) == 200 and len(plans) == 15
+        assert len(seen) == len(set(seen)) == 200 and len(plans) == len(old_plans) == 15
+        for plan, _admitted in old_plans:
+            nodes = [node for node in _plan_nodes(plan["Plan"])
+                     if node.get("Relation Name") == IpPatentApplicationVersion.__tablename__]
+            assert nodes and sum(_plan_work(node) for node in nodes) == 10_002
         # Match _assert_patent_disclosure_hydration_work: one version per admitted key,
         # with the same <50,000 total-work / <10,000 root-shared-block budgets.
         # Do not require the application's different SQL to use LATERAL or a named index.

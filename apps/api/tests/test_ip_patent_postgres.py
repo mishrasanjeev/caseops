@@ -583,7 +583,7 @@ def _patent_catalog_snapshot(session):
         "statistics": "SELECT schemaname, tablename, attname, null_frac, n_distinct, "
         "most_common_vals::text, most_common_freqs, histogram_bounds::text, correlation "
         "FROM pg_stats WHERE schemaname=current_schema() "
-        "AND tablename=ANY(CAST(:tables AS text[]))",
+        "AND tablename=ANY(CAST(:statistics AS text[]))",
         "indexes": "SELECT c.relname, i.indexrelid::regclass::text AS index_name, "
         "i.indisvalid, i.indisready, i.indislive, pg_get_indexdef(i.indexrelid) AS definition "
         "FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid "
@@ -591,7 +591,10 @@ def _patent_catalog_snapshot(session):
     }
     return {
         key: [
-            dict(row) for row in session.execute(text(query), {"tables": list(tables)}).mappings()
+            dict(row) for row in session.execute(text(query), {
+                "tables": list(tables),
+                "statistics": [*tables, "ix_patent_family_versions_identity_key"],
+            }).mappings()
         ]
         for key, query in queries.items()
     }

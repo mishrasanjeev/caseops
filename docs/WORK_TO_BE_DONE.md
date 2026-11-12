@@ -31,6 +31,17 @@ production action. Canonical ownership is IPLF-080B/UJ-29/PAT-01/IP-SCOPE plus
 NFT-005/J14-M14; historical032/UJ-02/090A note labels do not transfer ownership.
 This is not MacBook app work.
 
+Current follow-up: exact structured identity equality and two nonunique
+concurrent expression indexes replace range proposals in isolated source.
+Their55declared migration cases, health/SQLite checks and82physical profiles
+are UNEXECUTED. Complete rejected3d PG4088=4078P/10callF/all12264phases also
+proves the adjacent application scan defect. No release/fixed claim is made.
+
+Hosted3d8152 also fails the original scale case (PG4:127P/1F of128,384phases),
+with six1000702work/59900block plans. The isolated lower-only full-order seek
+and40-plan regression were withdrawn before execution. No source-review or literal-limit
+claim overrides this actual failure; keep original successor/ACL/source fences.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in

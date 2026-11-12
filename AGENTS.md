@@ -4175,3 +4175,8 @@ requirements when using the fallback.
   and seek the complete unique tenant/family/version identity without weakening
   access checks, work limits or missing-row rejection. Fresh-statistics passes
   and elapsed-time improvements cannot substitute for bounded charged work.
+- A complete composite range and a literal one-row limit are still not proof
+  of bounded work. Retain incremental-sort input work: a company-prefix index
+  can scan the full tenant before producing that single row. Reject failed
+  candidates even after source review, and keep exact successor rejection
+  outside any ordered candidate lookup; do not raise limits or hide bad plans.

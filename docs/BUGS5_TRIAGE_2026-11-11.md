@@ -55,6 +55,41 @@ source-data completion and production acceptance are separate fields.
 
 ### November 12 Full Docker Disclosure-Work Failure (Unreleased)
 
+The complete rejected hosted run is now reconciled: CI43210993859 has4088
+actual PG cases=4078passed/10call failures/0skips/all12264phases. Nine failures
+are physical family-query work; the adjacent application regression proves
+10002raw versions scanned for each of15page/detail plans, not a timeout or
+access leak. No App browser acceptance ran. The lower-only experiment below
+was withdrawn before execution because it still admits prefix sorting.
+
+The current isolated, UNEXECUTED candidate uses exact Text[] equality on
+[company,parent,version] and two nonunique concurrent expression indexes,
+not ordered ranges. It preserves exact outer identity, cardinality, access,
+source and lifecycle checks, and the existing SQLite path. New migration
+coverage declares55cases including15PG fresh/reapply/downgrade/conflict and
+cancelled-build recovery cases. SQL/catalog/health checks and82physical plan
+profiles (40family/30application/12missing-successor) remain pending execution.
+The canonical governance map adds only two index identities/fingerprints;
+tenant retention/legal-source policy remains unchanged. Local full06 remains
+frozen on2b7 with its original failure retained. No deployment or fixed claim.
+
+The first proposed full-key/two-sided repair3d8152 also FAILED actual hosted
+PG4 in CI43210993859:128actual=127P/1F/0S with all384phases complete. The same
+original scale node now charges1,000,702work/59,900blocks on six first/cursor
+custom/generic/auto plans. Actual Index Cond uses only company lower/upper
+bounds, followed by incremental sort over10002tenant rows per admitted key.
+Complete-key source structure and literal LIMIT1 were not physical proof. All
+42plans and full raw failure are retained in patent-work-failure-02; the rest
+of this immutable hosted run is still continuing, not cancelled or certified.
+
+The withdrawn intermediate draft removed only the upper seek bound, kept full key
+ordering/literal LIMIT1 and all exact outer tenant/family/version/cardinality
+checks. It must still reject present later-version/family/tenant successors.
+The historical one-sided3987 query used a parameterized limit and failed generic
+planning; that failure is preserved, not assumed repaired by this new shape.
+New source controls retain both failed two-sided shapes and40intended family
+plans, unchanged budgets. That intermediate draft was never an effective fix.
+
 Canonical ownership correction: PROGRAM_MANIFEST/generated JOURNEYS allocate
 this patent-family loader to IPLF-080B/UJ-29/PAT-01/IP-SCOPE, with NFT-005 and
 J14/M14 verification. Prior032/UJ-02 and090A performance-note labels are retained
@@ -76,7 +111,9 @@ index viable under that stale distribution. Fresh or differently ordered
 fixtures did not prove this later hydration path safe. This is why a prior
 source/CI pass cannot close every future planner/data-history variant.
 
-The proposed repair is isolated from the active run: seek and order the complete
+The initial source-only proposal below predates hosted3d execution and is
+superseded by its failed result above, not a current unexecuted3d claim.
+The proposed repair was isolated from the active run: seek and order the complete
 company/family/version unique identity, retaining exact outer identity checks
 and unchanged authorization/lifecycle/source behavior. Deterministic stale
 disclosure-statistics and complete-key regressions are being added; none has
