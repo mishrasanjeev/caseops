@@ -1,3 +1,14 @@
+## 2026-11-12 — hosted timeout repair and static-analysis follow-up
+
+J20/M22 release remains **Inconclusive; NO-GO**. Hosted shard3/32 now passes
+in5 minutes48 seconds under the same12-minute limit. Three CodeQL test findings
+are addressed by moving the deliberate clone interruption into a helper;
+all identity, absence, recovery and original-source assertions remain. The
+complete10-case module passed on actual PostgreSQL in72.046 seconds/all30 phases,
+with source parity and complete database cleanup verified. Fresh CodeQL analysis
+and alert verdict, full CI and remaining native/store acceptance stay open.
+See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
 ## 2026-11-12 — dated PostgreSQL setup verification
 
 J20/M22 release verification remains **Inconclusive; NO-GO**. CI shard3/32

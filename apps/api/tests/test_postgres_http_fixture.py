@@ -86,11 +86,12 @@ def test_dated_protocol_templates_match_fresh_history_and_isolate_failed_clones(
         raise AssertionError("A dated clone replayed migration history")
 
     monkeypatch.setattr(command, "upgrade", unexpected_upgrade)
-    failed_name = None
-    with pytest.raises(RuntimeError, match="deliberate dated clone interruption"):
+    failed_clones = []
+
+    def interrupt_clone():
         with temporary_http_database(source_url, template=template) as first:
-            failed_name = first.url.database
             expected = _schema_signature(first)
+            failed_clones.append((first.url.database, expected))
             # The historical migration independently generates alias UUIDs and
             # timestamps. Compare its complete semantic catalogue across fresh
             # migrations; retain every native ID and timestamp in exact clone
@@ -117,7 +118,11 @@ def test_dated_protocol_templates_match_fresh_history_and_isolate_failed_clones(
             with first.connect() as connection:
                 assert connection.scalar(text("SELECT id FROM dated_clone_probe")) == 1
             raise RuntimeError("deliberate dated clone interruption")
-    assert failed_name is not None
+
+    with pytest.raises(RuntimeError, match="deliberate dated clone interruption"):
+        interrupt_clone()
+    assert len(failed_clones) == 1
+    failed_name, expected = failed_clones[0]
     with pg_engine.connect() as connection:
         assert connection.scalar(
             text("SELECT count(*) FROM pg_database WHERE datname=:name"),

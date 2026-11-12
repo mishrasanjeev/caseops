@@ -88,3 +88,20 @@ also passed:686 mobile, TypeScript,1703 harness passes plus two unchanged
 Windows-only skips,422 Python cases in all17 requested modules. Complete
 current CI on the next pushed revision, replacement native platform suites,
 distribution signing and store submission remain required.
+
+## Static-analysis follow-up on the exception boundary
+
+The subsequent hosted shard3/32 passed on251b6aa8 in5 minutes48 seconds under
+the unchanged12-minute job limit. This does not make the whole CI run green.
+CodeQL emitted842–844 for an inline deliberate exception inside pytest.raises:
+unreachable following code and two variables whose later uses it could not see.
+The deliberate interruption now lives in a helper, as in the existing clone
+cleanup test. The uniquely acknowledged clone identity and its complete schema
+are captured before interruption, and all later absence, template refusal,
+recovery and source-preservation assertions remain. No query is suppressed.
+The complete10-case PostgreSQL fixture module passed again with30 passing
+phases in72.046 seconds; native exit0, unchanged source database inventory and
+all owned fixture/source database absence were independently reconciled in
+`ci-codeql-protocol-native-02/reconciled-proof.json` under the same task cache.
+The first145-case proof remains separately source-bound. A fresh CodeQL analysis
+and alert verdict are still required; no alert is dismissed or waived.
