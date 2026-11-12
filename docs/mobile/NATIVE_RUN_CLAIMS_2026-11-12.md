@@ -68,3 +68,12 @@ Queue/Privacy replacement, V1 and client-extension suites remain required.
 Historical a82ded25 Core23/Files17 acceptance is kept separate. Distribution
 signing, current CI completion, reviewer readiness and store submission remain
 open. This document does not authorize credit for skipped or unexecuted cases.
+
+The first complete frozen source run,7ae05efc, is retained at
+`frozen-source-7ae05efc/`. Mobile units, TypeScript and all17 Python modules
+passed. Six route-descriptor harness cases refused the old reviewed gateway
+digest after its pinned base changed. Review confirmed that the gateway's only
+change is its exact base-module digest. The separate reviewed gateway digest
+in `prepare-gateway-routes.mjs` is updated to those actual bytes; runtime source
+matching, immutable evidence, exact routes and64/65-event guards stay required.
+The complete replacement source inventory must pass before another native build.
