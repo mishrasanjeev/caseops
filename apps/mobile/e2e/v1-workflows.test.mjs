@@ -85,6 +85,16 @@ function validProducerPlan() {
     { key: 'wall-link', purpose: 'wall-matter-link', method: 'POST', route: '/api/ip/dockets/{docket}/matter-links', routeIds: { docket: 'ip-patent.docket_id' }, body: { matter_id: { $response: 'matter-0.id' }, relation_role: 'operational', expected_docket_updated_at: version, reason: 'Synthetic native wall lineage' }, expectedStatuses: [200] },
     { key: 'restricted', purpose: 'revoked-restricted', method: 'POST', route: '/api/matters/{matter}/access/restricted', routeIds: { matter: 'matter-7.id' }, body: { restricted: true }, expectedStatuses: [200] },
     { key: 'grant', purpose: 'revoked-grant', method: 'POST', route: '/api/matters/{matter}/access/grants', routeIds: { matter: 'matter-7.id' }, body: { membership_id: uuid(2) }, expectedStatuses: [200] }];
+  for (const [i, family] of ['design', 'trademark'].entries()) plan.steps.push({ key: 'link-' + family, purpose: 'calendar-matter-link', method: 'POST',
+    route: '/api/ip/dockets/{docket}/matter-links', routeIds: { docket: family === 'trademark' ? 'ip-trademark.docket.id' : 'ip-design.docket_id' },
+    body: { matter_id: { $response: 'matter-' + (i + 1) + '.id' }, relation_role: 'operational', expected_docket_updated_at: version,
+      reason: 'Synthetic native Calendar lineage' }, expectedStatuses: [201] });
+  plan.calendarCatalogue = { day: '2026-11-11', families: ['patent', 'design', 'trademark'].map((family, i) => ({
+    spec: { family, baseDate: '2026-11-10', jurisdiction: 'IN', ruleVersionId: uuid(700 + i), calendarVersionId: uuid(710),
+      ruleSourceHash: 'a'.repeat(64), calendarSourceHash: 'b'.repeat(64), title: 'Synthetic Calendar source' },
+    parents: { creator: 'ip-' + family, matter: 'matter-' + i, link: family === 'patent' ? 'wall-link' : 'link-' + family },
+  })) };
+  plan.fixtureProjection.v1.records.calendar = { $response: 'calendar-catalogue' };
   return plan;
 }
 function admissionFixture() {
@@ -402,6 +412,14 @@ test('supplement exact list and producer create routes match actual canonical tr
   for (const purpose of ['contract-create', 'work-parent-create']) {
     const changed = structuredClone(plan), step = changed.steps.find(value => value.purpose === purpose); step.route = step.route.slice(0, -1);
     assert.throws(() => requireV1ProducerPlan(changed));
+  }
+  for (const mutate of [p => { p.calendarCatalogue = null; }, p => { p.fixtureProjection.v1.records.calendar = fixture().v1.records.calendar; },
+    p => { p.calendarCatalogue.families[1].parents.link = p.calendarCatalogue.families[0].parents.link; },
+    p => { p.calendarCatalogue.families[1].spec.ruleSourceHash = 'not-an-observation'; },
+    p => { p.calendarCatalogue.families[0].spec.baseDate = '2026-02-30'; },
+    p => { p.steps.push(...Array.from({ length: 40 }, (_, i) => ({ key: 'extra-' + i, method: 'GET', route: '/api/build', expectedStatuses: [200] }))); },
+    p => { p.steps[0].key = 'calendar-member-feed'; }]) {
+    const changed = structuredClone(plan); mutate(changed); assert.throws(() => requireV1ProducerPlan(changed));
   }
 });
 test('Calendar row identity preserves the typed API ID and the acknowledged docket and Matter lineage', () => {
@@ -804,6 +822,13 @@ test('V1-PRODUCER-01 real TLS login MFA identity and normal write retain per-con
   const s=await producerServer(t,(req,res)=>{res.end(JSON.stringify(req.url==='/api/auth/login'?{...me,access_token:'synthetic-normal-login-token'}:req.url==='/api/auth/mfa/step-up'?{status:'verified'}:me));});
   const credentials=producerPrivate(s.root),charges=[];
   assert.deepEqual(await s.host.login('owner',credentials,{charge:x=>charges.push(x),remaining:()=>10000}),me);
+  assert.deepEqual(s.host.getMfaAcknowledgement('owner'), {
+    actor: { companyId: me.company.id, membershipId: me.membership.id },
+    request: { method: 'POST', route: '/api/auth/mfa/step-up', purpose: 'step_up', verificationMethod: 'totp' },
+    response: { status: 200, value: { status: 'verified' }, requestId: 'offline-2', releaseSha: source },
+  });
+  const acknowledgement = s.host.getMfaAcknowledgement('owner'); acknowledgement.response.value.status = 'changed';
+  assert.equal(s.host.getMfaAcknowledgement('owner').response.value.status, 'verified');
   await s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic offline Matter'}});
   assert.deepEqual(charges.map(x=>x.key),['actor-login','actor-mfa','actor-identity']);assert.equal(s.seen.length,4);
   assert.ok(s.seen.every(x=>x.headers['x-caseops-automated-test']==='no-paid-providers'&&x.headers.cookie===undefined));
@@ -1071,6 +1096,8 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
   test('the real TLS gateway refuses a future route, then the actual host sends it only after its creator ACK', async t => {
     const { cache, file } = fixture(t), seen = [], events = [];
     const calendarPath = '/api/ip/dockets/' + id + '/deadlines';
+    const accessPath = '/api/ip/dockets/' + id + '/access/preview';
+    const accessReceived = [];
     const calendarReceived = [];
     const upstream = http.createServer((req, res) => {
       const request = { method: req.method, route: req.url, marker: req.headers['x-caseops-automated-test'] };
@@ -1083,6 +1110,16 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
           calendarReceived.push(Buffer.concat(chunks));
           res.writeHead(201, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-calendar-ack' });
           res.end(JSON.stringify({ id: other, privateProjectionMarker: 'not returned to caller' }));
+        });
+        return;
+      }
+      if (req.url === accessPath) {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+          accessReceived.push(Buffer.concat(chunks));
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-private-access-ack' });
+          res.end(JSON.stringify({ preview_token: 'synthetic-private-preview-value' }));
         });
         return;
       }
@@ -1199,6 +1236,46 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     assert.deepEqual(calendarReceived, [exact]);
     assert.deepEqual(seen.filter(row => row.route === calendarPath), [{ method: 'POST', route: calendarPath, marker: 'no-paid-providers' }]);
     assert.ok(!JSON.stringify(events).includes('privateProjectionMarker'));
+    routeFile.verifyRestored();
+
+    const accessClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => accessClient.clear());
+    await accessClient.request({ actor: 'owner', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic@example.invalid' } });
+    const accessBytes = Buffer.from('{"action":"grant", "subject_id":"synthetic-private-subject"}');
+    const accessInput = { actor: 'owner', method: 'POST', route: accessPath, producerStage: 'base', bodyBytes: accessBytes };
+    assert.throws(() => accessClient.request(accessInput), /IP_ACCESS_TYPED_TRANSPORT_REQUIRED/);
+    let accessClaims = 0, accessAcks = 0;
+    const accessChain = { claim(attempt) {
+      assert.equal(++accessClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, accessPath); assert.deepEqual(attempt.bodyBytes, accessBytes);
+      return { provenance: { requestDigest: producerHash('actual-offline-panel-ack'), bodySha256: producerHash(accessBytes) },
+        acceptResponse(response) { accessAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); return response.value; } };
+    } };
+    const privateResult = await accessClient.requestIpAccess(accessInput, accessChain);
+    assert.deepEqual(privateResult.projection, { preview_token: 'synthetic-private-preview-value' });
+    assert.equal(accessAcks, 1); assert.deepEqual(accessReceived, [accessBytes]);
+    assert.ok(!JSON.stringify(events).includes('synthetic-private-preview-value') && !JSON.stringify(events).includes('synthetic-private-subject'));
+    await assert.rejects(accessClient.requestCalendar({ ...accessInput, bodyBytes: undefined }, accessChain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.equal(accessReceived.length, 1); routeFile.verifyRestored();
+
+    const memberClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => memberClient.clear());
+    await memberClient.request({ actor: 'member', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic-member@example.invalid' } });
+    const summaryPath = '/api/ip/dockets/' + id + '/summary';
+    const summaryInput = { actor: 'member', method: 'GET', route: summaryPath, producerStage: 'base' };
+    let summaryClaims = 0;
+    const summaryChain = { claim(attempt) {
+      assert.equal(++summaryClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, summaryPath); assert.equal(attempt.bodyBytes, undefined);
+      return { provenance: { requestDigest: producerHash('actual-offline-confirmation-ack') }, acceptResponse(response) {
+        assert.equal(response.status, 200); assert.equal(response.releaseSha, sourceSha);
+        assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); return response.value;
+      } };
+    } };
+    const summaryResult = await memberClient.requestMemberDocket(summaryInput, summaryChain);
+    assert.deepEqual(summaryResult.projection, { matter_id: id });
+    await assert.rejects(memberClient.requestMemberDocket(summaryInput, summaryChain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.deepEqual(seen.filter(row => row.route === summaryPath), [{ method: 'GET', route: summaryPath, marker: 'no-paid-providers' }]);
     routeFile.verifyRestored();
   });
 }

@@ -4884,3 +4884,14 @@ separate frame-release and thread-control-flow repair; complete 140 host
 diagnostic/launcher cases passed. Fresh hosted alert verdicts are still pending.
 See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md). Native
 platform completion and store submission remain unverified; release NO-GO.
+
+
+### 2026-11-13 — V1 Calendar producer host integration (native acceptance pending)
+
+J20/M22 US-MOB-01..08: normal MFA/private ACL bridge, typed three-family
+Calendar catalogue and complete base-producer integration retain the original
+request/write/deadline limits. Full V1 module:178/178 offline/real-loopback-TLS
+checks; no native case credit. See
+`docs/mobile/V1_CALENDAR_PRODUCER_INTEGRATION_2026-11-13.md`. Fresh governed
+PostgreSQL fixture production, native V1/CX/QP inventories, reviewer readiness and
+production store submission remain open. Release verdict:NO-GO.

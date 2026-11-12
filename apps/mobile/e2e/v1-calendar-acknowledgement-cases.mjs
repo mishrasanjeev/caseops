@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { prepareV1CalendarDeadline, validateV1CalendarReadback } from './v1-calendar-acknowledgements.mjs';
 import { createV1CalendarHostRoutes } from '../../../scripts/mobile/v1-calendar-host-routes.mjs';
+import { produceV1CalendarCatalogue } from '../../../scripts/mobile/v1-calendar-catalogue.mjs';
+import { pendingV1ProducerPlan, produceV1Dataset } from './v1-workflows-fixture.mjs';
+import { ipAccessTestFixture } from '../../../scripts/mobile/v1-ip-access-grant-cases.mjs';
 
 const id = n => '01000000-0000-4000-8000-' + String(n).padStart(12, '0');
 const time = '2026-11-08T12:00:00.000000Z';
@@ -91,7 +94,147 @@ function readback(scenario) {
   })), scenario.calendar);
 }
 
-test('derives the owner commands from each exact current parent chain and retains full actual member rows', () => {
+function composedFixture(remainingMs = 8000) {
+  const composed = fixture(), access = new Map(), replies = new Map(), charged = [], acknowledged = [];
+  for (const [index, entry] of composed.entries.entries()) {
+    for (const envelope of [entry.parents.workspace, entry.proposal, entry.confirmation, entry.memberDocket]) {
+      replies.set(envelope.request.method + ' ' + envelope.request.route, envelope);
+    }
+    if (entry.spec.family === 'trademark') continue;
+    const title = entry.memberDocket.response.value.title;
+    entry.parents.creator.response.value.facts = { ...entry.parents.creator.response.value.facts, title };
+    const acl = ipAccessTestFixture(entry.spec.family, { scope: composed.scope, title, expectedTimeoutMs: Math.min(remainingMs, 10000),
+      identities: [entry.parents.creator.response.value.id, entry.parents.creator.response.value.docket_id,
+        entry.parents.matter.response.value.id, entry.parents.link.response.value.id, id(900 + index * 3), id(901 + index * 3), id(902 + index * 3)] });
+    for (const envelope of [acl.parents.panel, acl.preview, acl.apply]) envelope.response.requestId += '-' + entry.spec.family;
+    entry.memberDocket.response.value.access_policy_version = 2;
+    access.set(entry.spec.family, acl); replies.set('GET ' + acl.parents.panel.request.route, acl.parents.panel);
+  }
+  replies.set('GET /api/calendar/events', composed.calendar);
+  const identity = actor => ({ company: { id: composed.scope.companyId },
+    membership: { id: actor === 'owner' ? composed.scope.ownerMembershipId : composed.scope.memberMembershipId } });
+  const typed = async (input, chain) => {
+    const actor = identity(input.actor), bytes = input.bodyBytes ?? (input.body === undefined ? undefined : Buffer.from(JSON.stringify(input.body)));
+    const claim = chain.claim({ stage: input.producerStage, actor: input.actor, company: actor.company.id,
+      membership: actor.membership.id, method: input.method, requestTarget: input.route, bodyBytes: bytes });
+    assert.ok(claim);
+    let envelope;
+    if (input.bodyBytes) {
+      const acl = [...access.values()].find(value => input.route.startsWith(value.parents.panel.request.route + '/'));
+      assert.ok(acl); envelope = acl.respond(input);
+    } else envelope = replies.get(input.method + ' ' + input.route);
+    assert.ok(envelope);
+    return { status: envelope.response.status, requestId: envelope.response.requestId, projection: claim.acceptResponse(envelope.response) };
+  };
+  const host = {
+    getActorIdentity: identity, getMfaAcknowledgement: () => access.get('patent').parents.mfa,
+    login: async (actor, evidence, callbacks) => {
+      assert.equal(actor, 'member'); assert.equal(evidence.path, '/synthetic/member-private.json');
+      for (const [key, method, route] of [['actor-login', 'POST', '/api/auth/login'], ['actor-mfa', 'POST', '/api/auth/mfa/step-up'], ['actor-identity', 'GET', '/api/auth/me']]) {
+        callbacks.charge({ key, method, route }); callbacks.onAcknowledged({ key, method, route, status: 200, requestId: 'member-' + key, releaseSha: composed.scope.sourceSha });
+      }
+      return identity(actor);
+    },
+    request: async input => {
+      const envelope = replies.get(input.method + ' ' + input.route); assert.ok(envelope);
+      assert.deepEqual(input.query, envelope.request.query); return envelope.response;
+    },
+    requestCalendar: typed, requestIpAccess: typed, requestMemberDocket: typed,
+  };
+  const families = composed.entries.map(entry => ({ spec: entry.spec,
+    parents: Object.fromEntries(['creator', 'matter', 'link'].map(key => [key, entry.parents[key]])) }));
+  const options = { memberCredentialEvidence: { path: '/synthetic/member-private.json' }, remaining: () => remainingMs,
+    charge: request => charged.push(request), onAcknowledged: response => acknowledged.push(response), now: () => Date.parse(time) };
+  return { composed, access, charged, acknowledged, host, families, options };
+}
+
+async function verifyDatasetCatalogueComposition() {
+  const { composed, host, families, options, access } = composedFixture(180000), { scope, entries } = composed;
+  const reference = { path: '/synthetic/catalogue.json', sha256: 'a'.repeat(64) }, events = [], charges = [];
+  const plan = { ...pendingV1ProducerPlan(), readyForLive: true, preparedOnly: false, sourceSha: scope.sourceSha,
+    runId: 'v1-0123456789abcdef01234567', companyId: scope.companyId, membershipId: scope.memberMembershipId,
+    ownerMembershipId: scope.ownerMembershipId, catalogueEvidence: reference, emptyNotificationPlanEvidence: reference,
+    secondaryOwner: { companySlug: 'test-mobile-v1-secondary', companyName: 'Synthetic secondary workspace',
+      fullName: 'Synthetic secondary owner', email: 'secondary@example.invalid' },
+    fixtureProjection: { companyId: scope.companyId, membershipId: scope.memberMembershipId,
+      v1: { records: { calendar: { $response: 'calendar-catalogue' } } } } };
+  const step = (key, purpose, route, body, expectedStatus, extra = {}) => ({ key, purpose, route, body,
+    method: 'POST', expectedStatuses: [expectedStatus], ...extra });
+  plan.steps = Array.from({ length: 26 }, (_, i) => step('contract-' + i, 'contract-create', '/api/contracts/', { title: 'Synthetic contract ' + i }, 200));
+  for (const entry of entries) plan.steps.push(step('ip-' + entry.spec.family, 'ip-create', entry.parents.creator.request.route,
+    { title: 'Synthetic source', ...(entry.spec.family === 'design' ? { details: { domain: 'design' } } : {}) }, 201, { family: entry.spec.family, idempotent: true }));
+  for (let i = 0; i < 8; i++) plan.steps.push(step('matter-' + i, 'work-parent-create', '/api/matters/', { title: 'Synthetic parent ' + i }, 200));
+  for (const [i, entry] of entries.entries()) plan.steps.push(step('link-' + entry.spec.family,
+    i === 0 ? 'wall-matter-link' : 'calendar-matter-link', entry.parents.link.request.route,
+    { ...entry.parents.link.request.body, reason: 'Synthetic operational source lineage' }, 201));
+  plan.steps.push(step('restricted', 'revoked-restricted', '/api/matters/' + id(2007) + '/access/restricted', { restricted: true }, 200),
+    step('grant', 'revoked-grant', '/api/matters/' + id(2007) + '/access/grants', { membership_id: scope.memberMembershipId }, 200));
+  plan.calendarCatalogue = { day: scope.day, families: families.map(({ spec }, i) => ({ spec,
+    parents: { creator: 'ip-' + spec.family, matter: 'matter-' + i, link: 'link-' + spec.family } })) };
+  plan.fixtureProjection.v1.records.calendar = { day: { $response: 'calendar-catalogue.day' },
+    dayLabel: 'Synthetic independently recorded day label', nextWeekLabel: 'Synthetic independently recorded next-week label',
+    sources: entries.map((entry, index) => ({
+      ...Object.fromEntries(['family', 'docket', 'event', 'confirmation'].map(field => [field, { $response: `calendar-catalogue.sources.${index}.${field}` }])),
+      expected: { sourceId: { $response: `calendar-catalogue.sources.${index}.docket.id` },
+        deadlineId: { $response: `calendar-catalogue.sources.${index}.confirmation.matterDeadlineId` } },
+      rowFields: [entry.event.title, entry.event.matter_title, scope.day],
+    })) };
+  const catalogue = { sourceSha: scope.sourceSha, syntheticDataOnly: true, designIntakeRegistered: true,
+    patentFamilyAvailable: true, trademarkManualAvailable: true };
+  let serial = 0;
+  const response = value => ({ status: 200, releaseSha: scope.sourceSha, requestId: 'base-http-' + ++serial, value });
+  const request = async input => {
+    if (input.actor === 'secondary-owner') {
+      if (input.route === '/api/bootstrap/company') return response({ company: { id: id(9100), slug: plan.secondaryOwner.companySlug },
+        membership: { id: id(9101), role: 'owner' }, user: { full_name: plan.secondaryOwner.fullName },
+        capabilities: ['company:manage_users'], access_token: 'synthetic-not-live-session' });
+      if (input.route === '/api/auth/mfa/enroll') return response({ secret: 'JBSWY3DPEHPK3PXP' });
+      return response(input.route.endsWith('/verify') ? { status: 'enrolled' } : { mfa_status: 'enrolled' });
+    }
+    for (const entry of entries) for (const key of ['creator', 'link']) {
+      const envelope = entry.parents[key];
+      if (input.route === envelope.request.route) return structuredClone(envelope.response);
+    }
+    if (input.route === '/api/matters/') {
+      const i = Number(input.body.title.split(' ').at(-1));
+      return i < 3 ? structuredClone(entries[i].parents.matter.response)
+        : response({ id: id(2000 + i), company_id: scope.companyId, title: input.body.title, is_active: true, status: 'intake' });
+    }
+    return response({ id: id(3000 + serial), company_id: scope.companyId });
+  };
+  const originalParents = families.map(x => x.parents);
+  const result = await produceV1Dataset(plan, { request, catalogue, readEvidence: () => catalogue, now: options.now,
+    persist: event => events.push(event), claim() {}, planEvidence: reference,
+    persistPrivate: async () => ({ evidence: { path: '/synthetic/secondary-private.json', sha256: 'b'.repeat(64), uid: process.getuid() },
+      identity: { uid: process.getuid(), dev: '1', ino: '2' }, mode: 0o600, canonicalWriter: 'local-fixture.py', ownedNoFollowSingleLink: true }),
+    aggregate: { begin() {}, remaining: () => 180000, request: value => charges.push(value),
+      publicState: () => ({ runId: plan.runId, sourceSha: scope.sourceSha }) },
+    admit: async () => ({ beforeMemberRead: true, sourceSha: scope.sourceSha, apiSourceSha: scope.sourceSha,
+      webSourceSha: scope.sourceSha, companyId: scope.companyId, membershipId: scope.ownerMembershipId, role: 'owner' }),
+    calendarCatalogue: input => {
+      for (const [i, entry] of input.families.entries()) for (const key of ['creator', 'matter', 'link']) {
+        assert.deepEqual(entry.parents[key].response, originalParents[i][key].response);
+        assert.equal(entry.parents[key].request.route, originalParents[i][key].request.route);
+      }
+      return produceV1CalendarCatalogue(host, input.scope, input.families, { ...options, ...input });
+    },
+  });
+  const actualCalendar = result.fixture.v1.records.calendar;
+  assert.deepEqual({ day: actualCalendar.day, sources: actualCalendar.sources.map(row => Object.fromEntries(
+    ['family', 'docket', 'event', 'confirmation'].map(key => [key, row[key]]))) }, readback(composed));
+  assert.equal(actualCalendar.dayLabel, plan.fixtureProjection.v1.records.calendar.dayLabel);
+  for (const row of actualCalendar.sources) {
+    assert.equal(row.expected.sourceId, row.docket.id); assert.equal(row.expected.deadlineId, row.confirmation.matterDeadlineId);
+    assert.equal(row.rowFields.length, 3);
+  }
+  assert.equal(result.receipt.requests, 68); assert.equal(result.receipt.writes, 57);
+  assert.equal(events.filter(x => x.type === 'v1_producer_response').length, 68);
+  assert.equal(result.receipt.mutationUncertain, false);
+  assert.ok([...access.values()].every(value => value.buffers.every(bytes => bytes.every(byte => byte === 0))));
+  assert.ok(!JSON.stringify(events).includes('synthetic-raw-token'));
+}
+
+test('derives the owner commands from each exact current parent chain and retains full actual member rows', async () => {
   const f = fixture();
   for (const entry of f.entries) {
     const pending = prepare(f.scope, entry);
@@ -107,6 +250,18 @@ test('derives the owner commands from each exact current parent chain and retain
   assert.deepEqual(result.sources.map(source => source.confirmation.matterDeadlineId), f.entries.map(entry => entry.deadlineId));
   result.sources[0].event.title = 'Changed later';
   assert.notEqual(f.entries[0].event.title, 'Changed later');
+
+  const { composed, access, charged, acknowledged, host, families, options } = composedFixture();
+  const actual = await produceV1CalendarCatalogue(host, composed.scope, families, options);
+  assert.deepEqual(actual, readback(composed));
+  assert.equal(charged.length, 22); assert.equal(charged.filter(row => row.method === 'POST').length, 12);
+  assert.equal(new Set(charged.map(row => row.key)).size, 22);
+  assert.deepEqual(charged.map(row => row.key).sort(), acknowledged.map(row => row.key).sort());
+  assert.ok([...access.values()].every(value => value.buffers.every(bytes => bytes.every(byte => byte === 0))));
+  await assert.rejects(produceV1CalendarCatalogue(host, composed.scope, families.slice(0, 2), options));
+  await assert.rejects(produceV1CalendarCatalogue(host, composed.scope, families, { ...options, remaining: () => 0 }), /DEADLINE_EXPIRED/);
+  assert.equal(charged.length, 22);
+  await verifyDatasetCatalogueComposition();
 });
 
 const parentFailures = [

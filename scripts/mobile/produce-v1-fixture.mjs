@@ -13,11 +13,13 @@ import { admitProducerPublic } from './native-producer-admission.mjs';
 import { admitProducerRouteFile } from './native-producer-route-file.mjs';
 import { producerFixedRoutes, producerRouteProvenance } from './native-producer-route-provenance.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
+import { produceV1CalendarCatalogue } from './v1-calendar-catalogue.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 export const V1_PRODUCER_INPUTS = Object.freeze(['scripts/mobile/produce-v1-fixture.mjs','scripts/mobile/native-producer-private.py',
   'scripts/mobile/local-fixture.py','scripts/mobile/local-transport.py','scripts/mobile/local-v1-inbox.py','scripts/mobile/local-v1-controls.py',
-  'scripts/mobile/local-gateway.py','compose.mobile-local.yml']);
+  'scripts/mobile/local-gateway.py','scripts/mobile/v1-ip-access-host.mjs','scripts/mobile/v1-ip-access-grant.mjs',
+  'scripts/mobile/v1-calendar-host-routes.mjs','scripts/mobile/v1-calendar-catalogue.mjs','compose.mobile-local.yml']);
 /** References resolve only to earlier acknowledged outputs; no code or future
  * receipt is accepted. The resolved plan itself is retained before its stage. */
 export function resolveProducedReferences(value, produced) {
@@ -182,7 +184,9 @@ export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,no
       let result;
       if(stage==='viewer')result={receipt:await produceV1Viewer(plan,dependencies)};
       else if(stage==='inbox')result={receipt:await produceV1Inbox(plan,{...dependencies,...createV1Worker({docker:q.docker,dockerReceipt:initial.docker,cache:q.workerCache,sourceSha:initial.source.sourceSha,store},command)})};
-      else result=await produceV1Dataset(plan,{...dependencies,catalogue:readProducerReference(plan.catalogueEvidence)});
+      else result=await produceV1Dataset(plan,{...dependencies,catalogue:readProducerReference(plan.catalogueEvidence),
+        calendarCatalogue: input => produceV1CalendarCatalogue(host, input.scope, input.families,
+          { ...input, memberCredentialEvidence: q.actors.member.credentialEvidence, now }) });
       const receiptEvidence=store.write(stage+'-receipt.json',result.receipt),fixtureEvidence=result.fixture?store.write(stage+'-dataset.json',result.fixture):undefined;
       produced[stage]={...result,receiptEvidence,...(fixtureEvidence?{fixtureEvidence}:{})};aggregate.complete(stage,receiptEvidence);
     }

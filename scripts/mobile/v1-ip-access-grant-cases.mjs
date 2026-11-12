@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { createV1FixtureAggregate } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
 import { createV1IpAccessGrant } from './v1-ip-access-grant.mjs';
+import { grantV1IpMemberAccess } from './v1-ip-access-host.mjs';
 
 const id = n => '11000000-0000-4000-8000-' + String(n).padStart(12, '0');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -12,12 +13,12 @@ const reason = 'Synthetic native fixture: grant access to the current test membe
 const types = { patent: 'patent_family', design: 'design_intake' };
 const creators = { patent: '/api/ip/patents/families', design: '/api/ip/specialist/records' };
 
-function fixture(family = 'patent') {
-  const scope = { sourceSha: 'a'.repeat(40), companyId: id(1), ownerMembershipId: id(2), memberMembershipId: id(3) };
+export function ipAccessTestFixture(family = 'patent', options = {}) {
+  const scope = options.scope ?? { sourceSha: 'a'.repeat(40), companyId: id(1), ownerMembershipId: id(2), memberMembershipId: id(3) };
   const { sourceSha, companyId, ownerMembershipId: owner, memberMembershipId: member } = scope;
-  const [record, docket, matter, edge, initial, granted, operation] = Array.from({ length: 7 }, (_, index) => id(index + 10));
+  const [record, docket, matter, edge, initial, granted, operation] = options.identities ?? Array.from({ length: 7 }, (_, index) => id(index + 10));
   const prefix = '/api/ip/dockets/' + docket;
-  const title = 'Restricted synthetic ' + family;
+  const title = options.title ?? 'Restricted synthetic ' + family;
   const ack = (requestId, method, route, status, value, options = {}) => ({
     actor: { companyId, membershipId: options.member ? member : owner },
     request: { method, route, ...options.request },
@@ -65,7 +66,7 @@ function fixture(family = 'patent') {
     assert.equal(request.route, envelope.request.route);
     assert.equal(request.actor, 'owner');
     assert.equal(request.method, 'POST');
-    assert.equal(request.timeoutMs, 8000);
+    assert.equal(request.timeoutMs, options.expectedTimeoutMs ?? 8000);
     assert.equal(request.automaticRetry, false);
     const digest = hash(request.bodyBytes);
     assert.deepEqual(request.provenance, { requestDigest: hash(previewRequest ? parents.panel.response.requestId : preview.response.requestId),
@@ -78,6 +79,7 @@ function fixture(family = 'patent') {
   return { scope, family, parents, memberSummary, preview, apply, ready, respond, charges, calls, buffers,
     expire: () => { clock = Date.parse(parents.mfa.response.value.expires_at) - 8000; } };
 }
+const fixture = ipAccessTestFixture;
 
 for (const family of Object.keys(types)) {
   test('binds ' + family + ' owner panel and fresh MFA to an exact single durable member grant', async () => {
@@ -98,6 +100,29 @@ for (const family of Object.keys(types)) {
     assert.ok(!JSON.stringify([receipt, f.charges]).includes('preview_token'));
     await assert.rejects(execute(f.respond), /PAIR_REPLAY_REFUSED/);
     assert.throws(() => grant.acceptMemberSummary(f.memberSummary), /MEMBER_READ_REPLAY_REFUSED/);
+
+    const bridge = fixture(family);
+    const { mfa, ...parents } = bridge.parents;
+    const host = {
+      getActorIdentity: () => ({ company: { id: bridge.scope.companyId }, membership: { id: bridge.scope.ownerMembershipId } }),
+      getMfaAcknowledgement: () => mfa,
+      requestIpAccess: async (input, chain) => {
+        const claim = chain.claim({ stage: input.producerStage, actor: input.actor, company: bridge.scope.companyId,
+          membership: bridge.scope.ownerMembershipId, method: input.method, requestTarget: input.route, bodyBytes: input.bodyBytes });
+        assert.deepEqual(claim.provenance, input.provenance);
+        const response = bridge.respond(input).response;
+        const projection = claim.acceptResponse(response);
+        assert.throws(() => claim.acceptResponse(response), /ACK_REPLAY_REFUSED/);
+        assert.throws(() => chain.claim({}), /HOST_REPLAY_REFUSED/);
+        return { projection };
+      },
+    };
+    const bridged = await grantV1IpMemberAccess(host, bridge.scope, family, parents,
+      { charge: value => bridge.charges.push(value), remaining: () => 8000, now: () => Date.parse(time) });
+    assert.equal(bridged.acceptMemberSummary(bridge.memberSummary).grantId, id(15));
+    assert.equal(bridge.calls.length, 2);
+    assert.ok(bridge.buffers.every(bytes => bytes.every(byte => byte === 0)));
+    await assert.rejects(grantV1IpMemberAccess({ ...host, getActorIdentity: () => ({}) }, bridge.scope, family, parents, {}), /HOST_ACTOR_REQUIRED/);
   });
 }
 
