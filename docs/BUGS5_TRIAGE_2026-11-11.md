@@ -2,6 +2,15 @@
 
 ## Evidence Boundary
 
+7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor
+now passes, but its generated entry still embeds the previous helper hash.
+Only that64-character generated pin is corrected next. Offline AST-isolated
+canonical rendering verifies the entire3083-byte output plus all three pinned
+inputs, without importing the full helper, running CLI/tests or changing MacBook
+state. Existing two strict binding/tamper journeys remain unchanged; fresh
+complete source/runtime gates are still owed. This second missed pin is a
+transitive metadata integration error, not grounds to bypass source admission.
+
 7949 API shard11 retains three failed SQLite fixture seeds, all before the
 new chained-downgrade assertions: reused PostgreSQL helpers open ordinary
 Session, correctly rejected by SQLite writer serialization. The follow-up

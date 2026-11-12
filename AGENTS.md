@@ -4203,6 +4203,10 @@ requirements when using the fallback.
   reference to those exact source bytes. Keep the consumer's binding and
   tamper rejection unchanged; a setup refusal from a stale pin is not an app
   failure or permission to bypass the held-source verification.
+  Follow that chain through generated launcher bytes as well: a corrected
+  constructor pin changes the helper hash consumed by its generated entry.
+  Validate the complete canonical renderer output and every input pin, not
+  only the first changed reference.
 - A PostgreSQL fixture helper is not automatically safe for SQLite. Use the
   actual CaseOpsSession for reliability writes and enable/check foreign-key
   enforcement on every fixture connection. Preserve ordinary-session rejection

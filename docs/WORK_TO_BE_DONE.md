@@ -39,6 +39,10 @@ readers, trust/owner/byte/namespace fences and apps/mobile bytes remain unchange
 The7949 Linux harness exposed a stale shared-host reference to the changed npm
 constructor. Refresh only that exact hash/size, preserving all source-binding
 and tamper checks; native Windows and full later-source CI are still owed.
+7b fixes that link but retains the generated entry's old helper hash. Update
+only the generated fingerprint and verify the complete canonical renderer plus
+all input pins; existing binding/tamper assertions and app/MacBook scope stay
+unchanged. String metadata validation is not source-suite or build acceptance.
 API11 separately retains three new SQLite fixture setup failures, not migration
 refusal reproductions. Use canonical writer sessions and enabled foreign keys,
 preserve plain-session rejection plus all row/catalog/revision assertions and
