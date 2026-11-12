@@ -974,7 +974,7 @@ async function scrolledPrivacyLogout({wrongPrincipal=false,logoutStatus=204}={})
  return {clicks,swipes,reads,signedOut};
 }
 test('Queue privacy logout restores the header from the receipt before one acknowledged sign-out',async()=>{
- const result=await scrolledPrivacyLogout();assert.deepEqual(result.clicks,['sign-out']);assert.equal(result.signedOut,true);assert.equal(result.reads,2);assert.ok(result.swipes.includes('up'));assert.ok(result.swipes.includes('down'));
+ const result=await scrolledPrivacyLogout();assert.deepEqual(result.clicks,['sign-out']);assert.equal(result.signedOut,true);assert.equal(result.reads,2);assert.deepEqual(result.swipes,[...Array(5).fill('up'),...Array(5).fill('down')]);
 });
 test('Queue privacy logout still refuses another principal and an unacknowledged sign-out',async()=>{
  await assert.rejects(scrolledPrivacyLogout({wrongPrincipal:true}));await assert.rejects(scrolledPrivacyLogout({logoutStatus:500}));

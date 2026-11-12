@@ -161,7 +161,7 @@ export async function withQPActor(member,action){const prior=new Map();try{for(c
 export async function logoutQPAccount(c){
  const open=await visible(c.driver,selector(c.platform,'id','account-open'));if(open)await dispatchNativeClick(c,open,'id','account-open');
  assert.equal(await(await find(c,'id','account-principal',{scroll:true,scrollDirection:'up'})).getText(),c.fixture.principalLabel);const before=await localJson(c.fixture.gatewayUrl+'/__caseops_e2e/status');
- await dispatchNativeClick(c,await find(c,'id','sign-out',{scroll:true}),'id','sign-out');await c.driver.waitUntil(async()=>!!await visible(c.driver,selector(c.platform,'id','signed-out'))&&!await visible(c.driver,selector(c.platform,'id','session-loading')),{timeout:20000,interval:200});
+ await dispatchNativeClick(c,await find(c,'id','sign-out',{scroll:true,...(c.platform==='android'?{scrollDirection:'down'}:{})}),'id','sign-out');await c.driver.waitUntil(async()=>!!await visible(c.driver,selector(c.platform,'id','signed-out'))&&!await visible(c.driver,selector(c.platform,'id','session-loading')),{timeout:20000,interval:200});
  const after=await localJson(c.fixture.gatewayUrl+'/__caseops_e2e/status');assert.equal(after.requests.slice(before.lastSequence).filter(r=>r.method==='POST'&&r.route==='/api/auth/native/logout'&&r.status===204).length,1);
  assert.equal((await c.driver.$$(selector(c.platform,'id','privacy-request-receipt'))).length,0);assert.equal((await c.driver.$$(selector(c.platform,'id','queue-task-detail'))).length,0);
 }

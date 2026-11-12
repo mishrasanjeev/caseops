@@ -1,3 +1,16 @@
+## 2026-11-12 — native completion cleanup remains open
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented; Inconclusive;
+release NO-GO**. Actual c8dd Android Queue passed all phases; Privacy setup/call
+passed but final teardown exceeded the unchanged480-second suite budget.
+The narrow Android sweep correction passed70 protocol cases and an actual-app
+logout in6.124 seconds, with one204, private controls cleared and session deleted.
+This focused proof earns no full-suite credit. Original failed reports and
+unknown original cleanup acknowledgements remain preserved and independently
+reconciled. Main CI was canceled at PostgreSQL shard3/32's12-minute limit:
+41/127 complete cases is incomplete, despite green source/security/CodeQL gates.
+Neither store is submitted. See [dated proof](mobile/NATIVE_QP_CLEANUP_2026-11-12.md).
+
 ## 2026-11-12 — native Matter marker and complete rejection diagnostics
 
 J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
