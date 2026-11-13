@@ -1,5 +1,17 @@
 # CaseOps agent instructions
 
+- Security advisory results are time-bound even for an unchanged source tree.
+  Recheck dependency security immediately before a protected release merge and
+  deployment after long-running acceptance. Retain the original passing audit
+  and a newly disclosed advisory separately; never waive a new failure or
+  relabel earlier tests as running the repaired dependency. Update the exact
+  locked artifact, installed-byte provenance, notices and protocol-boundary
+  regressions together, without broad dependency upgrades.
+  For already security-pinned direct dependencies, check the maintainer's
+  current official security releases/advisories before freezing acceptance:
+  registry and global vulnerability feeds can lag an upstream patch. Record
+  upstream release, upstream disclosure and feed-publication dates separately.
+
 - Use representative questions already supplied in a report before declaring
   reproduction input missing. Label newly chosen scenarios as such. Pair factual
   assistant requests with true legal/mixed requests and negated legal language;

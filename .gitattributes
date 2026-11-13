@@ -174,3 +174,6 @@ apps/api/vendor/uharfbuzz-0.57.0/LICENSE -text
 apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING -text
 apps/api/vendor/uharfbuzz-0.57.0/NOTICE.txt text eol=lf
 apps/api/vendor/uharfbuzz-0.57.0/provenance.json text eol=lf
+apps/api/vendor/dnspython-2.9.2/LICENSE text eol=lf
+apps/api/vendor/dnspython-2.9.2/NOTICE.txt text eol=lf
+apps/api/vendor/dnspython-2.9.2/provenance.json text eol=lf

@@ -15,7 +15,7 @@ from packaging.version import Version
 
 @pytest.mark.parametrize(
     "name,minimum,specifier",
-    [("dnspython", "2.9.0", ">=2.9.0"), ("fpdf2", "2.8.9", "==2.8.9")],
+    [("dnspython", "2.9.2", ">=2.9.2"), ("fpdf2", "2.8.9", "==2.8.9")],
 )
 def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, minimum, specifier):
     api = Path(__file__).resolve().parents[1]

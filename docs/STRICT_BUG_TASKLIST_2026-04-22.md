@@ -1,5 +1,29 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Workbook5 Docker Passed; New Dependency Security Stop
+
+Full08/40b completed4108native passes/all12324phases and784browser cases:
+770P/14explicitS/0F/0retry, all14new/retained target cases passed. Independent
+collection, progress, XML, artifact and source checks pass. PR614 mergedf6656bc1
+at the exact same tree. Old full07 failures remain retained as failures.
+
+Main Security43504920237 now fails dnspython2.9.0/CVE-2026-128089. Its global
+feed publication wasNovember13 20:19UTC during browser acceptance, but upstream
+disclosure wasNovember4 and the patched package was uploadedNovember3. The
+earlier passing audit did not prove maintainer advisories were absent.
+Safe WKS boundary regressions establish three missing rejections (text service,
+direct bitmap and wire bitmap) on2.9.0, with six positive/negative controls
+passing. Repair only the official2.9.2 dependency and corresponding provenance,
+notices and floors. Replacement gates/deployed bytes are still unverified.
+No new bug fixed verdict or provider/legal/native-app certification is claimed.
+
+Focused Linux replacement42cases=40P/2optional-observabilityS/0F,126phases,
+with the exact official2.9.2 wheel and unchanged source; not a built image or
+whole release. Windows new9WKS cases pass. Prior broader Windows35P/5F/2S
+provenance-helper/platform/cache-link failures remain retained, not suppressed.
+Strict installed metadata audit and dependency check pass. Full release gates
+remain pending; neither old full08 nor these components certify production.
+
 ## November13: Full07 Capture Refusals And Native Runtime Isolation
 
 NFT-005 / J14-M14 release verification; product workflows keep their existing

@@ -1,5 +1,34 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Fresh Advisory Blocks Workbook5 Production
+
+**Partially implemented / NO-GO.** QG-SEC-004/NFT-005. Full Docker08 at40b/c67
+completed4108PostgreSQL passes and784browsers=770P/14explicitS/0F/0retries;
+independent raw inventories/phase/XML/artifact hashes reconcile. PR614 merged
+asf6656bc1 with the identical tree. This supersedes the older pending full08
+status, not the retained failed full07 evidence or any production acceptance.
+
+Main Security43504920237/job132159937452 now fails dnspython2.9.0 for
+CVE-2026-128089/GHSA-vvf4-9x63-8xvv (global feed publishedNovember13 20:19UTC
+during the browser gate). Upstream disclosure wasNovember4; the2.9.2 package
+was uploadedNovember3. Earlier40b Security passed before global publication,
+not before upstream disclosure. Feed success did not replace maintainer review.
+Safe offline65536-service/8193-byte tests reproduce3failures,
+6passes on2.9.0 without abusive allocations or network. Targeted manifest,
+lock, installed-byte/provenance/notice and boundary regression repair is under
+acceptance; no source/advisory suppression or paid-provider probe. Current-main
+green gates, repaired-image Docker and exact production replay remain owed.
+Production is not certified from the merged PR or earlier source-bound run.
+
+Focused replacement proof: exact official2.9.2 wheel overlay on isolated,
+network-disabled Linux has42collected=40P/2explicit optional-observabilityS,
+126phases/0failure, complete unchanged-source receipts. Nine new WKS cases
+also pass on Windows. Fresh strict installed-metadata audit reports0known
+vulnerabilities and pipcheck is compatible. The broader Windows42case attempt
+is retained35P/5F/2S: old provenance-helper ctime/owner assumptions and default
+cache hardlinks, not waived or called native acceptance. No guard is relaxed.
+This focused overlay is not the new release image/full Docker or production.
+
 ## November13: Native Evidence Namespace Isolation
 
 **Partially implemented / NO-GO.** NFT-005/J14-M14. Complete full07/48ab has

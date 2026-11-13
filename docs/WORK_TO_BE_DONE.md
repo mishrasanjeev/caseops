@@ -1,5 +1,18 @@
 ## 2026-11-11 - Workbook 5
 
+November14 current update: full Docker08 at40b/c67 is complete and independently
+reconciled:4108native passes,784browsers=770P/14explicitS/0F/0retry, all14target
+cases passed at desktop/phone widths. PR614 merged asf6656bc1 with the same
+tree. This does not overwrite the failed full07 observations below.
+Release remains NO-GO: fresh main Security43504920237 detects the new high
+dnspython advisoryCVE-2026-128089, globally publishedNovember13 20:19UTC;
+upstream disclosureNovember4 and patched package uploadNovember3 predate that
+feed. Earlier audit success did not replace official maintainer review. Official2.9.2
+targeted repair/provenance and safe WKS regressions are in acceptance; prior
+2.9.0 local proof is not reused as repaired-runtime proof. Main green, complete
+repaired-image Docker and exact production replay remain required. No app/
+MacBook change, audit waiver, paid call or production/fixed verdict.
+
 November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
 zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
 No production certification. Controlled frozen filesystem probes reproduce
