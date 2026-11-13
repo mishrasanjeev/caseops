@@ -7,19 +7,32 @@ https://github.com/open-telemetry/opentelemetry-python/commit/78123a2755c907c602
 https://github.com/open-telemetry/opentelemetry-python/releases/tag/v1.45.2
 
 No SDK, instrumentation, exporter, or telemetry initialization is needed.
-The observability extra is required, not silently skipped. All input values
+Core-only collection declares an explicit optional-module skip. The separate
+mandatory all-extras CI gate fails if the extra is missing. All input values
 are at most 513 characters; rejection ordering replaces timing/DoS probes.
 """
 
+import importlib.metadata
+import os
 import re
 import socket
 from types import SimpleNamespace
 
 import pytest
+
+try:
+    importlib.metadata.version("opentelemetry-api")
+except importlib.metadata.PackageNotFoundError:
+    if os.environ.get("CASEOPS_REQUIRE_OBSERVABILITY_TESTS") == "1":
+        raise
+    pytest.skip(
+        "Optional observability extra absent; mandatory all-extras CI gate executes these cases",
+        allow_module_level=True,
+    )
+
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.trace.propagation import tracecontext
-
 
 TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
 SPAN_ID = "00f067aa0ba902b7"

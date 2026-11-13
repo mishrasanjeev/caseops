@@ -48,6 +48,35 @@ def test_strict_dependency_audit_installs_every_supported_optional_extra():
     assert "--strict" in audit and "--vulnerability-service osv" in audit
     assert '--path "$site_packages"' in audit
     assert "ignore-vuln" not in audit and "continue-on-error" not in audit
+    ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    gate = next(step for step in ci["jobs"]["api-ruff"]["steps"]
+                if step.get("name") == "Require optional traceparent security acceptance")
+    assert gate["env"]["CASEOPS_REQUIRE_OBSERVABILITY_TESTS"] == "1"
+    assert "tests/test_opentelemetry_traceparent_security_20261114.py" in gate["run"]
+    assert "continue-on-error" not in gate
+
+
+@pytest.mark.parametrize("required", [False, True], ids=["core-only", "mandatory-extra-gate"])
+def test_traceparent_collection_declares_optional_absence_but_required_gate_fails(
+    monkeypatch, required
+):
+    import runpy
+
+    real_version = importlib.metadata.version
+
+    def without_optional_distribution(name):
+        if name == "opentelemetry-api":
+            raise importlib.metadata.PackageNotFoundError(name)
+        return real_version(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", without_optional_distribution)
+    if required:
+        monkeypatch.setenv("CASEOPS_REQUIRE_OBSERVABILITY_TESTS", "1")
+    else:
+        monkeypatch.delenv("CASEOPS_REQUIRE_OBSERVABILITY_TESTS", raising=False)
+    expected = importlib.metadata.PackageNotFoundError if required else pytest.skip.Exception
+    with pytest.raises(expected):
+        runpy.run_path(str(Path(__file__).with_name("test_opentelemetry_traceparent_security_20261114.py")))
 
 
 def test_patched_dns_parser_rejects_a_self_referencing_compression_pointer():

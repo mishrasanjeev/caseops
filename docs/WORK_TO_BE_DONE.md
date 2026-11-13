@@ -28,6 +28,11 @@ and original8s/15s budgets remain. Fresh profile04-06 timed out (launches briefl
 overlapped; not exclusive measurements); serial07 diagnostic completed784IDs in
 19.99s under a45s profiling ceiling, NOT original-budget acceptance. The further
 schema deferral and ordered-inventory/runtime checks are pending validation.
+Independent review found two introduced gaps before release: unconditional
+optional imports broke core-only collection and lock regeneration dropped ten
+unrelated PyPy uharfbuzz wheels. Restore that package's exact prior block,
+declare core-only optional absence, and add a mandatory all-extras CI parser
+gate plus explicit optional/required collection regressions. No audit waiver.
 
 November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
 zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
