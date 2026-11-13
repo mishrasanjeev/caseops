@@ -12,7 +12,7 @@ const ANDROID_SCROLL_LIMIT = 10;
 const ANDROID_SCROLL_PERCENT = 0.65;
 const androidQueueNavigationControls = new Set(['queue-next','queue-first','queue-back','queue-open-matter']);
 async function tap(c,id){if(c.platform==='android'&&androidQueueNavigationControls.has(id))return tapQPQueueNavigation(c,id);consume(c);const iosBody=c.platform==='ios'&&(androidQueueNavigationControls.has(id)||/^queue-task-[a-f0-9-]{36}$/.test(id)||/^privacy-request-(start|confirm|cancel|reload)$/.test(id));const e=iosBody?await findIosFileFact(c,id,'XCUIElementTypeButton'):await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
-async function fact(c,id){consume(c);return c.platform==='ios'?(await findIosFileFact(c,id,'XCUIElementTypeStaticText')).getText():read(c,'id',id,{scroll:true});}
+async function fact(c,id,scrollDirection){consume(c);return c.platform==='ios'?(await findIosFileFact(c,id,'XCUIElementTypeStaticText')).getText():read(c,'id',id,{scroll:true,...(scrollDirection?{scrollDirection}:{})});}
 async function wait(c,id,value){if(c.platform==='ios'&&id==='matter-task-queue')return waitForQPIosQueue(c);if(c.platform==='ios'&&['queue-task-detail','matter-detail'].includes(id))return iosStructuralScreen(c,id,id==='queue-task-detail'?'queue-task-title':'matter-code');let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
 async function control(c,name,args={}){assert.ok(++c.controlCalls<=24,'QP_CASE_CONTROL_BOUND');return c.controls[name]({caseId:c.caseId,...args});}
@@ -550,7 +550,12 @@ async function completedNativeRead(c,afterSequence){
  }throw Error('QP_EXPLICIT_NATIVE_RELOAD_NOT_COMPLETED');
 }
 async function receiptFacts(c,r){for(const[id,value]of Object.entries({'privacy-request-id':r.id,'privacy-request-operation':r.operation_id,
- 'privacy-request-requested-at':r.requested_at,'privacy-request-status':'Received','privacy-request-not-completed':'Not completed'}))assert.equal(await fact(c,id),value);}
+ 'privacy-request-requested-at':r.requested_at,'privacy-request-status':'Received','privacy-request-not-completed':'Not completed'})){
+ // Both callers first reveal the received-state anchor above these fields.
+ // AccountPrivacyRequests renders this exact order. A generic up-first search
+ // repeatedly leaves the next fact below the viewport before finding it again.
+ assert.equal(await fact(c,id,c.platform==='android'?'down':undefined),value);
+ }}
 export const queuePrivacyScenarios=Object.freeze([
  {id:'QUEUE-01',run:async c=>{
   const before=await traffic(c);await home(c,'work');await wait(c,'matter-task-queue');c.selected={ownership:'mine',dates:'all'};

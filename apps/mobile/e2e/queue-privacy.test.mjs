@@ -577,7 +577,7 @@ test('control client single receipt read has no hidden20poll and enforces case+c
 
 // Executes the actual scenario functions against a finite in-memory native
 // protocol/ledger model. This is workflow-unit evidence, never Appium acceptance.
-async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,delayedReadEvidence=false}={}){
+async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,delayedReadEvidence=false,receiptBelowFold=false,wrongReceiptField}={}){
  const producer=producerDouble(),dataset=await producer.run(),tasks=structuredClone(dataset.tasks),events=[],clicks=[],records=[];
  const state={page:0,ownership:'mine',dates:'all',screen:'work',selected:null,changed:false,actor:'member',privacy:'null',confirmation:false,receipt:null,armed:false};
  const fixture={appId:'ai.caseops.mobile.dev.localacceptance',udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},membershipId:dataset.membershipId,gatewayRunId:'synthetic-qp',gatewayUrl:'https://127.0.0.1:18443',qp:{dataset,nativeSelectors:{observed:true,udid:'synthetic-device',buildReceipt:{path:'/synthetic/build',sha256:'a'.repeat(64)},segments:{}}}};
@@ -598,6 +598,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
  const page=(ownership=state.ownership,dates=state.dates,cursor=null)=>{const list=expectedQueue(tasks,ownership,dates,dataset.membershipId,dataset.teamPeerId);return{scope:'matter_tasks',ownership,dates,due_from:null,due_to:null,sort:'due_on_created_at_id',limit:25,items:structuredClone(list.slice(cursor?25:0,cursor?50:25)),next_cursor:!cursor&&list.length>25?'synthetic-next-'+tasks.find(t=>t.id===dataset.anchor.id).updated_at+'-'+(++cursorSerial):null};};
  const current=()=>page(state.ownership,state.dates,state.page?'next':null);
  const receipt={id:id(900),operation_id:id(901),request_type:'account_deletion',status:'received',requested_at:'2026-10-27T12:00:00.123456Z',deletion_completed:false};
+ const receiptFields=['privacy-request-id','privacy-request-operation','privacy-request-requested-at','privacy-request-status','privacy-request-not-completed'],receiptReads=[],receiptSwipes=[];let receiptViewport=0;
  const values=()=>{
   const v={'tab-work':'Work','account-open':'Account'};
   if(state.screen==='work'){
@@ -614,7 +615,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    if(state.privacy==='received')Object.assign(v,{'privacy-request-receipt':'Receipt','privacy-request-id':wrongReceipt?id(999):receipt.id,'privacy-request-operation':receipt.operation_id,'privacy-request-requested-at':receipt.requested_at,'privacy-request-status':'Received','privacy-request-not-completed':'Not completed'});
   }return v;
  };
- const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>text,getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
+ const element=(key,text)=>({elementId:key,isDisplayed:async()=>true,isEnabled:async()=>true,getText:async()=>{if(receiptFields.includes(key))receiptReads.push(key);return key===wrongReceiptField?'Unexpected stale value':text;},getAttribute:async attribute=>attribute==='resource-id'?key:attribute==='text'?text:attribute==='package'?fixture.appId:
   attribute==='class'&&['account-screen','work-scroll'].includes(key)?'android.widget.ScrollView':attribute==='class'&&key.startsWith('queue-task-')?'android.widget.Button':attribute==='class'&&['queue-next','queue-first','queue-back','queue-open-matter'].includes(key)?'android.view.View':attribute==='clickable'&&(key.startsWith('queue-task-')||['queue-next','queue-first','queue-back','queue-open-matter'].includes(key))?'true':null,click:async()=>{throw Error('ELEMENT_CLICK_FORBIDDEN');}});
  let settings={waitForIdleTimeout:500};
  const driver={getSettings:async()=>({...settings}),updateSettings:async value=>{settings={...settings,...value};},
@@ -627,7 +628,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    if(query.includes("/ancestor::*[@class='android.widget.ScrollView']"))return state.screen==='work'?[element('work-scroll','')]:[];
    if(query===`android=new UiSelector().text("No matching tasks")`)return state.screen==='work'&&!current().items.length?[element(query,'No matching tasks')]:[];
    if(query.startsWith('//*[starts-with(')){const rows=Object.entries(values()).filter(([k])=>/^queue-task-[a-f0-9-]{36}$/.test(k)).map(([k,v])=>element(k,v));return duplicateRow?[...rows,rows[0]]:rows;}
-   if(query.startsWith('android='))return[element(query,query.slice(8))];const key=query.replace(/^id=/,'');const v=values();return Object.hasOwn(v,key)?[element(key,v[key])]:[];
+   if(query.startsWith('android='))return[element(query,query.slice(8))];const key=query.replace(/^id=/,'');const v=values();if(receiptBelowFold&&receiptFields.includes(key)&&receiptFields.indexOf(key)!==receiptViewport)return[];return Object.hasOwn(v,key)?[element(key,v[key])]:[];
   },elementClick:async key=>{assert.equal(settings.waitForIdleTimeout,500,'QP_ACTION_REQUIRES_NORMAL_IDLE_BARRIER');clicks.push(key);
    if(key.startsWith('android=')){const label=key.slice(8);if(['Mine','Team','Unassigned'].includes(label))state.ownership={Mine:'mine',Team:'team',Unassigned:'unassigned'}[label];else state.dates={'All dates':'all',Dated:'dated',Undated:'undated'}[label];state.page=0;add('GET','/api/matter-work-queue');}
    else if(key==='tab-work'){state.screen='work';state.selected=null;state.page=0;state.stale=false;add('GET','/api/matter-work-queue');}
@@ -635,13 +636,15 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
    else if(key==='queue-first'){state.stale=false;state.page=0;add('GET','/api/matter-work-queue');}
    else if(/^queue-task-[a-f0-9-]{36}$/.test(key))state.selected=current().items.find(t=>t.id===key.slice(11));
    else if(key==='queue-back')state.selected=null;else if(key==='queue-open-matter')state.screen='matter';
-   else if(key==='account-open'){state.screen='account';state.privacy=state.actor==='member'&&state.receipt?'received':'null';add('GET','/api/account/deletion-requests');}
+   else if(key==='account-open'){receiptViewport=0;state.screen='account';state.privacy=state.actor==='member'&&state.receipt?'received':'null';add('GET','/api/account/deletion-requests');}
    else if(key==='privacy-request-start')state.confirmation=true;
    else if(key==='privacy-request-cancel')state.confirmation=false;
    else if(key==='privacy-request-confirm'){assert.equal(state.armed,true);assert.equal(state.receipt,null);state.receipt=receipt;state.confirmation=false;state.privacy='unknown';add('POST','/api/account/deletion-requests',202,{bodyObservation:{keys:['confirmation','operation_id']},responseObservation:receipt});}
-   else if(key==='privacy-request-reload'){state.privacy='received';add('GET','/api/account/deletion-requests');}
+   else if(key==='privacy-request-reload'){receiptViewport=0;state.privacy='received';add('GET','/api/account/deletion-requests');}
    else if(key==='back')state.screen='home';else throw Error('UNEXPECTED_SYNTHETIC_TAP '+key);
   }};
+ driver.performActions=async actions=>{assert.equal(receiptBelowFold,true);assert.equal(state.screen,'account');assert.equal(state.privacy,'received');const moves=actions[0].actions.filter(v=>v.type==='pointerMove');assert.equal(moves.length,2);const direction=moves[1].y>moves[0].y?'up':'down';receiptSwipes.push(direction);assert.equal(direction,'down','ORDERED_RECEIPT_MUST_SEEK_NEXT_FACT_DOWNWARD');receiptViewport=Math.min(receiptFields.length-1,receiptViewport+1);};
+ driver.releaseActions=async()=>{};
  const applyClick=driver.elementClick,scroll=driver.execute;
  driver.elementClick=async key=>{assert.ok(!/^queue-task-[a-f0-9-]{36}$/.test(key),'ANDROID_TASK_LEGACY_CLICK_FORBIDDEN');return applyClick(key);};
  driver.execute=async(command,args)=>command==='mobile: clickGesture'?applyClick(args.elementId):scroll(command,args);
@@ -653,7 +656,7 @@ async function workflowDouble(caseId,{duplicateRow=false,wrongReceipt=false,dela
   readControlReceipt:async()=>{calls.push('readControlReceipt');return{requestsForwarded:1,upstreamAcknowledged:true,upstreamStatus:202,responseObservation:state.receipt};}};
  const context={platform:'android',fixture,driver,caseId,controls,controlCalls:0,nativeOperations:0,authoritativeReads:0,record:e=>events.push(e),switchActor:async()=>{state.actor='second-company';state.screen='home';state.privacy='null';}};
  const originalFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({runId:fixture.gatewayRunId,overflow:false,markerRejected:0,routeRejected:0,lastSequence:records.length,requests:structuredClone(records)}));
- return{context,calls,clicks,events,records,run:()=>queuePrivacyScenarios.find(c=>c.id===caseId).run(context),close(){globalThis.fetch=originalFetch;producer.close();}};
+ return{context,calls,clicks,events,records,receiptReads,receiptSwipes,run:()=>queuePrivacyScenarios.find(c=>c.id===caseId).run(context),close(){globalThis.fetch=originalFetch;producer.close();}};
 }
 test('Queue Matter navigation binds the actual native accessibility contract',()=>{
  const screen=fs.readFileSync(path.join(ROOT,'apps/mobile/src/application/screens/MatterScreen.tsx'),'utf8');
@@ -1018,4 +1021,23 @@ test('an expired iOS structural-screen read cannot start a later geometry reques
   $:async()=>({elementId:'queue-task-title'}),getWindowRect:async()=>window,getElementRect:async()=>{geometryReads++;assert.fail('NO_GEOMETRY_AFTER_EXPIRED_SCREEN_READ');},waitUntil:async condition=>condition(),
  }};
  await assert.rejects(queueEvidence.iosStructuralScreen(c,'queue-task-detail','queue-task-title'),/QP_NATIVE_STATE_REQUIRED/);assert.equal(geometryReads,0);assert.equal(QP.transitionMs,20000);
+});
+
+
+test('Android Privacy reads both complete ordered receipts below the fold without upward search or changing its budgets',async()=>{
+ const x=await workflowDouble('PRIVACY-01',{receiptBelowFold:true});try{
+  await x.run();const fields=['privacy-request-id','privacy-request-operation','privacy-request-requested-at','privacy-request-status','privacy-request-not-completed'];
+  assert.deepEqual(x.receiptReads,[...fields,...fields]);assert.deepEqual(x.receiptSwipes,Array(8).fill('down'));
+  assert.equal(x.calls.filter(v=>v==='readOwnPrivacy').length,4);assert.equal(x.records.filter(v=>v.method==='POST').length,1);
+  assert.equal(x.clicks.filter(v=>v==='privacy-request-confirm').length,1);assert.equal(x.events.at(-1).boundary,'privacy-complete');
+  assert.equal(QP.serialMs,480000);assert.equal(QP.transitionMs,20000);assert.equal(QP.nativeControls,160);
+ }finally{x.close();}
+});
+
+test('Android Privacy still rejects a wrong final receipt fact below the fold without repeating its deletion request',async()=>{
+ const x=await workflowDouble('PRIVACY-01',{receiptBelowFold:true,wrongReceiptField:'privacy-request-not-completed'});try{
+  await assert.rejects(x.run(),/Unexpected stale value/);assert.deepEqual(x.receiptReads,['privacy-request-id','privacy-request-operation','privacy-request-requested-at','privacy-request-status','privacy-request-not-completed']);
+  assert.deepEqual(x.receiptSwipes,Array(4).fill('down'));assert.equal(x.records.filter(v=>v.method==='POST').length,1);
+  assert.equal(x.clicks.filter(v=>v==='privacy-request-confirm').length,1);assert.equal(x.events.some(v=>v.boundary==='privacy-complete'),false);
+ }finally{x.close();}
 });

@@ -6358,3 +6358,16 @@ is its accessible description. The complete 35-case component suite and web
 TypeScript passed; replacement native/production acceptance remains pending.
 No native assertions, timeouts, MFA/PKCE or authorization rules were relaxed.
 See [exact evidence and limits](mobile/NATIVE_MFA_STATUS_VIEWPORT_2026-11-13.md).
+
+
+## 2026-11-14 — Android native receipt-search latency
+
+J20/M22 / US-MOB-01/02/08 / QUEUE-01 and PRIVACY-01 remain **Partially
+implemented; Inconclusive; NO-GO**. Both source5 Android QP call bodies passed,
+but the original time window interrupted final cleanup; no full QP credit.
+A real native comparison found three unnecessary upward searches while reading
+ordered receipt fields (11.457seconds versus3.695seconds with downward search).
+The narrow harness correction preserves every receipt value, negative guard,
+request count, gesture limit and deadline. Two red regressions became green
+in the complete77-case module; fresh full native and source gates remain open.
+See [retained evidence and limits](mobile/ANDROID_RECEIPT_SEARCH_LATENCY_2026-11-14.md).
