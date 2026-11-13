@@ -1,3 +1,20 @@
+## 2026-11-13 — Android Files filename positioning remains under verification
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Partially fixed; NO-GO**.
+At source9d79, Android Core23 passed all69 phases, but Files17 retained13
+successful calls, three failed calls and one blocked case. The failures occur
+before finding the same older baseline filename. Native observation found16
+files, then independently revealed that exact row with bounded UiScrollable
+positioning; no pagination or network defect is claimed. The Android details
+helper now positions the filename before reading it, retaining exact identity,
+hash, source-expansion and lost-acknowledgement checks. A before-fix regression
+failed; the complete related60-case unit selection passed. A disclosed dirty
+host-candidate replay verified the exact row and hash on the unchanged APK and
+closed its session, with zero canonical case credit. Fresh complete native and
+store verification remains due. The earlier route-preparation failure, all
+failed case reports and the incomplete pagination hypothesis are retained.
+See [dated evidence and store dependencies](mobile/NATIVE_FILES_FILENAME_POSITION_2026-11-13.md).
+
 ## 2026-11-12 — hosted timeout repair and static-analysis follow-up
 
 J20/M22 release remains **Inconclusive; NO-GO**. Hosted shard3/32 now passes

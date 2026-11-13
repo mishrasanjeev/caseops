@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidTextFirstSegment, awaitAndroidUploadReadback, chooseAndroidFile,
-  collectAndroidFiles, rapidActivateAndroidUpload, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
+  collectAndroidFiles, rapidActivateAndroidUpload, readAndroidFileDetails, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
 import { selector } from './native-ui.mjs';
@@ -371,4 +371,64 @@ test('Android scroll-into-view only positions a plain resource-id target through
   }
   await assert.rejects(scrollAndroidIntoView({ ...context, platform: 'ios' }, 'new UiSelector().resourceId("x")'), /ANDROID_FILES_PLATFORM_REQUIRED/);
   assert.equal(queries.length, 1);
+});
+
+function shortFileRow({ filename = 'mobile-source.txt', sourceHash = 'a'.repeat(64), lostExpansion } = {}) {
+  const anchor = { attachmentId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', filename: 'mobile-source.txt', sha256: 'a'.repeat(64) };
+  const queries = [], clicks = []; let namePositioned = false, sourcePositioned = false, expanded = false;
+  const leaf = (elementId, text) => ({ elementId, isDisplayed: async () => true, getText: async () => text });
+  const show = leaf('source-details-once', 'Source details'), hide = leaf('source-details-expanded', 'Hide source details');
+  const control = { ...leaf('source-control', ''), $$: async query => {
+    if (query === selector('android', 'text', 'Source details')) return expanded ? [] : [show];
+    if (query === selector('android', 'text', 'Hide source details')) return expanded ? [hide] : [];
+    assert.fail('UNREVIEWED_SOURCE_CHILD_QUERY');
+  } };
+  const nameId = 'files-name-' + anchor.attachmentId, detailsId = 'files-source-' + anchor.attachmentId;
+  const context = { platform: 'android', driver: {
+    async $$(query) {
+      queries.push(query);
+      if (query.startsWith('android=new UiScrollable(')) {
+        if (query.endsWith('scrollIntoView(new UiSelector().resourceId("' + nameId + '"))')) namePositioned = true;
+        else if (query.endsWith('scrollIntoView(new UiSelector().resourceId("' + detailsId + '"))')) sourcePositioned = true;
+        else assert.fail('UNREVIEWED_EXACT_ROW_POSITION');
+        return [];
+      }
+      if (query === 'id=' + nameId) return namePositioned ? [leaf('exact-filename', filename)] : [];
+      if (query === 'id=' + detailsId) return sourcePositioned ? [control] : [];
+      if (query === 'id=files-hash-' + anchor.attachmentId) return expanded ? [leaf('exact-hash', sourceHash)] : [];
+      if (['id=files-inactive', 'id=files-restricted', 'id=files-error', 'id=files-loading'].includes(query)) return [];
+      assert.fail('UNREVIEWED_ROW_QUERY');
+    },
+    waitUntil: async (predicate, { timeoutMsg }) => { if (!await predicate()) throw new Error(timeoutMsg); },
+    getWindowRect: async () => ({ width: 1080, height: 2400 }),
+    performActions: async () => { throw new Error('SHORT_ROW_SWEEP_PRECEDED_EXACT_POSITION'); },
+    elementClick: async id => { assert.equal(id, show.elementId); clicks.push(id); expanded = true; if (lostExpansion) throw lostExpansion; },
+  } };
+  return { context, anchor, queries, clicks };
+}
+
+test('Android file details positions the exact filename before its first read and preserves one source expansion', async () => {
+  const f = shortFileRow(); await readAndroidFileDetails(f.context, f.anchor);
+  assert.ok(f.queries[0].endsWith('scrollIntoView(new UiSelector().resourceId("files-name-' + f.anchor.attachmentId + '"))'));
+  assert.equal(f.queries.filter(x => x.startsWith('android=new UiScrollable(')).length, 2);
+  assert.deepEqual(f.clicks, ['source-details-once']);
+});
+
+test('positioning a file row never replaces the exact filename assertion', async () => {
+  const f = shortFileRow({ filename: 'another-document.txt' });
+  await assert.rejects(readAndroidFileDetails(f.context, f.anchor), /ANDROID_FILES_WRONG_FILENAME/);
+  assert.equal(f.queries.filter(x => x.startsWith('android=new UiScrollable(')).length, 1);
+  assert.deepEqual(f.clicks, []);
+});
+
+test('positioning a file row retains the independently read source hash rejection', async () => {
+  const f = shortFileRow({ sourceHash: 'b'.repeat(64) });
+  await assert.rejects(readAndroidFileDetails(f.context, f.anchor), /ANDROID_FILES_WRONG_SOURCE_HASH/);
+  assert.deepEqual(f.clicks, ['source-details-once']);
+});
+
+test('file details preserves a lost source-expansion acknowledgement without replay', async () => {
+  const lost = new Error('lost-source-expansion-acknowledgement'), f = shortFileRow({ lostExpansion: lost });
+  await assert.rejects(readAndroidFileDetails(f.context, f.anchor), error => error === lost);
+  assert.deepEqual(f.clicks, ['source-details-once']);
 });
