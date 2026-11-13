@@ -1,3 +1,36 @@
+## 2026-11-14 — complete installed API audit and optional telemetry repair
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production verdict
+**Inconclusive**, native release **NO-GO**. After the separately retained DNS
+failure and repair, the expanded152-package audit found the optional telemetry
+API1.45.1 advisory GHSA-mf5v-w3w3-f6cg. Update the coherent official1.45.2/0.66b2
+cohort and retain the actual nine-case parser red/green proof. Add the omitted
+util-http Apache notice with tagged-source/artifact provenance and exact image,
+upload-context and deployment-fence checks. Security CI now installs the optional
+extra before its unchanged strict audit. Complete related coverage passes112
+cases/22subtests without failures/skips; all152 installed Mac distributions pass
+dependency validation and strict OSV audit, independently reconciled by unique
+canonical name and exact version. No waiver, native pass transfer or production
+closure. Preserve every prior failed report. New-source CI/image and both native
+suites remain due. See [telemetry evidence](security/otel-security-20261114.md).
+
+## 2026-11-14 — newly published dnspython WKS audit blocker
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production bug verdict
+**Inconclusive**, complete native release **NO-GO**. Exact4ca30702 Security found
+CVE-2026-128089 in the locked2.9.0 dependency after a compatible138-package
+installation. The official2.9.2 patch is hash/license/provenance verified; the
+API floor, targeted lock, image notice and integrity consumers are updated.
+Ten bounded parser regressions retain six red assertions on2.9.0 and pass on
+2.9.2. Complete scoped parser/notice/shared packaging coverage passes40cases
+plus17subtests with no failures/skips; the complete normal-fixture API selection
+also passes53cases/17subtests in the actual152-package Mac API installation,
+whose dependency validation passes. Preserve unrelated lock records, earlier
+notices, the original CI failure and all prior native evidence. Fresh complete
+API installed audit/image/CI and both exact-source native suites remain due;
+no advisory waiver or transferred native pass. See
+[dated scope and evidence](security/dnspython-security-20261114.md).
+
 ## 2026-11-13 — foreground native session-expiry recovery remains unverified
 
 J20/M22, US-MOB-01/02/08 and NATIVE-13: **Partially implemented**; bug verdict

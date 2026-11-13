@@ -15,7 +15,7 @@ from packaging.version import Version
 
 @pytest.mark.parametrize(
     "name,minimum,specifier",
-    [("dnspython", "2.9.0", ">=2.9.0"), ("fpdf2", "2.8.9", "==2.8.9")],
+    [("dnspython", "2.9.2", ">=2.9.2"), ("fpdf2", "2.8.9", "==2.8.9")],
 )
 def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, minimum, specifier):
     api = Path(__file__).resolve().parents[1]
@@ -43,12 +43,12 @@ def test_patched_dns_parser_rejects_a_self_referencing_compression_pointer():
 @pytest.mark.parametrize(
     "name,minimum",
     [
-        ("opentelemetry-api", "1.45.1"),
-        ("opentelemetry-sdk", "1.45.1"),
-        ("opentelemetry-exporter-otlp-proto-http", "1.45.1"),
-        ("opentelemetry-instrumentation-fastapi", "0.66b1"),
-        ("opentelemetry-instrumentation-sqlalchemy", "0.66b1"),
-        ("opentelemetry-instrumentation-httpx", "0.66b1"),
+        ("opentelemetry-api", "1.45.2"),
+        ("opentelemetry-sdk", "1.45.2"),
+        ("opentelemetry-exporter-otlp-proto-http", "1.45.2"),
+        ("opentelemetry-instrumentation-fastapi", "0.66b2"),
+        ("opentelemetry-instrumentation-sqlalchemy", "0.66b2"),
+        ("opentelemetry-instrumentation-httpx", "0.66b2"),
     ],
 )
 def test_observability_manifest_and_lock_exclude_vulnerable_tracestate_parser(name, minimum):
@@ -68,7 +68,7 @@ def test_patched_optional_tracestate_parser_uses_literal_comma_split(whitespace,
     trace = pytest.importorskip(
         "opentelemetry.trace", reason="Observability extra is not installed"
     )
-    assert Version(importlib.metadata.version("opentelemetry-api")) >= Version("1.45.1")
+    assert Version(importlib.metadata.version("opentelemetry-api")) >= Version("1.45.2")
     splits = []
 
     class Header(str):

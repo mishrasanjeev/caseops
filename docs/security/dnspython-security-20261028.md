@@ -1,5 +1,9 @@
 # dnspython 2.9.0 API dependency remediation
 
+Historical evidence for CVE-2026-114605. The current dependency floor is
+superseded by the [November14 WKS update](dnspython-security-20261114.md) for
+CVE-2026-128089; the original artifacts and results below remain historical.
+
 The fresh whole-lock audit of the retained 2.8.0 candidate failed for
 [GHSA-45c3-73f7-pv4m](https://github.com/rthalley/dnspython/security/advisories/GHSA-45c3-73f7-pv4m)
 (CVE-2026-114605). Upstream identifies versions below 2.9.0 as affected and

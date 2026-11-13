@@ -125,7 +125,7 @@ jobs:
         run: uv python install 3.13
       - name: Sync API deps
         working-directory: apps/api
-        run: uv sync --frozen --no-install-project
+        run: uv sync --frozen --no-install-project --extra observability
       - name: Install pip-audit
         run: uv tool install pip-audit
       # Audit every installed distribution, including the metadata-only local
