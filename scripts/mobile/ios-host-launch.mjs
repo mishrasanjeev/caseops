@@ -12,7 +12,7 @@ export const IOS_HOST_ENV = Object.freeze({ file: 'CASEOPS_IOS_HOST_POLICY_FILE'
 export const RUBY_ROOT_SET = '105453e7eeeb26f9778e22b4212b7a6725079827b4de684784eacde93845787a';
 const DENIED_CA = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b';
 const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18';
-const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1';
+const NODE_BOOTSTRAP = '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a';
 export const IOS_PODS_SOURCE_SHA256 = 'bcac5eb3bf33069d711759ba925b8ff54d474bc1f64b36176be52b6daec32947';
 const SOURCE_PINS = Object.freeze({ 'ios-host-pods.rb': IOS_PODS_SOURCE_SHA256,
   'ios-simulator-build.sh': 'f825762b8a2ab942ad905284c3c772fb659dbf95a81973647f3a781d6fb2d5eb',

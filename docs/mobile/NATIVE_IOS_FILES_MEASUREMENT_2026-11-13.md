@@ -76,3 +76,18 @@ is submitted/In review, not publicly live. Apple organization documentation is
 still in review; no new documents were requested at the last actual check.
 App Store listing/privacy drafts exist outside Git, but production Team/signing,
 archive, screenshots and native distribution qualification remain outstanding.
+
+## Frozen source gate follow-up
+
+The complete21-command freeze of77f468cf retained a failed harness:1720 cases,
+1702 passed,16 failed,2 Windows-only skips; mobile690, TypeScript and all18
+Python modules passed. Adding the37th observer worker correctly invalidated
+its exact recorder hash in the readable bootstrap and tooling manifest. The
+canonical token generator regenerated the shipped bootstrap and AST provenance;
+all current bootstrap SHA/blob pins and the generated iOS build entry were
+reconciled. Bootstrap size remains6068 bytes and the Windows option remains8167
+of8191 bytes; trust, ownership and deadline assertions are unchanged. The first
+focused tooling replay retained one stale generated iOS-entry failure; the
+subsequent65-case focused boundary selection passed with zero skips. Both failed
+precursors remain retained. A complete replacement freeze is required before
+pushing or building this revision.

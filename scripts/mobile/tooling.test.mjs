@@ -4729,7 +4729,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4872,7 +4872,7 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '1ec73b3c42d8b79d93775d56ffad383645c55ce8']]);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '3f08aeb00815650e61beaa32faf097af0b05602e']]);
     for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
