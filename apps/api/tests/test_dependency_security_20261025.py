@@ -52,6 +52,7 @@ def test_strict_dependency_audit_installs_every_supported_optional_extra():
     gate = next(step for step in ci["jobs"]["api-ruff"]["steps"]
                 if step.get("name") == "Require optional traceparent security acceptance")
     assert gate["env"]["CASEOPS_REQUIRE_OBSERVABILITY_TESTS"] == "1"
+    assert shlex.split(gate["run"])[:5] == ["uv", "run", "python", "-m", "pytest"]
     assert "tests/test_opentelemetry_traceparent_security_20261114.py" in gate["run"]
     assert "continue-on-error" not in gate
 

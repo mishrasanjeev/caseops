@@ -82,7 +82,7 @@ jobs:
           CASEOPS_REQUIRE_OBSERVABILITY_TESTS: "1"
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
           CASEOPS_TEST_RESULT_JOURNAL: observability-security-results.jsonl
-        run: uv run pytest --noconftest -o addopts= -p no:cacheprovider -p tests.retained_results tests/test_opentelemetry_traceparent_security_20261114.py -q --junitxml=observability-security-results.xml
+        run: uv run python -m pytest --noconftest -o addopts= -p no:cacheprovider -p tests.retained_results tests/test_opentelemetry_traceparent_security_20261114.py -q --junitxml=observability-security-results.xml
 
       - name: Retain optional traceparent security results
         if: always()
