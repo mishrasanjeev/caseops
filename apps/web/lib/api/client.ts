@@ -419,7 +419,97 @@ export async function apiBlobRequest(
   init: Omit<ApiRequestInit, "body"> = {},
   _retry = false,
 ): Promise<Response> {
+  return authenticatedBinaryRequest(path, init, async (response) => response, _retry);
+}
+
+export type ApiBlobData = { blob: Blob; headers: Headers; status: number };
+export type ApiBlobDataInit = Omit<ApiRequestInit, "body"> & { maxBytes?: number };
+type BinaryResponseStatus = { status?: number };
+
+function statusOnlyError(status: number): ApiError {
+  return new ApiError(status, `Request failed (${status}).`, null, null);
+}
+
+function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    if (signal.aborted) { void operation.catch(() => {}); abort(); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+async function binaryBody(response: Response, signal: AbortSignal, maxBytes: number): Promise<Blob> {
+  signal.throwIfAborted();
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    void response.body?.cancel().catch(() => {});
+    throw new NetworkError("The downloaded file exceeds the allowed size.", null);
+  }
+  if (!response.body) return new Blob([], { type: response.headers.get("content-type") ?? "" });
+  const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener("abort", cancel, { once: true });
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const item = await abortable(reader.read(), signal);
+      signal.throwIfAborted();
+      if (item.done) break;
+      size += item.value.byteLength;
+      if (size > maxBytes) throw new NetworkError("The downloaded file exceeds the allowed size.", null);
+      chunks.push(new Uint8Array(item.value));
+    }
+    return new Blob(chunks, { type: response.headers.get("content-type") ?? "" });
+  } catch (error) {
+    void reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    reader.releaseLock();
+  }
+}
+
+/** Private binary data: one deadline includes authentication recovery and body consumption. */
+export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {}): Promise<ApiBlobData> {
+  const { maxBytes = 32 * 1024 * 1024, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = init;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new RangeError("Binary size and timeout limits must be positive.");
+  }
+  const controller = new AbortController();
+  const observed: BinaryResponseStatus = {};
+  let timedOut = false;
+  const cancel = () => controller.abort(init.signal?.reason);
+  if (init.signal?.aborted) cancel();
+  else init.signal?.addEventListener("abort", cancel, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException("Request deadline exceeded", "TimeoutError"));
+  }, timeoutMs);
+  try {
+    return await abortable(authenticatedBinaryRequest(path, { ...init, signal: controller.signal },
+      async (response, signal) => ({ blob: await binaryBody(response, signal, maxBytes),
+        headers: response.headers, status: response.status }), false, "no-store", init.token === undefined, observed), controller.signal);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (observed.status !== undefined) throw statusOnlyError(observed.status);
+    if (timedOut) throw new NetworkError(`The workspace API did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Try again.`, error);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    init.signal?.removeEventListener("abort", cancel);
+  }
+}
+
+async function authenticatedBinaryRequest<T>(
+  path: string, init: Omit<ApiRequestInit, "body">,
+  consume: (response: Response, signal: AbortSignal) => Promise<T>,
+  _retry = false, cache?: RequestCache, cookieCaller = init.token === undefined,
+  observed: BinaryResponseStatus = {},
+): Promise<T> {
   const { method = "GET", headers = {}, signal, timeoutMs } = init;
+  signal?.throwIfAborted();
   const explicitToken = init.token;
   const portalRequest = isPortalApiPath(path);
   const requestHeaders: Record<string, string> = {
@@ -431,18 +521,35 @@ export async function apiBlobRequest(
   }
 
   let response: Response;
+  let parsed: unknown = null;
+  let value: T | undefined;
   try {
-    response = await fetchWithTimeout(
+    response = await consumeResponseWithTimeout(
       resolveUrl(path),
       {
         method,
         credentials: "include",
         headers: requestHeaders,
         signal,
+        cache,
       },
-      timeoutMs,
+      timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      async (response, bodySignal) => {
+        observed.status = response.ok ? undefined : response.status;
+        if (response.ok) value = await consume(response, bodySignal);
+        else {
+          const text = await (await binaryBody(response, bodySignal, 64 * 1024)).text();
+          const media = (response.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+          if (media === "application/json" || media.endsWith("+json")) {
+            try { parsed = JSON.parse(text); } catch { parsed = null; }
+          } else parsed = text;
+        }
+        bodySignal.throwIfAborted();
+        return response;
+      },
     );
   } catch (error) {
+    if (observed.status !== undefined) throw statusOnlyError(observed.status);
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
@@ -453,16 +560,7 @@ export async function apiBlobRequest(
     );
   }
 
-  if (response.ok) return response;
-
-  const contentType = response.headers.get("content-type") ?? "";
-  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  let parsed: unknown = null;
-  if (mediaType === "application/json" || mediaType.endsWith("+json")) {
-    parsed = await response.json().catch(() => null);
-  } else {
-    parsed = await response.text().catch(() => "");
-  }
+  if (response.ok) return value as T;
   const problemType =
     parsed &&
     typeof parsed === "object" &&
@@ -478,12 +576,13 @@ export async function apiBlobRequest(
     AUTH_REFRESH_TRIGGERS.has(problemType) &&
     !path.endsWith(REFRESH_PATH)
   ) {
+    observed.status = undefined;
     const fresh = await refreshAccessToken();
     if (fresh || explicitToken === undefined) {
-      return apiBlobRequest(
+      return authenticatedBinaryRequest(
         path,
         fresh ? { ...init, token: fresh } : init,
-        true,
+        consume, true, cache, cookieCaller, observed,
       );
     }
   }
@@ -499,7 +598,7 @@ export async function apiBlobRequest(
         window.location.pathname.startsWith("/portal/sign-in/");
       if (!onPortalSignIn) window.location.assign("/portal/sign-in");
     } else if (
-      explicitToken === undefined &&
+      cookieCaller &&
       !window.location.pathname.startsWith("/sign-in")
     ) {
       const next = encodeURIComponent(

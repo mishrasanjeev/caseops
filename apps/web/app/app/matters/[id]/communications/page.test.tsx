@@ -30,6 +30,11 @@ vi.mock("@/lib/api/endpoints", () => ({
   renderEmailTemplate: renderTemplateMock,
   sendMatterEmail: sendEmailMock,
 }));
+vi.mock("@/lib/api/communications-email", () => ({
+  listMatterEmailTemplates: listTemplatesMock,
+  previewMatterEmail: renderTemplateMock,
+  deliverMatterEmail: sendEmailMock,
+}));
 
 vi.mock("@/lib/capabilities", () => ({
   useCapability: (cap: string) => useCapabilityMock(cap),

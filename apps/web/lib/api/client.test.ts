@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./config";
 import {
   apiBlobRequest,
+  apiBlobDataRequest,
   apiRequest,
   fetchJsonWithTimeout,
   fetchWithTimeout,
@@ -394,5 +395,152 @@ describe("apiRequest", () => {
     await expect(fetchJsonWithTimeout("/api/public", { credentials: "omit" }, 5_000))
       .resolves.toEqual({ ok: false, status: 503, data: { reason: "unavailable" } });
     expect(fetch).toHaveBeenCalledWith("/api/public", expect.objectContaining({ credentials: "omit" }));
+  });
+});
+
+describe("apiBlobDataRequest", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.unstubAllGlobals();
+  });
+
+  it("consumes a private authenticated body and retains headers without browser caching", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response("%PDF-source", { headers: { "content-type": "application/pdf" } }));
+    const result = await apiBlobDataRequest("/api/private/source", { headers: { Accept: "application/pdf" } });
+    expect(await result.blob.text()).toBe("%PDF-source");
+    expect(result.headers.get("content-type")).toBe("application/pdf");
+    expect(result.status).toBe(200);
+    expect(fetch).toHaveBeenCalledWith("http://localhost:8000/api/private/source", expect.objectContaining({
+      credentials: "include", cache: "no-store", headers: expect.objectContaining({ Accept: "application/pdf" }),
+    }));
+  });
+
+  it("times out and cancels a stalled body after headers arrived", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({ cancel });
+    vi.mocked(fetch).mockResolvedValue(new Response(stream));
+    const operation = apiBlobDataRequest("/api/private/stalled", { timeoutMs: 2_000 });
+    const assertion = expect(operation).rejects.toMatchObject({ name: "NetworkError", message: expect.stringContaining("2 seconds") });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+    expect(cancel).toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("preserves unmount cancellation throughout body consumption", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    let begin!: () => void;
+    const started = new Promise<void>((resolve) => { begin = resolve; });
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ pull: begin, cancel })));
+    const operation = apiBlobDataRequest("/api/private/cancelled", { signal: controller.signal });
+    await started;
+    controller.abort(new DOMException("Viewer unmounted", "AbortError"));
+    await expect(operation).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancel).toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([403, 404, 422])("never refreshes or retries a typed %i denial", async (status) => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    vi.mocked(fetch).mockResolvedValue(response({ type: "source_denied", detail: "Source is unavailable" }, status, "application/problem+json"));
+    await expect(apiBlobDataRequest("/api/private/denied")).rejects.toMatchObject({ status, detail: "Source is unavailable" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["declared-oversize", "oversize", "truncated"])("preserves known 403 when its body is %s", async (kind) => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    const headers: Record<string, string> = { "content-type": "application/problem+json" };
+    if (kind === "declared-oversize") headers["content-length"] = "65537";
+    const body = kind === "truncated"
+      ? new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError("Body truncated")); } })
+      : "x".repeat(65537);
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 403, headers }));
+    await expect(apiBlobDataRequest("/api/private/denied")).rejects.toMatchObject({
+      name: "ApiError", status: 403, detail: "Request failed (403).", data: null, problemType: null,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves known 403 when the total deadline interrupts a stalled error body", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 403 }));
+    const operation = apiBlobDataRequest("/api/private/stalled-denial", { timeoutMs: 2_000 });
+    const assertion = expect(operation).rejects.toMatchObject({ name: "ApiError", status: 403, data: null, problemType: null });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+    expect(cancel).toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("preserves known 403 if caller cancellation wins the outer body guard", async () => {
+    const controller = new AbortController();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => { started = resolve; });
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ pull: started }), { status: 403 }));
+    const operation = apiBlobDataRequest("/api/private/aborted-denial", { signal: controller.signal });
+    await reading;
+    controller.abort(new DOMException("Viewer closed", "AbortError"));
+    await expect(operation).rejects.toMatchObject({ name: "ApiError", status: 403, data: null, problemType: null });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invent a refresh problem type for an unreadable known 401", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError("Body truncated")); } }), { status: 401 }));
+    await expect(apiBlobDataRequest("/api/private/truncated-auth", { token: "explicit" }))
+      .rejects.toMatchObject({ status: 401, data: null, problemType: null });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])("enforces the byte cap with declared length %s", async (declared) => {
+    vi.mocked(fetch).mockResolvedValue(new Response("too many source bytes", { headers: declared ? { "content-length": "21" } : {} }));
+    await expect(apiBlobDataRequest("/api/private/oversized", { maxBytes: 4 })).rejects.toMatchObject({ name: "NetworkError", message: expect.stringContaining("allowed size") });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one total deadline while the shared authentication refresh is pending", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("caseops.session.context", "{}");
+    let finishRefresh!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Expired" }, 401, "application/problem+json"))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+    const operation = apiBlobDataRequest("/api/private/refresh", { timeoutMs: 1_000 });
+    const assertion = expect(operation).rejects.toMatchObject({ name: "NetworkError" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await assertion;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    finishRefresh(response({ access_token: "refreshed", token_type: "bearer", company: {}, user: {}, membership: {} }, 200));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])("retains original cookie-signin intent after refresh, explicit token %s", async (explicit) => {
+    const localStorage = window.localStorage;
+    localStorage.setItem("caseops.session.context", "{}");
+    const assign = vi.fn();
+    vi.stubGlobal("window", { localStorage, dispatchEvent: vi.fn(), location: {
+      origin: "http://localhost:3000", pathname: "/app/contracts/source", search: "", assign,
+    } });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Expired" }, 401))
+      .mockResolvedValueOnce(response({ access_token: "refreshed", token_type: "bearer", company: {}, user: {}, membership: {} }, 200))
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Still invalid" }, 401));
+    await expect(apiBlobDataRequest("/api/private/source", explicit ? { token: "explicit" } : {}))
+      .rejects.toMatchObject({ status: 401 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    if (explicit) expect(assign).not.toHaveBeenCalled();
+    else expect(assign).toHaveBeenCalledWith("/sign-in?next=%2Fapp%2Fcontracts%2Fsource");
   });
 });

@@ -204,7 +204,7 @@ describe("ContractDetailPage", () => {
     expect(tablist).not.toHaveClass("h-10");
     expect(within(tablist).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "Overview", "Attachments (0)", "Clauses (0)", "Obligations (0)",
-      "Terms (0)", "Legal refs (0)", "Playbook (0)", "Redline",
+      "Terms", "Legal refs (0)", "Playbook (0)", "Redline",
     ]);
     expect(fetchWorkspaceMock).toHaveBeenCalledWith("c1");
   });

@@ -60,18 +60,21 @@ export function reviewCICommandOwnerResult(result, role, admission = undefined) 
   if (admission === RUNNER_COMMAND && role === 'GITHUB_OUTPUT' && parsed.ownerMatches === false && parsed.writeScopeSafe === true && parsed.ownerClass === 'ADMINISTRATORS' && parsed.tokenOwnerClass === 'CURRENT_USER') return { ownerMatches: false, writeScopeSafe: true, authority: 'native-runner-command-safe-administrators-owner' };
   throw new Error(prefix + 'OWNER_' + parsed.ownerClass + '_TOKEN_' + parsed.tokenOwnerClass + '_MATCH_' + (parsed.ownerMatches ? 'YES' : 'NO') + '_WRITE_' + (parsed.writeScopeSafe ? 'SAFE' : 'UNSAFE'));
 }
-function commandOwner(file, state, role, runnerCommand = null) {
+function commandOwner(file, state, role, runnerCommand = null, deadline = undefined) {
   assert.ok(COMMAND_OWNER_ROLES.has(role), 'CI_TRUST_COMMAND_OWNER_PROTOCOL');
   if (typeof process.getuid === 'function') {
     assert.ok(state.uid === BigInt(process.getuid()) && (state.mode & 0o022n) === 0n, 'CI_TRUST_COMMAND_OWNER');
     return;
   }
   assert.ok(process.platform === 'win32' && path.isAbsolute(process.env.SystemRoot || ''), 'CI_TRUST_OWNER_UNAVAILABLE');
+  if (deadline !== undefined) assert.ok(Number.isFinite(deadline) && performance.now() < deadline, 'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+  const timeout = deadline === undefined ? 4000 : Math.max(1, Math.min(4000, Math.floor(deadline - performance.now())));
   const code = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('COPS_ACL0');try{$s=[Security.AccessControl.AccessControlSections]'Access,Owner';$a=[IO.File]::GetAccessControl($env:CASEOPS_TRUST_ACL_PATH,$s);[Console]::Error.WriteLine('COPS_ACL1');$i=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$i.User.Value;$t=$i.Owner.Value;$o=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;[Console]::Error.WriteLine('COPS_ACL2');$ok=($o -eq $u -or ($o -eq $t -and $o -in @('S-1-5-18','S-1-5-32-544')));$safe=$true;foreach($r in $a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){if($r.AccessControlType -eq 'Allow' -and ([int]$r.FileSystemRights -band 852310) -ne 0 -and $r.IdentityReference.Value -notin @($u,'S-1-5-18','S-1-5-32-544','S-1-3-0')){$safe=$false}};[Console]::Error.WriteLine('COPS_ACL3');if($ok -and $safe){[Console]::Out.Write('SAFE')}else{$oc=if([string]::IsNullOrEmpty($o)){'MISSING'}elseif($o -eq $u){'CURRENT_USER'}elseif($o -eq 'S-1-5-18'){'SYSTEM'}elseif($o -eq 'S-1-5-32-544'){'ADMINISTRATORS'}elseif($o -eq $t){'TOKEN_OTHER'}else{'OTHER'};$tc=if([string]::IsNullOrEmpty($t)){'MISSING'}elseif($t -eq $u){'CURRENT_USER'}elseif($t -eq 'S-1-5-18'){'SYSTEM'}elseif($t -eq 'S-1-5-32-544'){'ADMINISTRATORS'}else{'OTHER'};[Console]::Out.Write(('{\"ownerMatches\":'+$ok.ToString().ToLowerInvariant()+',\"writeScopeSafe\":'+$safe.ToString().ToLowerInvariant()+',\"ownerClass\":\"'+$oc+'\",\"tokenOwnerClass\":\"'+$tc+'\"}'))}}catch{[Console]::Error.WriteLine('COPS_ACL_FAIL');exit 1}";
   const proof = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
-    env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
+    env: { SystemRoot: process.env.SystemRoot, CASEOPS_TRUST_ACL_PATH: file }, encoding: 'utf8', timeout, maxBuffer: 4096, windowsHide: true,
   });
   const result = reviewCICommandOwnerResult(proof, role, runnerCommand?.token);
+  if (deadline !== undefined) assert.ok(performance.now() < deadline, 'CI_TRUST_COMMAND_HARDEN_DEADLINE');
   runnerCommand?.reconcile(); return result;
 }
 function checkNamed(named, opened) {
@@ -537,22 +540,27 @@ Check;$last=Identity;foreach($offset in @(0,4,8,20,24,28,32,36,40,44,48)){if([Bi
 if($rules.Count -ne 3 -or $f.Length -ne $length -or (Digest) -ne $before){throw 'changed'}
 Check;[Console]::Out.Write('SECURED')
 }catch{$stage='OTHER';if($_.Exception.Message -cin @('bounded','extent','identity','changed','owner','acl')){$stage=$_.Exception.Message.ToUpperInvariant()};[Console]::Error.Write('CI_TRUST_COMMAND_HARDEN_REFUSED_'+$stage);exit 1}finally{if($info -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::FreeHGlobal($info)};if($null -ne $f){$f.Dispose()}}`;
-    const result = spawnSync(path.join(environment.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
-      env: { SystemRoot: environment.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_COMMAND_INO: String(initial.ino), CASEOPS_COMMAND_VOLUME: String(initial.dev), CASEOPS_COMMAND_BIRTH: String(initial.birthtimeNs), CASEOPS_COMMAND_MTIME: String(initial.mtimeNs), CASEOPS_COMMAND_LENGTH: String(initial.size), CASEOPS_COMMAND_SHA256: createHash('sha256').update(before).digest('base64') }, encoding: 'utf8', timeout: 4000, maxBuffer: 4096, windowsHide: true,
-    });
+    // Share the existing ten-second operation budget with cold shell startup
+    // and the independent postcondition. Native work still has its 3.5s bound.
     check();
+    const timeout = Math.max(1, Math.floor(end - performance.now()));
+    const result = spawnSync(path.join(environment.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
+      env: { SystemRoot: environment.SystemRoot, CASEOPS_TRUST_ACL_PATH: file, CASEOPS_COMMAND_INO: String(initial.ino), CASEOPS_COMMAND_VOLUME: String(initial.dev), CASEOPS_COMMAND_BIRTH: String(initial.birthtimeNs), CASEOPS_COMMAND_MTIME: String(initial.mtimeNs), CASEOPS_COMMAND_LENGTH: String(initial.size), CASEOPS_COMMAND_SHA256: createHash('sha256').update(before).digest('base64') }, encoding: 'utf8', timeout, maxBuffer: 4096, windowsHide: true,
+    });
     // Only fixed result classes are exposed; raw subprocess output stays private.
     reviewCITrustHardenResult(result);
+    check();
     const final = fs.fstatSync(fd, { bigint: true }), finalNamed = fs.lstatSync(file, { bigint: true });
     // The ACL/owner change may update ctime. Every other observed field and all
     // bytes must match the same retained descriptor before publication.
     for (const key of fields.filter(key => key !== 'ctimeNs')) assert.equal(initial[key], final[key], 'CI_TRUST_COMMAND_HARDEN_CHANGED');
     checkNamed(finalNamed, final); assert.ok(read(final.size).equals(before), 'CI_TRUST_COMMAND_HARDEN_CHANGED');
     assert.ok(equal(frame(final), frame(fs.fstatSync(fd, { bigint: true }))) && equal(frame(finalNamed), frame(fs.lstatSync(file, { bigint: true }))) && equal(namespace, parents(file, check)) && canonical(file) === file, 'CI_TRUST_COMMAND_HARDEN_CHANGED');
-    const proof = commandOwner(file, final, 'GITHUB_OUTPUT'); check();
+    const proof = commandOwner(file, final, 'GITHUB_OUTPUT', null, end); check();
     assert.ok(proof.ownerMatches === true && proof.writeScopeSafe === true, 'CI_TRUST_COMMAND_HARDEN_REFUSED');
     checkNamed(fs.lstatSync(file, { bigint: true }), fs.fstatSync(fd, { bigint: true }));
     assert.ok(equal(frame(final), frame(fs.fstatSync(fd, { bigint: true }))) && equal(namespace, parents(file, check)), 'CI_TRUST_COMMAND_HARDEN_CHANGED');
+    check();
     return { commandFileHardened: true, previousBytes: before.length, contentsPreserved: true, ownerMatches: true, writeScopeSafe: true };
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }

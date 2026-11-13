@@ -13,6 +13,7 @@ import {
 } from "@playwright/test";
 
 import { buildMinimalXlsx } from "./support/minimal-xlsx";
+import { openStatuteOptions, statuteOption } from "./support/statute-picker";
 import { seedVerifiedLocalStatute } from "./support/verified-statute-fixture";
 
 const envOr = (key: string, fallback: string): string =>
@@ -317,16 +318,16 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
 
     await page.goto(`${BASE_URL}/app/matters/${matter.id}/statutes`);
     await page.getByTestId("matter-statute-add-trigger").click();
-    const actSelect = page.getByTestId("matter-statute-act-select");
-    await expect(actSelect.locator("option")).toHaveCount(
-      catalog.statutes.length + 1,
+    const actSelect = await openStatuteOptions(page, "act");
+    await expect(actSelect.getByRole("option")).toHaveCount(
+      catalog.statutes.length,
     );
     for (const unavailable of catalog.statutes.filter(
       (row) => row.section_count === 0,
     )) {
       await expect(
-        actSelect.locator(`option[value="${unavailable.id}"]`),
-      ).toHaveAttribute("disabled", "");
+        statuteOption(actSelect, unavailable.id),
+      ).toHaveAttribute("aria-disabled", "true");
     }
     const sectionRequest = page.waitForResponse(
       (response) =>
@@ -334,19 +335,19 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
           "/api/statutes/constitution-india/sections" &&
         response.request().method() === "GET",
     );
-    await actSelect.selectOption("constitution-india");
+    await statuteOption(actSelect, "constitution-india").click();
     await expectStatus(await sectionRequest, 200, "load section picker");
-    const sectionSelect = page.getByTestId("matter-statute-section-select");
-    await expect(sectionSelect.locator("option")).toHaveCount(
-      sectionCatalog.catalog_section_count + 1,
+    const sectionSelect = await openStatuteOptions(page, "section");
+    await expect(sectionSelect.getByRole("option")).toHaveCount(
+      sectionCatalog.catalog_section_count,
     );
     await expect(
-      sectionSelect.locator(`option[value="${pending!.id}"]`),
-    ).toHaveAttribute("disabled", "");
+      statuteOption(sectionSelect, pending!.id),
+    ).toHaveAttribute("aria-disabled", "true");
     await expect(
-      sectionSelect.locator(`option[value="${verified!.id}"]`),
-    ).not.toHaveAttribute("disabled", "");
-    await sectionSelect.selectOption(verified!.id);
+      statuteOption(sectionSelect, verified!.id),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    await statuteOption(sectionSelect, verified!.id).click();
     const attach = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===

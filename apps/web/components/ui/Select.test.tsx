@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -23,9 +24,10 @@ const OPTIONS = Array.from({ length: 120 }, (_, index) => ({
       : `Matter ${index} - Shivani Khullar & Anr. Vs Samir Bajpai & Ors`,
 }));
 
-function Picker({ onValueChange = () => {}, defaultValue }: {
+function Picker({ onValueChange = () => {}, defaultValue, disabledValue }: {
   onValueChange?: (value: string) => void;
   defaultValue?: string;
+  disabledValue?: string;
 }) {
   return (
     <Select defaultValue={defaultValue} onValueChange={onValueChange}>
@@ -34,7 +36,7 @@ function Picker({ onValueChange = () => {}, defaultValue }: {
       </SelectTrigger>
       <SelectContent>
         {OPTIONS.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
+          <SelectItem key={option.value} value={option.value} disabled={option.value === disabledValue}>
             {option.label}
           </SelectItem>
         ))}
@@ -108,6 +110,45 @@ describe("Select", () => {
     const chevron = trigger.querySelector(":scope > svg");
     expect(chevron).toHaveClass("shrink-0");
     expect(chevron).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("distinguishes pointer-leave arrow origin from a settled keyboard re-open", async () => {
+    const change = vi.fn();
+    const user = userEvent.setup();
+    render(<Picker defaultValue="matter-87" disabledValue="matter-1" onValueChange={change} />);
+    let listbox = open();
+    let choices = within(listbox).getAllByRole("option");
+    await waitFor(() => expect(choices[87]).toHaveFocus());
+    await user.keyboard("{Home}");
+    await waitFor(() => expect(choices[0]).toHaveFocus());
+
+    // Radix legitimately moves focus to the listbox when the focused item
+    // loses the pointer. An arrow sent there starts at the first enabled item.
+    fireEvent.pointerLeave(choices[0], { pointerType: "mouse" });
+    expect(listbox).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(choices[0]).toHaveFocus());
+    expect(choices[2]).not.toHaveFocus();
+    expect(change).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    const trigger = screen.getByRole("combobox", { name: "Matter" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.keyboard(" ");
+    listbox = screen.getByRole("listbox");
+    choices = within(listbox).getAllByRole("option");
+    // Reopening must restore the selected identity, not just any hovered item.
+    await waitFor(() => expect(choices[87]).toHaveFocus());
+    await user.keyboard("{End}");
+    await waitFor(() => expect(choices[119]).toHaveFocus());
+    await user.keyboard("{Home}");
+    await waitFor(() => expect(choices[0]).toHaveFocus());
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(choices[2]).toHaveFocus());
+    expect(choices[1]).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(change).toHaveBeenCalledExactlyOnceWith("matter-2");
   });
 
   it("renders a scroll cue when the list overflows its bound", async () => {

@@ -1,5 +1,65 @@
 # CaseOps agent instructions
 
+- Use representative questions already supplied in a report before declaring
+  reproduction input missing. Label newly chosen scenarios as such. Pair factual
+  assistant requests with true legal/mixed requests and negated legal language;
+  a generic mocked answer cannot prove relevance or authorize weakening the
+  legal-evidence boundary.
+- A research URL's state includes both its query and mode. Regress same-query
+  mode changes and cleared/back navigation alongside staged filter edits, and
+  ensure a corpus recovery link cannot silently initiate a licensed-provider
+  search. A request payload alone is not relevance or legal-analysis proof.
+
+- Shared-catalog browser fixtures must retain their returned server identity.
+  A larger section count does not identify the owned long-caption Act. Prove
+  exact API identity, verified/pending inventory and idempotent setup beside a
+  higher-ranked competing fixture; keep production discovery read-only and
+  preserve the original keyboard, layout and persisted-attachment assertions.
+
+- A PDF export response, loaded worker and enabled Download button do not prove
+  visible PDF pages. Test the real renderer under production CSP, including
+  canvas ink, text and pagination. Pass already-authorized Blob bytes directly
+  to the renderer instead of fetching a local object URL through a blocked
+  connect-src path. Audit adjacent viewers; never relax CSP to hide this defect.
+- Keep browser runtime origins out of canonical unit-test environments. Reconcile
+  the full native failure messages before treating an origin mismatch as a CSRF
+  defect. For browser downloads, bind the observed response to the actual HTTP
+  method, not a same-URL preflight, and verify the completed native file's bytes;
+  a DevTools body lookup failure does not establish corrupt downloaded content.
+- A unit's filesystem-read fixture adds a build input even without an import.
+  Reconcile its explicit builder COPY, both upload allowlists and the deployment
+  dirty-input fence, including transitive inputs. Negative omission tests must
+  start from a fully admitted baseline, not all fail on the same missing input.
+
+- A reviewed message preview must bind the actor, recipient, source versions,
+  supplied inputs and exact rendered content. If authoritative facts change,
+  reject send with no outbox, audit-of-send or transport effect and require a
+  new preview. Re-rendering different content at send time is not freshness.
+- Binary authorization and cancellation cover the complete body, not just
+  response headers. Bind document safety validation to the displayed bytes,
+  reauthorize every download control and revoke stale object URLs. Passive
+  document viewing must not initiate a separately gated export. Preserve an
+  already-known denial if its error body fails; keep preview limits separate
+  from valid original downloads and normalize MIME exactly as upload admission.
+- A cancelled async control completion cannot reopen a view the user left.
+  Bind completion to the current intent as well as source identity. PDF parity
+  must reject footer-only continuation pages, not merely find the body somewhere.
+- Adding a parent lock requires testing overlap with lifecycle and actor/access
+  writers, including audit foreign-key locks. Match the canonical actor/parent
+  lock order and prove an unrelated HTTP request stays responsive while a lock
+  is held; threaded service tests alone do not cover async route starvation.
+- Persistent report fixtures can legitimately share display labels. Bind browser
+  assertions to the exact API-proven record and retained row cardinality, not a
+  unique-looking label; UI grouping need not preserve API order. Preserve old
+  tenant evidence and the failed selector
+  diagnosis instead of deleting fixtures or relaxing the business assertion.
+
+- A workbook row can mix a defect, a new workflow and a legal/source-quality
+  claim. Preserve all three acceptance boundaries: fixing one control cannot
+  close court-rule validity, model quality, source completeness or delivery.
+  Reproduce the actual persisted syntax and document, not only a convenient
+  fixture. See `docs/BUGS5_TRIAGE_2026-11-11.md` for the dated failure analysis.
+
 - A per-key LIMIT does not bound PostgreSQL index work when the plan scans
   a tenant prefix and filters the rest of the key. Retain actual first-page
   and cursor plans under stale/fresh statistics and custom/generic/auto
@@ -4013,6 +4073,9 @@ requirements when using the fallback.
   type-check input. Admit its finite import closure in Docker and Cloud Build
   ignore files and explicit builder COPY inputs, while excluding it from the
   runtime image. Checkout-only tests/builds cannot prove that upload contract.
+  Reconcile that same closure with fixture-image fingerprints and both push/PR
+  workflow triggers. Closing the deploy dirty-file guard alone does not cover
+  every image producer or prevent a stale fixture from being reused.
 - A successful paginated response can carry an authorization change through
   redacted rows rather than an HTTP error. Invalidate the earlier cached
   private prefix and pending callbacks, retain only freshly authorized data,
@@ -4023,6 +4086,9 @@ requirements when using the fallback.
   consumer, including Python CLI negative controls, not just Vitest manifests.
   Reconcile the exact added identities and complete consumer suites; retain
   literal contract/version assertions and missing/older-version refusals.
+  New production partitions must also join trusted-checkout and maintenance-
+  resume role inventories; a green final writer cannot substitute for a missing
+  or failed role. Retain historical counts separately from current additions.
 - A cross-tenant Bearer regression must not reuse a higher-priority auth
   cookie left by another fixture actor. Clear the owned cookie jar after
   bootstrap/login, verify the effective principal before the denial, and
@@ -4060,3 +4126,115 @@ requirements when using the fallback.
   main at native group boundaries. A healthy checkout can keep testing a
   superseded tree for hours. Preserve its partial evidence and resolve any
   concurrent branch work without force-pushing; never transfer a pass.
+- Windows fixture roots must leave space for real tenant/document UUID paths.
+  Check that a fresh short basetemp's parent exists before launching pytest;
+  retain path/setup failures rather than changing product storage or skipping
+  attachment acceptance. An anonymous HTTP probe must clear session cookies,
+  not merely omit its Bearer header.
+- Independent agents may review and implement in parallel, but heavy local
+  suites and startup-budget checks need one coordinated execution window.
+  A failed beforeAll can leave skipped/unexecuted tests with zero failed-test
+  counters. Inspect native suite errors, retain the incomplete inventory and
+  replay it within the original budgets before the complete serialized gate;
+  neither resource overlap nor a later subset pass authorizes certification.
+- A bounded JSON byte count does not bound decoder nesting. Treat malformed
+  or excessively nested retained JSON as row-local unsupported content while
+  preserving original bytes and valid siblings. Prove every shared string-list
+  consumer, optional typed payloads, reload and the real PostgreSQL path; do not
+  raise recursion limits or silently substitute an empty successful record.
+  Check tighter caller/encryption/base64 bounds before declaring an adjacent
+  parser vulnerable; a failing fixture assumption before the HTTP call is not
+  a successful product reproduction.
+- Intent regressions need both normative and incidental-language controls.
+  Legal-team labels are not legal advice; negating case law does not authorize
+  a mixed legal request. Preserve the whole-factual restriction boundary and
+  existing legal signals, test actual HTTP routing and citations, and never
+  describe finite mock-backed examples as general legal-answer quality.
+- On Windows, named stat and descriptor stat may expose different ctime
+  semantics. Retain and compare native creation and change timestamps alongside
+  full file/volume identity; never drop a timestamp, tolerate differences or
+  accept evidence only after close. Regress both capture and reader with actual
+  metadata-only races, hardlinks/reparse points and the original tamper checks.
+  Byte-hashed fixtures must also open both descriptors in binary mode: Windows
+  text translation can alter the supposedly immutable UTF-8 buffer. Assert
+  exact LF bytes and partial-write extent, and retain platform fixture failures
+  separately from native guard or product failures; never weaken OS protections.
+- A browser fixture must satisfy the visible form's actual length and format
+  contract before awaiting its mutation. Preserve validation-blocked runs as
+  fixture failures, not product reproductions; retain unique identifiers and
+  prove the corrected complete journey rather than increasing response waits.
+- Cleanup must preserve the primary workflow failure and each independent
+  cleanup error. Archive an owned conversation by its authenticated owner and
+  current session version, not source readiness; retained stale sources do not
+  transfer ownership or justify blocking a safe archive. Keep strict source
+  assertions on the workflow itself and prove cleanup independently.
+- A bounded parent page does not bound later disclosure hydration. Stale
+  version-table statistics can make a tenant-only secondary index scan an
+  entire import for each admitted key. Retain the actual catalog and every
+  custom/generic/auto hydration plan, regress the pre-import statistics state,
+  and seek the complete unique tenant/family/version identity without weakening
+  access checks, work limits or missing-row rejection. Fresh-statistics passes
+  and elapsed-time improvements cannot substitute for bounded charged work.
+- A complete composite range and a literal one-row limit are still not proof
+  of bounded work. Retain incremental-sort input work: a company-prefix index
+  can scan the full tenant before producing that single row. Reject failed
+  candidates even after source review, and keep exact successor rejection
+  outside any ordered candidate lookup; do not raise limits or hide bad plans.
+- Adding a concurrent index migration must preserve the entire requested
+  downgrade boundary, not merely its own safe index removal. Preflight a
+  chained target before autocommit DDL when a historical parent is
+  restore-forward-only; prove direct and relative one-step rollback plus
+  refused deeper targets leave rows, catalog and revision unchanged.
+- A governance-map change also changes its compiled runtime projection.
+  Regenerate and validate every dependent view and projection, proving admitted
+  classes and policy decisions unchanged. Updating a map hash alone cannot
+  certify the image's shipped governance metadata.
+- A Windows CI preparation or ownership refusal is not a dependency-audit
+  verdict. Preserve its actual phase and native evidence. Repair only the
+  literal pinned CI artifact through verified retained handles; keep default
+  readers strict and never recursively loosen checkout ACLs. A Linux skip
+  cannot certify the corresponding native Windows permission behavior.
+- Preparation deadlines cover cold process startup, native work, independent
+  postconditions and the final filesystem reconciliation under one original
+  absolute end. Do not reset that budget between phases or return success
+  after a late final read. Preserve the original failed transport diagnosis
+  and prove both cold-start admission and late-success rejection explicitly.
+- Updating shared tooling must also refresh every reviewed hash-and-size
+  reference to those exact source bytes. Keep the consumer's binding and
+  tamper rejection unchanged; a setup refusal from a stale pin is not an app
+  failure or permission to bypass the held-source verification.
+  Follow that chain through generated launcher bytes as well: a corrected
+  constructor pin changes the helper hash consumed by its generated entry.
+  Validate the complete canonical renderer output and every input pin, not
+  only the first changed reference.
+- A PostgreSQL fixture helper is not automatically safe for SQLite. Use the
+  actual CaseOpsSession for reliability writes and enable/check foreign-key
+  enforcement on every fixture connection. Preserve ordinary-session rejection
+  and the original data/catalog assertions; a setup exception cannot prove a
+  migration's refusal or rollback behavior.
+- An executed missing-version index seek can charge zero rows. Bind historical
+  performance controls to their exact stage, planner mode and expected result
+  cardinality; never require an empty result to perform a tenant-wide scan.
+  Keep populated historical witnesses and every current-query work/buffer,
+  result, ACL and missing-row boundary. Run current-query assertions before
+  legacy comparisons so a failing control cannot hide unexecuted acceptance.
+- Match a local tooling inventory to its declared CI operating system and
+  complete dependency closure before running it. Retain wrong-platform,
+  missing-dependency and real deadline failures separately. Do not repair
+  Mac-only assumptions from a server task, call a setup refusal an audit
+  verdict, or raise a preparation budget to conceal slow local storage.
+- A platform fixture must restore absent process properties by deletion, not
+  Object.defineProperty with an undefined descriptor. Prove present and absent
+  descriptor restoration after a body failure, including environment and native
+  command mocks. An early cleanup exception can contaminate later security
+  tests; preserve that failed run and replay the original race in a fresh
+  process before changing or weakening the production guard.
+- Native capture storage must be a separately claimed, current-user private
+  physical namespace outside global temp, sync storage, source and evidence.
+  Python 3.13 Windows mkdir(0700) may grant full control through OWNER RIGHTS;
+  admit that SID only after exact current-user ownership and protected-DACL
+  checks, never by accepting an administrator-owned or inherited writable root.
+  Bind the ACL probe to the native Windows directory with a minimal environment,
+  preserve ambient temp/cache assets and failed workspaces, and clean only an
+  exact owned workspace. Unchanged-helper controls and hosted PostgreSQL passes
+  do not diagnose an earlier capture failure or replace full Docker acceptance.

@@ -154,6 +154,126 @@ native assertion and deadline. See [exact evidence and open gates](mobile/NATIVE
 
 # Strict Enterprise Gap Tasklist
 
+## November13: Native Evidence Namespace Isolation
+
+**Partially implemented / NO-GO.** NFT-005/J14-M14. Complete full07/48ab has
+4106P/2capture-guard call failures, all4108identities/12324phases retained;
+all784browser cases unexecuted. Exact historical changed fields were not
+recorded. Frozen controlled probes establish a shared-Temp metadata failure
+class and isolated-storage success, not proof of the historical final operand.
+
+The canonical explicit runtime-parent repair preserves every capture security
+check and ambient Temp/cache/Temporal asset location. Current-user private
+physical admission, exact owner/claim cleanup, protected Windows OWNER RIGHTS
+and native-directory/minimal-environment ACL verification now have focused
+Windows93P/7S and isolated Linux83P/8S. All91runner identities have at least one
+applicable-platform pass;9wrapper cases pass on Windows. Review-only discovery
+of the caller-controlled probe host is corrected with regression, not waived.
+Source-bound components do not clear the failed full gate or certify a deploy.
+Retain both original failures/partial plans, observer provenance correction and
+all replacement inventories. No app/MacBook or provider/security fence change.
+
+## November13 (IST): Unreached Assertions And Wrong-Platform Evidence
+
+PN02 atCF passes127cases/381phases with complete native inventory/origin/XML
+and owned cleanup. Full Docker06 remains4083P/1F and all784browsers unexecuted.
+Hosted7b native4108 has one missing-version legacy comparison failure, with
+the later current-budget assertion loop UNREACHED, not passed. Candidate
+measurements alone do not execute assertions. Keep current bounds unchanged
+and check them before historical comparisons; an executed empty index seek
+may charge0rows. The narrow test correction still requires replacement proof.
+
+Shared local04 has complete failed evidence, not certification. Full tooling452
+belongs to Ubuntu source CI; Windows execution without its graph/POSIX context
+has95 failures that must not be relabelled as95product bugs or silently dropped.
+Whole npm57 retains3 genuine deadlines in short TMP, with changed failing case
+identities versus03. Keep original30sec budget and all trust fences; no full
+local Windows repair claim. Hosted Windows installed72 and both PS field suites
+are distinct components. Issue619 tracks the open local performance failure.
+Do not modify Mac/app code to green a server harness.
+All95 full errors were inspected, not discarded. An absent getuid descriptor
+caused cleanup to leave SystemRoot contaminated. Test-only restoration and
+CI-PLATFORM-01 now prove a fresh3-case Windows owner/cleanup/tamper chain;
+the unchanged runtime guard refuses the injected same-inode byte edit. Full
+canonical gates are still owed; no app or security-boundary weakening.
+
+## November12 Shared CI Follow-Up Evidence
+
+At7949d13a, Security43249131963 and matched CodeQL43249131982 pass.
+Windows installed job131289812798 passes72actual=71passed/1POSIXskip,
+including the new actual Windows retained-handle/ACL/CLI test. The separate
+Linux source harness is1568=1564passed/1stale-source-pin failure/3explicit
+skips. Update only the shared launcher hash/size reference to reviewed npm
+tooling bytes; keep exact-source and tamper checks unchanged. Later-source
+whole CI/local Docker/deployed acceptance remain required, not certified.
+
+Open [native issue618](https://github.com/mishrasanjeev/caseops/issues/618)
+records one moderate node-forge package finding (four component advisories)
+in the physical native graph. The configured high/critical gate passes, not
+an advisory-free verdict or evidence of server reachability. Preserve this
+for separate MacBook/native release review; do not alter app archives/locks,
+native source or MacBook execution under the server/shared-CI task.
+
+## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
+
+Shared-CI readiness is separately source-only: actual Windows preparation
+refusals prevented audit, not evidence of vulnerable installed dependencies.
+Owner authorized one literal pinned-artifact DACL hardening path, preserving
+strict default readers and original total deadlines across startup/postchecks.
+No native/app/lock edits or relaxed trust. Twelve new declared controls need
+standard Linux/Windows discovery and actual Windows permission acceptance.
+
+Actual f8 scale component passes501/400, not whole-release acceptance. Hosted
+PG8 confirms concurrent downgrade dropped both new indexes before a deeper
+restore-forward refusal. New source must refuse that entire chain before DDL,
+retain original rows/catalog/revision/privacy, permit exact/relative parent
+rollback, and ship the matching compiled governance projection. All new repair
+execution and complete release evidence remain due; no production claim.
+
+Current equality/index candidate is UNEXECUTED: structured Text[] identity,
+two nonunique concurrent expression indexes, strict index-health and recovery
+guards, no row rewrite or new retention/provider authority. Rejected3d complete
+PG inventory4088=4078P/10callF retains the adjacent application scan finding.
+All82physical profiles and fresh complete regression/release proof remain due.
+Lower-only range was withdrawn without execution. Full06 stays frozen on2b7.
+
+Actual follow-up3d8152 hosted PG4 also fails: complete tuple bounds still admit
+a company-prefix incremental sort,1000702work/59900blocks on six first/cursor
+plan modes. The intermediate lower-only/full-order/literal-one was withdrawn;
+neither a unique constraint nor a LIMIT proves its physical lookup bounded.
+Retain both failed shapes, actual source-bound plans and all original fences.
+
+**Partially implemented; release NO-GO.** Issue616/fullDocker06 at2b7 retains
+the original disclosure work-bound failure despite all52hosted CI jobs green.
+A bounded authorized parent page still triggers100tenant-wide version scans
+when pre-import statistics reflect53versions/40tenants. Actual totalwork1000701
+and59900blocks exceed the original50000/10000 limits, not just elapsed time.
+The draft full composite-key seek is isolated and unexecuted; require retained
+stale-statistics red/green, all actual hydration-plan modes, missing-version and
+ACL/source controls, complete replacement Docker/CI and exact-production proof.
+Adjacent application hydration is an exposure, not yet a reproduced defect.
+No schema, planner, security or threshold relaxation. Existing canonical owner
+IPLF-080B/UJ-29/PAT-01/IP-SCOPE/NFT-005/J14-M14; prior032/090A note labels do
+not transfer ownership. Frozen full06 is continuing to retain all failures.
+
+## QA-B5-2026-11-11: Workflow And Claim Coverage
+
+**Partially implemented; release NO-GO.** Source and component tests did not
+prevent missing user-visible contract Edit/View/Add paths or retained unresolved
+email placeholders. Candidate fixes must add original-record-shaped regression,
+permissions/stale-write/negative evidence and discovered desktop/phone journeys.
+[The source-bound assessment](BUGS5_TRIAGE_2026-11-11.md) also distinguishes
+verified legal-source completion, legal/model quality, actual recipient delivery
+and complete deployed certification. A current merged release has failed
+production verification; old stale checkpoints and green components cannot close
+that gate. Native/MacBook and other projects are outside this task.
+Open adjacent boundaries: eight legacy authenticated binary-success consumers
+still finish body reads outside `apiBlobRequest`'s deadline; Matter email
+transport still owns its parent lock during external I/O. The new private
+draft/contract helper and template shared-reader fence do not close those
+larger contracts. Their explicit inventories and acceptance are retained in the
+triage rather than silently waived.
+
 ## PRIV-RETENTION-2026-11-06 — Retired private-index generations retain customer data
 
 **Partially implemented.** B4-ADJ-40 in the strict bug list. Retired

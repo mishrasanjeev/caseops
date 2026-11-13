@@ -24,7 +24,9 @@ from fastapi.testclient import TestClient
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
-def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> str:
+def _create_matter(
+    client: TestClient, headers: dict[str, str], code: str, *, hearing_date: str | None = None,
+) -> str:
     resp = client.post(
         "/api/matters",
         headers=headers,
@@ -33,6 +35,8 @@ def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> st
             "title": f"Matter {code}",
             "practice_area": "Civil",
             "forum_level": "high_court",
+            "client_name": "Hari Gupta",
+            "next_hearing_on": hearing_date,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -63,6 +67,18 @@ def _create_template(
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+def _preview_message(
+    client: TestClient, headers: dict[str, str], matter_id: str, message: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {"recipient_email": "client@example.com", **message}
+    preview = client.post(
+        f"/api/matters/{matter_id}/communications/preview-email", headers=headers, json=payload,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["preview_token"], preview.text
+    return {**payload, "preview_token": preview.json()["preview_token"]}
 
 
 def test_template_crud_round_trip(client: TestClient) -> None:
@@ -149,20 +165,25 @@ def test_send_email_refuses_when_required_vars_missing(
     headers = auth_headers(str(bootstrap["access_token"]))
     matter_id = _create_matter(client, headers, "M11-S2-001")
     tpl = _create_template(client, headers)
+    message = {
+        "template_id": tpl["id"], "recipient_email": "client@example.com",
+        "variables": {"client_name": "Hari"},
+    }
+    preview = client.post(
+        f"/api/matters/{matter_id}/communications/preview-email", headers=headers, json=message,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["missing_variables"] == ["hearing_date"]
+    assert preview.json()["preview_token"] is None
 
     resp = client.post(
         f"/api/matters/{matter_id}/communications/send-email",
         headers=headers,
-        json={
-            "template_id": tpl["id"],
-            "recipient_email": "client@example.com",
-            "variables": {"client_name": "Hari"},  # hearing_date missing
-        },
+        json={**message, "preview_token": "not-a-valid-preview"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 409
     detail = resp.json()["detail"].lower()
-    assert "missing" in detail
-    assert "hearing_date" in detail
+    assert "preview" in detail
 
 
 def test_send_email_503_when_sendgrid_not_configured(
@@ -179,17 +200,17 @@ def test_send_email_503_when_sendgrid_not_configured(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-002")
+    matter_id = _create_matter(client, headers, "M11-S2-002", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     resp = client.post(
         f"/api/matters/{matter_id}/communications/send-email",
         headers=headers,
-        json={
+        json=_preview_message(client, headers, matter_id, {
             "template_id": tpl["id"],
             "recipient_email": "client@example.com",
             "variables": {"client_name": "Hari"},
-        },
+        }),
     )
     assert resp.status_code == 503
     assert "not configured" in resp.json()["detail"].lower()
@@ -209,7 +230,7 @@ def test_send_email_happy_path_writes_communications_row(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-003")
+    matter_id = _create_matter(client, headers, "M11-S2-003", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     fake_response = httpx.Response(
@@ -222,12 +243,12 @@ def test_send_email_happy_path_writes_communications_row(
         resp = client.post(
             f"/api/matters/{matter_id}/communications/send-email",
             headers=headers,
-            json={
+            json=_preview_message(client, headers, matter_id, {
                 "template_id": tpl["id"],
                 "recipient_email": "client@example.com",
                 "recipient_name": "Hari Gupta",
                 "variables": {"client_name": "Hari Gupta"},
-            },
+            }),
         )
     assert resp.status_code == 200, resp.text
     row = resp.json()
@@ -260,7 +281,7 @@ def test_sendgrid_webhook_promotes_communications_row(
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
-    matter_id = _create_matter(client, headers, "M11-S2-WEBHOOK")
+    matter_id = _create_matter(client, headers, "M11-S2-WEBHOOK", hearing_date="2026-11-20")
     tpl = _create_template(client, headers, required_vars=("client_name",))
 
     fake = httpx.Response(
@@ -272,11 +293,11 @@ def test_sendgrid_webhook_promotes_communications_row(
         sent = client.post(
             f"/api/matters/{matter_id}/communications/send-email",
             headers=headers,
-            json={
+            json=_preview_message(client, headers, matter_id, {
                 "template_id": tpl["id"],
                 "recipient_email": "client@example.com",
                 "variables": {"client_name": "Hari"},
-            },
+            }),
         )
     assert sent.status_code == 200
     sent_id = sent.json()["id"]

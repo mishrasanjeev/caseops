@@ -173,7 +173,64 @@ separate from pending Firefox keyboard, full Android/iOS and production proof.
 See the November 12 native MFA entry in the strict bug ledger. No store release
 or complete 83-case platform acceptance is claimed.
 
+November12 J14/M14 shared-CI evidence at7949: actual Windows archive permission
+and CLI test passes in72-case installed harness(71P/1POSIXskip); all11new
+portable controls pass on Linux. Linux1568-case source harness retains one
+stale reviewed-source hash/size pin failure, plus3explicit skips. Its exact
+reference update is not changed iOS app behavior or MacBook acceptance. Whole
+later-source CI/Docker/production remain due; separate native advisory618 open.
+
+## November 11 Workbook 5 Coverage Pending
+
+Existing J07/M06, J10/M09, J03/J08/M10 and J05/M05 own draft PDF parity,
+contract editing/viewing/manual term review, email composition/template safety
+and verified statute-picker usability. These are bounded implementation tracks,
+not completed coverage. [The 20-report matrix](BUGS5_TRIAGE_2026-11-11.md) retains
+the wider obligation/redline/research/data/provider/model-quality acceptance
+requests separately. Every new dated spec must be collected by standard app,
+Docker and exact-production configs; a test file alone is not executed coverage.
+
+November12 adds J05/J09/M04/M07 and M15 recovery/intent controls without claiming
+a new legal-research engine. Actual components:220 API,32 Research page, final27
+JSON-boundary and1356 release-consumer passes (overlaps are not summed as unique
+coverage). Proposed app784/prod433 inventories preserve774/423 originals; two
+new assistant/research journeys are unexecuted until the exact fresh built,
+Docker and deployed gates run. Source-bound controls do not close legal-source,
+provider, relevance or calibrated predictive-quality dependencies.
+
 ## November 2 Disclosure Work Coverage Pending
+
+Additional J14/M14 shared-CI controls are source-only: five deterministic-clock
+and seven archive/Windows-permission declarations, not discovered/executed
+coverage. Keep the literal artifact's unchanged hash/default-reader/owner/ACL
+fences and original absolute budgets. No app/MacBook acceptance is claimed.
+
+F8 original42plan hosted scale component is now positive501work/400blocks,
+not full coverage. Its actual chained-downgrade failure remains retained.
+Follow-up declares61migration cases/18PG including6chain-refusal controls,
+with compiled projection/current-head integration corrections. Those changes
+are unexecuted; wholeCI/localDocker/deployed acceptance is still incomplete.
+
+Current isolated source uses two exact structured-identity expression indexes
+and equality hydration for both family and application versions. Migration
+recovery/shape/readiness/SQLite coverage is declared, not executed. Rejected3d
+hosted4088cases reconcile4078P/10callF; full06 remains on2b7. All82new physical
+plan contexts and fresh full regression/release evidence remain required.
+
+November12 next candidate remains unexecuted after actual3d8152 hosted PG4
+failure1000702work/59900blocks across six first/cursor plan modes. Full-key
+two-sided bounds did not prevent a company-prefix incremental sort. Retain
+the withdrawn lower-only/full-order/literal-one history, exact outer successor rejection,
+40intended plan profiles and unchanged original budgets as pending, not coverage.
+
+November12 reopening evidence: canonical IPLF-080B/UJ-29/PAT-01/IP-SCOPE with
+NFT-005/J14-M14 remains NO-GO (prior032/UJ-02/090A note labels are drift)
+after fullDocker06 group03 exposed first-page custom/generic disclosure
+hydration1,000,701chargedwork/59,900blocks. Parent paging was bounded; the
+later lookup used a tenant-only secondary index100times. Retain53-row/40-tenant
+pre-import statistics and the complete captured plans. An isolated complete
+tenant/family/version-key repair and new deterministic regression are drafted,
+not executed, merged or deployed. No native-app/readthrough/Mac ownership change.
 
 IPLF-032/UJ-02/NFT-005/J14-M14 includes every later disclosure hydration and
 its actual custom/generic/auto work, not only authorized family-page selection.

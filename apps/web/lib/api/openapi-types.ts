@@ -3869,6 +3869,23 @@ export interface paths {
         patch: operations["patch_current_company_contract_attachment_metadata_api_contracts__contract_id__attachments__attachment_id__metadata_patch"];
         trace?: never;
     };
+    "/api/contracts/{contract_id}/attachments/{attachment_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read exact verified private PDF or validated DOCX preview bytes */
+        get: operations["preview_current_company_contract_attachment_api_contracts__contract_id__attachments__attachment_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts/{contract_id}/attachments/{attachment_id}/redline": {
         parameters: {
             query?: never;
@@ -10284,6 +10301,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/communications/email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Current Matter Email Templates */
+        get: operations["list_current_matter_email_templates_api_matters__matter_id__communications_email_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/communications/import-email": {
         parameters: {
             query?: never;
@@ -10295,6 +10329,23 @@ export interface paths {
         put?: never;
         /** Manually import one inbound email into an explicitly selected matter. */
         post: operations["import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/communications/preview-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Current Matter Email */
+        post: operations["preview_current_matter_email_api_matters__matter_id__communications_preview_email_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -21538,12 +21589,23 @@ export interface components {
             contract_type_key?: ("agreement" | "nda" | "addendum" | "purchase_order" | "master_services_agreement" | "statement_of_work" | "lease" | "employment" | "settlement" | "amendment" | "other") | null;
             /** Contract Type Notes */
             contract_type_notes?: string | null;
+            /** Counterparty Name */
+            counterparty_name?: string | null;
             /** Effective On */
             effective_on?: string | null;
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
             /** Expires On */
             expires_on?: string | null;
             /** Renewal On */
             renewal_on?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** ContractObligation */
         ContractObligation: {
@@ -21885,6 +21947,14 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ContractTermReviewRequest */
+        ContractTermReviewRequest: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+        };
         /** ContractTermSuggestionCreateRequest */
         ContractTermSuggestionCreateRequest: {
             /** Evidence Json */
@@ -21964,6 +22034,8 @@ export interface components {
             currency?: string | null;
             /** Effective On */
             effective_on?: string | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Expires On */
             expires_on?: string | null;
             /** Jurisdiction */
@@ -23329,22 +23401,28 @@ export interface components {
         EmailRenderResponse: {
             /** Body */
             body: string;
+            /** Invalid Placeholders */
+            invalid_placeholders?: string[];
             /** Missing Variables */
             missing_variables?: string[];
+            /** Resolved Variables */
+            resolved_variables?: {
+                [key: string]: string;
+            };
             /** Subject */
             subject: string;
         };
         /**
          * EmailSendRequest
-         * @description Compose & send action — pick a template, fill variables, send.
-         *
-         *     Creates a ``communications`` row with status=queued (or sent on
-         *     SendGrid 2xx). The SendGrid event webhook then promotes status
-         *     to delivered / opened / bounced as events arrive.
+         * @description Delivery requires a current server-issued preview for the exact message.
          */
         EmailSendRequest: {
+            /** Body */
+            body?: string | null;
             /** Client Id */
             client_id?: string | null;
+            /** Preview Token */
+            preview_token: string;
             /**
              * Recipient Email
              * Format: email
@@ -23352,8 +23430,10 @@ export interface components {
             recipient_email: string;
             /** Recipient Name */
             recipient_name?: string | null;
+            /** Subject */
+            subject?: string | null;
             /** Template Id */
-            template_id: string;
+            template_id?: string | null;
             /** Variables */
             variables?: {
                 [key: string]: string;
@@ -40203,6 +40283,47 @@ export interface components {
             score: number;
             /** Snippet */
             snippet: string;
+        };
+        /** MatterEmailPreviewRequest */
+        MatterEmailPreviewRequest: {
+            /** Body */
+            body?: string | null;
+            /** Client Id */
+            client_id?: string | null;
+            /**
+             * Recipient Email
+             * Format: email
+             */
+            recipient_email: string;
+            /** Recipient Name */
+            recipient_name?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Template Id */
+            template_id?: string | null;
+            /** Variables */
+            variables?: {
+                [key: string]: string;
+            };
+        };
+        /** MatterEmailPreviewResponse */
+        MatterEmailPreviewResponse: {
+            /** Body */
+            body: string;
+            /** Invalid Placeholders */
+            invalid_placeholders?: string[];
+            /** Missing Variables */
+            missing_variables?: string[];
+            /** Preview Expires At */
+            preview_expires_at?: string | null;
+            /** Preview Token */
+            preview_token?: string | null;
+            /** Resolved Variables */
+            resolved_variables?: {
+                [key: string]: string;
+            };
+            /** Subject */
+            subject: string;
         };
         /**
          * MatterExecutiveSummary
@@ -58831,6 +58952,36 @@ export interface operations {
             };
         };
     };
+    preview_current_company_contract_attachment_api_contracts__contract_id__attachments__attachment_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     parse_contract_attachment_redline_api_contracts__contract_id__attachments__attachment_id__redline_get: {
         parameters: {
             query?: never;
@@ -59283,7 +59434,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractTermReviewRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -72636,6 +72791,37 @@ export interface operations {
             };
         };
     };
+    list_current_matter_email_templates_api_matters__matter_id__communications_email_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post: {
         parameters: {
             query?: never;
@@ -72658,6 +72844,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundEmailImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_matter_email_api_matters__matter_id__communications_preview_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterEmailPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterEmailPreviewResponse"];
                 };
             };
             /** @description Validation Error */

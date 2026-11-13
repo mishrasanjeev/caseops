@@ -44,7 +44,43 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 724, "app-mobile": 60}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+BATCH5_CONTRACT_VERSION = 1
+BATCH5_FILES = tuple(
+    f"ram-2026-11-11-{name}.spec.ts" for name in ("statutes", "drafting", "contracts", "bugs")
+)
+BATCH5_PROJECTS = {"batch5-desktop": "batch5-prod-chromium", "batch5-mobile": "batch5-prod-mobile"}
+BATCH5_MOVED_CASES = (
+    ("ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"),
+    ("ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"),
+)
+# Keep the observed774 app and423 production baselines separate from additions.
+# Reviewed declarations must match fresh native collection before acceptance.
+BATCH5_CASE_COUNTS = {
+    "ram-2026-11-11-statutes.spec.ts": (1, 1),
+    "ram-2026-11-11-drafting.spec.ts": (1, 1),
+    "ram-2026-11-11-contracts.spec.ts": (1, 1),
+    "ram-2026-11-11-bugs.spec.ts": (2, 2),
+}
+BATCH5_PROOF_SCOPES = {
+    "ram-2026-11-11-statutes.spec.ts": "workflow-outcome",
+    "ram-2026-11-11-contracts.spec.ts": "workflow-outcome",
+    "ram-2026-11-11-drafting.spec.ts": "retained-readonly",
+    "ram-2026-11-11-bugs.spec.ts": "preview-no-paid-guard",
+}
+BATCH5_CASE_PROOF_SCOPES = {
+    "ram-2026-11-11-bugs.spec.ts": {
+        "BUG-003 communications resolved preview and missing-value guard desktop":
+        "preview-no-paid-guard",
+        "[mobile] BUG-003 communications resolved preview and missing-value guard phone":
+        "preview-no-paid-guard",
+        ("B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation desktop"): "assistant-research-no-paid-guard",
+        ("[mobile] B5-013/014 assistant factual citation, legal abstention "
+         "and research mode navigation phone"): "assistant-research-no-paid-guard",
+    },
+}
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -110,7 +146,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 101, "tester-catalog": 18, "tester-index": 6,
+    "tester": 97, "tester-catalog": 18, "tester-index": 6,
     "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
@@ -226,7 +262,7 @@ GOVERNANCE_STATE_KEYS = {
     "schema_version", "enabled", "rollout_expires_at", "approved_by", "evidence",
 }
 TESTER_CATALOG_FILE = "ram-2026-09-05-bugs.spec.ts"
-TESTER_PARTITION_CONTRACT = 2
+TESTER_PARTITION_CONTRACT = 3
 TESTER_CANONICAL_FILES = {"canonical-native-discovery.json", "canonical-discovery.json"}
 INDEX_FILES = {
     "ram-2026-10-10-prod.spec.ts": 4,
@@ -297,10 +333,15 @@ def _app_project_partition(binding):
 
 def _app_inventory(canonical):
     rows = canonical["tests"]
+    batch5 = [row for row in rows if row["file"] in BATCH5_FILES]
+    legacy = [row for row in rows if row["file"] not in BATCH5_FILES]
+    if batch5 or BATCH5_CASE_COUNTS:
+        _batch5_rows(batch5, {"app-chromium": 0, "app-mobile": 1}, include_moved=False)
     if (Counter(row["project_name"] for row in rows) != APP_PROJECT_COUNTS
+            or Counter(row["project_name"] for row in legacy) != APP_BASE_PROJECT_COUNTS
             or len({row["id"] for row in rows}) != sum(APP_PROJECT_COUNTS.values())
-            or [row["project_name"] for row in rows] != [
-                project for project, count in APP_PROJECT_COUNTS.items() for _ in range(count)
+            or [row["project_name"] for row in legacy] != [
+                project for project, count in APP_BASE_PROJECT_COUNTS.items() for _ in range(count)
             ]
             or len(set(APP_EXPECTED_SKIPS)) != 21
             or not set(APP_EXPECTED_SKIPS).issubset({_app_skip_identity(row) for row in rows})
@@ -319,6 +360,128 @@ def _app_inventory(canonical):
                    for p in canonical["projects"])):
         raise EvidenceError("app_canonical_inventory_mismatch")
     return rows
+
+
+def _batch5_counts():
+    if (set(BATCH5_CASE_COUNTS) != set(BATCH5_FILES)
+            or any(type(counts) not in (tuple, list) or len(counts) != 2
+                   or any(type(count) is not int or count < 0 for count in counts)
+                   or counts[0] < 1 for counts in BATCH5_CASE_COUNTS.values())
+            or BATCH5_CASE_COUNTS[BATCH5_FILES[0]][1] < 1):
+        raise EvidenceError("unreviewed_batch5_case_counts")
+    return {**BATCH5_CASE_COUNTS, **{file: (1, 1) for file, _ in BATCH5_MOVED_CASES}}
+
+
+def _batch5_partition(binding):
+    invocation, project = binding["invocation"], binding.get("project")
+    if invocation not in BATCH5_PROJECTS:
+        if invocation.startswith("batch5") or project in BATCH5_PROJECTS.values():
+            raise EvidenceError("unreviewed_batch5_invocation")
+        return None
+    expected_project = BATCH5_PROJECTS[invocation]
+    expected = {
+        "--config=playwright.prod-ram.config.ts", f"--project={expected_project}",
+        "--workers=1", "--retries=0", "--reporter=list", f"--output=test-results/{invocation}",
+    }
+    if (binding["config"] != "playwright.prod-ram.config.ts" or project != expected_project
+            or len(binding["arguments"]) != len(expected) or set(binding["arguments"]) != expected):
+        raise EvidenceError("batch5_role_binding_mismatch")
+    _batch5_counts()
+    return invocation
+
+
+def _batch5_rows(rows, projects, *, include_moved=True):
+    counts = _batch5_counts()
+    if not include_moved:
+        counts = {file: pair for file, pair in counts.items() if file in BATCH5_FILES}
+    expected = Counter({(file, project): pair[index]
+                        for file, pair in counts.items() for project, index in projects.items()
+                        if pair[index]})
+    if (Counter((row["file"], row["project_name"]) for row in rows) != expected
+            or len({row["id"] for row in rows}) != len(rows)
+            or any(row["project_id"] != row["project_name"]
+                   or ("[mobile]" in row["title_path"][-1]) != (projects[row["project_name"]] == 1)
+                   or "[local-only]" in row["title_path"][-1]
+                   or row["retries"] != 0 or row["repeat_each_index"] != 0 for row in rows)):
+        raise EvidenceError("batch5_case_inventory_mismatch")
+    for file, title in BATCH5_MOVED_CASES:
+        if file not in counts:
+            continue
+        expected_titles = {
+            project: ("[mobile] " if index else "") + title for project, index in projects.items()
+        }
+        if any(row["title_path"] != [file, expected_titles[row["project_name"]]]
+               for row in rows if row["file"] == file):
+            raise EvidenceError("batch5_moved_case_identity_mismatch")
+    for file, cases in BATCH5_CASE_PROOF_SCOPES.items():
+        expected_cases = Counter(
+            (project, (file, title))
+            for project, index in projects.items() for title in cases
+            if ("[mobile]" in title) == (index == 1)
+        )
+        actual_cases = Counter(
+            (row["project_name"], tuple(row["title_path"]))
+            for row in rows if row["file"] == file
+        )
+        if actual_cases != expected_cases:
+            raise EvidenceError("batch5_required_case_identity_mismatch")
+    return rows
+
+
+def _check_batch5_selection(binding, selected, canonical, *, execution=False):
+    invocation = _batch5_partition(binding)
+    if invocation is None:
+        raise EvidenceError("unreviewed_batch5_invocation")
+    projects = {project: index for index, project in enumerate(BATCH5_PROJECTS.values())}
+    all_rows = [row for row in canonical["tests"] if row["project_name"] in projects]
+    _batch5_rows(all_rows, projects)
+    expected = [row for row in all_rows if row["project_name"] == BATCH5_PROJECTS[invocation]]
+    if (canonical["global_error_count"] or canonical["report_status"] != "passed"
+            or any(row["results"] for row in canonical["tests"])
+            or selected["projects"] != canonical["projects"]
+            or selected["configuration"] != canonical["configuration"]
+            or [_tester_case_identity(row) for row in selected["tests"]]
+            != [_tester_case_identity(row) for row in expected]):
+        raise EvidenceError("batch5_canonical_selection_mismatch")
+    if execution:
+        if (selected["global_error_count"] or selected["report_status"] != "passed"
+                or any(row["status"] != "expected" or len(row["results"]) != 1
+                       or row["results"][0]["status"] != "passed"
+                       or row["results"][0]["retry"] != 0 for row in selected["tests"])):
+            raise EvidenceError("batch5_case_not_passed")
+        _batch5_proofs(selected)
+    elif selected["global_error_count"] or any(row["results"] for row in selected["tests"]):
+        raise EvidenceError("batch5_discovery_executed_tests")
+
+
+def _batch5_proofs(document):
+    scopes = []
+    for row in document["tests"]:
+        annotations = row["annotations"] + row["results"][0]["annotations"]
+        declared = {item.get("description") for item in annotations if item["type"] == "caseops-b5-proof"}
+        moved = row["file"] in {file for file, _ in BATCH5_MOVED_CASES}
+        cases = BATCH5_CASE_PROOF_SCOPES.get(row["file"])
+        if cases is not None:
+            if len(row["title_path"]) != 2 or row["title_path"][0] != row["file"]:
+                raise EvidenceError("batch5_required_case_identity_mismatch")
+            expected = cases.get(row["title_path"][1])
+            if expected is None:
+                raise EvidenceError("batch5_required_case_identity_mismatch")
+        else:
+            expected = "legacy-workflow-outcome" if moved else BATCH5_PROOF_SCOPES[row["file"]]
+        if (not moved and declared != {expected}) or (moved and declared and declared != {expected}):
+            raise EvidenceError("batch5_proof_scope_mismatch")
+        scopes.append({"id": row["id"], "file": row["file"], "scope": expected})
+    return scopes
+
+
+def _batch5_source_hashes(root):
+    files = ("playwright.app.config.ts", "playwright.prod-ram.config.ts",
+             "scripts/prod_playwright_evidence.py", REPORTER,
+             *(f"tests/e2e/{file}" for file in (*BATCH5_FILES, *(file for file, _ in BATCH5_MOVED_CASES))))
+    if any(not (root / file).is_file() or (root / file).is_symlink() for file in files):
+        raise EvidenceError("missing_or_linked_batch5_source")
+    return {file: _hash(root / file) for file in files}
 
 
 def _app_skip_identity(row):
@@ -1063,12 +1226,14 @@ def _binding(root, invocation, args, env):
     }
     _tester_partition(binding)
     _app_project_partition(binding)
+    _batch5_partition(binding)
     return binding
 
 
 def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> int:
     env = dict(os.environ if env is None else env)
     binding = _binding(root, invocation, args, env)
+    batch5_sources = _batch5_source_hashes(root) if invocation in BATCH5_PROJECTS else None
     destination = root / EVIDENCE / invocation
     destination.mkdir(parents=True, exist_ok=False)
     # Absolute host paths are checked internally, but never archived.
@@ -1143,7 +1308,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _check_notes22_evidence(binding, discovery)
         partition = _tester_partition(binding)
         app_partition = _app_project_partition(binding)
-        if partition is not None or app_partition is not None:
+        batch5_partition = _batch5_partition(binding)
+        if partition is not None or app_partition is not None or batch5_partition is not None:
             canonical_invocation = f"{invocation}-canonical"
             canonical_directory = root / EVIDENCE / canonical_invocation
             canonical_directory.mkdir(parents=True, exist_ok=False)
@@ -1179,6 +1345,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             }
             if partition is not None:
                 _check_tester_selection(binding, discovery, canonical)
+            elif batch5_partition is not None:
+                _check_batch5_selection(binding, discovery, canonical)
             else:
                 _check_app_selection(binding, discovery, canonical)
             with (destination / "canonical-native-discovery.json").open("xb") as stream:
@@ -1214,6 +1382,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _reconcile(discovery, result)
         if app_partition is not None:
             _check_app_selection(binding, result, canonical, execution=True)
+        if batch5_partition is not None:
+            _check_batch5_selection(binding, result, canonical, execution=True)
         _check_batch3_evidence(binding, result, execution=True)
         _check_batch4_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, result, execution=True)
@@ -1263,6 +1433,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         ).stdout.strip()
         if head != binding["checkout_sha"]:
             raise EvidenceError("checkout_changed_during_execution")
+        if batch5_sources is not None and _batch5_source_hashes(root) != batch5_sources:
+            raise EvidenceError("batch5_source_changed_during_execution")
         marker["phase"] = "complete"
         marker["completed"] = True
         code = process.returncode
@@ -1278,11 +1450,13 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
                 **marker,
                 "finished_at": datetime.now(UTC).isoformat(),
                 "test_count": len(result["tests"]),
+                **({"batch5_proof_scopes": _batch5_proofs(result)} if batch5_partition is not None else {}),
+                **({"batch5_source_sha256": batch5_sources} if batch5_partition is not None else {}),
                 "sha256": {
                     name: _hash(destination / name)
                     for name in sorted(
                         REPORT_FILES | (TESTER_CANONICAL_FILES
-                                        if partition is not None or app_partition is not None
+                                        if partition is not None or app_partition is not None or batch5_partition is not None
                                         else set())
                     )
                 },
@@ -1553,8 +1727,10 @@ def validate(root: Path, required, expected: str) -> None:
         binding = completion["binding"]
         partition = _tester_partition(binding)
         app_partition = _app_project_partition(binding)
+        batch5_partition = _batch5_partition(binding)
         report_files = REPORT_FILES | (
-            TESTER_CANONICAL_FILES if partition is not None or app_partition is not None else set()
+            TESTER_CANONICAL_FILES
+            if partition is not None or app_partition is not None or batch5_partition is not None else set()
         )
         if (
             binding["release_sha"] != expected
@@ -1565,7 +1741,7 @@ def validate(root: Path, required, expected: str) -> None:
             raise EvidenceError("completion_release_mismatch")
         if exit_marker["wrapper_exit"] or completion["execution_exit"]:
             raise EvidenceError("failed_invocation")
-        if app_partition is not None and (
+        if (app_partition is not None or batch5_partition is not None) and (
             completion.get("phase") != "complete"
             or exit_marker.get("phase") != "complete"
             or completion.get("discovery_exit") != 0
@@ -1587,7 +1763,7 @@ def validate(root: Path, required, expected: str) -> None:
                 raise EvidenceError("evidence_binding_mismatch")
         discovery = _json(directory / "discovery.json")
         result = _json(directory / "results.json")
-        if partition is not None or app_partition is not None:
+        if partition is not None or app_partition is not None or batch5_partition is not None:
             canonical = _json(directory / "canonical-discovery.json")
             canonical_binding = canonical["binding"]
             if (
@@ -1605,6 +1781,14 @@ def validate(root: Path, required, expected: str) -> None:
                 raise EvidenceError("canonical_tester_binding_mismatch")
             if partition is not None:
                 _check_tester_selection(binding, discovery, canonical)
+            elif batch5_partition is not None:
+                _validate_app_native(root, directory, binding, discovery, result, canonical)
+                _check_batch5_selection(binding, discovery, canonical)
+                _check_batch5_selection(binding, result, canonical, execution=True)
+                if completion.get("batch5_source_sha256") != _batch5_source_hashes(root):
+                    raise EvidenceError("batch5_source_receipt_mismatch")
+                if completion.get("batch5_proof_scopes") != _batch5_proofs(result):
+                    raise EvidenceError("batch5_proof_receipt_mismatch")
             else:
                 _validate_app_native(root, directory, binding, discovery, result, canonical)
                 _check_app_selection(binding, discovery, canonical)
@@ -1673,6 +1857,43 @@ def validate_tester_partition_union(root: Path, required, expected: str) -> None
         raise EvidenceError("oct13_partition_order_or_union_mismatch")
 
 
+def validate_batch5_release_union(root: Path, required, expected: str):
+    roles = [*TESTER_PARTITIONS, *BATCH5_PROJECTS]
+    if len(required) != len(roles) or set(required) != set(roles):
+        raise EvidenceError("missing_or_duplicate_batch5_release_role")
+    validate_tester_partition_union(root, list(TESTER_PARTITIONS), expected)
+    validate(root, list(BATCH5_PROJECTS), expected)
+    selected = []
+    canonical_identity = None
+    config_digest = None
+    for role in roles:
+        directory = root / EVIDENCE / role
+        result = _json(directory / "results.json")
+        binding = result["binding"]
+        digest = binding["config_sha256"]
+        if config_digest is not None and digest != config_digest:
+            raise EvidenceError("batch5_release_source_mismatch")
+        config_digest = digest
+        canonical = _json(directory / "canonical-discovery.json")
+        retained = _tester_inventory(canonical)
+        batch5 = [row for row in canonical["tests"]
+                  if row["project_name"] in BATCH5_PROJECTS.values()]
+        _batch5_rows(batch5, {project: index for index, project in enumerate(BATCH5_PROJECTS.values())})
+        identities = [_tester_case_identity(row) for row in (*retained, *batch5)]
+        if canonical_identity is not None and identities != canonical_identity:
+            raise EvidenceError("batch5_release_canonical_mismatch")
+        canonical_identity = identities
+        selected.extend(_tester_case_identity(row) for row in result["tests"])
+    if len(selected) != len(set(selected)) or Counter(selected) != Counter(canonical_identity):
+        raise EvidenceError("batch5_release_union_mismatch")
+    original = sum(TESTER_PARTITION_COUNTS.values()) + 2 * len(BATCH5_MOVED_CASES)
+    if original != 176:
+        raise EvidenceError("batch5_original_inventory_mismatch")
+    return {"tester_release_union": TESTER_PARTITION_CONTRACT, "original_case_count": original,
+            "new_batch5_case_count": sum(sum(pair) for pair in BATCH5_CASE_COUNTS.values()),
+            "test_count": len(selected), "release_sha": expected}
+
+
 def validate_app_project_union(root: Path, required, expected: str):
     if (len(required) != len(APP_PROJECT_PARTITIONS)
             or set(required) != set(APP_PROJECT_PARTITIONS)):
@@ -1729,9 +1950,11 @@ def main() -> int:
     union = validator.add_mutually_exclusive_group()
     union.add_argument("--tester-partition-union", action="store_true")
     union.add_argument("--app-project-union", action="store_true")
+    union.add_argument("--batch5-release-union", action="store_true")
     contract = modes.add_parser("tester-partition-contract")
     contract.add_argument("--required-version", type=int, choices=[TESTER_PARTITION_CONTRACT])
     modes.add_parser("batch4-governance")
+    modes.add_parser("batch5-contract")
     options = parser.parse_args()
     try:
         if options.mode == "tester-partition-contract":
@@ -1742,8 +1965,16 @@ def main() -> int:
         if options.mode == "batch4-governance":
             print("enabled" if batch4_governance_state(ROOT) else "disabled")
             return 0
+        if options.mode == "batch5-contract":
+            counts = _batch5_counts()
+            _batch5_source_hashes(ROOT)
+            print(json.dumps({"batch5_contract": BATCH5_CONTRACT_VERSION, "files": counts,
+                              "roles": BATCH5_PROJECTS, "proof_scopes": BATCH5_PROOF_SCOPES,
+                              "case_proof_scopes": BATCH5_CASE_PROOF_SCOPES}))
+            return 0
         if options.mode == "validate":
             validation = (
+                validate_batch5_release_union if options.batch5_release_union else
                 validate_app_project_union if options.app_project_union else
                 validate_tester_partition_union if options.tester_partition_union else validate
             )
@@ -1752,7 +1983,7 @@ def main() -> int:
                 options.required,
                 os.environ.get("CASEOPS_EXPECTED_RELEASE_SHA", ""),
             )
-            if options.app_project_union:
+            if options.app_project_union or options.batch5_release_union:
                 print(json.dumps(receipt))
             return 0
         arguments = options.arguments

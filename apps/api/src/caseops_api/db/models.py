@@ -44,6 +44,7 @@ from caseops_api.db.ip_specialist_models import (  # noqa: F401
     IpSpecialistRecord,
     IpSpecialistVersion,
 )
+from caseops_api.db.version_identity import version_identity_key
 
 
 def utcnow() -> datetime:
@@ -16176,6 +16177,17 @@ class IpPatentFamilyVersion(Base):
     )
 
 
+Index(
+    "ix_patent_family_versions_identity_key",
+    version_identity_key(
+        IpPatentFamilyVersion.company_id,
+        IpPatentFamilyVersion.family_id,
+        IpPatentFamilyVersion.version,
+    ),
+    info={"caseops_postgresql_only": True},
+).ddl_if(dialect="postgresql")
+
+
 class IpPatentApplication(Base):
     __tablename__ = "ip_patent_applications"
     __table_args__ = (
@@ -16284,6 +16296,17 @@ class IpPatentApplicationVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+Index(
+    "ix_patent_application_versions_identity_key",
+    version_identity_key(
+        IpPatentApplicationVersion.company_id,
+        IpPatentApplicationVersion.application_id,
+        IpPatentApplicationVersion.version,
+    ),
+    info={"caseops_postgresql_only": True},
+).ddl_if(dialect="postgresql")
 
 
 class IpPatentApplicationIdentifier(Base):

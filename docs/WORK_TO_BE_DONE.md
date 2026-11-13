@@ -233,6 +233,88 @@ post-failure diagnostics remain distinct in the bug ledger. Live Play Console
 still shows changes not submitted for review. No signed release or store
 publication is established by these builds.
 
+## 2026-11-11 - Workbook 5
+
+November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
+zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
+No production certification. Controlled frozen filesystem probes reproduce
+shared-Temp sibling timestamp refusals while isolated storage passes the exact
+same guard; historical exact failure predicates remain unknown. Canonical
+native-runner isolation with explicit private runtime-parent/claims, trusted
+Windows ACL host and exact cleanup has complementary focused proof:
+Windows100=93P/7explicitS and Linux runner91=83P/8WindowsS; all91runner IDs
+passed on an applicable platform, plus9Windows wrapper cases. All original
+timestamps/security/SQL/460-label assertions, ambient cache/binaries and app/
+MacBook boundaries remain unchanged. Complete replacement Docker/CI/protected
+main/exact deployment and433-case production replay still required. Old failed
+evidence and observer-version limitations are preserved; no fixed verdict.
+
+Candidate-only, release NO-GO. [Twenty-report triage](BUGS5_TRIAGE_2026-11-11.md)
+separates actual missing contract edit/view/term actions and a retained email
+placeholder leak from enhancements, unconfirmed retrieval/provider reports and
+verified-source/evaluation dependencies. Source/script/SDK success cannot close
+the broader legal-quality, full corpus, all-India directory, official registry
+sync or calibrated prediction requests. Add complete discovered desktop/phone
+browser regressions for each bounded repair and keep the original acceptance
+boundaries open until exact deployed proof. No native-app change is in scope.
+The same audit retains eight legacy binary-success body/deadline consumers and
+the pre-existing Matter lock across email transport as separate open adjacent
+work. See the explicit inventory in the triage; do not infer global closure from
+the new draft/contract helper or from emulated email acceptance.
+
+November12 continuation: current candidate repairs representative assistant
+intent, retained `query`/canonical `q` and mode-navigation recovery, and row-local
+deep retained JSON. Preserve actual red/green and failed full-Docker evidence;
+do not claim legal research/model relevance or original-turn reproduction from
+the finite mock-backed controls. Release guard1356 passes and API/page component
+passes still require a fresh14-case built desktop/phone selection, complete
+canonical Docker/green CI/protected main/exact deployment and live replay.
+
+FullDocker06 continuation is NO-GO: group03 retained a disclosure hydration
+work-bound failure after1022complete native passes, although exact2b7 CI52jobs
+and all784web cases succeeded with21explicit skips. The isolated complete-key
+draft must reproduce stale version-table statistics, retain all original
+budgets/ACL/missing-row behavior, and pass focused plus complete replacement
+gates before integration. The active2b7 full run remains unchanged; no main or
+production action. Canonical ownership is IPLF-080B/UJ-29/PAT-01/IP-SCOPE plus
+NFT-005/J14-M14; historical032/UJ-02/090A note labels do not transfer ownership.
+This is not MacBook app work.
+
+Owner subsequently approved shared CI trust/setup repairs, not native app work.
+Two Windows pre-audit failures are retained. CI-only exact pinned-archive
+hardening, unchanged whole-operation budgets and12new regression declarations
+still need actual standard tooling/native Windows/green CI acceptance. Default
+readers, trust/owner/byte/namespace fences and apps/mobile bytes remain unchanged.
+The7949 Linux harness exposed a stale shared-host reference to the changed npm
+constructor. Refresh only that exact hash/size, preserving all source-binding
+and tamper checks; native Windows and full later-source CI are still owed.
+7b fixes that link but retains the generated entry's old helper hash. Update
+only the generated fingerprint and verify the complete canonical renderer plus
+all input pins; existing binding/tamper assertions and app/MacBook scope stay
+unchanged. String metadata validation is not source-suite or build acceptance.
+API11 separately retains three new SQLite fixture setup failures, not migration
+refusal reproductions. Use canonical writer sessions and enabled foreign keys,
+preserve plain-session rejection plus all row/catalog/revision assertions and
+rerun the whole migration module and later release inventory before closure.
+
+Current follow-up: exact structured identity equality and two nonunique
+concurrent expression indexes replace range proposals in isolated source.
+Their55declared migration cases, health/SQLite checks and82physical profiles
+are UNEXECUTED. Complete rejected3d PG4088=4078P/10callF/all12264phases also
+proves the adjacent application scan defect. No release/fixed claim is made.
+
+F8 hosted original42plan scale now passes501work/400blocks, but its actual
+PG8 chained downgrade removed both new indexes before historical refusal.
+The follow-up pre-DDL destination guard,61declaredmigration cases/18PG, exact/
+relative parent replay, matching compiled governance projection and two
+current server-head assertion updates remain unexecuted. Do not weaken the
+existing catalog/row/privacy/revision assertions or describe this as certified.
+
+Hosted3d8152 also fails the original scale case (PG4:127P/1F of128,384phases),
+with six1000702work/59900block plans. The isolated lower-only full-order seek
+and40-plan regression were withdrawn before execution. No source-review or literal-limit
+claim overrides this actual failure; keep original successor/ACL/source fences.
+
 ## 2026-11-07 - Owner AI Requirements
 
 The 30-section v2.1 document is evaluated in

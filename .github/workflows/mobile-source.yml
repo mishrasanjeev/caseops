@@ -3,10 +3,10 @@ name: Mobile source gates
 on:
   pull_request:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/statutes/structured-schedule-api.json"]
   push:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/statutes/structured-schedule-api.json"]
 
 permissions:
   contents: read
@@ -237,7 +237,10 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        timeout-minutes: 5
         run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium
+      # Match ci.yml: avoid mutable apt/font downloads, but require the real
+      # Chromium runtime to execute a local smoke page before the full suite.
       - name: Verify Playwright Chromium runtime
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -270,7 +273,6 @@ jobs:
             process.exit(1);
           });
           NODE
-
       - name: Type-check both platform adapters
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -466,7 +468,9 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        timeout-minutes: 5
         run: node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium
+      # Keep the built-browser handoff on the same fail-closed runtime proof.
       - name: Verify Playwright Chromium runtime
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -499,7 +503,6 @@ jobs:
             process.exit(1);
           });
           NODE
-
       - env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}

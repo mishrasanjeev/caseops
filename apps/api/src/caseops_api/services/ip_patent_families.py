@@ -34,6 +34,7 @@ from caseops_api.db.models import (
     IpPatentFamily,
     IpPatentFamilyVersion,
 )
+from caseops_api.db.version_identity import version_identity_key
 from caseops_api.schemas.ip_documents import IpDocumentLinkTarget
 from caseops_api.schemas.ip_patents import (
     PatentDocumentSource,
@@ -672,22 +673,17 @@ def list_patent_families(
             column("version", IpPatentFamilyVersion.__table__.c.version.type),
             name="admitted_patent_disclosure_keys",
         ).data(version_keys)
-        key_columns = (
-            IpPatentFamilyVersion.family_id,
+        indexed_key = version_identity_key(
+            IpPatentFamilyVersion.company_id, IpPatentFamilyVersion.family_id,
             IpPatentFamilyVersion.version,
         )
-        indexed_key = tuple_(*key_columns)
-        admitted_key = tuple_(wanted_versions.c.family_id, wanted_versions.c.version)
-        # Fix the tenant and bound both ends of the admitted key. Ordering
-        # only the suffix gives the company-only indexes no useful sort prefix.
+        admitted_key = version_identity_key(
+            company_key, wanted_versions.c.family_id, wanted_versions.c.version
+        )
+        # The expression index owns one complete identity, not a tenant-prefix range.
         picked_version = (
             select(IpPatentFamilyVersion)
-            .where(
-                IpPatentFamilyVersion.company_id == company_key,
-                indexed_key >= admitted_key,
-                indexed_key <= admitted_key,
-            )
-            .order_by(*key_columns)
+            .where(indexed_key == admitted_key)
             .correlate(wanted_versions)
             .limit(literal_column("1"))
             .lateral("admitted_patent_disclosure_row")

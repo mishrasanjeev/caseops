@@ -236,6 +236,119 @@ test('hash-bound local gateway inputs retain canonical LF checkout and stored Gi
   }
 });
 
+const legacyMobileSourceTriggers = [
+  'package.json', 'package-lock.json', 'apps/mobile/**', 'apps/api/**', 'apps/web/**',
+  'tests/e2e/support/**', 'tests/mobile-web-auth/**', 'scripts/mobile/**',
+  'playwright.mobile-handoff.config.ts', 'tsconfig.e2e.json',
+  '.github/workflows/mobile-source.yml', '.github/actions/node-trust/**',
+];
+const rootWebMobileSourceTriggers = [
+  '.dockerignore', '.gcloudignore', 'docs/security/js-license-compliance-review-2026-10-12.md',
+  'license-policy/reviewed-packages.json', 'license-policy/upstream/**',
+  'tests/e2e/ram-2026-11-11-bugs.spec.ts', 'tests/fixtures/node-default-tls-probe.cjs',
+  'tests/fixtures/statutes/structured-schedule-api.json',
+];
+const mobileSourceWorkflow = () => require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
+function assertMobileSourceTriggers(workflow) {
+  const expected = [...legacyMobileSourceTriggers, ...rootWebMobileSourceTriggers].sort();
+  for (const event of ['push', 'pull_request'])
+    assert.deepEqual([...workflow.on[event].paths].sort(), expected, 'EXACT_MOBILE_SOURCE_TRIGGERS:' + event);
+}
+
+function mobileWebBuildInputs() {
+  const copies = { api: new Set(), web: new Set() };
+  for (const image of ['api', 'web']) {
+    const source = readFileSync(path.join(repo, 'apps', image, 'Dockerfile'), 'utf8');
+    for (const line of source.replace(/\\\r?\n/g, '').split(/\r?\n/)) {
+      if (!line.startsWith('COPY ')) continue;
+      const words = line.trim().split(/\s+/);
+      if (words.some(word => word.startsWith('--from='))) continue;
+      for (const value of words.slice(1, -1).filter(word => !word.startsWith('--'))) {
+        assert.match(value, /^[A-Za-z0-9_.\/-]+$/, 'LITERAL_ROOT_COPY_INPUT_REQUIRED');
+        assert.ok(!value.split('/').includes('..'));
+        copies[image].add((image === 'api' ? 'apps/api/' : '') + value.replace(/\/$/, ''));
+      }
+    }
+    assert.ok(copies[image].size);
+  }
+  const pending = [], visited = new Set(), external = new Set(), web = path.join(repo, 'apps/web');
+  function units(directory) {
+    for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (item.name.startsWith('.') || ['node_modules', 'coverage', 'test-results', 'playwright-report'].includes(item.name)) continue;
+      const file = path.join(directory, item.name);
+      if (item.isDirectory()) units(file);
+      else if (/\.test\.tsx?$/.test(item.name)) pending.push(file);
+    }
+  }
+  units(web);
+  assert.ok(pending.length);
+  while (pending.length) {
+    const file = pending.pop();
+    if (visited.has(file)) continue;
+    visited.add(file); assert.ok(visited.size <= 10000, 'ROOT_UNIT_DEPENDENCY_BOUND');
+    const source = readFileSync(file, 'utf8');
+    const references = [...source.matchAll(/\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["'](\.[^"']+)["']/g),
+      ...source.matchAll(/\bnew\s+URL\(\s*["'](\.[^"']+)["']\s*,\s*import\.meta\.url\s*\)/g)];
+    for (const match of references) {
+      const base = path.resolve(path.dirname(file), match[1]);
+      assert.ok(base.startsWith(repo + path.sep), 'ROOT_FIXTURE_REFERENCE_ESCAPES');
+      const dependency = [base, ...['.ts', '.tsx', '.json'].map(suffix => base + suffix), path.join(base, 'index.ts'), path.join(base, 'index.tsx')]
+        .find(candidate => existsSync(candidate) && fs.statSync(candidate).isFile());
+      assert.ok(dependency, 'ROOT_FIXTURE_REFERENCE_REQUIRED:' + file + ':' + match[1]);
+      if (dependency.startsWith(web + path.sep)) continue;
+      const relative = path.relative(repo, dependency).split(path.sep).join('/'); external.add(relative);
+      if (/\.(?:ts|tsx|js|mjs|cjs)$/.test(dependency)) pending.push(dependency);
+    }
+  }
+  assert.deepEqual([...external].filter(input => !copies.web.has(input)).sort(), [], 'EVERY_EXTERNAL_UNIT_INPUT_REQUIRES_EXPLICIT_COPY');
+  const bootstrap = readFileSync(path.join(repo, 'scripts/mobile/local-bootstrap.py'), 'utf8');
+  for (const image of ['api', 'web']) {
+    const body = bootstrap.match(new RegExp('^' + image.toUpperCase() + '_PATHS = \\[([\\s\\S]*?)\\]\\s*$', 'm'))?.[1];
+    assert.ok(body && body.length <= 16384, 'LITERAL_NATIVE_FINGERPRINT_PATHS_REQUIRED');
+    assert.equal(body.replace(/"[^"\r\n]+"/g, '').replace(/[\s,]/g, ''), '');
+    const scopes = [...body.matchAll(/"([^"\r\n]+)"/g)].map(match => match[1]);
+    const required = new Set([...copies[image], ...(image === 'web' ? ['.dockerignore', '.gcloudignore', ...external] : [])]);
+    assert.deepEqual([...required].filter(input => !scopes.some(scope => input === scope || input.startsWith(scope + '/'))).sort(), [], 'NATIVE_IMAGE_FINGERPRINT_CLOSURE:' + image);
+  }
+  return new Set([...copies.api, ...copies.web, ...external, '.dockerignore', '.gcloudignore']);
+}
+
+function assertMobileBuildTriggerCoverage(workflow, inputs) {
+  const { minimatch } = require('minimatch');
+  for (const event of ['push', 'pull_request']) {
+    const missing = [...inputs].filter(input => {
+      const probe = fs.statSync(path.join(repo, input)).isDirectory() ? input + '/__context_member__' : input;
+      return !workflow.on[event].paths.some(pattern => minimatch(probe, pattern, { dot: true }));
+    }).sort();
+    assert.deepEqual(missing, [], 'ROOT_BUILD_TRIGGER_CLOSURE:' + event);
+  }
+}
+
+test('mobile source CI retains every legacy filter and only the eight finite root web additions', () => {
+  assertMobileSourceTriggers(mobileSourceWorkflow());
+});
+
+test('mobile source CI covers every root COPY import filter and native fingerprint input', () => {
+  assertMobileBuildTriggerCoverage(mobileSourceWorkflow(), mobileWebBuildInputs());
+});
+
+test('mobile source CI refuses each old or new trigger omission and broader tree admission', () => {
+  const workflow = mobileSourceWorkflow(), inputs = mobileWebBuildInputs();
+  assertMobileSourceTriggers(workflow); assertMobileBuildTriggerCoverage(workflow, inputs);
+  for (const event of ['push', 'pull_request']) {
+    for (const omitted of [...legacyMobileSourceTriggers, ...rootWebMobileSourceTriggers]) {
+      const changed = structuredClone(workflow); changed.on[event].paths = changed.on[event].paths.filter(value => value !== omitted);
+      assert.throws(() => assertMobileSourceTriggers(changed), /EXACT_MOBILE_SOURCE_TRIGGERS/, event + ':' + omitted);
+      if (rootWebMobileSourceTriggers.includes(omitted))
+        assert.throws(() => assertMobileBuildTriggerCoverage(changed, inputs), /ROOT_BUILD_TRIGGER_CLOSURE/, event + ':' + omitted);
+    }
+    for (const broad of ['tests/**', 'tests/e2e/**', 'license-policy/**']) {
+      const changed = structuredClone(workflow); changed.on[event].paths.push(broad);
+      assert.throws(() => assertMobileSourceTriggers(changed), /EXACT_MOBILE_SOURCE_TRIGGERS/, event + ':' + broad);
+    }
+  }
+});
+
 test('mobile source CI installs the renderer browser and both locked dependency graphs', () => {
   const workflow = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
   const steps = workflow.jobs.source.steps;

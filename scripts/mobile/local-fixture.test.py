@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import stat
 import subprocess
 import ssl
@@ -448,20 +449,37 @@ class PrivateFixtureFileTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    @staticmethod
+    def missing_fingerprint_paths(required, scopes):
+        return sorted(value for value in required if not any(
+            Path(value) == scope or Path(value).is_relative_to(scope) for scope in scopes
+        ))
+
     def test_web_source_fingerprint_covers_every_root_context_copy_and_filter(self):
-        source = (bootstrap_module.REPO / "apps/web/Dockerfile").read_text(encoding="utf-8")
         scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
-        copied = set()
-        for line in source.splitlines():
-            if not line.startswith("COPY ") or line.startswith("COPY --from="):
-                continue
-            fields = line.split()
-            copied.update(value for value in fields[1:-1] if not value.startswith("--"))
-        self.assertTrue(copied)
-        for path in copied | {".dockerignore", ".gcloudignore"}:
-            relative = Path(path)
-            self.assertTrue(any(relative == scope or relative.is_relative_to(scope) for scope in scopes), path)
-        for omitted in ("scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
+        missing = {}
+        for image, context, values in (
+            ("web", Path("."), bootstrap_module.WEB_PATHS),
+            ("api", Path("apps/api"), bootstrap_module.API_PATHS),
+        ):
+            source = (bootstrap_module.REPO / f"apps/{image}/Dockerfile").read_text(encoding="utf-8")
+            copied = set()
+            for line in source.replace("\\\n", "").splitlines():
+                if not line.startswith("COPY "):
+                    continue
+                fields = shlex.split(line, comments=True)
+                if any(value.startswith("--from=") for value in fields[1:]):
+                    continue
+                copied.update((context / value).as_posix() for value in fields[1:-1]
+                              if not value.startswith("--"))
+            self.assertTrue(copied, image)
+            required = copied | ({".dockerignore", ".gcloudignore"} if image == "web" else set())
+            omitted = self.missing_fingerprint_paths(required, [Path(value) for value in values])
+            if omitted:
+                missing[image] = omitted
+        self.assertEqual(missing, {}, f"Fingerprint inputs missing by image: {missing}")
+        for omitted in ("tests/e2e/ram-2026-11-11-bugs.spec.ts",
+                        "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
                         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
                         "apps/api/pyproject.toml", "apps/api/uv.lock",
                         "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
@@ -471,6 +489,69 @@ class BootstrapTests(unittest.TestCase):
                         "apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING"):
             reduced = [scope for scope in scopes if scope != Path(omitted)]
             self.assertFalse(any(Path(omitted) == scope or Path(omitted).is_relative_to(scope) for scope in reduced))
+
+    def test_web_source_fingerprint_reports_all_missing_inputs(self):
+        omitted = {"tests/e2e/ram-2026-11-11-bugs.spec.ts",
+                   "scripts/mobile/npm-tooling.mjs", "apps/api/pyproject.toml"}
+        required = omitted | {"apps/web/app/page.tsx"}
+        scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
+        self.assertEqual(self.missing_fingerprint_paths(required, scopes), [])
+        reduced = [scope for scope in scopes if scope.as_posix() not in omitted]
+        self.assertEqual(self.missing_fingerprint_paths(required, reduced), sorted(omitted))
+
+    def test_web_source_fingerprint_keeps_test_scope_finite(self):
+        paths = bootstrap_module.WEB_PATHS
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertEqual({value for value in paths if Path(value).parts[0] == "tests"}, {
+            "tests/e2e/support", "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+            "tests/fixtures/statutes/structured-schedule-api.json",
+            "tests/fixtures/node-default-tls-probe.cjs",
+        })
+
+    def test_web_source_fingerprint_tracks_communications_inputs_not_neighboring_specs(self):
+        inputs = ("tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/support/env.ts",
+                  "tests/e2e/support/ram-bugs4.ts")
+        neighbor = "tests/e2e/unlisted-communications.spec.ts"
+        for selected in inputs:
+            with self.subTest(path=selected), tempfile.TemporaryDirectory() as directory:
+                root, changed = Path(directory), set()
+                for name in (*inputs, neighbor):
+                    target = root / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(f"Original synthetic source: {name}\n", encoding="utf-8")
+
+                # Model Git's pathspec selection; snapshot still hashes the real fixture bytes.
+                def git(command, **_kwargs):
+                    self.assertEqual(command[0], "git")
+                    if command[1:] == ["rev-parse", "HEAD"]:
+                        return "a" * 40
+                    scopes = command[command.index("--") + 1:]
+                    self.assertEqual(scopes, bootstrap_module.WEB_PATHS)
+                    included = sorted(set((*inputs, neighbor)) - set(
+                        self.missing_fingerprint_paths((*inputs, neighbor), [Path(value) for value in scopes])
+                    ))
+                    if command[1] == "ls-files":
+                        return "" if "--others" in command else "\0".join(included)
+                    self.assertEqual(command[1], "status")
+                    return "\n".join(f" M {name}" for name in included if name in changed).strip()
+
+                with patch.object(bootstrap_module, "REPO", root), patch.object(bootstrap_module, "run", side_effect=git):
+                    before = bootstrap_module.snapshot(bootstrap_module.WEB_PATHS)
+                    self.assertEqual([row["path"] for row in before["files"]], sorted(inputs))
+                    self.assertFalse(before["dirty"])
+                    (root / neighbor).write_text("Unrelated change\n", encoding="utf-8")
+                    changed.add(neighbor)
+                    self.assertEqual(bootstrap_module.snapshot(bootstrap_module.WEB_PATHS), before)
+                    content = f"Reviewed changed source: {selected}\n".encode()
+                    (root / selected).write_bytes(content)
+                    changed.add(selected)
+                    after = bootstrap_module.snapshot(bootstrap_module.WEB_PATHS)
+                    self.assertNotEqual(after["fingerprint"], before["fingerprint"])
+                    self.assertEqual(after["head"], before["head"])
+                    self.assertTrue(after["dirty"])
+                    self.assertEqual(after["changedPaths"], [f"M {selected}"])
+                    row = next(row for row in after["files"] if row["path"] == selected)
+                    self.assertEqual(row["sha256"], hashlib.sha256(content).hexdigest())
 
     def test_ios_web_build_uses_the_configured_simulator_loopback_origins(self):
         with tempfile.TemporaryDirectory() as directory:

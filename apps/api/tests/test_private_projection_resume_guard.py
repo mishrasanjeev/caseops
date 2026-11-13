@@ -10,8 +10,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.test_batch5_release_wiring import batch5_capture as _batch5_capture
+from tests.test_batch5_release_wiring import capture as _native_capture
+from tests.test_batch5_release_wiring import evidence as native_evidence
 from tests.test_scheduler_inventory import INVENTORY_PATH
 from tests.test_scheduler_inventory import scheduler_inventory as guard
+
+capture = _native_capture
+batch5_capture = _batch5_capture
 
 SCHEDULER = guard.PRIVATE_PROJECTION_SCHEDULER
 JOB = "caseops-private-projection-maintenance"
@@ -30,6 +36,7 @@ REQUIRED_JOBS = (
     "Prod Playwright (test-legal-write-oct13-b)",
     "Prod Playwright (batch3)",
     "Prod Playwright (batch4)",
+    "Prod Playwright (batch5)",
     "Prod Playwright (test-legal-readonly)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
@@ -38,9 +45,10 @@ REQUIRED_JOBS = (
     "Record exact-release evidence",
 )
 NEW_PARTITION_SUITES = (
-    "test-legal-write-oct13-a", "test-legal-write-oct13-b", "batch3", "batch4",
+    "test-legal-write-oct13-a", "test-legal-write-oct13-b", "batch3", "batch4", "batch5",
 )
 MATRIX_ALIAS_SUITES = ("tester-index", *NEW_PARTITION_SUITES)
+BATCH5_NATIVE_ROLES = ("batch5-desktop", "batch5-mobile")
 
 
 def stamp(value: datetime) -> str:
@@ -238,7 +246,7 @@ def assert_no_resume(state):
 def test_private_resume_accepts_two_later_serial_clean_runs_after_historical_breach(monkeypatch):
     inventory, state = evidence(monkeypatch)
     original = copy.deepcopy(inventory)
-    assert len(REQUIRED_JOBS) == 14
+    assert len(REQUIRED_JOBS) == 15
 
     result = resume(inventory)
 
@@ -293,6 +301,7 @@ def _regular_dispatch_inventory(jobs):
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester",
+        "prod-batch5-tester",
     ], "Complete regular QA partition inventory changed"
     regular = {"Resolve exact production release", "Record exact-release evidence"}
     for key in partitions:
@@ -305,10 +314,110 @@ def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
     regular = _regular_dispatch_inventory(jobs)
-    assert len(regular) == 14 and set(REQUIRED_JOBS) == regular
+    assert len(regular) == 15 and set(REQUIRED_JOBS) == regular
     assert "prod-test-legal-write-oct13" not in jobs
     assert "Prod Playwright (test-legal-write-oct13)" not in regular
     assert "Scheduled read-only statute verification" not in regular
+
+
+def test_private_resume_batch5_job_binds_both_required_native_receipts():
+    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
+    jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
+    batch5 = jobs["prod-batch5-tester"]
+    assert batch5["strategy"]["matrix"]["suite"] == ["batch5"]
+    assert batch5["strategy"]["max-parallel"] == 1
+    step = next(row for row in batch5["steps"]
+                if row.get("name") == "Run release-owned Batch5 tester acceptance")
+    invocations = [line.split('caseops-prod-playwright" ', 1)[1].split(" ", 1)[0]
+                   for line in step["run"].splitlines()
+                   if line.strip().startswith('bash "$RUNNER_TEMP/caseops-prod-playwright" ')]
+    assert invocations == list(BATCH5_NATIVE_ROLES)
+    assert "set -euo pipefail" in step["run"]
+    assert not step.get("continue-on-error", False)
+    record = jobs["record-release-evidence"]
+    assert "prod-batch5-tester" in record["needs"]
+    assert "needs.prod-batch5-tester.result == 'success'" in record["if"]
+    validation = next(row for row in record["steps"] if row.get("name") == (
+        "Require current release-owned Batch5 evidence before certification"
+    ))
+    assert "validate --required batch5-desktop batch5-mobile" in validation["run"]
+    assert "batch5-predates.json" in validation["run"] and "exit 1" in validation["run"]
+    assert not validation.get("if")
+    assert not validation.get("continue-on-error", False)
+
+
+@pytest.mark.parametrize("role", BATCH5_NATIVE_ROLES)
+@pytest.mark.parametrize("damage", [None, "missing", "failure", "duplicate"])
+def test_private_resume_batch5_native_contract_requires_each_complete_positive_role(
+    batch5_capture, role, damage,
+):
+    state = batch5_capture
+    assert native_evidence.BATCH5_PROJECTS == {
+        "batch5-desktop": "batch5-prod-chromium", "batch5-mobile": "batch5-prod-mobile",
+    }
+    for current in BATCH5_NATIVE_ROLES:
+        if damage == "missing" and current == role:
+            continue
+        if current == role and damage == "failure":
+            test = state.batch5_documents[current][1]["suites"][0]["specs"][0]["tests"][0]
+            test["status"] = "unexpected"
+            test["results"][0]["status"] = "failed"
+        elif current == role and damage == "duplicate":
+            discovery = state.batch5_documents[current][0]
+            discovery["suites"][-1] = copy.deepcopy(discovery["suites"][0])
+        rejected = current == role and damage in {"failure", "duplicate"}
+        assert state.batch5_run(current) == int(rejected)
+        if rejected:
+            completion = state.root / native_evidence.EVIDENCE / current / "completion.json"
+            assert not completion.exists()
+    if damage is None:
+        native_evidence.validate(
+            state.root, list(BATCH5_NATIVE_ROLES), state.env["CASEOPS_EXPECTED_RELEASE_SHA"]
+        )
+    else:
+        with pytest.raises((native_evidence.EvidenceError, OSError)):
+            native_evidence.validate(
+                state.root, list(BATCH5_NATIVE_ROLES), state.env["CASEOPS_EXPECTED_RELEASE_SHA"]
+            )
+
+
+@pytest.mark.parametrize("role", BATCH5_NATIVE_ROLES)
+@pytest.mark.parametrize("damage", ["missing", "duplicate", "substitute"])
+def test_private_resume_batch5_native_union_refuses_missing_or_duplicate_role_scope(
+    tmp_path, role, damage,
+):
+    roles = [*native_evidence.TESTER_PARTITIONS, *BATCH5_NATIVE_ROLES]
+    if damage == "missing":
+        roles.remove(role)
+    elif damage == "duplicate":
+        roles.append(role)
+    else:
+        roles[roles.index(role)] = next(value for value in BATCH5_NATIVE_ROLES if value != role)
+    with pytest.raises(
+        native_evidence.EvidenceError, match="missing_or_duplicate_batch5_release_role"
+    ):
+        native_evidence.validate_batch5_release_union(tmp_path, roles, "a" * 40)
+
+
+@pytest.mark.parametrize("name", [
+    "Prod Playwright (batch5-desktop)", "Prod Playwright (batch5-mobile)",
+    "Prod Playwright (batch5) (batch5-desktop)", "Prod Playwright (batch5) (batch5-mobile)",
+])
+def test_private_resume_native_width_is_not_a_github_batch5_job_alias(monkeypatch, name):
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] == ["run", "view"]:
+            job = next(row for row in result["jobs"] if row["name"] == "Prod Playwright (batch5)")
+            job["name"] = name
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError, match="job name is unknown"):
+        resume(inventory)
+    assert_no_resume(state)
 
 
 @pytest.mark.parametrize("job_id", ["scheduled-statute-verification", "record-release-evidence"])
@@ -321,7 +430,7 @@ def test_private_resume_inventory_rejects_existing_non_qa_job_repurposed_as_matr
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = copy.deepcopy(yaml.safe_load(workflow_path.read_text())["jobs"])
     regular = _regular_dispatch_inventory(jobs)
-    assert regular == set(REQUIRED_JOBS) and len(regular) == 14
+    assert regular == set(REQUIRED_JOBS) and len(regular) == 15
     original_ids = set(jobs)
     original_steps = copy.deepcopy(jobs[job_id]["steps"])
     assert jobs[job_id]["name"] != "Prod Playwright (${{ matrix.suite }})"
@@ -338,7 +447,7 @@ def test_private_resume_inventory_rejects_existing_non_qa_job_repurposed_as_matr
 
 def captured_jobs():
     # Retain the original eleven-successful-job capture as historical evidence;
-    # never rewrite it to look like a fourteen-role current dispatch.
+    # never rewrite it to look like a complete current dispatch.
     path = Path(__file__).with_name("fixtures") / "prod_verify_38942699099_jobs.json"
     return json.loads(path.read_text(encoding="utf-8"))["jobs"]
 
@@ -381,7 +490,7 @@ def test_private_resume_requires_each_current_matrix_alias_to_complete(
         result = original_gh(arguments)
         if arguments[:2] != ["run", "view"]:
             return result
-        assert len(result["jobs"]) == 14
+        assert len(result["jobs"]) == 15
         job = next(row for row in result["jobs"]
                    if row["name"] == f"Prod Playwright ({suite})")
         job["name"] += f" ({suite})"

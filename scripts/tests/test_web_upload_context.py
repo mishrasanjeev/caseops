@@ -46,11 +46,15 @@ BUILDER_INPUTS = {
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
+    "tests/e2e/ram-2026-11-11-bugs.spec.ts",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
         "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
+        "draft_pdf_oracle_20261111",
+        "draft_pdf_production_policy_20261111",
+        "env", "ram-bugs4",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -177,6 +181,52 @@ class NativeUploadTests(unittest.TestCase):
         for name in (".dockerignore", ".gcloudignore"):
             lines = (ROOT / name).read_text(encoding="utf-8").splitlines()
             self.assertIn(f"!{helper}", lines)
+
+    def test_colocated_draft_pdf_oracle_has_explicit_builder_admission(self):
+        dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
+        runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
+        for stem, unit in (
+            ("draft_pdf_oracle_20261111", "DraftPdfOracle.test.ts"),
+            ("draft_pdf_production_policy_20261111", "DraftPdfProductionPolicy.test.ts"),
+        ):
+            with self.subTest(helper=stem):
+                helper = f"tests/e2e/support/{stem}.ts"
+                source = (ROOT / "apps/web/components/drafting" / unit).read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(f'from "../../../../tests/e2e/support/{stem}"', source)
+                self.assertIn(helper, BUILDER_INPUTS)
+                self.assertIn(f"COPY {helper} /app/{helper}", dockerfile.splitlines())
+                self.assertNotIn(helper, runner)
+                for name in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(
+                        f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines()
+                    )
+
+    def test_colocated_communications_ast_read_has_explicit_builder_admission(self):
+        source = (ROOT / "apps/web/lib/communications-journey.test.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'new URL("../../../tests/e2e/ram-2026-11-11-bugs.spec.ts", import.meta.url)',
+            source,
+        )
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8"
+        ).split("FROM trusted-base AS runner", 1)
+        for dependency in (
+            "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+            "tests/e2e/support/env.ts",
+            "tests/e2e/support/ram-bugs4.ts",
+        ):
+            with self.subTest(dependency=dependency):
+                self.assertIn(dependency, BUILDER_INPUTS)
+                self.assertIn(f"COPY {dependency} /app/{dependency}", builder.splitlines())
+                self.assertNotIn(dependency, runner)
+                for name in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(
+                        f"!{dependency}", (ROOT / name).read_text(encoding="utf-8").splitlines()
+                    )
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

@@ -580,7 +580,13 @@ for (const status of [503, 200]) {
   Object.assign(env, { CASEOPS_EXPECTED_RELEASE_SHA: sha, CASEOPS_PW_EVIDENCE_INVOCATION: invocation,
     CASEOPS_PW_EVIDENCE_PHASE: "execution", CASEOPS_PW_EVIDENCE_JSON_FILE: path.join(directory, "native-results.json"),
     CASEOPS_PW_EVIDENCE_JUNIT_FILE: path.join(directory, "native-results.xml") });
-  const result = spawnSync(process.execPath, [path.join(root, "node_modules/@playwright/test/cli.js"),
+  const playwrightCli = process.env.CASEOPS_TEST_PLAYWRIGHT_CLI ?? path.join(root, "node_modules/@playwright/test/cli.js");
+  assert.ok(path.isAbsolute(playwrightCli) && fs.statSync(playwrightCli).isFile(), "Installed Playwright CLI is required");
+  const installed = JSON.parse(fs.readFileSync(path.join(path.dirname(playwrightCli), "package.json"), "utf8"));
+  const locked = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  assert.equal(installed.version, locked.packages["node_modules/@playwright/test"].version);
+  env.NODE_PATH = path.resolve(path.dirname(playwrightCli), "../..");
+  const result = spawnSync(process.execPath, [playwrightCli,
     "test", `--config=${configFile}`, "--workers=1", "--retries=0"], { cwd: root, env, encoding: "utf8", timeout: 60000 });
   fs.writeFileSync(path.join(fixtureDirectory, "child.stdout.log"), result.stdout ?? "", { flag: "wx" });
   fs.writeFileSync(path.join(fixtureDirectory, "child.stderr.log"), result.stderr ?? "", { flag: "wx" });

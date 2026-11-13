@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
@@ -22,6 +23,7 @@ MAX_BYTES = 256 * 1024 * 1024
 MAX_LINE = 16 * 1024 * 1024
 MAX_RETAIN_FILES = 100_000
 MAX_RETAIN_BYTES = 16 * 1024**3
+PARENT_MARKER = ".caseops-native-parent.json"
 
 
 def native_path(path: Path) -> Path:
@@ -196,6 +198,7 @@ def directory_identity(path: Path) -> dict:
         not stat.S_ISDIR(metadata.st_mode)
         or stat.S_ISLNK(metadata.st_mode)
         or getattr(metadata, "st_file_attributes", 0) & 0x400
+        or getattr(metadata, "st_reparse_tag", 0)
     ):
         raise ValueError("Owned runtime directory identity is unsafe")
     return {
@@ -205,13 +208,222 @@ def directory_identity(path: Path) -> dict:
     }
 
 
+def physical_directory(path: Path) -> None:
+    if not path.is_absolute() or os.path.normcase(str(path.resolve())) != os.path.normcase(str(path)):
+        raise ValueError("Native runtime parent must be an absolute physical path without aliases")
+    for ancestor in reversed([path, *path.parents]):
+        directory_identity(ancestor)
+
+
+def comparison_path(path: Path) -> Path:
+    value = str(path.resolve())
+    if os.name == "nt" and value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif os.name == "nt" and value.startswith("\\\\?\\"):
+        value = value[4:]
+    return Path(value)
+
+
+def windows_system_directory() -> Path:
+    import ctypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    query = kernel.GetSystemWindowsDirectoryW
+    query.argtypes = (ctypes.c_wchar_p, ctypes.c_uint)
+    query.restype = ctypes.c_uint
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = query(buffer, len(buffer))
+    if not 0 < length < len(buffer):
+        raise ValueError("Trusted native Windows directory unavailable")
+    return Path(buffer.value)
+
+
+def windows_acl_host(path: Path) -> tuple[Path, dict]:
+    windows = windows_system_directory()
+    physical_directory(windows)
+    system32 = windows / "System32"
+    shell = system32 / "WindowsPowerShell/v1.0/powershell.exe"
+    modules = shell.parent / "Modules"
+    physical_directory(shell.parent)
+    physical_directory(modules)
+    info = shell.lstat()
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or getattr(info, "st_file_attributes", 0) & 0x400
+        or getattr(info, "st_reparse_tag", 0)
+        or os.path.normcase(str(shell.resolve())) != os.path.normcase(str(shell))
+    ):
+        raise ValueError("Trusted native PowerShell path unavailable")
+    env = {
+        "SystemRoot": str(windows), "windir": str(windows), "PATH": str(system32),
+        "PSModulePath": str(modules), "CASEOPS_NATIVE_ACL_PATH": str(path),
+    }
+    for key in ("TEMP", "TMP"):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    return shell, env
+
+
+def private_directory_owner(path: Path) -> dict:
+    """Read ownership/permissions; never repair an existing directory's ACL."""
+    if os.name != "nt":
+        info = path.lstat()
+        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ValueError("Native runtime directory must be current-user private (0700)")
+        return {"uid": info.st_uid}
+    # Python 3.13 mkdir(0700) supplies the private Windows DACL at creation.
+    # Inspect SID rules, not localized account names or Windows st_uid placeholders.
+    command = r"""
+$ErrorActionPreference = 'Stop'
+$u = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$a = Get-Acl -LiteralPath $env:CASEOPS_NATIVE_ACL_PATH
+$owner = $a.GetOwner([Security.Principal.SecurityIdentifier]).Value
+if ($owner -ne $u) { throw 'Runtime owner must be the current user SID' }
+if (-not $a.AreAccessRulesProtected) { throw 'Runtime DACL must be protected' }
+# OWNER RIGHTS is meaningful only after the exact current-user owner check.
+$allowed = @($u, 'S-1-3-4', 'S-1-5-18', 'S-1-5-32-544')
+$full = $false
+foreach ($r in $a.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    if ($r.IsInherited -or $r.AccessControlType -ne 'Allow' -or
+        $r.IdentityReference.Value -notin $allowed) {
+        throw 'Nonprivate runtime ACL'
+    }
+    if ($r.IdentityReference.Value -in @($u, 'S-1-3-4') -and
+        ($r.FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -eq
+            [Security.AccessControl.FileSystemRights]::FullControl -and
+        ($r.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -eq 0) {
+        $full = $true
+    }
+}
+if (-not $full) { throw 'Current user lacks runtime ownership access' }
+@{user_sid=$u; owner_sid=$owner; sddl=$a.Sddl} | ConvertTo-Json -Compress
+"""
+    shell, env = windows_acl_host(path)
+    try:
+        result = subprocess.run(
+            [str(shell), "-NoProfile", "-NonInteractive", "-Command", command],
+            env=env,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("Native runtime private Windows ownership unconfirmed") from exc
+    if result.returncode or not 0 < len(result.stdout) <= 16_384:
+        raise ValueError("Native runtime private Windows ownership unconfirmed")
+    owner = json.loads(result.stdout)
+    if not isinstance(owner, dict) or set(owner) != {"user_sid", "owner_sid", "sddl"} or not all(
+        isinstance(value, str) and value for value in owner.values()
+    ) or owner["owner_sid"] != owner["user_sid"]:
+        raise ValueError("Malformed Windows runtime ownership receipt")
+    return owner
+
+
+def read_parent_claim(parent: Path) -> tuple[dict, str]:
+    physical_directory(parent)
+    marker = parent / PARENT_MARKER
+    before = marker.lstat()
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or getattr(before, "st_file_attributes", 0) & 0x400
+        or getattr(before, "st_reparse_tag", 0)
+        or before.st_nlink != 1
+        or not 0 < before.st_size <= 4096
+    ):
+        raise ValueError("Unsafe native runtime parent claim")
+
+    def identity(info):
+        # Windows named st_dev can be zero. The physical parent is separately
+        # bound; retain the full file ID rather than equating unlike dev views.
+        device = () if os.name == "nt" else (info.st_dev,)
+        return (*device, info.st_ino, info.st_mode, info.st_nlink, info.st_size)
+
+    def stable(info):
+        return (
+            info.st_dev, *identity(info), info.st_mtime_ns, info.st_ctime_ns,
+            getattr(info, "st_birthtime_ns", None), getattr(info, "st_file_attributes", 0),
+            getattr(info, "st_reparse_tag", 0),
+        )
+
+    with marker.open("rb") as stream:
+        held = os.fstat(stream.fileno())
+        # Named and descriptor ctime have distinct Windows semantics. Each is
+        # checked against itself; cross-view identity never substitutes for time.
+        if identity(held) != identity(before):
+            raise ValueError("Native runtime parent claim identity changed")
+        data = stream.read(4097)
+        if stable(os.fstat(stream.fileno())) != stable(held) or stable(marker.lstat()) != stable(before):
+            raise ValueError("Native runtime parent claim changed")
+    claim = json.loads(data)
+    if (
+        not isinstance(claim, dict)
+        or set(claim) != {"version", "kind", "path", "identity", "owner", "nonce"}
+        or type(claim["version"]) is not int
+        or claim["version"] != 1
+        or claim["kind"] != "caseops-native-runtime-parent"
+        or claim["path"] != str(parent)
+        or claim["identity"] != directory_identity(parent)
+        or claim["owner"] != private_directory_owner(parent)
+        or not isinstance(claim["nonce"], str)
+        or re.fullmatch(r"[0-9a-f]{32}", claim["nonce"]) is None
+    ):
+        raise ValueError("Native runtime parent claim does not match current ownership/identity")
+    return claim, hashlib.sha256(data).hexdigest()
+
+
+def admit_runtime_parent(parent: Path, source: Path, evidence: Path) -> dict:
+    if not parent.is_absolute() or ".." in parent.parts or str(parent).startswith("\\\\"):
+        raise ValueError("Native runtime parent must be an absolute local physical path")
+    physical_directory(parent.parent)
+    excluded = [Path(tempfile.gettempdir()), source, evidence]
+    excluded.extend(
+        Path(value) for key, value in os.environ.items()
+        if key.lower() in {"onedrive", "onedriveconsumer", "onedrivecommercial"} and value
+    )
+    if os.environ.get("USERPROFILE"):
+        excluded.append(Path(os.environ["USERPROFILE"]) / "OneDrive")
+    for location in excluded:
+        location = comparison_path(location)
+        if parent.is_relative_to(location) or location.is_relative_to(parent):
+            raise ValueError("Native runtime parent overlaps global temp, OneDrive, source or evidence")
+    if os.name == "nt" and len(str(parent / "copg-12345678/collection/fixtures")) > 100:
+        raise ValueError("Native runtime fixture workspace is not short enough")
+    try:
+        parent.mkdir(mode=0o700)
+    except FileExistsError:
+        # Never adopt, chmod, or place a claim in an existing unclaimed directory.
+        if not (parent / PARENT_MARKER).is_file():
+            raise ValueError("Existing native runtime parent is unclaimed; left untouched") from None
+    else:
+        physical_directory(parent)
+        save(parent / PARENT_MARKER, {
+            "version": 1,
+            "kind": "caseops-native-runtime-parent",
+            "path": str(parent),
+            "identity": directory_identity(parent),
+            "owner": private_directory_owner(parent),
+            "nonce": secrets.token_hex(16),
+        })
+    claim, digest = read_parent_claim(parent)
+    return {"parent_claim": claim, "parent_claim_sha256": digest}
+
+
 def cleanup_workspace(workspace: Path, root: Path, ownership: dict, expected: dict) -> None:
+    try:
+        claim, digest = read_parent_claim(root)
+        physical_directory(workspace)
+        workspace_owner = private_directory_owner(workspace)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError("Owned runtime cleanup identity or inventory changed; retained") from exc
     resolved_root, resolved_workspace = root.resolve(), workspace.resolve()
     if (
         resolved_workspace.parent != resolved_root
         or not resolved_workspace.is_relative_to(resolved_root)
         or workspace.parent != root
         or not workspace.name.startswith("copg-")
+        or claim != ownership["parent_claim"]
+        or digest != ownership["parent_claim_sha256"]
+        or workspace_owner != ownership["workspace_owner"]
         or directory_identity(root) != ownership["temp_root_identity"]
         or directory_identity(workspace) != ownership["workspace_identity"]
         or fixture_inventory(workspace) != expected
@@ -333,16 +545,21 @@ def plan(identities: list[str], api: Path) -> list[dict]:
     return groups
 
 
-def execute(api: Path, folder: Path, arguments: list[str]) -> int:
-    temp_root = Path(tempfile.gettempdir()).resolve()
+def execute(api: Path, folder: Path, arguments: list[str], *, runtime_parent: Path) -> int:
+    parent_claim = admit_runtime_parent(runtime_parent, api.parent.parent, folder)
+    temp_root = runtime_parent
     root_identity = directory_identity(temp_root)
     workspace = Path(tempfile.mkdtemp(prefix="copg-", dir=temp_root))
     runtime = workspace / folder.name
     ownership = {
+        **parent_claim,
+        "runtime_parent": str(temp_root),
         "temp_root": str(temp_root),
         "temp_root_identity": root_identity,
         "workspace_identity": directory_identity(workspace),
+        "workspace_owner": private_directory_owner(workspace),
     }
+    physical_directory(workspace)
     marker = workspace / ".caseops-runtime-owner.json"
     save(marker, {"workspace": str(workspace), "evidence_destination": str(folder), **ownership})
     marker_bytes = marker.read_bytes()
@@ -539,7 +756,7 @@ def reconcile(folder: Path, expected: list[str], code: int) -> tuple[dict, ET.El
     return result, suite
 
 
-def run(api: Path, output: Path) -> int:
+def run(api: Path, output: Path, *, runtime_parent: Path) -> int:
     api, output = api.resolve(), native_path(output.resolve())
     root = api.parent.parent
     if os.environ.get("PYTEST_ADDOPTS", "").strip():
@@ -554,6 +771,7 @@ def run(api: Path, output: Path) -> int:
     ]
     if any(path.exists() for path in targets):
         raise ValueError("Refusing to overwrite native acceptance evidence")
+    admit_runtime_parent(runtime_parent, root, output)
     work = output / "postgres-processes"
     work.mkdir(parents=True, exist_ok=False)
     baseline = source_snapshot(root)
@@ -566,7 +784,7 @@ def run(api: Path, output: Path) -> int:
     collection = work / "collection"
     collection.mkdir()
     unchanged()
-    code = execute(api, collection, ["--collect-only"])
+    code = execute(api, collection, ["--collect-only"], runtime_parent=runtime_parent)
     unchanged()
     if code:
         raise ValueError("Canonical PostgreSQL collection did not complete successfully")
@@ -579,7 +797,10 @@ def run(api: Path, output: Path) -> int:
         folder = work / f"child-{group['shard']:02}"
         folder.mkdir()
         save(folder / "inventory.json", group)
-        code = execute(api, folder, ["--junitxml=" + str(folder / "results.xml"), *group["files"]])
+        code = execute(
+            api, folder, ["--junitxml=" + str(folder / "results.xml"), *group["files"]],
+            runtime_parent=runtime_parent,
+        )
         unchanged()
         try:
             result, suite = reconcile(folder, group["nodeids"], code)
@@ -673,11 +894,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-dir", type=Path, required=True)
     parser.add_argument("--results-directory", type=Path, required=True)
+    parser.add_argument("--runtime-parent", type=Path, required=True)
     args = parser.parse_args()
     if args.api_dir.resolve() != Path(__file__).resolve().parent.parent / "apps/api":
         parser.error("Native driver must use its own candidate API checkout")
     try:
-        return run(args.api_dir, args.results_directory)
+        return run(args.api_dir, args.results_directory, runtime_parent=args.runtime_parent)
     except (ValueError, KeyError, TypeError, OSError, ET.ParseError) as exc:
         print(f"[native-acceptance] NO-GO: {exc}", file=sys.stderr)
         return 1

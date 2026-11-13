@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-11-11",
+  "source_run": 43040958126,
+  "source_job": 130592283232,
+  "reported_instances": 1,
+  "scope": "One exact synthetic Matter-code origin independently reviewed against immutable source and the redacted native provenance. No current-path, value-pattern, rule-wide, changed-span or future-origin exemption.",
+  "findings": [
+    {
+      "fingerprint": "861aea48e506aaff41ea08739e216e90fb5b13d4:apps/api/tests/test_draft_pdf_parity_20261111.py:generic-api-key:90",
+      "blob_sha256": "c133ae62e0821521c6cafb4cfff42c49cad544ef774e97fca476c91ede5a091e",
+      "span_sha256": "1ed22f625dd225a0c340e80d6bc64a5537004046af94cb4d420940433a0d12b8",
+      "kind": "matter_fixture_code",
+      "classification": "False positive: deterministic code passed to the Matter helper's matter_code field. Authentication uses the separately generated bootstrap token.",
+      "review": "Independent Codex review recomputed the origin/span hash and inspected the helper's actual use. The original failed run is retained; corrected-head tree and history scans remain required."
+    }
+  ]
+}

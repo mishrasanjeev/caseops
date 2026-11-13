@@ -103,8 +103,9 @@ def test_shared_lifecycle_reclose_and_backdate_on_postgres(isolated_postgres_cli
     run_journey(isolated_postgres_client)
 
 
-def _seed(engine):
-    with Session(engine) as session:
+def _seed(engine, *, session_type=None):
+    session_type = Session if session_type is None else session_type
+    with session_type(engine) as session:
         company_id = _seed_company(session)
         actor_id = _seed_membership(session, company_id, role="admin")
         client = Client(company_id=company_id, name="Patent PG client", client_type="corporate")
@@ -583,7 +584,7 @@ def _patent_catalog_snapshot(session):
         "statistics": "SELECT schemaname, tablename, attname, null_frac, n_distinct, "
         "most_common_vals::text, most_common_freqs, histogram_bounds::text, correlation "
         "FROM pg_stats WHERE schemaname=current_schema() "
-        "AND tablename=ANY(CAST(:tables AS text[]))",
+        "AND tablename=ANY(CAST(:statistics AS text[]))",
         "indexes": "SELECT c.relname, i.indexrelid::regclass::text AS index_name, "
         "i.indisvalid, i.indisready, i.indislive, pg_get_indexdef(i.indexrelid) AS definition "
         "FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid "
@@ -591,7 +592,10 @@ def _patent_catalog_snapshot(session):
     }
     return {
         key: [
-            dict(row) for row in session.execute(text(query), {"tables": list(tables)}).mappings()
+            dict(row) for row in session.execute(text(query), {
+                "tables": list(tables),
+                "statistics": [*tables, "ix_patent_family_versions_identity_key"],
+            }).mappings()
         ]
         for key, query in queries.items()
     }
@@ -896,9 +900,10 @@ def _seed_patent_family_scale(
     return company_id, actor_id, family_uuid_base
 
 
-def _seed_patent_scale_source(pg_engine, company_id, actor_id, family):
+def _seed_patent_scale_source(pg_engine, company_id, actor_id, family, *, session_type=None):
     # Reuse the real source/link/correction path from the source-worker race fixture.
-    with Session(pg_engine) as session:
+    session_type = Session if session_type is None else session_type
+    with session_type(pg_engine) as session:
         taxonomy = IpDocumentTaxonomyEntry(
             company_id=company_id,
             key=f"scale-source-{uuid4().hex}",

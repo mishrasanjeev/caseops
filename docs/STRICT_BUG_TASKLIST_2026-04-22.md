@@ -246,6 +246,142 @@ This proves DOM focus, not Firefox keyboard behavior, native acceptance or a
 store release. Preserve the original deadlines and independently replay both
 platforms; the complete 83 cases per platform and distribution remain open.
 
+## November13: Full07 Capture Refusals And Native Runtime Isolation
+
+NFT-005 / J14-M14 release verification; product workflows keep their existing
+Workbook5 ownership. Full07/48ab completed4108actual=4106P/2callF/0S/0retry,
+all12324phases retained. Both failures are unchanged readthrough evidence
+guards, at prewrite namespace and compound final comparison. Historical exact
+metadata/predicate was not recorded; no common historical cause is invented.
+All784browser cases stayed gated. NO-GO; no merge/deploy or fixed verdict.
+
+Frozen controlled probes reproduce shared-Temp sibling mtime/ctime refusal at
+both boundaries; isolated storage passes the same complete guard with unrelated
+Temp/scratch activity. Earlier observer-version01 evidence is preserved with
+its provenance limitation, not upgraded to frozen acceptance. Canonical source
+now requires an explicit private physical runtime parent outside Temp/sync/
+source/evidence. The wrapper uses the current-user LocalApplicationData default;
+claims bind owner/identity/nonce, and cleanup removes only the exact owned
+workspace after retention. All original evidence timestamps/identities/binary/
+hash/fsync checks, SQL budgets and four-layout matrix remain unchanged.
+
+Review corrected native OWNER RIGHTS compatibility and caller-controlled ACL
+probe routing. Native Windows discovery plus minimal environment, exact current
+SID/protected DACL and negative ownership/alias/cleanup tests are source-bound.
+Windows focused100=93P/7explicitS; Linux standalone runner91=83P/8WindowsS.
+Independent raw phase/XML reconciliation proves all91runner identities have a
+pass on an applicable platform, plus9Windows wrapper passes (both shell guards).
+This is complementary component evidence only, not full Docker/CI/production.
+Ambient Temp/cache and offline binaries remain unchanged; app/MacBook untouched.
+Require fresh complete replacement Docker, green CI/main and exact live replay.
+
+## November13 (IST): Comparison And Tooling Evidence Correction
+
+CF focusedPN02 passes127cases/all381phases,0F/0S, including the full61-case
+migration module and original scale/successor cases. Source seals match; owned
+resources retired. This supersedes the earlier SQLite fixture's unexecuted
+repair status, not full Docker or production acceptance.
+
+Hosted7b PostgreSQL4108=4107P/1F exposes an invalid missing-version historical
+work lower bound. Keep all12 populated legacy10002-row witnesses and current
+query budgets/ACL/source/lifecycle/404 checks; bind the3 expected-empty profiles
+by stage/mode/cardinality and prove execution/results without demanding a scan.
+Execute current budgets before old comparisons. This test correction is source
+only until replacement execution; retain hosted failure and unreached checks.
+
+Local Windows tooling04 remains FAILED:452=356P/95F/1skip (Ubuntu-only inventory
+misapplied locally), npm57=53P/3deadlineF/1POSIXskip, both PS13-field suites pass.
+Short TMP did not cure genuine npm deadlines. Retain all full errors; no budget,
+permission or namespace waiver and no app/Mac source/dependency changes. The
+canonical hosted Windows installed72 and Linux source gates are separate.
+Local workstation performance remains open in issue619; no repair is claimed.
+Independent inspection of all95 found a shared fixture cleanup contamination.
+Test-only absent/present descriptor restoration now has a new regression;
+fresh Windows owner/cleanup/same-inode chain3P/0F/0S, original runtime refusal
+unchanged. This does not clear the wrong-platform full run or issue619.
+See BUGS5 triage and the dated sidecar for exact failures and scope.
+
+## November 12 Disclosure Hydration Reopening: Issue616
+
+Later7949 API11 fails three SQLite setup paths before chain assertions because
+the reused PG fixture opens plain Session. Correct the fixture to use the
+canonical CaseOpsSession plus enforced foreign keys, retain plain-Session
+rejection and every original survivor/catalog/privacy check, and replay the
+whole61-case module. Hosted native original rollback case already passes in
+7949PG11; no full release or later-source acceptance follows from that subset.
+
+J14/M14 shared-CI integration is also pending: owner approved repairing only
+shared Windows trust/setup tooling after actual pre-audit ACL/timeout failures.
+CI-only literal pinned-archive hardening and shared unchanged absolute budgets
+have12declared new tests, including native Windows proof, not execution passes.
+Keep default readers/owner/hash/namespace/TLS guards strict; app/MacBook source
+and dependencies unchanged. Full regression/green CI/production remain required.
+
+F8's hosted original42plan scale component now passes (six disclosure modes
+501work/400blocks), but actual PG8 proves an unreleased partial-catalog rollback
+defect. A deeper downgrade removes both support indexes before a historical
+refusal. New source preflights the entire destination before concurrent DDL;
+61declaredmigration cases/18PG include six chain-refusal controls and both
+direct/relative parent rollback. Compiled projection and stale current-head
+test expectations are corrected without dropping catalog/privacy assertions.
+Execution/fullCI/fullDocker/production remain incomplete; Not fixed/NO-GO.
+
+Current status remains Not fixed/NO-GO. Complete3d PG result is4078P/10callF
+of4088, all12264phases; nine family physical failures and one adjacent
+application scan failure. The current UNEXECUTED exact-array equality/index
+candidate preserves all data/security boundaries and declares82physical plan
+profiles plus migration interruption/conflict/replay/downgrade and health
+coverage. The intermediate lower-only range was withdrawn before execution.
+Static review/lint/governance generation is not PostgreSQL or release proof.
+
+The complete-key two-sided candidate3d8152 is also Not fixed: hosted PG4's
+original scale case fails with1000702work/59900blocks in six actual first/
+cursor custom/generic/auto plans. Preserve all42plans; source/lint review did
+not predict bounded executor work. The withdrawn intermediate lower-only seek
+kept literal LIMIT1 plus exact outer identity/cardinality and all successor
+negative cases. Its replacement must prove both rejected shapes physically red
+and its own original-budget plan inventory green before any fixed claim.
+
+**Not fixed on candidate2b7; release NO-GO.** FullDocker06's retained real
+PostgreSQL call failure charges1,000,701 total work and59,900blocks on both
+custom/generic first-page disclosure hydration, against unchanged50000/10000
+bounds. A company-only secondary index scans10002rows for each100admitted keys
+under53-row/40-tenant stale statistics. The earlier suffix-range patch did not
+bound this distribution; small fresh CI shards did not exercise it. Preserve
+all42plans and full SQL/bindings/catalog evidence in patent-work-failure-01.
+
+The isolated, unexecuted repair orders and seeks the full unique tenant/family/
+version key and retains exact outer identity/cardinality/ACL/lifecycle/source
+checks. New deterministic stale-statistics, first/cursor and custom/generic/auto
+regressions plus adjacent application-loader plan coverage are pending. Do not
+analyze away the retained state, change budgets or add planner hints. Full06
+continues frozen; no merge/deploy from CIgreen. Full replacement and exact
+production journeys remain required. Canonical ownership is IPLF-080B/UJ-29,
+PAT-01/IP-SCOPE and NFT-005/J14-M14. Prior032/UJ-02 and090A performance-note
+labels are historical ownership drift, not authority to change those products.
+
+## November 11 Workbook 5: Not Closed
+
+The reporting tester's production2816 record confirms missing core contract
+metadata editing, indexed-PDF viewing and manual term entry, plus a retained
+email with literal `{[client_name]}`/`{[hearing_date]}`. These are Not fixed at
+the initial live baseline. Draft parity and long statute-option layout require
+their own exact browser reproduction. See [all 20 report assessments and the
+reopen analysis](BUGS5_TRIAGE_2026-11-11.md), including unimplemented enhancements,
+source-data gaps and exact closure criteria. Candidate patches/tests are not
+production acceptance. Do not modify Matter lifecycle controls without a
+persisted lifecycle/audit reproduction; this workbook supplies no such event.
+
+November12: representative API/page red tests confirm assistant intent and
+legacy-query/mode navigation gaps; the original Acts/sections question was
+already in the workbook. Current components include90 intent cases within a
+complete220-case API pass,32 Research page passes,27 retained-JSON/cursor controls
+and1356 complete release-consumer passes. Full Docker05 failed4079P/5F before
+all782 browser cases. Narrow parser and Windows evidence/byte-mode repairs have
+source-bound component proof, not a replacement full gate or deployed closure.
+Preserve the three original Windows platform-fixture failures separately from
+the Linux81 and native Windows63 passes; no OS security policy was relaxed.
+
 ## November 8 B4-ADJ-07 Mobile Retirement Regression
 
 CI 42457749671 on `283ee514` confirmed the retirement preview succeeded at

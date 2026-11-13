@@ -234,7 +234,10 @@ def write_ci_dependency_output(selected_files: Path, github_output: Path) -> boo
         for name in files
     ):
         raise ValueError("The selected pytest inventory must be nonempty, unique and canonical")
-    required = "tests/test_prod_playwright_evidence.py" in files
+    required = any(name in files for name in (
+        "tests/test_prod_playwright_evidence.py",
+        "tests/test_batch5_release_wiring.py",
+    ))
     temporal = "tests/test_durable_workflows.py" in files
     with github_output.open("a", encoding="utf-8", newline="\n") as output:
         output.write(f"requires_playwright={str(required).lower()}\n")

@@ -28,6 +28,7 @@ const RETAINED_INDEX_PROD_SPECS = /ram-2026-10-(?:10|12)-prod\.spec\.ts$/;
 const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-\d{2}-\d{2}\.prod\.spec\.ts$/;
 const BATCH3_CLIENT_SPEC = /ram-2026-10-22-bugs\.spec\.ts$/;
 const WORKSPACE_REQUIREMENTS_SPECS = /ram-2026-11-07-(?:contracts|teams)\.spec\.ts$/;
+const BATCH5_SPECS = /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 // Batch 4 specs sign in as the reporting tester themselves and run the same
@@ -70,6 +71,7 @@ export default defineConfig({
     BATCH3_DRAFT_READONLY_SPEC,
     BATCH4_SPECS,
     WORKSPACE_REQUIREMENTS_SPECS,
+    BATCH5_SPECS,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -88,6 +90,38 @@ export default defineConfig({
     video: "off",
   },
   projects: [
+    {
+      name: "batch5-prod-chromium",
+      testMatch: [BATCH5_SPECS, WORKSPACE_REQUIREMENTS_SPECS],
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "batch5-prod-mobile",
+      testMatch: [BATCH5_SPECS, WORKSPACE_REQUIREMENTS_SPECS],
+      grep: /\[mobile\]/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
     {
       name: "platform-reports-prod-chromium",
       testMatch: PLATFORM_REPORT_ADMIN_PROD_SPECS,
@@ -121,7 +155,7 @@ export default defineConfig({
     {
       name: "tester-prod-chromium",
       testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /ram-2026-10-08-notices\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
-      testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC],
+      testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS],
       // Mutating halves of read-only production checks run only against a local app.
       grepInvert: /\[local-only\]/,
       use: {

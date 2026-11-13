@@ -66,6 +66,8 @@ interface PDFViewerProps {
    *  without additional headers (typically a signed GCS URL or a
    *  same-origin streaming endpoint that reads the cookie). */
   url: string;
+  /** Already authorized bytes avoid a second fetch of a local object URL. */
+  file?: Blob;
   /** Optional filename for the download button. */
   filename?: string;
   className?: string;
@@ -75,6 +77,7 @@ interface PDFViewerProps {
 
 export function PDFViewer({
   url,
+  file,
   filename,
   className,
   annotations = [],
@@ -94,7 +97,7 @@ export function PDFViewer({
   // browser send the caseops_session cookie on the cross-origin
   // request. The API's CORS config already allows credentials from
   // the caseops.ai origin (EG-001).
-  const docOpts = useMemo(() => ({ url, withCredentials: true }), [url]);
+  const docOpts = useMemo(() => file ?? { url, withCredentials: true }, [file, url]);
 
   // Keyboard navigation. Scoped to the viewer container so it doesn't
   // swallow the page-wide shortcuts when the user is typing in the
