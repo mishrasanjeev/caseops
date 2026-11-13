@@ -22,6 +22,12 @@ Preflight18 also fails the unchanged15-second App collection budget, with24
 inventory cases passed and5unexecuted after its hook failure. Cold import-path
 repair is required; a warm retry is not performance closure. Full09 has not
 started and no earlier run is relabelled as this replacement's acceptance.
+Collector source now defers axe/jsQR/JSZip and canonical response schemas into
+their existing async runtime paths. Assertions, real validators, test registration
+and original8s/15s budgets remain. Fresh profile04-06 timed out (launches briefly
+overlapped; not exclusive measurements); serial07 diagnostic completed784IDs in
+19.99s under a45s profiling ceiling, NOT original-budget acceptance. The further
+schema deferral and ordered-inventory/runtime checks are pending validation.
 
 November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
 zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.

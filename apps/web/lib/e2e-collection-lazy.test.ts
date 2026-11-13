@@ -73,3 +73,39 @@ it.each(boundaries)("keeps $file heavy imports inside awaited async runtime bodi
     expect(consumers[0].getStart(source)).toBeGreaterThan(statement.getEnd());
   }
 });
+
+it.each([
+  { file: "support/draft_pdf_production_20261111.ts", imports: 1, validators: ["authContext", "draftSchema"] },
+  { file: "ram-2026-10-22-drafting.prod.spec.ts", imports: 2, validators: ["authContext", "draftSchema"] },
+  { file: "ram-2026-11-11-bugs.spec.ts", imports: 2, validators: ["authContext", "authSession"] },
+])("defers $file canonical validators without replacing their response checks", ({ file, imports, validators }) => {
+  const source = ts.createSourceFile(file, readFileSync(
+    new URL(`../../../tests/e2e/${file}`, import.meta.url), "utf8",
+  ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const nodes = descendants(source);
+  const modulePath = (value: string) => value.endsWith("/lib/api/schemas");
+  for (const node of nodes) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+      && modulePath(node.moduleSpecifier.text)) {
+      expect(node.importClause?.isTypeOnly).toBe(true);
+    }
+  }
+  const deferred = nodes.filter(node => ts.isCallExpression(node)
+    && node.expression.kind === ts.SyntaxKind.ImportKeyword
+    && node.arguments[0] && ts.isStringLiteral(node.arguments[0])
+    && modulePath(node.arguments[0].text));
+  expect(deferred).toHaveLength(imports);
+  for (const call of deferred) {
+    expect(ts.isAwaitExpression(call.parent)).toBe(true);
+    let runtime = call.parent;
+    while (runtime.parent && !ts.isFunctionDeclaration(runtime)
+      && !ts.isArrowFunction(runtime) && !ts.isFunctionExpression(runtime)) runtime = runtime.parent;
+    if (!ts.isFunctionDeclaration(runtime) && !ts.isArrowFunction(runtime)
+      && !ts.isFunctionExpression(runtime)) throw new Error("Canonical schemas must load inside a runtime function.");
+    expect(runtime.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)).toBe(true);
+  }
+  for (const validator of validators) {
+    expect(nodes.some(node => ts.isCallExpression(node)
+      && node.expression.getText(source) === `${validator}.safeParse`)).toBe(true);
+  }
+});

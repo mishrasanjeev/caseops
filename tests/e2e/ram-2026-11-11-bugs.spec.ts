@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { authContext, authSession, type AuthContext, type AuthSession } from "../../apps/web/lib/api/schemas";
+import type { AuthContext, AuthSession } from "../../apps/web/lib/api/schemas";
 import type { AuthoritySearchMode, TenantAIPolicy, searchAuthorities } from "../../apps/web/lib/api/endpoints";
 import type { AssistantAskResponse, AssistantScopeOption, AssistantSessionRecord } from "../../apps/web/lib/api/workspace-assistant";
 import { localTransportHeaders } from "./support/cost-controls";
@@ -26,7 +26,8 @@ function required(name: string): string {
   return value;
 }
 
-function sessionFrom(value: unknown, credentials: TesterCredentials): AuthSession {
+async function sessionFrom(value: unknown, credentials: TesterCredentials): Promise<AuthSession> {
+  const { authSession } = await import("../../apps/web/lib/api/schemas");
   const parsed = authSession.safeParse(value);
   if (!parsed.success) throw new Error("Reporter login did not match the canonical auth contract.");
   const actor = parsed.data;
@@ -38,7 +39,8 @@ function sessionFrom(value: unknown, credentials: TesterCredentials): AuthSessio
   return actor;
 }
 
-function sameActor(value: unknown, actor: AuthSession): AuthContext {
+async function sameActor(value: unknown, actor: AuthSession): Promise<AuthContext> {
+  const { authContext } = await import("../../apps/web/lib/api/schemas");
   const parsed = authContext.safeParse(value);
   if (!parsed.success) throw new Error("Reporter self-auth did not match the canonical auth contract.");
   const current = parsed.data;
@@ -89,7 +91,7 @@ for (const phone of [false, true]) {
         owner_full_name: "Communications QA", owner_email: credentials.email, owner_password: credentials.password,
       } }), "Loopback-only communications owner bootstrap");
     }
-    const actor = sessionFrom(await json(await request.post(`${api.origin}/api/auth/login`, {
+    const actor = await sessionFrom(await json(await request.post(`${api.origin}/api/auth/login`, {
       headers: transport, maxRetries: 0, maxRedirects: 0,
       data: { company_slug: credentials.slug, email: credentials.email, password: credentials.password },
     }), "Reporter API authentication"), credentials);
@@ -113,8 +115,8 @@ for (const phone of [false, true]) {
       return url.origin === api.origin && url.pathname === pathname && response.request().method() === method;
     });
     const [browserLogin] = await Promise.all([responseFor("/api/auth/login"), signIn(page, { web }, credentials)]);
-    const browserActor = sessionFrom(await json(browserLogin, "Reporter browser authentication"), credentials);
-    sameActor(browserActor, actor);
+    const browserActor = await sessionFrom(await json(browserLogin, "Reporter browser authentication"), credentials);
+    await sameActor(browserActor, actor);
     await selfAuth(page.request, transport);
     await release();
 
@@ -322,13 +324,13 @@ for (const phone of [false, true]) {
       } }), "Loopback-only assistant/research owner bootstrap");
     }
     // Reuse canonical owner/MFA/tenant validation, not prepareTester's IP grants.
-    const actor = sessionFrom(await json(await request.post(`${api.origin}/api/auth/login`, {
+    const actor = await sessionFrom(await json(await request.post(`${api.origin}/api/auth/login`, {
       headers: transport, maxRetries: 0, maxRedirects: 0,
       data: { company_slug: credentials.slug, email: credentials.email, password: credentials.password },
     }), "Assistant/research reporter API authentication"), credentials);
     const headers = { ...transport, Authorization: `Bearer ${actor.access_token}` };
     const selfAuth = async (client: APIRequestContext, authHeaders: Record<string, string>) => {
-      const current = sameActor(await json(await client.get(`${api.origin}/api/auth/me`, {
+      const current = await sameActor(await json(await client.get(`${api.origin}/api/auth/me`, {
         headers: authHeaders, maxRetries: 0, maxRedirects: 0,
       }), "Assistant/research reporter self-auth"), actor);
       expect(["ai:generate", "authorities:search", "matters:write"].every(cap => current.capabilities?.includes(cap)),
@@ -359,7 +361,7 @@ for (const phone of [false, true]) {
       return url.origin === api.origin && url.pathname === pathname && response.request().method() === method;
     });
     const [browserLogin] = await Promise.all([responseFor("/api/auth/login"), signIn(page, { web }, credentials)]);
-    sameActor(sessionFrom(await json(browserLogin, "Assistant/research reporter browser authentication"), credentials), actor);
+    await sameActor(await sessionFrom(await json(browserLogin, "Assistant/research reporter browser authentication"), credentials), actor);
     await selfAuth(page.request, transport);
 
     const policy = await json<TenantAIPolicy>(await request.get(`${api.origin}/api/admin/tenant-ai-policy`, {
