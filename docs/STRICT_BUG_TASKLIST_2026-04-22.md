@@ -21,8 +21,17 @@ Focused Linux replacement42cases=40P/2optional-observabilityS/0F,126phases,
 with the exact official2.9.2 wheel and unchanged source; not a built image or
 whole release. Windows new9WKS cases pass. Prior broader Windows35P/5F/2S
 provenance-helper/platform/cache-link failures remain retained, not suppressed.
-Strict installed metadata audit and dependency check pass. Full release gates
+Strict core-installed metadata audit and dependency check pass. Full release gates
 remain pending; neither old full08 nor these components certify production.
+
+All-extras audit163 exposes optional opentelemetry-api1.45.1/CVE-2026-126360,
+fixed1.45.2. Keep observability disabled, update its compatible cohort, extend
+strict CI audit to all supported extras and regress the real traceparent parser
+plus valid-context preservation. Original positive core audit and expanded
+negative audit stay distinct. Safe 513-character baseline55=45P/10F on1.45.1;
+patched real-parser/workflow/floor suite69P on1.45.2, complete native journals.
+Fresh strict all-extras163-package audit reports0known vulnerabilities. These
+are focused results, not replacement full Docker or production certification.
 
 ## November13: Full07 Capture Refusals And Native Runtime Isolation
 

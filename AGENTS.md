@@ -11,6 +11,10 @@
   current official security releases/advisories before freezing acceptance:
   registry and global vulnerability feeds can lag an upstream patch. Record
   upstream release, upstream disclosure and feed-publication dates separately.
+  Audit the actual installed metadata for all supported optional extras as
+  well as core dependencies. A core-only passing audit cannot clear an
+  observability, OCR or other optional runtime; keep disabled features disabled
+  and retain each audit's installed-set scope and advisory outcomes.
 
 - Use representative questions already supplied in a report before declaring
   reproduction input missing. Label newly chosen scenarios as such. Pair factual

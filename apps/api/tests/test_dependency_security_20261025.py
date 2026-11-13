@@ -30,6 +30,26 @@ def test_dns_and_pdf_security_floor_matches_manifest_lock_and_runtime(name, mini
     assert Version(importlib.metadata.version(name)) >= Version(minimum)
 
 
+def test_strict_dependency_audit_installs_every_supported_optional_extra():
+    import shlex
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / ".github/workflows/security.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["pip-audit"]["steps"]
+    sync = next(step for step in steps if step.get("name") == "Sync API deps")
+    assert sync["working-directory"] == "apps/api"
+    assert shlex.split(sync["run"]) == [
+        "uv", "sync", "--frozen", "--all-extras", "--no-install-project"
+    ]
+    audit = next(step for step in steps if step.get("name") == "Run pip-audit")["run"]
+    assert "uv pip check" in audit
+    assert "--strict" in audit and "--vulnerability-service osv" in audit
+    assert '--path "$site_packages"' in audit
+    assert "ignore-vuln" not in audit and "continue-on-error" not in audit
+
+
 def test_patched_dns_parser_rejects_a_self_referencing_compression_pointer():
     import dns.name
 
@@ -43,12 +63,12 @@ def test_patched_dns_parser_rejects_a_self_referencing_compression_pointer():
 @pytest.mark.parametrize(
     "name,minimum",
     [
-        ("opentelemetry-api", "1.45.1"),
-        ("opentelemetry-sdk", "1.45.1"),
-        ("opentelemetry-exporter-otlp-proto-http", "1.45.1"),
-        ("opentelemetry-instrumentation-fastapi", "0.66b1"),
-        ("opentelemetry-instrumentation-sqlalchemy", "0.66b1"),
-        ("opentelemetry-instrumentation-httpx", "0.66b1"),
+        ("opentelemetry-api", "1.45.2"),
+        ("opentelemetry-sdk", "1.45.2"),
+        ("opentelemetry-exporter-otlp-proto-http", "1.45.2"),
+        ("opentelemetry-instrumentation-fastapi", "0.66b2"),
+        ("opentelemetry-instrumentation-sqlalchemy", "0.66b2"),
+        ("opentelemetry-instrumentation-httpx", "0.66b2"),
     ],
 )
 def test_observability_manifest_and_lock_exclude_vulnerable_tracestate_parser(name, minimum):
@@ -68,7 +88,7 @@ def test_patched_optional_tracestate_parser_uses_literal_comma_split(whitespace,
     trace = pytest.importorskip(
         "opentelemetry.trace", reason="Observability extra is not installed"
     )
-    assert Version(importlib.metadata.version("opentelemetry-api")) >= Version("1.45.1")
+    assert Version(importlib.metadata.version("opentelemetry-api")) >= Version("1.45.2")
     splits = []
 
     class Header(str):

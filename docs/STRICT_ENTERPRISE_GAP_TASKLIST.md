@@ -23,11 +23,22 @@ Production is not certified from the merged PR or earlier source-bound run.
 Focused replacement proof: exact official2.9.2 wheel overlay on isolated,
 network-disabled Linux has42collected=40P/2explicit optional-observabilityS,
 126phases/0failure, complete unchanged-source receipts. Nine new WKS cases
-also pass on Windows. Fresh strict installed-metadata audit reports0known
+also pass on Windows. The core140-package strict audit reports0known
 vulnerabilities and pipcheck is compatible. The broader Windows42case attempt
 is retained35P/5F/2S: old provenance-helper ctime/owner assumptions and default
 cache hardlinks, not waived or called native acceptance. No guard is relaxed.
 This focused overlay is not the new release image/full Docker or production.
+
+Expanded163-package all-extras audit then finds opentelemetry-api1.45.1 /
+CVE-2026-126360 (moderate; fixed1.45.2). The core-only CI installation omitted
+this optional parser. Repair the compatible1.45.2/0.66b2 cohort and require
+--all-extras in the existing strict installed-metadata audit. Observability
+remains disabled; no telemetry is enabled. Add bounded traceparent/valid-context
+and workflow-scope regressions, retain the original audit, and complete new
+candidate gates. No unqualified 'all dependencies clear' claim from core140.
+Actual bounded baseline55=45P/10F; patched69/69 real-parser, exact-context,
+workflow and version-floor cases pass. Strict all-extras audit163/0known
+vulnerabilities is separate from core140. No replacement full-release claim.
 
 ## November13: Native Evidence Namespace Isolation
 

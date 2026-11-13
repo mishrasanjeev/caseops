@@ -13,6 +13,16 @@ targeted repair/provenance and safe WKS regressions are in acceptance; prior
 repaired-image Docker and exact production replay remain required. No app/
 MacBook change, audit waiver, paid call or production/fixed verdict.
 
+The subsequent163-package all-extras audit finds a second advisory in optional
+OpenTelemetry API1.45.1 (CVE-2026-126360). Compatible1.45.2/0.66b2 cohort and
+all-extras strict CI auditing are repaired in source; observability remains disabled.
+Safe baseline55=45P/10F, patched focused69P and strict installed all-extras
+audit163/0known vulnerabilities. Replacement hosted/full/live gates remain owed.
+Preflight18 also fails the unchanged15-second App collection budget, with24
+inventory cases passed and5unexecuted after its hook failure. Cold import-path
+repair is required; a warm retry is not performance closure. Full09 has not
+started and no earlier run is relabelled as this replacement's acceptance.
+
 November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
 zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
 No production certification. Controlled frozen filesystem probes reproduce
