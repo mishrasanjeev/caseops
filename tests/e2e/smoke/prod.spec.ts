@@ -18,7 +18,6 @@
  * smoke pass, not a coverage suite. The goal is "did the page render
  * a server-rendered shell" + "is the primary action reachable".
  */
-import AxeBuilder from "@axe-core/playwright";
 import { expect, request as pwRequest, test } from "@playwright/test";
 
 const STAMP = `${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -249,6 +248,7 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
     page,
   }) => {
     test.setTimeout(180_000);
+    const { default: AxeBuilder } = await import("@axe-core/playwright");
     await page.setViewportSize({ width: 360, height: 800 });
 
     const failures: string[] = [];
@@ -293,6 +293,7 @@ test.describe("Prod smoke — public surfaces (P1-004)", () => {
     page,
   }) => {
     test.setTimeout(120_000);
+    const { default: AxeBuilder } = await import("@axe-core/playwright");
     await page.setViewportSize({ width: 360, height: 800 });
 
     const failures: string[] = [];
