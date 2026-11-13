@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Adjacent Cohort Assertion Missed, Gates Remain Closed
+
+QG-SEC-004/NFT-005: targeted71P was insufficient propagation inventory. Hosted
+f0db APIshard4 proves one stale October26 exact-cohort assertion, not an outage
+or new provider failure (1460P/365S/1F). Correct exact1.45.2/0.66b2 expectations
+without loosening the fourteen-package, direct-manifest, artifact-hash or actual
+installed-version checks. Broad code/config search has no old tracing pins.
+The complete five-module Linux security family110P/330phases/0S/0F is retained;
+network disabled, built f0db core runtime, existing optional/dev packages, not a
+new full image/canonical suite. Full09 interrupted with source unchanged and
+all capture bytes retained, after collection/before execution groups. No GO
+from that prefix, older full08 or passing preflight20. Replacement gates owed.
+
 ## November14: Fresh Advisory Blocks Workbook5 Production
 
 **Partially implemented / NO-GO.** QG-SEC-004/NFT-005. Full Docker08 at40b/c67

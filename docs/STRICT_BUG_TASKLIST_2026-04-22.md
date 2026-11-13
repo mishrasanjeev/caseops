@@ -1,5 +1,19 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Complete Security-Family Repair, Replacement Still Required
+
+PR620/f0db full preflight20 passes2954frontend/304files and14/14built-browser
+journeys, but current hosted APIshard4 has1826actual=1460P/365S/1F. Its sole
+failure is the adjacent October26 exact-cohort test still expecting1.45.1/
+0.66b1 after the patched runtime moved to1.45.2/0.66b2. Update only that strict
+expected cohort, retaining all manifest/lock/wheel/installed-version assertions.
+All five security-family modules now reconcile110unique Linux cases/330passed
+phases,0S/0F, on built f0db core libraries plus existing optional/dev libraries,
+network disabled and source unchanged. This is focused proof, not a new image
+or full release. Full09 deliberately interrupted after collection, before
+native execution groups; all evidence retained, no acceptance claim. Newhead
+CI/preflight/full10/exact production replay and final Excel remain required.
+
 ## November14: Workbook5 Docker Passed; New Dependency Security Stop
 
 Full08/40b completed4108native passes/all12324phases and784browser cases:

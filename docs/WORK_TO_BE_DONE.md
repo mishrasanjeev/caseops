@@ -1,5 +1,19 @@
 ## 2026-11-11 - Workbook 5
 
+November14 latest continuation: after restoring every Playwright Git blob to
+the accepted baseline, f0db/preflight20 passes2954frontend and14built-browser
+cases. Hosted APIshard4 retains one missed adjacent exact-cohort assertion in
+test_dependency_security_20261026.py, still pinned to old tracing releases.
+Correct that strict dictionary only; grep all code/config pin consumers, and
+retain exact manifest/lock/hash/installed checks. Focused five-module Linux
+replacement110P/330phases/0S/0F, all intended files/ordered IDs and source hashes
+reconciled, no network. Full09 was deliberately interrupted after completed
+collection and before any native execution group; capture/source seals and
+normal power restoration retained. Seven exact-owned containers/two networks
+removed; images/two test volumes/evidence preserved. No full09 acceptance or
+production deployment. Newhead CI/preflight21/full10/live replay remain owed.
+The prior dated observations below are history, not current certification.
+
 November14 current update: full Docker08 at40b/c67 is complete and independently
 reconciled:4108native passes,784browsers=770P/14explicitS/0F/0retry, all14target
 cases passed at desktop/phone widths. PR614 merged asf6656bc1 with the same

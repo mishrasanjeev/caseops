@@ -15,6 +15,10 @@
   well as core dependencies. A core-only passing audit cannot clear an
   observability, OCR or other optional runtime; keep disabled features disabled
   and retain each audit's installed-set scope and advisory outcomes.
+  Before freezing a dependency repair, inventory every dated manifest/lock/
+  installed-cohort assertion across the repository and execute the complete
+  security test family. Updating one floor test while an adjacent exact-cohort
+  test still pins the old release is incomplete propagation, not a CI outage.
   Treat fresh-transform-cache collection separately from warm-cache success.
   Never filter or fake collection to meet a budget. A dynamic TypeScript import
   can bypass the actual Playwright worker's transpilation path even when list,
