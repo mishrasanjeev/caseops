@@ -1,3 +1,17 @@
+## 2026-11-13 — iOS offscreen Files measurement replacement pending
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Inconclusive; NO-GO**.
+Actual9d79 iOS Core23 passed; full Files17 retained16 passed calls and one
+failed FILES-11 call, with complete postflight and session cleanup. Passive
+native diagnostics separately measured redundant offscreen polling and a late
+read overlapping the next action. The helper now completes one measured
+observation before scrolling, preserves all visibility/identity/geometry guards
+and original deadlines, and passes unit and actual read-only Simulator candidate
+checks. Candidate credit is zero; a new source-bound cold full17 replacement is
+required. Current unique9d79 passes are39/83 iOS and36/83 Android, independently.
+Google Play version3 remains submitted/In review; Apple documentation review is
+pending. See [dated evidence](mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md).
+
 ## 2026-11-13 — Android Files filename positioning remains under verification
 
 J20/M22 / US-MOB-01..08: **Partially implemented / Partially fixed; NO-GO**.

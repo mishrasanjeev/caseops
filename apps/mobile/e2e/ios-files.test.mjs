@@ -54,7 +54,7 @@ function measuredFileDriver(context, frameFor = () => ({ x: 20, y: 200, width: 3
   let sequence = 0;
   const scroll = { elementId: scrollId, isDisplayed: async () => true, getAttribute: async () => 'XCUIElementTypeScrollView' };
   driver.$$ = async (value) => {
-    if (value === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [scroll];
+    if ((value === '-ios predicate string:type == "XCUIElementTypeScrollView"' || value === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1')) return [scroll];
     const matches = (await query(value)).map(control => value.startsWith('~files-') ? { ...control, elementId: value.slice(1),
       getAttribute: async (key) => key === 'name' ? value.slice(1) : key === 'type'
         ? value === '~files-selection' ? 'XCUIElementTypeOther' : ['files-choose','files-upload','files-reload','files-selection-clear'].includes(value.slice(1)) ? 'XCUIElementTypeButton' : 'XCUIElementTypeStaticText'
@@ -500,7 +500,7 @@ test('exact Files facts scroll from measured target and viewport geometry while 
     const scroll = { elementId: 'scroll', isDisplayed: async () => true, getAttribute: async () => 'XCUIElementTypeScrollView' };
     const context = { platform: 'ios', driver: {
       $$: async (query) => query === `~${id}` ? duplicate ? [target,target] : [target]
-        : query === '-ios predicate string:type == "XCUIElementTypeScrollView"' ? [scroll] : [],
+        : (query === '-ios predicate string:type == "XCUIElementTypeScrollView"' || query === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1') ? [scroll] : [],
       getWindowRect: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
       getElementRect: async (elementId) => elementId === 'scroll' ? viewport : ({ x: 127, y, width: 149, height: 51 }),
       waitUntil: async (condition, options) => { if (!await condition()) throw new Error(options.timeoutMsg); },
@@ -754,7 +754,7 @@ function textReaderDouble(t, options = {}) {
   });
   const context = { platform: 'ios', fixture: { gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: ledger.runId }, record: value => events.push(value), driver: {
     async $$(query) {
-      if (query === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [control('scroll')];
+      if ((query === '-ios predicate string:type == "XCUIElementTypeScrollView"' || query === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1')) return [control('scroll')];
       const id = query.startsWith('~') ? query.slice(1) : '';
       if (id.startsWith('files-')) return ui === 'files' ? [control(id)] : [];
       if (!id || ui !== 'viewer') return [];

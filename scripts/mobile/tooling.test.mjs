@@ -5628,8 +5628,8 @@ function observerSinkFixture(callback) {
 }
 
 test('source observer import is inert and the worker allowlist is literal and unique', () => {
-  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 36); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 36);
-  for (const added of ['scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
+  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 37); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 37);
+  for (const added of ['scripts/mobile/ios-files-facts.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
     assert.equal(SOURCE_GATE_WORKER_PATHS.filter(name => name === added).length, 1);
   assert.ok(SOURCE_GATE_WORKER_PATHS.every(name => !name.includes('..') && name.endsWith('.test.mjs')));
 });

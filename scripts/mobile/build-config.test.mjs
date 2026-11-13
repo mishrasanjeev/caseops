@@ -162,7 +162,7 @@ test('mobile CI selects every tooling module and audits before either platform e
   const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
     'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs',
     'apps/mobile/e2e/ios-files.test.mjs', 'apps/mobile/e2e/android-files.test.mjs',
-    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs',
+    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs', 'scripts/mobile/ios-files-facts.test.mjs',
     'scripts/mobile/ios-simulator-signing.test.mjs',
     'scripts/mobile/prepare-gateway-routes.test.mjs',
     'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',

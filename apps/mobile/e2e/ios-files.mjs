@@ -344,16 +344,18 @@ export async function findIosFileFact(context, id, type) {
   nativeAction(context, 'find', 'id', id);
   let control;
   for (let attempt = 0; attempt <= 9; attempt++) {
-    let direction, frame, viewport;
-    try {
-      await waitForIosVisibility(context.driver, async probe => {
+    let direction, frame, viewport, refusal;
+    await waitForIosVisibility(context.driver, async probe => {
+      try {
         const matches = await probe(() => context.driver.$$(query));
         assert.ok(matches.length <= 1, 'IOS_FILES_FACT_ID_NOT_UNIQUE');
         if (!matches.length) return false;
         control = matches[0];
         assert.equal(await probe(() => control.getAttribute('name')), id, 'IOS_FILES_FACT_ID_MISMATCH');
         assert.equal(await probe(() => control.getAttribute('type')), type, 'IOS_FILES_FACT_TYPE_MISMATCH');
-        const scroll = await visible(context.driver, '-ios predicate string:type == "XCUIElementTypeScrollView"', probe);
+        const scrolls = await probe(() => context.driver.$$('-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1'));
+        assert.ok(scrolls.length <= 1, 'AMBIGUOUS_VISIBLE_NATIVE_LOCATOR');
+        const scroll = scrolls[0];
         assert.ok(scroll, 'IOS_FILES_VIEWPORT_REQUIRED');
         viewport = await probe(() => context.driver.getElementRect(scroll.elementId));
         frame = await probe(() => context.driver.getElementRect(control.elementId));
@@ -361,32 +363,40 @@ export async function findIosFileFact(context, id, type) {
         assert.ok(validFrame(frame) && validFrame(viewport) && validFrame(window) && containsFrame(window, viewport), 'IOS_FILES_FACT_GEOMETRY_REQUIRED');
         assert.ok(frame.x >= viewport.x && frame.x + frame.width <= viewport.x + viewport.width, 'IOS_FILES_FACT_HORIZONTAL_BOUNDS_REQUIRED');
         direction = frame.y < viewport.y ? 'up' : frame.y + frame.height > viewport.y + viewport.height ? 'down' : undefined;
-        return !direction && await probe(() => control.isDisplayed());
-      }, { timeout: 1500, interval: 150, timeoutMsg: 'IOS_FILES_FACT_NOT_VISIBLE' });
-      return control;
-    } catch (error) {
-      if (/NOT_UNIQUE|MISMATCH|GEOMETRY_REQUIRED|HORIZONTAL_BOUNDS_REQUIRED|VIEWPORT_REQUIRED|AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/.test(error.message)
-        || !direction || attempt === 9) throw error;
-      event(context, 'ios-file-fact-scroll-geometry', { controlId: id, attempt: attempt + 1, direction, frame, viewport });
-      assert.equal(await visible(context.driver, '-ios predicate string:type == "XCUIElementTypeKeyboard"'), undefined, 'IOS_FILES_KEYBOARD_MUST_BE_ABSENT');
-      // A full-height flick can carry a short row from below the viewport to
-      // above it in one gesture. Drag only the measured gap, slowly, through
-      // the same non-interactive left gutter and remeasure before continuing.
-      const gap = direction === 'up' ? viewport.y - frame.y : frame.y + frame.height - viewport.y - viewport.height;
-      const far = gap > viewport.height / 2;
-      const room = far ? Math.floor(viewport.height - 64) : Math.min(160, Math.floor((viewport.height - 32) / 2));
-      assert.ok(room >= 44, 'IOS_FILES_SCROLL_SPAN_REQUIRED');
-      const distance = Math.min(room, Math.max(44, Math.ceil(gap + 24)));
-      const x = viewport.x + 8, start = far ? Math.round(direction === 'up' ? viewport.y + 32 : viewport.y + viewport.height - 32)
-        : Math.round(viewport.y + viewport.height / 2);
-      const end = start + (direction === 'up' ? distance : -distance);
-      event(context, 'ios-file-fact-bounded-drag', { controlId: id, attempt: attempt + 1, x, start, end, duration: 650 });
-      await context.driver.performActions([{ type: 'pointer', id: 'ios-files-scroll', parameters: { pointerType: 'touch' }, actions: [
-        { type: 'pointerMove', duration: 0, x, y: start }, { type: 'pointerDown', button: 0 },
-        { type: 'pointerMove', duration: 650, x, y: end }, { type: 'pointerUp', button: 0 },
-      ] }]);
-      await context.driver.releaseActions();
-    }
+        // A complete offscreen measurement is ready for one bounded drag.
+        // Do not poll it again until the deadline and overlap a late read
+        // with keyboard checks or scrolling.
+        return !!direction || await probe(() => control.isDisplayed());
+      } catch (error) {
+        if (/NOT_UNIQUE|MISMATCH|GEOMETRY_REQUIRED|HORIZONTAL_BOUNDS_REQUIRED|VIEWPORT_REQUIRED|AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/.test(error.message)) {
+          refusal = error;
+          return true;
+        }
+        throw error;
+      }
+    }, { timeout: 1500, interval: 150, timeoutMsg: 'IOS_FILES_FACT_NOT_VISIBLE' });
+    if (refusal) throw refusal;
+    if (!direction) return control;
+    assert.ok(attempt < 9, 'IOS_FILES_FACT_NOT_VISIBLE');
+    event(context, 'ios-file-fact-scroll-geometry', { controlId: id, attempt: attempt + 1, direction, frame, viewport });
+    assert.equal(await visible(context.driver, '-ios predicate string:type == "XCUIElementTypeKeyboard"'), undefined, 'IOS_FILES_KEYBOARD_MUST_BE_ABSENT');
+    // A full-height flick can carry a short row from below the viewport to
+    // above it in one gesture. Drag only the measured gap, slowly, through
+    // the same non-interactive left gutter and remeasure before continuing.
+    const gap = direction === 'up' ? viewport.y - frame.y : frame.y + frame.height - viewport.y - viewport.height;
+    const far = gap > viewport.height / 2;
+    const room = far ? Math.floor(viewport.height - 64) : Math.min(160, Math.floor((viewport.height - 32) / 2));
+    assert.ok(room >= 44, 'IOS_FILES_SCROLL_SPAN_REQUIRED');
+    const distance = Math.min(room, Math.max(44, Math.ceil(gap + 24)));
+    const x = viewport.x + 8, start = far ? Math.round(direction === 'up' ? viewport.y + 32 : viewport.y + viewport.height - 32)
+      : Math.round(viewport.y + viewport.height / 2);
+    const end = start + (direction === 'up' ? distance : -distance);
+    event(context, 'ios-file-fact-bounded-drag', { controlId: id, attempt: attempt + 1, x, start, end, duration: 650 });
+    await context.driver.performActions([{ type: 'pointer', id: 'ios-files-scroll', parameters: { pointerType: 'touch' }, actions: [
+      { type: 'pointerMove', duration: 0, x, y: start }, { type: 'pointerDown', button: 0 },
+      { type: 'pointerMove', duration: 650, x, y: end }, { type: 'pointerUp', button: 0 },
+    ] }]);
+    await context.driver.releaseActions();
   }
 }
 async function clickIosFileFact(context, id, type = 'XCUIElementTypeButton') {
