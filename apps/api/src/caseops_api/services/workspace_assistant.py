@@ -1422,8 +1422,45 @@ _LEGAL_PROPOSITION_TERMS = (
 
 
 def _asks_for_legal_proposition(question: str) -> bool:
-    normalized = question.casefold()
-    return any(term in normalized for term in _LEGAL_PROPOSITION_TERMS)
+    import re
+
+    normalized = " ".join(question.casefold().split())
+    remainder, restrictions = re.subn(r"\bwithout adding case law\b", " ", normalized)
+    remainder = " ".join(remainder.split()).strip(" ,;:.?!")
+    field = r"(?:status|practice area|next hearing date)"
+    fields = rf"{field}(?: and {field}){{0,2}}"
+    recorded_fact_request = (
+        rf"(?:(?:summari[sz]e|show|list) (?:the )?recorded (?:matter )?"
+        rf"(?:details|facts|{fields})|"
+        rf"what (?:is|are) (?:the )?(?:recorded )?{fields} of (?:this|the) matter|"
+        rf"what (?:is|are) (?:this|the) matter's (?:recorded )?{fields})"
+    )
+    # Exclude only this explicit restriction on an otherwise wholly factual
+    # request. Every remaining clause must fit; negation alone grants no bypass.
+    if restrictions == 1 and re.fullmatch(recorded_fact_request, remainder):
+        normalized = remainder
+    sources = r"(?:(?:legal|statutory) )?(?:acts?|sections?|rules?|laws?)"
+    source_list = rf"{sources}(?: (?:and|or) {sources}){{0,3}}"
+    # New signals require normative context; incidental labels such as a legal
+    # team, law firm, ACTS project, or recorded office procedure are not enough.
+    return any(term in normalized for term in _LEGAL_PROPOSITION_TERMS) or any(
+        re.search(pattern, normalized) is not None
+        for pattern in (
+            rf"\b(?:applicable|governing) {source_list}\b",
+            rf"\b{source_list} (?:appl(?:y|ies)|governs?|(?:is|are) applicable)\b",
+            # A typed conduct/action judgment stays normative regardless of
+            # trailing jurisdiction, coordination, or qualification clauses.
+            r"\b(?:is|are|was|were|whether)(?: [\w'-]+){0,5} "
+            r"(?:conduct|actions?|behaviou?r) (?:(?:is|are|was|were) )?"
+            r"(?:not )?(?:legal|illegal|lawful|unlawful)\b",
+            r"\b(?:is|are|was|were|whether)(?: [\w'-]+){0,6} "
+            r"(?:legal|illegal|lawful|unlawful)(?=[?.!,;:]|$| (?:to|for|under|if)\b)",
+            r"\blegal remed(?:y|ies)\b",
+            r"\bprocedural requirements?\b",
+            r"\bprocedures? (?:should|must|shall) be (?:followed|applied|used)\b",
+            r"\bstatutory (?:filing )?(?:procedures?|deadlines?|requirements?)\b",
+        )
+    )
 
 
 def _proposal_id(

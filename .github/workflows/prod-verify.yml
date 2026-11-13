@@ -285,7 +285,10 @@ jobs:
 
       - name: Require release-owned bounded tester partition contract
         if: matrix.suite == 'tester' || matrix.suite == 'tester-catalog' || matrix.suite == 'tester-index' || matrix.suite == 'test-legal-write-oct13-a' || matrix.suite == 'test-legal-write-oct13-b'
-        run: python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
+        run: |
+          version=2
+          if grep -Fxq 'BATCH5_CONTRACT_VERSION = 1' scripts/prod_playwright_evidence.py; then version=3; fi
+          python scripts/prod_playwright_evidence.py tester-partition-contract --required-version "$version"
 
       - name: Run canonical tester production regressions
         if: matrix.suite == 'tester'
@@ -501,6 +504,62 @@ jobs:
           else
             echo "::notice::Rule governance is disabled in production; BUG-003..006 production proof waits for the enabled state."
           fi
+
+      - name: Require release-owned Batch5 configuration
+        id: batch5-prerequisites
+        if: matrix.suite == 'batch5'
+        run: |
+          set -euo pipefail
+          [[ "${CASEOPS_EXPECTED_RELEASE_SHA:-}" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          specs=(tests/e2e/ram-2026-11-11-{statutes,drafting,contracts,bugs}.spec.ts)
+          moved=(tests/e2e/ram-2026-11-07-{contracts,teams}.spec.ts)
+          owned=(scripts/prod_playwright_evidence.py playwright.app.config.ts playwright.prod-ram.config.ts "${specs[@]}" "${moved[@]}")
+          git diff --quiet HEAD -- "${owned[@]}"
+          if grep -Fxq 'BATCH5_CONTRACT_VERSION = 1' scripts/prod_playwright_evidence.py && grep -Fq 'name: "batch5-prod-chromium"' playwright.prod-ram.config.ts && grep -Fq 'name: "batch5-prod-mobile"' playwright.prod-ram.config.ts; then
+            for file in "${owned[@]}"; do test -f "$file" && test ! -L "$file"; done
+            git --literal-pathspecs ls-files --error-unmatch -- "${owned[@]}" >/dev/null
+            grep -Fq '/ram-2026-11-11-' playwright.app.config.ts
+            python scripts/prod_playwright_evidence.py batch5-contract
+            echo "state=current" >> "$GITHUB_OUTPUT"
+          else
+            # The workflow graph can be newer than the exact serving checkout.
+            # Never execute the new contract against an older helper or config.
+            for file in "${specs[@]}"; do test ! -e "$file" && test ! -L "$file"; done
+            if grep -Eq 'BATCH5_|batch5-' scripts/prod_playwright_evidence.py playwright.prod-ram.config.ts || grep -Fq '/ram-2026-11-11-' playwright.app.config.ts; then
+              echo "::error::Partial Batch5 release-owned configuration."
+              exit 1
+            fi
+            git merge-base --is-ancestor HEAD 2816c29c30d8f13147f67a396f47321871096f0d
+            test -z "$(git ls-tree --name-only HEAD -- "${specs[@]}")"
+            mkdir -p test-results/prod-native-evidence
+            printf '{"release_sha":"%s","completed":false,"reason":"serving_release_predates_batch5_acceptance"}\n' "$CASEOPS_EXPECTED_RELEASE_SHA" > test-results/prod-native-evidence/batch5-predates.json
+            echo "state=historical" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run release-owned Batch5 tester acceptance
+        if: matrix.suite == 'batch5' && steps.batch5-prerequisites.outputs.state == 'current'
+        env:
+          CASEOPS_RAM_PROD_SLUG: test-legal
+          CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: |
+          set -euo pipefail
+          test -n "${CASEOPS_RAM_PROD_PASSWORD:-}"
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch5-desktop --config=playwright.prod-ram.config.ts --project=batch5-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/batch5-desktop
+          bash "$RUNNER_TEMP/caseops-prod-playwright" batch5-mobile --config=playwright.prod-ram.config.ts --project=batch5-prod-mobile --workers=1 --retries=0 --reporter=list --output=test-results/batch5-mobile
 
       - name: Run legacy QA production regressions
         if: matrix.suite == 'legacy'
@@ -831,8 +890,16 @@ jobs:
           COST_CONFIGURED: ${{ steps.ip-cost-prerequisites.outputs.configured }}
           PLATFORM_REPORT_READY: ${{ steps.platform-report-prerequisites.outputs.ready }}
           BATCH4_GOVERNANCE: ${{ steps.batch4-tester.outputs.governance }}
+          BATCH5_STATE: ${{ steps.batch5-prerequisites.outputs.state }}
         run: |
           set -euo pipefail
+          if [[ "$SUITE" == batch5 ]]; then
+            case "${BATCH5_STATE:-}" in
+              historical) test -f test-results/prod-native-evidence/batch5-predates.json; exit 0 ;;
+              current) python scripts/prod_playwright_evidence.py validate --required batch5-desktop batch5-mobile; exit 0 ;;
+              *) echo "::error::Missing Batch5 release-owned configuration state."; exit 1 ;;
+            esac
+          fi
           case "$SUITE" in
             tester|tester-catalog|tester-index|test-legal-write-oct13-a|test-legal-write-oct13-b) required=("$SUITE") ;;
             batch3|batch4) required=() ;;
@@ -976,6 +1043,21 @@ jobs:
       max-parallel: 1
       matrix:
         suite: [batch4]
+    steps: *prod-playwright-steps
+
+  prod-batch5-tester:
+    name: Prod Playwright (${{ matrix.suite }})
+    if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && (needs.prod-batch4-tester.result == 'success' || needs.prod-batch4-tester.result == 'failure' || needs.prod-batch4-tester.result == 'cancelled')
+    needs: [resolve-release, prod-batch4-tester]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    env:
+      CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite: [batch5]
     steps: *prod-playwright-steps
 
   scheduled-statute-verification:
@@ -1139,7 +1221,7 @@ jobs:
 
   record-release-evidence:
     name: Record exact-release evidence
-    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13-a.result == 'success' && needs.prod-test-legal-write-oct13-b.result == 'success' && needs.prod-batch3-tester.result == 'success' && needs.prod-batch4-tester.result == 'success'
+    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success' && needs.prod-tester-index.result == 'success' && needs.prod-test-legal-write-oct13-a.result == 'success' && needs.prod-test-legal-write-oct13-b.result == 'success' && needs.prod-batch3-tester.result == 'success' && needs.prod-batch4-tester.result == 'success' && needs.prod-batch5-tester.result == 'success'
     needs:
       - resolve-release
       - prod-playwright-shards
@@ -1148,6 +1230,7 @@ jobs:
       - prod-test-legal-write-oct13-b
       - prod-batch3-tester
       - prod-batch4-tester
+      - prod-batch5-tester
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -1213,6 +1296,26 @@ jobs:
           name: prod-playwright-report-batch4
           path: test-results/prod-native-evidence
 
+      - name: Retain Batch5 partition evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-playwright-report-batch5
+          path: test-results/prod-native-evidence
+
+      - name: Require current release-owned Batch5 evidence before certification
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CASEOPS_EXPECTED_RELEASE_SHA"
+          if [[ -e test-results/prod-native-evidence/batch5-predates.json || -L test-results/prod-native-evidence/batch5-predates.json ]]; then
+            echo "::error::Historical Batch5 diagnostics cannot certify a current release."
+            exit 1
+          fi
+          grep -Fxq 'BATCH5_CONTRACT_VERSION = 1' scripts/prod_playwright_evidence.py
+          python scripts/prod_playwright_evidence.py batch5-contract
+          python scripts/prod_playwright_evidence.py validate --required batch5-desktop batch5-mobile
+
       - name: Reject historical Batch4 markers before current-release certification
         env:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
@@ -1261,10 +1364,21 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         run: |
           set -euo pipefail
-          python scripts/prod_playwright_evidence.py tester-partition-contract --required-version 2
+          version=2
+          if grep -Fxq 'BATCH5_CONTRACT_VERSION = 1' scripts/prod_playwright_evidence.py; then version=3; fi
+          python scripts/prod_playwright_evidence.py tester-partition-contract --required-version "$version"
           python scripts/prod_playwright_evidence.py validate \
             --required tester tester-catalog tester-index test-legal-write-oct13-a test-legal-write-oct13-b \
             --tester-partition-union
+
+      - name: Require original tester and moved workspace cases in the complete B5 release union
+        env:
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          python scripts/prod_playwright_evidence.py validate \
+            --required tester tester-catalog tester-index test-legal-write-oct13-a test-legal-write-oct13-b batch5-desktop batch5-mobile \
+            --batch5-release-union
 
       - name: Require complete release-owned Batch3 and Batch4 role evidence
         env:

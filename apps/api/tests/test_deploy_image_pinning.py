@@ -80,15 +80,23 @@ def test_api_ci_shards_disable_network_backed_ocr() -> None:
         ("ci.yml", "e2e-projects"),
         ("prod-verify.yml", "prod-playwright-shards"),
         ("release-verify.yml", "release-playwright"),
+        ("mobile-source.yml", "source"),
+        ("mobile-source.yml", "browser-handoff"),
     ],
 )
 def test_playwright_ci_verifies_chromium_without_apt_network_dependency(
     workflow_name: str, job_name: str
 ) -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
-    steps = yaml.safe_load(workflow)["jobs"][job_name]["steps"]
+    job = yaml.safe_load(workflow)["jobs"][job_name]
+    steps = job["steps"]
     commands = "\n".join(str(step.get("run", "")) for step in steps)
-    install = next(step for step in steps if step.get("run") == "npx playwright install chromium")
+    install_command = (
+        "node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium"
+        if workflow_name == "mobile-source.yml"
+        else "npx playwright install chromium"
+    )
+    install = next(step for step in steps if step.get("run") == install_command)
     smoke = next(step for step in steps if step.get("name") == "Verify Playwright Chromium runtime")
 
     assert install["timeout-minutes"] <= 5
@@ -102,6 +110,30 @@ def test_playwright_ci_verifies_chromium_without_apt_network_dependency(
     assert "--with-deps" not in commands
     assert "apt-get" not in commands
     assert "/etc/apt/" not in commands
+    assert job["runs-on"] == "ubuntu-24.04"
+    for step in (install, smoke):
+        assert step.get("if") is None
+        assert not step.get("continue-on-error", False)
+    if workflow_name == "mobile-source.yml":
+        canonical = yaml.safe_load(
+            (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        )["jobs"]["e2e-projects"]["steps"]
+        canonical_smoke = next(
+            step for step in canonical if step.get("name") == "Verify Playwright Chromium runtime"
+        )
+        assert smoke["run"] == canonical_smoke["run"]
+        assert install["env"] == smoke["env"] == canonical_smoke["env"]
+        assert not install.get("working-directory")
+        assert not smoke.get("working-directory")
+        suite_command = (
+            "node ../../scripts/mobile/npm-tooling.mjs test"
+            if job_name == "source"
+            else "node scripts/mobile/npm-tooling.mjs run test:e2e:mobile-handoff"
+        )
+        suite = next(step for step in steps if step.get("run") == suite_command)
+        assert steps.index(smoke) < steps.index(suite)
+        assert suite.get("if") is None
+        assert not suite.get("continue-on-error", False)
 
 
 def test_production_deploy_converges_clamav_startup_probe() -> None:

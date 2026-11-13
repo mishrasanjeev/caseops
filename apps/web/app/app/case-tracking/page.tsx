@@ -116,10 +116,17 @@ export default function CaseTrackingPage() {
     mutationFn: refreshCaseTrackingBookmark,
     onSuccess: async (response) => {
       setSelectedBookmarkId(response.bookmark.id);
-      await queryClient.cancelQueries({ queryKey: ["matters"] });
+      const hearingQueryKeys = [
+        ["matters"],
+        ["calendar", "month"],
+        ["calendar", "week"],
+        ["calendar", "day"],
+        ["calendar", "summary"],
+      ];
+      await Promise.all(hearingQueryKeys.map(queryKey => queryClient.cancelQueries({ queryKey })));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["case-tracking"] }),
-        queryClient.invalidateQueries({ queryKey: ["matters"] }),
+        ...hearingQueryKeys.map(queryKey => queryClient.invalidateQueries({ queryKey })),
       ]);
     },
     // A failed refresh still records provider health, the error and the

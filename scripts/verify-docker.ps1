@@ -10,6 +10,7 @@ param(
     [ValidatePattern('^[0-9.]+/[0-9]{1,2}$')]
     [string]$WorkerNetworkSubnet,
     [string]$ResultsDirectory,
+    [string]$RuntimeParent,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$PlaywrightArgs = @()
 )
@@ -1383,9 +1384,15 @@ try {
         Push-Location $ApiDir
         $PostgresExitCode = 1
         try {
+            if (-not $RuntimeParent) {
+                $LocalData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+                if (-not $LocalData) { throw "Current-user local application data folder is unavailable." }
+                $RuntimeParent = Join-Path $LocalData "CaseOpsPG"
+            }
             $NativeArguments = @(
                 (Join-Path $RepoRoot "scripts\run_postgres_acceptance.py"),
-                "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory
+                "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory,
+                "--runtime-parent", $RuntimeParent
             )
             & $ApiPython @NativeArguments
             $PostgresExitCode = $LASTEXITCODE

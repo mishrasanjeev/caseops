@@ -3,22 +3,21 @@ drafts.
 
 Mirrors the ``render_version_docx`` shape so the route layer can swap
 between the two without changing the lookup / authorization /
-citation-gate logic. The PDF path is preferred for filing-grade
-output (margins + page numbering + court header are court-rule
-sensitive); the DOCX path remains for circulating drafts for markup.
+citation-gate logic. This is a review PDF using legacy layout presets;
+content approval does not verify the preset against current filing rules.
 
 Same citation gate as DOCX: a non-approved draft with zero verified
 citations cannot be exported. PRD §6.1 / §17.4.
 
-Court rules sources are pinned in
-``services.court_format_profiles``; this module is a thin renderer
-over those profiles.
+The presets lack reviewed legal-source provenance. This renderer does not
+invent missing pleading structure or repair the approved source content.
 """
 
 from __future__ import annotations
 
 import io
 import json
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -114,6 +113,7 @@ def render_version_pdf(
         body=version.body,
         citations=citations,
         review_required=draft.review_required,
+        created_at=version.created_at,
     )
 
     safe_title = (
@@ -144,6 +144,7 @@ def render_pdf_bytes(
     body: str,
     citations: list[str],
     review_required: bool,
+    created_at: datetime | None = None,
 ) -> bytes:
     """Pure-function PDF renderer. Separated from ``render_version_pdf``
     so unit tests can exercise the layout without an authorisation or
@@ -165,7 +166,7 @@ def render_pdf_bytes(
                     size=profile.heading_font_size_pt,
                     style="B",
                 )
-                self.cell(
+                self.multi_cell(
                     0,
                     8,
                     _ascii_safe(profile.court_header_text),
@@ -182,7 +183,7 @@ def render_pdf_bytes(
                     size=profile.body_font_size_pt - 2,
                     style="I",
                 )
-                self.cell(
+                self.multi_cell(
                     0,
                     5,
                     _ascii_safe(profile.court_header_text),
@@ -208,6 +209,15 @@ def render_pdf_bytes(
             self.cell(0, 8, text, new_x="LMARGIN", new_y="NEXT", align=align)
 
     pdf = CourtFormattedPDF(format=profile.page_format, unit="mm")
+    if created_at is not None:
+        # Stable snapshot bytes allow download-time reauthorization to reject a
+        # changed profile/content/review state without substituting unseen output.
+        pdf.set_creation_date(
+            created_at.replace(tzinfo=UTC) if created_at.tzinfo is None else created_at
+        )
+    pdf.set_subject(
+        f"court-profile={profile.key}; layout-sha256={profile.layout_digest}; rules=unverified"
+    )
     pdf.set_margins(
         profile.margin_left_mm,
         profile.margin_top_mm,
@@ -244,6 +254,19 @@ def render_pdf_bytes(
         align="C",
     )
     pdf.ln(3)
+
+    pdf.set_font(profile.body_font, size=profile.body_font_size_pt - 2, style="I")
+    pdf.multi_cell(
+        0,
+        5,
+        _ascii_safe(
+            f"Layout preset: {profile.key}. Court rules unverified; lawyer review required."
+        ),
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
+    pdf.ln(2)
 
     if review_required:
         pdf.set_font(profile.body_font, size=profile.body_font_size_pt - 1, style="I")

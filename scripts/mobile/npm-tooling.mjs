@@ -17,6 +17,7 @@ const directoryFields = ['dev', 'ino', 'mode', 'uid', 'gid'];
 const frame = (s, keys = fields) => keys.map(k => String(s[k]));
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const digest = b => createHash('sha256').update(b).digest('hex');
+const ciArchiveDeadlines = new WeakMap();
 const check = end => assert.ok(performance.now() < end, 'NPM_TOOLING_PREPARATION_DEADLINE');
 const canonical = p => (fs.realpathSync.native ?? fs.realpathSync)(p);
 function namedFile(named, opened) {
@@ -116,6 +117,132 @@ export function readPinnedArchive(file, end = performance.now() + 30000) {
       && equal(ns, parents(location, end)) && acl === windowsOwner(file, 'file', true, end, 'ARCHIVE_POST_READ'), 'NPM_TOOLING_ARCHIVE_CHANGED');
     const kept = bytes.subarray(0, n); assert.equal(digest(kept), NPM_ARTIFACT.sha256, 'NPM_TOOLING_ARCHIVE_DIGEST');
     return kept;
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+const CI_ARCHIVE_STAGES = Object.freeze(['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']
+  .map(stage => 'NPM_TOOLING_CI_ARCHIVE_HARDEN_REFUSED_' + stage));
+const CI_ARCHIVE_CODES = new Set([...CI_ARCHIVE_STAGES, ...['CONTEXT', 'EXTENT', 'CHANGED', 'DIGEST',
+  'TIMEOUT', 'OUTPUT_BOUND', 'ERROR', 'SIGNAL', 'PROTOCOL'].map(code => 'NPM_TOOLING_CI_ARCHIVE_HARDEN_' + code),
+  'NPM_TOOLING_PREPARATION_DEADLINE']);
+/** Pure transport decoder. Never reflect native output, paths, SIDs or exception text. */
+export function reviewNpmCIArchiveHardenResult(result) {
+  const refuse = code => { throw new Error('NPM_TOOLING_CI_ARCHIVE_HARDEN_' + code); };
+  if (!result || typeof result !== 'object' || Array.isArray(result)) refuse('PROTOCOL');
+  if (result.error !== undefined && result.error !== null) {
+    if (typeof result.error !== 'object' || Array.isArray(result.error)) refuse('PROTOCOL');
+    if (result.error.code === 'ETIMEDOUT') refuse('TIMEOUT');
+    if (result.error.code === 'ENOBUFS') refuse('OUTPUT_BOUND');
+    refuse('ERROR');
+  }
+  if (result.signal !== null) refuse(typeof result.signal === 'string' && result.signal ? 'SIGNAL' : 'PROTOCOL');
+  if (!Number.isInteger(result.status) || typeof result.stdout !== 'string' || typeof result.stderr !== 'string') refuse('PROTOCOL');
+  if (Buffer.byteLength(result.stdout) > 4096 || Buffer.byteLength(result.stderr) > 4096) refuse('OUTPUT_BOUND');
+  if (result.status === 1 && result.stdout === '' && CI_ARCHIVE_STAGES.includes(result.stderr)) throw new Error(result.stderr);
+  if (result.status !== 0 || result.stdout !== 'SECURED' || result.stderr !== '') refuse('PROTOCOL');
+}
+function hardenCIPinnedArchive(end) {
+  let fd;
+  try {
+    assert.ok(process.platform === 'win32' && process.env.GITHUB_ACTIONS === 'true' && process.env.CI === 'true', 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
+    const workspace = process.env.GITHUB_WORKSPACE;
+    const moduleRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+    assert.ok(typeof workspace === 'string' && path.isAbsolute(workspace) && path.resolve(workspace) === workspace
+      && !workspace.startsWith('\\\\') && !workspace.startsWith('//') && workspace === moduleRoot
+      && canonical(workspace) === workspace && path.isAbsolute(process.env.SystemRoot || ''), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
+    const file = path.join(workspace, ...NPM_ARTIFACT.relative.split('/'));
+    check(end);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+    const initial = fs.fstatSync(fd, { bigint: true }), named = fs.lstatSync(file, { bigint: true });
+    namedFile(named, initial);
+    assert.ok(initial.isFile() && initial.nlink === 1n && initial.size === BigInt(NPM_ARTIFACT.sizeBytes)
+      && initial.ino > 0n && initial.dev >= 0n && initial.dev <= 4294967295n
+      && initial.birthtimeNs > 0n && initial.mtimeNs > 0n && named.birthtimeNs === initial.birthtimeNs,
+    'NPM_TOOLING_CI_ARCHIVE_HARDEN_EXTENT');
+    assert.equal(canonical(file), file, 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
+    const namespace = parents(file, end);
+    const read = () => {
+      const bytes = Buffer.alloc(NPM_ARTIFACT.sizeBytes + 1); let n = 0;
+      while (n < bytes.length) {
+        check(end); const width = Math.min(65536, bytes.length - n), amount = fs.readSync(fd, bytes, n, width, n);
+        assert.ok(Number.isInteger(amount) && amount >= 0 && amount <= width, 'NPM_TOOLING_CI_ARCHIVE_HARDEN_EXTENT');
+        if (!amount) break; n += amount;
+      }
+      assert.equal(n, NPM_ARTIFACT.sizeBytes, 'NPM_TOOLING_CI_ARCHIVE_HARDEN_EXTENT');
+      assert.equal(digest(bytes.subarray(0, n)), NPM_ARTIFACT.sha256, 'NPM_TOOLING_CI_ARCHIVE_HARDEN_DIGEST');
+      return bytes.subarray(0, n);
+    };
+    const before = read();
+    assert.ok(equal(frame(initial), frame(fs.fstatSync(fd, { bigint: true })))
+      && equal(frame(named), frame(fs.lstatSync(file, { bigint: true })))
+      && equal(namespace, parents(file, end)), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED');
+    const code = String.raw`$ErrorActionPreference='Stop';$f=$null;$info=[IntPtr]::Zero;try{
+$clock=[Diagnostics.Stopwatch]::StartNew();function Check {if($clock.ElapsedMilliseconds -ge 3500){throw 'bounded'}}
+Check;$rights=[Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
+$f=[IO.FileStream]::new($env:CASEOPS_NPM_HARDEN_PATH,[IO.FileMode]::Open,$rights,[IO.FileShare]::Read,4096,[IO.FileOptions]::None)
+Check;if(!$f.CanRead -or !$f.CanSeek -or $f.Length -ne 4043346){throw 'extent'}
+$assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsNpmArchiveHandle'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
+$type=$assembly.DefineDynamicModule('Native').DefineType('CaseOpsNpmArchiveHandle.Native',[Reflection.TypeAttributes]::Public)
+$method=$type.DefinePInvokeMethod('GetFileInformationByHandle','kernel32.dll','GetFileInformationByHandle',[Reflection.MethodAttributes]'Public,Static,PinvokeImpl',[Reflection.CallingConventions]::Standard,[bool],[Type[]]@([IntPtr],[IntPtr]),[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode)
+$method.SetImplementationFlags($method.GetMethodImplementationFlags() -bor [Reflection.MethodImplAttributes]::PreserveSig);$native=$type.CreateType();$info=[Runtime.InteropServices.Marshal]::AllocHGlobal(52)
+function Identity {
+Check;if(!$native::GetFileInformationByHandle($f.SafeFileHandle.DangerousGetHandle(),$info)){throw 'identity'}
+$b=[byte[]]::new(52);[Runtime.InteropServices.Marshal]::Copy($info,$b,0,52)
+$ino=([uint64][BitConverter]::ToUInt32($b,44) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,48)
+$birth=([uint64][BitConverter]::ToUInt32($b,8) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,4)
+$mtime=([uint64][BitConverter]::ToUInt32($b,24) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,20)
+$size=([uint64][BitConverter]::ToUInt32($b,32) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,36)
+if(([BitConverter]::ToUInt32($b,0) -band 1040) -ne 0 -or [BitConverter]::ToUInt32($b,40) -ne 1 -or $birth -le 116444736000000000 -or $mtime -le 116444736000000000){throw 'identity'}
+$culture=[Globalization.CultureInfo]::InvariantCulture
+if($ino.ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_MTIME -or $size -ne 4043346 -or $f.Length -ne 4043346){throw 'identity'}
+return ,$b
+}
+function Digest {$f.Position=0;$h=[Security.Cryptography.SHA256]::Create();try{return [BitConverter]::ToString($h.ComputeHash($f)).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}}
+$first=Identity;$before=Digest;if($before -cne 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'){throw 'changed'}
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$identity.User;$t=$identity.Owner
+if(!$u -or !$t -or $u.Value -in @('S-1-5-18','S-1-5-32-544')){throw 'owner'}
+$old=$f.GetAccessControl();$o=$old.GetOwner([Security.Principal.SecurityIdentifier]).Value
+$runtime=($o -eq $u.Value -or ($o -eq $t.Value -and $o -in @('S-1-5-18','S-1-5-32-544')))
+$public=($o -eq 'S-1-5-32-544' -and $t.Value -eq $u.Value)
+if(!($runtime -or $public)){throw 'owner'}
+Check;$a=[Security.AccessControl.FileSecurity]::new();$a.SetOwner($u);$a.SetAccessRuleProtection($true,$false)
+foreach($sid in @($u.Value,'S-1-5-18','S-1-5-32-544')){$id=[Security.Principal.SecurityIdentifier]::new($sid);$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($id,[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.AccessControlType]::Allow))}
+Check;$f.SetAccessControl($a);Check;$actual=$f.GetAccessControl()
+if(!$actual.AreAccessRulesProtected -or $actual.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $u.Value){throw 'owner'}
+$rules=@($actual.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]));$seen=@{}
+foreach($rule in $rules){Check;$sid=$rule.IdentityReference.Value;if($rule.IsInherited -or $rule.AccessControlType -ne 'Allow' -or $sid -notin @($u.Value,'S-1-5-18','S-1-5-32-544') -or $rule.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl -or $rule.InheritanceFlags -ne 'None' -or $rule.PropagationFlags -ne 'None' -or $seen.ContainsKey($sid)){throw 'acl'};$seen[$sid]=$true}
+Check;$last=Identity;foreach($offset in @(0,4,8,20,24,28,32,36,40,44,48)){if([BitConverter]::ToUInt32($first,$offset) -ne [BitConverter]::ToUInt32($last,$offset)){throw 'changed'}}
+if($rules.Count -ne 3 -or (Digest) -cne $before){throw 'changed'}
+Check;[Console]::Out.Write('SECURED')
+}catch{$stage='OTHER';if($_.Exception.Message -cin @('bounded','extent','identity','changed','owner','acl')){$stage=$_.Exception.Message.ToUpperInvariant()};[Console]::Error.Write('NPM_TOOLING_CI_ARCHIVE_HARDEN_REFUSED_'+$stage);exit 1}finally{if($info -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::FreeHGlobal($info)};if($null -ne $f){$f.Dispose()}}`;
+    check(end);
+    const result = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
+        env: { SystemRoot: process.env.SystemRoot, CASEOPS_NPM_HARDEN_PATH: file,
+          CASEOPS_NPM_HARDEN_INO: String(initial.ino), CASEOPS_NPM_HARDEN_VOLUME: String(initial.dev),
+          CASEOPS_NPM_HARDEN_BIRTH: String(initial.birthtimeNs), CASEOPS_NPM_HARDEN_MTIME: String(initial.mtimeNs) },
+        encoding: 'utf8', windowsHide: true, maxBuffer: 4096,
+        timeout: Math.max(1, Math.min(5000, Math.floor(end - performance.now()))),
+      });
+    reviewNpmCIArchiveHardenResult(result); check(end);
+    const final = fs.fstatSync(fd, { bigint: true }), finalNamed = fs.lstatSync(file, { bigint: true });
+    for (const key of [...fields.filter(key => key !== 'ctimeNs'), 'birthtimeNs'])
+      assert.equal(final[key], initial[key], 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED');
+    namedFile(finalNamed, final);
+    assert.equal(finalNamed.birthtimeNs, final.birthtimeNs, 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED');
+    assert.ok(read().equals(before) && equal(frame(final), frame(fs.fstatSync(fd, { bigint: true })))
+      && equal(frame(finalNamed), frame(fs.lstatSync(file, { bigint: true })))
+      && canonical(file) === file && equal(namespace, parents(file, end)), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED');
+    check(end);
+    return Object.freeze({ kind: 'caseops-npm-ci-pinned-archive-hardening-v1', artifactSha256: NPM_ARTIFACT.sha256,
+      sizeBytes: NPM_ARTIFACT.sizeBytes, authority: 'literal-workspace-archive', owner: 'current-user',
+      writers: Object.freeze(['current-user', 'system', 'administrators']), protected: true,
+      identityBound: true, contentsPreserved: true });
+  } catch (error) {
+    const message = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
+    const drift = ['NPM_TOOLING_NAMED_DESCRIPTOR_CHANGED', 'NPM_TOOLING_REGULAR_FILE_REQUIRED',
+      'NPM_TOOLING_NAMESPACE_CHANGED', 'NPM_TOOLING_NAMESPACE_SCOPE'].includes(message);
+    throw new Error(CI_ARCHIVE_CODES.has(message) ? message
+      : drift ? 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED' : 'NPM_TOOLING_CI_ARCHIVE_HARDEN_ERROR');
   } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 function text(block, start, width) {
@@ -229,9 +356,10 @@ export function verifyInstalledNpm(root, rows, directories, end, uid) {
   assert.ok(equal(outerNamespace, parents(root, end)), 'NPM_TOOLING_RUNTIME_NAMESPACE_CHANGED');
   return { entries: after.size, observations, bytesRead };
 }
-export function prepareNpm({ parent = os.tmpdir(), archive = fileURLToPath(new URL('../../' + NPM_ARTIFACT.relative, import.meta.url)) } = {}) {
+export function prepareNpm(options = {}) {
+  const { parent = os.tmpdir(), archive = fileURLToPath(new URL('../../' + NPM_ARTIFACT.relative, import.meta.url)) } = options;
   assert.ok(['22.23.4', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
-  const end = performance.now() + 30000;
+  const end = ciArchiveDeadlines.get(options) ?? performance.now() + 30000;
   const kept = readPinnedArchive(archive, end), tar = gunzipSync(kept, { maxOutputLength: 33554432 });
   assert.equal(tar.length, NPM_ARTIFACT.tarBytes, 'NPM_TOOLING_TAR_EXTENT');
   const rows = regularTarMembers(tar, end); assert.equal(rows.length, NPM_ARTIFACT.members, 'NPM_TOOLING_EXACT_MEMBERS');
@@ -340,8 +468,19 @@ export async function runNpm(args, options = {}) {
   const child = spawn(process.execPath, ['--input-type=module', '--eval', installed.environment.CASEOPS_PINNED_NPM_BOOTSTRAP, '--', isNpx ? 'npx' : 'npm', ...ordinaryArgs], { stdio: 'inherit', env: environment, windowsHide: true });
   return await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', (status, signal) => signal ? reject(new Error('NPM_TOOLING_CHILD_SIGNAL')) : resolve(status)); });
 }
+/** CI invocation only: no arbitrary archive, environment, deadline or ACL target API. */
+export async function runCINpm(args) {
+  const end = performance.now() + 30000;
+  assert.ok(['22.23.4', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(Array.isArray(args) && args.every(arg => typeof arg === 'string'), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
+  const proof = hardenCIPinnedArchive(end);
+  console.error(JSON.stringify(proof));
+  const options = Object.freeze({}); ciArchiveDeadlines.set(options, end);
+  return runNpm(args, options);
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { process.exitCode = await runNpm(process.argv.slice(2)); }
+  try { process.exitCode = await (process.platform === 'win32' && process.env.GITHUB_ACTIONS === 'true' && process.env.CI === 'true'
+    ? runCINpm(process.argv.slice(2)) : runNpm(process.argv.slice(2))); }
   catch (error) {
     const label = /^NPM_TOOLING_[A-Z_]+$/.test(error?.message || '') ? error.message : 'NPM_TOOLING_REFUSED';
     console.error(label);

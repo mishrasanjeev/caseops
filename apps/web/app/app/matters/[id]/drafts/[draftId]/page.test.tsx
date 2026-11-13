@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Blob as NodeBlob } from "node:buffer";
+import { webcrypto } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api/config";
@@ -63,6 +65,14 @@ vi.mock("@/components/drafting/DraftCompareView", () => ({
   DraftCompareView: () => <div data-testid="draft-compare" />,
 }));
 
+const { pdfArtifactMock, downloadPdfMock } = vi.hoisted(() => ({ pdfArtifactMock: vi.fn(), downloadPdfMock: vi.fn() }));
+vi.mock("@/components/drafting/DraftPdfPreview", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/drafting/DraftPdfPreview")>(),
+  useDraftPdfArtifact: pdfArtifactMock,
+  downloadDraftPdf: downloadPdfMock,
+  DraftPdfPreview: ({ url, file }: { url: string | null; file: Blob | null }) => <div data-testid="real-pdf-preview" data-url={url} data-file-type={file?.type} />,
+}));
+
 vi.mock("@/components/drafting/FilingChecklistCard", () => ({
   FilingChecklistCard: ({ courtProfile }: { courtProfile?: string }) => (
     <div
@@ -73,6 +83,8 @@ vi.mock("@/components/drafting/FilingChecklistCard", () => ({
 }));
 
 import DraftDetailPage from "@/app/app/matters/[id]/drafts/[draftId]/page";
+
+afterEach(() => vi.unstubAllGlobals());
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -122,6 +134,8 @@ const BASE_DRAFT = {
 
 describe("MatterDraftDetailPage", () => {
   beforeEach(() => {
+    pdfArtifactMock.mockReset().mockImplementation((source) => ({ url: source ? "blob:approved-pdf" : null, file: source ? new Blob(["%PDF-synthetic"], { type: "application/pdf" }) : null, error: null, retry: vi.fn(), revalidate: vi.fn().mockResolvedValue("blob:approved-pdf"), validating: false }));
+    downloadPdfMock.mockReset();
     approveDraftMock.mockReset();
     draftFilingBundleUrlMock.mockReset();
     draftPdfUrlMock.mockReset();
@@ -432,13 +446,103 @@ describe("MatterDraftDetailPage", () => {
       "data-court-profile",
       "supreme_court",
     );
-    expect(screen.getByTestId("draft-download-pdf")).toHaveAttribute(
-      "href",
-      "https://api.test/draft.pdf?court_profile=supreme_court",
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(
+      "https://api.test/draft.pdf?court_profile=supreme_court&version_id=v-1", "approved:false:Bail application",
     );
     expect(screen.getByTestId("draft-download-filing-bundle")).toHaveAttribute(
       "href",
       "https://api.test/bundle.zip?court_profile=supreme_court",
     );
+  });
+
+  it("BUG001 separates draft text from the version-pinned PDF and downloads its exact bytes", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("draft-download-pdf")).toBeDisabled();
+    expect(screen.queryByTestId("real-pdf-preview")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(screen.queryByTestId("draft-body-readonly")).not.toBeInTheDocument();
+    expect(screen.getByTestId("real-pdf-preview")).toHaveAttribute("data-url", "blob:approved-pdf");
+    expect(screen.getByTestId("real-pdf-preview")).toHaveAttribute("data-file-type", "application/pdf");
+    expect(screen.getByText(/Court-profile rules are unverified/)).toBeVisible();
+    await userEvent.click(screen.getByTestId("draft-download-pdf"));
+    expect(downloadPdfMock).toHaveBeenCalledWith("blob:approved-pdf", BASE_DRAFT.title, 1);
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-1", "approved:false:Bail application");
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+  });
+
+  it("BUG001 passive text, remount and edit cancellation do not acquire a PDF", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    const first = render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    first.unmount();
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    await userEvent.click(screen.getByTestId("draft-edit-toggle"));
+    expect(draftPdfUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(draftPdfUrlMock).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "Draft text" }));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(null, "approved:false:Bail application");
+  });
+
+  it("BUG001 replacing the version requires another explicit PDF action", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    const replacement = { ...BASE_DRAFT, current_version_id: "v-2", versions: [
+      ...BASE_DRAFT.versions, { ...BASE_DRAFT.versions[0], id: "v-2", revision: 2, body: "Replacement source." },
+    ] };
+    fetchDraftMock.mockResolvedValue(replacement);
+    generateDraftVersionMock.mockResolvedValue(replacement);
+    await userEvent.click(screen.getByTestId("draft-generate"));
+    await waitFor(() => expect(screen.getByTestId("draft-current-revision")).toHaveTextContent("Revision 2"));
+    expect(pdfArtifactMock.mock.calls.some(([source]) => source?.includes("version_id=v-2"))).toBe(false);
+    expect(screen.getByTestId("draft-body-readonly")).toHaveTextContent("Replacement source.");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith("https://api.test/draft.pdf?version_id=v-2", "approved:false:Bail application");
+  });
+
+  it("BUG001 a cancelled deferred download cannot reopen PDF after switching to Draft text", async () => {
+    const real = await vi.importActual<typeof import("@/components/drafting/DraftPdfPreview")>("@/components/drafting/DraftPdfPreview");
+    pdfArtifactMock.mockImplementation(real.useDraftPdfArtifact);
+    vi.stubGlobal("Blob", NodeBlob);
+    vi.stubGlobal("crypto", webcrypto);
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL = vi.fn(() => "blob:deferred-pdf");
+      static revokeObjectURL = vi.fn();
+    });
+    let complete!: (response: Response) => void;
+    const fetch = vi.fn().mockResolvedValueOnce(new Response("%PDF-synthetic", { headers: { "content-type": "application/pdf" } }))
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve; }));
+    vi.stubGlobal("fetch", fetch);
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+    useCapabilityMock.mockReturnValue(true);
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    await waitFor(() => expect(screen.getByTestId("draft-download-pdf")).toBeEnabled());
+    await userEvent.click(screen.getByTestId("draft-download-pdf"));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await userEvent.click(screen.getByRole("tab", { name: "Draft text" }));
+    await act(async () => { complete(new Response("%PDF-synthetic", { headers: { "content-type": "application/pdf" } })); });
+    expect(screen.getByRole("tab", { name: "Draft text" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("draft-body-readonly")).toHaveTextContent(BASE_DRAFT.versions[0].body);
+    expect(screen.queryByTestId("real-pdf-preview")).not.toBeInTheDocument();
+    expect(downloadPdfMock).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

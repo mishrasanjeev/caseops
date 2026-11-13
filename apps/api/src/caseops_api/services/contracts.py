@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
@@ -53,6 +53,10 @@ from caseops_api.schemas.contracts import (
     ContractWorkspaceResponse,
 )
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+    require_locked_membership_capability,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
@@ -63,6 +67,7 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
     sanitize_filename,
 )
+from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -445,6 +450,102 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
     return contract
 
 
+def _get_locked_contract(
+    session: Session, *, context: SessionContext, contract_id: str,
+    new_linked_matter_id: str | None = None,
+    owner_membership_id: str | None = None,
+) -> Contract:
+    lock_contract_actor(session, context=context, capability="contracts:edit",
+                        additional_membership_ids=(owner_membership_id,))
+    observed = session.execute(select(Contract.linked_matter_id).where(
+        Contract.id == contract_id, Contract.company_id == context.company.id,
+    )).one_or_none()
+    if observed is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    parent_ids = sorted(
+        {value for value in (observed.linked_matter_id, new_linked_matter_id) if value}
+    )
+    # Discover without a child lock, then lock all old/new parents in one order.
+    # A concurrent relink must not make us acquire a new parent after the child.
+    for matter_id in parent_ids:
+        parent = session.scalar(select(Matter.id).where(
+            Matter.id == matter_id, Matter.company_id == context.company.id,
+        ).with_for_update())
+        if parent is None:
+            raise HTTPException(
+                status_code=404, detail="Linked matter not found in the current company."
+            )
+    contract = session.scalar(
+        select(Contract)
+        .where(Contract.id == contract_id, Contract.company_id == context.company.id)
+        .options(raiseload("*"))
+        .with_for_update(of=Contract, key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    if contract.linked_matter_id != observed.linked_matter_id:
+        raise HTTPException(
+            status_code=409,
+            detail="The contract's linked matter changed. Reload before saving.",
+        )
+    return contract
+
+
+def lock_contract_actor(
+    session: Session, *, context: SessionContext, capability: str | None = None,
+    additional_membership_ids: tuple[str | None, ...] = (),
+) -> None:
+    """Use the lifecycle writer's principal fence before any parent/child lock."""
+    company_id, actor_id, user_id = context.company.id, context.membership.id, context.user.id
+    actors = lock_company_memberships_for_assignment(
+        session, company_id=company_id,
+        membership_ids=(actor_id, *additional_membership_ids),
+    )
+    actor = actors.get(actor_id)
+    if actor is None or actor.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Contract access is no longer available.")
+    if capability is not None:
+        require_locked_membership_capability(session, actor, capability)
+    session.refresh(context.company)
+    current = get_session_context(session, actor_id, token_issued_at=context.token_issued_at)
+    if current.company.id != company_id or current.user.id != user_id:
+        raise HTTPException(status_code=403, detail="Contract access is no longer available.")
+    context.company, context.membership, context.user = (
+        current.company, current.membership, current.user,
+    )
+
+
+def _assert_contract_version(contract: Contract, expected: datetime | None) -> None:
+    def as_utc(value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+    if expected is not None and as_utc(expected) != as_utc(contract.updated_at):
+        raise HTTPException(
+            status_code=409,
+            detail="This contract changed after you opened it. Reload before saving your changes.",
+        )
+
+
+def _apply_contract_metadata(contract: Contract, updates: dict[str, object]) -> None:
+    if not updates:
+        return
+    effective = updates.get("effective_on", contract.effective_on)
+    expiry = updates.get("expires_on", contract.expires_on)
+    if effective and expiry and expiry < effective:
+        raise HTTPException(
+            status_code=422, detail="Expiry date cannot be before the effective date."
+        )
+    for field_name, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        setattr(contract, field_name, value)
+    if {"contract_type", "contract_type_key", "contract_type_notes"} & set(updates):
+        contract.contract_type_key, contract.contract_type_notes = _resolve_contract_type_values(
+            contract.contract_type, contract.contract_type_key, contract.contract_type_notes,
+        )
+
+
 def _get_contract_attachment_model(
     session: Session,
     *,
@@ -568,6 +669,7 @@ def _get_contract_term_suggestion_model(
             ContractTermSuggestion.contract_id == contract_id,
             ContractTermSuggestion.company_id == context.company.id,
         )
+        .execution_options(populate_existing=True)
     )
     if suggestion is None:
         raise HTTPException(
@@ -579,6 +681,9 @@ def _get_contract_term_suggestion_model(
 
 def _contract_metadata_snapshot(contract: Contract) -> dict[str, object]:
     return {
+        "title": contract.title,
+        "counterparty_name": contract.counterparty_name,
+        "summary": contract.summary,
         "contract_type": contract.contract_type,
         "contract_type_key": contract.contract_type_key,
         "contract_type_notes": contract.contract_type_notes,
@@ -786,6 +891,8 @@ def create_contract(
     context: SessionContext,
     payload: ContractCreateRequest,
 ) -> ContractRecord:
+    lock_contract_actor(session, context=context, capability="contracts:create",
+                        additional_membership_ids=(payload.owner_membership_id,))
     existing_contract = session.scalar(
         select(Contract).where(
             Contract.company_id == context.company.id,
@@ -938,21 +1045,27 @@ def update_contract(
     contract_id: str,
     payload: ContractUpdateRequest,
 ) -> ContractRecord:
-    raw_updates = payload.model_dump(exclude_unset=True)
+    raw_updates = payload.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
     original_update_keys = set(raw_updates.keys())
-    locked_linked_matter = None
-    if raw_updates.get("linked_matter_id"):
-        locked_linked_matter = _get_operational_linked_matter(
-            session,
-            context=context,
-            matter_id=raw_updates["linked_matter_id"],
-        )
-
     # Lock the Matter parent before loading or mutating the Contract child. This
     # keeps lifecycle disposal and contract linking in one deterministic lock
     # order and makes the operational check authoritative through commit.
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id,
+                                    new_linked_matter_id=raw_updates.get("linked_matter_id"),
+                                    owner_membership_id=raw_updates.get("owner_membership_id"))
+    _assert_contract_version(contract, payload.expected_updated_at)
+    before_values = {field: getattr(contract, field) for field in raw_updates}
     metadata_before = _contract_metadata_snapshot(contract)
+
+    locked_linked_matter = None
+    if raw_updates.get("linked_matter_id"):
+        locked_linked_matter = _get_operational_linked_matter(
+            session, context=context, matter_id=raw_updates["linked_matter_id"],
+        )
+
+    metadata_updates = {field: raw_updates.pop(field) for field in list(raw_updates)
+                        if field in ContractMetadataUpdateRequest.model_fields}
+    _apply_contract_metadata(contract, metadata_updates)
 
     if "linked_matter_id" in raw_updates:
         linked_matter_id = raw_updates.pop("linked_matter_id")
@@ -976,21 +1089,15 @@ def update_contract(
             value = value.strip()
         setattr(contract, field_name, value)
 
-    if original_update_keys & {
-        "contract_type",
-        "contract_type_key",
-        "contract_type_notes",
-    }:
-        contract_type_key, contract_type_notes = _resolve_contract_type_values(
-            contract.contract_type,
-            contract.contract_type_key,
-            contract.contract_type_notes,
-        )
-        contract.contract_type_key = contract_type_key
-        contract.contract_type_notes = contract_type_notes
-
     if contract.currency:
         contract.currency = contract.currency.upper()
+
+    if (
+        all(getattr(contract, field) == value for field, value in before_values.items())
+        and _contract_metadata_snapshot(contract) == metadata_before
+    ):
+        session.commit()
+        return _contract_record(contract)
 
     session.add(contract)
     _append_activity(
@@ -1010,20 +1117,11 @@ def update_contract(
         metadata={
             "contract_code": contract.contract_code,
             "status": contract.status,
-            "fields": sorted(raw_updates.keys()),
+            "fields": sorted(original_update_keys),
         },
     )
     metadata_after = _contract_metadata_snapshot(contract)
-    metadata_fields = {
-        "contract_type",
-        "contract_type_key",
-        "contract_type_notes",
-        "effective_on",
-        "expires_on",
-        "renewal_on",
-        "auto_renewal",
-    }
-    if original_update_keys & metadata_fields and metadata_after != metadata_before:
+    if metadata_after != metadata_before:
         record_from_context(
             session,
             context,
@@ -1090,21 +1188,11 @@ def update_contract_metadata(
     contract_id: str,
     payload: ContractMetadataUpdateRequest,
 ) -> ContractRecord:
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id)
+    _assert_contract_version(contract, payload.expected_updated_at)
     before = _contract_metadata_snapshot(contract)
-    updates = payload.model_dump(exclude_unset=True)
-    for field_name, value in updates.items():
-        if isinstance(value, str):
-            value = value.strip() or None
-        setattr(contract, field_name, value)
-    if {"contract_type", "contract_type_key", "contract_type_notes"} & set(updates):
-        contract_type_key, contract_type_notes = _resolve_contract_type_values(
-            contract.contract_type,
-            contract.contract_type_key,
-            contract.contract_type_notes,
-        )
-        contract.contract_type_key = contract_type_key
-        contract.contract_type_notes = contract_type_notes
+    updates = payload.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
+    _apply_contract_metadata(contract, updates)
 
     after = _contract_metadata_snapshot(contract)
     if after != before:
@@ -1115,7 +1203,7 @@ def update_contract_metadata(
             actor_membership_id=context.membership.id,
             event_type="contract_metadata_updated",
             title="Contract metadata updated",
-            detail="Contract type or term metadata changed.",
+            detail="Updated fields: " + ", ".join(sorted(updates)),
         )
         record_from_context(
             session,
@@ -1295,7 +1383,7 @@ def create_contract_term_suggestion(
     contract_id: str,
     payload: ContractTermSuggestionCreateRequest,
 ) -> ContractTermSuggestionRecord:
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id)
     source_attachment_id = _validated_contract_attachment_id(
         session,
         context=context,
@@ -1349,8 +1437,9 @@ def review_contract_term_suggestion(
     contract_id: str,
     suggestion_id: str,
     accepted: bool,
+    expected_updated_at: datetime | None = None,
 ) -> ContractTermSuggestionRecord:
-    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id)
     suggestion = _get_contract_term_suggestion_model(
         session,
         context=context,
@@ -1371,15 +1460,20 @@ def review_contract_term_suggestion(
             detail="Contract term suggestions cannot change after review.",
         )
     if accepted:
+        if expected_updated_at is None:
+            raise HTTPException(
+                status_code=422,
+                detail="The observed contract version is required before accepting terms.",
+            )
+        _assert_contract_version(contract, expected_updated_at)
         _ensure_term_suggestion_can_be_accepted(suggestion)
     before_suggestion = _term_suggestion_snapshot(suggestion)
     before_terms = _canonical_term_snapshot(contract)
+    if accepted:
+        _apply_contract_metadata(contract, _term_suggestion_canonical_updates(suggestion))
     suggestion.status = desired_status
     suggestion.reviewed_by_membership_id = context.membership.id
     suggestion.reviewed_at = utcnow()
-    if accepted:
-        for field_name, value in _term_suggestion_canonical_updates(suggestion).items():
-            setattr(contract, field_name, value)
     after_suggestion = _term_suggestion_snapshot(suggestion)
     after_terms = _canonical_term_snapshot(contract)
     session.add(suggestion)

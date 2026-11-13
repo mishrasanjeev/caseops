@@ -30,7 +30,9 @@ from caseops_api.services.session_context import SessionContext
 # {{var_name}} — alphanumeric + underscore only. Whitespace inside
 # the braces is tolerated so admins can write {{ client_name }}
 # interchangeably with {{client_name}}.
-_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}(?!\})")
+_UNRESOLVED_RE = re.compile(r"\{\{|\}\}|\{\[|\]\}|\[[A-Za-z_][A-Za-z0-9_]* not set\]")
+MATTER_EMAIL_VARIABLES = frozenset({"client_name", "hearing_date", "matter_title", "matter_code"})
 
 
 def list_email_templates(
@@ -155,15 +157,7 @@ def render_template(
     template: EmailTemplate | EmailTemplateRecord,
     variables: dict[str, str],
 ) -> EmailRenderResponse:
-    """Substitute ``{{var}}`` tokens in subject + body with the
-    supplied variable values. Tokens with no provided value are kept
-    as ``[client_name not set]`` so the lawyer can spot them in the
-    preview pane and either provide the variable or edit the template.
-
-    Also returns ``missing_variables`` — the set of declared-required
-    variables the caller didn't pass — so the Send button can be
-    disabled until the user fills them.
-    """
+    """Render once; every actual token needs a value, even in legacy templates."""
     subject_tpl = template.subject_template
     body_tpl = template.body_template
 
@@ -177,6 +171,7 @@ def render_template(
     body = _PLACEHOLDER_RE.sub(_replace, body_tpl)
 
     declared_required: list[str] = []
+    declared_names: set[str] = set()
     declared = (
         template.variables
         if isinstance(template, EmailTemplateRecord)
@@ -184,17 +179,30 @@ def render_template(
     )
     for v in declared:
         if isinstance(v, dict):
+            if v.get("name"):
+                declared_names.add(str(v["name"]))
             if v.get("required", True) and v.get("name"):
                 declared_required.append(str(v["name"]))
         else:
+            if getattr(v, "name", None):
+                declared_names.add(v.name)
             if getattr(v, "required", True) and getattr(v, "name", None):
                 declared_required.append(v.name)
-    missing = [
-        n for n in declared_required
+    tokens = set(_PLACEHOLDER_RE.findall(subject_tpl + "\n" + body_tpl))
+    missing = sorted(
+        n for n in tokens | set(declared_required)
         if n not in variables or not variables[n].strip()
-    ]
+    )
+    invalid = sorted(tokens - declared_names - MATTER_EMAIL_VARIABLES)
+    # Reject unsupported syntax and tokens inserted through a supplied value.
+    if any(_UNRESOLVED_RE.search(text) for text in (
+        _PLACEHOLDER_RE.sub("", subject_tpl), _PLACEHOLDER_RE.sub("", body_tpl),
+        subject, body,
+    )):
+        invalid.append("Malformed or nested placeholder")
     return EmailRenderResponse(
         subject=subject, body=body, missing_variables=missing,
+        invalid_placeholders=invalid,
     )
 
 

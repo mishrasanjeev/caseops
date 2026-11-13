@@ -256,3 +256,9 @@ b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_
 b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_legibility.py:generic-api-key:646
 440278e2b86d5b994da960e44c30f5b35da5fcb7:tests/e2e/support/ram-bugs4.ts:generic-api-key:142
 # End 2026-11-01 review.
+
+# 2026-11-11 PR614: exact independently reviewed synthetic Matter-code origin.
+# The value is written to matter_code, not authentication. Immutable blob/span
+# hashes are retained in docs/security/history-finding-review-2026-11-11.json.
+# No current path, rule-wide exclusion, changed span or future origin is covered.
+861aea48e506aaff41ea08739e216e90fb5b13d4:apps/api/tests/test_draft_pdf_parity_20261111.py:generic-api-key:90

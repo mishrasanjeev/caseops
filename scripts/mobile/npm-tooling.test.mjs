@@ -6,12 +6,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import https from 'node:https';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
-import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, npmWindowsOwnerDiagnostic, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, runNpm, verifyInstalledNpm } from './npm-tooling.mjs';
+import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, npmWindowsOwnerDiagnostic, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, reviewNpmCIArchiveHardenResult, runCINpm, runNpm, verifyInstalledNpm } from './npm-tooling.mjs';
 import { installNpmRegistryTransport } from './npm-registry.mjs';
 
 const archive = process.env.CASEOPS_TEST_NPM_ARCHIVE || fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', import.meta.url));
@@ -392,6 +392,239 @@ test('Windows npm diagnostics retain the original Error and exclude unvalidated 
   }
   const spoof = Object.assign(new Error(sentinel.message), { phase: 'ARCHIVE_PRE_READ', writeScopeSafe: false });
   assert.equal(npmWindowsOwnerDiagnostic(spoof), null); assert.equal(npmWindowsOwnerDiagnostic(null), null);
+});
+
+const ciWorkspace = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const ciArchive = path.join(ciWorkspace, ...NPM_ARTIFACT.relative.split('/'));
+const securedArchive = { status: 0, signal: null, stdout: 'SECURED', stderr: '' };
+function withCIArchiveEnvironment(patch, run) {
+  const values = { GITHUB_ACTIONS: 'true', CI: 'true', GITHUB_WORKSPACE: ciWorkspace, ...patch };
+  const prior = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  try { return run(); }
+  finally {
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+}
+
+test('CI archive native transport accepts only fixed secured proof and redacts every refusal', () => {
+  reviewNpmCIArchiveHardenResult(securedArchive);
+  for (const stage of ['BOUNDED', 'EXTENT', 'IDENTITY', 'CHANGED', 'OWNER', 'ACL', 'OTHER']) {
+    const code = 'NPM_TOOLING_CI_ARCHIVE_HARDEN_REFUSED_' + stage;
+    assert.throws(() => reviewNpmCIArchiveHardenResult({ ...securedArchive, status: 1, stdout: '', stderr: code }), { message: code });
+  }
+  for (const result of [null, {}, Object.assign([], securedArchive),
+    ...[false, 0, '', true, 'PRIVATE_PATH_SID_TOKEN', []].map(error => ({ ...securedArchive, error })),
+    { ...securedArchive, stdout: 'SECURED\n' },
+    { ...securedArchive, stderr: 'PRIVATE_PATH_SID_TOKEN' }, { ...securedArchive, status: null },
+    { ...securedArchive, signal: 'SIGTERM' }, { ...securedArchive, signal: undefined },
+    { ...securedArchive, stdout: 'x'.repeat(4097) }, { ...securedArchive, stderr: 'x'.repeat(4097) },
+    { ...securedArchive, error: { code: 'ETIMEDOUT', message: 'PRIVATE_PATH_SID_TOKEN' } },
+    { ...securedArchive, error: { code: 'ENOBUFS' } }, { ...securedArchive, error: Error('PRIVATE_PATH_SID_TOKEN') }]) {
+    assert.throws(() => reviewNpmCIArchiveHardenResult(result), error => {
+      assert.match(error.message, /^NPM_TOOLING_CI_ARCHIVE_HARDEN_[A-Z_]+$/);
+      assert.equal(error.message.includes('PRIVATE_PATH_SID_TOKEN'), false); return true;
+    });
+  }
+});
+
+test('CI archive hardening refuses non-CI and noncanonical workspace contexts before native work', async t => {
+  const root = fixture(t); let calls = 0;
+  for (const patch of [{ GITHUB_ACTIONS: 'false' }, { CI: 'false' }, { GITHUB_WORKSPACE: undefined },
+    { GITHUB_WORKSPACE: root }, { GITHUB_WORKSPACE: ciWorkspace + path.sep + '.' },
+    { GITHUB_WORKSPACE: '\\\\server\\unreviewed' }]) {
+    const pending = withWindowsAcl(root, () => { calls++; return securedArchive; },
+      () => withCIArchiveEnvironment(patch, () => runCINpm(['--version'])));
+    await assert.rejects(pending, /NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT/);
+  }
+  assert.equal(calls, 0);
+});
+
+test('default npm APIs never gain CI repair authority from environment flags', async t => {
+  const root = fixture(t); let repairs = 0;
+  const produce = (_executable, _args, options) => {
+    if (options.env.CASEOPS_NPM_HARDEN_PATH) repairs++;
+    return { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact({ writeScopeSafe: false })) };
+  };
+  withWindowsAcl(root, produce, () => withCIArchiveEnvironment({}, () => {
+    assert.throws(() => readPinnedArchive(ciArchive), /NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED/);
+    assert.throws(() => prepareNpm({ parent: root, archive: ciArchive }), /NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED/);
+  }));
+  const pending = withWindowsAcl(root, produce, () => withCIArchiveEnvironment({},
+    () => runNpm(['--version'], { parent: root, archive: ciArchive })));
+  await assert.rejects(pending, /NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED/);
+  assert.equal(repairs, 0);
+});
+
+test('CI archive hardening binds one descriptor literal bytes and exact native ACL before the unchanged reader', async t => {
+  const root = fixture(t), commands = [], proof = []; let opened, closed, reads = 0;
+  const originalError = console.error;
+  console.error = line => proof.push(JSON.parse(line));
+  try {
+    const pending = withWindowsAcl(root, (executable, args, options) => {
+      commands.push({ executable, args, options });
+      return options.env.CASEOPS_NPM_HARDEN_PATH ? securedArchive : {
+        status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact()),
+      };
+    }, () => withCIArchiveEnvironment({}, () => withFs({
+      openSync(original, file, ...args) { const fd = original(file, ...args); if (file === ciArchive && opened === undefined) opened = fd; return fd; },
+      readSync(original, fd, bytes, offset, length, position) { if (fd === opened) reads++; return original(fd, bytes, offset, Math.min(length, 8192), position); },
+      closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+      mkdtempSync() { throw Error('CONTROL_STOP_BEFORE_RUNTIME_CREATION'); },
+    }, () => runCINpm(['--version']))));
+    await assert.rejects(pending, /CONTROL_STOP_BEFORE_RUNTIME_CREATION/);
+  } finally { console.error = originalError; }
+  assert.equal(opened, closed); assert.ok(reads > NPM_ARTIFACT.sizeBytes / 8192);
+  assert.throws(() => fs.fstatSync(opened), { code: 'EBADF' });
+  assert.equal(commands.length, 3); // Native hardening, then the reader's two unchanged ACL checks.
+  const first = commands[0];
+  assert.equal(first.executable, path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'));
+  assert.equal(first.options.env.CASEOPS_NPM_HARDEN_PATH, ciArchive);
+  assert.ok(first.options.timeout > 0 && first.options.timeout <= 5000);
+  assert.equal(first.options.maxBuffer, 4096); assert.equal(first.options.windowsHide, true);
+  assert.match(first.args[4], /\$f=\[IO\.FileStream\]::new/);
+  assert.match(first.args[4], /GetFileInformationByHandle/);
+  assert.match(first.args[4], /\$f\.GetAccessControl\(\)/);
+  assert.match(first.args[4], /\$f\.SetAccessControl\(\$a\)/);
+  assert.equal(/Set-Acl|SetAccessControl\(\$env:|\[IO\.File\]::SetAccessControl/.test(first.args[4]), false);
+  assert.deepEqual(proof, [{ kind: 'caseops-npm-ci-pinned-archive-hardening-v1',
+    artifactSha256: NPM_ARTIFACT.sha256, sizeBytes: NPM_ARTIFACT.sizeBytes,
+    authority: 'literal-workspace-archive', owner: 'current-user',
+    writers: ['current-user', 'system', 'administrators'], protected: true,
+    identityBound: true, contentsPreserved: true }]);
+});
+
+test('CI archive hardening closes and refuses short stalled malformed or changed bytes before native mutation', async t => {
+  const root = fixture(t);
+  for (const mode of ['short', 'stalled', 'malformed', 'digest', 'named', 'linked', 'io']) {
+    let opened, closed, calls = 0;
+    const pending = withWindowsAcl(root, () => { calls++; return securedArchive; },
+      () => withCIArchiveEnvironment({}, () => withFs({
+        openSync(original, file, ...args) { const fd = original(file, ...args); if (file === ciArchive) opened = fd; return fd; },
+        closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+        readSync(original, fd, bytes, offset, length, position) {
+          if (fd !== opened) return original(fd, bytes, offset, length, position);
+          if (mode === 'stalled' || mode === 'short' && position > 0) return 0;
+          if (mode === 'malformed') return length + 1;
+          if (mode === 'io') throw Error('PRIVATE_PATH_SID_TOKEN');
+          const n = original(fd, bytes, offset, length, position);
+          if (mode === 'digest' && position === 0 && n) bytes[offset] ^= 1;
+          return n;
+        },
+        lstatSync(original, file, ...args) {
+          const s = original(file, ...args);
+          return mode === 'named' && file === ciArchive ? new Proxy(s, { get: (target, key) => key === 'ino' ? s.ino + 1n : Reflect.get(target, key) }) : s;
+        },
+        fstatSync(original, fd, ...args) {
+          const s = original(fd, ...args);
+          return mode === 'linked' && fd === opened ? new Proxy(s, { get: (target, key) => key === 'nlink' ? 2n : Reflect.get(target, key) }) : s;
+        },
+      }, () => runCINpm(['--version']))));
+    await assert.rejects(pending, /^Error: NPM_TOOLING_CI_ARCHIVE_HARDEN_(EXTENT|DIGEST|CHANGED|ERROR)$/);
+    assert.equal(calls, 0); assert.equal(opened, closed);
+  }
+});
+
+test('CI archive hardening rejects post-native identity replacement and never renews the total preparation deadline', async t => {
+  const root = fixture(t);
+  t.mock.method(console, 'error', () => {});
+  for (const mode of ['identity', 'namespace', 'post-digest', 'deadline', 'handoff-deadline', 'reader-unsafe', 'native-owner', 'native-timeout', 'native-protocol']) {
+    let nativeDone = false, calls = 0, clock = 0, opened, closed;
+    const originalNow = Object.getOwnPropertyDescriptor(performance, 'now');
+    Object.defineProperty(performance, 'now', { configurable: true, value: () => clock });
+    try {
+      const pending = withWindowsAcl(root, (_executable, _args, options) => {
+        calls++; nativeDone = true;
+        if (mode === 'deadline') clock = 30001;
+        if (mode === 'handoff-deadline') {
+          clock = options.env.CASEOPS_NPM_HARDEN_PATH ? 29999 : 30001;
+          if (!options.env.CASEOPS_NPM_HARDEN_PATH) return { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact()) };
+        }
+        if (mode === 'reader-unsafe' && !options.env.CASEOPS_NPM_HARDEN_PATH)
+          return { status: 0, signal: null, stderr: '', stdout: JSON.stringify(windowsAclFact({ writeScopeSafe: false })) };
+        if (mode === 'native-timeout') return { ...securedArchive, error: { code: 'ETIMEDOUT', message: 'PRIVATE_PATH_SID_TOKEN' } };
+        if (mode === 'native-protocol') return { ...securedArchive, stderr: 'PRIVATE_PATH_SID_TOKEN' };
+        return mode === 'native-owner' ? { ...securedArchive, status: 1, stdout: '', stderr: 'NPM_TOOLING_CI_ARCHIVE_HARDEN_REFUSED_OWNER' } : securedArchive;
+      }, () => withCIArchiveEnvironment({}, () => withFs({
+        openSync(original, file, ...args) { const fd = original(file, ...args); if (file === ciArchive) opened = fd; return fd; },
+        closeSync(original, fd) { if (fd === opened) closed = fd; return original(fd); },
+        fstatSync(original, fd, ...args) {
+          const s = original(fd, ...args);
+          return mode === 'identity' && nativeDone ? new Proxy(s, { get: (target, key) => key === 'ino' ? s.ino + 1n : Reflect.get(target, key) }) : s;
+        },
+        lstatSync(original, file, ...args) {
+          const s = original(file, ...args);
+          return mode === 'namespace' && nativeDone && file === path.dirname(ciArchive)
+            ? new Proxy(s, { get: (target, key) => key === 'ino' ? s.ino + 1n : Reflect.get(target, key) }) : s;
+        },
+        readSync(original, fd, bytes, offset, length, position) {
+          const n = original(fd, bytes, offset, length, position);
+          if (mode === 'post-digest' && nativeDone && fd === opened && position === 0 && n) bytes[offset] ^= 1;
+          return n;
+        },
+      }, () => runCINpm(['--version']))));
+      await assert.rejects(pending, error => {
+        const expected = {
+          identity: 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED', deadline: 'NPM_TOOLING_PREPARATION_DEADLINE',
+          namespace: 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CHANGED', 'post-digest': 'NPM_TOOLING_CI_ARCHIVE_HARDEN_DIGEST',
+          'handoff-deadline': 'NPM_TOOLING_PREPARATION_DEADLINE',
+          'reader-unsafe': 'NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED',
+          'native-owner': 'NPM_TOOLING_CI_ARCHIVE_HARDEN_REFUSED_OWNER',
+          'native-timeout': 'NPM_TOOLING_CI_ARCHIVE_HARDEN_TIMEOUT',
+          'native-protocol': 'NPM_TOOLING_CI_ARCHIVE_HARDEN_PROTOCOL',
+        }[mode];
+        assert.equal(error.message, expected); assert.equal(error.message.includes('PRIVATE_PATH_SID_TOKEN'), false); return true;
+      });
+      assert.equal(calls, ['handoff-deadline', 'reader-unsafe'].includes(mode) ? 2 : 1); assert.equal(opened, closed);
+    } finally {
+      if (originalNow) Object.defineProperty(performance, 'now', originalNow); else delete performance.now;
+    }
+  }
+});
+
+test('native Windows CI hardens only a staged pinned archive while default readers remain fail closed', t => {
+  if (process.platform !== 'win32') { t.skip('Requires actual Windows FileStream identity and ACL enforcement'); return; }
+  const root = fixture(t), workspace = path.join(root, 'workspace'), scripts = path.join(workspace, 'scripts/mobile');
+  fs.mkdirSync(scripts, { recursive: true });
+  for (const file of ['npm-tooling.mjs', 'npm-registry.mjs']) fs.copyFileSync(fileURLToPath(new URL(file, import.meta.url)), path.join(scripts, file));
+  const stagedArchive = path.join(workspace, ...NPM_ARTIFACT.relative.split('/'));
+  fs.mkdirSync(path.dirname(stagedArchive), { recursive: true }); fs.copyFileSync(archive, stagedArchive);
+  const temp = path.join(root, 'runtime'); fs.mkdirSync(temp);
+  const systemRoot = process.env.SystemRoot;
+  const setup = spawnSync(path.join(systemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', String.raw`$ErrorActionPreference='Stop';$u=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$parent=[IO.Path]::GetDirectoryName($env:FIXTURE_ARCHIVE);$wide=[Security.AccessControl.DirectorySecurity]::new();$wide.SetOwner($u);$wide.SetAccessRuleProtection($true,$false)
+foreach($s in @($u.Value,'S-1-5-18','S-1-5-32-544','S-1-5-32-545')){$wide.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($s),[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))};[IO.Directory]::SetAccessControl($parent,$wide)
+$a=[Security.AccessControl.FileSecurity]::new();$a.SetOwner($u);$a.SetAccessRuleProtection($false,$false)
+foreach($s in @($u.Value,'S-1-5-18','S-1-5-32-544')){$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($s),[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.AccessControlType]::Allow))};[IO.File]::SetAccessControl($env:FIXTURE_ARCHIVE,$a)
+$sourceAcl=[IO.File]::GetAccessControl($env:FIXTURE_ARCHIVE);if(@($sourceAcl.GetAccessRules($false,$true,[Security.Principal.SecurityIdentifier]) | Where-Object {$_.IdentityReference.Value -eq 'S-1-5-32-545'}).Count -eq 0){throw 'Fixture must establish inherited broad write scope'}
+$d=[Security.AccessControl.DirectorySecurity]::new();$d.SetOwner($u);$d.SetAccessRuleProtection($true,$false)
+foreach($s in @($u.Value,'S-1-5-18','S-1-5-32-544')){$d.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($s),[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))};[IO.Directory]::SetAccessControl($env:FIXTURE_TEMP,$d)
+$parentAcl=[IO.Directory]::GetAccessControl($parent);$h=[Security.Cryptography.SHA256]::Create();try{[Console]::Out.Write([BitConverter]::ToString($h.ComputeHash($parentAcl.GetSecurityDescriptorBinaryForm())).Replace('-','').ToLowerInvariant())}finally{$h.Dispose()}`],
+    { env: { SystemRoot: systemRoot, FIXTURE_ARCHIVE: stagedArchive, FIXTURE_TEMP: temp }, encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4096 });
+  assert.equal(setup.status, 0, 'Owned native ACL fixture setup must succeed');
+  assert.match(setup.stdout, /^[a-f0-9]{64}$/);
+  const before = fs.readFileSync(stagedArchive), original = hash(fs.readFileSync(archive));
+  const env = { ...process.env, GITHUB_ACTIONS: 'true', CI: 'true', GITHUB_WORKSPACE: workspace, TEMP: temp, TMP: temp };
+  const reader = `import {readPinnedArchive} from ${JSON.stringify(pathToFileURL(path.join(scripts, 'npm-tooling.mjs')).href)};readPinnedArchive(${JSON.stringify(stagedArchive)});`;
+  const denied = spawnSync(process.execPath, ['--input-type=module', '--eval', reader], { env, encoding: 'utf8', timeout: 10000, maxBuffer: 4096, windowsHide: true });
+  assert.notEqual(denied.status, 0); assert.match(denied.stderr, /NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED/);
+  const run = spawnSync(process.execPath, [path.join(scripts, 'npm-tooling.mjs'), '--version'],
+    { env, encoding: 'utf8', windowsHide: true, timeout: 35000, maxBuffer: 8192 });
+  assert.equal(run.status, 0, run.stderr); assert.equal(run.signal, null); assert.equal(run.stdout.trim(), '11.12.1');
+  const proof = JSON.parse(run.stderr.trim()); assert.equal(proof.kind, 'caseops-npm-ci-pinned-archive-hardening-v1');
+  assert.equal(proof.identityBound, true); assert.equal(proof.contentsPreserved, true);
+  assert.ok(fs.readFileSync(stagedArchive).equals(before)); assert.equal(hash(fs.readFileSync(archive)), original);
+  const allowed = spawnSync(process.execPath, ['--input-type=module', '--eval', reader], { env, encoding: 'utf8', timeout: 10000, maxBuffer: 4096, windowsHide: true });
+  assert.equal(allowed.status, 0, allowed.stderr);
+  const parentAfter = spawnSync(path.join(systemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop';$a=[IO.Directory]::GetAccessControl($env:FIXTURE_PARENT);$h=[Security.Cryptography.SHA256]::Create();try{[Console]::Out.Write([BitConverter]::ToString($h.ComputeHash($a.GetSecurityDescriptorBinaryForm())).Replace('-','').ToLowerInvariant())}finally{$h.Dispose()}"],
+    { env: { SystemRoot: systemRoot, FIXTURE_PARENT: path.dirname(stagedArchive) }, encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 4096 });
+  assert.equal(parentAfter.status, 0); assert.equal(parentAfter.stdout, setup.stdout);
 });
 
 test('installed file descriptors precede pathname checks and reject replacement before any payload read', t => {

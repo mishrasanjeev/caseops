@@ -18,11 +18,12 @@ import {
   ExternalLink,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -45,6 +46,14 @@ import {
 } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import {
+  Select,
+  SelectContent,
+  SelectEmpty,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   addMatterStatuteReference,
@@ -101,8 +110,8 @@ export default function MatterStatutesPage() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div>
+      <CardHeader className="flex flex-col items-start justify-between gap-3 space-y-0 sm:flex-row">
+        <div className="min-w-0">
           <CardTitle>Statutes referenced</CardTitle>
           <CardDescription>
             Sections this matter relies on or distinguishes. The drafting flow
@@ -196,11 +205,20 @@ function RefRow({
 }
 
 function AddReferenceDialog({ matterId }: { matterId: string }) {
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [statuteId, setStatuteId] = useState<string>("");
   const [sectionId, setSectionId] = useState<string>("");
   const [relevance, setRelevance] = useState<Relevance>("cited");
   const queryClient = useQueryClient();
+  const setDialogOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setStatuteId("");
+      setSectionId("");
+      setRelevance("cited");
+    }
+  };
 
   const statutesQuery = useQuery({
     queryKey: ["statutes", "list"],
@@ -210,7 +228,12 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   });
   const sectionsQuery = useQuery({
     queryKey: ["statutes", statuteId, "sections"],
-    queryFn: () => listStatuteSections(statuteId),
+    queryFn: async ({ signal }) => {
+      const result = await listStatuteSections(statuteId);
+      // The client has no transport cancellation; do not admit abandoned reads.
+      signal.throwIfAborted();
+      return result;
+    },
     enabled: open && Boolean(statuteId),
     staleTime: 30 * 60_000,
   });
@@ -218,9 +241,25 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
     (statute) => statute.section_count > 0,
   );
   const allStatutes = statutesQuery.data?.statutes ?? [];
-  const sections = sectionsQuery.data?.sections ?? [];
+  const catalogReady = statutesQuery.isSuccess && statutesQuery.fetchStatus === "idle";
+  const sectionsReady = sectionsQuery.isSuccess && sectionsQuery.fetchStatus === "idle";
+  const sections = sectionsReady ? sectionsQuery.data.sections : [];
   const selectableSectionIds = new Set(sections.map((section) => section.id));
-  const catalogSections = sectionsQuery.data?.catalog_sections ?? sections;
+  const catalogSections = sectionsReady ? sectionsQuery.data.catalog_sections ?? sections : [];
+  const canAttach = catalogReady
+    && selectableStatutes.some((statute) => statute.id === statuteId)
+    && selectableSectionIds.has(sectionId);
+  const sectionPlaceholder = !statuteId
+    ? "Select an Act first"
+    : sectionsQuery.isPaused
+      ? "Waiting for connection…"
+      : sectionsQuery.isPending || sectionsQuery.isFetching
+        ? "Loading sections…"
+        : sectionsQuery.isError
+          ? "Could not load verified sections"
+          : sections.length === 0
+            ? "No verified sections available"
+            : "Select a section…";
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -233,10 +272,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
         queryKey: ["matter", matterId, "statute-references"],
       });
       toast.success("Statute reference attached.");
-      setOpen(false);
-      setStatuteId("");
-      setSectionId("");
-      setRelevance("cited");
+      setDialogOpen(false);
     },
     onError: (e: unknown) =>
       toast.error(
@@ -245,9 +281,9 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setDialogOpen}>
       <DialogTrigger asChild>
-        <Button data-testid="matter-statute-add-trigger">
+        <Button className="w-full shrink-0 sm:w-auto" data-testid="matter-statute-add-trigger">
           <Plus className="h-4 w-4" aria-hidden /> Add reference
         </Button>
       </DialogTrigger>
@@ -258,41 +294,54 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
             Pick the Act → Section, then how this matter relates to it.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Act</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-act`} className="font-medium">
+              Act
+            </label>
+            <Select
               value={statuteId}
-              onChange={(e) => {
-                setStatuteId(e.target.value);
+              onValueChange={(value) => {
+                setStatuteId(value);
                 setSectionId("");
               }}
-              disabled={statutesQuery.isPending || statutesQuery.isError}
-              data-testid="matter-statute-act-select"
+              disabled={!catalogReady}
             >
-              <option value="">
-                {statutesQuery.isPending
-                  ? "Loading verified Acts…"
-                  : statutesQuery.isError
-                    ? "Could not load verified Acts"
-                    : selectableStatutes.length === 0
-                      ? "No verified Acts available"
-                      : "Select an Act…"}
-              </option>
-              {allStatutes.map((s) => (
-                <option
-                  key={s.id}
-                  value={s.id}
-                  disabled={s.section_count === 0}
-                >
-                  {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
-                  {s.catalog_section_count ?? s.section_count} catalogued
-                  {s.section_count === 0 ? "; verification pending" : ""})
-                </option>
-              ))}
-            </select>
-            {!statutesQuery.isPending && !statutesQuery.isError ? (
+              <SelectTrigger
+                id={`${fieldId}-act`}
+                data-testid="matter-statute-act-select"
+              >
+                <SelectValue
+                  placeholder={statutesQuery.isPaused
+                    ? "Waiting for connection…"
+                    : statutesQuery.isPending || statutesQuery.isFetching
+                      ? "Loading verified Acts…"
+                      : statutesQuery.isError
+                        ? "Could not load verified Acts"
+                        : selectableStatutes.length === 0
+                          ? "No verified Acts available"
+                          : "Select an Act…"}
+                />
+              </SelectTrigger>
+              <SelectContent aria-label="Act">
+                {allStatutes.length === 0 ? (
+                  <SelectEmpty>No verified Acts available</SelectEmpty>
+                ) : null}
+                {allStatutes.map((s) => (
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    data-value={s.id}
+                    disabled={s.section_count === 0}
+                  >
+                    {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
+                    {s.catalog_section_count ?? s.section_count} catalogued
+                    {s.section_count === 0 ? "; verification pending" : ""})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {catalogReady ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
                 data-testid="matter-statute-catalog-coverage"
@@ -304,7 +353,11 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 visible but disabled.
               </span>
             ) : null}
-            {statutesQuery.isError ? (
+            {statutesQuery.isPaused ? (
+              <span role="status" className="text-xs text-[var(--color-mute)]" data-testid="matter-statute-catalog-paused">
+                The Act catalog is waiting for a connection. Reconnect to continue.
+              </span>
+            ) : statutesQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-danger-700)]"
                 data-testid="matter-statute-catalog-error"
@@ -312,7 +365,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 The verified statute catalog could not be loaded. Retry by
                 reopening this dialog.
               </span>
-            ) : !statutesQuery.isPending && selectableStatutes.length === 0 ? (
+            ) : catalogReady && selectableStatutes.length === 0 ? (
               <span
                 className="text-xs text-[var(--color-warn-700)]"
                 data-testid="matter-statute-no-selectable-acts"
@@ -321,44 +374,47 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 attach.
               </span>
             ) : null}
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Section</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm disabled:opacity-50"
-              value={sectionId}
-              onChange={(e) => setSectionId(e.target.value)}
-              disabled={!statuteId || sectionsQuery.isPending}
-              data-testid="matter-statute-section-select"
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-section`} className="font-medium">
+              Section
+            </label>
+            <Select
+              value={sectionsReady ? sectionId : ""}
+              onValueChange={setSectionId}
+              disabled={!statuteId || !sectionsReady}
             >
-              <option value="">
-                {!statuteId
-                  ? "Select an Act first"
-                  : sectionsQuery.isPending
-                    ? "Loading sections…"
-                    : sectionsQuery.isError
-                      ? "Could not load verified sections"
-                      : sections.length === 0
-                        ? "No verified sections available"
-                        : "Select a section…"}
-              </option>
-              {catalogSections.map((sec) => (
-                <option
-                  key={sec.id}
-                  value={sec.id}
-                  disabled={!selectableSectionIds.has(sec.id)}
-                >
-                  {sec.section_number}
-                  {sec.section_label ? ` — ${sec.section_label}` : ""}
-                  {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
-                    ? " (historical repealed-law edition)" : ""}
-                  {!selectableSectionIds.has(sec.id)
-                    ? " — verification pending; not attachable"
-                    : ""}
-                </option>
-              ))}
-            </select>
-            {statuteId && !sectionsQuery.isPending && !sectionsQuery.isError ? (
+              <SelectTrigger
+                id={`${fieldId}-section`}
+                data-testid="matter-statute-section-select"
+              >
+                <SelectValue placeholder={sectionPlaceholder} />
+              </SelectTrigger>
+              <SelectContent aria-label="Section">
+                {catalogSections.length === 0 ? (
+                  <SelectEmpty>
+                    {sectionPlaceholder}
+                  </SelectEmpty>
+                ) : null}
+                {catalogSections.map((sec) => (
+                  <SelectItem
+                    key={sec.id}
+                    value={sec.id}
+                    data-value={sec.id}
+                    disabled={!selectableSectionIds.has(sec.id)}
+                  >
+                    {sec.section_number}
+                    {sec.section_label ? ` — ${sec.section_label}` : ""}
+                    {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
+                      ? " (historical repealed-law edition)" : ""}
+                    {!selectableSectionIds.has(sec.id)
+                      ? " — verification pending; not attachable"
+                      : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {statuteId && sectionsReady ? (
               <span
                 className="text-xs text-[var(--color-mute)]"
                 data-testid="matter-statute-section-coverage"
@@ -371,41 +427,67 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 through the UI or API.
               </span>
             ) : null}
-            {sectionsQuery.isError ? (
-              <span
-                className="text-xs text-[var(--color-danger-700)]"
-                data-testid="matter-statute-sections-error"
-              >
-                Verified sections could not be loaded. Retry by selecting the
-                Act again.
+            {statuteId && sectionsQuery.isPaused ? (
+              <span role="status" className="text-xs text-[var(--color-mute)]" data-testid="matter-statute-sections-paused">
+                Sections are waiting for a connection. Reconnect to continue.
               </span>
+            ) : sectionsQuery.isError ? (
+              <div className="flex min-w-0 flex-col items-start gap-2">
+                <span
+                  role="alert"
+                  className="text-xs text-[var(--color-danger-700)]"
+                  data-testid="matter-statute-sections-error"
+                >
+                  Verified sections could not be loaded for this Act. Use Retry
+                  sections to try again.
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={sectionsQuery.fetchStatus !== "idle"}
+                  onClick={() => {
+                    setSectionId("");
+                    void sectionsQuery.refetch({ cancelRefetch: false });
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden /> Retry sections
+                </Button>
+              </div>
             ) : null}
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Relevance</span>
-            <select
-              className="rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+          </div>
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={`${fieldId}-relevance`} className="font-medium">
+              Relevance
+            </label>
+            <Select
               value={relevance}
-              onChange={(e) => setRelevance(e.target.value as Relevance)}
-              data-testid="matter-statute-relevance-select"
+              onValueChange={(value) => setRelevance(value as Relevance)}
             >
-              <option value="cited">cited (we rely on it)</option>
-              <option value="opposing">
-                opposing (other side relies on it)
-              </option>
-              <option value="context">
-                context (in scope but not load-bearing)
-              </option>
-            </select>
-          </label>
+              <SelectTrigger
+                id={`${fieldId}-relevance`}
+                data-testid="matter-statute-relevance-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent aria-label="Relevance">
+                <SelectItem value="cited">cited (we rely on it)</SelectItem>
+                <SelectItem value="opposing">
+                  opposing (other side relies on it)
+                </SelectItem>
+                <SelectItem value="context">
+                  context (in scope but not load-bearing)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+          <Button variant="ghost" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>
           <Button
             onClick={() => addMutation.mutate()}
-            disabled={!sectionId || addMutation.isPending}
+            disabled={!canAttach || addMutation.isPending}
             data-testid="matter-statute-add-submit"
           >
             {addMutation.isPending ? (

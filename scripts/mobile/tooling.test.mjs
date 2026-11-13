@@ -3380,7 +3380,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  assert.equal(setupCount, 18); assert.equal(commandCount, 171);
+  assert.equal(setupCount, 19); assert.equal(commandCount, 200);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
@@ -3453,6 +3453,11 @@ test('all Windows owner queries refuse an arbitrary token-default group with imp
   }
 });
 
+function restoreProcessDescriptor(name, descriptor) {
+  if (descriptor === undefined) delete process[name];
+  else Object.defineProperty(process, name, descriptor);
+}
+
 test('Windows ownership refusal precedes descriptor bytes and closes every opened source', () => {
   // This is an actual filesystem/constructor composition with injected Windows
   // OS proof responses. It is not an actual Windows ACL acceptance claim on Mac.
@@ -3483,7 +3488,7 @@ test('Windows ownership refusal precedes descriptor bytes and closes every opene
     }
   } finally {
     fs.openSync = originalOpen; fs.readSync = originalRead; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
-    Object.defineProperty(process, 'getuid', originalUid); Object.defineProperty(process, 'platform', originalPlatform);
+    restoreProcessDescriptor('getuid', originalUid); restoreProcessDescriptor('platform', originalPlatform);
     if (originalSystemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = originalSystemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -3532,7 +3537,7 @@ test('CI Windows ACL completion markers are mandatory before writing even when S
     cp.spawnSync = () => { calls++; return { status: 0, stdout: 'SAFE', stderr: completed }; }; syncBuiltinESMExports();
     assert.equal(appendCITrustOutputs(file, root, ciTrustValues).appendedKeys, 9); assert.equal(calls, 4);
   } finally {
-    cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    cp.spawnSync = original; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
   }
 }));
@@ -4684,7 +4689,7 @@ test('Windows owner refusal exposes only fixed existing-source classes before an
     }
   } finally {
     fs.openSync = open; fs.readSync = read; cp.spawnSync = originalSpawn; syncBuiltinESMExports();
-    Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -4706,7 +4711,7 @@ test('Windows parent-directory owner refusal stays distinct from existing code a
     assert.equal(sawCode, true); assert.equal(directories, 1); assert.equal(fs.existsSync(path.join(root, 'policy')), false);
     for (const fd of fds) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
   } finally {
-    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform);
+    fs.openSync = open; cp.spawnSync = original; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
     if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -4749,7 +4754,7 @@ function ciSourceWindowsProofs(change) {
     const rows = Array.from({ length: 6 }, (_, index) => ({ runtimeOwner: index >= 2, reviewedAdminSource: index < 2, writeScopeSafe: true, tokenUserPresent: true, aclSha256: 'a'.repeat(64) }));
     change?.(rows, calls, options); return { status: 0, stdout: JSON.stringify(rows), stderr: '' };
   }; syncBuiltinESMExports();
-  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
+  return { get calls() { return calls; }, restore() { cp.spawnSync = spawn; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; } };
 }
 
 test('CI runtime copies retain exact reviewed Git blobs with independent readonly owned files', async () => ciSourceFixture(async ({ source, parent, api }) => {
@@ -5039,8 +5044,36 @@ async function ciFreshParentFixture(callback, setup = null) {
     return args.at(-1).includes("[Console]::Out.Write('SAFE')") ? { status: 0, stdout: 'SAFE', stderr } : { status: 0, stdout: '{"ownerMatches":true,"writeScopeSafe":true}', stderr };
   }; syncBuiltinESMExports();
   try { return await callback({ root, workspace, output, environment, calls }); }
-  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); Object.defineProperty(process, 'getuid', uid); Object.defineProperty(process, 'platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
+  finally { cp.spawnSync = originalSpawn; syncBuiltinESMExports(); restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform); if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot; fs.rmSync(root, { recursive: true, force: true }); }
 }
+
+test('CI-PLATFORM-01 failed fixture restores absent and present process descriptors and environment', async () => {
+  const uid = Object.getOwnPropertyDescriptor(process, 'getuid');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const systemRoot = process.env.SystemRoot;
+  const cp = ciTrustCreateRequire(import.meta.url)('node:child_process'), spawn = cp.spawnSync;
+  try {
+    for (const absent of [false, true]) {
+      if (absent) delete process.getuid;
+      else Object.defineProperty(process, 'getuid', { configurable: true, enumerable: false, writable: false, value: () => 1000 });
+      const expected = Object.getOwnPropertyDescriptor(process, 'getuid');
+      const failure = new Error('synthetic fixture body failure');
+      await assert.rejects(ciFreshParentFixture(async () => {
+        assert.equal(process.platform, 'win32');
+        assert.equal(process.env.SystemRoot, '/owned-public-windows-system');
+        throw failure;
+      }), error => error === failure);
+      assert.deepEqual(Object.getOwnPropertyDescriptor(process, 'getuid'), expected);
+      assert.deepEqual(Object.getOwnPropertyDescriptor(process, 'platform'), platform);
+      assert.equal(process.env.SystemRoot, systemRoot);
+      assert.equal(cp.spawnSync, spawn);
+    }
+  } finally {
+    restoreProcessDescriptor('getuid', uid); restoreProcessDescriptor('platform', platform);
+    cp.spawnSync = spawn; syncBuiltinESMExports();
+    if (systemRoot === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = systemRoot;
+  }
+});
 test('CI fresh-parent setup precedes every staged child and payload without using an environment-selected path', async () => {
   let observed = false;
   await ciFreshParentFixture(async ({ environment, calls }) => {
@@ -5242,7 +5275,8 @@ test('CI-COMMAND-01 native command hardening keeps bytes and independently reche
     const state = fs.statSync(command, { bigint: true });
     assert.deepEqual(Object.fromEntries(['INO', 'VOLUME', 'BIRTH', 'MTIME', 'LENGTH'].map(key => [key, options.env['CASEOPS_COMMAND_' + key]])), { INO: String(state.ino), VOLUME: String(state.dev), BIRTH: String(state.birthtimeNs), MTIME: String(state.mtimeNs), LENGTH: '17' });
     assert.equal(options.env.CASEOPS_COMMAND_SHA256, createHash('sha256').update('EARLIER=retained\n').digest('base64'));
-    assert.equal(options.timeout, 4000); assert.equal(options.maxBuffer, 4096);
+    assert.ok(options.timeout > 0 && options.timeout <= 10000); assert.equal(options.maxBuffer, 4096);
+    assert.match(code, /ElapsedMilliseconds -ge 3500/);
     assert.match(code, /\[IO\.FileMode\]::Open,\$rights,\[IO\.FileShare\]::Read/);
     assert.match(code, /\$f\.SetAccessControl\(\$a\)/); assert.match(code, /\$f\.GetAccessControl\(\)/);
     assert.doesNotMatch(code, /\$f\.GetAccessControl\(\[/);
@@ -5257,6 +5291,100 @@ test('CI-COMMAND-01 native command hardening keeps bytes and independently reche
     return { status: 0, stdout: 'SECURED', stderr: '' };
   } });
 });
+test('CI-COMMAND-07 deterministic cold startup uses only the original whole-operation budget', async t => {
+  const clockBase = performance.now(); let elapsed = 0, hardeningTimeout, owners = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      const result = hardenCITrustRunnerCommand({ ...environment, SystemRoot: process.env.SystemRoot });
+      assert.equal(result.commandFileHardened, true);
+      assert.equal(result.contentsPreserved && result.ownerMatches && result.writeScopeSafe, true);
+      assert.ok(hardeningTimeout > 4500 && hardeningTimeout <= 10000);
+      assert.equal(owners, 1); assert.equal(elapsed, 5000);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: (_fixture, args, options) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) {
+      hardeningTimeout = options.timeout;
+      if (options.timeout <= 4500) return { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' };
+      elapsed += 4500; return { status: 0, stdout: 'SECURED', stderr: '' };
+    }
+    owners++; assert.ok(options.timeout > 0 && options.timeout <= 4000);
+    elapsed += 500; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
+test('CI-COMMAND-08 a late successful hardener cannot reset the original ten-second deadline', async t => {
+  const clockBase = performance.now(); let elapsed = 0;
+  await ciNativeRunnerFixture(async fixture => {
+    const { environment, command } = fixture;
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.equal(fixture.commandCalls, 1);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: () => { elapsed += 10001; return { status: 0, stdout: 'SECURED', stderr: '' }; } });
+});
+
+test('CI-COMMAND-09 independent owner proof shares the remaining operation budget and late success refuses', async t => {
+  const clockBase = performance.now(); let elapsed = 0, ownerTimeout;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.ok(ownerTimeout > 0 && ownerTimeout <= 1500);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: (_fixture, args, options) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) {
+      elapsed += 8500; return { status: 0, stdout: 'SECURED', stderr: '' };
+    }
+    ownerTimeout = options.timeout; elapsed += 1600;
+    return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
+test('CI-COMMAND-10 expired operation still retains the original failed transport classification', async t => {
+  const clockBase = performance.now(); let elapsed = 0;
+  await ciNativeRunnerFixture(async ({ environment, command }) => {
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT');
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { t.mock.restoreAll(); }
+  }, { proof: () => { elapsed += 10001; return { status: null, error: { code: 'ETIMEDOUT' }, stdout: '', stderr: '' }; } });
+});
+
+test('CI-COMMAND-11 a stall in the final namespace read cannot return success after the deadline', async t => {
+  const clockBase = performance.now(); let elapsed = 0, afterOwner = false, injected = false;
+  await ciNativeRunnerFixture(async fixture => {
+    const { environment, command } = fixture;
+    const trace = ciSourceTrace(), lstat = fs.lstatSync;
+    t.mock.method(performance, 'now', () => clockBase + elapsed);
+    fs.lstatSync = (file, ...args) => {
+      const state = lstat(file, ...args);
+      if (afterOwner && !injected && file === path.parse(command).root) {
+        injected = true; elapsed = 10001;
+      }
+      return state;
+    };
+    try {
+      assert.equal(ciHardeningRefusal({ ...environment, SystemRoot: process.env.SystemRoot })?.message,
+        'CI_TRUST_COMMAND_HARDEN_DEADLINE');
+      assert.equal(injected, true); assert.equal(fixture.commandCalls, 2);
+      assert.equal(fs.readFileSync(command, 'utf8'), 'EARLIER=retained\n');
+    } finally { fs.lstatSync = lstat; trace.restore(); t.mock.restoreAll(); }
+    trace.closed();
+  }, { proof: (_fixture, args) => {
+    if (args.at(-1).includes("[Console]::Out.Write('SECURED')")) return { status: 0, stdout: 'SECURED', stderr: '' };
+    afterOwner = true; return { status: 0, stdout: 'SAFE', stderr: ciCommandMarkers };
+  } });
+});
+
 test('CI-COMMAND-02 hardening refuses missing context foreign command names aliases hardlinks and oversize before dispatch', async () => {
   for (const options of [{ name: 'set_env_01234567-89ab-cdef-0123-456789abcdef' }, { nested: true }, { alias: true }]) await ciNativeRunnerFixture(async f => {
     f.environment.SystemRoot = process.env.SystemRoot;
@@ -5432,7 +5560,7 @@ test('CI runner final callback refuses a same-inode edit after verified payload 
     try { try { await prepareCIHostNodeTrustWindows(f.environment); } catch (error) { observedError = error; } }
     finally { fs.realpathSync.native = native; fs.lstatSync = lstat; trace.restore(); } trace.closed();
     const sameInode = fs.lstatSync(f.command, { bigint: true }).ino === inode;
-    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', verifiedEditedByte, namedDevZeroSimulation: true }));
+    t.diagnostic(JSON.stringify({ injectedAfterReadback: changed && readback, sameInode, commandQueries: f.commandCalls, outcome: observedError ? 'refused' : 'returned', refusalCode: observedError ? ciTrustFailureCode(observedError) : null, verifiedEditedByte, namedDevZeroSimulation: true }));
     assert.equal(changed && readback && sameInode, true); assert.equal(f.commandCalls, 1); assert.equal(verifiedEditedByte, 88); assert.equal(observedError?.message, 'CI_TRUST_RUNNER_COMMAND_CHANGED');
   });
 });

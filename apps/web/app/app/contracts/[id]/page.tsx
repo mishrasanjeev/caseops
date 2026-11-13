@@ -9,7 +9,6 @@ import {
   Gavel,
   Loader2,
   Scale,
-  Save,
   Sparkles,
   Upload,
   XCircle,
@@ -19,6 +18,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { ContractMetadataEditor } from "@/components/app/ContractMetadataEditor";
+import { ContractTermEntry } from "@/components/app/ContractTermEntry";
 import { Button } from "@/components/ui/Button";
 import {
   Card,
@@ -45,7 +46,6 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   CONTRACT_ATTACHMENT_ROLE_OPTIONS,
-  CONTRACT_TYPE_OPTIONS,
   acceptContractTermSuggestion,
   compareContractAgainstTenantPlaybook,
   comparePlaybook,
@@ -67,7 +67,6 @@ import {
   type TenantPlaybookRecord,
   updateContractAttachmentMetadata,
   updateContractLegalReference,
-  updateContractMetadata,
   uploadContractAttachment,
 } from "@/lib/api/endpoints";
 import type {
@@ -94,6 +93,7 @@ type Workspace = {
     auto_renewal: boolean;
     jurisdiction: string | null;
     summary: string | null;
+    updated_at: string;
   };
   attachments: Array<{
     id: string;
@@ -151,9 +151,6 @@ export default function ContractDetailPage() {
     null,
   );
   const [redlineAttachmentId, setRedlineAttachmentId] = useState<string | null>(null);
-  const [contractTypeKey, setContractTypeKey] =
-    useState<ContractTypeKey>("agreement");
-  const [contractTypeNotes, setContractTypeNotes] = useState("");
   const [legalReferenceDraft, setLegalReferenceDraft] = useState({
     act_name: "",
     section_label: "",
@@ -187,30 +184,6 @@ export default function ContractDetailPage() {
 
   const invalidateWorkspace = () =>
     queryClient.invalidateQueries({ queryKey: ["contracts", contractId, "workspace"] });
-
-  const metadataMutation = useMutation({
-    mutationFn: () => {
-      const selectedType = CONTRACT_TYPE_OPTIONS.find(
-        (option) => option.value === contractTypeKey,
-      );
-      const notes = contractTypeNotes.trim() || null;
-      return updateContractMetadata({
-        contractId,
-        contract_type:
-          contractTypeKey === "other" && notes
-            ? notes
-            : selectedType?.label ?? "Agreement",
-        contract_type_key: contractTypeKey,
-        contract_type_notes: notes,
-      });
-    },
-    onSuccess: async () => {
-      await invalidateWorkspace();
-      toast.success("Contract metadata saved.");
-    },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not save contract metadata.")),
-  });
 
   const createLegalReferenceMutation = useMutation({
     mutationFn: () =>
@@ -259,7 +232,7 @@ export default function ContractDetailPage() {
 
   const acceptTermSuggestionMutation = useMutation({
     mutationFn: (suggestionId: string) =>
-      acceptContractTermSuggestion({ contractId, suggestionId }),
+      acceptContractTermSuggestion({ contractId, suggestionId, expected_updated_at: workspaceQuery.data!.contract.updated_at }),
     onSuccess: async () => {
       await invalidateWorkspace();
       toast.success("Term suggestion accepted.");
@@ -417,20 +390,6 @@ export default function ContractDetailPage() {
     enabled: Boolean(redlineAttachmentId),
   });
 
-  useEffect(() => {
-    const contract = workspaceQuery.data?.contract;
-    if (!contract) return;
-    setContractTypeKey(contract.contract_type_key ?? "other");
-    setContractTypeNotes(
-      contract.contract_type_notes ??
-        (contract.contract_type_key ? "" : contract.contract_type),
-    );
-  }, [
-    workspaceQuery.data?.contract?.contract_type,
-    workspaceQuery.data?.contract?.contract_type_key,
-    workspaceQuery.data?.contract?.contract_type_notes,
-  ]);
-
   if (workspaceQuery.isPending) {
     return (
       <div className="flex flex-col gap-3">
@@ -460,6 +419,7 @@ export default function ContractDetailPage() {
     term_suggestions = [],
   } = workspace;
   const attachmentGroups = groupAttachmentsByRole(attachments);
+  const canEditDetails = canEdit;
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
@@ -477,8 +437,8 @@ export default function ContractDetailPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 break-words">
               <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-mute)]">
                 {contract.contract_code} · {contract.contract_type}
               </div>
@@ -518,7 +478,7 @@ export default function ContractDetailPage() {
             Obligations ({obligations.length})
           </TabsTrigger>
           <TabsTrigger value="terms">
-            Terms ({term_suggestions.length})
+            Terms
           </TabsTrigger>
           <TabsTrigger value="legal">
             Legal refs ({legal_references.length})
@@ -531,76 +491,11 @@ export default function ContractDetailPage() {
 
         <TabsContent value="overview">
           <Card>
-            <CardContent className="grid gap-4 py-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-lg border border-[var(--color-line)] bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-[var(--color-ink)]">
-                      Contract metadata
-                    </h2>
-                    <p className="mt-1 text-xs text-[var(--color-mute)]">
-                      Controlled type is stored beside the legacy label.
-                    </p>
-                  </div>
-                  {contract.contract_type_key ? (
-                    <StatusBadge status={contract.contract_type_key} />
-                  ) : (
-                    <StatusBadge status="legacy" />
-                  )}
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="contract-type-key">Controlled type</Label>
-                    <Select
-                      value={contractTypeKey}
-                      disabled={!canEdit}
-                      onValueChange={(value) =>
-                        setContractTypeKey(value as ContractTypeKey)
-                      }
-                    >
-                      <SelectTrigger id="contract-type-key">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONTRACT_TYPE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="contract-type-notes">Legacy / other label</Label>
-                    <Input
-                      id="contract-type-notes"
-                      value={contractTypeNotes}
-                      disabled={!canEdit}
-                      onChange={(event) => setContractTypeNotes(event.target.value)}
-                      placeholder={contract.contract_type}
-                    />
-                  </div>
-                </div>
-                {canEdit ? (
-                  <Button
-                    size="sm"
-                    className="mt-3"
-                    disabled={metadataMutation.isPending}
-                    onClick={() => metadataMutation.mutate()}
-                    data-testid="contract-save-metadata"
-                  >
-                    {metadataMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" aria-hidden /> Save metadata
-                      </>
-                    )}
-                  </Button>
-                ) : null}
-              </section>
+            <CardContent className="grid min-w-0 gap-6 py-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <ContractMetadataEditor contractId={contractId} contract={contract} canEdit={canEditDetails} onSaved={async () => {
+                await invalidateWorkspace();
+                await queryClient.invalidateQueries({ queryKey: ["contracts", "list"] });
+              }} />
 
               <section className="rounded-lg border border-[var(--color-line)] bg-white p-4">
                 <h2 className="text-sm font-semibold text-[var(--color-ink)]">
@@ -694,10 +589,10 @@ export default function ContractDetailPage() {
                       key={a.id}
                       className="flex flex-col gap-3 py-3 lg:flex-row lg:items-start lg:justify-between"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <FileText className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
-                        <div>
-                          <div className="text-sm font-medium text-[var(--color-ink)]">
+                        <div className="min-w-0">
+                          <div className="break-words text-sm font-medium text-[var(--color-ink)]">
                             {a.original_filename}
                           </div>
                           <div className="mt-0.5 text-xs font-medium text-[var(--color-ink-2)]">
@@ -711,13 +606,16 @@ export default function ContractDetailPage() {
                               {a.notes}
                             </div>
                           ) : null}
-                          <div className="text-xs text-[var(--color-mute)]">
+                          <div className="break-all text-xs text-[var(--color-mute)]">
                             {a.content_type ?? "—"} · {(a.size_bytes / 1024).toFixed(0)} KB
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <StatusBadge status={a.processing_status ?? "unknown"} />
+                        <Button size="sm" variant="outline" href={`/app/contracts/${contractId}/attachments/${a.id}/view`}>
+                          <FileText className="h-4 w-4" aria-hidden />View document
+                        </Button>
                         {a.original_filename.toLowerCase().endsWith(".docx") ? (
                           <Button
                             size="sm"
@@ -1081,19 +979,29 @@ export default function ContractDetailPage() {
         </TabsContent>
 
         <TabsContent value="terms">
+          <section className="mb-5" aria-labelledby="canonical-terms-heading">
+            <h2 id="canonical-terms-heading" className="text-sm font-semibold">Canonical terms</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <TermStat label="Effective" value={contract.effective_on} />
+              <TermStat label="Expiry" value={contract.expires_on} />
+              <TermStat label="Renewal" value={contract.renewal_on} />
+              <TermStat label="Auto-renewal" value={contract.auto_renewal ? "Yes" : "No"} />
+            </dl>
+          </section>
           <Card>
             <CardHeader>
-              <CardTitle>Term suggestions</CardTitle>
+              <CardTitle>Term suggestions ({term_suggestions.length})</CardTitle>
               <CardDescription>
                 Suggested dates are reviewable and do not become canonical until accepted.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-w-0 flex-col gap-4">
+              {canEditDetails ? <ContractTermEntry contractId={contractId} attachments={attachments} onSaved={invalidateWorkspace} /> : null}
               {term_suggestions.length === 0 ? (
                 <EmptyState
                   icon={Clock}
                   title="No term suggestions"
-                  description="AI or manual extraction can add suggested effective, expiry, renewal, and duration values for review."
+                  description="No suggested dates are awaiting review. Canonical dates and obligations are recorded separately."
                 />
               ) : (
                 <ul className="flex flex-col gap-2">
@@ -1131,7 +1039,7 @@ export default function ContractDetailPage() {
                             </p>
                           ) : null}
                         </div>
-                        {canEdit && suggestion.status === "suggested" ? (
+                        {canEditDetails && suggestion.status === "suggested" ? (
                           <div className="flex flex-wrap gap-2">
                             <Button
                               size="sm"

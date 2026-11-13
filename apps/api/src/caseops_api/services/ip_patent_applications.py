@@ -7,10 +7,21 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, or_, select, text, tuple_
+from sqlalchemy import (
+    column,
+    delete,
+    literal,
+    literal_column,
+    or_,
+    select,
+    text,
+    true,
+    tuple_,
+    values,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from caseops_api.db.models import (
     IpAsset,
@@ -21,6 +32,7 @@ from caseops_api.db.models import (
     IpPatentApplicationIdentity,
     IpPatentApplicationVersion,
 )
+from caseops_api.db.version_identity import version_identity_key
 from caseops_api.schemas.ip_patents import (
     PatentApplicationCreateRequest,
     PatentApplicationFacts,
@@ -200,16 +212,42 @@ def _records(
         (app.id, (version_numbers or {}).get(app.id, dockets[app.docket_id].current_version))
         for app in applications
     ]
-    versions = {
-        (row.application_id, row.version): row
-        for row in session.scalars(
-            select(IpPatentApplicationVersion).where(
-                IpPatentApplicationVersion.company_id == context.company.id,
-                tuple_(
-                    IpPatentApplicationVersion.application_id, IpPatentApplicationVersion.version
-                ).in_(keys),
+    version_hydration = select(IpPatentApplicationVersion).where(
+        IpPatentApplicationVersion.company_id == context.company.id,
+        tuple_(
+            IpPatentApplicationVersion.application_id, IpPatentApplicationVersion.version
+        ).in_(keys),
+    )
+    if session.get_bind().dialect.name == "postgresql":
+        wanted = values(
+            column("application_id", IpPatentApplicationVersion.__table__.c.application_id.type),
+            column("version", IpPatentApplicationVersion.__table__.c.version.type),
+            name="admitted_patent_application_keys",
+        ).data(keys)
+        picked = (
+            select(IpPatentApplicationVersion)
+            .where(version_identity_key(
+                IpPatentApplicationVersion.company_id, IpPatentApplicationVersion.application_id,
+                IpPatentApplicationVersion.version,
+            ) == version_identity_key(
+                select(literal(context.company.id)).scalar_subquery(),
+                wanted.c.application_id, wanted.c.version,
+            ))
+            .correlate(wanted)
+            .limit(literal_column("1"))
+            .lateral("admitted_patent_application_row")
+        )
+        hydrated = aliased(IpPatentApplicationVersion, picked)
+        version_hydration = (
+            select(hydrated).select_from(wanted.join(picked, true())).where(
+                hydrated.company_id == context.company.id,
+                hydrated.application_id == wanted.c.application_id,
+                hydrated.version == wanted.c.version,
             )
         )
+    versions = {
+        (row.application_id, row.version): row
+        for row in session.scalars(version_hydration)
     }
     if len(versions) != len(applications):
         raise _error("patent_application_version_not_found", "Application version not found.", 404)

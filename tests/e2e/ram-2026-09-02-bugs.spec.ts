@@ -13,6 +13,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { seedVerifiedLocalStatute } from "./support/verified-statute-fixture";
+import { openStatuteOptions, statuteOption } from "./support/statute-picker";
 
 const envOr = (key: string, fallback: string): string =>
   (process.env[key] ?? "").trim() || fallback;
@@ -428,9 +429,9 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await signIn(page);
     await page.goto(`${BASE_URL}/app/matters/${matter.id}/statutes`);
     await page.getByTestId("matter-statute-add-trigger").click();
-    const actSelect = page.getByTestId("matter-statute-act-select");
-    await expect(actSelect.locator("option")).toHaveCount(
-      catalog.statutes.length + 1,
+    const actSelect = await openStatuteOptions(page, "act");
+    await expect(actSelect.getByRole("option")).toHaveCount(
+      catalog.statutes.length,
     );
     await expect(
       page.getByTestId("matter-statute-catalog-coverage"),
@@ -441,8 +442,8 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
       (row) => row.section_count === 0,
     )) {
       await expect(
-        actSelect.locator(`option[value="${unavailable.id}"]`),
-      ).toHaveAttribute("disabled", "");
+        statuteOption(actSelect, unavailable.id),
+      ).toHaveAttribute("aria-disabled", "true");
     }
     expect(selectable.length).toBeGreaterThan(0);
     const constitution = selectable.find(
@@ -455,7 +456,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
           "/api/statutes/constitution-india/sections" &&
         response.request().method() === "GET",
     );
-    await actSelect.selectOption("constitution-india");
+    await statuteOption(actSelect, "constitution-india").click();
     const sectionsResponse = await sectionsResponsePromise;
     await expectStatus(sectionsResponse, 200, "load selected Act sections");
     const sectionPayload = (await sectionsResponse.json()) as {
@@ -477,22 +478,20 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     );
     expect(article14Record).toBeTruthy();
     expect(article14Record?.verification_status).toBe("verified_official");
-    const sectionSelect = page.getByTestId("matter-statute-section-select");
-    await expect(sectionSelect.locator("option")).toHaveCount(
-      sectionPayload.catalog_section_count + 1,
+    const sectionSelect = await openStatuteOptions(page, "section");
+    await expect(sectionSelect.getByRole("option")).toHaveCount(
+      sectionPayload.catalog_section_count,
     );
     for (const unavailable of sectionPayload.catalog_sections.filter(
       (row) => row.selection_state !== "verified_selectable",
     )) {
       await expect(
-        sectionSelect.locator(`option[value="${unavailable.id}"]`),
-      ).toHaveAttribute("disabled", "");
+        statuteOption(sectionSelect, unavailable.id),
+      ).toHaveAttribute("aria-disabled", "true");
     }
-    const article14 = sectionSelect.locator(
-      `option[value="${article14Record!.id}"]`,
-    );
+    const article14 = statuteOption(sectionSelect, article14Record!.id);
     await expect(article14).toHaveCount(1);
-    await sectionSelect.selectOption(article14Record!.id);
+    await article14.click();
     const attach = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===

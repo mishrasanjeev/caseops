@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -69,8 +69,10 @@ export default function ResearchPage() {
   const canSearch = useCapability("authorities:search");
   const canAnnotate = useCapability("authorities:annotate");
   const searchParams = useSearchParams();
-  const initialQuery = searchParams?.get("q")?.trim() ?? "";
+  const initialQuery =
+    (searchParams?.get("q") ?? searchParams?.get("query") ?? "").trim();
   const initialMode = parseAuthoritySearchMode(searchParams?.get("mode"));
+  const previousUrlCriteria = useRef({ query: initialQuery, mode: initialMode });
   const [query, setQuery] = useState(initialQuery);
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
@@ -100,28 +102,36 @@ export default function ResearchPage() {
       : null,
   );
 
-  // When the user arrives via the topbar search (?q=...), re-sync local
-  // state + fire the query if a new ?q= lands while we're on the page.
+  // Both retained assistant links and topbar links target the free corpus.
+  // Filter edits remain staged until submit unless the URL criteria change.
   useEffect(() => {
-    const nextQ = searchParams?.get("q")?.trim() ?? "";
+    const nextQ =
+      (searchParams?.get("q") ?? searchParams?.get("query") ?? "").trim();
     const nextMode = parseAuthoritySearchMode(searchParams?.get("mode"));
-    if (nextQ && nextQ !== searchCriteria?.query) {
-      setQuery(nextQ);
-      setSearchMode(nextMode);
-      if (nextQ.length >= 2) {
-        setPage(0);
-        setSearchCriteria({
+    if (
+      previousUrlCriteria.current.query === nextQ &&
+      previousUrlCriteria.current.mode === nextMode
+    ) {
+      return;
+    }
+    previousUrlCriteria.current = { query: nextQ, mode: nextMode };
+    setResearchSource("caseops_corpus");
+    setQuery(nextQ);
+    setSearchMode(nextMode);
+    setPage(0);
+    setSearchCriteria(
+      nextQ.length >= 2
+        ? {
           query: nextQ,
           forumLevel,
           courtName,
           documentType,
           language,
           searchMode: nextMode,
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+        }
+        : null,
+    );
+  }, [searchParams, forumLevel, courtName, documentType, language]);
   const [savedAuthorityIds, setSavedAuthorityIds] = useState<Set<string>>(
     () => new Set(),
   );

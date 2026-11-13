@@ -123,6 +123,20 @@ hashes and bounded inventory. Failed or interrupted workspaces stay intact;
 successful cleanup must recheck ownership, directory identity and containment.
 Do not shorten stored filenames or accept a copied subset as complete evidence.
 
+The driver's explicit `--runtime-parent` must be outside global temp, OneDrive,
+the source checkout and evidence. The canonical wrapper defaults `-RuntimeParent`
+to the current user's local application-data `CaseOpsPG` directory. Only a fresh
+private directory or its exact existing owner/identity/nonce claim is admitted;
+an unclaimed existing directory is never adopted or ACL-repaired. Windows requires
+the exact current-user owner SID and a protected, noninherited private DACL.
+OWNER RIGHTS full control is admitted only after that owner check. Each workspace
+is exclusive, fixtures remain at most 100 Windows path characters, and cleanup
+removes only the verified workspace, never the reusable parent. TEMP/TMP/HOME and
+runtime asset/cache settings remain unchanged. Require exact source-bound native
+ownership and capture-boundary noise results plus the complete unchanged Docker
+replacement; focused Windows/Linux helper passes alone are not a fix claim for
+an unidentified historical capture refusal.
+
 `postgres-results.jsonl`, `postgres.xml` and
 `postgres-driver-completion.json` are combined driver products, not one pytest
 process. Require the exact canonical union, all phases, zero skips/retries,

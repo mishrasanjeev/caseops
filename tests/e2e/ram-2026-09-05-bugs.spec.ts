@@ -7,6 +7,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
+import { openStatuteOptions, statuteOption } from "./support/statute-picker";
 
 const BASE =
   process.env.PROD_BASE_URL ||
@@ -254,14 +255,15 @@ test.describe("Ram September 05 reported workflows", () => {
     await page.goto(`${BASE}/app/matters/${matter.id}/statutes`);
     await page.getByTestId("matter-statute-add-trigger").click();
     const picker = page.getByTestId("matter-statute-act-select");
+    const actOptions = await openStatuteOptions(page, "act");
     await expect(
-      picker.locator('option[value="constitution-india"]'),
+      statuteOption(actOptions, "constitution-india"),
     ).toBeAttached();
     // Never seed a synthetic verified provision to make this release gate pass.
     for (const id of actIds) {
-      const option = picker.locator(`option[value="${id}"]`);
+      const option = statuteOption(actOptions, id);
       await expect.soft(option, `${id}: the catalog entry must exist`).toBeAttached();
-      await expect.soft(option).not.toHaveAttribute("disabled", "");
+      await expect.soft(option).not.toHaveAttribute("aria-disabled", "true");
       const sectionsResponse = await api.get(`${API}/api/statutes/${id}/sections`, {
         headers: headers(),
       });
@@ -298,10 +300,11 @@ test.describe("Ram September 05 reported workflows", () => {
         : payload.sections[0];
       expect(section, `${id}: expected usable provision`).toBeDefined();
       expect(section.verification_status).toBe("verified_official");
-      await picker.selectOption(id);
+      await option.click();
       const sections = page.getByTestId("matter-statute-section-select");
-      await expect(sections.locator(`option[value="${section.id}"]`)).toBeAttached();
-      await sections.selectOption(section.id);
+      const sectionOption = statuteOption(await openStatuteOptions(page, "section"), section.id);
+      await expect(sectionOption).toBeAttached();
+      await sectionOption.click();
       await expect(page.getByTestId("matter-statute-add-submit")).toBeEnabled();
       for (const control of [picker, sections, page.getByTestId("matter-statute-add-submit")]) {
         await expect(control).toBeVisible();
@@ -360,6 +363,7 @@ test.describe("Ram September 05 reported workflows", () => {
       await page.goto(`${BASE}/app/matters/${matter.id}/statutes`);
       await expect(savedLink).toBeVisible();
       await page.getByTestId("matter-statute-add-trigger").click();
+      await openStatuteOptions(page, "act");
     }
   });
   }

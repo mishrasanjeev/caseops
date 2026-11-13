@@ -1,19 +1,20 @@
 // @vitest-environment node
 
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-type NativeTest = { projectId: string; projectName: string; repeatEachIndex?: number; retries?: number; results: unknown[] };
+type NativeAnnotation = { type: string; description?: string };
+type NativeTest = { projectId: string; projectName: string; repeatEachIndex?: number; retries?: number; results: unknown[]; annotations?: NativeAnnotation[] };
 type NativeSuite = { title: string; specs?: { id: string; file: string; title: string; tests: NativeTest[] }[]; suites?: NativeSuite[] };
-type Case = { id: string; file: string; titles: string[]; project: string; repeat: number; retries: number; results: unknown[] };
+type Case = { id: string; file: string; titles: string[]; project: string; repeat: number; retries: number; results: unknown[]; annotations?: NativeAnnotation[] };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 119,
+  "tester-prod-chromium": 115,
   "tester-index-prod-chromium": 6,
   "test-legal-write-prod-chromium": 51,
 };
@@ -122,6 +123,7 @@ function flatten(suites: NativeSuite[], projectRetries: Record<string, number>, 
         file: spec.file.replaceAll("\\", "/").split("/").at(-1)!,
         titles: [...titles, spec.title], project: test.projectName,
         repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? projectRetries[test.projectId], results: test.results,
+        annotations: test.annotations ?? [],
       }))),
       ...flatten(suite.suites ?? [], projectRetries, titles),
     ];
@@ -172,6 +174,28 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
 type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
   Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
 const appSourceProjects = { "app-chromium": 719, "app-mobile": 55 };
+const batch5Files = ["statutes", "drafting", "contracts", "bugs"].map(name => `ram-2026-11-11-${name}.spec.ts`);
+const isBatch5 = (row: Case) => batch5Files.includes(row.file.split("/").at(-1)!);
+const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
+const batch5BugsProofCases = [
+  ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
+  ["[mobile] BUG-003 communications resolved preview and missing-value guard phone", "preview-no-paid-guard"],
+  ["B5-013/014 assistant factual citation, legal abstention and research mode navigation desktop", "assistant-research-no-paid-guard"],
+  ["[mobile] B5-013/014 assistant factual citation, legal abstention and research mode navigation phone", "assistant-research-no-paid-guard"],
+] as const;
+
+function expectBatch5BugsProofs(rows: Case[]) {
+  const actual = rows.filter(row => row.file === batch5BugsFile).map(row => JSON.stringify([
+    row.project.endsWith("mobile") ? "mobile" : "desktop", row.file, row.titles,
+    [...new Set((row.annotations ?? []).filter(item => item.type === "caseops-b5-proof")
+      .map(item => item.description))].sort(),
+  ])).sort();
+  const expected = batch5BugsProofCases.map(([title, scope]) => JSON.stringify([
+    title.startsWith("[mobile]") ? "mobile" : "desktop", batch5BugsFile,
+    [batch5BugsFile, title], [scope],
+  ])).sort();
+  expect(actual).toEqual(expected);
+}
 
 function flattenApp(suites: NativeSuite[], retries: Record<string, number>, parents: string[] = []): Case[] {
   return suites.flatMap(suite => {
@@ -181,6 +205,7 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
         id: `${spec.id}:${test.projectId}:${ordinal}`, file: spec.file.replaceAll("\\", "/"),
         titles: [...titles, spec.title], project: test.projectName,
         repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? retries[test.projectId], results: test.results,
+        annotations: test.annotations ?? [],
       }))),
       ...flattenApp(suite.suites ?? [], retries, titles),
     ];
@@ -188,7 +213,8 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
 }
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
-  // Exact774-case metadata scope:15s constructor/20s new hooks and units. The
+  // The retained774-case baseline is checked apart from the old eight plus two B5 additions.
+  // Keep the15s constructor/20s hooks and units. The
   // established production collector above keeps its literal8s bound unchanged.
   const env: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE"]) {
@@ -247,17 +273,20 @@ function canonicalAppProject(canonical: Case[], project: keyof typeof appSourceP
 // supplies the expected App partition. --list never starts either local stack.
 describe("complete independent App CI project inventory", () => {
   let canonical: Case[];
+  let batch5: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
-    canonical = collectAppProject();
+    const all = collectAppProject();
+    batch5 = all.filter(isBatch5);
+    canonical = all.filter(row => !isBatch5(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
       .flatMap(project => canonicalAppProject(canonical, project));
   }, 20_000);
 
-  it("keeps all774 canonical identities, original project order and zero retry/repeat", () => {
+  it("keeps all774 original canonical identities, project order and zero retry/repeat", () => {
     expect(canonical).toHaveLength(774);
     expect(counts(canonical.map(row => row.project))).toEqual(appSourceProjects);
     expect(wholeByDeclaration.map(row => row.project)).toEqual([
@@ -281,7 +310,7 @@ describe("complete independent App CI project inventory", () => {
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
     const count = appSourceProjects[project];
     it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
-      const selected = collectAppProject(project);
+      const selected = collectAppProject(project).filter(row => !isBatch5(row));
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
     }, 20_000);
@@ -298,9 +327,65 @@ describe("complete independent App CI project inventory", () => {
     expect(mobile.every(row => !desktopIds.has(row.id))).toBe(true);
   });
 
+  it("reconciles every additive B5 identity with its dedicated exact-production role", () => {
+    const present = batch5Files.filter(file => existsSync(path.join(root, "tests/e2e", file)));
+    if (present.length === 0) {
+      // Configuration-only preparation is not evidence that B5 journeys ran.
+      expect(batch5).toEqual([]);
+      return;
+    }
+    expect(present).toEqual(batch5Files);
+    expect(batch5).toHaveLength(8 + 2);
+    expect(canonical.length + batch5.length).toBe(774 + 8 + 2);
+    expect(counts(batch5.map(row => row.project))).toEqual({ "app-chromium": 5, "app-mobile": 5 });
+    for (const project of Object.keys(appSourceProjects)) {
+      expect(counts(batch5.filter(row => row.project === project).map(row => row.file))).toEqual({
+        "ram-2026-11-11-statutes.spec.ts": 1, "ram-2026-11-11-drafting.spec.ts": 1,
+        "ram-2026-11-11-contracts.spec.ts": 1, "ram-2026-11-11-bugs.spec.ts": 2,
+      });
+    }
+    expectBatch5BugsProofs(batch5);
+    expect(new Set(batch5.map(row => row.id)).size).toBe(batch5.length);
+    expect(batch5.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(new Set(batch5.filter(row => row.project === "app-chromium").map(row => row.file))).toEqual(new Set(batch5Files));
+    expect(batch5.filter(row => row.file === batch5Files[0] && row.project === "app-mobile").length).toBeGreaterThan(0);
+    const dedicated = collectProjects({ "batch5-prod-chromium": 7, "batch5-prod-mobile": 7 });
+    expect(counts(dedicated.map(row => row.project))).toEqual({
+      "batch5-prod-chromium": 7, "batch5-prod-mobile": 7,
+    });
+    const production = dedicated.filter(isBatch5);
+    expect(production).toHaveLength(8 + 2);
+    expectBatch5BugsProofs(production);
+    const identity = (row: Case) => JSON.stringify([
+      row.file, row.titles, row.project.endsWith("mobile") ? "mobile" : "desktop", row.repeat, row.retries,
+    ]);
+    expect(production.every(row => isBatch5(row) && row.results.length === 0)).toBe(true);
+    expect(production.map(identity).sort()).toEqual(batch5.map(identity).sort());
+    expect(production.every(row => row.titles.join(" ").includes("[mobile]") === row.project.endsWith("mobile"))).toBe(true);
+  }, 20_000);
+
 });
 
 describe("App metadata constructor and source-order controls", () => {
+  it.each(["renamed", "duplicate-comms", "swapped-scope", "both-scopes", "missing-scope"])(
+    "rejects %s in the four exact mixed-file proof identities", damage => {
+      const rows: Case[] = batch5BugsProofCases.map(([title, scope]) => ({
+        id: title, file: batch5BugsFile, titles: [batch5BugsFile, title],
+        project: title.startsWith("[mobile]") ? "app-mobile" : "app-chromium",
+        repeat: 0, retries: 0, results: [],
+        annotations: [{ type: "caseops-b5-proof", description: scope }],
+      }));
+      if (damage === "renamed") rows[2].titles[1] += " changed identity";
+      else if (damage === "duplicate-comms") {
+        rows[2].titles = [...rows[0].titles];
+        rows[2].annotations = [...rows[0].annotations!];
+      } else if (damage === "swapped-scope") rows[2].annotations![0].description = "preview-no-paid-guard";
+      else if (damage === "both-scopes") rows[2].annotations!.push({ type: "caseops-b5-proof", description: "preview-no-paid-guard" });
+      else rows[2].annotations = [];
+      expect(() => expectBatch5BugsProofs(rows)).toThrow();
+    },
+  );
+
   it("rejects an extra project returned by the selected native constructor without filtering it away", () => {
     const suites: NativeSuite[] = [{ title: "nested/spec.ts", specs: [{
       id: "source-id", file: "nested/spec.ts", title: "literal case", tests: [
@@ -365,15 +450,31 @@ describe("reviewed production tester source inventory", () => {
 
   beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects the independent reviewed119+6+51 exact partition before production", () => {
+  it("collects the reviewed115+6+51 QA roles before the four moved workspace cases", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(176);
+    expect(cases).toHaveLength(172);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
       .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{
         project: "test-legal-write-prod-chromium",
         title: "NOTES22 newest three of four saved notes persist after reload at 1280px and 393px",
       }]);
+  });
+
+  it("preserves all four Nov7 workspace journeys in the test-legal B5 roles", () => {
+    const moved = collectProjects({ "batch5-prod-chromium": 0, "batch5-prod-mobile": 0 })
+      .filter(row => /ram-2026-11-07-(?:contracts|teams)\.spec\.ts$/.test(row.file));
+    const expected = [
+      ["ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"],
+      ["ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"],
+    ].flatMap(([file, title]) => [
+      ["batch5-prod-chromium", file, title], ["batch5-prod-mobile", file, `[mobile] ${title}`],
+    ]);
+    expect(moved.map(row => [row.project, row.file, row.titles.at(-1)]).sort()).toEqual(expected.sort());
+    expect(moved.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
+    expect(cases).toHaveLength(172);
+    expect(cases.length + moved.length).toBe(176);
+    expect(cases.some(row => /ram-2026-11-07-(?:contracts|teams)\.spec\.ts$/.test(row.file))).toBe(false);
   });
 
   it("routes the Notes mutation to the project matching its unchanged production tenant guard", () => {

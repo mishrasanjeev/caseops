@@ -1,0 +1,206 @@
+# BUG001 Scoped Rendering Handoff
+
+Baseline: `2816c29c30d8f13147f67a396f47321871096f0d`.
+Workbook: CaseOps_Bugs (5), BUG-001. The tester reported generic draft text;
+PDF parity was explicitly unverified, not a reproduced PDF mismatch.
+
+PRD ownership: J07 / M06, MOD-TS-012, US-018 / US-021, FT-027 / FT-029 /
+FT-030, NFT-013 / NFT-014, SEC-003 / SEC-004. No global ledger changes.
+
+## Route And Profile Audit
+
+- `/api/drafting/preview` generates partial AI text. It is not a PDF preview
+  and is unchanged. Neither acceptance fixture calls it or generation routes.
+- The saved draft formerly used a sans-serif `pre`; selecting a court profile
+  changed only `/api/matters/{matter}/drafts/{draft}/export.pdf`.
+- The existing export route already supports `version_id` and `court_profile`.
+  The new viewer pins both, renders its authenticated PDF bytes with the local
+  PDF.js worker, and downloads that same blob after a fresh export authorization
+  and SHA-256 comparison. Denial or changed bytes discards the artifact.
+- PDF creation metadata now uses the persisted version timestamp, so an
+  unchanged export is byte-stable across later authorization reads. A changed
+  title, review state, body, citation list or preset cannot silently replace
+  what the reviewer saw. Profile/version changes and unmount abort ownership.
+- Existing access, citation and lawyer-review checks remain authoritative.
+  No new filing approval, model call or legal-profile approval is introduced.
+- The legacy court presets have no pinned official rule bytes, editions,
+  effective dates or legal-review records. Their old documentation incorrectly
+  described sources as pinned. Numeric settings and resolver policy are unchanged.
+  The new layout digest identifies settings, not legal verification.
+- The existing shared Matter export route's historical filing-grade description
+  was not edited. A PDF and preview now explicitly warn that court rules are
+  unverified and lawyer review remains necessary.
+- A separate reproducible renderer defect used a non-wrapping court-header
+  cell. Baseline synthetic long-header glyph bounds were -501.52..1093.07pt
+  against printable 72..523.28pt. Wrapped headers pass the geometry regression.
+
+## Browser Inventory And Fixture Environment
+
+`ram-2026-11-11-drafting.spec.ts`: exactly **2 intended cases**, desktop and
+`[mobile]` phone. The phone case creates a Pixel 5 touch context. There are no
+explicit screenshot/video/trace commands; the parent configuration owns media.
+
+Required runtime settings (all paths must refer to the checkout being tested):
+
+```text
+CASEOPS_E2E_PYTHON=<existing interpreter; no dependency synchronization>
+PYTHONPATH=<checkout>/apps/api/src
+CASEOPS_E2E_API_PORT=<isolated loopback API port>
+CASEOPS_E2E_WEB_PORT=<isolated loopback web port>
+CASEOPS_WEB_BASE_URL=http://127.0.0.1:<web port>
+CASEOPS_ENV=e2e
+CASEOPS_LLM_PROVIDER=mock
+CASEOPS_EMBEDDING_PROVIDER=mock
+CASEOPS_E2E_DATABASE_URL=sqlite+pysqlite:///<checkout>/caseops-e2e.db
+CASEOPS_DATABASE_URL=<same database URL on the API process>
+```
+
+The imported `e2eEnv` supplies the normal local auth/CORS/storage settings.
+`CASEOPS_E2E_DATABASE_URL` may be omitted for the exact checkout-local SQLite
+default. The existing shared fixture guard also permits only the dedicated
+loopback PostgreSQL acceptance connection (`caseops` database/user/password,
+explicit port 20000..49999, no URL query overrides). No shared application DB.
+
+The spec bootstraps unique synthetic local tenants and blank drafts, persists a
+layout-only version, then uses real submit/approve routes. Its synthetic citation
+count is a fixture, not verified legal authority or evidence of content quality.
+It compares every rendered page's nonblank canvas and the downloaded artifact
+hash, changes profile, reloads, and checks persisted content/reviews are unchanged.
+Every browser API request must retain the no-paid-providers marker. The local
+fixture branch rejects non-loopback targets and generation requests. The
+read-only production branch added below does not enter this fixture flow.
+
+## Evidence Limits
+
+Focused unit/API journals, JSON/XML reports and synthetic PDF renders are in the
+owning worktree's `.tmp` and `apps/web/.tmp`, not committed release evidence.
+Final focused results: `bug001-api-04.jsonl` / XML contain all 37 intended unique
+cases (4 new, 25 profile, 8 existing PDF/profile-route cases), with 111 passed
+setup/call/teardown records and completion exit 0. `bug001-web-06.json` contains
+33 passes across both intended modules (21 artifact, 12 page). Scoped frontend
+and E2E TypeScript checks and the owned Python Ruff check pass.
+Checks used the existing `ai1107` Python environment with this checkout's
+`PYTHONPATH`, and Node 24.15.0 with read-only existing npm dependencies and a
+Vite root pinned to this checkout. They are not pinned release-runtime gates.
+
+The default Playwright config discovers both dated cases. On this branch's
+unchanged app config, only desktop is discovered after the required `[mobile]`
+tag: the parent configuration agent must add this spec to the mobile allowlist
+and reconcile the final inventory to exactly 2. Discovery is not execution.
+
+The initial browser attempts failed fixture setup because the server normalizes
+Matter codes to uppercase; the exact guard is corrected and directly exercised.
+Those attempts did not reach the UI and must not be called parity passes.
+
+Parent owns built-app desktop/mobile replay, canonical configuration, exact
+release verification, production-safe media policy and workbook adjudication.
+Production acceptance remains **Inconclusive**. Placeholder court/party text,
+irrelevant authorities, drafting quality and jurisdiction/document-specific
+reviewed legal-profile data remain separate unresolved dependencies. This patch
+does not certify legal suitability or close the whole BUG001 report.
+
+## Read-Only Production Follow-Up
+
+The same two stable cases now dispatch to a separate production journey when
+the configured web base URL is non-loopback. Local fixture statements remain
+unchanged. The production branch requires exactly `https://caseops.ai` and
+`https://api.caseops.ai`, the actual reporting QA account, and these inputs:
+
+```text
+PROD_API_BASE_URL=https://api.caseops.ai
+CASEOPS_EXPECTED_RELEASE_SHA=<exact 40-hex serving API/web SHA>
+CASEOPS_RAM_PROD_SLUG=test-legal
+CASEOPS_RAM_PROD_EMAIL=<actual reporting account email>
+CASEOPS_RAM_PROD_PASSWORD=<reporter's existing secret>
+```
+
+The reported retained Matter/draft IDs are pinned in the policy helper; optional
+`CASEOPS_B5_DRAFT_MATTER_ID` / `CASEOPS_B5_DRAFT_ID` inputs must match those same
+owner-reported IDs. The version is selected from a fresh authorized draft GET,
+never from fixture configuration. No local Python, database or model environment
+is used on this branch. Canonical configuration must explicitly set trace,
+screenshot and video to `off`, workers to 1 and retries to 0.
+
+The only permitted browser POST is one normal reporter login, with its CORS
+preflight. Drafting support reads are allowlisted; bootstrap, generation,
+retrieval/provider calls, approval, submission, finalization and all other writes
+are blocked before transport. Requests retain the authoritative no-paid marker.
+Serving API/web SHA is checked before login and again before the result.
+
+If the persisted citation/review state legitimately blocks PDF export, the UI
+guard, disabled download and unchanged record are asserted. A metadata-only
+`PARITYUNVERIFIED` receipt is attached and the case deliberately **fails** with
+that explicit outcome. This guard is not a positive parity result or a skip.
+Other export failures remain failures, not misclassified citation guards.
+
+If the existing export gate permits the read, the actual PDF preview is checked
+across its complete bounded page inventory with nonblank canvas-pixel checks.
+Version/profile request identity and resolved profile response identity are
+asserted, followed by hash parity at the real application's blob-anchor download
+handoff. A capturing listener prevents native saving and hashes the blob only
+in memory; native downloads are disabled as a second fence. No exported PDF,
+screenshot, video, trace, private DOM/body, credentials or filename is saved by
+this journey. Only hashes, page counts, public profile keys and status metadata
+are attached. Selecting `generic`, reloading, fresh record fingerprint equality
+and exact release identity complete the conditional positive read-only path.
+
+The production branch has not been executed as part of this source follow-up.
+Its 26 offline policy/memory-handoff cases and TypeScript/discovery checks are
+supporting evidence only. Whole BUG001 legal-content/profile quality remains
+open even after a future positive read-only parity result.
+
+## Independent Review Corrections
+
+The passive Draft text view no longer creates a PDF source URL. An explicit PDF
+tab action grants acquisition only for the currently displayed source/review
+identity. Returning to text, editing/cancelling, reload, source replacement or a
+review/title change clears that request. Changing a court preset while still in
+text view does not export. The older retained October 22 production journey's
+prohibited-export fence is unchanged.
+
+Draft PDF reads now use Banach's additive `apiBlobDataRequest` contract rather
+than a direct fetch. Its authenticated cookie/refresh/sign-in path, one complete
+30-second request/body budget, caller cancellation, no-store semantics and 32 MiB
+cap are reused. Existing `apiBlobRequest` Response callers are not changed by
+drafting. Shared client source/tests remain Banach-owned; original dependency
+commit: `18f362adaecdf24571590cef75bbe708bb9a6711`.
+Banach's shared-only follow-up `81f1ae5103c9b2e65fe2470f7bb55a64c4122155`
+retains original cookie-caller intent through a refresh retry, so a second 401
+still recovers to sign-in without redirecting explicit-token callers.
+
+Both of the same two Playwright cases declare exactly this native annotation,
+including discovery and failure paths:
+
+```text
+type: caseops-b5-proof
+description: retained-readonly
+```
+
+This matches the configuration owner's `BATCH5_PROOF_SCOPES` contract. It is not
+a full drafting/content workflow claim, even when synthetic local setup creates
+and approves its own layout-only fixture.
+
+The old greater-than-50-dark-pixels check has been replaced. The new oracle
+waits for each page's canvas and text layer, reconciles the complete persisted
+body/title/citation text in order across all pages, checks every footer and the
+selected preset's paper/printable bounds, and requires actual high-contrast ink
+for every printable text run. It rejects header-only renders, omitted final
+paragraphs, low/white body text, clipped text and incorrect continuation pages.
+Profile changes render and download the replacement artifact and compare its
+fresh authorized bytes; reload still starts in passive text view with no export.
+
+An offline real-PDF/PDF.js canvas control passed at desktop and 393px phone
+widths. Whitening only the body leaves the complete text layer and dark headers
+intact but correctly fails the new contrast check. No application server or
+production requests were used for this control. It is supporting oracle proof,
+not execution of the two built-app user journeys.
+
+The earlier composed selection passed 99 cases; after the body-boundary/review
+warning and shared second-401 regressions, the final selection passed all 103
+cases (23 artifact, 14 page, 14 oracle, 26 production-policy and 26 shared-client).
+Native discovery still contains exactly 2 annotated browser cases.
+Production and full legal/content suitability remain unverified.
+
+The pure oracle remains at `tests/e2e/support/draft_pdf_oracle_20261111.ts` and
+has no imports or transitive dependencies. The parent owns its finite builder
+COPY/upload allowlisting; no root build/config/upload files are changed here.
