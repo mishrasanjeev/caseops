@@ -16,10 +16,12 @@
   observability, OCR or other optional runtime; keep disabled features disabled
   and retain each audit's installed-set scope and advisory outcomes.
   Treat fresh-transform-cache collection separately from warm-cache success.
-  Defer heavy browser helper and response-schema imports into their existing
-  awaited runtime bodies, never filter or fake collection to meet a budget.
-  Reconcile ordered identities and execute the real deferred audits/validators;
-  profiling with a larger diagnostic ceiling is not acceptance at the old limit.
+  Never filter or fake collection to meet a budget. A dynamic TypeScript import
+  can bypass the actual Playwright worker's transpilation path even when list,
+  typecheck and AST tests pass. Prove real worker loading before retaining that
+  optimization; restore the known-good import path if unproved. Keep unrelated
+  performance work separate from a security release. A larger profiling ceiling
+  is not acceptance at the original limit.
 
 - Use representative questions already supplied in a report before declaring
   reproduction input missing. Label newly chosen scenarios as such. Pair factual

@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
@@ -702,7 +703,6 @@ test.describe("Public landing page and user guide", () => {
     test(`${viewport.name} public pages have no overflow or serious accessibility issues`, async ({
       page,
     }) => {
-      const { default: AxeBuilder } = await import("@axe-core/playwright");
       await page.setViewportSize(viewport);
 
       for (const pathname of PUBLIC_CONTENT_PAGES) {

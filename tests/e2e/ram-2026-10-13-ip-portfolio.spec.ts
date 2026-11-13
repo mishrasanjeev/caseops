@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import JSZip from "jszip";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
@@ -28,7 +29,6 @@ function csv(rows: string[][]): Buffer {
 }
 
 async function nativeDateWorkbook(page: Page, mark: string): Promise<Buffer> {
-  const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(readFileSync(path.join(process.cwd(),
     "tests/e2e/fixtures/ip-portfolio-native-dates-20261013.xlsx")));
   const member = zip.file("xl/worksheets/sheet1.xml");

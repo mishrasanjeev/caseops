@@ -1,7 +1,7 @@
 /** J07/M06: retained control-state reads only, not generation or approval acceptance. */
 import { createHash } from "node:crypto";
 import type { APIResponse, Page, Response } from "@playwright/test";
-import type { Draft } from "../../apps/web/lib/api/schemas";
+import { authContext, draft as draftSchema, type Draft } from "../../apps/web/lib/api/schemas";
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
@@ -41,8 +41,7 @@ async function json(response: Pick<APIResponse, "status" | "json">, label: strin
   catch { throw new Error(`${label} JSON could not be read; private response omitted.`); }
 }
 
-async function parseDraft(value: unknown): Promise<Draft> {
-  const { draft: draftSchema } = await import("../../apps/web/lib/api/schemas");
+function parseDraft(value: unknown): Draft {
   const parsed = draftSchema.safeParse(value);
   if (!parsed.success) throw new Error("Retained draft does not match the current frontend contract; private response omitted.");
   return parsed.data;
@@ -98,7 +97,6 @@ async function controls(page: Page, value: Draft, fixture: RetainedFixture): Pro
 }
 
 test("B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls persist after reload", async ({ page, baseURL }, info) => {
-  const { authContext } = await import("../../apps/web/lib/api/schemas");
   if (!baseURL) throw new Error("Use the production verification config.");
   expect(info.config.workers).toBe(1);
   expect(info.config.fullyParallel).toBe(false);
@@ -171,7 +169,7 @@ test("B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls per
     const baselines = new Map<string, string>();
     for (const fixture of fixtures) {
       const pathname = `/api/matters/${fixture.matterId}/drafts/${fixture.draftId}`;
-      const baseline = await parseDraft(await read(pathname));
+      const baseline = parseDraft(await read(pathname));
       assertRetained(baseline, fixture, actor.company.id);
       baselines.set(fixture.draftId, fingerprint(baseline));
       for (const stage of ["initial", "reload"] as const) {
@@ -181,14 +179,14 @@ test("B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls per
         else await page.reload();
         const receipt: Response = await received;
         expect(await receipt.finished(), "Bound browser draft response completes before another navigation").toBeNull();
-        const rendered = await parseDraft(await json(receipt, "Browser retained draft"));
+        const rendered = parseDraft(await json(receipt, "Browser retained draft"));
         assertRetained(rendered, fixture, actor.company.id);
         expect(fingerprint(rendered) === baselines.get(fixture.draftId), "Browser reload preserves all retained versions and review state").toBe(true);
         await controls(page, rendered, fixture);
       }
     }
     for (const fixture of fixtures) {
-      const retained = await parseDraft(await read(`/api/matters/${fixture.matterId}/drafts/${fixture.draftId}`));
+      const retained = parseDraft(await read(`/api/matters/${fixture.matterId}/drafts/${fixture.draftId}`));
       expect(fingerprint(retained) === baselines.get(fixture.draftId), "Both retained QA drafts remain byte-equivalent in their canonical DTOs").toBe(true);
     }
     expect(logins, "One normal browser login, no API fixture login or session replacement").toBe(1);

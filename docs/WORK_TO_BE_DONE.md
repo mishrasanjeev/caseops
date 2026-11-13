@@ -22,12 +22,18 @@ Preflight18 also fails the unchanged15-second App collection budget, with24
 inventory cases passed and5unexecuted after its hook failure. Cold import-path
 repair is required; a warm retry is not performance closure. Full09 has not
 started and no earlier run is relabelled as this replacement's acceptance.
-Collector source now defers axe/jsQR/JSZip and canonical response schemas into
-their existing async runtime paths. Assertions, real validators, test registration
-and original8s/15s budgets remain. Fresh profile04-06 timed out (launches briefly
+An experimental collector deferred axe/jsQR/JSZip and canonical response schemas.
+Fresh profile04-06 timed out (launches briefly
 overlapped; not exclusive measurements); serial07 diagnostic completed784IDs in
 19.99s under a45s profiling ceiling, NOT original-budget acceptance. The further
-schema deferral and ordered-inventory/runtime checks are pending validation.
+schema deferral did not meet the15s budget either. Preflight19 completed both
+typechecks/81transportunits/29ordinary-cache inventorycases/2961frontendcases/
+freshbuild, but browser14=10P/4F/0S/0retry. Every failing assistant/communications
+case hit `SyntaxError: Cannot use import statement outside a module` at the
+new schema import. Full structured failures are retained. Remove the ENTIRE
+unproved collector optimization, restore exact known-good Playwright files,
+add three static-validator loader regressions and replay all14 journeys. Issue615
+remains open and separate; do not expand this security release to repair it.
 Independent review found two introduced gaps before release: unconditional
 optional imports broke core-only collection and lock regeneration dropped ten
 unrelated PyPy uharfbuzz wheels. Restore that package's exact prior block,
