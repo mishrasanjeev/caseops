@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { iosFilesInventory as inventory, iosFilesScenarios as scenarios, collectIosFiles, validateIosFilesContext,
-  validateSourceSeed, validatePickerProvider, validateAsset, validatePickerAsset } from '../../apps/mobile/e2e/ios-files.mjs';
+  validateSourceSeed, validatePickerProvider, validateAsset, validatePickerAsset, IOS_FILE_FACT_RESPONSE_ATTRIBUTES } from '../../apps/mobile/e2e/ios-files.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { FixtureUnavailable, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
@@ -224,9 +224,13 @@ export async function runIosFiles() {
         path: appium.pathname, logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000,
         capabilities: { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:deviceName': fixture.deviceName,
           'appium:platformVersion': fixture.platformVersion, 'appium:udid': fixture.udid, 'appium:bundleId': fixture.appId,
-          'appium:noReset': true, 'appium:newCommandTimeout': 60, 'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000 } });
+          'appium:noReset': true, 'appium:newCommandTimeout': 60, 'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000,
+          'appium:shouldUseCompactResponses': false, 'appium:elementResponseAttributes': IOS_FILE_FACT_RESPONSE_ATTRIBUTES } });
       sessionId = driver.sessionId;
       journal.write({ ...appiumSessionEvent(sessionId, 'created'), id });
+      const factSettings = await driver.getSettings();
+      assert.equal(factSettings.shouldUseCompactResponses, false, 'IOS_FILES_NATIVE_FACT_SETTINGS_REQUIRED');
+      assert.equal(factSettings.elementResponseAttributes, IOS_FILE_FACT_RESPONSE_ATTRIBUTES, 'IOS_FILES_NATIVE_FACT_SETTINGS_REQUIRED');
       await driver.switchContext('NATIVE_APP');
       context = { fixture, driver, platform: 'ios', runId, gatewayBaseline: baseline, assets, source: assets.source, provider: assets.provider, uploaded, filesState,
         record: (event) => journal.write({ ...event, id }),

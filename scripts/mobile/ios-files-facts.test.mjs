@@ -3,14 +3,17 @@ import test from 'node:test';
 import {findIosFileFact} from '../../apps/mobile/e2e/ios-files.mjs';
 
 const id='files-viewer-unavailable-11111111-1111-4111-8111-111111111111';
-const viewportQuery='-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1';
-function fixture(t,{alwaysOffscreen=false,invisible=false,wrongName=false,wrongType=false,duplicates=false,visibleScrolls=1,lateFinder=false,lateGeometry=false,unknownFrame=false,horizontal=false,outsideViewport=false,keyboard=false}={}){
+const viewportQuery='name == '+JSON.stringify(id)+' OR (type == "XCUIElementTypeScrollView" AND visible == 1)';
+function fixture(t,{costMs=130,alwaysOffscreen=false,invisible=false,wrongName=false,wrongType=false,duplicates=false,visibleScrolls=1,lateFinder=false,lateGeometry=false,unknownFrame=false,horizontal=false,outsideViewport=false,keyboard=false,missingFacts=false,wrongNativeId=false,wrongResolution=false}={}){
  let now=0,drags=0,lookups=0,readsAtFirstDrag=null;const waits=[],queries=[],dispatches=[];
  t.mock.method(performance,'now',()=>now);
- const step=value=>{now+=130;return value;};
+ const step=value=>{now+=costMs;return value;};
  const target={elementId:'owned-fact',getAttribute:async key=>step(key==='name'?(wrongName?'different':id):key==='type'?(wrongType?'XCUIElementTypeButton':'XCUIElementTypeStaticText'):null),isDisplayed:async()=>step(!invisible&&drags>0)};
  const scroll={elementId:'owned-scroll',isDisplayed:async()=>step(true)};
+ const raw=(elementId,type,name,rect,displayed)=>({'element-6066-11e4-a52e-4f735466cecf':elementId,ELEMENT:wrongNativeId?'different':elementId,type,'attribute/name':name,rect,...(missingFacts?{}:{displayed})});
  const driver={
+  findElements:async(using,query)=>{assert.equal(using,'-ios predicate string');assert.equal(query,viewportQuery);queries.push(query);lookups++;if(lateFinder)now+=1501;const row=raw('owned-fact',wrongType?'XCUIElementTypeButton':'XCUIElementTypeStaticText',wrongName?'different':id,{x:horizontal?-1:20,y:alwaysOffscreen||drags===0?1206:410,width:unknownFrame?NaN:362,height:43},!invisible&&drags>0);return step([row,...(duplicates?[{...row,ELEMENT:'duplicate','element-6066-11e4-a52e-4f735466cecf':'duplicate'}]:[]),...Array.from({length:visibleScrolls},(_,i)=>raw('scroll-'+i,'XCUIElementTypeScrollView',null,{x:0,y:outsideViewport?900:125,width:402,height:638},true))]);},
+  $:async raw=>{assert.equal(raw['attribute/name'],id);return wrongResolution?{...target,elementId:'different'}:target;},
   $$:async query=>{queries.push(query);if(query==='~'+id){lookups++;if(lateFinder){now+=1501;return[target];}return step(duplicates?[target,{...target,elementId:'duplicate'}]:[target]);}if(keyboard&&query.includes('XCUIElementTypeKeyboard'))return step([{elementId:'keyboard',isDisplayed:async()=>step(true)}]);if(query.includes('XCUIElementTypeScrollView'))return step(Array.from({length:visibleScrolls},()=>scroll));return step([]);},
   getElementRect:async elementId=>step(elementId===scroll.elementId?{x:0,y:outsideViewport?900:125,width:402,height:638}:{x:horizontal?-1:20,y:alwaysOffscreen||drags===0?1206:410,width:unknownFrame?NaN:362,height:43}),
   getWindowRect:async()=>{if(lateGeometry)now+=1501;return step({x:0,y:0,width:402,height:874});},
@@ -44,3 +47,12 @@ test('an iOS file fact still refuses a late finder and an in-viewport invisible 
 test('an unreachable iOS file fact retains the existing nine measured-drag limit',async t=>{
  const f=fixture(t,{alwaysOffscreen:true});await assert.rejects(findIosFileFact(f.context,id,'XCUIElementTypeStaticText'),/IOS_FILES_FACT_NOT_VISIBLE/);assert.equal(f.stats().drags,9);assert.ok(f.waits.every(x=>x.timeout===1500));
 });
+
+test('native fact observation stays within1500ms when individual protocol reads take200ms',async t=>{
+ const f=fixture(t,{costMs:200});const actual=await findIosFileFact(f.context,id,'XCUIElementTypeStaticText');
+ assert.equal(actual,f.target);assert.equal(f.stats().drags,1);assert.ok(f.waits.every(x=>x.timeout===1500&&x.interval===150));
+});
+
+test('native expanded facts refuse missing snapshot fields and inconsistent protocol element identity',async t=>{for(const options of[{missingFacts:true},{wrongNativeId:true}]){const f=fixture(t,options);await assert.rejects(findIosFileFact(f.context,id,'XCUIElementTypeStaticText'),/IOS_FILES_FACT_(?:RESPONSE_REQUIRED|ID_MISMATCH)/);assert.equal(f.stats().drags,0);}});
+
+test('wrapping an observed native element cannot change the resolved element identity',async t=>{const f=fixture(t,{wrongResolution:true});await assert.rejects(findIosFileFact(f.context,id,'XCUIElementTypeStaticText'),/IOS_FILES_FACT_RESOLUTION_ID_MISMATCH/);assert.equal(f.stats().drags,1);});

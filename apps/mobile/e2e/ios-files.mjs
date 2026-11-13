@@ -339,26 +339,46 @@ export async function expandIosSourceDetails(context, button) {
   assert.equal(await button.isEnabled(), true, 'IOS_FILES_DETAILS_BUTTON_DISABLED');
   if (label === 'Source details') await dispatchNativeClick(context, button);
 }
+export const IOS_FILE_FACT_RESPONSE_ATTRIBUTES = 'type,rect,displayed,attribute/name';
 export async function findIosFileFact(context, id, type) {
-  const query = selector('ios', 'id', id);
+  selector('ios', 'id', id);
+  const query = `name == ${JSON.stringify(id)} OR (type == "XCUIElementTypeScrollView" AND visible == 1)`;
   nativeAction(context, 'find', 'id', id);
   let control;
   for (let attempt = 0; attempt <= 9; attempt++) {
     let direction, frame, viewport, refusal;
     await waitForIosVisibility(context.driver, async probe => {
       try {
-        const matches = await probe(() => context.driver.$$(query));
+        // WDA returns these facts from each matched native snapshot. Keep the
+        // exact identity, type, visibility and geometry in one response instead
+        // of spending the observation window on separate attribute requests.
+        const rows = await probe(() => context.driver.findElements('-ios predicate string', query));
+        assert.ok(Array.isArray(rows) && rows.length <= 64, 'IOS_FILES_FACT_RESPONSE_REQUIRED');
+        const identities = new Set();
+        for (const row of rows) {
+          const nativeId = row?.['element-6066-11e4-a52e-4f735466cecf'];
+          assert.ok(typeof nativeId === 'string' && nativeId.length > 0 && nativeId.length <= 128,
+            'IOS_FILES_FACT_RESPONSE_REQUIRED');
+          assert.ok(!identities.has(nativeId), 'IOS_FILES_FACT_ID_NOT_UNIQUE');
+          identities.add(nativeId);
+          if (row.ELEMENT !== undefined) assert.equal(row.ELEMENT, nativeId, 'IOS_FILES_FACT_ID_MISMATCH');
+          assert.ok(typeof row.type === 'string' && typeof row.displayed === 'boolean'
+            && Object.hasOwn(row, 'attribute/name'), 'IOS_FILES_FACT_RESPONSE_REQUIRED');
+          assert.ok(row['attribute/name'] === id || row.type === 'XCUIElementTypeScrollView'
+            && row.displayed === true, 'IOS_FILES_FACT_ID_MISMATCH');
+        }
+        const matches = rows.filter(row => row['attribute/name'] === id);
         assert.ok(matches.length <= 1, 'IOS_FILES_FACT_ID_NOT_UNIQUE');
         if (!matches.length) return false;
-        control = matches[0];
-        assert.equal(await probe(() => control.getAttribute('name')), id, 'IOS_FILES_FACT_ID_MISMATCH');
-        assert.equal(await probe(() => control.getAttribute('type')), type, 'IOS_FILES_FACT_TYPE_MISMATCH');
-        const scrolls = await probe(() => context.driver.$$('-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1'));
+        const measured = matches[0];
+        assert.equal(measured['attribute/name'], id, 'IOS_FILES_FACT_ID_MISMATCH');
+        assert.equal(measured.type, type, 'IOS_FILES_FACT_TYPE_MISMATCH');
+        const scrolls = rows.filter(row => row.type === 'XCUIElementTypeScrollView' && row.displayed === true);
         assert.ok(scrolls.length <= 1, 'AMBIGUOUS_VISIBLE_NATIVE_LOCATOR');
         const scroll = scrolls[0];
         assert.ok(scroll, 'IOS_FILES_VIEWPORT_REQUIRED');
-        viewport = await probe(() => context.driver.getElementRect(scroll.elementId));
-        frame = await probe(() => context.driver.getElementRect(control.elementId));
+        viewport = scroll.rect;
+        frame = measured.rect;
         const window = await probe(() => context.driver.getWindowRect());
         assert.ok(validFrame(frame) && validFrame(viewport) && validFrame(window) && containsFrame(window, viewport), 'IOS_FILES_FACT_GEOMETRY_REQUIRED');
         assert.ok(frame.x >= viewport.x && frame.x + frame.width <= viewport.x + viewport.width, 'IOS_FILES_FACT_HORIZONTAL_BOUNDS_REQUIRED');
@@ -366,9 +386,13 @@ export async function findIosFileFact(context, id, type) {
         // A complete offscreen measurement is ready for one bounded drag.
         // Do not poll it again until the deadline and overlap a late read
         // with keyboard checks or scrolling.
-        return !!direction || await probe(() => control.isDisplayed());
+        if (!direction && measured.displayed) {
+          control = await probe(() => context.driver.$(measured));
+          assert.equal(control.elementId, measured['element-6066-11e4-a52e-4f735466cecf'], 'IOS_FILES_FACT_RESOLUTION_ID_MISMATCH');
+        }
+        return !!direction || measured.displayed;
       } catch (error) {
-        if (/NOT_UNIQUE|MISMATCH|GEOMETRY_REQUIRED|HORIZONTAL_BOUNDS_REQUIRED|VIEWPORT_REQUIRED|AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/.test(error.message)) {
+        if (/NOT_UNIQUE|MISMATCH|RESPONSE_REQUIRED|GEOMETRY_REQUIRED|HORIZONTAL_BOUNDS_REQUIRED|VIEWPORT_REQUIRED|AMBIGUOUS_VISIBLE_NATIVE_LOCATOR/.test(error.message)) {
           refusal = error;
           return true;
         }

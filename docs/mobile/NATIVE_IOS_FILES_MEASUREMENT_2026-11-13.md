@@ -91,3 +91,63 @@ focused tooling replay retained one stale generated iOS-entry failure; the
 subsequent65-case focused boundary selection passed with zero skips. Both failed
 precursors remain retained. A complete replacement freeze is required before
 pushing or building this revision.
+
+
+## Source391 replacement and atomic native facts
+
+A fresh actual source391c50fd Simulator bundle508dcf0a and matching isolated
+API/web passed Core23 (69 phases). Its complete Files17 attempt retained5
+passing calls,1 failed call (FILES-06), and11 unexecuted calls. PNG received its
+normal200 upload acknowledgment and appeared after reload, but its subsequent
+hash observation failed. The uncertain mutation fence correctly prevented any
+upload replay. Fourteen acknowledged sessions closed; the3 dependency-blocked
+cases created none. The canonical aggregate postflight failed
+EXACT_FILES_SESSION_LIFECYCLE_REQUIRED; this remains a failed/incomplete run.
+The separate provider postflight and independent reconciliation preserved all21
+originals across3 cohorts and found zero owned private copies. Neither that
+privacy result nor the read-only diagnostics makes the full attempt pass.
+
+A separate unchanged-helper diagnostic passed on the existing PNG without a
+business write. Passive timing used per-request Headers identity, did not wrap
+native promises, and found zero overlapping requests in this diagnostic. Its
+last complete in-viewport observation spent about1444ms across8 protocol
+requests. This supports a narrow timing-margin hypothesis; it does not identify
+the original failed RPC, whose transport timing was not captured. An unchanged
+replay is not used as acceptance or as proof that the original failure vanished.
+
+The pinned WDA expanded response independently returned exact native element
+IDs, type, attribute/name, visibility and rectangles in one native snapshot
+response. The standard response field name represents type in this WDA, so the
+actual identity uses attribute/name explicitly. Together with the native window
+read, the measured probe took746ms across2 protocol commands. The revised
+helper consumes those facts, preserves every ID/type/unique viewport/geometry/
+containment/visibility denial and verifies the resolved wrapper retains the
+same native ID. Sessions explicitly request and verify those response settings.
+Missing snapshot facts fail closed. The1500ms observation,150ms poll,650ms drag
+and9-drag cap remain unchanged. A200ms-per-command clocked regression fails on
+the old serial reads and passes on the revised protocol. Adjacent scenario
+fixtures model the actual expanded response instead of removing their assertions.
+
+The dirty-host candidate passed the existing PNG filename/hash before and after
+an authoritative reload on the unchanged391 app, normal logout and session
+cleanup, without upload replay or another business mutation. Only its exact
+helper bytes are candidate evidence; unrelated unit-test inputs changed during
+preparation, so this is not a frozen whole-source acceptance claim. A new clean
+source-bound build/backend and complete cold-cohort Files replacement remain
+required. Bug verdict stays Inconclusive and native release verdict stays NO-GO.
+
+Retained evidence below the same private root:
+- ios391c50-core-full-01/reconciled-proof.json
+- ios391c50-files-01/reconciled-failed-proof.json, including failed postflight
+- files06-fact-diagnostic-391c50-01/{passive-timings,terminal}.json
+- files06-fact-candidate-391c50-01/{candidate-after-reload-result,terminal}.json
+- ios-files-atomic-facts-before-fix-01.log (new clocked reproduction fails)
+- ios-files-atomic-adjacent-02.log (55 passed,0 skipped)
+
+The current391 Linux CI is still completing its unchanged inventory. Mobile
+source, both installed dependency audits, CodeQL analysis and secret scanning
+have passed; no complete-green claim is made until every required job finishes.
+QP2 setup remains independent of the failed Files call, after exact owned-session
+absence and complete retained privacy evidence. No security feature is enabled
+to enumerate sessions: Appium3 session discovery remains disabled; only the
+acknowledged invocation-owned session IDs are independently checked absent.

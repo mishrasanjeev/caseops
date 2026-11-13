@@ -1,5 +1,20 @@
 ## 2026-11-13 — iOS offscreen Files measurement replacement pending
 
+### 2026-11-13 native Files replacement remains incomplete
+
+J20/M22, US-MOB-01..08, FILES-01..17: source391 passed actual iOS Core23,
+but its fresh Files attempt passed5 calls, failed FILES-06 and left11 unexecuted.
+All14 created sessions closed; all21 provider originals were preserved with zero
+owned private copies. The aggregate lifecycle postflight correctly remained
+failed. An atomic WDA fact reader now preserves the existing identity, role,
+visibility, geometry and timing bounds; the clocked regression and separate
+read-only native candidate pass. Implementation Partially implemented, bug
+verdict Inconclusive, full native release NO-GO pending rebuilt full acceptance.
+See docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md for exact artifacts,
+original failure retention and the distinction between measured diagnostics and
+an unmeasured original transport cause. Android and iOS83-case suites remain due.
+
+
 J20/M22 / US-MOB-01..08: **Partially implemented / Inconclusive; NO-GO**.
 Actual9d79 iOS Core23 passed; full Files17 retained16 passed calls and one
 failed FILES-11 call, with complete postflight and session cleanup. Passive
