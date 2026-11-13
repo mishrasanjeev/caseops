@@ -151,3 +151,66 @@ QP2 setup remains independent of the failed Files call, after exact owned-sessio
 absence and complete retained privacy evidence. No security feature is enabled
 to enumerate sessions: Appium3 session discovery remains disabled; only the
 acknowledged invocation-owned session IDs are independently checked absent.
+
+
+## Independent iOS Queue/Privacy execution
+
+The source391 QP producer completed34 normal actor-setup calls (22 POSTs),
+4 actual MFA enrollments, and74 normal dataset calls (53 POSTs/1 PATCH).
+Two separate normal Safari sign-ins verified exact native principals/workspaces,
+PKCE, actual segmented controls, logout and session cleanup before registration.
+The actual2-case native run executed all6 phases: both setups and teardowns
+passed, but both calls failed QP_NATIVE_STATE_REQUIRED. Its postflight passed,
+2 acknowledged sessions were independently absent and controls were disabled.
+No account-deletion submission was forwarded. These are0/2 passing calls,
+not skipped or accepted workflows, and the original failed report remains retained.
+
+Actual native hierarchy evidence shows the member's5436-point queue Other
+container has visible=false, while both correctly named segmented controls are
+visible within it. All25 task rows exist as native Buttons, including offscreen
+rows. The empty second workspace's smaller container has visible=true. A tall
+structural container's visibility is therefore not a usable control predicate.
+The iOS queue now requires its exact unique typed structural parent plus visible
+native ownership/date controls within that parent and the actual viewport. Native
+row responses retain complete ordered membership, roles, duplicate and excluded/
+unbound-row denials. Row evidence is structural membership, not a claim that all25
+rows were simultaneously visible. Exact task/pagination clicks use measured
+native controls. Structural detail screens require their current visible text
+inside the exact typed parent. Privacy status/confirmation checks seek the actual
+visible controls and preserve20s transition,1500ms fact and480s serial bounds;
+confirmation proves both scoped buttons instead of relying on its wrapper.
+The existing single-dispatch and unknown-acknowledgement mutation fences remain.
+
+A separate read-only dirty-host candidate on the unchanged391 binary passed all25
+first-page native identities, actual Next, both older second-page identities,
+selection and every fact of the older task, exact parent opening, and native
+privacy form open/cancel back to no request. Normal logout and session cleanup
+passed. Zero business mutations/deletion POSTs were observed; the2 temporary
+exact GET matter routes were restored to the original10 afterward. Its exact
+candidate module bytes/source observation are retained, with0 canonical case
+credit. Later deadline guards have separate clocked regression coverage and
+still require the complete clean source-bound replacement. No privacy request
+completion or production acceptance is claimed.
+
+The focused combined boundary selection passed130 cases with0 failures/skips.
+The independent whole83-per-platform inventory remains unchanged. Both native
+QP cases require fresh actors/dataset/registration for their full rerun; the
+expired/closed authority and old failed report must never be reused as a retry.
+
+Additional retained evidence:
+- qp-391c50-ios-01/queue-operator-claim-db06bf20725cc877bf3ca1da/
+  reconciled-failed-proof.json
+- qp-ios391c50-native-candidate-01/{first-page-result,older-task-result,
+  matter-open-result,privacy-cancel-result,terminal,route-restoration-proof}.json
+- ios-qp-files-adjacent-03.log:130 passed,0 skipped
+
+Setup refusals are retained separately: unsupported Appium session-list route,
+public-reference size mismatches for actual executable files, and an omitted
+explicit disabled-default configuration key. Known completed setup stages were
+not replayed. Executable descriptors use the existing128MiB executable admission
+bound, not the smaller JSON fixture bound. The host config was normalized only
+to the gateway's already-effective disabled value0, with same-descriptor bytes
+and guest readback; no runtime setting, receipt or business data changed then.
+Session discovery remains disabled; exact invocation-owned sessions are checked
+through their read-only native timeouts endpoint. These preparation failures
+provide no application failure or native case credit.

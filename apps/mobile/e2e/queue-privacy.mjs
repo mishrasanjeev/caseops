@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import { setTimeout as pause } from 'node:timers/promises';
 import { collectQP, decodeQueuePage, decodeAccountDeletionReceipt, expectedQueue, hash } from './queue-privacy-contract.mjs';
-import { find, findQuery, read, visible, selector, dispatchNativeClick, nativeAction, home } from './native-ui.mjs';
+import { find, findQuery, read, visible, selector, dispatchNativeClick, nativeAction, home, waitForIosVisibility } from './native-ui.mjs';
 import { traffic,delta,readOnlyTraffic } from './journeys.mjs';
 import { displayDay } from '../src/domain/contracts.ts';
+import { findIosFileFact } from './ios-files.mjs';
 const event=(c,boundary,facts={})=>c.record({type:'queue_privacy_assertion',boundary,...facts});
 const consume=c=>assert.ok(++c.nativeOperations<=160,'QP_NATIVE_CONTROL_BOUND');
 const NATIVE_STATE_MS = 20000;
 const ANDROID_SCROLL_LIMIT = 10;
 const ANDROID_SCROLL_PERCENT = 0.65;
 const androidQueueNavigationControls = new Set(['queue-next','queue-first','queue-back','queue-open-matter']);
-async function tap(c,id){if(c.platform==='android'&&androidQueueNavigationControls.has(id))return tapQPQueueNavigation(c,id);consume(c);const e=await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
-async function fact(c,id){consume(c);return read(c,'id',id,{scroll:true});}
-async function wait(c,id,value){let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
+async function tap(c,id){if(c.platform==='android'&&androidQueueNavigationControls.has(id))return tapQPQueueNavigation(c,id);consume(c);const iosBody=c.platform==='ios'&&(androidQueueNavigationControls.has(id)||/^queue-task-[a-f0-9-]{36}$/.test(id)||/^privacy-request-(start|confirm|cancel|reload)$/.test(id));const e=iosBody?await findIosFileFact(c,id,'XCUIElementTypeButton'):await find(c,'id',id,{scroll:true});assert.equal(await e.isEnabled(),true);await dispatchNativeClick(c,e,'id',id);}
+async function fact(c,id){consume(c);return c.platform==='ios'?(await findIosFileFact(c,id,'XCUIElementTypeStaticText')).getText():read(c,'id',id,{scroll:true});}
+async function wait(c,id,value){if(c.platform==='ios'&&id==='matter-task-queue')return waitForQPIosQueue(c);if(c.platform==='ios'&&['queue-task-detail','matter-detail'].includes(id))return iosStructuralScreen(c,id,id==='queue-task-detail'?'queue-task-title':'matter-code');let terminal;await c.driver.waitUntil(async()=>{try{const e=await visible(c.driver,selector(c.platform,'id',id));return!!e&&(value===undefined||await e.getText()===value);}catch(e){terminal=e;return true;}},{timeout:NATIVE_STATE_MS,interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;}
 async function absent(c,id){consume(c);assert.equal((await c.driver.$$(selector(c.platform,'id',id))).length,0,'QP_PRIVATE_OLD_CONTROL_REMAINS');}
 async function control(c,name,args={}){assert.ok(++c.controlCalls<=24,'QP_CASE_CONTROL_BOUND');return c.controls[name]({caseId:c.caseId,...args});}
 export function assertObservedStaleQueueCursor(records,{afterSequence,staleAfterSequence,anchorId}){
@@ -62,6 +63,36 @@ const queueSegments = {
   'Task ownership': ['Mine', 'Team', 'Unassigned'],
   'Task dates': ['All dates', 'Dated', 'Undated'],
 };
+function iosSnapshotId(row) {
+ const id=row?.['element-6066-11e4-a52e-4f735466cecf'];
+ assert.ok(typeof id==='string'&&id.length>0&&id.length<=128&&typeof row.type==='string'
+  &&typeof row.displayed==='boolean'&&Object.hasOwn(row,'attribute/name'),'QP_IOS_NATIVE_SNAPSHOT_REQUIRED');
+ if(row.ELEMENT!==undefined)assert.equal(row.ELEMENT,id,'QP_IOS_NATIVE_ID_CHANGED');return id;
+}
+export async function iosStructuralScreen(c,id,positiveId){
+ const end=performance.now()+NATIVE_STATE_MS;
+ const positive=await findIosFileFact(c,positiveId,'XCUIElementTypeStaticText');
+ assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');
+ const rows=await c.driver.findElements('accessibility id',id);assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');assert.equal(rows.length,1,'QP_IOS_UNIQUE_STRUCTURAL_SCREEN_REQUIRED');const row=rows[0];iosSnapshotId(row);
+ assert.equal(row['attribute/name'],id);assert.equal(row.type,'XCUIElementTypeOther');
+ assert.ok(containsFrame(row.rect,await c.driver.getElementRect(positive.elementId)),'QP_IOS_POSITIVE_FACT_OUTSIDE_SCREEN');
+ assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');
+}
+export async function waitForQPIosQueue(c){
+ assert.equal(c.platform,'ios');const end=performance.now()+NATIVE_STATE_MS;
+ await findIosFileFact(c,'screen-work','XCUIElementTypeStaticText');assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');
+ const query='name == "matter-task-queue" OR name == "Task ownership" OR name == "Task dates" OR (type == "XCUIElementTypeScrollView" AND visible == 1)';
+ let terminal;await c.driver.waitUntil(async()=>{try{
+  assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');const rows=await c.driver.findElements('-ios predicate string',query);assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');assert.ok(Array.isArray(rows)&&rows.length<=8,'QP_IOS_NATIVE_SNAPSHOT_REQUIRED');
+  const ids=rows.map(iosSnapshotId);assert.equal(new Set(ids).size,ids.length,'QP_IOS_DUPLICATE_NATIVE_ID');
+  const roots=rows.filter(r=>r['attribute/name']==='matter-task-queue'),scrolls=rows.filter(r=>r.type==='XCUIElementTypeScrollView'&&r.displayed);
+  assert.ok(roots.length<=1&&scrolls.length<=1,'QP_IOS_UNIQUE_STRUCTURAL_SCREEN_REQUIRED');if(!roots.length||!scrolls.length)return false;
+  const root=roots[0];assert.equal(root.type,'XCUIElementTypeOther');const window=await c.driver.getWindowRect();assert.ok(performance.now()<end&&containsFrame(window,scrolls[0].rect),'QP_IOS_QUEUE_VIEWPORT_REQUIRED');
+  assert.equal(rows.length,4,'QP_IOS_EXACT_QUEUE_CONTROLS_REQUIRED');
+  for(const name of Object.keys(queueSegments)){const controls=rows.filter(r=>r['attribute/name']===name);assert.equal(controls.length,1,'QP_IOS_EXACT_QUEUE_CONTROLS_REQUIRED');const control=controls[0];assert.equal(control.type,'XCUIElementTypeSegmentedControl');assert.equal(control.displayed,true);assert.ok(containsFrame(root.rect,control.rect)&&containsFrame(scrolls[0].rect,control.rect),'QP_IOS_QUEUE_CONTROL_OUTSIDE_SCOPE');}
+  return true;
+ }catch(e){terminal=e;return true;}},{timeout:Math.max(1,end-performance.now()),interval:200,timeoutMsg:'QP_NATIVE_STATE_REQUIRED'});if(terminal)throw terminal;
+}
 function containsFrame(outer, inner) {
   const valid = (frame) => frame && [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
     frame.width > 0 && frame.height > 0;
@@ -118,7 +149,15 @@ async function revealAndroidWorkHeader(c, scope, probe) {
 }
 
 export async function waitForQPPrivacyControl(c, id, value) {
-  if (c.platform !== 'android') return wait(c, id, value);
+  if(c.platform==='ios'){
+   const end=performance.now()+NATIVE_STATE_MS;
+   if(id==='privacy-request-confirmation'){
+    const buttons=[];for(const key of ['privacy-request-confirm','privacy-request-cancel']){buttons.push(await findIosFileFact(c,key,'XCUIElementTypeButton'));assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');}
+    const rows=await c.driver.findElements('accessibility id',id);assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');assert.equal(rows.length,1,'QP_IOS_UNIQUE_CONFIRMATION_REQUIRED');const root=rows[0];iosSnapshotId(root);assert.equal(root['attribute/name'],id);assert.equal(root.type,'XCUIElementTypeOther');
+    for(const button of buttons){assert.ok(containsFrame(root.rect,await c.driver.getElementRect(button.elementId)),'QP_IOS_CONFIRMATION_OUTSIDE_SCOPE');assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');}return;
+   }
+   for(;;){assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');const control=await findIosFileFact(c,id,'XCUIElementTypeStaticText');assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');const actual=await control.getText();assert.ok(performance.now()<end,'QP_NATIVE_STATE_REQUIRED');if(value===undefined||actual===value)return;await pause(Math.min(200,Math.max(0,end-performance.now())));}
+  }
   return withinAndroidViewport('QP_NATIVE_STATE_REQUIRED', async (probe) => {
     const query = selector('android', 'id', id);
     const scope = await androidScrollScope(c, 'account', probe);
@@ -470,16 +509,21 @@ export async function tapQPQueueTask(c,id) {
 
 async function rows(c,page){
  if (c.platform === 'android') { consume(c); return androidQueuePage(c, page); }
+ return assertQPIosQueuePage(c,page);
+}
+export async function assertQPIosQueuePage(c,page){
+ assert.equal(c.platform,'ios');
  await wait(c,'matter-task-queue');consume(c);
- const attribute=c.platform==='ios'?'name':'resource-id';let terminal;
- await c.driver.waitUntil(async()=>{try{
-  const elements=await c.driver.$$(`//*[starts-with(@${attribute}, 'queue-task-')]`);assert.ok(elements.length<=64);
-  const ids=[];for(const e of elements){const id=await e.getAttribute(attribute);if(/^queue-task-[a-f0-9-]{36}$/.test(id))ids.push(id.slice(11));}
+ let terminal;
+ await waitForIosVisibility(c.driver,async probe=>{try{
+  const elements=await probe(()=>c.driver.findElements('-ios predicate string','name BEGINSWITH "queue-task-"'));assert.ok(Array.isArray(elements)&&elements.length<=64);
+  const nativeIds=elements.map(iosSnapshotId);assert.equal(new Set(nativeIds).size,nativeIds.length,'QP_IOS_DUPLICATE_NATIVE_ID');
+  const ids=[];for(const e of elements){const id=e['attribute/name'];assert.match(id??'',/^queue-task-[a-f0-9-]{36}$/,'QP_IOS_EXACT_TASK_ROW_REQUIRED');assert.equal(e.type,'XCUIElementTypeButton','QP_IOS_TASK_BUTTON_REQUIRED');ids.push(id.slice(11));}
   assert.deepEqual(ids,[...new Set(ids)],'QP_DUPLICATE_NATIVE_ROW');
   assert.ok(ids.every(id=>c.fixture.qp.dataset.tasks.some(t=>t.id===id&&t.role!=='excluded')),'QP_UNAUTHORIZED_OR_UNBOUND_NATIVE_ROW');
-  return JSON.stringify(ids)===JSON.stringify(page.items.map(x=>x.id));
+  if(JSON.stringify(ids)!==JSON.stringify(page.items.map(x=>x.id)))return false;
+  const next=await probe(()=>c.driver.findElements('accessibility id','queue-next'));assert.equal(next.length,page.next_cursor?1:0);for(const row of next){iosSnapshotId(row);assert.equal(row['attribute/name'],'queue-next');assert.equal(row.type,'XCUIElementTypeButton');}return true;
  }catch(error){terminal=error;return true;}},{timeout:20000,interval:200,timeoutMsg:'QP_EXACT_NATIVE_PAGE_IDENTITIES'});if(terminal)throw terminal;
- assert.equal((await c.driver.$$(selector(c.platform,'id','queue-next'))).length,page.next_cursor?1:0);
 }
 async function queue(c,ownership,dates,cursor=null){
  assert.ok(++c.authoritativeReads<=24);const r=await control(c,'readQueue',{ownership,dates,...(cursor?{cursor}:{})});assert.equal(r.status,200);

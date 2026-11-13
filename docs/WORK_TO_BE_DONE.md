@@ -1,5 +1,21 @@
 ## 2026-11-13 — iOS offscreen Files measurement replacement pending
 
+### 2026-11-13 actual iOS Queue/Privacy failures retained
+
+J20/M22, US-MOB-01..08, QUEUE-01/PRIVACY-01: the actual source391 QP attempt
+executed both calls and failed their native visibility waits; all sessions,
+controls and postflight cleaned up, with0 deletion submissions. Native hierarchy
+proved the tall queue wrapper invisible while its typed child controls were
+visible. The candidate now checks scoped visible controls, complete ordered row
+identities and measured pagination/privacy inputs. A separate read-only native
+candidate reached the older second-page task, exact parent and privacy cancel;
+130 adjacent regressions pass. Canonical QP credit remains0/2 until fresh full
+source/binary/backend/actor/registration acceptance. Implementation Partially
+implemented, bug verdict Inconclusive, full native release NO-GO. See
+`docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md` for exact evidence and
+preserved failed attempts; no source-based assumption is reported as measured.
+
+
 ### 2026-11-13 native Files replacement remains incomplete
 
 J20/M22, US-MOB-01..08, FILES-01..17: source391 passed actual iOS Core23,

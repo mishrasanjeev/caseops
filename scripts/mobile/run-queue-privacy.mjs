@@ -12,6 +12,7 @@ import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs
 import { observeLocalQAInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from './run-v1-workflows.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { authenticate, browserOrigin } from '../../apps/mobile/e2e/browser-handoff.mjs';
+import { IOS_FILE_FACT_RESPONSE_ATTRIBUTES } from '../../apps/mobile/e2e/ios-files.mjs';
 import { find,visible,selector,dispatchNativeClick } from '../../apps/mobile/e2e/native-ui.mjs';
 import { validateFixtureCredentials, validateLocalQAActor, validateLocalQABuildReceipt } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { Journal,binaryHash,localJson,localUrl,reconcileResults,safeFailure } from '../../apps/mobile/e2e/support.mjs';
@@ -180,8 +181,9 @@ export async function runQueuePrivacy(q){
     assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeLocalQAInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
     const f=a.members[0].fixture;requested=true;driver=await remote({hostname:url.hostname,port:Number(url.port)||4723,protocol:url.protocol.slice(0,-1),path:url.pathname,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:60000,
      capabilities:{platformName:q.platform==='ios'?'iOS':'Android','appium:automationName':q.platform==='ios'?'XCUITest':'UiAutomator2','appium:udid':f.udid,'appium:deviceName':f.deviceName,'appium:platformVersion':f.platformVersion,'appium:noReset':true,'appium:newCommandTimeout':60,...transport.capabilities,
-      ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})}});
+      ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000,'appium:shouldUseCompactResponses':false,'appium:elementResponseAttributes':IOS_FILE_FACT_RESPONSE_ATTRIBUTES}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})}});
     sessionId=driver.sessionId;journal.write({...appiumSessionEvent(sessionId,'created'),id});if(q.platform==='android')verifyAndroidSessionTransport(f,q.platform,driver.capabilities);await configureNativeDriver(driver, q.platform, event => journal.write({ ...event, id }));await driver.switchContext('NATIVE_APP');
+    if(q.platform==='ios'){const settings=await driver.getSettings();assert.equal(settings.shouldUseCompactResponses,false,'QP_IOS_NATIVE_FACT_SETTINGS_REQUIRED');assert.equal(settings.elementResponseAttributes,IOS_FILE_FACT_RESPONSE_ATTRIBUTES,'QP_IOS_NATIVE_FACT_SETTINGS_REQUIRED');}
     c={fixture:{...f,qp:a.fixture.qp},platform:q.platform,driver,caseId:scenario.id,controls,gatewayBaseline:baseline,nativeOperations:0,controlCalls:0,authoritativeReads:0,
      queueViewportDiagnostics:process.env.CASEOPS_QA_NATIVE_QUEUE_DIAGNOSTICS==='1',record:e=>journal.write({...e,id})};
     c.switchActor=async actor=>{await logoutQPAccount(c);const member=a.members[actor==='second-company'?1:0];c.fixture={...member.fixture,qp:a.fixture.qp};await withQPActor(member,()=>authenticate(c,{fresh:true}));state.actor=member;};

@@ -979,3 +979,43 @@ test('Queue privacy logout restores the header from the receipt before one ackno
 test('Queue privacy logout still refuses another principal and an unacknowledged sign-out',async()=>{
  await assert.rejects(scrolledPrivacyLogout({wrongPrincipal:true}));await assert.rejects(scrolledPrivacyLogout({logoutStatus:500}));
 });
+
+function iosQueueSnapshotDouble(change=()=>{}){
+ const viewport={x:0,y:125,width:402,height:638},window={x:0,y:0,width:402,height:874};let stateY=1000,drags=0;const calls=[],controls=new Map();
+ const raw=(name,type,rect,displayed=true,key=name)=>({'element-6066-11e4-a52e-4f735466cecf':key,ELEMENT:key,'attribute/name':name,type,rect,displayed});
+ const scroll=()=>raw(null,'XCUIElementTypeScrollView',viewport,true,'scroll');
+ const row=(name,type='XCUIElementTypeStaticText')=>{const rect={x:20,y:name==='screen-work'?160:stateY,width:362,height:33};return raw(name,type,rect,rect.y>=125&&rect.y+rect.height<=763);};
+ const nativeRows=[1,2].map((n,i)=>raw('queue-task-'+id(n),'XCUIElementTypeButton',{x:20,y:500+i*200,width:362,height:160},i===0));
+ const rootRows=[raw('matter-task-queue','XCUIElementTypeOther',{x:20,y:268,width:362,height:5436},false),raw('Task ownership','XCUIElementTypeSegmentedControl',{x:20,y:329,width:362,height:32}),raw('Task dates','XCUIElementTypeSegmentedControl',{x:20,y:416,width:362,height:32}),scroll()];
+ change({nativeRows,rootRows});
+ const driver={
+  async findElements(using,query){calls.push({using,query});if(query==='name BEGINSWITH "queue-task-"')return nativeRows;if(using==='accessibility id'&&query==='queue-next')return[raw('queue-next','XCUIElementTypeButton',{x:140,y:5591,width:120,height:51},false)];if(query.startsWith('name == "matter-task-queue" OR'))return rootRows;
+   const match=/^name == ("[^"]+") OR \(type == "XCUIElementTypeScrollView" AND visible == 1\)$/.exec(query);assert.ok(match,'EXACT_NATIVE_FACT_QUERY_REQUIRED');const name=JSON.parse(match[1]);const current=row(name);controls.set(name,{elementId:name,getText:async()=>name==='privacy-request-state'?'No received request is recorded':'Work'});return[current,scroll()];},
+  $:async value=>controls.get(value['attribute/name']),getWindowRect:async()=>window,
+  $$:async query=>{assert.ok(query.includes('XCUIElementTypeKeyboard'));return[];},
+  async performActions(actions){const points=actions[0].actions.filter(x=>x.type==='pointerMove');assert.equal(points[1].duration,650);assert.equal(points[0].x,8);stateY+=points[1].y-points[0].y;drags++;},releaseActions:async()=>{},
+  async waitUntil(condition,options){assert.ok(options.timeout<=20000&&options.timeout>0);if(!await condition())throw Error(options.timeoutMsg);},
+ };
+ return{c:{platform:'ios',driver,nativeOperations:0,fixture:{qp:{dataset:{tasks:[{id:id(1),role:'mine'},{id:id(2),role:'mine'}]}}},record:()=>{}},page:{items:[{id:id(1)},{id:id(2)}],next_cursor:'synthetic-next-page'},calls,drags:()=>drags};
+}
+test('iOS Queue proves visible native segments inside an offscreen structural parent and the complete ordered page',async()=>{
+ const x=iosQueueSnapshotDouble();await queueEvidence.assertQPIosQueuePage(x.c,x.page);assert.equal(x.c.nativeOperations,1);assert.equal(x.calls.filter(x=>x.query==='name BEGINSWITH "queue-task-"').length,1);assert.equal(x.drags(),0);
+});
+test('iOS Queue rejects hidden or foreign-scoped controls, malformed roles, duplicate and unbound rows without input',async()=>{
+ for(const edit of [x=>{x.rootRows[1].displayed=false;},x=>{x.rootRows[2].rect.y=800;},x=>{x.rootRows[0].type='XCUIElementTypeButton';},x=>{x.rootRows.push({...x.rootRows[1]});},x=>{x.nativeRows.push({...x.nativeRows[0]});},x=>{x.nativeRows[1]['attribute/name']='queue-task-'+id(3);},x=>{x.nativeRows[0].type='XCUIElementTypeStaticText';},x=>{delete x.nativeRows[0].displayed;},x=>{x.nativeRows.reverse();}]){const x=iosQueueSnapshotDouble(edit);await assert.rejects(queueEvidence.assertQPIosQueuePage(x.c,x.page));assert.equal(x.drags(),0);}
+});
+test('iOS privacy seeks its actual visible status while preserving the existing observation and drag limits',async()=>{
+ const x=iosQueueSnapshotDouble();await waitForQPPrivacyControl(x.c,'privacy-request-state','No received request is recorded');assert.ok(x.drags()>0&&x.drags()<=9);assert.equal(QP.transitionMs,20000);assert.equal(QP.serialMs,480000);
+});
+
+test('iOS Queue still excludes a currently ineligible native row from acceptance',async()=>{const x=iosQueueSnapshotDouble();x.c.fixture.qp.dataset.tasks[0].role='excluded';await assert.rejects(queueEvidence.assertQPIosQueuePage(x.c,x.page),/QP_UNAUTHORIZED_OR_UNBOUND_NATIVE_ROW/);assert.equal(x.drags(),0);});
+test('an expired iOS structural-screen read cannot start a later geometry request',async t=>{
+ let now=0,geometryReads=0;t.mock.method(performance,'now',()=>now);
+ const raw=(name,type,rect,key=name)=>({'element-6066-11e4-a52e-4f735466cecf':key,ELEMENT:key,'attribute/name':name,type,rect,displayed:true});
+ const window={x:0,y:0,width:402,height:874},viewport={x:0,y:125,width:402,height:638};
+ const c={platform:'ios',record:()=>{},driver:{
+  findElements:async(using,query)=>{if(using==='accessibility id'){assert.equal(query,'queue-task-detail');now=20001;return[raw(query,'XCUIElementTypeOther',{x:20,y:268,width:362,height:1500})];}return[raw('queue-task-title','XCUIElementTypeStaticText',{x:20,y:300,width:362,height:33}),raw(null,'XCUIElementTypeScrollView',viewport,'scroll')];},
+  $:async()=>({elementId:'queue-task-title'}),getWindowRect:async()=>window,getElementRect:async()=>{geometryReads++;assert.fail('NO_GEOMETRY_AFTER_EXPIRED_SCREEN_READ');},waitUntil:async condition=>condition(),
+ }};
+ await assert.rejects(queueEvidence.iosStructuralScreen(c,'queue-task-detail','queue-task-title'),/QP_NATIVE_STATE_REQUIRED/);assert.equal(geometryReads,0);assert.equal(QP.transitionMs,20000);
+});
