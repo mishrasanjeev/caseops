@@ -1,5 +1,34 @@
 # Strict Bug Task List - 2026-04-22
 
+## November13: Full07 Capture Refusals And Native Runtime Isolation
+
+NFT-005 / J14-M14 release verification; product workflows keep their existing
+Workbook5 ownership. Full07/48ab completed4108actual=4106P/2callF/0S/0retry,
+all12324phases retained. Both failures are unchanged readthrough evidence
+guards, at prewrite namespace and compound final comparison. Historical exact
+metadata/predicate was not recorded; no common historical cause is invented.
+All784browser cases stayed gated. NO-GO; no merge/deploy or fixed verdict.
+
+Frozen controlled probes reproduce shared-Temp sibling mtime/ctime refusal at
+both boundaries; isolated storage passes the same complete guard with unrelated
+Temp/scratch activity. Earlier observer-version01 evidence is preserved with
+its provenance limitation, not upgraded to frozen acceptance. Canonical source
+now requires an explicit private physical runtime parent outside Temp/sync/
+source/evidence. The wrapper uses the current-user LocalApplicationData default;
+claims bind owner/identity/nonce, and cleanup removes only the exact owned
+workspace after retention. All original evidence timestamps/identities/binary/
+hash/fsync checks, SQL budgets and four-layout matrix remain unchanged.
+
+Review corrected native OWNER RIGHTS compatibility and caller-controlled ACL
+probe routing. Native Windows discovery plus minimal environment, exact current
+SID/protected DACL and negative ownership/alias/cleanup tests are source-bound.
+Windows focused100=93P/7explicitS; Linux standalone runner91=83P/8WindowsS.
+Independent raw phase/XML reconciliation proves all91runner identities have a
+pass on an applicable platform, plus9Windows wrapper passes (both shell guards).
+This is complementary component evidence only, not full Docker/CI/production.
+Ambient Temp/cache and offline binaries remain unchanged; app/MacBook untouched.
+Require fresh complete replacement Docker, green CI/main and exact live replay.
+
 ## November13 (IST): Comparison And Tooling Evidence Correction
 
 CF focusedPN02 passes127cases/all381phases,0F/0S, including the full61-case

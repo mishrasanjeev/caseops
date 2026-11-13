@@ -53,6 +53,7 @@ $InitialLocation = (Get-Location).Path
 $ApiPython = "Invoke-FakePytest"
 $RepoRoot = Join-Path $Work "candidate with spaces"
 $ApiDir = Join-Path $Work "api with spaces"
+$RuntimeParent = Join-Path $Work "runtime parent with spaces"
 [void][IO.Directory]::CreateDirectory($ApiDir)
 $ComposeFile = Join-Path $Work "compose with spaces.yml"
 $Cases = @(
@@ -174,9 +175,13 @@ function Invoke-FakePytest {
     Assert-Guard ((Get-Location).Path -eq $ApiDir) "Pytest did not run in the candidate API directory."
     $ExpectedArguments = @(
         (Join-Path $RepoRoot "scripts\run_postgres_acceptance.py"),
-        "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory
+        "--api-dir", $ApiDir, "--results-directory", $ResultsDirectory,
+        "--runtime-parent", $RuntimeParent
     )
     Assert-Guard (($Arguments -join "|") -ceq ($ExpectedArguments -join "|")) "Standard full native selection changed."
+    Assert-Guard (@($Arguments | Where-Object { $_ -ceq "--runtime-parent" }).Count -eq 1 -and
+        $Arguments[-2] -ceq "--runtime-parent" -and $Arguments[-1] -ceq $RuntimeParent -and
+        -not [string]::IsNullOrWhiteSpace($RuntimeParent)) "Missing or changed explicit native runtime parent."
     Assert-Guard ($env:CASEOPS_DATABASE_URL -ceq $env:CASEOPS_TEST_POSTGRES_URL -and
         $env:CASEOPS_DATABASE_URL -cne $env:CASEOPS_E2E_DATABASE_URL) "Native and browser databases overlap."
     $Name = ([Uri]$env:CASEOPS_DATABASE_URL).AbsolutePath.TrimStart('/')

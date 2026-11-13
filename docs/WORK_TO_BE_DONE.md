@@ -1,5 +1,19 @@
 ## 2026-11-11 - Workbook 5
 
+November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
+zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
+No production certification. Controlled frozen filesystem probes reproduce
+shared-Temp sibling timestamp refusals while isolated storage passes the exact
+same guard; historical exact failure predicates remain unknown. Canonical
+native-runner isolation with explicit private runtime-parent/claims, trusted
+Windows ACL host and exact cleanup has complementary focused proof:
+Windows100=93P/7explicitS and Linux runner91=83P/8WindowsS; all91runner IDs
+passed on an applicable platform, plus9Windows wrapper cases. All original
+timestamps/security/SQL/460-label assertions, ambient cache/binaries and app/
+MacBook boundaries remain unchanged. Complete replacement Docker/CI/protected
+main/exact deployment and433-case production replay still required. Old failed
+evidence and observer-version limitations are preserved; no fixed verdict.
+
 Candidate-only, release NO-GO. [Twenty-report triage](BUGS5_TRIAGE_2026-11-11.md)
 separates actual missing contract edit/view/term actions and a retained email
 placeholder leak from enhancements, unconfirmed retrieval/provider reports and

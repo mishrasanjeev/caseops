@@ -1,5 +1,24 @@
 # Strict Enterprise Gap Tasklist
 
+## November13: Native Evidence Namespace Isolation
+
+**Partially implemented / NO-GO.** NFT-005/J14-M14. Complete full07/48ab has
+4106P/2capture-guard call failures, all4108identities/12324phases retained;
+all784browser cases unexecuted. Exact historical changed fields were not
+recorded. Frozen controlled probes establish a shared-Temp metadata failure
+class and isolated-storage success, not proof of the historical final operand.
+
+The canonical explicit runtime-parent repair preserves every capture security
+check and ambient Temp/cache/Temporal asset location. Current-user private
+physical admission, exact owner/claim cleanup, protected Windows OWNER RIGHTS
+and native-directory/minimal-environment ACL verification now have focused
+Windows93P/7S and isolated Linux83P/8S. All91runner identities have at least one
+applicable-platform pass;9wrapper cases pass on Windows. Review-only discovery
+of the caller-controlled probe host is corrected with regression, not waived.
+Source-bound components do not clear the failed full gate or certify a deploy.
+Retain both original failures/partial plans, observer provenance correction and
+all replacement inventories. No app/MacBook or provider/security fence change.
+
 ## November13 (IST): Unreached Assertions And Wrong-Platform Evidence
 
 PN02 atCF passes127cases/381phases with complete native inventory/origin/XML

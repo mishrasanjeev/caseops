@@ -4229,3 +4229,12 @@ requirements when using the fallback.
   command mocks. An early cleanup exception can contaminate later security
   tests; preserve that failed run and replay the original race in a fresh
   process before changing or weakening the production guard.
+- Native capture storage must be a separately claimed, current-user private
+  physical namespace outside global temp, sync storage, source and evidence.
+  Python 3.13 Windows mkdir(0700) may grant full control through OWNER RIGHTS;
+  admit that SID only after exact current-user ownership and protected-DACL
+  checks, never by accepting an administrator-owned or inherited writable root.
+  Bind the ACL probe to the native Windows directory with a minimal environment,
+  preserve ambient temp/cache assets and failed workspaces, and clean only an
+  exact owned workspace. Unchanged-helper controls and hosted PostgreSQL passes
+  do not diagnose an earlier capture failure or replace full Docker acceptance.
