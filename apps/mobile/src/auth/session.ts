@@ -31,6 +31,9 @@ export class NativeSession {
       method: string,
       purpose: "business" | "revalidation",
     ) => void = () => {},
+    private readonly onSessionEnded: (
+      cause: unknown,
+    ) => Promise<void> = async () => {},
   ) {}
 
   get sessionKey(): string {
@@ -56,9 +59,9 @@ export class NativeSession {
     }
   }
 
-  private async invalidate(generation: number): Promise<void> {
+  private async invalidate(generation: number): Promise<boolean> {
     // A late refusal from an old request may never clear a newer sign-in.
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) return false;
     const notified = this.endLocalAuthority();
     try {
       await this.store.clear();
@@ -75,6 +78,7 @@ export class NativeSession {
         401,
         "native_session_cleanup_failed",
       );
+    return true;
   }
 
   get identity(): SessionIdentity | null {
@@ -201,11 +205,15 @@ export class NativeSession {
           throw error;
         if (generation === this.generation) {
           // A lost refresh acknowledgement cannot safely replay a rotating token.
+          let cleared = false;
           try {
-            await this.invalidate(generation);
+            cleared = await this.invalidate(generation);
           } finally {
             await this.revokeCredential(saved);
           }
+          // Only completed cleanup may release the root sign-in surface. The
+          // refresh itself is never replayed, including a lost acknowledgement.
+          if (cleared) await this.onSessionEnded(error);
         }
         throw error;
       }
@@ -301,7 +309,7 @@ export class NativeSession {
       return result;
     } catch (error) {
       if (error instanceof MobileApiError && error.status === 401) {
-        await this.invalidate(generation);
+        if (await this.invalidate(generation)) await this.onSessionEnded(error);
       }
       throw error;
     }
@@ -402,7 +410,7 @@ export class NativeSession {
           "native_session_ended",
         );
       if (error instanceof MobileApiError && error.status === 401)
-        await this.invalidate(generation);
+        if (await this.invalidate(generation)) await this.onSessionEnded(error);
       throw error;
     } finally {
       this.byteRequests.delete(controller);

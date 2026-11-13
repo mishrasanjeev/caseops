@@ -1,3 +1,18 @@
+## 2026-11-13 — foreground native session-expiry recovery remains unverified
+
+J20/M22, US-MOB-01/02/08 and NATIVE-13: **Partially implemented**; bug verdict
+**Inconclusive**; complete native release **NO-GO**. The actual c77076 iOS Core
+run passed12 calls, left11 unexecuted after foreground session expiry, reconciled
+all69 phases and23 closed/absent sessions, and passed postflight. Read-only native
+session timestamps prove expired MFA; the gateway403 body/individual timing was
+not captured and remains explicitly unmeasured. The root App now receives a
+completed-cleanup notification for foreground JSON/byte rejection as well as
+restore; only a separate public policy read may recover sign-in. No refresh,
+business mutation, MFA expiry or compatibility rule is relaxed. Focused70-case
+coverage passes; rebuilt complete Android/iOS acceptance remains required. See
+`docs/mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md` for exact evidence, failed
+fixture/isolation attempts, unchanged bounds and current publishing dependencies.
+
 ## 2026-11-13 — iOS offscreen Files measurement replacement pending
 
 ### 2026-11-13 actual iOS Queue/Privacy failures retained
