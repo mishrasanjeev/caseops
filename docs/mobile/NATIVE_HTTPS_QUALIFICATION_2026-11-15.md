@@ -137,3 +137,11 @@ call positions and counted pre/post descriptor opens are regressed. The complete
 replacement affected selection passed314/314 and independent Python9/9; the
 snapshot02/312 result remains retained, superseded source evidence, not a current
 freeze or native/store result.
+
+A subsequent complete Android wrapper consumer replay found that its isolated
+checkout copied the shared build inspector without the newly extracted SDK XML
+parser. The original49-case run retained37 passes and12 missing-module failures;
+adding the actual parser to the existing fixture copy restored49/49 passes.
+Independent review confirmed identical case titles, assertions and deadlines.
+This fixture repair adds no native acceptance credit and still requires the
+complete frozen source gate before pushing the candidate.
