@@ -166,7 +166,7 @@ function admissionFixture() {
     getJson: async url => { log.push(url.includes('release-identity') ? 'web' : url.includes('/status') ? 'controls' : 'api');
       return url.includes('/status') ? { runId: 'synthetic-run', v1ControlsEnabled: true, v1ControlsImplementationSha256: gatewayImplementationEvidence.sha256, v1RegistrationSha256: registration.sha256 }
         : { release_sha: source, revision: url.includes('release-identity') ? 'synthetic-web' : 'synthetic-api' }; },
-    environment: { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' }, buildCheck: () => {}, fixtureCheck: () => {}, coreCheck: () => {}, harness: () => 'e'.repeat(64) };
+    environment: { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' }, buildCheck: () => {}, fixtureCheck: () => {}, memberCheck: () => {}, harness: () => 'e'.repeat(64) };
   return { q, f, b, values, dependencies, log };
 }
 test('both platforms collect the independent seventeen literal cases and all51 phases', () => {
@@ -630,6 +630,22 @@ test('control receipt polling charges every actual RPC to its literal case ceili
     assert.ok(sent.every(value => value.capability === 'readControlReceipt')); assert.ok(clock < V1_CONTROL_PROTOCOL.completionMs);
     controls.dispose(); await assert.rejects(controls.readWorkspace({ caseId: 'WORK-01' }), /V1_CONTROLS_CLOSED/); assert.equal(sent.length, 14);
   } finally { if (previous === undefined) delete process.env.NODE_EXTRA_CA_CERTS; else process.env.NODE_EXTRA_CA_CERTS = previous; }
+});
+
+test('V1 validates both admitted member authentication environments without requiring Core dataset fields', async () => {
+  const x = admissionFixture(), checked = [], environments = [];
+  x.dependencies.memberCheck = (fixture, environment) => {
+    assert.equal(fixture.matter, undefined); assert.equal(fixture.work, undefined);
+    assert.equal(environment[fixture.auth.emailEnv], 'synthetic@example.invalid');
+    assert.equal(environment[fixture.auth.passwordEnv], 'synthetic-only-password');
+    assert.equal(environment[fixture.auth.totpSecretEnv], 'SYNTHETIC_ONLY');
+    checked.push(fixture.membershipId); environments.push(environment);
+  };
+  const result = await admitV1BeforeMembers(x.q, x.dependencies);
+  assert.deepEqual(checked, result.members.map(member => member.fixture.membershipId));
+  assert.equal(new Set(checked).size, 2);
+  for (const environment of environments) assert.deepEqual(environment, x.dependencies.environment);
+  assert.deepEqual(x.dependencies.environment, { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' });
 });
 
 test('runtime credential mapping preserves host identity and refuses malformed mapping before protected member reads', async () => {

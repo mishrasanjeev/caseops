@@ -152,7 +152,7 @@ export function validateLocalQAActor(fixture, evidence) {
   validateFixtureIsolation(fixture, evidence);
 }
 
-export function validateCoreFixture(fixture, environment = process.env) {
+export function validateNativeFixtureAuthentication(fixture, environment = process.env) {
   assert.equal(fixture.environment, 'docker-integration', 'REAL_DOCKER_CORE_FIXTURE_REQUIRED');
   assert.equal(fixture.syntheticDataOnly, true, 'NO_PRIVATE_FIXTURES');
   assert.equal(fixture.coreInventory, 'native-core-2026-10-25', 'DATED_CORE_FIXTURE_REQUIRED');
@@ -161,6 +161,11 @@ export function validateCoreFixture(fixture, environment = process.env) {
   validateFixtureBrowserPolicy(fixture);
   const evidence = JSON.parse(verifiedFile(fixture.isolationEvidence?.path, fixture.isolationEvidence?.sha256));
   validateFixtureIsolation(fixture, evidence);
+  return fixture;
+}
+
+export function validateCoreFixture(fixture, environment = process.env) {
+  validateNativeFixtureAuthentication(fixture, environment);
   if (fixture.seedEvidence) {
     const seed = JSON.parse(verifiedFile(fixture.seedEvidence.path, fixture.seedEvidence.sha256));
     assert.equal(seed.environment, 'docker-integration', 'REAL_SEED_RECEIPT_REQUIRED');

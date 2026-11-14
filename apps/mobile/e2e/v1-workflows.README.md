@@ -332,3 +332,16 @@ substitute a hard link/symlink. Both references retain independently observed
 ownership. Omitting the runtime mapping preserves the existing single-namespace
 contract. Controls remain default-disabled and all normal API identity/MFA
 checks, exact routes and operation/deadline ceilings continue to apply.
+
+
+### Member authentication versus the Core dataset
+
+V1 member admission uses `validateNativeFixtureAuthentication` after complete V1
+fixture/source/artifact/backend and native-auth observation checks. The shared
+validator retains the synthetic Docker environment, dated fixture identity,
+serving origin, credential/MFA, browser recipe/marker and actual isolation receipt
+checks. V1 records come from its own complete normal-API producer and actual
+native presentation/selector observations. Core23 independently continues through
+`validateCoreFixture`, including all of its matter searches, task, draft,
+calendar and optional seed-ledger checks. Both inventories are still required
+separately for the complete83-case release qualification.

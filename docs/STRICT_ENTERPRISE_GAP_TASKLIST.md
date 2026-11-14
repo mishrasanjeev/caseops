@@ -5330,3 +5330,16 @@ native acceptance remain open. Exact drafts supporting reads are added through
 actual repository-constructor tests; no additional native writes are granted.
 The original unlogged route refusal remains Inconclusive. See
 [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--host-and-mounted-credential-identity).
+
+
+## 2026-11-14 — V1 authentication admission depends on unrelated Core seed
+
+J20/M22 / US-MOB-01/02/08 remains Partially implemented / Partially fixed /
+NO-GO. Both real public V1 member fixtures reproduce the complete Core validator's
+`SEEDED_MATTER_ID_REQUIRED` after their shared authentication/isolation checks.
+The V1 runner now selects an extracted, unchanged common authentication validator;
+Core still retains every original seed/record check. The focused638-case run and
+two actual public fixture contract replays pass, including eight negative guards.
+Independent review found no blocking or major issue. Frozen gates and fresh full
+native acceptance remain open. See
+[dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--v1-member-authentication-and-core-seed-boundaries).

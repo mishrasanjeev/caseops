@@ -18,7 +18,7 @@ import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
-import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, validateNativeFixtureAuthentication, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
@@ -1113,6 +1113,34 @@ function coreFixture(t) {
   return fixture;
 }
 const unitCredentials = { CASEOPS_MOBILE_UNIT_EMAIL: 'unit@example.invalid', CASEOPS_MOBILE_UNIT_PASSWORD: 'unit-only' };
+test('native authentication admits its isolated member without requiring unrelated Core records while Core remains complete', t => {
+  const fixture = coreFixture(t);
+  for (const key of ['matter', 'today', 'work', 'calendar']) delete fixture[key];
+  fixture.auth = { ...fixture.auth, mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' };
+  const env = { ...unitCredentials, CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
+  assert.equal(validateNativeFixtureAuthentication(fixture, env), fixture);
+  assert.throws(() => validateCoreFixture(fixture, env), /SEEDED_MATTER_ID_REQUIRED/);
+});
+test('shared native member validation preserves credential MFA browser marker source and Docker isolation refusals', t => {
+  const fixture = coreFixture(t);
+  for (const key of ['matter', 'today', 'work', 'calendar']) delete fixture[key];
+  fixture.auth = { ...fixture.auth, mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' };
+  const env = { ...unitCredentials, CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
+  for (const mutate of [
+    x => { x.environment = 'production'; }, x => { x.syntheticDataOnly = false; },
+    x => { x.coreInventory = 'unreviewed'; }, x => { x.backendSha = 'unknown'; },
+    x => { x.webSha = 'unknown'; }, x => { x.backendRevision = 'different'; },
+    x => { x.browserApiMarkerVerified = false; }, x => { x.auth.webOrigin = 'http://127.0.0.1:3443'; },
+    x => { x.auth.emailEnv = 'PATH'; }, x => { x.auth.passwordEnv = 'PATH'; },
+    x => { x.auth.totpSecretEnv = 'PATH'; }, x => { x.auth.mfaStage = 'unknown'; },
+    x => { x.auth.mode = 'native-firefox'; }, x => { x.isolationEvidence.sha256 = '0'.repeat(64); },
+    x => { const data = JSON.parse(readFileSync(x.isolationEvidence.path)); data.productionAccessed = true; x.isolationEvidence = ownedFile(t, data); },
+    x => { const data = JSON.parse(readFileSync(x.isolationEvidence.path)); data.containers[0].project = 'other-project'; x.isolationEvidence = ownedFile(t, data); },
+  ]) { const x = structuredClone(fixture); mutate(x); assert.throws(() => validateNativeFixtureAuthentication(x, env)); }
+  for (const name of ['CASEOPS_MOBILE_UNIT_EMAIL', 'CASEOPS_MOBILE_UNIT_PASSWORD', 'CASEOPS_MOBILE_UNIT_TOTP']) {
+    const missing = { ...env }; delete missing[name]; assert.throws(() => validateNativeFixtureAuthentication(fixture, missing));
+  }
+});
 test('dated fixture requires genuine Docker/TLS/release/marker/seed evidence and all supported searches', (t) => {
   const fixture = coreFixture(t);
   assert.equal(validateCoreFixture(fixture, unitCredentials), fixture);

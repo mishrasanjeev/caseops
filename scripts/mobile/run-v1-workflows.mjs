@@ -13,7 +13,7 @@ import { OBSERVER_IDENTITY, attestAndroidFilesContainers } from './android-files
 import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 import { attestAndroidBinary, attestLocalQAAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
-import { validateBuildReceipt, validateCoreFixture, admitApplication, admitLocalQAApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { validateBuildReceipt, validateNativeFixtureAuthentication, admitApplication, admitLocalQAApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { binaryHash, localJson, Journal, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
@@ -163,7 +163,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   requirePreparedV1(config);
   const io = { read: readV1Reference, bytes: readV1Bytes, snapshot: sourceSnapshot, installed: observeInstalled, getJson: localJson,
     artifactHash: binaryHash, reader: readV1Member, environment: process.env, buildCheck: validateBuildReceipt,
-    fixtureCheck: validateV1ExecutionFixture, coreCheck: validateCoreFixture, harness: v1HarnessFingerprint, ...dependencies };
+    fixtureCheck: validateV1ExecutionFixture, memberCheck: validateNativeFixtureAuthentication, harness: v1HarnessFingerprint, ...dependencies };
   assert.equal(path.resolve(config.repoRoot), ROOT, 'EXACT_V1_CHECKOUT_REQUIRED');
   const fixture = io.read(config.fixtureEvidence), build = io.read(config.buildReceipt), isolation = io.read(config.dockerReceipt), device = io.read(config.deviceEvidence), expectedInstalled = io.read(config.installedEvidence);
   io.fixtureCheck(fixture, config.platform); admitApplication(fixture, config.platform);
@@ -275,7 +275,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
       for (const [key, field] of [['emailEnv', 'email'], ['passwordEnv', 'password'], ['totpSecretEnv', 'totp_secret']]) {
         assert.match(memberFixture.auth[key], /^CASEOPS_MOBILE_[A-Z0-9_]+$/); assert.ok(typeof value[field] === 'string' && value[field]); environment[memberFixture.auth[key]] = value[field];
       }
-      io.coreCheck(memberFixture, environment); members.push({ fixture: memberFixture, value });
+      io.memberCheck(memberFixture, environment); members.push({ fixture: memberFixture, value });
       for (const key of ['emailEnv', 'passwordEnv', 'totpSecretEnv']) delete environment[memberFixture.auth[key]];
     } finally { loaded.bytes.fill(0); }
   }

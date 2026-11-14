@@ -248,3 +248,64 @@ platform remain required. Current-candidate formal acceptance is0/83 Android
 and0/83 iOS. No historical source's case count or receipt is relabelled.
 All evidence paths above are under
 `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.
+
+
+## 2026-11-14 — V1 member authentication and Core seed boundaries
+
+J20/M22 / US-MOB-01/02/08; implementation status: Partially implemented;
+bug verdict: Partially fixed; release verdict: NO-GO pending native acceptance.
+
+Revision fbf2ea31 passed all21 source gates (697 mobile,1746 harness passes with
+three explicit Windows-only skips,452 Python cases across all18 modules).
+Its actual Android APK and strict-signed iOS Simulator app both compiled; the
+Android artifact independently passed signature, manifest permission projection,
+16KB ZIP alignment and all20 ARM64 ELF checks. Its fresh normal-API V1 producer
+completed all four phases on its first attempt. Both primary and viewer accounts
+then completed actual native Firefox/MFA/PKCE sign-in, principal/workspace
+verification, logout and independently confirmed Appium session cleanup. The
+primary also completed the native segment and exact Inbox action observations.
+These remain preparation observations, not any of the83 formal acceptance cases.
+
+The mounted credential mapping additionally passed actual normal login/MFA and
+tenant/membership/role/capability checks for all three registered actors. Docker
+exposes the copied files with UID0, while their host descriptors report UID501.
+The original failed probe used the host UID and was refused before its credential
+byte read or authentication constructor. It remains failed; a separate metadata
+observation and replacement probe use the actual runtime UID with unchanged SHA,
+private mode, single link, original references and copied bytes. Retained proof:
+`v1-fbf2ea31-runtime-credential-mapping-02/proof.json`. Its `actors` and
+`runtimeAuthority` fields contain the actual current runtime bindings; the
+`copies` array preserves the original copy-phase provenance rather than replacing
+that failed attempt's UID references. No actor file, producer receipt or guard
+was rewritten to obtain the positive result.
+
+A subsequent preflight audit exposed a separate runner dependency:
+`admitV1BeforeMembers` called the complete Core fixture validator for each V1
+member. After all shared authentication and isolation checks, that function also
+requires the Core23 matter/search/task/draft/calendar seed. Those fields are not
+part of the separately produced V1 fixture. Replaying both actual public member
+fixtures with explicitly synthetic offline credential environments reproduces
+`SEEDED_MATTER_ID_REQUIRED`, without private credential reads or HTTP. Original
+proof: `native-v1-member-validation-actual-red-01.json`; the V1 inventory was not
+started and receives zero case credit.
+
+Extract the unchanged authentication/isolation prefix as
+`validateNativeFixtureAuthentication` and use it for V1 member admission.
+`validateCoreFixture` still calls that prefix and retains its complete original
+seed/record validation tail. V1 retains its own complete17-case record validation,
+exact source/binary/backend identities, browser/MFA observations, private reader
+checks and two-company membership binding. This changes no case, deadline, source
+fence, authentication requirement or Core acceptance criterion. New regressions
+cover authentication-only fixtures, retained Core refusal, credential/MFA/browser/
+marker/source/isolation denials and both scoped private member environments.
+The complete two-module focused run passes638 tests with zero skips/errors/
+failures. Replay of the same two actual public fixtures passes the shared helper,
+retains Core refusal and passes eight security negatives; it is explicitly an
+offline contract replay, not new native acceptance.
+
+Independent adversarial review confirms the shared prefix and remaining Core tail
+are byte-identical and finds no blocking or major issue. Full frozen source gates,
+new source-bound native artifacts and complete per-platform native inventories
+remain required. No fbf2ea31 receipt or earlier case count transfers to a newer
+revision. All evidence paths above are under
+`/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.
