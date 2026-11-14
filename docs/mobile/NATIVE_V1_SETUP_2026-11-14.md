@@ -181,3 +181,6 @@ Complete Python control module: original43pass/2failure; candidate45pass. Raw lo
 
 
 The first complete frozen55fc96b2 gate correctly refused the changed shared control bytes: the client-extension JavaScript composition and three independent Python inventories/loaders retained the prior exact base digest. All other gates completed; the failed whole report is preserved at `frozen-source-55fc96b2-01/`. Reconcile all four literal consumers (gateway loader, queue Python, queue JavaScript and client-extension Python) to the actual changed descriptor-verified source digest. Keep runtime hash validation and all tamper-refusal tests; do not replace the pin with dynamic trust or erase the original failed gate. A complete replacement gate is required before any native build.
+
+
+The replacement13b527a8 gate passed every Python module but refused the changed gateway at the separate reviewed exporter pin. Preserve that failed whole gate at `frozen-source-13b527a8-01/`. The gateway delta is solely its exact reviewed shared-base digest; reconcile the exporter to that actual gateway file after the complete gateway/queue/client source controls pass. The four shared-base consumers and this transitive exporter form one exact closure; runtime mismatch/tamper rejection remains mandatory. No native build was started on either failed frozen gate.
