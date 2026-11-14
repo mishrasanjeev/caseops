@@ -22,6 +22,7 @@ import type { FormEvent } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { IpIndiaSources } from "@/components/ip/IpIndiaSources";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -276,6 +277,8 @@ export default function IpRegistryPage() {
           </Button>
         }
       />
+
+      <IpIndiaSources />
 
       <Card>
         <CardHeader>

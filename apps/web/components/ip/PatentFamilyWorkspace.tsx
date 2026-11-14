@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
+import { IpIndiaSources } from "@/components/ip/IpIndiaSources";
 import { PatentFamilyLifecycle } from "@/components/ip/PatentFamilyLifecycle";
 import { PatentFamilyApplications } from "@/components/ip/PatentApplicationWorkspace";
 import { PatentSourceDownload } from "@/components/ip/PatentSourceDownload";
@@ -50,6 +51,7 @@ export function PatentFamilyIndex() {
     <Link href="/app/ip" className="inline-flex w-fit items-center gap-2 text-sm"><ArrowLeft size={16} />IP workspace</Link>
     <PageHeader title="Patent families" actions={canWrite && !creating
       ? <Button onClick={() => setCreating(true)}><Plus size={16} />New disclosure</Button> : null} />
+    <IpIndiaSources />
     {creating && <FamilyForm onCancel={() => setCreating(false)} onSaved={(family) => {
       router.push(`/app/ip/patents/${family.id}`);
     }} />}
