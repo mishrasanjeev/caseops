@@ -1,7 +1,8 @@
 """Pinned, offline Unicode fonts for application PDFs.
 
 The approved font set covers its actual cmaps, not all Unicode. Liberation has
-genuine Sans/Serif/Mono Regular/Bold/Italic/BoldItalic faces. Devanagari fallback
+genuine Sans/Serif/Mono Regular/Bold/Italic/BoldItalic faces. Noto Sans fallback
+also has four genuine faces, including non-breaking hyphen. Devanagari fallback
 has genuine upright Regular/Bold only; italic text keeps bold where requested
 and uses the upright Indic face without inventing an italic font.
 
@@ -26,12 +27,12 @@ from typing import Any
 
 _ROOT = Path(__file__).parent.parent / "assets" / "pdf_fonts"
 _MANIFEST_PIN = {
-    "bytes": 3773,
-    "sha256": "a42bb856e26770f31de0d47c46dc038a4e946bea61fcf1079a9c2a22dafc7670",
+    "bytes": 4604,
+    "sha256": "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4",
 }
 _NOTICE_PIN = {
-    "bytes": 732,
-    "sha256": "79db66799e7f4c054e3e3b9ceae0c414b450f5ea37313401c625516d820d1b01",
+    "bytes": 1020,
+    "sha256": "03f863636cd21d1f28b80d1450c257859bc0d2753ca0fc6aaa52f60c82a48a25",
 }
 _VERSION_FIELDS = (
     "st_dev",
@@ -158,6 +159,7 @@ def _manifest() -> dict[str, Any]:
             "shaper_version",
             "families",
             "fallback",
+            "latin_fallback",
             "assets",
             "notices",
         }
@@ -166,7 +168,7 @@ def _manifest() -> dict[str, Any]:
         or manifest["engine_version"] != "2.8.9"
         or manifest["shaper"] != "uharfbuzz"
         or manifest["shaper_version"] != "0.57.0"
-        or len(manifest["assets"]) != 14
+        or len(manifest["assets"]) != 18
         or len(manifest["notices"]) != 2
     ):
         raise _unavailable()
@@ -208,6 +210,7 @@ def unicode_pdf_class() -> type:
     aliases.update({item["family"].lower(): key for key, item in families.items()})
     aliases.update({"arial": "helvetica", "times new roman": "times", "courier new": "courier"})
     fallback = manifest["fallback"]
+    latin_fallback = manifest["latin_fallback"]
 
     class SemanticFragment(Fragment):
         def render_with_text_shaping(self, *args: Any, **kwargs: Any) -> str:
@@ -280,16 +283,26 @@ def unicode_pdf_class() -> type:
                 # its four genuine upstream styles before any table is built.
                 for emphasis, filename in chosen["files"].items():
                     self._verified_font(chosen["family"], emphasis, filename)
-                for fallback_style, filename in fallback["files"].items():
-                    self._verified_font(fallback["family"], fallback_style, filename)
-                self.set_fallback_fonts([fallback["family"]], exact_match=True)
+                for profile in (fallback, latin_fallback):
+                    for fallback_style, filename in profile["files"].items():
+                        self._verified_font(profile["family"], fallback_style, filename)
+                self.set_fallback_fonts(
+                    [fallback["family"], latin_fallback["family"]], exact_match=True
+                )
                 family = chosen["family"]
             super().set_font(family, style, size)
 
         def get_fallback_font(self, char: str, style: str = "") -> str | None:
+            selected = super().get_fallback_font(char, style)
+            if selected is not None:
+                return selected
             # The approved Indic family has real upright R/B only. Preserve bold;
-            # never register regular outlines as an invented italic/bolditalic face.
-            return super().get_fallback_font(char, "B" if "B" in style.upper() else "")
+            # only this family may lose italics, never the genuine Latin styles.
+            indic_style = "B" if "B" in style.upper() else ""
+            key = fallback["family"].lower() + indic_style
+            if getattr(self.fonts.get(key), "cmap", {}).get(ord(char)) not in (None, ".notdef", 0):
+                return key
+            return None
 
         def normalize_text(self, text: str) -> str:
             if self.font_family:
@@ -325,6 +338,7 @@ def verify_package() -> dict[str, Any]:
     if {path.name for path in _ROOT.iterdir()} != expected_names:
         raise _unavailable()
     coverage: dict[str, set[int]] = {}
+    latin_styles = {name: style for style, name in manifest["latin_fallback"]["files"].items()}
     for name in manifest["assets"]:
         raw = _font_bytes(name)
         font = TTFont(BytesIO(raw), recalcTimestamp=False, lazy=False)
@@ -333,13 +347,23 @@ def verify_package() -> dict[str, Any]:
             if not cmap or font["OS/2"].fsType != 0 or "fvar" in font:
                 raise _unavailable()
             coverage[name] = {point for point, glyph in cmap.items() if glyph != ".notdef"}
+            if name in latin_styles:
+                style = latin_styles[name]
+                expected_flags = (1 if "B" in style else 0) | (2 if "I" in style else 0)
+                if (
+                    font["head"].macStyle & 3 != expected_flags
+                    or 0x2011 not in coverage[name]
+                    or font.getGlyphID(cmap[0x2011]) == 0
+                ):
+                    raise _unavailable()
         finally:
             font.close()
-    fallback_coverage = set().union(*(coverage[n] for n in manifest["fallback"]["files"].values()))
-    required = {ord(c) for c in "Counsel’s — “fees”… ₹ Café Śrī Rāmesh Łukasz अधिवक्ता की फीस"}
+    required = {ord(c) for c in "Counsel’s — “fees”… ₹ Café Śrī Rāmesh Łukasz अधिवक्ता की फीस\u2011"}
     for family in manifest["families"].values():
-        for name in family["files"].values():
-            if not required <= coverage[name] | fallback_coverage:
+        for style, name in family["files"].items():
+            indic = manifest["fallback"]["files"]["B" if "B" in style else ""]
+            latin = manifest["latin_fallback"]["files"][style]
+            if not required <= coverage[name] | coverage[indic] | coverage[latin]:
                 raise _unavailable()
     return {
         "state": "verified_packaged_pdf_fonts",

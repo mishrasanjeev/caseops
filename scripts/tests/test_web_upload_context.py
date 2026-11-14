@@ -38,6 +38,7 @@ PDF_ATTRIBUTION_INPUTS = {
 PDF_PUBLIC_NOTICES = {
     "apps/web/public/third-party-notices/liberation-fonts-2.1.5-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/noto-sans-devanagari-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-2.008-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/uharfbuzz-0.57.0-APACHE-LICENSE.txt",
     "apps/web/public/third-party-notices/harfbuzz-15.0.0-OldMIT-COPYING.txt",
 }

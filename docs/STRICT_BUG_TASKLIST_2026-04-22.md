@@ -1,5 +1,46 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: B5-001 U+2011 Candidate, Focused Native147 Passed
+
+**Inconclusive for the original production fix; unshipped candidate.** J07/M06,
+US-017/018/021, FT-025..032, MOD-TS-008/012 own the draft-export defect;
+J06/M05 are upstream bench-intelligence context, not the export owner.
+The parent-provided exact34ce Linux-image diagnostic
+`outputs/bugs5-20261111/prod-draft-linux-render-07.json` records U+2011 with
+no fallback and422 at draft_pdf_export.py:292. Original private bytes were not
+retained and this worker did not access the original draft or production.
+
+Isolated `codex/bugs5-pdf-punctuation-20261114` adds four unmodified Noto Sans
+2.008 faces from the existing official ffebf8c1 commit. Git blobs, SHA256,
+static TrueType headers, U+2011 nonzero glyphs, genuine R/B/I/BI flags and
+fsType=0 were inspected before asset creation. The same upstream LICENSE is
+byte-identical to the retained OFL. Existing14assets remain unchanged;18total
+assets and the revised manifest/NOTICE are pinned. Exact Latin style fallback
+precedes only the existing Indic upright-italic exception; unsupported text
+still fails closed without rewriting. Focused native/extraction/style/tamper
+and synthetic finalized-two-citation draft regressions are retained.
+
+The initial independent asset review was UNTESTED. Parent then completed a
+fresh Windows native run on the exact candidate buffers:147cases/all441phases
+passed,0skip/fail. Collection/execution IDs, completion and source hashes agree
+in outputs/bugs5-20261111/pdf-punctuation-source-native-01. This selects four
+pure modules plus named pure Draft cases, not the unexecuted HTTP Draft case,
+fresh built-image proof, full Docker or production acceptance. No original
+private draft bytes were retained or modified.
+
+Parent reconciled the public NotoSans2.008 attribution with the existing exact
+OFL bytes,18font metadata entries,11components/14notices, finite web upload
+inventory and public Playwright assertions. The production-only Draft helper
+also now admits its exact Matter drafting-data GET dependency, while blocking
+all writes, missing markers and other-record reads. Both intended frontend
+modules executed51/51cases,0fail/skip; web and E2E typechecks passed in the
+isolated web-only install. Separate offline Linux source-overlay proof15/15
+passes all core styles, two synthetic Draft profiles and unsupported emoji
+refusal. Those component results are not a fresh image or browser journey.
+Original-record desktop/phone replay, full required gates and a new protected
+release remain open. No main advance or deployment.
+Review sidecar: `outputs/bugs5-20261111/B5-PDF-FONT-REPAIR-2026-11-14.md`.
+
 ## November14: Workflow Consumer Missed; Current CI Failed
 
 CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure

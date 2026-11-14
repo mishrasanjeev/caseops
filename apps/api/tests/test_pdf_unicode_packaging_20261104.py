@@ -29,6 +29,11 @@ NOTICES = (
         "OFL-1.1",
         "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
     ),
+    (
+        "NotoSans",
+        "OFL-1.1",
+        "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+    ),
     ("uharfbuzz", "Apache-2.0", "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"),
     ("uharfbuzz", "Old MIT", "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"),
 )
@@ -36,25 +41,25 @@ NOTICES = (
 
 def test_exact_runtime_assets_and_notices_retain_every_original_byte():
     raw = (ASSETS / "manifest.json").read_bytes()
-    assert len(raw) == 3773
+    assert len(raw) == 4604
     assert (
         hashlib.sha256(raw).hexdigest()
-        == "a42bb856e26770f31de0d47c46dc038a4e946bea61fcf1079a9c2a22dafc7670"
+        == "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4"
     )
     manifest = json.loads(raw)
     pins = manifest["assets"] | manifest["notices"]
     names = {path.name for path in ASSETS.iterdir()}
     assert names == set(pins) | {"manifest.json", "NOTICE.txt"}
-    assert len(manifest["assets"]) == 14
+    assert len(manifest["assets"]) == 18
     for name, pin in pins.items():
         value = (ASSETS / name).read_bytes()
         assert len(value) == pin["bytes"]
         assert hashlib.sha256(value).hexdigest() == pin["sha256"]
     notice = (ASSETS / "NOTICE.txt").read_bytes()
-    assert len(notice) == 732
+    assert len(notice) == 1020
     assert (
         hashlib.sha256(notice).hexdigest()
-        == "79db66799e7f4c054e3e3b9ceae0c414b450f5ea37313401c625516d820d1b01"
+        == "03f863636cd21d1f28b80d1450c257859bc0d2753ca0fc6aaa52f60c82a48a25"
     )
 
 
@@ -100,6 +105,67 @@ def test_liberation_binary_and_source_archives_match_fonts_and_original_ofl():
                     source_names.add(leaf.removesuffix(".sfd") + ".ttf")
     assert binary_names == source_names == runtime_names
     assert len(binary_names) == 12
+
+
+@pytest.mark.parametrize(
+    "suffix,flags,blob",
+    (
+        ("Regular", 0, "d55220958aa51eeeb85048d746eabe43d2cd9f14"),
+        ("Bold", 1, "27131f8f479947ef1b6c1d0bc9ad5ab3d30bd831"),
+        ("Italic", 2, "c7c67b281b9c6134c4be186cdd4639688e08855e"),
+        ("BoldItalic", 3, "1c06d9a8c3ef7067446f8a24a501b8648b549404"),
+    ),
+)
+def test_additive_noto_sans_bytes_match_official_git_blob_and_native_metadata(suffix, flags, blob):
+    from fontTools.ttLib import TTFont
+
+    provenance = json.loads((VENDOR / "SOURCE-AND-LICENSE.json").read_bytes())
+    manifest_raw = (ASSETS / "manifest.json").read_bytes()
+    manifest = json.loads(manifest_raw)
+    assert set(provenance["font_metadata"]) == set(manifest["assets"])
+    assert provenance["runtime_manifest_pin"] == {
+        "bytes": len(manifest_raw),
+        "sha256": hashlib.sha256(manifest_raw).hexdigest(),
+    }
+    name = f"NotoSans-{suffix}.ttf"
+    pin = next(row for row in provenance["official_sources"] if row["path"] == name)
+    raw = (ASSETS / name).read_bytes()
+    assert len(raw) == pin["bytes"] == manifest["assets"][name]["bytes"]
+    assert hashlib.sha256(raw).hexdigest() == pin["sha256"] == manifest["assets"][name]["sha256"]
+    assert hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest() == blob
+    assert pin["git_blob"] == blob
+    assert pin["official_source"] == (
+        "https://raw.githubusercontent.com/notofonts/noto-fonts/"
+        f"ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/{name}"
+    )
+    metadata = provenance["font_metadata"][name]
+    assert raw[:4].hex() == metadata["sfnt_header_hex"] == "00010000"
+    with TTFont(BytesIO(raw), recalcTimestamp=False, lazy=False) as font:
+        assert "fvar" not in font
+        assert font["OS/2"].fsType == metadata["embedding_fsType"] == 0
+        assert font["head"].macStyle == metadata["head_macStyle"] == flags
+        assert font["OS/2"].fsSelection == metadata["os2_fsSelection"]
+        for name_id, expected in metadata["names"].items():
+            assert font["name"].getDebugName(int(name_id)) == expected
+        assert font["name"].getDebugName(1) == "Noto Sans"
+        assert font["name"].getDebugName(6) == "NotoSans-" + suffix
+        assert "SIL Open Font License, Version 1.1" in font["name"].getDebugName(13)
+        cmap = font.getBestCmap()
+        assert len(cmap) == metadata["cmap_count"]
+        assert cmap[0x2011] == metadata["nonbreaking_hyphen"]["glyph"] == "uni2011"
+        assert font.getGlyphID(cmap[0x2011]) == metadata["nonbreaking_hyphen"]["glyph_id"] > 0
+    license_raw = (ASSETS / "OFL-Noto.txt").read_bytes()
+    license_pin = next(
+        row for row in provenance["official_sources"] if row["path"] == "noto-OFL-LICENSE"
+    )
+    assert hashlib.sha256(license_raw).hexdigest() == license_pin["sha256"]
+    assert hashlib.sha1(
+        b"blob " + str(len(license_raw)).encode("ascii") + b"\0" + license_raw
+    ).hexdigest() == license_pin["git_blob"] == "c82d72e422e2d08c5ab439b6bac7c2177ea0c565"
+    assert license_pin["official_source"] == (
+        "https://raw.githubusercontent.com/notofonts/noto-fonts/"
+        "ffebf8c1ee449e544955a7e813c54f9b73848eac/LICENSE"
+    )
 
 
 def test_exact_shaper_lock_and_both_native_and_python_license_obligations():
@@ -168,7 +234,7 @@ def test_api_image_and_wheel_source_keep_font_and_notice_closure():
     project = tomllib.loads((ROOT / "apps/api/pyproject.toml").read_text())
     assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/caseops_api"]
     expected = [*ASSETS.iterdir(), *VENDOR.iterdir(), *SHAPER.iterdir()]
-    assert len(expected) == 25
+    assert len(expected) == 29
     for name in (".dockerignore", ".gcloudignore"):
         rules = (ROOT / "apps/api" / name).read_text()
         for path in expected:

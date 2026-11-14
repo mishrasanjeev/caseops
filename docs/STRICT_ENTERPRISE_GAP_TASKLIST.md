@@ -1,5 +1,29 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: B5-001 Additive PDF Font Candidate, Native147 Passed
+
+**Inconclusive / NO-GO for this candidate.** Existing J07/M06,
+US-017/018/021, FT-025..032 own the draft export; no new workflow or legal-rule
+certification is introduced. The exact34ce retained Linux diagnostic identifies
+U+2011 as unsupported. Four genuine styled Noto Sans faces from the already
+pinned official commit are added without changing original14font bytes,
+source text, unsupported-script rejection or Devanagari's upright-only policy.
+Provenance records actual cmap/style/header/embedding and shared OFL inspection;
+that inspection does not establish shaping, PDF extraction or visible output.
+Runtime/packaging asset inventory moves14to18 and pins are updated together.
+The initial asset inspection was UNTESTED; parent later executed147focused
+Windows cases/all441phases with0fail/skip and unchanged source buffers. That
+pure-module/named-Draft selection is not HTTP, built-image, full Docker or
+production proof. Public attribution now includes NotoSans2.008 with the same
+exact OFL bytes,18font entries and11components/14notices. Both intended
+frontend modules pass51/51cases and both typechecks pass;15offline Linux
+overlay checks pass separately. Fresh built-image and original-record browser
+acceptance remain open. The exact reported drafting-data GET dependency is
+admitted without broadening target or mutation access. No new deployment,
+commit or main advance; frozen Docker11 and the original private draft remain
+untouched. See the November14 strict-bug entry and the parent
+evidence sidecar `outputs/bugs5-20261111/B5-PDF-FONT-REPAIR-2026-11-14.md`.
+
 ## November14: Audit-Command Contract Propagation Still Incomplete
 
 QG-SEC-004/NFT-005 remains NO-GO. Current e2e0 CI43527128891 failed one dated

@@ -1,5 +1,18 @@
 # CaseOps agent instructions
 
+- Cross-process source fidelity requires explicit UTF-8 byte decoding and an
+  input-buffer hash, not the Windows console locale. A locale-decoded JSON
+  pipe can turn an unsupported source character into supported mojibake and
+  create a false-positive PDF test. Preserve that invalid diagnostic, replay
+  the exact source bytes on the native image, and never change the saved text.
+
+- A punctuation glyph repair must add byte-pinned, licensed upstream faces,
+  never rewrite source text, drop characters or invent italic outlines.
+  Verify actual cmap/header/embedding flags and every requested style; keep
+  Devanagari's upright-only policy separate from genuine Latin italics.
+  Reconcile runtime, provenance, packaging and public-notice asset counts;
+  metadata inspection alone is not native rendering or production acceptance.
+
 - Security advisory results are time-bound even for an unchanged source tree.
   Recheck dependency security immediately before a protected release merge and
   deployment after long-running acceptance. Retain the original passing audit
