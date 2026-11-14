@@ -1,5 +1,21 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Audit-Command Contract Propagation Still Incomplete
+
+QG-SEC-004/NFT-005 remains NO-GO. Current e2e0 CI43527128891 failed one dated
+FastEmbed security-workflow consumer: exact sync expected core-only rather than
+the intentionally required --all-extras. Update that expected command, retain
+all strict audit/path/installed-metadata/no-ignore checks. Package-name and pin
+search missed this workflow dependency; inventory workflow/step-name references
+as well. Hosted17512API=13385P/4126S/1F,4108PGP/55OTELP are not whole acceptance;
+App artifacts unpublished. Own full10 interrupted at195 complete-phase passes,
+not a completed group/run. Preserve journals and failed evidence, no production
+claim. Require whole green hosted CI before starting another long Docker gate.
+Focused ten-module Linux replay363cases/1089phases retains361P/two environment
+failures: missing git and child pytest import. Both unchanged cases pass on
+native Windows, six phases. Initial missing-temp-parent setup failure retained;
+no source guard changes, no aggregate single-environment passing claim.
+
 ## November14: Adjacent Cohort Assertion Missed, Gates Remain Closed
 
 QG-SEC-004/NFT-005: targeted71P was insufficient propagation inventory. Hosted

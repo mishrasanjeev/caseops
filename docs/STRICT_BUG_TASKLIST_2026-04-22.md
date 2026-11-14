@@ -1,5 +1,22 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Workflow Consumer Missed; Current CI Failed
+
+CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure
+is the October21 FastEmbed wheel test's exact Security sync-command expectation,
+still core-only after the intentional all-extras audit change. Preserve every
+strict installed-metadata/no-ignore assertion and add --all-extras to the exact
+expected command. This is our missed adjacent consumer, not a provider outage.
+Hosted4108PG/55OTEL pass separately; App artifacts absent, whole CI failed.
+Full10 deliberately interrupted at195 complete-phase passes of4108, no native
+session completion or browser acceptance; retain all raw evidence. Replacement
+whole hosted CI must pass before the next canonical local Docker run. No deploy.
+Expanded ten-module Linux focused run completed363cases/all1089phases:361P,
+two environment failures (minimal API image lacks git; isolated child cannot
+import the appended pytest). Both exact cases then pass on native Windows,
+all six phases. Retain both environments and the earlier missing-temp-parent
+setup failure separately; do not call this one all-pass363-case execution.
+
 ## November14: Complete Security-Family Repair, Replacement Still Required
 
 PR620/f0db full preflight20 passes2954frontend/304files and14/14built-browser

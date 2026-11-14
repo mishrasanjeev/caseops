@@ -1,5 +1,19 @@
 ## 2026-11-11 - Workbook 5
 
+November14 00:56UTC: e2e0 CI43527128891 failed the October21 FastEmbed test's
+exact core-only Security sync command. The workflow intentionally requires
+--all-extras; correct only that stale command expectation and retain all strict
+installed-metadata/no-ignore checks. This is another missed adjacent workflow
+consumer, our propagation error. Hosted17512API=13385P/4126S/1F,4108PGP/55OTELP;
+App artifacts absent, not a green release. Full10 deliberately interrupted after
+195 complete-phase passes, before native completion/browser execution; power
+restored and evidence retained. No production deployment. Complete hosted CI
+must pass before replacement local Docker, then exact-main/live acceptance.
+Expanded ten-module Linux363cases/1089phases:361P/two environment failures
+(missing git; child pytest import), both exact checks then native Windows2P/
+6phases. Preserve initial missing-temp-parent setup errors and all raw outputs;
+this is not a single all-pass363-case execution or whole-release acceptance.
+
 November14 latest continuation: after restoring every Playwright Git blob to
 the accepted baseline, f0db/preflight20 passes2954frontend and14built-browser
 cases. Hosted APIshard4 retains one missed adjacent exact-cohort assertion in

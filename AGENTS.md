@@ -19,6 +19,11 @@
   installed-cohort assertion across the repository and execute the complete
   security test family. Updating one floor test while an adjacent exact-cohort
   test still pins the old release is incomplete propagation, not a CI outage.
+  Include workflow-command consumers even when their filenames describe a
+  different package. Search references to the changed workflow and step names,
+  not just dependency names and versions. Require the complete hosted CI result
+  before starting another long local Docker gate after a propagation failure;
+  pending shards are not evidence that the changed contract is accepted.
   Treat fresh-transform-cache collection separately from warm-cache success.
   Never filter or fake collection to meet a budget. A dynamic TypeScript import
   can bypass the actual Playwright worker's transpilation path even when list,
