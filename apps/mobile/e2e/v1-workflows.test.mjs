@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
-import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave, scopedAction } from './v1-workflows.mjs';
+import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, segment, row, positionV1Visible, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave, scopedAction } from './v1-workflows.mjs';
 import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
@@ -33,6 +33,9 @@ import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-r
 import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
 import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout, producerServerDate, producerServerDateUpperBound } from '../../../scripts/mobile/native-producer-host.mjs';
 import { createV1PrivateWriter, resolveProducedReferences, createV1Worker, v1ProducerFailureCode } from '../../../scripts/mobile/produce-v1-fixture.mjs';
+
+import { V1RunEvidence, V1OwnedSessions, validateV1EvidenceStreams, verifyV1SessionAbsence, finishV1Evidence, readV1SessionStatus } from './v1-run-evidence.mjs';
+import { nativeCalendarRowFields, admitV1SegmentPresentation } from './v1-native-presentation.mjs';
 
 const ids = ['SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'SOURCE-04', 'SOURCE-05', 'SOURCE-06', 'SOURCE-07', 'WORK-01', 'WORK-02', 'WORK-03', 'WORK-04', 'WORK-05', 'WORK-06', 'WORK-07', 'WORK-08', 'COUNSEL-01', 'INBOX-01'];
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -1434,7 +1437,7 @@ test('Android retained segment selection follows its observed checkable parent a
   let children = [label], parents;
   const parent = { elementId: 'actual-parent', isDisplayed: async () => true, getAttribute: async key => state[key], $$: async () => children };
   parents = [parent];
-  const c = { platform: 'android', fixture: { v1: { nativeSelectors: { segments: { 'Event type': { Deadlines: recipe } } } } },
+  const c = { platform: 'android', fixture: { udid:'synthetic-device',buildReceipt:ref('build'),v1: { nativeSelectors: { observed:true,udid:'synthetic-device',buildReceipt:ref('build'),segments: { 'Event type': { Deadlines: recipe } } } } },
     driver: { $$: async query => query === recipe.query ? [label] : query === `//*[@text='Deadlines']/parent::*[@checkable='true']` ? parents : [] } };
   await selectedSegment(c, 'Event type', 'Deadlines');
   for (const [key, bad] of [['checked', 'false'], ['checkable', 'false'], ['class', 'android.widget.TextView']]) {
@@ -1535,4 +1538,202 @@ test('V1 producer stopped receipts expose only finite public codes and never exc
     { message: 'V1_IP_ACL_GRANT_NOT_ACTIVE', cause: secret }, 'V1_IP_ACL_GRANT_NOT_ACTIVE', null]) {
     const code = v1ProducerFailureCode(error); assert.equal(code, 'V1_FIXTURE_PRODUCTION_INCOMPLETE'); assert.equal(code.includes(secret), false);
   }
+});
+
+// These are source/harness regressions; actual Appium acceptance is separate.
+
+function evidenceDirectory(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-v1-evidence-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory;
+}
+test('V1 evidence requires both complete streams with shared ordering and byte-exact hashes', t => {
+  const directory = evidenceDirectory(t), journal = new V1RunEvidence(directory);
+  journal.write({type:'run_started'});journal.write({type:'browser_step',control:'synthetic'});journal.write({type:'phase_started'});
+  const manifest=journal.close(), main=fs.readFileSync(path.join(directory,'events.jsonl')), browser=fs.readFileSync(path.join(directory,'browser-events.jsonl'));
+  assert.deepEqual(validateV1EvidenceStreams(manifest,main,browser).map(x=>x.evidenceSequence),[1,2,3]);
+  assert.throws(()=>validateV1EvidenceStreams(manifest,main,Buffer.alloc(0)));
+  assert.throws(()=>validateV1EvidenceStreams(manifest,Buffer.from(main.toString().replace('run_started','run_altered')),browser));
+  assert.deepEqual(journal.close(),manifest); assert.throws(()=>journal.write({type:'late'}));
+});
+for (const type of ['native_ui_action','browser_step']) test(`V1 ${type} stream saturates at its unchanged 2000-entry cap and stops both streams`, t => {
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory);
+  for(let i=0;i<2000;i++)journal.write({type});
+  assert.throws(()=>journal.write({type}),/V1_EVIDENCE_EVENT_BOUND/);
+  assert.throws(()=>journal.write({type:type==='browser_step'?'native_ui_action':'browser_step'}),/V1_EVIDENCE_EVENT_BOUND/);
+  const manifest=journal.close();assert.equal(manifest.status,'incomplete');assert.equal(manifest.totalEvents,2000);
+});
+test('V1 serialization and byte-bound failures poison the writer without exposing diagnostics', t => {
+  for(const event of [{type:'synthetic',value:'x'.repeat(1048576)},(()=>{const x={type:'synthetic'};x.x=x;return x})(),{get type(){throw new Error('DO_NOT_RETAIN')}}]){
+    const sub=path.join(evidenceDirectory(t),'run');fs.mkdirSync(sub);const journal=new V1RunEvidence(sub);
+    assert.throws(()=>journal.write(event),/V1_EVIDENCE_(WRITE_FAILED|BYTE_BOUND)/);
+    assert.throws(()=>journal.write({type:'safe'}));const manifest=journal.close();assert.equal(manifest.status,'incomplete');
+    assert.equal(JSON.stringify(manifest).includes('DO_NOT_RETAIN'),false);
+  }
+});
+for(const fault of ['partial-write','fsync'])test(`V1 ${fault} retains uncertain bytes without claiming a whole-file digest`,t=>{
+  const directory=evidenceDirectory(t);const io={...fs,appendFileSync(fd,bytes){if(fault==='partial-write'){fs.appendFileSync(fd,bytes.subarray(0,7));throw new Error('PRIVATE_IO_DIAGNOSTIC')}return fs.appendFileSync(fd,bytes)},fsyncSync(fd){if(fault==='fsync')throw new Error('PRIVATE_IO_DIAGNOSTIC');fs.fsyncSync(fd)}};
+  const journal=new V1RunEvidence(directory,io);assert.throws(()=>journal.write({type:'synthetic'}),/V1_EVIDENCE_WRITE_FAILED/);
+  const manifest=journal.close();assert.equal(manifest.status,'incomplete');assert.equal(manifest.streams[0].sha256,null);assert.equal(manifest.streams[0].bytes,null);assert.equal(manifest.streams[0].fileBytesVerified,false);
+  assert.ok(fs.statSync(path.join(directory,'events.jsonl')).size>0);assert.equal(JSON.stringify(manifest).includes('PRIVATE_IO_DIAGNOSTIC'),false);
+});
+test('V1 final evidence verification detects replacement or altered retained bytes', t=>{
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory);journal.write({type:'synthetic'});
+  fs.writeFileSync(path.join(directory,'events.jsonl'),'replacement');const manifest=journal.close();
+  assert.equal(manifest.status,'incomplete');assert.equal(manifest.streams[0].sha256,null);
+});
+test('V1 owned session cleanup survives saturated evidence and never repeats a lost acknowledgement',async t=>{
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory),owner=new V1OwnedSessions(10);let calls=0;
+  const driver={sessionId:uuid(1),async deleteSession(){calls++}};owner.add(driver);
+  for(let i=0;i<2000;i++)journal.write({type:'synthetic'});
+  await assert.rejects(owner.remove(driver,()=>journal.write({type:'appium_session'})),/V1_EVIDENCE_EVENT_BOUND/);
+  assert.deepEqual(await owner.close(),[{id:uuid(1),attempted:true,acknowledged:true}]);assert.equal(calls,1);
+  const lost={sessionId:uuid(2),async deleteSession(){calls++;throw new Error('LOST_ACK')}};owner.add(lost);
+  await assert.rejects(owner.remove(lost),/LOST_ACK/);await owner.close();assert.equal(calls,2);
+  const hanging={sessionId:uuid(3),deleteSession(){calls++;return new Promise(()=>{})}};owner.add(hanging);
+  const result=await owner.close();assert.equal(result.at(-1).acknowledged,false);assert.equal(calls,3);
+  await owner.close();assert.equal(calls,3);assert.equal(journal.close().status,'incomplete');
+});
+test('V1 session registry bounds actual registrations and rejects concurrent unknown owners',async()=>{
+  const owner=new V1OwnedSessions(10);for(let i=0;i<17;i++){const d={sessionId:uuid(i+1),async deleteSession(){}};owner.add(d);assert.throws(()=>owner.add({sessionId:uuid(100)}),/V1_OWNED_SESSION_BOUND/);await owner.remove(d)}
+  assert.throws(()=>owner.add({sessionId:uuid(100)}),/V1_OWNED_SESSION_BOUND/);
+});
+test('V1 Calendar fixture uses the canonical decoded display type and exact normalized source fields',()=>{
+  const raw={id:'deadline:'+uuid(1),kind:'deadline',display_type:'filing_deadline',title:'Synthetic filing',occurs_on:'2026-11-14',matter_id:uuid(2),matter_code:'SYN-2',matter_title:'Synthetic matter',ip_docket_id:uuid(3),time_status:'time_not_published',detail:null};
+  assert.deepEqual(nativeCalendarRowFields(raw,'2026-11-14','Synthetic day'),['Synthetic filing','SYN-2 · Synthetic matter','Synthetic day · filing deadline · Time not published · IP docket']);
+  assert.throws(()=>nativeCalendarRowFields({...raw,occurs_on:'2026-11-15'},'2026-11-14','Synthetic day'));
+});
+test('V1 viewer segment presentation is separately source/build/device bound without primary data grafting',()=>{
+  const selectors={observed:true,udid:'synthetic-device',buildReceipt:ref('build'),segments:{'Matter view':{Work:{label:'Work'}}}};
+  const fixture={udid:'synthetic-device',buildReceipt:ref('build'),binarySourceSha:source,companyId:uuid(9)};
+  const c={fixture,platform:'android',segmentPresentation:{sourceSha:source,platform:'android',selectors}};
+  assert.equal(admitV1SegmentPresentation(c),selectors);assert.equal(fixture.v1,undefined);
+  assert.equal(admitV1SegmentPresentation({...c,segmentPresentation:{...c.segmentPresentation,selectors:{...selectors,segments:{'Source type':{Contracts:{label:'Contracts'}}}}}}).segments['Source type'].Contracts.label,'Contracts');
+  for(const changed of [{udid:'wrong'},{buildReceipt:ref('wrong')},{binarySourceSha:'f'.repeat(40)}])assert.throws(()=>admitV1SegmentPresentation({...c,fixture:{...fixture,...changed}}));
+  assert.throws(()=>admitV1SegmentPresentation({...c,segmentPresentation:undefined}));assert.equal(fixture.v1,undefined);
+});
+function positioningDouble(){
+  let clock=0,moves=0;const original=Date.now;Date.now=()=>clock;
+  const c={platform:'android',budget:{control(){}},driver:{getWindowRect:async()=>({x:0,y:0,width:500,height:1000}),performActions:async()=>{moves++},releaseActions:async()=>{},waitUntil:async callback=>{for(let n=0;n<105;n++){if(await callback())return;clock+=200}throw new Error('EXACT_V1_VISIBLE_FACT_REQUIRED')}}};
+  return{c,get moves(){return moves},restore(){Date.now=original}};
+}
+test('V1 positioning latches original lookup and lost gesture errors despite WDIO rejected-callback retries',async()=>{
+  for(const fault of ['lookup','gesture']){const value=positioningDouble();try{
+    const original=new Error('ORIGINAL_NATIVE_FAILURE');let reads=0,dispatched=0;
+    value.c.driver.waitUntil=async callback=>{for(let n=0;n<20;n++){try{if(await callback())return}catch{};await Promise.resolve();}throw new Error('WRAPPED_TIMEOUT')};
+    if(fault==='gesture'){let clock=0;Date.now=()=>clock+=400;value.c.driver.performActions=async()=>{dispatched++;throw original}};
+    await assert.rejects(positionV1Visible(value.c,async()=>{reads++;if(fault==='lookup')throw original;return{ready:false}}),error=>error===original);
+    assert.ok(reads<=5);assert.equal(value.moves,0);assert.equal(dispatched,fault==='gesture'?1:0);
+  }finally{value.restore()}}
+});
+test('V1 rows require all exact child fields and reposition a row covered by Android tabs',async()=>{
+  for(const clipped of [true,false]){const value=positioningDouble();try{
+    const fields=['Exact title','Exact parent','Exact metadata'],element={elementId:'row',isDisplayed:async()=>true,getAttribute:async()=> 'event-synthetic',
+      $$:async query=>clipped&&value.moves===0?[]:[{isDisplayed:async()=>true,getText:async()=>fields.find(f=>query===selector('android','text',f))}]};
+    const tab={elementId:'tab',isDisplayed:async()=>true};
+    value.c.driver.$$=async query=>query===selector('android','id','event-synthetic')?[element]:query===selector('android','id','tab-today')?[tab]:[];
+    value.c.driver.getElementRect=async id=>id==='tab'?{x:0,y:900,width:125,height:100}:({x:0,y:value.moves?300:clipped?700:900,width:500,height:100});
+    assert.equal(await row(value.c,'event-synthetic',fields),element);assert.equal(value.moves,1);
+  }finally{value.restore()}}
+});
+
+test('V1 finalizer cannot accept cleanup that crosses its original absolute deadline or a rejected result',t=>{
+  for(const fault of ['late','validation','corrupt']){
+    const directory=evidenceDirectory(t);let clock=0;const journal=new V1RunEvidence(directory,fs,{now:()=>clock,milliseconds:100});
+    journal.write({type:'synthetic',nested:{value:'original'}});
+    if(fault==='corrupt')fs.writeFileSync(path.join(directory,'events.jsonl'),'corrupted');
+    if(fault==='late')clock=100;
+    const result=finishV1Evidence(journal,()=>{if(fault==='validation')throw new Error('PRIVATE_RESULT_DETAIL');return{status:'passed'}});
+    assert.equal(result.completed,false);assert.equal(result.result,undefined);assert.equal(JSON.stringify(result).includes('PRIVATE_RESULT_DETAIL'),false);
+  }
+});
+test('V1 complete stream finalization consumes held exact bytes and isolates mutable event inputs',t=>{
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory),nested={value:'original'};
+  journal.write({type:'synthetic',nested});nested.value='changed';journal.events[0].nested.value='also changed';
+  const result=finishV1Evidence(journal,events=>{assert.equal(events[0].nested.value,'original');return{status:'passed'}});
+  assert.equal(result.completed,true);assert.equal(result.result.status,'passed');
+});
+test('V1 session absence checks every known ID plus actual complete inventory without retries',async()=>{
+  const sessions=[{id:uuid(1)},{id:uuid(2)}],calls=[];
+  const request=async(route,timeout)=>{calls.push({route,timeout});return route==='/appium/sessions'?{status:200,value:[]}:{status:404,value:{error:'invalid session id'}}};
+  const result=await verifyV1SessionAbsence(sessions,request);assert.equal(result.verified,true);
+  assert.deepEqual(calls.map(x=>x.route),[`/session/${uuid(1)}/timeouts`,`/session/${uuid(2)}/timeouts`,'/appium/sessions']);assert.ok(calls.every(x=>x.timeout<=5000&&x.timeout>0));
+  for(const response of [{status:200,value:{}},{status:404,value:{error:'unknown error'}}]){let reads=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{reads++;return response}));assert.equal(reads,1)}
+  await assert.rejects(verifyV1SessionAbsence(sessions,async(route)=>route==='/appium/sessions'?{status:200,value:[{id:uuid(3)}]}:{status:404,value:{error:'invalid session id'}}));
+  let clock=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{clock=60000;return{status:404,value:{error:'invalid session id'}}},()=>clock),/V1_SESSION_ABSENCE_DEADLINE/);
+});
+test('V1 global expiry during gesture geometry prevents late physical dispatch',async()=>{
+  const value=positioningDouble();try{let active=true,geometry=0;value.c.assertActive=()=>assert.equal(active,true,'GLOBAL_EXPIRED');
+    value.c.driver.getWindowRect=async()=>{geometry++;active=false;return{x:0,y:0,width:500,height:1000}};
+    await assert.rejects(positionV1Visible(value.c,async()=>({ready:false})),/GLOBAL_EXPIRED/);assert.equal(geometry,1);assert.equal(value.moves,0);
+  }finally{value.restore()}
+});
+test('V1 Work and Source segments use separate viewer presentation and dispatch each exact control once',async()=>{
+  const fixture={udid:'synthetic-device',buildReceipt:ref('build'),binarySourceSha:source,companyId:uuid(9)},before=structuredClone(fixture),calls=[];
+  const recipes={};for(const [group,label]of[['Matter view','Work'],['Source type','Contracts']])recipes[group]={[label]:{group,label,labelAttribute:'text',query:`android=new UiSelector().text("${label}")`}};
+  let label;const element={elementId:'segment',isDisplayed:async()=>true,getAttribute:async()=>label};
+  const c={fixture,platform:'android',segmentPresentation:{sourceSha:source,platform:'android',selectors:{observed:true,udid:fixture.udid,buildReceipt:fixture.buildReceipt,segments:recipes}},budget:{control(){}},driver:{waitUntil:async fn=>assert.equal(await fn(),true),$$:async query=>query===recipes[label==='Work'?'Matter view':'Source type'][label].query?[element]:[],elementClick:async id=>calls.push(id)}};
+  for(const [group,value]of[['Matter view','Work'],['Source type','Contracts']]){label=value;await segment(c,group,label)}
+  assert.deepEqual(calls,['segment','segment']);assert.deepEqual(fixture,before);assert.equal(fixture.v1,undefined);
+});
+test('Android read-only row binds its exact global scroll ancestor and rejects alternate ownership',async()=>{
+  const facts=['Readonly exact task','Unassigned','todo · Read-only'],id='task-synthetic',row={elementId:'row',isDisplayed:async()=>true,getAttribute:async key=>key==='resource-id'?id:'false',$$:async query=>{assert.equal(query.startsWith('xpath=ancestor::'),false);return facts.filter(x=>selector('android','text',x)===query).map((x,i)=>({elementId:'leaf'+i,isDisplayed:async()=>true,getText:async()=>x}))}},scroll={elementId:'scroll',isDisplayed:async()=>true};
+  let ancestorCount=1;const queries=[];const c={platform:'android',budget:createV1CaseBudget(),driver:{$$:async query=>{queries.push(query);return facts.some(x=>selector('android','text',x)===query)?facts.filter(x=>selector('android','text',x)===query).map((x,i)=>({elementId:'leaf'+i,isDisplayed:async()=>true,getText:async()=>x})):query===selector('android','id',id)?[row]:query===`//*[@resource-id='${id}']/ancestor::*[@scrollable="true"]`?Array(ancestorCount).fill(scroll):[]},getWindowRect:async()=>({x:0,y:0,width:400,height:800}),getElementRect:async key=>key==='scroll'?{x:0,y:100,width:400,height:600}:key==='row'?{x:10,y:200,width:380,height:100}:{x:20,y:210,width:300,height:20}}};
+  assert.equal(await readOnlyV1Row(c,id,facts),row);assert.ok(queries.includes(`//*[@resource-id='${id}']/ancestor::*[@scrollable="true"]`));
+  ancestorCount=0;await assert.rejects(readOnlyV1Row(c,id,facts),/EXACT_READONLY_ROW_SCROLL_ANCESTOR_REQUIRED/);ancestorCount=2;await assert.rejects(readOnlyV1Row(c,id,facts),/EXACT_READONLY_ROW_SCROLL_ANCESTOR_REQUIRED/);
+});
+
+test('Android flattened readonly facts reject missing, duplicate, hidden, altered and out-of-row matches',async()=>{
+  for(const fault of ['missing','duplicate','hidden','wrong-text','outside','clickable','wrong-id','too-many']){
+    const id='task-synthetic',facts=['Exact title','Exact owner','Exact state'];
+    const leaf={elementId:'leaf',isDisplayed:async()=>fault!=='hidden',getText:async()=>fault==='wrong-text'?'Wrong':facts[0]};
+    const row={elementId:'row',isDisplayed:async()=>true,getAttribute:async key=>key==='resource-id'?(fault==='wrong-id'?'task-other':id):fault==='clickable'?'true':'false'},scroll={elementId:'scroll',isDisplayed:async()=>true};
+    const c={platform:'android',budget:createV1CaseBudget(),driver:{$$:async query=>query===selector('android','id',id)?[row]:query.includes('/ancestor::')?[scroll]:facts.some(x=>selector('android','text',x)===query)&&fault!=='missing'?Array(fault==='too-many'?101:fault==='duplicate'?2:1).fill(leaf):[],getWindowRect:async()=>({x:0,y:0,width:400,height:800}),getElementRect:async key=>key==='scroll'?{x:0,y:100,width:400,height:600}:key==='row'?{x:10,y:200,width:380,height:100}:{x:20,y:fault==='outside'?400:210,width:300,height:20}}};
+    await assert.rejects(readOnlyV1Row(c,id,facts),new RegExp(fault==='too-many'?'READONLY_ROW_FACT_LOOKUP_BOUND':fault==='clickable'?'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION':fault==='wrong-id'?'EXACT_READONLY_ROW_IDENTITY_REQUIRED':fault==='wrong-text'?'Expected values to be strictly equal':'EXACT_READONLY_ROW_FACT_REQUIRED'));
+  }
+});
+
+test('V1 session HTTP observation preserves marker/TLS policy, refuses redirects and bounds received bytes',async()=>{
+  const options=[];
+  const response=await readV1SessionStatus('http://127.0.0.1:4725/appium/sessions',1000,async(url,init)=>{options.push(init);assert.equal(url.hostname,'127.0.0.1');return new Response('{"value":[]}',{status:200})});
+  assert.deepEqual(response,{status:200,value:[]});assert.equal(options[0].redirect,'error');assert.deepEqual(options[0].headers,{'X-CaseOps-Automated-Test':'no-paid-providers'});assert.ok(options[0].signal instanceof AbortSignal);
+  for(const item of [new Response('',{status:302}),new Response('bad-json',{status:200}),new Response(new Uint8Array([255]),{status:200})])await assert.rejects(readV1SessionStatus('https://localhost:4725/appium/sessions',1000,async()=>item));
+  let cancelled=false,reads=0;
+  const body=new ReadableStream({pull(controller){reads++;controller.enqueue(new Uint8Array(9000));},cancel(){cancelled=true}},{highWaterMark:0});
+  await assert.rejects(readV1SessionStatus('http://127.0.0.1:4725/appium/sessions',1000,async()=>new Response(body,{status:200})),/V1_SESSION_STATUS_RESPONSE_BOUND/);
+  assert.equal(cancelled,true);assert.equal(reads,2);
+  for(const url of ['https://example.invalid/appium/sessions','http://user@localhost:4725/appium/sessions','http://localhost:4725/appium/sessions?q=x']){let calls=0;await assert.rejects(readV1SessionStatus(url,1000,async()=>{calls++;return new Response('{}')}));assert.equal(calls,0)}
+});
+test('V1 absence observation admits the complete seventeen-session inventory under one deadline',async()=>{
+  const sessions=Array.from({length:17},(_,i)=>({id:uuid(i+1)}));let count=0;
+  const result=await verifyV1SessionAbsence(sessions,async(route)=>{count++;return route==='/appium/sessions'?{status:200,value:[]}:{status:404,value:{error:'invalid session id'}}});assert.equal(result.known.length,17);assert.equal(count,18);
+});
+
+test('Android readonly association refuses changed row/scroll epochs and tab occlusion', async () => {
+  for (const fault of ['row-layout', 'scroll-layout', 'row-identity', 'scroll-identity', 'tabs']) {
+    const facts = ['Exact title', 'Exact owner', 'Exact state'], id = 'task-synthetic';
+    let rowReads = 0, scrollReads = 0, rowQueries = 0, scrollQueries = 0;
+    const row = { elementId: 'row', isDisplayed: async () => true, getAttribute: async key => key === 'resource-id' ? id : 'false' };
+    const scroll = { elementId: 'scroll', isDisplayed: async () => true }, tab = { elementId: 'tab', isDisplayed: async () => true };
+    const c = { platform: 'android', budget: createV1CaseBudget(), driver: {
+      $$: async query => {
+        if (query === selector('android', 'id', id)) return [{ ...row, elementId: fault === 'row-identity' && ++rowQueries > 1 ? 'replacement' : 'row' }];
+        if (query.includes('/ancestor::')) return [{ ...scroll, elementId: fault === 'scroll-identity' && ++scrollQueries > 1 ? 'replacement' : 'scroll' }];
+        if (query === selector('android', 'id', 'tab-today')) return fault === 'tabs' ? [tab] : [];
+        return facts.filter(value => query === selector('android', 'text', value)).map((value, i) => ({ elementId: `leaf-${i}`, isDisplayed: async () => true, getText: async () => value }));
+      }, getWindowRect: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+      getElementRect: async key => key === 'row' ? { x: 10, y: fault === 'row-layout' && ++rowReads > 1 ? 220 : 200, width: 380, height: 100 }
+        : key === 'scroll' ? { x: 0, y: 100, width: 400, height: fault === 'scroll-layout' && ++scrollReads > 1 ? 590 : 600 }
+        : key === 'tab' ? { x: 0, y: 200, width: 100, height: 100 } : { x: 20, y: 210, width: 300, height: 20 },
+      performActions: async () => { throw new Error('COVERED_ROW_REQUIRES_POSITIONING'); }, releaseActions: async () => {},
+    } };
+    await assert.rejects(readOnlyV1Row(c, id, facts), fault === 'tabs' ? /COVERED_ROW_REQUIRES_POSITIONING/ : fault.endsWith('layout') ? /READONLY_ROW_LAYOUT_CHANGED/ : /Expected values to be strictly equal/);
+  }
+});
+
+test('V1 evidence poisons serialization failure without reading an arbitrary thrown message getter', t => {
+  const directory = evidenceDirectory(t), journal = new V1RunEvidence(directory); let reads = 0;
+  const thrown = { get message() { reads++; throw new Error('UNSAFE_DIAGNOSTIC_ACCESS'); } };
+  assert.throws(() => journal.write({ get type() { throw thrown; } }), /V1_EVIDENCE_WRITE_FAILED/);
+  assert.equal(reads, 0); assert.throws(() => journal.write({ type: 'safe' }), /V1_EVIDENCE_WRITE_FAILED/);
+  assert.equal(journal.close().status, 'incomplete'); assert.equal(reads, 0);
 });

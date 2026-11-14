@@ -957,6 +957,19 @@ test("Calendar source callback composes into the originating tab stack and gener
   );
   assert.equal(attrs.kind, "{sourceKind}");
   assert.equal(attrs.onKindChange, "{setSourceKind}");
+  assert.equal(attrs.active, '{route.type === "source-list"}');
+  assert.equal(attrs.key, "{`${identity.company.id}:${sourceKind}`}");
+  assert.ok(ts.isParenthesizedExpression(list.parent));
+  const retained = list.parent.parent;
+  assert.ok(ts.isConditionalExpression(retained));
+  assert.equal(
+    retained.condition.getText(file),
+    'stack.some((entry) => entry.type === "source-list")',
+  );
+  assert.ok(
+    list.pos < calendar.pos,
+    "Sources must occupy the stable sibling before route-specific screens",
+  );
   const screen = readFileSync(
     new URL("../application/screens/SourceRecordsScreen.tsx", import.meta.url),
     "utf8",
@@ -1144,18 +1157,22 @@ function sourceListHarness(respond: (path: string) => unknown) {
     visible = [];
     seen = new Set();
     visit(
-      jsx(screen, {
-        repository,
-        active,
-        kind,
-        onKindChange(value: typeof kind) {
-          kinds.push(value);
-          kind = value;
+      jsx(
+        screen,
+        {
+          repository,
+          active,
+          kind,
+          onKindChange(value: typeof kind) {
+            kinds.push(value);
+            kind = value;
+          },
+          openSource(...args: unknown[]) {
+            opened.push(args);
+          },
         },
-        openSource(...args: unknown[]) {
-          opened.push(args);
-        },
-      }),
+        `${company}:${kind}`,
+      ),
       "root",
     );
     for (const [key, instance] of instances) {
@@ -1421,4 +1438,97 @@ test("Sources reaches and opens the exact older application beyond 100 pages", a
     app.calls.map(({ path }) => path),
     expected,
   );
+});
+
+test("Sources detail suspension retains page cursor but remounts an authorized list without cached rows", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.equal(app.has("source-row-contract-contract-2"), true);
+  app.control("source-row-contract-contract-2")();
+  assert.equal(app.opened.length, 1);
+  const retired = [
+    "source-next-page",
+    "source-first-page",
+    "source-reload",
+    "source-row-contract-contract-2",
+  ].map((id) => app.control(id));
+  app.setActive(false);
+  app.render();
+  assert.equal(app.text(), "");
+  assert.equal(app.calls.at(-1)!.signal.aborted, true);
+  for (const action of retired) action();
+  app.setActive(true);
+  app.render();
+  assert.equal(app.has("source-row-contract-contract-2"), false);
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  assert.equal(app.has("source-row-contract-contract-2"), true);
+  assert.deepEqual(
+    app.calls.map(({ path }) => readSourceCursor(path)),
+    [null, "2", "2"],
+  );
+});
+
+test("Sources Back hides a revoked page and ignores completion from its unmounted reader", async (t) => {
+  let resolve: (value: unknown) => void = () => {};
+  let mode = "ready";
+  const app = sourceListHarness((path) => {
+    if (mode === "denied")
+      throw Object.assign(new Error("Synthetic denied"), { status: 403 });
+    if (mode === "pending")
+      return new Promise((done) => {
+        resolve = done;
+      });
+    return numberedContractPage(path);
+  });
+  t.after(app.unmount);
+  await app.settle();
+  mode = "pending";
+  app.control("source-next-page")();
+  app.render();
+  assert.equal(app.has("source-row-contract-contract-1"), false);
+  app.setActive(false);
+  app.render();
+  assert.equal(app.calls.at(-1)!.signal.aborted, true);
+  mode = "denied";
+  app.setActive(true);
+  app.render();
+  assert.equal(app.has("source-row-contract-contract-1"), false);
+  resolve(numberedContractPage("/api/contracts/?cursor=2"));
+  await app.settle();
+  assert.match(app.text(), /Not available to this account/);
+  assert.doesNotMatch(app.text(), /Page +[12]/);
+  assert.equal(app.has("source-row-contract-contract-2"), false);
+  assert.deepEqual(
+    app.calls.map(({ path }) => readSourceCursor(path)),
+    [null, "2", "2"],
+  );
+});
+test("Sources kind changes and pop/reopen discard the retained page history", async (t) => {
+  const app = sourceListHarness((path) =>
+    path === "/api/ip/readiness"
+      ? readiness()
+      : path.startsWith("/api/ip/portfolio?")
+        ? ipPage([])
+        : numberedContractPage(path),
+  );
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  app.choose()("ip_docket");
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  app.choose()("contract");
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  app.control("source-next-page")();
+  await app.settle();
+  app.unmount();
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
 });

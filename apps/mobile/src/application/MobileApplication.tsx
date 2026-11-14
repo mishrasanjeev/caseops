@@ -481,6 +481,18 @@ function ApplicationContent({
           </View>
         ) : null}
         <View style={styles.fill}>
+          {stack.some((entry) => entry.type === "source-list") ? (
+            <SourceRecordsScreen
+              key={`${identity.company.id}:${sourceKind}`}
+              repository={sources}
+              kind={sourceKind}
+              onKindChange={setSourceKind}
+              active={route.type === "source-list"}
+              openSource={(source, locator) =>
+                push({ type: "source", source, locator })
+              }
+            />
+          ) : null}
           <View
             style={[
               styles.fill,
@@ -734,17 +746,7 @@ function ApplicationContent({
                 localUnlock={localUnlock}
               />
             </View>
-          ) : route.type === "source-list" ? (
-            <SourceRecordsScreen
-              repository={sources}
-              kind={sourceKind}
-              onKindChange={setSourceKind}
-              active
-              openSource={(source, locator) =>
-                push({ type: "source", source, locator })
-              }
-            />
-          ) : route.type === "source" ? (
+          ) : route.type === "source-list" ? null : route.type === "source" ? (
             <SourceRecordDetailScreen
               repository={sources}
               source={route.source}

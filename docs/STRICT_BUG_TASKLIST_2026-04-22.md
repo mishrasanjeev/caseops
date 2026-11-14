@@ -6662,3 +6662,19 @@ See [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#20
 Full current-candidate native acceptance remains0/83 per platform; no earlier
 native pass is transferred, and earlier unclassified network refusals stay
 incomplete. Fresh full source gates and native builds/execution remain due.
+
+## 2026-11-14 — Native Sources Back and V1 evidence closure
+
+**Partially fixed / NO-GO.** Actual e725017d Android Page2/detail/Back reset to
+Page1. Retain only the cursor while unmounting readers, then freshly authorize
+Back; preserve inactive leases and type/company/session/pop resets. Its V1 run
+also filled the original2,000-event journal:5calls passed,9failed,1interrupted,
+2unstarted, no summary. Original evidence is retained. Separate mandatory,
+bounded, hash-bound browser/native streams and independent owned-session cleanup
+now produce honest incomplete output without replaying mutations or lost acks.
+Measured Calendar normalization/clipping and viewer accessibility topology are
+repaired in the harness; diagnostic05 passed both exact readonly rows on M21,
+with zero candidate acceptance credit. See [scope, budgets, evidence and remaining
+verification](mobile/NATIVE_PAGINATION_EVIDENCE_2026-11-14.md). Fresh candidate
+builds and all83 cases per platform remain required; this entry does not close
+the native release gate.

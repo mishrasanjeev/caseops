@@ -5411,3 +5411,16 @@ secret/getter guards. Independent review found no blocking or major issue.
 Fresh full gates and native acceptance remain open; both actual source6721039b
 builds passed, but formal counts remain0/83 per platform. See
 [dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--bind-v1-access-timestamps-to-the-actual-server-response-clock).
+
+## 2026-11-14 — J20/M22 cursor retention and bounded native evidence
+
+**Partially implemented / Partially fixed / NO-GO.** Repair the observed Sources
+Page2/detail/Back reset while retaining only navigation cursor state, never old
+reader results. Preserve authorization, inactive callbacks and all reset scopes.
+Repair the independently measured Calendar/viewer harness assumptions and V1
+journal-overflow cleanup. The two mandatory streams explicitly increase the
+aggregate evidence budget to4,000events/2MiB, with original per-stream2,000entry
+caps, unchanged30-minute acceptance deadline, fail-closed hashes/order and
+bounded cleanup. [Dated proof and exact remaining gates](mobile/NATIVE_PAGINATION_EVIDENCE_2026-11-14.md)
+retain the failed full Android run and all preparatory diagnostics separately.
+Fresh candidate builds and complete independent83-case inventories remain due.

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { constants, openSync, closeSync, fstatSync, lstatSync, readSync } from 'node:fs';
 import { v1Inventory, V1_BUDGETS } from './v1-workflows-inventory.mjs';
+import { nativeCalendarRowFields } from './v1-native-presentation.mjs';
 
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const SHA = /^[a-f0-9]{64}$/;
@@ -388,6 +389,7 @@ export function validateV1ExecutionFixture(fixture, platform) {
     v1CalendarDeadlineIdentity(source.event, source.docket, source.expected.deadlineId);
     text(source.docket.status); v1Version(source.docket.updated_at, 'task');
     assert.ok(Array.isArray(source.rowFields) && source.rowFields.length === 3); source.rowFields.forEach(text);
+    assert.deepEqual(source.rowFields, nativeCalendarRowFields(source.event, records.calendar.day, records.calendar.dayLabel), 'CANONICAL_CALENDAR_ROW_FACTS_REQUIRED');
   }
   const contracts = records.contracts.pages.flatMap(page => page.contracts);
   assert.deepEqual(records.contracts.rows.map(row => row.id).sort(), contracts.map(row => row.id).sort());
