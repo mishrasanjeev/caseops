@@ -1,5 +1,38 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Native Harness Found A Missing Shared Builder Input
+
+At b3af, hosted Mobile source43587483399/job132424989570 retains1569native
+cases=1564P/3explicitS/2F. Both failures are the shared root-build closure:
+canonical-api-validators.ts was transitively imported by the colocated web
+assurance but absent from explicit Docker COPY. This is our propagation miss,
+not a native-device defect. Add exactly that helper to builder COPY, both
+finite ignore admissions and native upload inputs; keep it out of the runner.
+Existing source-trigger/fingerprint scopes already cover tests/e2e/support;
+no mobile/MacBook code or approval/broad allowlist change is needed. Add a
+direct regression and rerun actual native upload/canaries and shared harness.
+The original short CLI log lookup only returned 'run still in progress'; the
+actual complete job log was subsequently retained through its exact API endpoint.
+No full CI/Docker/production success is inferred from this repair.
+
+Actual replacement component: all10native SDK upload/positive-negative canary
+cases pass in49.348s, including the new builder-only helper check; required
+operator/licence paths remain72 (this builder input is not a new licence).
+Direct local shared-native module initialization stops before cases because
+@expo/config is absent; that setup failure is not a product reproduction or
+permission to edit/install into MacBook code. Hosted full harness is required.
+
+The same b3af CI Web job132425062786 retains2991frontend cases=2990P/1F in
+436.16s. The new real external-library worker failed, but its native JSON stayed
+in ephemeral /tmp so the exact inner errors are unavailable here. The web job
+also omitted browser provisioning needed by that new browser test. Add the
+existing pinned Playwright Chromium install before coverage under unchanged
+trust settings and retain complete synthetic native JSON/stderr as an exact
+artifact; do not declare the missing browser to be an independently reproduced
+inner error. Local final13loader assertions/three modules pass with four actual
+native worker cases, and two new API workflow/retention checks pass. All
+15/20second child/test limits and full coverage thresholds remain unchanged.
+
 ## November14: Integrated Collection615 Failure Retained
 
 Worker-safe canonical/external loaders have real native validation, ZIP, QR and

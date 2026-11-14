@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,7 +116,13 @@ test('native accessibility builder retains its instance and detects a real unnam
     { cwd: root, env, encoding: "utf8", windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 });
   writeFileSync(path.join(dir, "native.json"), result.stdout ?? "");
   writeFileSync(path.join(dir, "stderr.txt"), result.stderr ?? "");
-  expect(result.error, dir).toBeUndefined(); expect(result.status, result.stderr + dir).toBe(0);
+  const retained = path.join(root, "test-results/native-loader", path.basename(dir));
+  mkdirSync(retained, { recursive: true });
+  writeFileSync(path.join(retained, "native.json"), result.stdout ?? "");
+  writeFileSync(path.join(retained, "stderr.json"), JSON.stringify({ stderr: result.stderr ?? "" }));
+  expect(readFileSync(path.join(retained, "native.json"), "utf8")).toBe(result.stdout);
+  expect(result.error, dir).toBeUndefined();
+  expect(result.status, result.stderr + dir + (result.stdout ?? "").slice(0, 12000)).toBe(0);
   const report = JSON.parse(result.stdout);
   expect(report.errors).toEqual([]);
   expect(report.stats).toMatchObject({ expected: 3, unexpected: 0, skipped: 0, flaky: 0 });

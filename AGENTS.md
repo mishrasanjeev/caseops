@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- A new test helper imported transitively by a colocated web unit can become a
+  builder input even when production code never imports it. Reconcile the exact
+  Docker COPY closure, both finite ignore allowlists, native upload discovery,
+  source triggers and build fingerprints; do not broaden a directory allowlist
+  or copy test helpers into the production runner to hide the missing input.
+
 - Connecting an existing validator can expose its old false positives. Regress
   equivalent abbreviation-first, section-first and full-name citations beside
   wrong-statute/number negatives before persisting its findings. Repeated
