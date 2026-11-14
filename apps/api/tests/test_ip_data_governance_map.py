@@ -536,11 +536,11 @@ def _reviewed_pdf_fonts(tmp_path: Path, monkeypatch) -> tuple[list[str], Path]:
     return paths, manifest_path
 
 
-def test_committed_gate_reads_all14_reviewed_font_pins_without_bypassing_data_controls(
+def test_committed_gate_reads_all18_reviewed_font_pins_without_bypassing_data_controls(
     tmp_path: Path, monkeypatch,
 ) -> None:
     fonts, _ = _reviewed_pdf_fonts(tmp_path, monkeypatch)
-    assert len(fonts) == 14
+    assert len(fonts) == 18
     provider = "apps/api/src/caseops_api/services/new_provider.py"
     migration = "apps/api/alembic/versions/new_data.py"
     for path, source in (

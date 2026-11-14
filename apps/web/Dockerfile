@@ -81,6 +81,7 @@ COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/
 COPY tests/e2e/ram-2026-11-11-bugs.spec.ts /app/tests/e2e/ram-2026-11-11-bugs.spec.ts
 COPY tests/e2e/support/env.ts /app/tests/e2e/support/env.ts
 COPY tests/e2e/support/ram-bugs4.ts /app/tests/e2e/support/ram-bugs4.ts
+COPY tests/e2e/support/canonical-api-validators.ts /app/tests/e2e/support/canonical-api-validators.ts
 # Colocated licence units read this finite API attribution/declaration closure.
 # These inputs are builder-only; no API code, fonts or vendor archives enter runner.
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/

@@ -1,5 +1,115 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Windows Collection Is Not A Passing Local Component
+
+Issue615 remains Not fixed. On integrated790-case source, fresh-cache baseline
+App collection takes21.216s under a45s diagnostic ceiling; baseline selected
+production176takes9.642s. The worker-safe loader candidate still fails the
+original15second App constructor, while its8second production constructor
+passes7.519s. A profiled App diagnostic takes16.427s, not admission. Additional
+CPU profiling attributes7.864s to Babel,2.601s to file reading and1.068s to GC;
+the separate loader thread is mostly idle. Do not confuse that idle thread with
+the main thread's work. An experimental19MB read deferral plus bounded Node heap
+flags also misses15seconds; no heap flag or read deferral is retained in source.
+
+This Windows test-startup defect remains visible and must not be labelled fixed
+or a passing full Windows preflight. The urgent production repair instead
+requires exact-candidate complete hosted CI (including its unchanged full
+frontend coverage and native15/8second inventory checks), fresh local built
+20-case workflow acceptance, and the unchanged canonical full Docker verifier
+with all native PG/browser identities. This is not permission to omit or weaken
+repository tests, source binding, provider/security fences or deploy guards.
+Retain failed Windows evidence separately and require exact-serving production
+replay; no certification is inferred from this admission plan.
+
+## November14: Structural Draft Quality Is Not Legal Accuracy Certification
+
+Partially implemented / NO-GO for the new candidate until release acceptance.
+J07/M06 structural validators and bounded multiline authority context are being
+connected to the existing generation/edit paths. Preserve all source, citation,
+review, lifecycle and no-paid gates. Deterministic fixtures cannot establish
+substantive legal accuracy, citation relevance or suitability for filing.
+Existing IP ownership adds dated official reference content and Form 2 field
+guidance without enabling automated register access. Full India source coverage,
+live registry adapter terms/capabilities and separately reviewed legal/form
+benchmarks remain open. All new tests must enter the real App/production native
+inventory; a new spec or a source link alone is not coverage or certification.
+
+## November14: PR621 Propagation Still Requires Whole Gates
+
+QG verification remains NO-GO, not production-certified. New Teams regressions
+had15lint findings despite earlier focused PG passes, and the governance test
+retained the old14-font count. Explicit same-fixture binding, normal formatting
+and strict18-font acceptance repair those consumers. Whole-API Ruff and94focused
+cases now pass;44PG cases are collected, not replayed by that collection. No
+allowlist, lifecycle/access fence, model/provider isolation or deadline changes.
+The owner's drafting quality and official IP India content/format requirements
+are separately under review; schema validity, links and pinned fonts cannot
+establish legal suitability, searchable official content or a completed filing.
+
+## November14: Upload Required-Set Consumer Was Missed
+
+PR621/3e9c15efb's native upload gate failed the stale71-path cardinality after
+the Noto Sans public notice made72required paths. Both contexts already admit
+the asset. The strict cardinality is updated to72without changing allowlists;
+all9local native discovery/canary cases pass. Hosted replacement and all full
+candidate/production gates remain open. Preserve the original9setup failures
+and failed hosted job rather than attributing either to missing licensed bytes.
+
+## November14: B5-001 Additive PDF Font Candidate, Native147 Passed
+
+**Inconclusive / NO-GO for this candidate.** Existing J07/M06,
+US-017/018/021, FT-025..032 own the draft export; no new workflow or legal-rule
+certification is introduced. The exact34ce retained Linux diagnostic identifies
+U+2011 as unsupported. Four genuine styled Noto Sans faces from the already
+pinned official commit are added without changing original14font bytes,
+source text, unsupported-script rejection or Devanagari's upright-only policy.
+Provenance records actual cmap/style/header/embedding and shared OFL inspection;
+that inspection does not establish shaping, PDF extraction or visible output.
+Runtime/packaging asset inventory moves14to18 and pins are updated together.
+The initial asset inspection was UNTESTED; parent later executed147focused
+Windows cases/all441phases with0fail/skip and unchanged source buffers. That
+pure-module/named-Draft selection is not HTTP, built-image, full Docker or
+production proof. Public attribution now includes NotoSans2.008 with the same
+exact OFL bytes,18font entries and11components/14notices. Both intended
+frontend modules pass51/51cases and both typechecks pass;15offline Linux
+overlay checks pass separately. Fresh built-image and original-record browser
+acceptance remain open. The exact reported drafting-data GET dependency is
+admitted without broadening target or mutation access. No new deployment,
+commit or main advance; frozen Docker11 and the original private draft remain
+untouched. See the November14 strict-bug entry and the parent
+evidence sidecar `outputs/bugs5-20261111/B5-PDF-FONT-REPAIR-2026-11-14.md`.
+
+## November14: Bounded Unused-Team Component Verified, Whole Scale Gap Open
+
+J14/M13/US-040, NFT-001 and SEC-002/003/004 remain partially implemented,
+not production-certified. Focused51pure/SQLite and44PostgreSQL cases pass,
+including the10,000-unrelated-docket work bound and dependency-writer races.
+All45database intent/ack pairs and complete phase/native XML inventories are
+retained. The Windows journal metadata repair preserves fail-closed controls;
+its original44setup errors and all launcher failures remain separate evidence.
+Populated-team N+1/raw-history/bulk-ACL work, global-enablement scale, cold
+collection615 and full candidate/production acceptance remain open. Neither
+these components nor deployed34ce's partial production passes certify the
+release. No native device/store or paid-provider acceptance is implied.
+
+## November14: Teams Unused-Scope Optimization Does Not Close Bulk Work Gap
+
+J14/M13/US-040, NFT-001 and SEC-002/003/004 remain **Inconclusive / UNTESTED**.
+The isolated b5-team candidate adds indexed tenant-qualified dependency EXISTS
+checks and synchronous Teams endpoint bodies. Only teams with no Matter,
+grant or wall references can avoid the IP fence scan. Historical/future ACL
+rows conservatively preserve the original full pipeline, checked at discovery
+and both locked revalidation stages. Global scoping enablement is unchanged.
+
+The24 unit/in-process HTTP, one real-app SQLite/TestClient HTTP and44 PG cases
+are authored expectations, not
+collected/executed evidence. Full nonempty-team role/ACL batching, raw history/
+pair/query bounds, global-enablement scaling and exact-release responsiveness
+are still open. Negative-index plan and Team-FK interleaving tests are authored
+but unrun. No timeout/retry, lifecycle, ACL, dependency, deployment or native
+surface was weakened; no main/HEAD/production mutation or certification occurred.
+
 ## November14: Audit-Command Contract Propagation Still Incomplete
 
 QG-SEC-004/NFT-005 remains NO-GO. Current e2e0 CI43527128891 failed one dated

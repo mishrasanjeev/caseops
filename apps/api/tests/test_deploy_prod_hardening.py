@@ -4646,6 +4646,7 @@ _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
     ("e2e-env", "tests/e2e/support/env.ts"),
     ("ram-bugs4", "tests/e2e/support/ram-bugs4.ts"),
+    ("canonical-api-validators", "tests/e2e/support/canonical-api-validators.ts"),
     ("retained-assistant", "tests/e2e/support/retained-assistant-evidence.ts"),
     ("draft-pdf-oracle", "tests/e2e/support/draft_pdf_oracle_20261111.ts"),
     ("draft-pdf-production-policy", "tests/e2e/support/draft_pdf_production_policy_20261111.ts"),

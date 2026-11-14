@@ -52,10 +52,10 @@ def document(family: str = "Helvetica", style: str = ""):
     return pdf
 
 
-def test_all_fourteen_packaged_fonts_and_two_original_notices_parse_from_bytes():
+def test_all_eighteen_packaged_fonts_and_two_original_notices_parse_from_bytes():
     report = pdf_fonts.verify_package()
     assert report["state"] == "verified_packaged_pdf_fonts"
-    assert report["font_files"] == 14
+    assert report["font_files"] == 18
     assert report["notices"] == 2
     assert report["parser_input"] == "verified immutable bytes"
 
@@ -100,6 +100,75 @@ def test_indic_fallback_is_honest_upright_and_keeps_bold(requested, actual):
     assert selected == "caseopsdevanagari" + actual
     assert "caseopsdevanagariI" not in pdf.fonts
     assert "caseopsdevanagariBI" not in pdf.fonts
+
+
+@pytest.mark.parametrize("family", ("Helvetica", "Times", "Courier"))
+@pytest.mark.parametrize("style,flags", (("", 0), ("B", 1), ("I", 2), ("BI", 3)))
+def test_nonbreaking_hyphen_has_genuine_styled_glyph_and_lossless_native_output(
+    family,
+    style,
+    flags,
+    monkeypatch,
+):
+    import uharfbuzz as hb
+
+    real_shape = hb.shape
+    shaped = []
+
+    def shape(font, buffer, *args, **kwargs):
+        result = real_shape(font, buffer, *args, **kwargs)
+        shaped.append([info.codepoint for info in buffer.glyph_infos])
+        return result
+
+    monkeypatch.setattr(hb, "shape", shape)
+    pdf = document(family, style)
+    selected = pdf.get_fallback_font("\u2011", style)
+    assert selected == "caseopslatin" + style
+    face = pdf.fonts[selected]
+    assert face.ttfont["head"].macStyle & 3 == flags
+    assert face.ttfont["OS/2"].fsType == 0
+    assert face.ttfont.getGlyphID(face.cmap[0x2011]) > 0
+    assert type(face.ttffile) is BytesIO
+    source = "Synthetic non\u2011breaking source; ordinary-hyphen; अधिवक्ता की फीस."
+    assert pdf_layout.pdf_text(source) == source
+    pdf.multi_cell(0, 7, source, new_x="LMARGIN", new_y="NEXT")
+    output = extracted(bytes(pdf.output()))
+    assert compact(source) in compact(output)
+    assert output.count("\u2011") == source.count("\u2011")
+    assert shaped and all(glyph > 0 for segment in shaped for glyph in segment)
+    assert all(not font.missing_glyphs for font in pdf.fonts.values())
+
+
+@pytest.mark.parametrize("style", ("", "B", "I", "BI"))
+def test_latin_fallback_cannot_borrow_a_different_style_or_emit_tofu(style):
+    pdf = document(style=style)
+    selected = pdf.get_fallback_font("\u2011", style)
+    assert selected == "caseopslatin" + style
+    del pdf.fonts[selected].cmap[0x2011]
+    assert any(
+        0x2011 in font.cmap
+        for key, font in pdf.fonts.items()
+        if key.startswith("caseopslatin") and key != selected
+    )
+    with pytest.raises(HTTPException) as refused:
+        pdf.multi_cell(0, 6, "non\u2011breaking", new_x="LMARGIN", new_y="NEXT")
+    assert refused.value.status_code == 422
+    assert "source text has not been changed" in refused.value.detail
+
+
+@pytest.mark.parametrize("style", ("", "B", "I", "BI"))
+@pytest.mark.parametrize("fault", ("missing", "corrupt"))
+def test_each_new_latin_face_remains_pinned_before_parsing(owned_fonts, style, fault):
+    manifest = pdf_fonts._manifest()
+    filename = manifest["latin_fallback"]["files"][style]
+    target = owned_fonts / filename
+    if fault == "missing":
+        target.unlink()
+    else:
+        target.write_bytes(b"not the pinned upstream font")
+    with pytest.raises(HTTPException) as refused:
+        pdf_fonts._font_bytes(filename)
+    assert refused.value.status_code == 503
 
 
 def test_actual_fonttools_and_harfbuzz_consume_verified_memory_even_if_path_changes(
@@ -205,7 +274,7 @@ def test_unqualified_sdk_identity_refuses_instead_of_using_an_unknown_adapter(
     assert refused.value.status_code == 503
 
 
-@pytest.mark.parametrize("unsupported", ("漢", "বাংলা", "தமிழ்"))
+@pytest.mark.parametrize("unsupported", ("漢", "বাংলা", "தமிழ்", "\U0001f600"))
 def test_uncovered_script_is_an_actionable_error_without_partial_pdf(unsupported):
     pdf = document()
     output = None
@@ -244,7 +313,7 @@ def test_original_notice_bytes_and_asset_membership_are_exact():
     names = set(manifest["assets"]) | set(manifest["notices"]) | {"manifest.json", "NOTICE.txt"}
     actual = {p.name for p in pdf_fonts._ROOT.iterdir()}
     assert actual == names
-    assert len(manifest["assets"]) == 14
+    assert len(manifest["assets"]) == 18
     assert set(manifest["families"]) == {"helvetica", "times", "courier"}
     for name, expected in manifest["notices"].items():
         raw = pdf_fonts._read_pinned(name, expected)

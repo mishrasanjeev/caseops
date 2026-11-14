@@ -393,7 +393,8 @@ describe("IP registry reconciliation page", () => {
     });
     render(<IpRegistryPage />, { wrapper: wrapper() });
 
-    const [item] = await screen.findAllByRole("listitem");
+    const decisions = await screen.findByTestId("registry-diff-decisions");
+    const [item] = await within(decisions).findAllByRole("listitem");
     expect(item).toHaveTextContent("Mark as shown on the register");
     expect(item).toHaveTextContent("BeforeNot shown");
     expect(item).toHaveTextContent("AfterASTER");

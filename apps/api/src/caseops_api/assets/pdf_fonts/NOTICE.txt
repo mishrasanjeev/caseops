@@ -2,6 +2,7 @@ CaseOps PDF fonts
 
 Liberation Fonts 2.1.5: Copyright 2010 Google Corporation; Copyright 2012 Red Hat, Inc. SIL Open Font License 1.1, reserved names as retained in OFL-Liberation.txt.
 Noto Sans Devanagari: Copyright 2018 The Noto Project Authors. SIL Open Font License 1.1 as retained in OFL-Noto.txt.
+Noto Sans 2.008: Copyright 2015-2021 Google LLC (Regular/Bold); Copyright 2015-2022 Google LLC (Italic/BoldItalic). SIL Open Font License 1.1 under the same unmodified upstream OFL-Noto.txt.
 
-All fourteen font files are unmodified upstream bytes. Internal application family aliases do not rename font metadata. Devanagari has genuine upright Regular/Bold only; italic fallback is explicitly upright. No promise of all-Unicode coverage.
+All eighteen font files are unmodified upstream bytes. Internal application family aliases do not rename font metadata. Noto Sans has genuine Regular/Bold/Italic/BoldItalic Latin fallback faces, including U+2011. Devanagari has genuine upright Regular/Bold only; its italic fallback is explicitly upright. No promise of all-Unicode coverage.
 Corresponding upstream identifiers, source archive and SHA256 values are retained in vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json. No font network lookup is permitted at runtime.

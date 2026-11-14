@@ -666,6 +666,31 @@ def test_database_journal_disabled_preserves_original_zero_journal_io(monkeypatc
     fixtures._database_ownership_journal("invalid", None, None, None, None)
 
 
+def test_database_journal_repeated_appends_keep_named_and_opened_identity(database_journal):
+    import os
+
+    fixtures, target, connection = database_journal
+    identity_field = "st_birthtime_ns" if os.name == "nt" else "st_ctime_ns"
+    assert identity_field in fixtures._JOURNAL_META
+    assert ("st_ctime_ns" in fixtures._JOURNAL_META) is (os.name != "nt")
+    assert "st_mtime_ns" in fixtures._JOURNAL_META and "st_ino" in fixtures._JOURNAL_META
+    for index in range(2):
+        name = "caseops_http_template_" + str(index + 1) * 32
+        for event in ["create_intent", "create_ack"]:
+            fixtures._database_ownership_journal(
+                event, name, "caseops", f"CREATE DATABASE {name}", connection,
+            )
+        named = target.lstat()
+        with target.open("rb", buffering=0) as opened:
+            descriptor = os.fstat(opened.fileno())
+            for key in fixtures._JOURNAL_META:
+                if key != "st_dev" or os.name != "nt":
+                    assert getattr(named, key) == getattr(descriptor, key), key
+    rows = journal_rows(target)
+    assert [row["event"] for row in rows] == ["create_intent", "create_ack"] * 2
+    assert rows[0]["databaseName"] != rows[2]["databaseName"]
+
+
 @pytest.mark.parametrize("invalid", ["hardlink", "oversize"])
 def test_database_journal_invalid_file_refuses_before_create(
     database_journal, monkeypatch, invalid

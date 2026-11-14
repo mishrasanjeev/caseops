@@ -75,6 +75,7 @@ scripts/mobile/*
 !tests/e2e/support/draft_pdf_production_policy_20261111.ts
 !tests/e2e/support/env.ts
 !tests/e2e/support/ram-bugs4.ts
+!tests/e2e/support/canonical-api-validators.ts
 
 apps/web/node_modules/
 apps/web/.next/

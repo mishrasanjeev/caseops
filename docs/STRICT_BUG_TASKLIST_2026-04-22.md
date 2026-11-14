@@ -1,5 +1,213 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Native Harness Found A Missing Shared Builder Input
+
+At b3af, hosted Mobile source43587483399/job132424989570 retains1569native
+cases=1564P/3explicitS/2F. Both failures are the shared root-build closure:
+canonical-api-validators.ts was transitively imported by the colocated web
+assurance but absent from explicit Docker COPY. This is our propagation miss,
+not a native-device defect. Add exactly that helper to builder COPY, both
+finite ignore admissions and native upload inputs; keep it out of the runner.
+Existing source-trigger/fingerprint scopes already cover tests/e2e/support;
+no mobile/MacBook code or approval/broad allowlist change is needed. Add a
+direct regression and rerun actual native upload/canaries and shared harness.
+The original short CLI log lookup only returned 'run still in progress'; the
+actual complete job log was subsequently retained through its exact API endpoint.
+No full CI/Docker/production success is inferred from this repair.
+
+Actual replacement component: all10native SDK upload/positive-negative canary
+cases pass in49.348s, including the new builder-only helper check; required
+operator/licence paths remain72 (this builder input is not a new licence).
+Direct local shared-native module initialization stops before cases because
+@expo/config is absent; that setup failure is not a product reproduction or
+permission to edit/install into MacBook code. Hosted full harness is required.
+
+The same b3af CI Web job132425062786 retains2991frontend cases=2990P/1F in
+436.16s. The new real external-library worker failed, but its native JSON stayed
+in ephemeral /tmp so the exact inner errors are unavailable here. The web job
+also omitted browser provisioning needed by that new browser test. Add the
+existing pinned Playwright Chromium install before coverage under unchanged
+trust settings and retain complete synthetic native JSON/stderr as an exact
+artifact; do not declare the missing browser to be an independently reproduced
+inner error. Local final13loader assertions/three modules pass with four actual
+native worker cases, and two new API workflow/retention checks pass. All
+15/20second child/test limits and full coverage thresholds remain unchanged.
+
+## November14: Integrated Collection615 Failure Retained
+
+Worker-safe canonical/external loaders have real native validation, ZIP, QR and
+axe-worker proof, but integrated App790cold collection still times out at the
+unchanged15s budget. Selected production176passes its8s budget at7.519s. Source
+ab9c remains unshipped. The later45s-profiled App completion is diagnostic only;
+an experimental source-read/heap adjustment also fails and is not retained.
+No static inventory, filtered tests, warmed-cache pass or raised deadline is
+used as closure. Keep615open. Urgent production acceptance uses the complete
+exact-source CI/frontend gates, fresh built20workflows and unchanged full
+canonical Docker/production inventories, not a false Windows-preflight pass.
+
+## November14: Independent Review Found Two Additional Drafting Defects
+
+Static review of49c identified false type findings for valid section-first/
+full-name citations and repeated generic findings hiding a distinct template
+blocker. Actual new red41cases reproduce17failures/24passes, including HTTP
+manual edit/reload; evidence draft621-review-red-execute-01 remains retained.
+The bounded repair recognizes equivalent citations for all three affected
+templates while retaining wrong-law/number negatives. Group repeated diagnoses
+with occurrence counts and allocate bounded message space without slicing away
+distinct finding codes; impossible future code inventories refuse persistence.
+No legal mapping, approval, source, citation or provider fence is relaxed.
+Expanded61case component passed before final strict-zip/lint formatting. Final
+eight-module replacement now passes336cases/all1008phases,0fail/skip, in333.58s;
+whole-API Ruff passes. Evidence draft621-final-collect/execute-01 binds exact
+runtime/test bytes. The expanded existing two browser journeys remain unexecuted.
+The prior274case API pass predates this review repair and is not later-source
+certification. Full CI/Docker/main/deployed replay still gate PR621.
+
+## November14: Draft Quality And Official IP Source Acceptance
+
+The owner's resumed immediate-patch request is under active PR621 ownership.
+Candidate drafting defects are concrete: first-line-only authority summaries
+drop later reasoning (whitespace-only summaries can raise IndexError), existing
+document-type validators were not passed the actual template on generation or
+manual edit, and a full model summary can conceal deterministic findings at the
+1200-character limit. Preserve the original budgets, actual validators, stable
+finding codes and citation/review/ACL/source/lifecycle fences. Local deterministic
+tests are component proof, not a real-model legal-quality benchmark.
+
+Official IP India references are a bounded, dated addition under existing IP
+ownership: actual Form 2 fields and Rule 13 guidance, exact official URLs and
+reviewed PDF hash. Seven references do not constitute a live register adapter,
+complete source corpus or completed filing. Production register CAPTCHA/OTP and
+provider/licensing gates remain untouched. Both additions require discovered
+desktop/phone journeys and exact-serving acceptance before a fixed claim.
+
+Cold collection615 remains open: a worker-safe canonical schema loader removed
+unnecessary eager work and preserved784App/172selected-production identities,
+but its final fresh-cache15second App run still timed out. The earlier passing
+quiet measurements do not erase that failure. Broader measured work reduction,
+actual worker proof and unchanged15/8second constructors remain required.
+
+## November14: PR621 Lint And Governance Consumer Repairs
+
+The owner's immediate-patch request resumes621 and adds AI drafting-quality
+and official IP India search/source-format acceptance. These do not authorize
+invented legal material, paid automated probes, native/MacBook edits or waived
+release gates. Draft quality is not established by font rendering alone.
+
+At fec37f677, CI43578433184 fails15Ruff diagnostics in the new Teams PG module
+and one backend shard10case: governance still asserts14reviewed fonts although
+the manifest now has18. Fix fixture registration via an explicit source-module
+binding (same decorated fixture), format that new module, and update the exact
+governance count/name to18. All original positive/negative governance controls
+remain. Whole API Ruff now passes;94focused cases pass with282phases/0F/0S;
+all four intended modules were collected/executed. PG discovery remains44cases,
+not execution of the reformatted file. Evidence: primary outputs/bugs5-20261111/
+ci621-components-*. Prior failed hosted/local results remain retained. Fresh
+complete CI and full local/release/production acceptance remain required.
+
+## November14: Follow-Up Upload Inventory Count Reconciled
+
+Draft PR621/3e9c15efb first failed its Native Cloud Build web-upload gate. Local
+unchanged reproduction confirms all9cases stopped in setUp at72required paths
+versus stale71, before traversal. The new Noto Sans public notice was already
+admitted by both upload contexts; this was a missed exact-count consumer, not
+a missing asset or reason to broaden either allowlist. Correct only71to72.
+All9native gcloud discovery tests then pass locally, including every positive
+input and secret/sibling/parent-pruning negative canary. Evidence:
+outputs/bugs5-20261111/upload-context-followup-01/before.log and after.log.
+Keep the hosted failed run43578082898 and require fresh green CI; no claim
+that these9checks are whole release or new production acceptance.
+
+## November14: B5-001 U+2011 Candidate, Focused Native147 Passed
+
+**Inconclusive for the original production fix; unshipped candidate.** J07/M06,
+US-017/018/021, FT-025..032, MOD-TS-008/012 own the draft-export defect;
+J06/M05 are upstream bench-intelligence context, not the export owner.
+The parent-provided exact34ce Linux-image diagnostic
+`outputs/bugs5-20261111/prod-draft-linux-render-07.json` records U+2011 with
+no fallback and422 at draft_pdf_export.py:292. Original private bytes were not
+retained and this worker did not access the original draft or production.
+
+Isolated `codex/bugs5-pdf-punctuation-20261114` adds four unmodified Noto Sans
+2.008 faces from the existing official ffebf8c1 commit. Git blobs, SHA256,
+static TrueType headers, U+2011 nonzero glyphs, genuine R/B/I/BI flags and
+fsType=0 were inspected before asset creation. The same upstream LICENSE is
+byte-identical to the retained OFL. Existing14assets remain unchanged;18total
+assets and the revised manifest/NOTICE are pinned. Exact Latin style fallback
+precedes only the existing Indic upright-italic exception; unsupported text
+still fails closed without rewriting. Focused native/extraction/style/tamper
+and synthetic finalized-two-citation draft regressions are retained.
+
+The initial independent asset review was UNTESTED. Parent then completed a
+fresh Windows native run on the exact candidate buffers:147cases/all441phases
+passed,0skip/fail. Collection/execution IDs, completion and source hashes agree
+in outputs/bugs5-20261111/pdf-punctuation-source-native-01. This selects four
+pure modules plus named pure Draft cases, not the unexecuted HTTP Draft case,
+fresh built-image proof, full Docker or production acceptance. No original
+private draft bytes were retained or modified.
+
+Parent reconciled the public NotoSans2.008 attribution with the existing exact
+OFL bytes,18font metadata entries,11components/14notices, finite web upload
+inventory and public Playwright assertions. The production-only Draft helper
+also now admits its exact Matter drafting-data GET dependency, while blocking
+all writes, missing markers and other-record reads. Both intended frontend
+modules executed51/51cases,0fail/skip; web and E2E typechecks passed in the
+isolated web-only install. Separate offline Linux source-overlay proof15/15
+passes all core styles, two synthetic Draft profiles and unsupported emoji
+refusal. Those component results are not a fresh image or browser journey.
+Original-record desktop/phone replay, full required gates and a new protected
+release remain open. No main advance or deployment.
+Review sidecar: `outputs/bugs5-20261111/B5-PDF-FONT-REPAIR-2026-11-14.md`.
+
+## November14: Teams Focused Proof Passed, Production Closure Still Open
+
+The isolated candidate now has51pure/SQLite cases passed with153retained
+setup/call/teardown phases and44PostgreSQL cases passed with132phases, no skips
+or failures. The complete collected IDs match execution and native XML.
+The PostgreSQL run retains45paired database create-intent/ack records; each
+HTTP template starts from template0, never the application database. Six
+10,000-docket unused-team mutations stay within40SQL statements, with no role
+table reads or docket hydration. Historical/future grants and walls, all three
+snapshot checkpoints, concurrent dependency writers and unfiltered global
+scoping controls pass. Nonempty-team scale remains open.
+
+Attempt06 stopped all44cases in setup at the Windows ownership-journal guard.
+Its failure is preserved. Legacy named-path ctime and descriptor change time
+disagreed after append; the repair compares Windows birth time while retaining
+inode/size/mtime/ownership/namespace checks and POSIX ctime. Repeated durable
+appends and existing hardlink/oversize/short-write/zero-write/parent-swap/lost-ACK
+controls pass. Earlier owned launcher preparation failures01-05 remain retained,
+not product reproductions. Evidence is in teams-native-execute-02 and
+teams-postgres-focused-07 under the primary Workbook5 evidence root.
+
+Verdict remains **Inconclusive** for the unshipped repair. Exact34ce production
+removal504 remains a failed result. Fresh image/full Docker/browser/CI/protected
+release and exact-production replay are still required; no timeout, retry,
+provider, ACL or lifecycle fence was weakened. MacBook work is untouched.
+
+## November14: Teams Zero-Dependency Candidate, UNTESTED
+
+J14/M13/US-040, FT-059/061, NFT-001, SEC-002/003/004. Exact34ce API00525-x6m
+had a 120-second removal504 and later recovered without restart; the supplied
+10,195 visible TM count is not an operational-role count. In b5-team only,
+add three tenant-qualified EXISTS probes over Matter.team_id, grant.team_id
+and wall.excluded_team_id. Every historical/future row counts. Only zero
+dependencies bypass the tenant IP scan; all three snapshot checkpoints
+recheck, any dependency retains the original full role/parent/ACL fence,
+and global scoping remains unfiltered. Eight sync-DB Teams routes now use def.
+
+Verdict: **Inconclusive / UNTESTED**. Source-declared candidates are24 unit/
+in-process HTTP, one real-app SQLite/TestClient HTTP and44 PostgreSQL cases,
+including the retained15. The added SQLite case uses the same lifespan portal,
+real auth/team/removal and a1-second build GET before its bounded gate releases.
+No collection,
+tests, DB, Docker, build, install, network, commit, push or deploy ran. New
+negative-EXISTS plan assertions retain actual EXPLAIN/buffer evidence only when
+executed; no zero-I/O or production latency result exists. Nonempty-team N+1,
+raw role/coverage-history bounds and bulk durable ACL work remain explicitly
+open, as do global-scoping scale and exact-release browser acceptance. The
+frozen parent's fullDocker11 and operational evidence are not modified.
+
 ## November14: Workflow Consumer Missed; Current CI Failed
 
 CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure
@@ -6091,3 +6299,87 @@ The complete tooling inventory passed422 unique cases with zero failures/errors/
 Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
 
 These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.
+# PR621 November 14 CI Follow-Up: Still Not Production Acceptance
+
+Exact candidate291c5363f0fe30f16274bbb0c6f56674bb6c3d5b completed a fresh
+build and all20 intended local Playwright workflows:20P/0F/0S/0retry,
+10desktop/10phone. Evidence: outputs/bugs5-20261111/built-preflight-26.
+This is the explicitly bounded UI component, not the full Docker gate,
+Windows615 cold inventory acceptance, or production certification.
+
+Its hosted CI43588886529 failed before the web coverage gate because the
+pinned Playwright binary registry rejects ubuntu26.04-x64. The web job is
+now pinned to ubuntu-24.04, matching the existing E2E jobs; a regression
+asserts this runner and the unchanged15-minute job/coverage contract. No
+browser-version override, dependency update, timeout or coverage waiver.
+The shared source harness43588886526 failed one assertion because the new
+trusted browser-install command makes201 Node commands, not200. Every
+command must still carry all nine trust outputs and conditional admission.
+The semantic API job also correctly rejected the unreviewed builder-map
+change. The map now records the finite test-only helper input and synthetic
+evidence boundary; canonical generated map/projection are regenerated.
+Failed logs remain under ci621-291c-failures-01, not erased by later success.
+
+All replacement hosted gates, unchanged full Docker inventory, protected
+merge, guarded exact-main deployment and complete exact-production replay
+remain required. Production still independently observed at34ce; no PR621
+fix is claimed deployed from these local checks.
+
+Candidate667f50cc6 repeats the fresh built20 workflows successfully with
+0failures/skips/retries. Exact Security43590740545 and shared source43590740598
+passed; Web43590740471 also passed, including full coverage, unchanged native
+inventory budgets, fresh Next build and web Docker builder. Other API/PG and
+later browser gates remain incomplete. These passes are source-bound, not
+production or replacement-head certification.
+
+The preceding291c API shard4 completed before workflow cancellation and retained
+seven deploy-guard failures (1580P/776S), all explicitly naming the same missing
+canonical validator helper. This was a real omission in the builder dependency
+propagation, not a product API reproduction or an authorized deployment.
+The repair adds that one literal helper to the actual dirty-input path array
+and its shared omission/native-Git regression matrix. No whole test-tree
+allowlist or dirty-source waiver is introduced. Failed evidence remains in
+outputs/bugs5-20261111/ci621-291c-failures-01/api-shard4.log.
+
+November14 follow-up226482: API shard7 retained38 failures,1350P/546S. Complete
+structured results separate37 stale browser-job inventory assertions from one
+release-owned CLI count mismatch97vs101. The new web browser worker is now an
+explicit member of the reviewed job inventory and all three unsupported-label
+negative cases. The CLI assertion includes four dated IP India tester cases.
+Complete workflow plus new-worker modules:266P/0F/0S, not a changed production
+test filter or weaker version guard. Earlier38failures are retained unchanged.
+
+PG shard12 retained a nativeSIGSEGV139, not a failed SQL assertion:68fully-phased
+passes, one setup-only case, no session completion/XML,129intended identities.
+The active case is retained-width/date/category projection[analyzed]. Actual
+merge-source60f1e609 has treec43d302d, identical to PR226482; runtime was Linux
+CPython3.13.18. A partial60s faulthandler trace is inside SQLAlchemy child
+traversal. The shared read-only test observer used a tree traversal over shared
+CTE DAGs, which has separately reproduced bounded exponential expansion on
+compiled PG and SQLite statements. Its repair retains object identities and
+bounds unique nodes20000/rawedges100000/frontier, preserving opaque/DML,
+cycle and overbound rejection. Pure file82P/246phases with all26other consumers
+audited; original PG replay/fullCI remain required. No SQL rewrite, physical
+query/latency-budget change, interpreter pin or disabled faulthandler.
+
+Docker12/13 stopped before app tests on public-wheel download timeouts. Host
+hash-verified Pillow succeeds0.49s; default container fullbody stalls while
+headers succeed. The already-configured Docker Desktop proxy succeeds with
+the exact wheel hash1.18s. One isolated unchanged-source API-target cache build
+with predefined proxy build arguments completed315.9s/137packages and unchanged
+CA/hash/license/model checks, with no runtime proxy ENV/history leakage, no
+global config change and original container/volume inventories preserved.
+This is acquisition/cache preparation only. Canonical fresh builds/fullDocker
+and current-head hosted CI remain mandatory; no SkipBuild or timeout waiver.
+
+The first original-case replay is deliberately retained red:84cases=82pureP/
+2PGF,469.37s, complete native phase/XML evidence and unchanged source378255c6.
+Both fresh/analyzed variants hit a too-narrow ClauseElement check, not a SQL
+result/budget assertion. A minimal real ORM with_only_columns projection proves
+SQLAlchemy retains _MemoizedSelectEntities: it is traversable/Visitable but
+not ClauseElement. Six new compiledPG/SQLite plain/opaque/writable cases first
+reproduced6TypeErrors. The classifier now validates the actual traversable
+SQLAlchemy protocol, still rejects arbitrary objects and all DML/opaque/cycle/
+overbound controls. Complete pure file88P/264phases after wholeAPI Ruff passed;
+the second physical PG replay and complete hosted/fullDocker gates remain owed.
+No previous red is relabelled fixed, no original elapsed/work bound changed.

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 
 import { devices, expect, type Browser, type Response, type TestInfo } from "@playwright/test";
 
-import { authContext, draft as draftSchema, type Draft } from "../../../apps/web/lib/api/schemas";
+import type { Draft } from "../../../apps/web/lib/api/schemas";
+import { canonicalApiValidators } from "./canonical-api-validators";
 import { noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 import { allowedProductionDraftRead, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
@@ -14,6 +15,7 @@ const fingerprint = (draft: Draft) => hash(JSON.stringify(draft));
 const mediaOff = (value: unknown) => value === "off";
 
 export async function productionDraftPdfJourney(browser: Browser, baseURL: string, info: TestInfo, phone: boolean) {
+  const { authContext, draft: draftSchema } = canonicalApiValidators();
   let failure: string | undefined;
   let parityUnverified = false;
   const settings = productionDraftSettings(baseURL, process.env);

@@ -38,6 +38,7 @@ PDF_ATTRIBUTION_INPUTS = {
 PDF_PUBLIC_NOTICES = {
     "apps/web/public/third-party-notices/liberation-fonts-2.1.5-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/noto-sans-devanagari-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-2.008-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/uharfbuzz-0.57.0-APACHE-LICENSE.txt",
     "apps/web/public/third-party-notices/harfbuzz-15.0.0-OldMIT-COPYING.txt",
 }
@@ -54,7 +55,7 @@ BUILDER_INPUTS = {
         "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
-        "env", "ram-bugs4",
+        "env", "ram-bugs4", "canonical-api-validators",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -111,7 +112,7 @@ class NativeUploadTests(unittest.TestCase):
         self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *PDF_PUBLIC_NOTICES, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 71)
+        self.assertEqual(len(self.required), 72)
 
     def files(self, paths):
         for relative in paths:
@@ -227,6 +228,19 @@ class NativeUploadTests(unittest.TestCase):
                     self.assertIn(
                         f"!{dependency}", (ROOT / name).read_text(encoding="utf-8").splitlines()
                     )
+
+    def test_canonical_validator_loader_remains_builder_only_with_finite_admission(self):
+        helper = "tests/e2e/support/canonical-api-validators.ts"
+        consumer = (ROOT / "tests/e2e/ram-2026-11-11-bugs.spec.ts").read_text(encoding="utf-8")
+        self.assertIn('from "./support/canonical-api-validators"', consumer)
+        self.assertIn(helper, BUILDER_INPUTS)
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8"
+        ).split("FROM trusted-base AS runner", 1)
+        self.assertIn(f"COPY {helper} /app/{helper}", builder.splitlines())
+        self.assertNotIn(helper, runner)
+        for name in (".dockerignore", ".gcloudignore"):
+            self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

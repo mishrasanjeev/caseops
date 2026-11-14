@@ -1,5 +1,14 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+November14 J07/M06 draft-quality and existing J08/M08 IP acceptance are extended
+in the PRD. Candidate bounded multiline authority context, document-type review
+findings and seven dated official IP India references are not deployed proof.
+The reference search is separate from live patent/trademark/design registers;
+Form 2 content/format guidance does not establish a completed filing. Native
+desktop/phone discovery, actual current-source Docker and exact-serving replay
+must precede a completed-coverage claim. Real-model legal quality remains a
+separate reviewed benchmark, never inferred from deterministic fixtures.
+
 November12 J14/M14 shared-CI evidence at7949: actual Windows archive permission
 and CLI test passes in72-case installed harness(71P/1POSIXskip); all11new
 portable controls pass on Linux. Linux1568-case source harness retains one

@@ -2,6 +2,7 @@ import time
 from dataclasses import replace
 
 import pypdfium2 as pdfium
+import pytest
 
 from caseops_api.services.court_format_profiles import resolve_profile
 from caseops_api.services.draft_pdf_export import render_pdf_bytes
@@ -56,6 +57,27 @@ def test_layout_digest_tracks_settings_without_claiming_legal_review():
         text = document[0].get_textpage().get_text_range()
         assert "Court rules unverified; lawyer review required." in text
         assert "FACTS" in text
+
+
+@pytest.mark.parametrize("profile_key", ("generic", "delhi_hc"))
+def test_finalized_two_citation_draft_preserves_nonbreaking_hyphen(profile_key):
+    from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted
+
+    # Synthetic text only: the reported original private bytes were not retained.
+    source = "FACTS\n\nSynthetic non\u2011breaking source. No legal proposition."
+    citations = ["SYNTHETIC-CITATION-ONE", "SYNTHETIC-CITATION-TWO"]
+    body = render(
+        resolve_profile(explicit_key=profile_key),
+        body=source,
+        citations=citations,
+        status_label="finalized",
+    )
+    text = extracted(body)
+    assert compact(source) in compact(text)
+    assert text.count("\u2011") == 1
+    for citation in citations:
+        assert citation in text
+    assert b"/FontFile2" in body
 
 
 def test_review_required_warning_survives_multipage_export(tmp_path):

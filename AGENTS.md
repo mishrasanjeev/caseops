@@ -1,5 +1,93 @@
 # CaseOps agent instructions
 
+- SQL test observers must bound their own work without weakening the measured
+  query contract. Shared CTE objects form a DAG, not a tree: retain and visit
+  each object identity once, charge raw edges before deduplication, and bound
+  nodes/frontier. Keep writable/opaque/cyclic/overbound graphs rejecting and
+  prove recursive CTE reads still work. A crash during observation is not a
+  database assertion failure; preserve its phase journal and replay the original
+  PostgreSQL journey before attributing or closing the incident.
+  ORM projections can retain traversable entity containers which are not
+  ClauseElement instances. Cover real with_only_columns ORM projections on
+  both dialects, with opaque and writable siblings; core-only CTE tests do not
+  establish that the observer accepts the real mapped query.
+
+- Adding a real browser worker to a unit suite also adds its browser/runtime
+  provisioning contract. Pin the job to an OS supported by the locked browser
+  registry, propagate the existing trust outputs to the install, reconcile
+  complete browser-job and command inventories plus their negative controls,
+  and retain failed worker evidence. Propagate additive tester cases into
+  isolated release-owned CLI assertions as well as discovery/native results.
+  A floating
+  runner or green local browser cache cannot prove hosted provisioning.
+
+- A new test helper imported transitively by a colocated web unit can become a
+  builder input even when production code never imports it. Reconcile the exact
+  Docker COPY closure, both finite ignore allowlists, deployment dirty-input
+  guards, native upload discovery, source triggers and build fingerprints.
+  Exercise real Git dirty-input rejection as well as static closure/omission
+  checks; a passing upload-only suite does not cover the deploy guard. Do not
+  broaden a directory allowlist
+  or copy test helpers into the production runner to hide the missing input.
+
+- Connecting an existing validator can expose its old false positives. Regress
+  equivalent abbreviation-first, section-first and full-name citations beside
+  wrong-statute/number negatives before persisting its findings. Repeated
+  diagnoses must not crowd a distinct blocker off the bounded review surface;
+  retain occurrence counts, complete code lines and save/reload proof.
+
+- Draft-quality acceptance must exercise generation and manual revision using
+  the actual template type, preserve multiline authority reasoning within the
+  bounded prompt, and keep deterministic blockers visible when summaries clip.
+  Schema-valid model output and passing deterministic fixtures do not establish
+  real-model legal accuracy or filing suitability.
+- Official IP references must distinguish reviewed source content and format
+  guidance from live register records. Retain exact source/version/hash and
+  provisional/complete boundaries; never present an index link as an ingested
+  form or bypass an official portal's CAPTCHA/OTP to claim search coverage.
+
+- Before publishing a regression-heavy repair or starting a long acceptance
+  run, execute the repository's normal whole-API lint gate as well as focused
+  tests. Re-export imported pytest fixtures through an explicit module binding
+  when argument names would otherwise redefine an unused import; do not mask
+  lint errors with broad ignores. A font-pack change must cover governance-gate
+  manifest consumers as well as PDF, public notices and upload inventories.
+
+- Cross-process source fidelity requires explicit UTF-8 byte decoding and an
+  input-buffer hash, not the Windows console locale. A locale-decoded JSON
+  pipe can turn an unsupported source character into supported mojibake and
+  create a false-positive PDF test. Preserve that invalid diagnostic, replay
+  the exact source bytes on the native image, and never change the saved text.
+
+- A punctuation glyph repair must add byte-pinned, licensed upstream faces,
+  never rewrite source text, drop characters or invent italic outlines.
+  Verify actual cmap/header/embedding flags and every requested style; keep
+  Devanagari's upright-only policy separate from genuine Latin italics.
+  Reconcile runtime, provenance, packaging and public-notice asset counts;
+  metadata inspection alone is not native rendering or production acceptance.
+  A new public notice also changes the native upload required-set cardinality;
+  replay actual gcloud discovery and its positive/negative canaries, not only
+  the page and packaging tests.
+
+- Windows file identity checks must compare the same creation-time field on
+  named paths and open descriptors. Python's legacy ctime can mean creation
+  time for lstat but change time for fstat after append. Use Windows birth time
+  alongside inode, size, mtime, ownership and namespace checks; preserve POSIX
+  ctime checks and prove repeated durable appends plus tamper rejection.
+
+- Delegated workers may write only inside their assigned isolated worktree or
+  an explicitly validated absolute evidence root. Never derive an evidence
+  path from the worker's current directory or write untracked sidecars into a
+  frozen release source tree. Preserve any deviation and its hashes; restoring
+  clean status later is not proof that the tree stayed clean throughout a run.
+
+- A zero-dependency Teams fast path must probe tenant-qualified Matter team,
+  team-grant and team-wall references, including every historical and future
+  ACL row. Recheck at all three snapshot checkpoints under the original
+  authority/Team locks; preserve the full existing fence for any dependency
+  and the unfiltered global scoping fence. Passing unused-team tests cannot
+  certify nonempty-team role/ACL work bounds or production responsiveness.
+
 - Security advisory results are time-bound even for an unchanged source tree.
   Recheck dependency security immediately before a protected release merge and
   deployment after long-running acceptance. Retain the original passing audit
