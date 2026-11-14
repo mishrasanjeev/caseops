@@ -1364,10 +1364,37 @@ class GatewayTests(unittest.TestCase):
             "GET /api/auth/native/sessions",
         ]}))
         self.gateway = gateway_module.Gateway(self.root)
-        self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler())
+        self.handler_completion = threading.Condition()
+        self.completed_handlers = set()
+        self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.connection_type = http.client.HTTPConnection
+
+    def tracked_handler(self):
+        original = self.gateway.handler()
+        completion, completed = self.handler_completion, self.completed_handlers
+
+        class ObservedHandler(original):
+            def finish(self):
+                try:
+                    super().finish()
+                finally:
+                    with completion:
+                        completed.add((self.server.server_port, self.client_address))
+                        completion.notify_all()
+
+        return ObservedHandler
+
+    def wait_for_handler(self, server_port, peer, deadline):
+        remaining = deadline - gateway_module.time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+        with self.handler_completion:
+            complete = self.handler_completion.wait_for(
+                lambda: (server_port, peer) in self.completed_handlers, timeout=remaining)
+        if not complete or gateway_module.time.monotonic() > deadline:
+            raise TimeoutError("OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
 
     def tearDown(self):
         self.server.shutdown()
@@ -1376,11 +1403,16 @@ class GatewayTests(unittest.TestCase):
         self.gateway.journal.close()
         self.temp.cleanup()
 
-    def request(self, method, path, headers=None, body=None):
-        with closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
+    def request(self, method, path, headers=None, body=None, timeout=3):
+        deadline = gateway_module.time.monotonic() + timeout
+        with closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=timeout)) as client:
             client.request(method, path, body=body, headers=headers or {})
+            peer = client.sock.getsockname()
+            client.sock.settimeout(max(.001, deadline - gateway_module.time.monotonic()))
             response = client.getresponse()
-            return response.status, response.read()
+            result = response.status, response.read()
+        self.wait_for_handler(self.server.server_port, peer, deadline)
+        return result
 
     def test_owned_workspace_setup_put_forwards_exact_body_and_authority_once_over_tls(self):
         certificates = self.root / "workspace-put-tls"
@@ -1407,7 +1439,7 @@ class GatewayTests(unittest.TestCase):
                 self.wfile.write(b"{}")
 
         with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
-                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler()) as tls:
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler()) as tls:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
@@ -1422,12 +1454,16 @@ class GatewayTests(unittest.TestCase):
                 with patch.object(gateway_module.http.client, "HTTPConnection", return_value=connection) as transport, \
                         closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
                                                           context=client_context)) as client:
+                    deadline = gateway_module.time.monotonic() + 3
                     client.request("PUT", "/api/ip/workspace/configuration", body=body, headers={
                         gateway_module.MARKER_HEADER: gateway_module.MARKER,
                         "Authorization": "Bearer SYNTHETIC_WORKSPACE_OWNER", "Content-Type": "application/json",
                     })
+                    peer = client.sock.getsockname()
                     response = client.getresponse()
-                    self.assertEqual((response.status, response.read()), (200, b"{}"))
+                    actual_body = response.read()
+                    self.wait_for_handler(tls.server_port, peer, deadline)
+                    self.assertEqual((response.status, actual_body), (200, b"{}"))
                     transport.assert_called_once()
                 self.assertEqual(observed, [("PUT", "/api/ip/workspace/configuration", gateway_module.MARKER,
                                              "Bearer SYNTHETIC_WORKSPACE_OWNER", body)])
@@ -1525,7 +1561,7 @@ class GatewayTests(unittest.TestCase):
         self.gateway.state["runId"] = run_id
         configure("consent", [default, search])
         with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
-                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler()) as tls:
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler()) as tls:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
@@ -1537,11 +1573,15 @@ class GatewayTests(unittest.TestCase):
                 thread.start()
 
             def request(method, target, headers=native):
+                deadline = gateway_module.time.monotonic() + 3
                 with closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
                                                          context=client_context)) as client:
                     client.request(method, target, headers=headers)
+                    peer = client.sock.getsockname()
                     response = client.getresponse()
-                    return response.status, json.loads(response.read())
+                    result = response.status, json.loads(response.read())
+                self.wait_for_handler(tls.server_port, peer, deadline)
+                return result
 
             def rejected(method, target, headers=native, code="ROUTE_NOT_ADMITTED"):
                 self.assertEqual(request(method, target, headers), (403, {"code": code}))
@@ -1681,8 +1721,11 @@ class GatewayTests(unittest.TestCase):
                 def close(self): pass
             with self.subTest(expected=expected), patch.object(gateway_module.http.client, "HTTPConnection", Upstream), \
                     closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
+                deadline = gateway_module.time.monotonic() + 3
                 client.request("GET", "/api/build", headers={gateway_module.MARKER_HEADER: gateway_module.MARKER})
+                peer = client.sock.getsockname()
                 response = client.getresponse(); headers = response.getheaders(); body = response.read()
+                self.wait_for_handler(self.server.server_port, peer, deadline)
                 self.assertEqual(response.status, expected)
                 if expected == 200:
                     self.assertEqual([value for key, value in headers if key.lower() == "set-cookie"], [value for _, value in pairs])
@@ -2174,6 +2217,103 @@ class GatewayTests(unittest.TestCase):
         lines = Path(self.gateway.journal.name).read_text().splitlines()
         self.assertEqual([json.loads(line)["sourceRequestId"] for line in lines],
                          [f"{index:016x}" for index in range(64)])
+
+    def test_request_helper_waits_for_exact_owned_handler_after_readable_body(self):
+        close_entered, release_close, body_read, boundary = (threading.Event() for _ in range(4))
+        outcome, errors = {}, []
+        base_connection = self.connection_type
+
+        class ObservedClient(base_connection):
+            def getresponse(self):
+                response = super().getresponse()
+                original_read = response.read
+                def read(*args, **kwargs):
+                    data = original_read(*args, **kwargs)
+                    body_read.set()
+                    return data
+                response.read = read
+                return response
+
+        def close_upstream():
+            close_entered.set()
+            released = release_close.wait(3)
+            if not released:
+                raise TimeoutError("SYNTHETIC_UPSTREAM_CLOSE_NOT_RELEASED")
+
+        def dispatch():
+            try:
+                outcome['response'] = self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"})
+                with self.gateway.lock:
+                    outcome['requestsAtReturn'] = list(self.gateway.state['requests'])
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                boundary.set()
+
+        original_wait = self.handler_completion.wait_for
+        def observe_wait(*args, **kwargs):
+            boundary.set()
+            return original_wait(*args, **kwargs)
+
+        self.connection_type = ObservedClient
+        with patch.object(gateway_module.http.client, "HTTPConnection") as transport, \
+                patch.object(self.handler_completion, 'wait_for', side_effect=observe_wait):
+            response = transport.return_value.getresponse.return_value
+            response.status = 200; response.getheaders.return_value = []; response.read.return_value = b"{}"
+            transport.return_value.close.side_effect = close_upstream
+            worker = threading.Thread(target=dispatch)
+            worker.start()
+            try:
+                received = body_read.wait(1)
+                held = close_entered.wait(1)
+                observed_boundary = boundary.wait(1)
+                with self.gateway.lock:
+                    before_release = list(self.gateway.state['requests'])
+            finally:
+                release_close.set()
+                worker.join(3)
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(received and held and observed_boundary)
+            self.assertEqual(before_release, [])
+            self.assertEqual(errors, [])
+            self.assertEqual(outcome['response'], (200, b"{}"))
+            self.assertEqual(len(outcome['requestsAtReturn']), 1)
+            row = outcome['requestsAtReturn'][0]
+            self.assertEqual((row['method'], row['route'], row['trafficClass']),
+                             ('OPTIONS', '/api/auth/login', 'browser-preflight'))
+            self.assertNotIn('nativeMarker', row)
+            self.assertEqual(transport.return_value.request.call_count, 1)
+
+    def test_request_helper_completion_deadline_does_not_replay_http(self):
+        release_close = threading.Event()
+        error = None
+        def close_upstream():
+            released = release_close.wait(3)
+            if not released:
+                raise TimeoutError("SYNTHETIC_UPSTREAM_CLOSE_NOT_RELEASED")
+        with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200; response.getheaders.return_value = []; response.read.return_value = b"{}"
+            transport.return_value.close.side_effect = close_upstream
+            started = gateway_module.time.monotonic()
+            try:
+                try:
+                    self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"}, timeout=.2)
+                except BaseException as caught:
+                    error = caught
+                elapsed = gateway_module.time.monotonic() - started
+            finally:
+                release_close.set()
+                with self.handler_completion:
+                    complete = self.handler_completion.wait_for(lambda: len(self.completed_handlers) == 1, timeout=3)
+            self.assertTrue(complete)
+            self.assertIsInstance(error, TimeoutError)
+            self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+            self.assertLess(elapsed, 1)
+            self.assertEqual(transport.return_value.request.call_count, 1)
+            self.assertEqual(len(self.gateway.state['requests']), 1)
+            self.assertEqual(self.gateway.state['requests'][0]['trafficClass'], 'browser-preflight')
+            self.assertNotIn('nativeMarker', self.gateway.state['requests'][0])
 
     def test_public_identity_and_preflight_do_not_forge_a_native_marker(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:

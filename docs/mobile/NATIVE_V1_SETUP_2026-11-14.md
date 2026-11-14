@@ -309,3 +309,52 @@ new source-bound native artifacts and complete per-platform native inventories
 remain required. No fbf2ea31 receipt or earlier case count transfers to a newer
 revision. All evidence paths above are under
 `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.
+
+
+## 2026-11-14 — Complete owned gateway handler observation in CI tests
+
+J20/M22 / US-MOB-01/02/08; status: Partially implemented; bug verdict:
+Partially fixed; release verdict: NO-GO pending native acceptance and hosted CI.
+
+Hosted Mobile run43566147215, job132360325641, failed the119-case Python module
+at `GatewayTests.test_public_identity_and_preflight_do_not_forge_a_native_marker`.
+The HTTP OPTIONS body had arrived, but the last journal row was still the earlier
+GET build identity. The uncontrolled gateway deliberately records ordinary
+requests in its handler's finally block after sending the response; V1/producer
+requests retain their existing durable-before-response behavior. A readable
+response is not proof that the test server has completed that final observation.
+Original raw and separately sanitized logs are retained in
+`ci-6b44841b-mobile-source-failure-01/`.
+
+Change only the Python test's owned-server observation: track actual handler
+finish by the exact server port/client peer, consume the complete response, and
+wait for that handler using the remainder of the existing three-second budget.
+The affected direct TLS, calendar and response-header helpers use the same
+completion boundary. The production gateway, its journal ordering, source pins,
+app/backend code, native executors and assertions are unchanged. Completion
+waiting has a finite wall-clock deadline; socket timeouts remain per-I/O idle
+timeouts, and this change does not claim a new whole-body transport deadline.
+
+Two new real-socket regressions deterministically hold upstream close after the
+response is readable. The original helper returns an empty journal and fails to
+report the missing completion deadline; both original regressions fail in
+`native-gateway-handler-completion-red-01.log`. The replacement proves the exact
+preflight class, absent native marker, original status/body, single HTTP dispatch,
+finite timeout and explicitly released cleanup. The original119 test bodies keep
+their payload, header, route, marker, classification and negative guards.
+
+Complete replacement:121 tests passed with zero skips/errors/failures, retained
+in `native-gateway-handler-completion-green-02.log`. The earlier complete run
+still contains three failed readiness-constructor subtests because the ambient
+Homebrew Node16 aborts on its missing ICU73 library. Retain that report as failed;
+the separate direct runtime diagnostic confirms the loader failure, and the
+replacement changes PATH to the pinned Node24 without changing any test budget.
+Independent adversarial review found no blocking or major issue.
+
+This follow-up changes only the Python unit test and documentation. Keep the
+6b44841b application/backend/native checkout frozen for actual builds and tests;
+record complete runtime-input equality separately. Native receipts and case
+counts retain their actual source revision. No native credit transfers to this
+follow-up and no store archive is established by a Simulator build. All named
+evidence paths are under
+`/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.

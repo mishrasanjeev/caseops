@@ -5343,3 +5343,17 @@ two actual public fixture contract replays pass, including eight negative guards
 Independent review found no blocking or major issue. Frozen gates and fresh full
 native acceptance remain open. See
 [dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--v1-member-authentication-and-core-seed-boundaries).
+
+
+## 2026-11-14 — Gateway CI observations race handler completion
+
+J20/M22 / US-MOB-01/02/08 remains Partially implemented / Partially fixed /
+NO-GO. Hosted source6b44841b failed an unchanged traffic-class assertion after
+reading the response before the ordinary gateway handler's final journal entry.
+Two deterministic real-socket regressions reproduce the race and missing finite
+completion timeout. The test now observes exact owned-handler completion within
+the existing deadline and preserves payloads, markers, route checks and single
+HTTP dispatch. The complete pinned-runtime module passes121/121; original CI,
+red regressions and the ambient-Node failed run remain retained. Production
+code and native execution inputs remain frozen separately. See
+[dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--complete-owned-gateway-handler-observation-in-ci-tests).
