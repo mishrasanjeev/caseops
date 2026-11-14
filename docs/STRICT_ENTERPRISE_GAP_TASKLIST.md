@@ -5424,3 +5424,14 @@ caps, unchanged30-minute acceptance deadline, fail-closed hashes/order and
 bounded cleanup. [Dated proof and exact remaining gates](mobile/NATIVE_PAGINATION_EVIDENCE_2026-11-14.md)
 retain the failed full Android run and all preparatory diagnostics separately.
 Fresh candidate builds and complete independent83-case inventories remain due.
+
+## 2026-11-14 — J20/M22 per-entry Sources ownership
+
+**Partially implemented / Partially fixed / NO-GO.** Replace the single
+company/type cursor host with independently keyed navigation-instance hosts
+across retained tab stacks. A synchronous entry ID prevents same-index batched
+replacement from adopting an old cursor. Actual app Sources JSX source tests
+reproduce and cover nested/tab/replacement ownership, inactive-reader disposal,
+late results and exact fresh authorization. See [dated remaining native gates](mobile/NATIVE_SOURCE_LIST_OWNERSHIP_2026-11-14.md).
+No old build or native case credit transfers; both platforms still require the
+final frozen source, actual artifacts and complete83-case native inventories.

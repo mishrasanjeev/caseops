@@ -20,7 +20,7 @@ import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1V
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
 import { pendingV1ProducerPlan, requireV1ProducerPlan, produceV1Dataset, resolveV1ResponseReferences, produceV1Inbox, pendingV1InboxPlan } from './v1-workflows-fixture.mjs';
 import { pendingV1ViewerPlan, produceV1Viewer } from './v1-workflows-viewer.mjs';
-import { selector } from './native-ui.mjs';
+import { selector, dispatchNativeClick } from './native-ui.mjs';
 import { pendingV1Request } from '../../../scripts/mobile/prepare-v1-fixture.mjs';
 import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from '../../../scripts/mobile/run-v1-workflows.mjs';
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
@@ -1736,4 +1736,29 @@ test('V1 evidence poisons serialization failure without reading an arbitrary thr
   assert.throws(() => journal.write({ get type() { throw thrown; } }), /V1_EVIDENCE_WRITE_FAILED/);
   assert.equal(reads, 0); assert.throws(() => journal.write({ type: 'safe' }), /V1_EVIDENCE_WRITE_FAILED/);
   assert.equal(journal.close().status, 'incomplete'); assert.equal(reads, 0);
+});
+
+test('V1 witness row preserves one ID-bound find event and budget charge across polling and positioning', async () => {
+  const value = positioningDouble();
+  try {
+    const fields = ['Exact title', 'Exact parent', 'Exact metadata'], events = [], clicks = [];
+    const element = { elementId: 'row', isDisplayed: async () => true, getAttribute: async () => 'event-synthetic',
+      $$: async query => value.moves === 0 ? [] : fields.filter(text => query === selector('android', 'text', text)).map(text => ({ isDisplayed: async () => true, getText: async () => text })) };
+    const budget = createV1CaseBudget(); value.c.budget = budget;
+    value.c.record = event => { budget.control(); events.push(event); };
+    value.c.driver.$$ = async query => query === selector('android', 'id', 'event-synthetic') ? [element] : [];
+    value.c.driver.getElementRect = async () => ({ x: 0, y: value.moves ? 300 : 700, width: 500, height: 100 });
+    value.c.driver.elementClick = async id => clicks.push(id);
+    const resolved = await row(value.c, 'event-synthetic', fields);
+    assert.equal(resolved, element); assert.equal(value.moves, 1); assert.deepEqual(clicks, []);
+    assert.deepEqual(events, [{ type: 'native_ui_action', action: 'find', controlId: 'event-synthetic' }, { type: 'native_ui_action', action: 'swipe' }]);
+    assert.equal(budget.counts.controls, 3); // one find, explicit gesture admission, recorded swipe
+    await dispatchNativeClick(value.c, resolved, 'id', 'event-synthetic');
+    assert.deepEqual(clicks, ['row']); assert.equal(budget.counts.controls, 4);
+    assert.deepEqual(events.at(-1), { type: 'native_ui_action', action: 'click', controlId: 'event-synthetic' });
+    let lookups = 0; const exhausted = createV1CaseBudget();
+    for (let i = 0; i < V1_BUDGETS.maxControlsPerCase; i++) exhausted.control();
+    await assert.rejects(row({ ...value.c, record: () => exhausted.control(), driver: { $$: async () => { lookups++; return []; } } }, 'event-synthetic', fields), /V1_NATIVE_ACTION_BOUND/);
+    assert.equal(lookups, 0);
+  } finally { value.restore(); }
 });

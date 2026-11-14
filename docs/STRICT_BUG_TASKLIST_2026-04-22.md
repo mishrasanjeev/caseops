@@ -6678,3 +6678,17 @@ with zero candidate acceptance credit. See [scope, budgets, evidence and remaini
 verification](mobile/NATIVE_PAGINATION_EVIDENCE_2026-11-14.md). Fresh candidate
 builds and all83 cases per platform remain required; this entry does not close
 the native release gate.
+
+## 2026-11-14 — Sources cursor belongs to its navigation instance
+
+**Partially fixed / NO-GO.** The adjacent audit after2a053086 identified cursor
+aliasing across nested Sources entries, tabs and a same-index pop/push in one
+commit. The expanded harness executes the actual app JSX mapping: all3new
+journeys reproduced the wrong cursor before repair. Allocate a fresh explicit
+entry instance before navigation and retain one cursor-only host per entry
+across all tab stacks, activating only the exact current route object. Readers
+and inactive callbacks remain retired; previous results never transfer. Preserve
+[the failed source reproduction and exact follow-up scope](mobile/NATIVE_SOURCE_LIST_OWNERSHIP_2026-11-14.md).
+The preceding Android APK build/postflight passes remain historical source
+proof, with zero acceptance credit for this follow-up. Fresh gates/builds and
+complete independent83-case native suites remain required.

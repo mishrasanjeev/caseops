@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { openMatter, traffic, delta, readOnlyTraffic } from './journeys.mjs';
-import { home, find, findQuery, visible, selector, dispatchNativeClick, input, read, expectText, swipe, androidBehindTabBar } from './native-ui.mjs';
+import { home, find, findQuery, visible, selector, dispatchNativeClick, input, read, expectText, swipe, androidBehindTabBar, nativeAction } from './native-ui.mjs';
 import { readV1Reference, validateV1Fixture, validateV1MutationEvidence, v1Identity, v1Version,
   V1_CONTROL_CAPABILITIES, createV1CaseBudget, v1Hash } from './v1-workflows-contract.mjs';
 import { validateV1InboxMutationEvidence } from './v1-workflows-contract.mjs';
@@ -183,6 +183,7 @@ export async function segment(c, group, label) {
   const recipe = observed.segments[group]?.[label];
   assert.ok(recipe && recipe.label === label && recipe.group === group, 'EXACT_OBSERVED_SEGMENT_REQUIRED');
   assert.ok(typeof recipe.query === 'string' && recipe.query.startsWith(c.platform === 'ios' ? '-ios predicate string:' : 'android='), 'TYPED_OBSERVED_SEGMENT_REQUIRED');
+  if (recipe.scopeQuery) nativeAction(c, 'find');
   const element = await positionV1Visible(c, async check => {
     const scope = recipe.scopeQuery ? await visible(c.driver, recipe.scopeQuery) : c.driver;
     check();
@@ -222,6 +223,7 @@ export async function selectedSegment(c, group, label) {
   assert.equal(String(selected), recipe.selectedValue, 'RETAINED_SEGMENT_SELECTION_REQUIRED');
 }
 export async function row(c, id, fields) {
+  nativeAction(c, 'find', 'id', id);
   return positionV1Visible(c, async check => {
     const element = await visible(c.driver, selector(c.platform, 'id', id));
     check();

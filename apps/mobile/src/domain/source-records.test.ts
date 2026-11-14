@@ -1,3 +1,4 @@
+import { sourceListEntries } from "./source-navigation.ts";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { test } from "node:test";
@@ -957,18 +958,17 @@ test("Calendar source callback composes into the originating tab stack and gener
   );
   assert.equal(attrs.kind, "{sourceKind}");
   assert.equal(attrs.onKindChange, "{setSourceKind}");
-  assert.equal(attrs.active, '{route.type === "source-list"}');
-  assert.equal(attrs.key, "{`${identity.company.id}:${sourceKind}`}");
-  assert.ok(ts.isParenthesizedExpression(list.parent));
-  const retained = list.parent.parent;
-  assert.ok(ts.isConditionalExpression(retained));
-  assert.equal(
-    retained.condition.getText(file),
-    'stack.some((entry) => entry.type === "source-list")',
+  assert.equal(attrs.active, "{origin === tab && entry === route}");
+  assert.equal(attrs.key, "{key}");
+  let mapping: ts.Node = list;
+  while (!ts.isJsxExpression(mapping)) mapping = mapping.parent;
+  assert.match(
+    mapping.getText(file),
+    /sourceListEntries\(stacks, identity\.company\.id, sourceKind\)/,
   );
   assert.ok(
     list.pos < calendar.pos,
-    "Sources must occupy the stable sibling before route-specific screens",
+    "Sources instances precede route-specific screens in one stable sibling slot",
   );
   const screen = readFileSync(
     new URL("../application/screens/SourceRecordsScreen.tsx", import.meta.url),
@@ -996,6 +996,19 @@ function sourceListHarness(respond: (path: string) => unknown) {
   let current: Instance;
   let kind: "contract" | "ip_docket" = "contract";
   let active = true;
+  type HarnessRoute = {
+    type: string;
+    instance?: number;
+    [key: string]: unknown;
+  };
+  const stacks: Record<string, HarnessRoute[]> = {
+    today: [{ type: "home" }, { type: "source-list", instance: 1 }],
+    matters: [{ type: "home" }],
+    calendar: [{ type: "home" }],
+    work: [{ type: "home" }],
+  };
+  let tab = "today",
+    sequence = 1;
   let nodes: Node[] = [];
   let visible: string[] = [];
   let seen = new Set<string>();
@@ -1125,7 +1138,9 @@ function sourceListHarness(respond: (path: string) => unknown) {
   );
   function visit(value: unknown, path: string) {
     if (Array.isArray(value))
-      value.forEach((item, index) => visit(item, path + "." + index));
+      value.forEach((item, index) =>
+        visit(item, path + "." + (item?.key ?? index)),
+      );
     else if (typeof value === "string" || typeof value === "number")
       visible.push(String(value));
     else if (value && typeof value === "object") {
@@ -1151,28 +1166,86 @@ function sourceListHarness(respond: (path: string) => unknown) {
     for (const value of instance.hooks)
       (value as Effect | null | undefined)?.cleanup?.();
   };
+  // Execute the actual app's Sources JSX fragment. This covers its ownership
+  // keys and activation topology as well as the real screen/resource hooks.
+  const appFile = ts.createSourceFile(
+    "MobileApplication.tsx",
+    readFileSync(
+      new URL("../application/MobileApplication.tsx", import.meta.url),
+      "utf8",
+    ),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let sourceNode: ts.Node | undefined;
+  const findSource = (node: ts.Node) => {
+    if (
+      ts.isJsxSelfClosingElement(node) &&
+      node.tagName.getText(appFile) === "SourceRecordsScreen"
+    )
+      sourceNode = node;
+    ts.forEachChild(node, findSource);
+  };
+  findSource(appFile);
+  assert.ok(sourceNode);
+  while (!ts.isJsxExpression(sourceNode)) {
+    sourceNode = sourceNode.parent;
+    assert.ok(sourceNode);
+  }
+  const expression = sourceNode.expression;
+  assert.ok(expression);
+  const fragment = ts.transpileModule(
+    `export function render({SourceRecordsScreen,stacks,stack,route,tab,identity,sourceKind,sources,setSourceKind,push,sourceListEntries}:any){return (${expression.getText(appFile)});}`,
+    {
+      fileName: "fragment.tsx",
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+        jsx: ts.JsxEmit.ReactJSX,
+      },
+    },
+  ).outputText;
+  const compiled = { exports: {} as { render?: (value: unknown) => unknown } };
+  new Function("require", "module", "exports", fragment)(
+    (name: string) => {
+      assert.equal(name, "react/jsx-runtime");
+      return { jsx, jsxs: jsx };
+    },
+    compiled,
+    compiled.exports,
+  );
+  assert.ok(compiled.exports.render);
   function render() {
     scheduled = false;
     nodes = [];
     visible = [];
     seen = new Set();
+    const stack = stacks[tab];
     visit(
-      jsx(
-        screen,
-        {
-          repository,
-          active,
-          kind,
-          onKindChange(value: typeof kind) {
-            kinds.push(value);
-            kind = value;
-          },
-          openSource(...args: unknown[]) {
-            opened.push(args);
-          },
+      compiled.exports.render!({
+        SourceRecordsScreen: screen,
+        stacks,
+        stack,
+        route: active ? stack.at(-1) : { type: "source" },
+        tab,
+        identity: { company: { id: company } },
+        sourceKind: kind,
+        sources: repository,
+        setSourceKind(value: typeof kind) {
+          kinds.push(value);
+          kind = value;
         },
-        `${company}:${kind}`,
-      ),
+        push(value: HarnessRoute) {
+          if (value.type === "source")
+            opened.push(
+              value.locator === undefined
+                ? [value.source]
+                : [value.source, value.locator],
+            );
+        },
+        sourceListEntries,
+      }),
       "root",
     );
     for (const [key, instance] of instances) {
@@ -1202,6 +1275,20 @@ function sourceListHarness(respond: (path: string) => unknown) {
     },
     setActive(value: boolean) {
       active = value;
+    },
+    pushAccount() {
+      stacks[tab].push({ type: "account" });
+    },
+    pushSources() {
+      stacks[tab].push({ type: "source-list", instance: ++sequence });
+    },
+    popRoute() {
+      assert.ok(stacks[tab].length > 1);
+      stacks[tab].pop();
+    },
+    switchTab(value: string) {
+      assert.ok(stacks[value]);
+      tab = value;
     },
     scheduled: () => scheduled,
     text: () => visible.join(" "),
@@ -1531,4 +1618,234 @@ test("Sources kind changes and pop/reopen discard the retained page history", as
   app.unmount();
   await app.settle();
   assert.match(app.text(), /Page +1/);
+});
+
+test("actual app gives a nested Sources entry a fresh cursor and restores the older list on Back", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  const retired = app.control("source-next-page");
+  app.pushAccount();
+  app.render();
+  assert.equal(app.text(), "");
+  const before = app.calls.length;
+  retired();
+  app.render();
+  assert.equal(app.calls.length, before);
+  app.pushSources();
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  app.popRoute();
+  app.render();
+  app.popRoute();
+  app.render();
+  assert.equal(app.has("source-row-contract-contract-2"), false);
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => readSourceCursor(path)),
+    [null, "2", null, "2"],
+  );
+});
+test("actual app keeps independent Sources cursors across tabs without inactive reader requests", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  app.switchTab("matters");
+  app.pushSources();
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  app.control("source-next-page")();
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  assert.match(app.text(), /Page +3/);
+  const old = app.control("source-first-page");
+  app.switchTab("today");
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+  const reads = app.calls.length;
+  old();
+  app.render();
+  assert.equal(app.calls.length, reads);
+  app.switchTab("matters");
+  await app.settle();
+  assert.match(app.text(), /Page +3/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => readSourceCursor(path)),
+    [null, "2", null, "2", "3", "2", "3"],
+  );
+});
+test("actual app replaces a popped Sources entry at the same stack index within one commit", async (t) => {
+  const app = sourceListHarness(numberedContractPage);
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  const retired = app.control("source-first-page");
+  app.popRoute();
+  app.pushSources();
+  app.render();
+  retired();
+  assert.equal(app.has("source-row-contract-contract-2"), false);
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  assert.deepEqual(
+    app.calls.map(({ path }) => readSourceCursor(path)),
+    [null, "2", null],
+  );
+});
+
+test("Sources navigation descriptors bind each exact instance, company, kind and originating tab", () => {
+  const a = { type: "source-list", instance: 1 },
+    b = { type: "source-list", instance: 2 },
+    c = { type: "source-list", instance: 3 };
+  const stacks = {
+    today: [{ type: "home" }, a, { type: "account" }, b],
+    matters: [{ type: "home" }, c],
+  };
+  const entries = sourceListEntries(stacks, "company-a", "contract");
+  assert.deepEqual(
+    entries.map((x) => [x.entry, x.origin]),
+    [
+      [a, "today"],
+      [b, "today"],
+      [c, "matters"],
+    ],
+  );
+  assert.equal(new Set(entries.map((x) => x.key)).size, 3);
+  for (const [company, kind] of [
+    ["company-b", "contract"],
+    ["company-a", "ip_docket"],
+  ])
+    assert.equal(
+      entries.some((x) =>
+        sourceListEntries(stacks, company, kind).some((y) => x.key === y.key),
+      ),
+      false,
+    );
+  for (const instance of [
+    undefined,
+    0,
+    -1,
+    1.5,
+    Infinity,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])
+    assert.throws(() =>
+      sourceListEntries(
+        { today: [{ type: "source-list", instance }] },
+        "company-a",
+        "contract",
+      ),
+    );
+  assert.throws(() =>
+    sourceListEntries({ today: [a, a] }, "company-a", "contract"),
+  );
+});
+test("actual Sources mapping never adopts a former reader's late result into a newer navigation entry", async (t) => {
+  let mode = "ready",
+    resolve: (value: unknown) => void = () => {};
+  const app = sourceListHarness((path) =>
+    mode === "pending"
+      ? new Promise((done) => {
+          resolve = done;
+        })
+      : numberedContractPage(path),
+  );
+  t.after(app.unmount);
+  await app.settle();
+  app.control("source-next-page")();
+  await app.settle();
+  mode = "pending";
+  app.control("source-reload")();
+  app.render();
+  const obsolete = app.calls.at(-1)!;
+  app.pushAccount();
+  app.render();
+  assert.equal(obsolete.signal.aborted, true);
+  mode = "ready";
+  app.pushSources();
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  resolve(numberedContractPage("/api/contracts/?cursor=2"));
+  await app.settle();
+  assert.match(app.text(), /Page +1/);
+  assert.equal(app.has("source-row-contract-contract-2"), false);
+  app.popRoute();
+  app.render();
+  app.popRoute();
+  await app.settle();
+  assert.match(app.text(), /Page +2/);
+});
+
+test("actual Sources entry callback allocates a fresh instance before each batched push", () => {
+  const file = ts.createSourceFile(
+    "MobileApplication.tsx",
+    readFileSync(
+      new URL("../application/MobileApplication.tsx", import.meta.url),
+      "utf8",
+    ),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let callback: ts.Expression | undefined;
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.name.getText(file) === "openSourceList"
+    )
+      callback = node.initializer;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(callback);
+  const instance = { current: 0 },
+    created: { type: string; instance: number }[] = [];
+  const invoke = new Function(
+    "sourceListInstance",
+    "push",
+    `return (${callback.getText(file)})`,
+  )(instance, (route: { type: string; instance: number }) =>
+    created.push(route),
+  ) as () => void;
+  invoke();
+  invoke();
+  assert.deepEqual(created, [
+    { type: "source-list", instance: 1 },
+    { type: "source-list", instance: 2 },
+  ]);
+  assert.equal(
+    new Set(
+      sourceListEntries({ today: created }, company, "contract").map(
+        (x) => x.key,
+      ),
+    ).size,
+    2,
+  );
+  const declined = { current: 0 },
+    accepted: { type: string; instance: number }[] = [];
+  let allow = false;
+  const conditional = new Function(
+    "sourceListInstance",
+    "push",
+    `return (${callback.getText(file)})`,
+  )(declined, (route: { type: string; instance: number }) => {
+    if (allow) accepted.push(route);
+  }) as () => void;
+  conditional();
+  allow = true;
+  conditional();
+  assert.equal(declined.current, 2);
+  assert.deepEqual(accepted, [{ type: "source-list", instance: 2 }]);
+  instance.current = Number.MAX_SAFE_INTEGER;
+  invoke();
+  assert.equal(created.length, 2);
+  assert.equal(instance.current, Number.MAX_SAFE_INTEGER);
 });
