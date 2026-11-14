@@ -38,9 +38,33 @@ it("keeps external sources referrer-free and makes duplicate instances accessibl
   const regions = screen.getAllByRole("region", { name: "IP India reference search" });
   const ids = regions.map((region) => within(region).getByLabelText("Search official references").id);
   expect(new Set(ids).size).toBe(2);
+  expect(new Set(summaries.map((summary) => summary.id)).size).toBe(2);
   for (const region of regions) for (const link of within(region).getAllByRole("link")) {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(link).toHaveAttribute("referrerpolicy", "no-referrer");
     expect(link).toHaveAttribute("target", "_blank");
   }
+});
+
+it("keeps return navigation internal at both ends without discarding the reference query", () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  render(<IpIndiaSources summaryId="registry-ipindia-sources" returnTo="#registry-controls" returnLabel="Return to Registry" />);
+  const summary = screen.getByText("IP India official sources and form references");
+  expect(summary).toHaveAttribute("id", "registry-ipindia-sources");
+  summary.focus();
+  expect(summary).toHaveFocus();
+  fireEvent.click(summary);
+  fireEvent.change(screen.getByLabelText("Search official references"), { target: { value: "nationality" } });
+  const links = screen.getAllByRole("link", { name: "Return to Registry" });
+  expect(links).toHaveLength(2);
+  for (const link of links) {
+    expect(link).toHaveAttribute("href", "#registry-controls");
+    expect(link).not.toHaveAttribute("target");
+    expect(link).not.toHaveAttribute("referrerpolicy");
+    fireEvent.click(link);
+  }
+  expect(screen.getByLabelText("Search official references")).toHaveValue("nationality");
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 7 references");
+  expect(fetch).not.toHaveBeenCalled();
 });

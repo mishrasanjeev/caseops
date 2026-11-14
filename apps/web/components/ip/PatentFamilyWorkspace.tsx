@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, FileText, LockKeyhole, Pencil, Plus, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, FileText, LockKeyhole, Pencil, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -49,13 +49,16 @@ export function PatentFamilyIndex() {
   if (!canRead) return <p role="alert">Patent records are not available with your current permissions.</p>;
   return <div className="flex min-w-0 flex-col gap-5">
     <Link href="/app/ip" className="inline-flex w-fit items-center gap-2 text-sm"><ArrowLeft size={16} />IP workspace</Link>
-    <PageHeader title="Patent families" actions={canWrite && !creating
-      ? <Button onClick={() => setCreating(true)}><Plus size={16} />New disclosure</Button> : null} />
-    <IpIndiaSources />
+    <PageHeader title="Patent families" actions={<>
+      <a href="#patent-ipindia-sources"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"
+        aria-label="IP India official references" title="IP India official references"><BookOpen className="h-4 w-4" aria-hidden /></a>
+      {canWrite && !creating ? <Button onClick={() => setCreating(true)}><Plus size={16} />New disclosure</Button> : null}
+    </>} />
     {creating && <FamilyForm onCancel={() => setCreating(false)} onSaved={(family) => {
       router.push(`/app/ip/patents/${family.id}`);
     }} />}
-    <form className="flex min-w-0 flex-wrap items-end gap-2" onSubmit={(event) => {
+    <form id="patent-family-controls" tabIndex={-1} className="flex min-w-0 scroll-mt-24 flex-wrap items-end gap-2" onSubmit={(event) => {
       event.preventDefault(); setQuery(search.trim()); setCursor(undefined);
     }}>
       <div className="min-w-0 flex-1 basis-48"><Label htmlFor="patent-search">Family title</Label>
@@ -83,6 +86,7 @@ export function PatentFamilyIndex() {
           <Button variant="ghost" disabled={!families.data.next_cursor} onClick={() => setCursor(families.data.next_cursor ?? undefined)}>Next page<ArrowRight size={16} /></Button>
         </div>
       </>}
+    <IpIndiaSources summaryId="patent-ipindia-sources" returnTo="#patent-family-controls" returnLabel="Return to Patent families" />
   </div>;
 }
 

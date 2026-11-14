@@ -197,6 +197,17 @@ test("B4-ADJ-12 a registry identity outside the docket or of the wrong kind is r
     await registryRefusals(rt, request, target);
     const kind = await registryPicker(page, rt, target);
     await expectOnScreen(kind, "The identifier type is on screen beside its record");
+    for (const width of [639, 640, 641, 767, 768, 769, 1279, 1280, 1281, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await kind.scrollIntoViewIfNeeded();
+      await expectOnScreen(kind, `The identifier type remains usable at ${width}px`);
+      const box = await kind.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThan(100);
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+      await expectNoPageOverflow(page);
+    }
     await markPositive(info, "b4-adj-12-registry-contract", { local: rt.local, docketId: target.docketId });
   } finally {
     await rt.release();

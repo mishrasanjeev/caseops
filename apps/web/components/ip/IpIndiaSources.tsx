@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ArrowUp, ExternalLink } from "lucide-react";
 import { useId, useState } from "react";
 
 import { Input } from "@/components/ui/Input";
@@ -9,14 +9,25 @@ import { IPINDIA_REVIEWED_ON, IPINDIA_SOURCES, searchIpIndiaSources, type IpIndi
 
 const kindLabel = { register: "External register", form: "Form reference", rule: "Rule reference" };
 
-export function IpIndiaSources() {
+type IpIndiaSourcesProps = { summaryId?: string } & (
+  | { returnTo: `#${string}`; returnLabel: string }
+  | { returnTo?: never; returnLabel?: never }
+);
+
+export function IpIndiaSources({ summaryId, returnTo, returnLabel }: IpIndiaSourcesProps = {}) {
   const id = useId();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | IpIndiaSourceKind>("all");
   const rows = searchIpIndiaSources(query, kind);
+  const returnLink = returnTo ? (
+    <a href={returnTo} className="inline-flex items-center gap-2 text-sm font-medium text-brand-700 underline">
+      <ArrowUp className="h-4 w-4" aria-hidden />{returnLabel}
+    </a>
+  ) : null;
   return <details className="min-w-0 border-y border-line py-4" data-testid="ipindia-sources">
-    <summary className="cursor-pointer font-semibold">IP India official sources and form references</summary>
+    <summary id={summaryId ?? `${id}-summary`} className="scroll-mt-24 cursor-pointer font-semibold">IP India official sources and form references</summary>
     <section aria-label="IP India reference search" className="mt-4 min-w-0 space-y-4">
+      {returnLink}
       <p className="text-sm text-mute">India only. Reviewed {IPINDIA_REVIEWED_ON}. This search covers {IPINDIA_SOURCES.length} curated references, not live patent, trademark or design records. Registry automation remains separate and is not enabled here.</p>
       <div className="flex min-w-0 flex-wrap gap-3">
         <div className="min-w-0 flex-1 basis-56"><Label htmlFor={`${id}-query`}>Search official references</Label>
@@ -42,6 +53,7 @@ export function IpIndiaSources() {
           <a className="text-xs underline" href={row.discoveredFrom} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Official source index</a>
         </li>)}
       </ul>}
+      {returnLink}
     </section>
   </details>;
 }

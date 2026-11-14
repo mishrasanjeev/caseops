@@ -1,5 +1,32 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Secondary IP References Regressed Primary Desktop Visibility
+
+PR621 candidatecb2fb4b1's hosted desktop job132473139959 completed727cases:
+705P/20explicitS/2F/0retry. The two full native errorcontexts establish Registry
+layout regressions: BUG012's Madrid pointer has viewport ratio0.1875 after the
+notice is scrolled, and B4ADJ12's IdentifierType has ratio0 after selecting its
+legal record. Phone passes do not disprove this: that adjacent phone journey
+explicitly scrolls its control. This is our placement/integration miss, not a
+provider outage, authorization defect, collection615 failure or download613.
+
+The new optional reference panel was placed above Docket scope, adding height
+before the established operational controls. Move it below the entire Registry
+workflow and below the patent index's primary content; retain compact header
+access, internal return navigation, unsaved search/selection state, source
+content/format/hash, referrer protection and read guards. Preserve the original
+desktop viewport assertions, replay both complete dated files/phone counterparts,
+and add boundary-width/navigation coverage. Test official external links and
+internal returns as distinct contracts. No Madrid notice rewrite or viewport
+threshold/timeout relaxation is the repair.
+
+Parent preserved completed519PG cases and the incomplete next group, stopped
+only its exact-owned full15 tree/containers, retained all evidence/data and
+recorded full15 as INCOMPLETE. New source must receive fresh built browser
+acceptance including the original failing files, complete CI/fullDocker and
+production replay. Source edits or the earlier focused20/phone62P do not close
+these failures or certify a production release. Verification is pending.
+
 ## November14: Native Harness Found A Missing Shared Builder Input
 
 At b3af, hosted Mobile source43587483399/job132424989570 retains1569native

@@ -1,5 +1,17 @@
 # CaseOps agent instructions
 
+- Optional reference content must not push established operational controls out
+  of the desktop viewport. Keep secondary sources after the primary workflow,
+  with same-page access and return navigation that preserves unsaved state.
+  Replay the original positive desktop and phone journeys, including every
+  link in a notice, and test widths around the actual layout breakpoints.
+  A passing phone test that scrolls its control cannot certify an unscrolled
+  desktop contract. Do not hide that regression by weakening viewport checks.
+  Fragment navigation must also transfer keyboard focus to a focusable target;
+  a router's hash scroll alone is not a keyboard handoff. Keep review evidence
+  outside the source worktree using an absolute destination, and preserve any
+  untracked-sidecar source-provenance deviation instead of erasing it.
+
 - SQL test observers must bound their own work without weakening the measured
   query contract. Shared CTE objects form a DAG, not a tree: retain and visit
   each object identity once, charge raw edges before deduplication, and bound
