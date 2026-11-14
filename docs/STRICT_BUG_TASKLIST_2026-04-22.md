@@ -6299,3 +6299,28 @@ The complete tooling inventory passed422 unique cases with zero failures/errors/
 Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
 
 These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.
+# PR621 November 14 CI Follow-Up: Still Not Production Acceptance
+
+Exact candidate291c5363f0fe30f16274bbb0c6f56674bb6c3d5b completed a fresh
+build and all20 intended local Playwright workflows:20P/0F/0S/0retry,
+10desktop/10phone. Evidence: outputs/bugs5-20261111/built-preflight-26.
+This is the explicitly bounded UI component, not the full Docker gate,
+Windows615 cold inventory acceptance, or production certification.
+
+Its hosted CI43588886529 failed before the web coverage gate because the
+pinned Playwright binary registry rejects ubuntu26.04-x64. The web job is
+now pinned to ubuntu-24.04, matching the existing E2E jobs; a regression
+asserts this runner and the unchanged15-minute job/coverage contract. No
+browser-version override, dependency update, timeout or coverage waiver.
+The shared source harness43588886526 failed one assertion because the new
+trusted browser-install command makes201 Node commands, not200. Every
+command must still carry all nine trust outputs and conditional admission.
+The semantic API job also correctly rejected the unreviewed builder-map
+change. The map now records the finite test-only helper input and synthetic
+evidence boundary; canonical generated map/projection are regenerated.
+Failed logs remain under ci621-291c-failures-01, not erased by later success.
+
+All replacement hosted gates, unchanged full Docker inventory, protected
+merge, guarded exact-main deployment and complete exact-production replay
+remain required. Production still independently observed at34ce; no PR621
+fix is claimed deployed from these local checks.

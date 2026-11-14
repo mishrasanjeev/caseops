@@ -19,6 +19,7 @@ def test_web_native_browser_dependency_precedes_unchanged_coverage_gate() -> Non
         "${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}"
     )
     assert workflow["jobs"]["web"]["timeout-minutes"] == 15
+    assert workflow["jobs"]["web"]["runs-on"] == "ubuntu-24.04"
 
 
 def test_web_worker_failure_retention_is_exact_synthetic_json_only() -> None:

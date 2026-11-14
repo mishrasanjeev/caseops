@@ -468,7 +468,9 @@ jobs:
 
   web:
     name: Web (typecheck + vitest + build)
-    runs-on: ubuntu-latest
+    # Match the existing browser jobs: the locked Playwright release does not
+    # provide a Chromium download for the newly selected Ubuntu 26.04 image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

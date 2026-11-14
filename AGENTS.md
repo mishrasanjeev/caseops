@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Adding a real browser worker to a unit suite also adds its browser/runtime
+  provisioning contract. Pin the job to an OS supported by the locked browser
+  registry, propagate the existing trust outputs to the install, reconcile
+  exact command inventories, and retain failed worker evidence. A floating
+  runner or green local browser cache cannot prove hosted provisioning.
+
 - A new test helper imported transitively by a colocated web unit can become a
   builder input even when production code never imports it. Reconcile the exact
   Docker COPY closure, both finite ignore allowlists, native upload discovery,
