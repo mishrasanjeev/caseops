@@ -5381,3 +5381,19 @@ HTTP dispatch. The complete pinned-runtime module passes121/121; original CI,
 red regressions and the ambient-Node failed run remain retained. Production
 code and native execution inputs remain frozen separately. See
 [dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--complete-owned-gateway-handler-observation-in-ci-tests).
+
+
+## 2026-11-14 — V1 grant fixture server-clock validation
+
+J20/M22 / US-MOB-01/02/08 remains Partially implemented / Inconclusive / NO-GO.
+The source6721039b producer stopped after design access apply200 without its
+exact exception. A read-only actual-panel replay proves its valid grant can be
+rejected against the Mac clock, but does not establish the entire original
+stop's root cause. Bind each grant check to its own canonical received server
+Date, preserve all lineage/expiry/deadline guards and record only finite public
+failure codes. Complete changed V1 coverage passes202/202 with actual marked
+TLS, independent clocks, exact boundaries, malformed-header/no-replay and
+secret/getter guards. Independent review found no blocking or major issue.
+Fresh full gates and native acceptance remain open; both actual source6721039b
+builds passed, but formal counts remain0/83 per platform. See
+[dated evidence and limits](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--bind-v1-access-timestamps-to-the-actual-server-response-clock).

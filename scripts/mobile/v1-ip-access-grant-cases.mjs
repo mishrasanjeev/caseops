@@ -22,7 +22,7 @@ export function ipAccessTestFixture(family = 'patent', options = {}) {
   const ack = (requestId, method, route, status, value, options = {}) => ({
     actor: { companyId, membershipId: options.member ? member : owner },
     request: { method, route, ...options.request },
-    response: { status, releaseSha: sourceSha, requestId, value },
+    response: { status, releaseSha: sourceSha, requestId, value, serverDate: new Date(time).toUTCString() },
   });
   const grant = (id, subject_id, subject_label, reason) => ({ id, subject_type: 'membership', subject_id, subject_label,
     access_level: 'member', reason, effective_from: time, expires_at: null, revoked_at: null,
@@ -221,3 +221,47 @@ test('the existing base gate refuses a reconstructed pair after an uncertain dis
   assert.equal(f.calls.length, 2);
   assert.ok(!JSON.stringify(events).includes(previewToken));
 });
+
+for (const family of ['patent', 'design']) {
+  test(`granted ${family} access uses each response server second when the client clock is behind`, async () => {
+    const f = fixture(family), epoch = Date.parse(time);
+    Object.assign(f.apply.response.value.panel.grants[0], { effective_from: new Date(epoch + 15).toISOString(), created_at: new Date(epoch + 16).toISOString() });
+    const proof = await f.ready({ now: () => epoch - 20 })(f.respond);
+    assert.equal(proof.acceptMemberSummary(f.memberSummary).membershipId, f.scope.memberMembershipId);
+    assert.equal(f.calls.length, 2); assert.ok(f.buffers.every(b => b.every(x => x === 0)));
+  });
+  test(`${family} grant timestamp second boundaries use the panel and apply observations independently`, async () => {
+    const epoch = Date.parse(time);
+    for (const which of ['owner', 'member']) for (const offset of [999, 1000]) {
+      const f = fixture(family), row = which === 'owner' ? f.parents.panel.response.value.grants[0] : f.apply.response.value.panel.grants[0];
+      Object.assign(row, { effective_from: new Date(epoch + offset).toISOString(), created_at: new Date(epoch + offset).toISOString() });
+      if (which === 'owner') f.apply.response.value.panel.grants[1] = structuredClone(row);
+      if (which === 'owner' && offset === 1000) { assert.throws(() => f.ready({ now: () => epoch + 5000 }), /GRANT_NOT_ACTIVE/); assert.equal(f.calls.length, 0); continue; }
+      const run = f.ready({ now: () => epoch + 5000 });
+      if (offset === 999) { const result = await run(f.respond); result.acceptMemberSummary(f.memberSummary); assert.equal(f.calls.length, 2); }
+      else { await assert.rejects(run(f.respond), /GRANT_NOT_ACTIVE/); assert.equal(f.calls.length, which === 'owner' ? 0 : 2); }
+    }
+    const f = fixture(family);
+    f.apply.response.serverDate = new Date(epoch + 1000).toUTCString();
+    Object.assign(f.apply.response.value.panel.grants[0], { effective_from: new Date(epoch + 1000).toISOString(), created_at: new Date(epoch + 1001).toISOString() });
+    const granted = await f.ready()(f.respond); granted.acceptMemberSummary(f.memberSummary); assert.equal(f.calls.length, 2);
+  });
+  test(`${family} access rejects missing or malformed corresponding response time without host fallback`, async () => {
+    for (const which of ['panel', 'apply']) for (const date of [undefined, 'not-a-date', 'Sun, 08 Nov 2026 12:00:00 GMT trailing', 'Mon, 08 Nov 2026 12:00:00 GMT']) {
+      const f = fixture(family), target = which === 'panel' ? f.parents.panel.response : f.apply.response;
+      if (date === undefined) delete target.serverDate; else target.serverDate = date;
+      if (which === 'panel') { assert.throws(f.ready, /SERVER_DATE/); assert.equal(f.calls.length, 0); }
+      else { await assert.rejects(f.ready()(f.respond), /SERVER_DATE/); assert.equal(f.calls.length, 2); }
+    }
+  });
+  test(`${family} server-clock grant validation still rejects expiry revocation and invalid timestamps`, async () => {
+    for (const which of ['owner', 'member']) for (const change of [
+      { expires_at: time }, { revoked_at: time }, { revoked_by_membership_id: id(999) },
+      { effective_from: 'invalid' }, { created_at: 'invalid' },
+    ]) {
+      const f = fixture(family), row = which === 'owner' ? f.parents.panel.response.value.grants[0] : f.apply.response.value.panel.grants[0]; Object.assign(row, change);
+      if (which === 'owner') { assert.throws(f.ready, /GRANT_NOT_ACTIVE/); assert.equal(f.calls.length, 0); }
+      else { await assert.rejects(f.ready()(f.respond), /GRANT_NOT_ACTIVE/); assert.equal(f.calls.length, 2); }
+    }
+  });
+}

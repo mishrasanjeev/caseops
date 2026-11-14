@@ -16,6 +16,16 @@ import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { produceV1CalendarCatalogue } from './v1-calendar-catalogue.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
+const PUBLIC_FAILURE_CODES = new Set(['PRODUCER_SERVER_DATE_REQUIRED', 'V1_IP_ACL_GRANT_NOT_ACTIVE',
+  'V1_IP_ACL_OWNER_GRANT_CHANGED', 'V1_IP_ACL_APPLY_SHAPE', 'V1_IP_ACL_APPLY_EFFECT',
+  'V1_IP_ACL_PANEL_SHAPE', 'V1_IP_ACL_PANEL_LINEAGE', 'V1_IP_ACL_UNEXPECTED_PANEL_ACCESS',
+  'V1_IP_ACL_GRANT_LINEAGE', 'V1_IP_ACL_GRANT_SHAPE', 'V1_IP_ACL_DISTINCT_GRANT_IDENTITY',
+  'V1_PRODUCER_TOTAL_DEADLINE', 'V1_WHOLE_FIXTURE_DEADLINE', 'FIXTURE_STAGE_HTTP_BOUND', 'FIXTURE_STAGE_POST_BOUND']);
+export function v1ProducerFailureCode(error) {
+  const message = error instanceof Error ? Object.getOwnPropertyDescriptor(error, 'message')?.value : undefined;
+  return typeof message === 'string' && PUBLIC_FAILURE_CODES.has(message) ? message : 'V1_FIXTURE_PRODUCTION_INCOMPLETE';
+}
+
 export const V1_PRODUCER_INPUTS = Object.freeze(['scripts/mobile/produce-v1-fixture.mjs','scripts/mobile/native-producer-private.py',
   'scripts/mobile/local-fixture.py','scripts/mobile/local-transport.py','scripts/mobile/local-v1-inbox.py','scripts/mobile/local-v1-controls.py',
   'scripts/mobile/local-gateway.py','scripts/mobile/v1-ip-access-host.mjs','scripts/mobile/v1-ip-access-grant.mjs',
@@ -195,7 +205,7 @@ export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,no
     const aggregateEvidence=store.write('aggregate.json',result);
     return {counselPrerequisiteEvidence,aggregateEvidence,producerEvidence:produced.readthrough.receiptEvidence,datasetEvidence:produced.readthrough.fixtureEvidence,
       viewerEvidence:produced.viewer.receiptEvidence,inboxEvidence:produced.inbox.receiptEvidence,nativeExecution:'not-run'};
-  } catch {store.persist({type:'v1_producer_orchestration_stopped',stage,automaticRetry:false,observed:false,completionUnverified:true});throw new Error('V1_PRODUCER_INCOMPLETE_NO_REPLAY');}
+  } catch (error) {store.persist({type:'v1_producer_orchestration_stopped',stage,automaticRetry:false,observed:false,completionUnverified:true,failureCode:v1ProducerFailureCode(error)});throw new Error('V1_PRODUCER_INCOMPLETE_NO_REPLAY');}
   finally {host?.clear();file.clear();}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

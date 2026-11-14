@@ -9,6 +9,30 @@ import { totp } from '../../apps/mobile/e2e/mfa.mjs';
 
 export const producerHash = bytes => createHash('sha256').update(bytes).digest('hex');
 export function producerTimeout(remaining,maximum=10000) { assert.ok(Number.isFinite(remaining)&&remaining>=1,'PRODUCER_DEADLINE_EXPIRED');return Math.floor(Math.min(remaining,maximum)); }
+// HTTP Date has one-second precision. These observations belong to the exact
+// TLS response, not the client's independently ticking workstation clock.
+export function producerServerDateUpperBound(value) {
+  assert.ok(typeof value === 'string' && value.length === 29
+    && /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT$/.test(value), 'PRODUCER_SERVER_DATE_REQUIRED');
+  const time = Date.parse(value);
+  assert.ok(Number.isFinite(time) && new Date(time).toUTCString() === value, 'PRODUCER_SERVER_DATE_REQUIRED');
+  return time + 1000;
+}
+export function producerServerDate(rawHeaders) {
+  assert.ok(Array.isArray(rawHeaders) && rawHeaders.length <= 256 && rawHeaders.length % 2 === 0, 'PRODUCER_SERVER_DATE_REQUIRED');
+  const dates = [];
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    assert.ok(typeof rawHeaders[index] === 'string' && typeof rawHeaders[index + 1] === 'string', 'PRODUCER_SERVER_DATE_REQUIRED');
+    if (rawHeaders[index].toLowerCase() === 'date') dates.push(rawHeaders[index + 1]);
+  }
+  assert.ok(dates.length === 1 || dates.length === 2, 'PRODUCER_SERVER_DATE_REQUIRED');
+  const times = dates.map(producerServerDateUpperBound);
+  // The canonical gateway emits its fresh Date before the upstream's possibly
+  // cached Date. Both clocks are in the same isolated VM; never select a later
+  // supplied value or fall back to the client clock.
+  assert.ok(times.every(time => Math.abs(time - times[0]) <= 1000), 'PRODUCER_SERVER_DATE_REQUIRED');
+  return dates[0];
+}
 export function readProducerReference(ref, maxBytes = 1048576) {
   assert.ok(ref && path.isAbsolute(ref.path) && path.normalize(ref.path) === ref.path, 'PRODUCER_REFERENCE_REQUIRED');
   return JSON.parse(verifiedFile(ref.path, ref.sha256, maxBytes));
@@ -77,6 +101,10 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
     const payload = accessBytes ?? (body === undefined ? undefined : Buffer.from(JSON.stringify(body))); assert.ok(!payload || payload.length <= 1048576);
     const safeHeaders = { ...headers, 'X-CaseOps-Automated-Test':'no-paid-providers', ...(!useWeb&&tokens.has(actor) ? { Authorization:'Bearer '+tokens.get(actor) } : {}),
       ...(payload ? { 'Content-Type':'application/json', 'Content-Length':String(payload.length) } : {}) };
+    const accessPath = /^\/api\/ip\/dockets\/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\/access(?:\/(?:preview|apply))?$/;
+    const bindResponseClock = !useWeb && query === undefined && url.search === '' && route === url.pathname && accessPath.test(url.pathname)
+      && ((method === 'GET' && /\/access$/.test(url.pathname))
+        || (accessBytes !== undefined && method === 'POST' && /\/access\/(?:preview|apply)$/.test(url.pathname)));
     const id = ++sequence; persist({ type:'producer_http_started', sequence:id, actor, method, route:url.pathname, automaticRetry:false, mutationUncertain:method !== 'GET' });
     try {
       const send = proof => new Promise((resolve,reject) => {
@@ -93,7 +121,8 @@ export function createProducerHttp({ apiOrigin, webOrigin, sourceSha, publicCa, 
             const bytes = Buffer.concat(chunks), value = bytes.length ? JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)) : null;
             const observedId = res.headers['x-request-id'];assert.ok((typeof observedId==='string'&&observedId.length>0&&observedId.length<=160)||(useWeb&&observedId===undefined),'PRODUCER_REQUEST_ID_REQUIRED');const requestId=observedId??null;
             const permitReceipt = res.headers['x-caseops-qa-producer-permit-consumed'];
-            settled = true; clearTimeout(timer); resolve({status:res.statusCode,value,requestId,releaseSha:sourceSha, ...(proof ? { permitReceipt } : {})});
+            const responseClock = bindResponseClock ? { serverDate: producerServerDate(res.rawHeaders) } : {};
+            settled = true; clearTimeout(timer); resolve({status:res.statusCode,value,requestId,releaseSha:sourceSha, ...responseClock, ...(proof ? { permitReceipt } : {})});
           } catch { req.destroy(); fail(); } });
         });
         timer = setTimeout(() => { req.destroy(); fail(); }, remaining); req.on('error',fail); req.end(payload);

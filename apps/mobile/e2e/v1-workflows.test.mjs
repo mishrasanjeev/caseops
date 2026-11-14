@@ -31,8 +31,8 @@ import { createPrivacyRequestsRepository } from '../src/domain/privacy-requests.
 import { once } from 'node:events';
 import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-route-file.mjs';
 import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
-import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
-import { createV1PrivateWriter, resolveProducedReferences, createV1Worker } from '../../../scripts/mobile/produce-v1-fixture.mjs';
+import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout, producerServerDate, producerServerDateUpperBound } from '../../../scripts/mobile/native-producer-host.mjs';
+import { createV1PrivateWriter, resolveProducedReferences, createV1Worker, v1ProducerFailureCode } from '../../../scripts/mobile/produce-v1-fixture.mjs';
 
 const ids = ['SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'SOURCE-04', 'SOURCE-05', 'SOURCE-06', 'SOURCE-07', 'WORK-01', 'WORK-02', 'WORK-03', 'WORK-04', 'WORK-05', 'WORK-06', 'WORK-07', 'WORK-08', 'COUNSEL-01', 'INBOX-01'];
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -1229,6 +1229,7 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     const { cache, file } = fixture(t), seen = [], events = [];
     const calendarPath = '/api/ip/dockets/' + id + '/deadlines';
     const accessPath = '/api/ip/dockets/' + id + '/access/preview';
+    const accessApplyPath = '/api/ip/dockets/' + id + '/access/apply';
     const accessReceived = [];
     const calendarReceived = [];
     const upstream = http.createServer((req, res) => {
@@ -1245,13 +1246,13 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
         });
         return;
       }
-      if (req.url === accessPath) {
+      if (req.url === accessPath || req.url === accessApplyPath) {
         const chunks = [];
         req.on('data', chunk => chunks.push(chunk));
         req.on('end', () => {
           accessReceived.push(Buffer.concat(chunks));
-          res.writeHead(200, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-private-access-ack' });
-          res.end(JSON.stringify({ preview_token: 'synthetic-private-preview-value' }));
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-Request-ID': req.url === accessPath ? 'synthetic-private-access-ack' : 'synthetic-private-apply-ack' });
+          res.end(JSON.stringify(req.url === accessPath ? { preview_token: 'synthetic-private-preview-value' } : { applied: true }));
         });
         return;
       }
@@ -1381,14 +1382,27 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
       assert.equal(++accessClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
       assert.equal(attempt.requestTarget, accessPath); assert.deepEqual(attempt.bodyBytes, accessBytes);
       return { provenance: { requestDigest: producerHash('actual-offline-panel-ack'), bodySha256: producerHash(accessBytes) },
-        acceptResponse(response) { accessAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); return response.value; } };
+        acceptResponse(response) { accessAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); assert.ok(Number.isFinite(producerServerDateUpperBound(response.serverDate))); return response.value; } };
     } };
     const privateResult = await accessClient.requestIpAccess(accessInput, accessChain);
     assert.deepEqual(privateResult.projection, { preview_token: 'synthetic-private-preview-value' });
     assert.equal(accessAcks, 1); assert.deepEqual(accessReceived, [accessBytes]);
+    const applyBytes = Buffer.from('{"action":"grant","preview_token":"synthetic-private-preview-value"}');
+    let applyClaims = 0, applyAcks = 0;
+    const applyChain = { claim(attempt) {
+      assert.equal(++applyClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, accessApplyPath); assert.deepEqual(attempt.bodyBytes, applyBytes);
+      return { provenance: { requestDigest: producerHash(privateResult.requestId), bodySha256: producerHash(applyBytes) },
+        acceptResponse(response) { applyAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/);
+          assert.ok(Number.isFinite(producerServerDateUpperBound(response.serverDate))); return response.value; } };
+    } };
+    const applyResult = await accessClient.requestIpAccess({ ...accessInput, route: accessApplyPath, bodyBytes: applyBytes }, applyChain);
+    assert.deepEqual(applyResult.projection, { applied: true }); assert.equal(applyAcks, 1);
+    assert.deepEqual(accessReceived, [accessBytes, applyBytes]);
+
     assert.ok(!JSON.stringify(events).includes('synthetic-private-preview-value') && !JSON.stringify(events).includes('synthetic-private-subject'));
     await assert.rejects(accessClient.requestCalendar({ ...accessInput, bodyBytes: undefined }, accessChain), /HTTP_INCOMPLETE_NO_REPLAY/);
-    assert.equal(accessReceived.length, 1); routeFile.verifyRestored();
+    assert.equal(accessReceived.length, 2); routeFile.verifyRestored();
 
     const memberClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
     t.after(() => memberClient.clear());
@@ -1475,5 +1489,50 @@ test('native notification actions bind exact record IDs, labels and frames and d
     fixture.v1.nativeSelectors.buildReceipt = ref('other-build'); await rejected(); fixture.v1.nativeSelectors.buildReceipt = fixture.buildReceipt;
     const count = calls.length; rejectClick = true;
     await assert.rejects(scopedAction(c, scopeId, action), /LOST_NATIVE_ACK/); assert.equal(calls.length, count + 1);
+  }
+});
+
+
+test('V1 producer server Date parser binds one or two actual canonical seconds without selecting a later value', () => {
+  const date = 'Sun, 08 Nov 2026 12:00:00 GMT', previous = 'Sun, 08 Nov 2026 11:59:59 GMT';
+  assert.equal(producerServerDate(['dAtE', date]), date);
+  assert.equal(producerServerDate(['Date', date, 'date', previous]), date);
+  assert.equal(producerServerDate(['Date', previous, 'Date', date]), previous);
+  assert.equal(producerServerDateUpperBound(date), Date.parse(date) + 1000);
+  for (const raw of [[], ['Date'], ['Date', undefined], ['Date', date, 'Date', date, 'Date', date],
+    ['Date', date, 'date', 'Sun, 08 Nov 2026 11:59:58 GMT'], ['Date', 'Mon, 08 Nov 2026 12:00:00 GMT'],
+    ['Date', date + ' trailing'], ['Date', '2026-11-08T12:00:00Z'], ['Date', date, ...Array.from({ length: 128 }, () => ['X', 'synthetic']).flat()]])
+    assert.throws(() => producerServerDate(raw), /SERVER_DATE/);
+});
+test('V1 producer captures received server Date only on an exact access panel through real marked TLS', async t => {
+  const first = 'Sun, 08 Nov 2026 12:00:00 GMT', second = 'Sun, 08 Nov 2026 11:59:59 GMT';
+  const s = await producerServer(t, (_req, res) => { res.sendDate = false; res.setHeader('Date', [first, second]); res.end('{"observed":true}'); });
+  const response = await s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access' });
+  assert.equal(response.status, 200); assert.equal(response.serverDate, first); assert.deepEqual(response.value, { observed: true });
+  for (const route of ['/api/build', '/api/ip/dockets/' + uuid(10) + '/access?diagnostic=synthetic', '/api/ip/dockets/' + uuid(10) + '/access-elsewhere/access']) {
+    const other = await s.host.request({ method: 'GET', route }); assert.equal(Object.hasOwn(other, 'serverDate'), false);
+  }
+  assert.equal(s.seen.length, 4); assert.ok(s.seen.every(x => x.headers['x-caseops-automated-test'] === 'no-paid-providers'));
+});
+test('V1 producer rejects missing malformed extra or incoherent received Date without transport replay', async t => {
+  const date = 'Sun, 08 Nov 2026 12:00:00 GMT';
+  for (const header of [undefined, 'bad-date', 'Mon, 08 Nov 2026 12:00:00 GMT', [date, date, date], [date, 'Sun, 08 Nov 2026 12:00:02 GMT']]) {
+    const s = await producerServer(t, (_req, res) => { res.sendDate = false; if (header !== undefined) res.setHeader('Date', header); res.end('{}'); });
+    await assert.rejects(s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access', timeoutMs: 1000 }), /INCOMPLETE_NO_REPLAY/);
+    await assert.rejects(s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access' }), /OUTCOME_UNCERTAIN/);
+    assert.equal(s.seen.length, 1); assert.equal(s.seen[0].headers['x-caseops-automated-test'], 'no-paid-providers');
+  }
+});
+
+test('V1 producer stopped receipts expose only finite public codes and never exception values or causes', () => {
+  const secret = 'synthetic-private-password-and-preview-token';
+  let getterReads = 0; const accessor = new Error(); Object.defineProperty(accessor, 'message', { get() { getterReads++; return secret; } });
+  assert.equal(v1ProducerFailureCode(accessor), 'V1_FIXTURE_PRODUCTION_INCOMPLETE'); assert.equal(getterReads, 0);
+  for (const message of ['PRODUCER_SERVER_DATE_REQUIRED', 'V1_IP_ACL_GRANT_NOT_ACTIVE']) {
+    const error = new Error(message, { cause: new Error(secret) }); assert.equal(v1ProducerFailureCode(error), message);
+  }
+  for (const error of [new Error(secret), new Error('V1_IP_ACL_GRANT_NOT_ACTIVE\n' + secret), new Error('V1_PRIVATE_' + secret),
+    { message: 'V1_IP_ACL_GRANT_NOT_ACTIVE', cause: secret }, 'V1_IP_ACL_GRANT_NOT_ACTIVE', null]) {
+    const code = v1ProducerFailureCode(error); assert.equal(code, 'V1_FIXTURE_PRODUCTION_INCOMPLETE'); assert.equal(code.includes(secret), false);
   }
 });

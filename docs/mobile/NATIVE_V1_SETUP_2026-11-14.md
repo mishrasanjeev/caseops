@@ -443,3 +443,55 @@ subject and101-row responses. It preserves all151 original oracle identities,
 registers exactly55 control identities plus four native-creation reservations,
 and performs no extra HTTP or mutation. Both old projections and original raw
 producer receipts remain unchanged. No V1 registration has been activated.
+
+
+## 2026-11-14 — bind V1 access timestamps to the actual server response clock
+
+J20/M22, US-MOB-01/02/08; candidate **Implemented**, original native setup
+defect verdict **Inconclusive**, full release **NO-GO**. The source6721039b
+producer stopped after the acknowledged design access apply200; its original
+receipt omitted the exact exception. Preserve all494 events and attempted
+mutations under `v1-6721039b-android-producer-01/`; no failed phase was replayed.
+An independently admitted, authenticated read of that exact owned panel found
+its valid grant timestamps about5ms later than the original Mac failure clock.
+The held, original `readGrant` predicate rejects that actual grant at the
+original host observation and accepts it later. This proves the clock-sensitive
+validator defect, but **does not establish the original stop's complete root
+cause**: the original apply body and prior assertions were not retained. Keep
+`v1-6721039b-producer-readonly-diagnostic-01/` (route not yet admitted), `...-02/`
+and its `exact-predicate-replay.json` separate. No response body, credential,
+record identity or query is exposed in public diagnostics.
+
+The native producer host now captures the first canonical received HTTP Date
+only for exact queryless access-panel GETs and typed preview/apply responses.
+It admits one header or the canonical gateway-plus-upstream pair within one
+second; missing, malformed, extra or incoherent headers fail before settling
+the response and poison the client without replay. Grant activation compares
+against the exclusive upper bound of its corresponding server response second,
+without a client-clock fallback or selecting a later header. Initial owner and
+new member grant checks use their own panel/apply observations. MFA expiry,
+revocation/expiry, full owner equality, actor and source lineage, byte
+provenance, member readback, request count and all original deadlines remain.
+
+The complete changed V1 module passes202/202, zero failures, cancellation, skip
+or todo (`native-grant-server-clock-green-04.tap`). Actual marked TLS covers
+panel and typed preview/apply capture, unrelated-route exclusion, malformed
+wire rejection and no replay. Patent/design regressions control host and server
+clocks independently and exercise999ms/1000ms boundaries and negative guards.
+The original-runner red02 report has198 cases,192pass and6fail, with zero
+cancellation/skip/todo, retained separately alongside preliminary red01. Fixed allowlisted
+stop codes improve future diagnosis without reflecting exception values or
+causes; an own message descriptor avoids invoking arbitrary getters. Independent
+adversarial review found no blocking or major issue in the five-file correction.
+Fresh complete source gates, builds and formal native execution remain due.
+Exclusive dependency installation completed with pinned Node24/npm tooling;
+the earlier outer-PATH preinstall refusal performed no installation and remains
+retained separately as `grant-response-clock-runtime-install-01/`.
+
+Both actual source6721039b Android and iOS Simulator builds passed. Android APK
+SHA `a4915a8d4cf8931e68842c6af54f501a266a1d58da15aaedd410c67e11ad8bba`
+was installed and independently checked, but setup never reached formal native
+cases. The original failed iOS precompile guard and successful compile02 are
+retained separately. Current-source formal acceptance remains0/83 per platform;
+no older source's case count transfers. All119 retained containers were preserved
+and stopped, along with this run's emulator/Appium/private VM, before rebuilding.

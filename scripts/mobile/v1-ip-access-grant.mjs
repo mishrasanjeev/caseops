@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { producerTimeout } from './native-producer-host.mjs';
+import { producerTimeout, producerServerDateUpperBound } from './native-producer-host.mjs';
 
 const creators = Object.freeze({
   patent: { route: '/api/ip/patents/families', type: 'patent_family' },
@@ -50,13 +50,13 @@ function readPanel(value, { docketId, title, matterId }, version, grantCount) {
   return value.grants;
 }
 
-function readGrant(value, subject, grantor, reason, now) {
+function readGrant(value, subject, grantor, reason, observedUpperBound) {
   fields(value, grantKeys, 'V1_IP_ACL_GRANT_SHAPE');
   assert.ok(identity(value.id) && value.subject_type === 'membership' && value.subject_id === subject
     && value.granted_by_membership_id === grantor && value.access_level === 'member'
     && label(value.subject_label) && value.reason === reason && value.record_version === 0, 'V1_IP_ACL_GRANT_LINEAGE');
   assert.ok(value.expires_at === null && value.revoked_at === null && value.revoked_by_membership_id === null
-    && timestamp(value.effective_from) <= now && timestamp(value.created_at) <= now, 'V1_IP_ACL_GRANT_NOT_ACTIVE');
+    && timestamp(value.effective_from) < observedUpperBound && timestamp(value.created_at) < observedUpperBound, 'V1_IP_ACL_GRANT_NOT_ACTIVE');
 }
 
 /**
@@ -119,7 +119,7 @@ export function createV1IpAccessGrant(scope, family, { creator, matter, link, pa
   const target = { docketId, title, matterId };
   const priorVersion = 1;
   const [prior] = readPanel(panelAck.value, target, priorVersion, 1);
-  readGrant(prior, ownerMembershipId, ownerMembershipId, initialReason, now());
+  readGrant(prior, ownerMembershipId, ownerMembershipId, initialReason, producerServerDateUpperBound(panelAck.serverDate));
   const ownerGrant = structuredClone(prior);
   const payload = { action: 'grant', expected_access_policy_version: priorVersion, subject_type: 'membership',
     subject_id: memberMembershipId, reason: fixtureReason };
@@ -178,7 +178,7 @@ export function createV1IpAccessGrant(scope, family, { creator, matter, link, pa
     const unchanged = grants.find(item => item?.id === ownerGrant.id);
     assert.ok(isDeepStrictEqual(unchanged, ownerGrant), 'V1_IP_ACL_OWNER_GRANT_CHANGED');
     const added = grants.find(item => item?.id !== ownerGrant.id);
-    readGrant(added, memberMembershipId, ownerMembershipId, fixtureReason, now());
+    readGrant(added, memberMembershipId, ownerMembershipId, fixtureReason, producerServerDateUpperBound(applied.serverDate));
     assert.ok(added.subject_label === memberLabel && ![docketId, matterId, recordId, changed.invalidation_operation_id].includes(added.id),
       'V1_IP_ACL_DISTINCT_GRANT_IDENTITY');
     const receipt = Object.freeze({ companyId, sourceSha, family, docketId, matterId, membershipId: memberMembershipId,
