@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
-import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave } from './v1-workflows.mjs';
+import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave, scopedAction } from './v1-workflows.mjs';
 import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
@@ -1347,4 +1347,47 @@ test('Android retained segment selection follows its observed checkable parent a
   delete recipe.selectedOwner; recipe.selectedAttribute = 'selected';
   label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'true'; await selectedSegment(c, 'Event type', 'Deadlines');
   label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'false'; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines'));
+});
+
+
+test('native notification actions bind exact record IDs, labels and frames and dispatch only once', async () => {
+  for (const platform of ['android', 'ios']) {
+    const scopeId = 'notification-' + uuid(1), calls = [], controls = [];
+    let action = 'Open source record', suffix = 'open-source', visible = true, enabled = true, label = action;
+    let type = platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View', clickable = 'true', accessible = 'true';
+    let cardCount = 1, controlCount = 1, actualId, rejectClick = false;
+    let rect = { x: 20, y: 50, width: 80, height: 40 };
+    const leaf = { elementId: 'label', isDisplayed: async () => true, getAttribute: async () => label };
+    const card = { elementId: 'card', isDisplayed: async () => true };
+    const button = { elementId: 'button', isDisplayed: async () => visible, isEnabled: async () => enabled,
+      getAttribute: async key => ({ name: actualId, 'resource-id': actualId, type, class: type, label, clickable, accessible })[key],
+      $$: async query => query === `android=new UiSelector().text(${JSON.stringify(action)}).className("android.widget.TextView")` ? [leaf] : [] };
+    const fixture = { udid: 'synthetic-device', buildReceipt: ref('build'), v1: { nativeSelectors: { observed: true, udid: 'synthetic-device',
+      buildReceipt: ref('build'), scopedActionPatterns: { recipientInbox: { observed: true, scopePrefix: 'notification-',
+        controlIdentity: 'notification-action-id', expectedType: type } } } } };
+    const c = { platform, fixture, budget: { control: () => controls.push('one') }, driver: {
+      $$: async query => query === selector(platform, 'id', scopeId) ? Array(cardCount).fill(card)
+        : query === selector(platform, 'id', `${scopeId}-${suffix}`) ? Array(controlCount).fill(button) : [],
+      getElementRect: async id => id === 'card' ? { x: 10, y: 20, width: 100, height: 200 } : rect,
+      getWindowRect: async () => ({ x: 0, y: 0, width: 200, height: 300 }),
+      elementClick: async id => { calls.push(id); if (rejectClick) throw new Error('LOST_NATIVE_ACK'); } } };
+    for (const [next, key] of [['Open source record', 'open-source'], ['Mark as read', 'mark-read'], ['Dismiss notification', 'dismiss'], ['Restore notification', 'restore']]) {
+      action = label = next; suffix = key; actualId = `${scopeId}-${suffix}`; await scopedAction(c, scopeId, action);
+    }
+    assert.deepEqual(calls, Array(4).fill('button')); assert.equal(controls.length, 4);
+    const rejected = async () => { const count = calls.length; await assert.rejects(scopedAction(c, scopeId, action)); assert.equal(calls.length, count); };
+    cardCount = 0; await rejected(); cardCount = 2; await rejected(); cardCount = 1;
+    controlCount = 0; await rejected(); controlCount = 2; await rejected(); controlCount = 1;
+    visible = false; await rejected(); visible = true; enabled = false; await rejected(); enabled = true;
+    actualId = 'notification-' + uuid(2) + '-restore'; await rejected(); actualId = `${scopeId}-${suffix}`;
+    type = 'unreviewed'; await rejected(); type = platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View';
+    label = 'Wrong action'; await rejected(); label = action;
+    if (platform === 'android') { clickable = 'false'; await rejected(); clickable = 'true'; }
+    else { accessible = 'false'; await rejected(); accessible = 'true'; }
+    rect = { x: 110, y: 50, width: 80, height: 40 }; await rejected(); rect = { x: 20, y: 50, width: 80, height: 40 };
+    fixture.v1.nativeSelectors.udid = 'other-device'; await rejected(); fixture.v1.nativeSelectors.udid = fixture.udid;
+    fixture.v1.nativeSelectors.buildReceipt = ref('other-build'); await rejected(); fixture.v1.nativeSelectors.buildReceipt = fixture.buildReceipt;
+    const count = calls.length; rejectClick = true;
+    await assert.rejects(scopedAction(c, scopeId, action), /LOST_NATIVE_ACK/); assert.equal(calls.length, count + 1);
+  }
 });

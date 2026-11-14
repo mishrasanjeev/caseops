@@ -40,8 +40,47 @@ async function scopedIdFact(c, scopeId, fieldId, value) {
   const query = `//*[@${attr}=${xpathText(scopeId)}]//*[@${attr}=${xpathText(fieldId)}]`;
   const element = await findQuery(c, query, { scroll: true }); assert.equal(await element.getText(), value, 'EXACT_SCOPED_V1_VALUE_ID_REQUIRED');
 }
-async function scopedAction(c, scopeId, label) {
+export async function scopedAction(c, scopeId, label) {
   const observed = c.fixture.v1.nativeSelectors; assert.equal(observed.observed, true); assert.equal(observed.udid, c.fixture.udid); assert.deepEqual(observed.buildReceipt, c.fixture.buildReceipt);
+  const identityPattern = observed.scopedActionPatterns?.recipientInbox;
+  if (identityPattern?.controlIdentity === 'notification-action-id') {
+    assert.equal(identityPattern.observed, true);
+    assert.equal(identityPattern.scopePrefix, 'notification-');
+    assert.match(scopeId, /^notification-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i);
+    const suffix = { 'Open source record': 'open-source', 'Mark as read': 'mark-read',
+      'Dismiss notification': 'dismiss', 'Restore notification': 'restore' }[label];
+    assert.ok(suffix, 'EXACT_NOTIFICATION_ACTION_REQUIRED');
+    assert.equal(identityPattern.expectedType, c.platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View');
+    const scopes = await c.driver.$$(selector(c.platform, 'id', scopeId));
+    assert.equal(scopes.length, 1, 'UNIQUE_NATIVE_ACTION_SCOPE_REQUIRED');
+    assert.equal(await scopes[0].isDisplayed(), true);
+    const controlId = `${scopeId}-${suffix}`;
+    const matches = await c.driver.$$(selector(c.platform, 'id', controlId));
+    assert.equal(matches.length, 1, 'UNIQUE_NOTIFICATION_ACTION_ID_REQUIRED');
+    const element = matches[0];
+    assert.equal(await element.isDisplayed(), true); assert.equal(await element.isEnabled(), true);
+    assert.equal(await element.getAttribute(c.platform === 'ios' ? 'name' : 'resource-id'), controlId);
+    assert.equal(await element.getAttribute(c.platform === 'ios' ? 'type' : 'class'), identityPattern.expectedType);
+    if (c.platform === 'ios') {
+      assert.equal(await element.getAttribute('label'), label);
+      assert.ok([true, 'true'].includes(await element.getAttribute('accessible')));
+    } else {
+      assert.equal(await element.getAttribute('clickable'), 'true');
+      const leaf = await visible(element, `android=new UiSelector().text(${JSON.stringify(label)}).className("android.widget.TextView")`);
+      assert.ok(leaf, 'EXACT_NOTIFICATION_ACTION_LABEL_REQUIRED');
+      assert.equal(await leaf.getAttribute('text'), label);
+    }
+    // Expo's embedded native host may be a sibling of the RN card in the
+    // accessibility tree. Bind the exact native action ID and label to that
+    // card's actual frame instead of assuming descendant topology.
+    const valid = r => r && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(r[key])) && r.width > 0 && r.height > 0;
+    const contains = (a, b) => a.x <= b.x && a.y <= b.y && a.x + a.width >= b.x + b.width && a.y + a.height >= b.y + b.height;
+    const [card, button, window] = await Promise.all([
+      c.driver.getElementRect(scopes[0].elementId), c.driver.getElementRect(element.elementId), c.driver.getWindowRect()]);
+    assert.ok(valid(card) && valid(button) && valid(window) && contains(card, button) && contains(window, button), 'NOTIFICATION_ACTION_FRAME_REQUIRED');
+    event(c, 'scoped-native-action-observed-before-one-dispatch', { scopeId, label, type: identityPattern.expectedType, controlId });
+    c.budget.control(); await dispatchNativeClick(c, element, 'id', controlId); return;
+  }
   let recipe = observed.scopedActions?.[`${scopeId}:${label}`];
   if (!recipe) {
     const pattern = observed.scopedActionPatterns?.recipientInbox;
