@@ -1229,11 +1229,45 @@ def _retrieve_for_draft(
 def _augment_summary_with_findings(base: str | None, findings: list[DraftFinding]) -> str | None:
     if not findings:
         return base
-    # Keep actionable blockers ahead of warnings when the bounded field clips.
-    # Python's stable sort preserves the original order within each group.
+    # Group repeated diagnoses, retaining occurrence counts and every distinct
+    # severity/code. Repetition must not crowd a different blocker off the UI.
     ordered = sorted(findings, key=lambda finding: finding.severity != "blocker")
-    lines = [f"[{f.severity.upper()}] {f.code}: {f.message}" for f in ordered]
-    suffix = "Review findings:\n" + "\n".join(lines)
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for finding in ordered:
+        grouped.setdefault((finding.severity, finding.code), []).append(finding.message)
+    prefixes, messages = [], []
+    for (severity, code), occurrences in grouped.items():
+        prefixes.append(f"[{severity.upper()}] {code}: ")
+        distinct = dict.fromkeys(" ".join(message.split()) for message in occurrences)
+        text = "; ".join(distinct)
+        messages.append(f"{len(occurrences)} occurrences. {text}" if len(occurrences) > 1 else text)
+    header = "Review findings:\n"
+    fixed = len(header) + sum(map(len, prefixes)) + len(prefixes) - 1
+    if fixed + 4 * len(prefixes) > _SUMMARY_MAX_LEN:
+        # Codes are server-owned and the current validator inventory fits. A
+        # future unrepresentable inventory must fail before version persistence.
+        raise ValueError("Draft finding codes exceed the bounded review summary capacity.")
+    message_budget = _SUMMARY_MAX_LEN - fixed
+    if sum(map(len, messages)) > message_budget:
+        budgets = [0] * len(messages)
+        pending = list(range(len(messages)))
+        while pending:
+            share = message_budget // len(pending)
+            short = [index for index in pending if len(messages[index]) <= share]
+            if not short:
+                for ordinal, index in enumerate(pending):
+                    budgets[index] = share + (ordinal < message_budget % len(pending))
+                break
+            for index in short:
+                budgets[index] = len(messages[index])
+                message_budget -= budgets[index]
+                pending.remove(index)
+        messages = [message if len(message) <= budget
+                    else message[:budget - 3].rstrip() + "..."
+                    for message, budget in zip(messages, budgets, strict=True)]
+    suffix = header + "\n".join(
+        prefix + message for prefix, message in zip(prefixes, messages, strict=True)
+    )
     # Model prose can fill the entire field; reserve space for deterministic
     # findings first while retaining the UI's trailing-findings wire format.
     if base and len(base) + 2 + len(suffix) > _SUMMARY_MAX_LEN:
@@ -1243,8 +1277,6 @@ def _augment_summary_with_findings(base: str | None, findings: list[DraftFinding
         combined = suffix
     else:
         combined = f"{base}\n\n{suffix}"
-    if len(combined) > _SUMMARY_MAX_LEN:
-        combined = combined[: _SUMMARY_MAX_LEN - 3].rstrip() + "..."
     return combined
 
 

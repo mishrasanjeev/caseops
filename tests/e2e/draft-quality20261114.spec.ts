@@ -85,10 +85,22 @@ for (const phone of [false, true]) {
           await page.getByTestId("draft-edit-toggle").click();
           const editor = page.getByTestId("draft-body-editor");
           await expect(editor).toHaveValue(original.body);
+          const repeated = "Section 483 of Bharatiya Nyaya Sanhita. ".repeat(6);
+          await editor.fill(repeated);
+          await page.getByTestId("draft-save-edit").click();
+          await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 2");
+          const confusion = page.locator('[data-code="statute.bns_bnss_confusion"]');
+          await expect(confusion).toHaveCount(1);
+          await expect(confusion).toContainText("6 occurrences");
+          await expect(finding).toBeVisible();
+          await page.reload();
+          await expect(confusion).toHaveCount(1);
+          await expect(finding).toBeVisible();
+          await page.getByTestId("draft-edit-toggle").click();
           const corrected = "I solemnly affirm the supplied statements.\nVerification: true to my knowledge.";
           await editor.fill(corrected);
           await page.getByTestId("draft-save-edit").click();
-          await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 2");
+          await expect(page.getByTestId("draft-current-revision")).toHaveText("Revision 3");
           await expect(finding).toHaveCount(0);
           await page.reload();
           await expect(page.getByTestId("draft-body-readonly")).toHaveText(corrected);
@@ -102,6 +114,27 @@ for (const phone of [false, true]) {
           const refused = await auth.post(`${draftApi}/approve`, { data: {}, maxRetries: 0 });
           expect(refused.status()).toBe(422);
           expect((await refused.json()).detail).toContain("verified citations");
+
+          const bail = await json(auth, `${apiBaseUrl}/api/matters/${matter.id}/drafts`, "POST", {
+            title: "Synthetic citation spelling", draft_type: "brief", template_type: "bail",
+          });
+          await page.goto(`/app/matters/${matter.id}/drafts/${bail.id}`);
+          await page.getByTestId("draft-generate").click();
+          const missingStatute = page.locator('[data-code="template.bail_missing_statute"]');
+          await expect(missingStatute).toBeVisible();
+          const citations = ["BNSS s.483", "Section 483 of BNSS",
+            "Section 483 of the Bharatiya Nagarik Suraksha Sanhita, 2023"];
+          for (const [index, citation] of citations.entries()) {
+            await page.getByTestId("draft-edit-toggle").click();
+            const text = `${citation}. The applicant is in custody and addresses the triple test.`;
+            await page.getByTestId("draft-body-editor").fill(text);
+            await page.getByTestId("draft-save-edit").click();
+            await expect(page.getByTestId("draft-current-revision")).toHaveText(`Revision ${index + 2}`);
+            await expect(missingStatute).toHaveCount(0);
+            await page.reload();
+            await expect(page.getByTestId("draft-body-readonly")).toHaveText(text);
+            await expect(missingStatute).toHaveCount(0);
+          }
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         } finally { await auth.dispose(); }
       } finally { await context.close(); await api.dispose(); }

@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Independent Review Found Two Additional Drafting Defects
+
+Static review of49c identified false type findings for valid section-first/
+full-name citations and repeated generic findings hiding a distinct template
+blocker. Actual new red41cases reproduce17failures/24passes, including HTTP
+manual edit/reload; evidence draft621-review-red-execute-01 remains retained.
+The bounded repair recognizes equivalent citations for all three affected
+templates while retaining wrong-law/number negatives. Group repeated diagnoses
+with occurrence counts and allocate bounded message space without slicing away
+distinct finding codes; impossible future code inventories refuse persistence.
+No legal mapping, approval, source, citation or provider fence is relaxed.
+Expanded61case component passed before final strict-zip/lint formatting. Final
+eight-module replacement now passes336cases/all1008phases,0fail/skip, in333.58s;
+whole-API Ruff passes. Evidence draft621-final-collect/execute-01 binds exact
+runtime/test bytes. The expanded existing two browser journeys remain unexecuted.
+The prior274case API pass predates this review repair and is not later-source
+certification. Full CI/Docker/main/deployed replay still gate PR621.
+
 ## November14: Draft Quality And Official IP Source Acceptance
 
 The owner's resumed immediate-patch request is under active PR621 ownership.

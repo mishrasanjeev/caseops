@@ -1,5 +1,11 @@
 # CaseOps agent instructions
 
+- Connecting an existing validator can expose its old false positives. Regress
+  equivalent abbreviation-first, section-first and full-name citations beside
+  wrong-statute/number negatives before persisting its findings. Repeated
+  diagnoses must not crowd a distinct blocker off the bounded review surface;
+  retain occurrence counts, complete code lines and save/reload proof.
+
 - Draft-quality acceptance must exercise generation and manual revision using
   the actual template type, preserve multiline authority reasoning within the
   bounded prompt, and keep deterministic blockers visible when summaries clip.
