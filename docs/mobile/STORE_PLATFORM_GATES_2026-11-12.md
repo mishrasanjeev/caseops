@@ -32,3 +32,8 @@ native pass. A separately marked non-submittable qualification artifact and
 an artifact-bound final promotion check are still needed before solving that
 cycle. The 83-case platform suite, full current source/CI verification, actual
 signed build and Play submission remain outstanding.
+
+2026-11-15 source follow-up: the qualification-cycle repair is specified and
+implemented for review in `NATIVE_HTTPS_QUALIFICATION_2026-11-15.md`. This note's
+original incomplete artifact/native findings remain historical evidence; no
+qualification, promotion, signing or native pass is asserted by that source work.

@@ -5467,3 +5467,33 @@ and missing-cohort/fallthrough regressions. Evidence and independent reviews:
 Fresh analysis plus the alert verdict and the remaining native gates are still
 pending; no exclusion, dismissal, source-identity relaxation or native-result
 transfer is permitted.
+
+
+### 2026-11-15 — J20/M22 production HTTPS qualification source repair
+
+US-MOB-01/02/08; CX28-LINK-05. **Partially implemented / Inconclusive;
+release NO-GO.** The common native runner admits local QA identities while its
+signed HTTPS case needs the production identity; the final submission builder
+previously required that native result before creating its qualification
+artifact. The new explicitly non-submittable Android qualification entry keeps
+all 14 shared prerequisites and all 15 final/promotion gates. A private, typed
+case-only lease independently binds installed APK/source/version/signer, public
+DAL, current OS verification/default resolver and exact cold/warm matter
+readbacks. Metadata flags and package-forced intents grant no positive proof.
+Normal disposable setup uses single acknowledged bootstrap/MFA/matter APIs, not
+database or entitlement overrides. Canonical completed reports for all83/249
+phases and V1's two verified streams/session absence are mandatory for unchanged
+artifact promotion; failed Files journal close cannot publish a passed result.
+
+The complete source snapshot now includes the extracted SDK parser and nine
+qualification/support/policy inputs previously outside its explicit selection.
+The original count1-vs11 source-closure failure and stale CI-tooling inventory
+failure are retained; the new regression proves exact fingerprint, tracked
+modification and untracked-index retention without increasing bounds. Pure
+contract/negative tests are source verification, not native acceptance. Earlier
+7247 builds and historical qualification artifacts receive zero new-source
+credit. Fresh freeze/full CI and alert verdict, actual APK/Simulator builds,
+all83 cases independently on each platform, hardware checks and store review
+remain required. iOS HTTPS qualification is still unavailable pending
+Orchestrum's Apple Team/provisioning/AASA; never substitute MU-ZERO.
+See docs/mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md and the MacBook runbook.

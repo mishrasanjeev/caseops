@@ -77,7 +77,13 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     insist(Buffer.from(text, 'utf8').equals(result.stdout), 'SOURCE_GIT_UTF8_REQUIRED'); return text;
   };
   const paths = ['apps/mobile', 'package.json', 'package-lock.json',
-    'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/build-android-local-acceptance.ps1',
+    'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/android-sdk-xml.mjs',
+    'scripts/mobile/android-https-qualification.mjs', 'scripts/mobile/android-https-subject.mjs',
+    'scripts/mobile/android-qualification-apk.mjs', 'scripts/mobile/android-qualification-promotion.mjs',
+    'scripts/mobile/run-android-qualification.mjs',
+    'scripts/mobile/store-packaging-execution.mjs', 'scripts/mobile/store-packaging-inputs.mjs',
+    'scripts/mobile/store-artifact-postflight.mjs',
+    'scripts/mobile/build-android-local-acceptance.ps1',
     'scripts/mobile/build-android-local-acceptance.sh',
     'scripts/mobile/android-host-launch.mjs', 'scripts/mobile/android-no-paid.gradle',
     'scripts/mobile/host-platform-trust.py', 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java',
@@ -98,7 +104,8 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/rebuild-host-node-bootstrap.mjs', 'scripts/mobile/host-node-trust-start.provenance.json',
     'scripts/mobile/store-packaging-host.py', 'scripts/mobile/store_process_owner.py',
     'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
-    'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts'];
+    'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',
+    'apps/web/native-links/production.json'];
   const selectedNames = () => {
     const raw = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths]);
     const seen = new Set(), selected = []; let start = 0;

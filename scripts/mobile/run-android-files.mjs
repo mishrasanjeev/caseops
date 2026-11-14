@@ -254,6 +254,11 @@ export async function executeAndroidFilesCases({ cases = scenarios, createDriver
   return { completed: [...completed], unavailable };
 }
 
+export function publishAndroidFilesResult(journal, publish) {
+  journal.close();
+  return publish();
+}
+
 export async function runAndroidFiles() {
   const collection = collectAndroidFiles(), reportRoot = process.env.CASEOPS_MOBILE_REPORT_ROOT || path.join(os.homedir(), '.cache/caseops-mobile/android-files-reports');
   mkdirSync(reportRoot, { recursive: true, mode: 0o700 });
@@ -369,9 +374,10 @@ export async function runAndroidFiles() {
   }
   journal.write({ type: 'run_completed', platform: 'android', intendedCount: collection.intended.length });
   const result = reconcileResults(journal.events, collection.intended), nativeSessionCount = journal.events.filter(event => event.type === 'appium_session' && event.state === 'created').length;
-  newJson(path.join(report, 'result.json'), { ...collection, ...result,
-    nativeExecution: nativeSessionCount ? 'observed-Appium-sessions' : 'not-run', nativeSessionCount, report });
-  completed = true; clearTimeout(deadline); process.removeListener('exit', interrupted); journal.close();
+  // Publish completion only after the journal's final close acknowledged.
+  publishAndroidFilesResult(journal, () => newJson(path.join(report, 'result.json'), { ...collection, ...result,
+    nativeExecution: nativeSessionCount ? 'observed-Appium-sessions' : 'not-run', nativeSessionCount, report }));
+  completed = true; clearTimeout(deadline); process.removeListener('exit', interrupted);
   return { ...result, report };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

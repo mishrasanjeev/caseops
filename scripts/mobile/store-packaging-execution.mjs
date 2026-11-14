@@ -8,6 +8,7 @@ import { packagingPlan } from './prepare-store-packaging.mjs';
 import { checkDeadline, digest, gitSource, jsonInput as rawJsonInput, objectKeys, privateDirectory as rawPrivateDirectory, readInput as rawReadInput, readPrivateCredentials, writePrivate as rawWritePrivate, writePublicLock } from './store-packaging-inputs.mjs';
 import { EMBED_PROGRAM, inspectDistributionArtifact, PLIST_JSON_PROGRAM } from './store-artifact-postflight.mjs';
 import { admitIosHostExecution, composeIosHostCommand } from './ios-host-launch.mjs';
+import { deriveQualificationApk } from './android-qualification-apk.mjs';
 
 const require = createRequire(import.meta.url);
 const { reference, validateStoreBuild, storeNumberReservations, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
@@ -20,6 +21,18 @@ export function storeGatesFor(platform) {
   assert.ok(['android', 'ios'].includes(platform), 'STORE_PLATFORM_REQUIRED');
   const native = platform === 'android' ? 'nativeAndroid' : 'nativeIos';
   return GATES.filter(name => !['nativeIos', 'nativeAndroid'].includes(name) || name === native);
+}
+// This inventory authorizes a non-submittable qualification build only. It
+// cannot be supplied to executeStorePackaging or authorize a native pass.
+export function androidQualificationGates() {
+  return storeGatesFor('android').filter(name => name !== 'nativeAndroid');
+}
+const QUALIFICATION_BUILD = Symbol('android-https-qualification-build');
+export function pendingAndroidQualification() {
+  return { ...pendingStoreExecution('android'), kind: 'caseops-android-qualification-request' };
+}
+export function executeAndroidQualification(requestRef, options = {}) {
+  return executePackaging(requestRef, { ...options, purpose: QUALIFICATION_BUILD });
 }
 export const LIMITS = Object.freeze({ totalSeconds: 3600, cleanupSeconds: 30, commands: 48,
   outputPerStream: 16 * 1024 * 1024, aggregateOutput: 256 * 1024 * 1024, publicReferences: 256 });
@@ -36,8 +49,8 @@ if not 0<len(b)<=32768 or hashlib.sha256(b).hexdigest()!=h:raise ValueError('PAC
 sys.argv=[p]
 exec(compile(bytes(b),p,'exec'),{'__name__':'__main__','__file__':p,'__caseops_host_source__':bytes(b)})
 `;
-const roles = platform => ['node', 'python', 'git', ...(platform === 'ios'
-  ? ['ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'] : ['java', 'keytool', 'jarsigner', 'bundletool'])];
+const roles = (platform, qualification = false) => ['node', 'python', 'git', ...(platform === 'ios'
+  ? ['ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'] : ['java', 'keytool', 'jarsigner', 'bundletool', ...(qualification ? ['aapt2'] : [])])];
 const utf8Json = bytes => {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new Error('STORE_PUBLIC_JSON_REFUSED'); }
@@ -54,13 +67,13 @@ export function pendingStoreExecution(platform) {
     storeHistory: null, reservationDirectory: null, outputDirectory: null,
     architecture: { ios: ['arm64'], android: ['arm64-v8a'] }, signingSecrets: null, privacyPolicy: null };
 }
-export function admitTools(value, platform, { contractOnly = false, deadline } = {}) {
+export function admitTools(value, platform, { contractOnly = false, deadline, qualification = false } = {}) {
   const readInput = (file, options) => rawReadInput(file, { ...options, deadline });
   checkDeadline(deadline);
   objectKeys(value, ['schemaVersion', 'kind', 'hostPlatform', 'entries', 'runtimeInputs', 'generatedInputs', 'iosHostPolicy'], 'STORE_TOOLS_REQUIRED');
   assert.equal(value.schemaVersion, 1); assert.equal(value.kind, 'caseops-local-store-tools');
   assert.equal(value.hostPlatform, 'darwin', 'STORE_MACOS_HOST_REQUIRED');
-  objectKeys(value.entries, roles(platform), 'STORE_EXACT_TOOL_ROLES_REQUIRED');
+  objectKeys(value.entries, roles(platform, qualification), 'STORE_EXACT_TOOL_ROLES_REQUIRED');
   const seen = new Set(); let bytes = 0;
   for (const [role, item] of Object.entries(value.entries)) {
     checkDeadline(deadline); objectKeys(item, ['path', 'sha256', 'sizeBytes', 'version', 'ownerUid'], 'STORE_TOOL_RECORD_REQUIRED');
@@ -165,6 +178,11 @@ export async function runHostCommand(command, { python, hostScript, environment,
 }
 
 export async function executeStorePackaging(requestRef, { root = ROOT, adapter } = {}) {
+  return executePackaging(requestRef, { root, adapter });
+}
+
+async function executePackaging(requestRef, { root = ROOT, adapter, purpose } = {}) {
+  const qualification = purpose === QUALIFICATION_BUILD;
   const startedAt = Date.now(), deadline = startedAt + LIMITS.totalSeconds * 1000;
   const admissionDeadline = deadline - LIMITS.cleanupSeconds * 1000;
   const readInput = (file, options) => rawReadInput(file, { ...options, deadline: admissionDeadline });
@@ -172,14 +190,17 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   const privateDirectory = (file, options) => rawPrivateDirectory(file, { ...options, deadline: admissionDeadline });
   const writePrivate = (file, bytes) => rawWritePrivate(file, bytes, { deadline: admissionDeadline });
   const contractOnly = adapter !== undefined;
-  assert.ok(contractOnly || process.env.CASEOPS_LOCAL_STORE_BUILD_GO === 'EXPLICIT_REVIEWED_LOCAL_STORE_BUILD', 'STORE_BUILD_NOT_ARMED');
+  assert.ok(contractOnly || (qualification
+    ? process.env.CASEOPS_ANDROID_QUALIFICATION_BUILD_GO === 'EXPLICIT_NON_SUBMITTABLE_ANDROID_QUALIFICATION'
+    : process.env.CASEOPS_LOCAL_STORE_BUILD_GO === 'EXPLICIT_REVIEWED_LOCAL_STORE_BUILD'), 'STORE_BUILD_NOT_ARMED');
   assert.ok(contractOnly || (process.platform === 'darwin' && process.versions.node === '24.15.0'), 'STORE_ACCEPTED_HOST_REQUIRED');
   const q = jsonInput(reference(requestRef)).value;
   objectKeys(q, ['schemaVersion', 'kind', 'readyForLocalBuild', 'syntheticDataOnly', 'platform', 'recipe', 'sourceTree', 'gates', 'tools',
     'storeHistory', 'reservationDirectory', 'outputDirectory', 'architecture', 'signingSecrets', 'privacyPolicy'], 'STORE_EXECUTION_REQUEST_REQUIRED');
-  assert.ok(q.schemaVersion === 1 && q.kind === 'caseops-store-execution-request' && q.readyForLocalBuild === true
+  assert.ok(q.schemaVersion === 1 && q.kind === (qualification ? 'caseops-android-qualification-request' : 'caseops-store-execution-request') && q.readyForLocalBuild === true
     && typeof q.syntheticDataOnly === 'boolean' && (contractOnly || !q.syntheticDataOnly), 'STORE_COMPLETE_REAL_REQUEST_REQUIRED');
   assert.ok(['ios', 'android'].includes(q.platform), 'STORE_PLATFORM_REQUIRED');
+  if (qualification) assert.equal(q.platform, 'android', 'STORE_QUALIFICATION_ANDROID_ONLY');
   if (q.platform === 'ios') assert.equal(q.signingSecrets, null, 'STORE_IOS_PASSWORD_INPUT_FORBIDDEN');
   else { objectKeys(q.signingSecrets, ['path'], 'STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED'); assert.ok(path.isAbsolute(q.signingSecrets.path || '') && path.resolve(q.signingSecrets.path) === q.signingSecrets.path, 'STORE_PRIVATE_CREDENTIAL_PATH_REQUIRED'); }
   assert.equal(fs.lstatSync(path.join(root, 'apps/mobile', q.platform), { throwIfNoEntry: false }), undefined, 'STORE_FRESH_NATIVE_PROJECT_REQUIRED');
@@ -211,7 +232,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   const buildInput = jsonInput(reference(request.storeBuild)), baseline = jsonInput(reference(buildInput.value.baseline));
   const settings = { ...validateStoreBuild(buildInput.value, baseline.value, links, { allowSynthetic: contractOnly }),
     ref: request.storeBuild, build: { value: buildInput.value, bytes: buildInput.bytes }, baseline };
-  const toolsInput = jsonInput(reference(q.tools)), tools = admitTools(toolsInput.value, q.platform, { contractOnly, deadline: admissionDeadline });
+  const toolsInput = jsonInput(reference(q.tools)), tools = admitTools(toolsInput.value, q.platform, { contractOnly, deadline: admissionDeadline, qualification });
   const sourceBudget = { entries: 0, bytes: 0, deadline: Math.min(Date.now() + 120000, admissionDeadline) };
   const source = adapter?.source ? adapter.source() : gitSource(root, tools.git.path, sourceBudget);
   assert.equal(source.sourceSha, request.source.sourceSha, 'STORE_ACTUAL_SOURCE_MISMATCH');
@@ -221,7 +242,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   assert.equal(plan.platform, q.platform, 'STORE_PLATFORM_MISMATCH');
   const gates = jsonInput(reference(q.gates)).value;
   objectKeys(gates, ['schemaVersion', 'kind', 'platform', 'sourceSha', 'tree', 'sourceFingerprint', 'inputFileCount', 'reviewedAt', 'reservationDirectory', 'inputBindings', 'results', 'evidence'], 'STORE_REVIEWED_GATES_REQUIRED');
-  assert.ok(gates.schemaVersion === 2 && gates.kind === 'caseops-reviewed-store-gates'
+  assert.ok(gates.schemaVersion === 2 && gates.kind === (qualification ? 'caseops-reviewed-qualification-gates' : 'caseops-reviewed-store-gates')
     && gates.sourceSha === source.sourceSha && gates.tree === source.tree
     && gates.sourceFingerprint === request.source.sourceFingerprint && gates.inputFileCount === request.source.inputFileCount
     && Date.parse(gates.reviewedAt) <= Date.now() && Date.now() - Date.parse(gates.reviewedAt) <= 86400000
@@ -230,7 +251,7 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     storeBuildSha256: request.storeBuild.sha256, privacyPolicySha256: q.privacyPolicy.sha256,
     signingPublicInputs: request.signing, architecture: q.architecture }, 'STORE_REVIEWED_INPUT_BINDINGS_MISMATCH');
   assert.equal(gates.platform, q.platform, 'STORE_GATE_PLATFORM_MISMATCH');
-  const platformGates = storeGatesFor(q.platform);
+  const platformGates = qualification ? androidQualificationGates() : storeGatesFor(q.platform);
   objectKeys(gates.results, platformGates, 'STORE_COMPLETE_GATE_INVENTORY_REQUIRED');
   assert.ok(platformGates.every(name => gates.results[name] === 'passed'), 'STORE_REQUIRED_GATE_FAILED');
   assert.ok(Array.isArray(gates.evidence) && gates.evidence.length >= platformGates.length && gates.evidence.length <= LIMITS.publicReferences, 'STORE_GATE_EVIDENCE_REQUIRED');
@@ -265,11 +286,13 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   privateDirectory(q.reservationDirectory); privateDirectory(path.dirname(q.outputDirectory));
   const output = privateDirectory(q.outputDirectory, { existing: false });
   const batch = digest(JSON.stringify({ sourceSha: source.sourceSha, tree: source.tree, build: request.storeBuild, links: request.nativeLinks }));
-  const result = { schemaVersion: 1, kind: 'caseops-local-store-build-result', contractOnly,
+  const result = { schemaVersion: 1, kind: qualification ? 'caseops-android-qualification-result' : 'caseops-local-store-build-result', contractOnly,
+    qualificationOnly: qualification, submissionAllowed: false,
     invocationStartedAt: new Date(startedAt).toISOString(), deadlineUtc: new Date(deadline).toISOString(),
     sourceScope: 'complete tracked file contents/root-file metadata; no complete directory inventory',
     runtimeScope: 'operator-reviewed declared tool/runtime inputs; import closure not independently established here',
-    sourceSha: source.sourceSha, tree: source.tree, platform: q.platform, observed: false,
+    sourceSha: source.sourceSha, tree: source.tree, fullSourceFingerprint: source.fullSourceFingerprint,
+    recipe: q.recipe, tools: q.tools, inputBindings: gates.inputBindings, platform: q.platform, observed: false,
     distributionSigningVerified: false, storeAcceptance: false, uploaded: false, originalFailure: null,
     cleanup: { complete: false }, commands: [], phases: ['reservation', 'signing-admission', 'build', 'artifact-postflight', 'source-postflight'].map(name => ({ name, status: 'unreached' })) };
   let privateCopy, secret, lastCommandCleanup = true;
@@ -346,6 +369,8 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     const vendorLicense = 'apps/mobile/vendor/deepmerge-4.3.1-caseops.1/LICENSE.txt';
     if (source.files.some(f => f.path === vendorLicense)) notices.push(vendorLicense);
     const attestation = { schemaVersion: 1, kind: 'caseops-store-artifact-source', source: request.source,
+      ...(qualification ? { qualificationOnly: true, nativeAcceptanceClaimed: false,
+        submissionAuthorization: 'separate-artifact-bound-promotion-required' } : {}),
       sourceTree: source.tree, fullSourceFingerprint: source.fullSourceFingerprint, nativeLinks: request.nativeLinks,
       storeBuild: request.storeBuild, apiOrigin: request.apiOrigin, webOrigin: request.webOrigin,
       nativeLinkPolicy: links.projections.policy, privacyPolicy, privacyPolicyRef: q.privacyPolicy, architecture: q.architecture,
@@ -452,6 +477,14 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
       : await inspectDistributionArtifact({ platform: q.platform, artifact: result.artifact.path, expected,
         tools: { ...tools, jarVerifier: runtime['StoreJarVerifier.java'] }, output, deadline: admissionDeadline, signingCopy: privateCopy?.path }, invoke);
     assert.equal(result.postflight.distributionSigningVerified, true, 'STORE_POSTFLIGHT_INCOMPLETE'); phase('artifact-postflight', 'passed');
+    if (qualification) {
+      assert.ok(!contractOnly || typeof adapter.qualificationApk === 'function', 'QUALIFICATION_FAKE_DERIVATION_REQUIRED');
+      result.qualificationApk = await (adapter?.qualificationApk ?? deriveQualificationApk)({
+        aab: result.artifact, output, keystore: privateCopy, keyAlias: request.signing.uploadKeyAlias, tools, deadline: admissionDeadline,
+      }, invoke);
+      assert.equal(result.qualificationApk.submissionAllowed, false, 'QUALIFICATION_CANNOT_SUBMIT');
+      assert.equal(result.qualificationApk.installedAcceptance, false, 'QUALIFICATION_NOT_NATIVE_ACCEPTANCE');
+    }
     phase('source-postflight', 'running');
     sourceBudget.deadline = Math.min(Date.now() + 120000, deadline - 30000);
     const after = adapter?.source ? adapter.source() : gitSource(root, tools.git.path, sourceBudget);

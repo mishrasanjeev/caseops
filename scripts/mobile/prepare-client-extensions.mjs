@@ -21,7 +21,7 @@ export function pendingClientExtensionRequest(platform){return{
  buildReceipt:null,dockerReceipt:null,deviceEvidence:null,installedEvidence:null,codeClosure:null,controlsEvidence:null,
  appiumServerEvidence:null,appiumInventoryEvidence:null,acceptedToolEvidence:null,clientRuntimeInventoryEvidence:null,appiumUrl:null,wdaPort:null,
  members:[],claimRoot:null,report:null,leaseDeadlineMs:null,
- physicalHardwareAcceptance:'unverified',verifiedDomainAssociation:'unverified'};}
+ physicalHardwareAcceptance:'unverified',verifiedDomainAssociation:'unverified',httpsQualification:null};}
 
 export function pendingClientExtensionProducers(platform) {
  assert.ok(['ios','android'].includes(platform));const common={schemaVersion:1,readyForLive:false,preparedOnly:true,platform,noPaidMarker:'no-paid-providers',productionAccessed:false,automaticRetry:false,sourceSha:null,backendRevision:null,webRevision:null,expiresAt:null,companyId:null,companySlug:null,membershipId:null,userId:null,credentialEvidence:null};

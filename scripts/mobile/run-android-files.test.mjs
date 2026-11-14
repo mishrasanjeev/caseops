@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { androidFilesInventory, collectAndroidFiles } from '../../apps/mobile/e2e/android-files.mjs';
 import { assembleAndroidFilesFixture, androidFilesKnownSources, androidFilesHarnessFingerprint, assertStrictAndroidFilesEnvironment, bindAndroidFilesPrivateRoots,
-  captureAndroidFilesFailure, captureAndroidFilesPrivacy, executeAndroidFilesCases, validateAndroidFilesContainers } from './run-android-files.mjs';
+  captureAndroidFilesFailure, captureAndroidFilesPrivacy, executeAndroidFilesCases, publishAndroidFilesResult, validateAndroidFilesContainers } from './run-android-files.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 test('controller keeps every preflight/checkpoint cold and overrides input flags only for final postflight', () => {
@@ -306,4 +306,15 @@ test('Files fingerprint binds every observer Java manifest transform and build-h
  const names=[...OBSERVER_SOURCE_INPUTS,'scripts/mobile/run-android-files.mjs','scripts/mobile/android-files-privacy.mjs','scripts/mobile/source-snapshot.mjs','scripts/mobile/prepare-android-files-fixture.py','scripts/mobile/admit-android-file-source.py','scripts/mobile/local-transport.py','apps/mobile/e2e/android-local-profile.mjs'];
  for(const name of names){const out=path.join(directory,name);mkdirSync(path.dirname(out),{recursive:true});writeFileSync(out,readFileSync(path.join(source,name)));}
  const first=androidFilesHarnessFingerprint(directory);for(const name of OBSERVER_SOURCE_INPUTS){const file=path.join(directory,name),original=readFileSync(file);writeFileSync(file,Buffer.concat([original,Buffer.from('\n') ]));assert.notEqual(androidFilesHarnessFingerprint(directory),first,name);writeFileSync(file,original);assert.equal(androidFilesHarnessFingerprint(directory),first,name);}
+});
+
+test('a failed final Files journal close cannot publish a passed completion result', () => {
+  for (const original of [Error('SYNTHETIC_CLOSE_FAILURE'), undefined, 0]) {
+    let published = 0, failed = false;
+    try { publishAndroidFilesResult({ close() { throw original; } }, () => { published++; }); }
+    catch (error) { failed = true; assert.equal(error, original); }
+    assert.equal(failed, true); assert.equal(published, 0);
+  }
+  const order = []; assert.equal(publishAndroidFilesResult({ close() { order.push('close'); } }, () => { order.push('publish'); return 17; }), 17);
+  assert.deepEqual(order, ['close', 'publish']);
 });

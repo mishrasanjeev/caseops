@@ -22,6 +22,7 @@ import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { home } from '../../apps/mobile/e2e/native-ui.mjs';
 import { openMatter } from '../../apps/mobile/e2e/journeys.mjs';
 import { observedSegment } from '../../apps/mobile/e2e/client-extensions-ui.mjs';
+import { observeAndroidHttpsQualification, withAndroidHttpsQualification } from './android-https-qualification.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
@@ -48,6 +49,14 @@ export async function admitClientExtensions(q,dependencies={}) {
   assert.equal(tools.executables.find(t=>t.role==='node').file.path,process.execPath);
   assert.equal(tools.executables.find(t=>t.role==='git').file.path,io.selectedExecutable('git',io.environment));
   for(const tool of tools.executables)assert.deepEqual(io.tool(tool.file.path),tool.file,'CX_ACCEPTED_EXECUTABLE_CHANGED');
+  if(q.httpsQualification){
+    assert.equal(q.platform,'android','QUAL_ANDROID_ONLY');
+    for(const role of ['adb','apksigner','aapt2','java'])assert.equal(tools.executables.filter(row=>row.role===role).length,1,'QUAL_ACCEPTED_SDK_TOOL_REQUIRED');
+    assert.ok(Array.isArray(tools.httpsRuntimeInputs)&&tools.httpsRuntimeInputs.length>0&&tools.httpsRuntimeInputs.length<=256,'QUAL_ACCEPTED_SDK_CLOSURE_REQUIRED');
+    let total=0;
+    for(const input of tools.httpsRuntimeInputs){const actual=io.tool(input.path);assert.equal(actual.sha256,input.sha256);assert.equal(actual.extent,input.sizeBytes);total+=actual.extent;}
+    assert.ok(total<=256*1024*1024,'QUAL_TOOL_CLOSURE_BYTE_BOUND');
+  }
   const source={sourceSha:q.expectedSourceSha,sourceFingerprint:q.expectedSourceFingerprint,sourceDirty:false,inputFileCount:q.expectedInputFileCount};
   assert.deepEqual(io.snapshot(ROOT),source);assert.equal(io.harness(ROOT),q.expectedHarnessFingerprint);
   const fixture=io.read(q.fixtureEvidence);validateClientExtensionFixture(fixture,q.platform);
@@ -124,7 +133,7 @@ export async function admitClientExtensions(q,dependencies={}) {
     for(const [key,field]of [['emailEnv','email'],['passwordEnv','password'],['totpSecretEnv','totp_secret']]){assert.match(f.auth[key],/^CASEOPS_MOBILE_[A-Z0-9_]+$/);assert.ok(typeof loaded.value[field]==='string'&&loaded.value[field]);env[f.auth[key]]=loaded.value[field];}
     try{io.coreCheck(f,env);}finally{for(const key of ['emailEnv','passwordEnv','totpSecretEnv'])delete env[f.auth[key]];}members.push({fixture:f,value:loaded.value});transferred=true;
   }finally{try{loaded.bytes.fill(0);}finally{if(!transferred&&loaded.value)for(const key of Object.keys(loaded.value))loaded.value[key]=undefined;}}}}catch(error){members.forEach(m=>{if(m.value)for(const key of Object.keys(m.value))m.value[key]=undefined;m.value=undefined;});throw error;}
-  return{fixture,build,isolation,source,installed,members,controls,server,currentGuard,androidFingerprint,platform:q.platform,beforeMemberRead:true};
+  return{fixture,build,isolation,source,installed,members,controls,server,currentGuard,androidFingerprint,acceptedTools:tools,platform:q.platform,beforeMemberRead:true};
 }
 
 /** Serial phase accounting; known unsupported prerequisites remain unverified. */
@@ -192,6 +201,16 @@ export async function runClientExtensions(q,dependencies={}) {
       context.checkBudget=needed=>{assert.ok(io.now()+needed<=context.startedAt+CX_BUDGETS.perCaseMs,'CX_CASE_DEADLINE');assert.ok(io.now()+needed<=q.leaseDeadlineMs-120000,'CX_NATIVE_CLEANUP_RESERVE');};
       context.home=tab=>home(context,tab);context.segment=(group,label)=>observedSegment(context,group,label);
       context.openMatter=matter=>openMatter(context,matter);
+      if(scenario.id==='CX28-LINK-05'&&q.platform==='android'&&q.httpsQualification){
+        // The local QA receipt and actor remain admitted above. Only this case
+        // leases the separately signed production app on the same owned device.
+        context.withHttpsQualification=action=>withAndroidHttpsQualification(context,()=>observeAndroidHttpsQualification(read(q.httpsQualification),{
+          platform:q.platform,caseId:scenario.id,source:admitted.source,udid:f.udid,adbPort:f.androidTransport.adbPort,acceptedTools:admitted.acceptedTools,outputRoot:q.report,
+          deadline:Math.min(context.startedAt+CX_BUDGETS.perCaseMs,q.leaseDeadlineMs-120000),cleanupDeadline:Math.min(context.startedAt+CX_BUDGETS.perCaseMs,q.leaseDeadlineMs-120000),checkBudget:context.checkBudget,
+          cleanupCharge:()=>{assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},
+          charge:()=>{context.checkBudget(CX_BUDGETS.nativeReadMs);assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},record:context.record,
+        }),action);
+      }
       context.ensureAuthenticated=async(actor='member')=>{assert.ok(['member','second-company'].includes(actor));const member=admitted.members[actor==='member'?0:1];
         if(state.activeActor&&state.activeActor!==actor){await account(context);await signOut(context);}
         context.fixture={...member.fixture,cx:f.cx};await withMember(member,()=>authenticate(context,{fresh:false}));state.activeActor=actor;};

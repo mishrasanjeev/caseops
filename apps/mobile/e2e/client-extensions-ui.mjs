@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { find, findQuery, visible, selector, dispatchNativeClick, restart, input, backgroundAndResume } from './native-ui.mjs';
 import { CX_BUDGETS } from './client-extensions-inventory.mjs';
+import { dispatchQualifiedHttpsLink } from '../../../scripts/mobile/android-https-qualification.mjs';
 
 export class ClientExtensionUnavailable extends Error { constructor(code) { super(code); this.name='ClientExtensionUnavailable'; } }
 const operation=c=>{c.checkBudget?.(CX_BUDGETS.nativeReadMs);assert.ok(++c.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');};
@@ -144,7 +145,7 @@ export async function biometric(c, mode) {
 export async function recordLink(c,url,{verifiedHttps=false}={}) {
  assert.ok(typeof url==='string'&&url.length<=512&&!/[\x00-\x20\x7f]/.test(url));
  if(verifiedHttps){const p=c.fixture.cx.links.verifiedAssociation;if(!p?.observed||p.binaryHash!==c.binaryHash||p.udid!==c.fixture.udid||p.mode!=='production'||!url.startsWith(p.origin+'/native/open/'))throw new ClientExtensionUnavailable('CX_ACTUAL_VERIFIED_HTTPS_ARTIFACT_REQUIRED');}
- operation(c);await c.driver.execute('mobile: deepLink',c.platform==='ios'?{url,bundleId:c.fixture.appId}:{url,package:c.fixture.appId,waitForLaunch:true});
+ operation(c);if(verifiedHttps)await dispatchQualifiedHttpsLink(c,url);else await c.driver.execute('mobile: deepLink',c.platform==='ios'?{url,bundleId:c.fixture.appId}:{url,package:c.fixture.appId,waitForLaunch:true});
  record(c,'os-record-link-dispatched-once',{urlSha256:createHash('sha256').update(url).digest('hex'),verifiedHttps,physicalAssociationProven:verifiedHttps&&c.workflowDomain==='physical'});
 }
 export async function openPending(c){await waitId(c,'record-link-open');await tap(c,'record-link-open');}

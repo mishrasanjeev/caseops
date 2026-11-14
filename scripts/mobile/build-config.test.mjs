@@ -174,7 +174,8 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
-    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'];
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs',
+    'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -798,6 +799,45 @@ const snapshotClosed = control => { assert.ok(control.opened.size > 0); for (con
 test('selected source keeps legacy sorted path-NUL-digest-NUL bytes and the four-field DTO', t => {
   const root = snapshotFixture(t), actual = sourceSnapshot(root);
   assert.deepEqual(actual, { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceFingerprint: '99c6e5b1a2dde7671c37f2c071145645392496402ea072cfa547c154ab64abf2', sourceDirty: false, inputFileCount: 2 });
+});
+test('native source binds production HTTPS qualification helpers and policy bytes', t => {
+  const helpers = [
+    'scripts/mobile/android-sdk-xml.mjs',
+    'scripts/mobile/android-https-qualification.mjs',
+    'scripts/mobile/android-https-subject.mjs',
+    'scripts/mobile/android-qualification-apk.mjs',
+    'scripts/mobile/android-qualification-promotion.mjs',
+    'scripts/mobile/run-android-qualification.mjs',
+    'scripts/mobile/store-packaging-execution.mjs',
+    'scripts/mobile/store-packaging-inputs.mjs',
+    'scripts/mobile/store-artifact-postflight.mjs',
+    'apps/web/native-links/production.json',
+  ];
+  const values = Object.fromEntries(['apps/mobile/index.ts', ...helpers].map((name, index) => [name, `synthetic source ${index}\n`]));
+  const root = snapshotFixture(t, values), before = sourceSnapshot(root);
+  const expected = createHash('sha256');
+  for (const name of Object.keys(values).sort()) expected.update(name + '\0' + createHash('sha256').update(values[name]).digest('hex') + '\0');
+  assert.equal(before.inputFileCount, helpers.length + 1);
+  assert.equal(before.sourceFingerprint, expected.digest('hex'));
+  assert.equal(before.sourceDirty, false);
+  for (const name of helpers) {
+    const file = path.join(root, name);
+    writeFileSync(file, values[name] + 'changed\n');
+    const changed = sourceSnapshot(root);
+    assert.equal(changed.sourceSha, before.sourceSha, name);
+    assert.equal(changed.inputFileCount, before.inputFileCount, name);
+    assert.equal(changed.sourceDirty, true, name);
+    assert.notEqual(changed.sourceFingerprint, before.sourceFingerprint, name);
+    writeFileSync(file, values[name]);
+    assert.deepEqual(sourceSnapshot(root), before, name);
+    execFileSync('git', ['rm', '--cached', '--quiet', '--', name], { cwd: root });
+    const untracked = sourceSnapshot(root);
+    assert.equal(untracked.inputFileCount, before.inputFileCount, name);
+    assert.equal(untracked.sourceFingerprint, before.sourceFingerprint, name);
+    assert.equal(untracked.sourceDirty, true, name);
+    execFileSync('git', ['add', '--', name], { cwd: root });
+    assert.deepEqual(sourceSnapshot(root), before, name);
+  }
 });
 test('selected source charges exact paired root-present entries and refuses one less', t => {
   const root = snapshotFixture(t);
