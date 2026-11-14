@@ -1,3 +1,7 @@
+## November14 — CI optional notice audit consumer
+
+Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
+
 ## November14 — Inbox native identity verification pending
 
 Partially implemented / Inconclusive; NO-GO. Actual Android setup exposed native button hosts outside their RN card's accessibility subtree. Preserve the failed setup and passive frame/tree observation. Add exact per-notification action identities and fail-closed typed/label/frame checks, with single protocol dispatch. Complete V1 replacement180/180 passes locally; native replacement and full83/platform remain unverified. See `docs/mobile/NATIVE_V1_SETUP_2026-11-14.md` for exact evidence and the earlier failed environment attempt.

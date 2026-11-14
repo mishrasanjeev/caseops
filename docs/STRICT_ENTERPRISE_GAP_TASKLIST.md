@@ -1,3 +1,7 @@
+## November14 — CI optional notice audit consumer
+
+Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
+
 ## November14 — Disposable native workspace restoration admission
 
 Partially implemented / Inconclusive; NO-GO. A pre-execution contract check found the exact normal manual-workspace restoration POST missing from QA owner-route admission. Permit only SOURCE-04/applyIpPolicy with an immediately observed configuration version and no automations or extra body fields; enforce before private admission and HTTP. Complete45-case Python module passes after original43pass/2failure. Actual API/native restoration remains due. See the dated native V1 setup document.

@@ -184,3 +184,12 @@ The first complete frozen55fc96b2 gate correctly refused the changed shared cont
 
 
 The replacement13b527a8 gate passed every Python module but refused the changed gateway at the separate reviewed exporter pin. Preserve that failed whole gate at `frozen-source-13b527a8-01/`. The gateway delta is solely its exact reviewed shared-base digest; reconcile the exporter to that actual gateway file after the complete gateway/queue/client source controls pass. The four shared-base consumers and this transitive exporter form one exact closure; runtime mismatch/tamper rejection remains mandatory. No native build was started on either failed frozen gate.
+
+
+## 2026-11-14 — Remaining CI all-extras assertion
+
+Status: Partially implemented; bug verdict: Partially fixed; release verdict: NO-GO. Current ca71f1da CI43556303195 API coverage shard4 (job132329896722) completed1309passed/687explicitly skipped/1failed. The only failure is `test_otel_util_http_packaging_20261114.py::test_strict_installed_ci_audit_also_admits_optional_cohort`, whose tokenized command expectation still requires --extra observability after main deliberately broadened the strict installed audit to --all-extras. Preserve the failed job and bounded sanitized log under `ci-ca71f1da-api-shard4-failure-02/`. The first log fetch refused terminal escape sequences and is retained separately.
+
+A separate checkout reproduces the complete five-case module: four pass/one fails. Change only its exact command expectation, retaining every installed identity/notice/strict-OSV/uv-pip-check/no-ignore assertion. Complete replacement across all eight related dependency/packaging modules passes149cases, zero skips/errors/failures, plus17 unittest subtests. Independent JUnit reconciliation and original/replacement reports are retained under `ci-ca71f1da-otel-command-{red,green}-01/`. Hosted replacement remains required.
+
+This follow-up changes only that API test and documentation. The ca71f1da native build/backend/harness checkout stays frozen for its actual device work; both its Android APK and strict-signed iOS Simulator app built successfully. Exact runtime-input equality must be recorded separately rather than renaming those receipts or claiming these are store archives. The full83-case native inventories remain incomplete.

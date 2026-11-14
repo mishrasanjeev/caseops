@@ -104,7 +104,7 @@ def test_strict_installed_ci_audit_also_admits_optional_cohort():
     install = [step for step in steps if step.get("name") == "Sync API deps"]
     assert len(install) == 1
     assert shlex.split(install[0]["run"]) == [
-        "uv", "sync", "--frozen", "--no-install-project", "--extra", "observability"
+        "uv", "sync", "--frozen", "--all-extras", "--no-install-project"
     ]
     audit = [step for step in steps if step.get("name") == "Run pip-audit"]
     assert len(audit) == 1
