@@ -1,3 +1,17 @@
+## November14 — settled native Firefox Connect readiness
+
+Partially fixed / NO-GO. Source db725c01's full Android V1 attempt fails after
+exact identity reads;0/17 native calls, independently closed session/control run.
+Retain its journal and the candidate replay failures. Keep initial asynchronous
+Connect wait-only; after PKCE/identity proof, handle a late IME once and seek the
+settled control downward under the unchanged10-second budget. Fence late async
+reads/geometry and retain the exact element for one protocol click, including
+after MFA.60 focused Firefox regressions pass. The corrected canonical harness
+completes primary/viewer/primary authentication and logout against the actual
+M20 APK/backend; this earns no new-source build or83-case credit. New-source
+platform builds, full native inventories and store readiness remain required.
+See [dated evidence](mobile/NATIVE_V1_SETUP_2026-11-14.md).
+
 ## November14 — canonical native installed receipt compatibility
 
 Candidate Implemented; native verification Inconclusive; NO-GO. Actual source6b

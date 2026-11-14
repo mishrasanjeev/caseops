@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { dispatchNativeClick, find, read, selector, visible } from './native-ui.mjs';
+import { dispatchNativeClick, find, read, selector, swipe, visible } from './native-ui.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
 import { browserStep } from './browser-progress.mjs';
@@ -255,6 +255,54 @@ async function resolveFirefoxEntryOnce(context, recipe) {
   }
 }
 
+// Only call after the exact identity and PKCE checks. The earlier Connect
+// lookup is deliberately wait-only: scrolling an unsettled consent page can
+// refresh it. Reading the identity, however, can leave its settled button below
+// the viewport. Keep the original ten-second lookup budget and never swipe up
+// toward Firefox's pull-to-refresh edge.
+export const FIREFOX_SETTLED_CONNECT_MS = 10000;
+async function settledConnect(context, recipe) {
+  const deadline = Date.now() + FIREFOX_SETTLED_CONNECT_MS;
+  let control, failure, scrolls = 0, active = true, keyboardDismissed = false;
+  const check = () => {
+    if (!active || Date.now() >= deadline) throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+  };
+  const probe = async operation => {
+    check();
+    const value = await operation();
+    check();
+    return value;
+  };
+  browserStep(context, 'connect', 'find');
+  try {
+    await context.driver.waitUntil(async () => {
+      try {
+        // Firefox can restore the form IME after its URL editor has already
+        // disappeared. Observe it here, after the identity reads, rather than
+        // treating one earlier false keyboard observation as settled state.
+        if (await probe(() => context.driver.isKeyboardShown())) {
+          assert.equal(keyboardDismissed, false, 'FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED');
+          keyboardDismissed = true;
+          browserStep(context, 'consent-keyboard', 'dismiss');
+          await probe(() => context.driver.hideKeyboard());
+          assert.equal(await probe(() => context.driver.isKeyboardShown()), false, 'FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED');
+        }
+        control = await visible(context.driver, selector(context.platform, recipe.locators.connect.kind, recipe.locators.connect.value), probe);
+        if (control) return true;
+        if (scrolls < 3 && Date.now() < deadline) {
+          scrolls++;
+          await swipe(context, 'down', check);
+        }
+        return false;
+      } catch (error) { failure = error; return true; }
+    }, { timeout: FIREFOX_SETTLED_CONNECT_MS, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
+    if (failure) throw failure;
+    browserStep(context, 'connect', 'read');
+    assert.equal((await probe(() => control.getText())).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+    return control;
+  } finally { active = false; }
+}
+
 // This drives Firefox's real Android accessibility tree. Recipes come from the
 // parent's observed, secret-free UI inspection; no XPath/index or webview fiction.
 export async function firefoxLogin(context, credentials, authorizationIdentity) {
@@ -288,10 +336,11 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
       workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
       assert.equal((await text(context, key)).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
     }
-    assert.equal((await text(context, 'connect')).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+    return settledConnect(context, recipe);
   };
-  await verifyIdentity();
-  await press(context, 'connect');
+  const connect = await verifyIdentity();
+  browserStep(context, 'connect', 'click');
+  await dispatchNativeClick(context, connect, recipe.locators.connect.kind, recipe.locators.connect.value);
   if (stage === 'consent') {
     await locate(context, 'mfaCode');
     assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
@@ -299,10 +348,11 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
     assert.equal((await text(context, 'mfaSubmit')).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
     await press(context, 'mfaSubmit');
     await locate(context, 'mfaVerified');
-    await verifyIdentity();
+    const verifiedConnect = await verifyIdentity();
     assert.equal(await visible(driver, selector(platform, recipe.locators.mfaCode.kind, recipe.locators.mfaCode.value)), undefined,
       'NATIVE_CONSENT_MFA_NOT_COMPLETED');
-    await press(context, 'connect');
+    browserStep(context, 'connect', 'click');
+    await dispatchNativeClick(context, verifiedConnect, recipe.locators.connect.kind, recipe.locators.connect.value);
   }
   const appOpen = await locate(context, 'appOpen');
   browserStep(context, 'appOpen', 'read');

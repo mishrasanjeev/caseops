@@ -495,3 +495,63 @@ cases. The original failed iOS precompile guard and successful compile02 are
 retained separately. Current-source formal acceptance remains0/83 per platform;
 no older source's case count transfers. All119 retained containers were preserved
 and stopped, along with this run's emulator/Appium/private VM, before rebuilding.
+
+
+## November 14 — settled Firefox consent viewport
+
+Bug verdict **Partially fixed**; complete native release **NO-GO**. The actual
+source `db725c0130b189780f03508cf8186da8bcaf9f58` Android V1 run reached all
+three exact browser identity reads, then failed the final Connect lookup with
+`NATIVE_CONTROL_NOT_VISIBLE`. All17 workflow calls remained unexecuted. The
+one Appium session is independently absent, the complete session inventory is
+empty and the actual gateway control run is closed. Claims were not reset and
+the failed run was not replayed.
+
+The dated journal records a principal-read swipe before the final wait-only
+Connect lookup. Read-only follow-up found the keyboard open and Connect absent;
+a single keyboard dismissal changed visibility after accessibility settled.
+Do not attribute the original failure to a specific account cookie or claim
+that a native scroll alone repaired it. The first candidate replay still failed:
+a false keyboard observation immediately after URL dismissal did not establish
+that the later identity-read viewport would remain keyboard-free. Its failed
+report and subsequent keyboard-open observation are retained separately.
+
+Keep the initial asynchronous Connect lookup wait-only. Only after unchanged
+PKCE and exact principal, email and workspace reads, observe the keyboard in a
+bounded settled lookup, dismiss it at most once and require acknowledgement.
+Recover a below-viewport Connect with at most3 downward gestures in the original
+10-second lookup budget. Verify the caption and dispatch that exact element ID
+once. Preserve the independent post-MFA identity check, absent MFA field, second
+explicit Connect and one app-open callback. Active/deadline probes forbid a late
+visibility response or delayed geometry from issuing another command after the
+outer wait expires; acknowledged gestures still release their input.
+
+Proof lives under the owner-held `native-release-20261111-ZzEIol4V` root:
+
+- `v1-db725c01c-full01-failure-reconciliation-01/proof.json`: original full
+  runner0/17 calls, exact session absence and closed actual control run.
+- `firefox-consent-viewport-red-01.tap`: dependency setup failed before tests;
+  no test credit. `red-02.tap`: the3 selected regressions execute,1pass/2fail
+  against the original harness. `focused-01.tap`:51pass/2fail on the first
+  candidate, preserving the missing fixed diagnostic-name registration.
+- `firefox-consent-viewport-focused-05.tap`:60/60 Firefox regressions pass,
+  including late IME, recurrence, delayed native visibility, bounded missing
+  Connect, original transport exceptions, stale/lost click acknowledgements and
+  late-callback gesture admission/release. Existing delayed initial-Connect,
+  identity, PKCE and MFA negatives retain their assertions and time budgets.
+- `firefox-consent-viewport-canonical-auth-diagnostic-01`: failed native
+  readiness before sign-in; preserve it. Diagnostic02 failed final Connect and
+  remains failed. Diagnostic03 completes actual canonical authenticate/logout
+  for primary, viewer and primary, using normal browser MFA/PKCE each time.
+  Each real session is independently absent. Explicit owned-app process restarts
+  preserve app data. This is a harness diagnostic against actual M20 APK
+  `8646587140917f1cda27694d4883dca2e47dc06fad1eaeb8acdf2d7f0be12df6`
+  and M20 backend, not a new-source build or any of the83 acceptance cases.
+- The previous pushed revision's CI43578668131 completes53 jobs:52success,
+  one expected staging-deployment skip. Its Mobile source workflow also passes.
+  These results do not certify this later candidate.
+
+The runtime app and production authorization are unchanged. New-source gates,
+fresh platform binaries/backends and all independent native inventories remain
+required. No old source's case passes transfer to the new candidate. The
+personal OnePlus receives no QA CA or new trust change.

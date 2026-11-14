@@ -1495,6 +1495,8 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
+  let consentViewport = 'bottom', keyboardShown = false, keyboardDismissedAt = -Infinity, keyboardChecksAfterDismissal = 0;
+  const consentScrolls = [], keyboardDismissals = [];
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
   let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
@@ -1509,12 +1511,15 @@ function firefoxDouble(t, foreign = false, options = {}) {
     getCurrentPackage: async () => stage === 'complete' ? fixture.appId : 'org.mozilla.firefox',
     pressKeyCode: async (code) => {
       assert.equal(code, 4); assert.equal(editing, true, 'BACK_MUST_NOT_NAVIGATE_WHEN_EDITOR_CLOSED');
-      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
+      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
     },
+    isKeyboardShown: async () => options.recurringConsentKeyboard && keyboardDismissals.length > 0
+      ? ++keyboardChecksAfterDismissal > 1 : keyboardShown,
+    hideKeyboard: async () => { keyboardDismissals.push('dismiss'); keyboardDismissedAt = clock; keyboardChecksAfterDismissal = 0; if (options.keyboardDismissFailure) throw options.keyboardDismissFailure; if (!options.keyboardStuck) keyboardShown = false; },
     waitUntil: async (callback, settings = {}) => {
       // Pending Firefox preparation is observed one click per poll, so it
       // takes the simulated clock below rather than a single poll.
-      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && fullBrowser) {
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && !options.consentViewportScroll && options.keyboardTreeDelayMs === undefined && fullBrowser) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1538,8 +1543,14 @@ function firefoxDouble(t, foreign = false, options = {}) {
       if (!options.replaceIgnored) typed[key] = args.text;
     },
     getWindowRect: async () => ({ width: 400, height: 800 }),
-    performActions: async () => {
+    performActions: async (actions) => {
       swipes.push('scroll');
+      if (options.consentViewportScroll && stage === 'connect') {
+        const gesture = actions[0].actions;
+        const direction = gesture[0].y < gesture[2].y ? 'up' : 'down';
+        consentScrolls.push({ direction, verified, identityRead: records.filter(row => row.type === 'browser_step' && row.action === 'read').at(-1)?.key });
+        consentViewport = direction === 'up' ? 'top' : 'bottom';
+      }
       if (options.connectDelayMs !== undefined && stage === 'connect' && clock - connectedAt < options.connectDelayMs) {
         stage = 'login';
         refreshes.push('GET /sign-in');
@@ -1570,6 +1581,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
           && (key === 'companySlug' || !options.lowerFieldsNeedScroll || swipes.length > 0)
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
           && clock - connectedAt >= (options.connectDelayMs ?? 0)
+          && (!options.consentViewportScroll || (key === 'connect' ? consentViewport === 'bottom' && !(options.missingSettledConnect && consentScrolls.length > 0) : consentViewport === 'top'))
+          && (key !== 'connect' || !options.restoreKeyboardAfterWorkspace
+            || !keyboardShown && (keyboardDismissals.length === 0 || clock - keyboardDismissedAt >= (options.keyboardTreeDelayMs ?? 0)))
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
           && (key !== 'mfaSubmit' || !options.submitHiddenUntilCode || consentCodeEntered)
         : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
@@ -1584,6 +1598,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
       fields.set(elementId, key);
       return [{ elementId, isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
         getText: async () => {
+          if (key === 'workspace' && options.restoreKeyboardAfterWorkspace) keyboardShown = true;
           if (Object.hasOwn(typed, key)) return typed[key];
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
@@ -1600,7 +1615,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
           if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
-          if (key === 'urlClose') editing = false;
+          if (key === 'urlClose') { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') { stage = 'connect'; connectedAt = clock; }
           if (key === 'connect') {
@@ -1616,7 +1631,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         } }];
     },
   };
-  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
+  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes, consentScrolls, keyboardDismissals,
     elapsed: () => clock };
 }
 
@@ -6445,4 +6460,162 @@ test('Android Maven fallback retains namespace identity and feeds both actual Gr
     fs.rmdirSync(home); fs.symlinkSync(path.join(root, 'previous-home'), home, 'dir');
     assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_OWNED_DIRECTORY/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('Firefox restores settled Connect after identity scrolling before and after consent MFA', async t => {
+  browserEnvironment(t);
+  for (const restoreConsentKeyboard of [false, true]) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, restoreConsentKeyboard });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    await browserLogin(fake.context);
+    assert.deepEqual(fake.consentScrolls.map(({direction,verified}) => [direction,verified]), [['up',false],['down',false],['up',true],['down',true]]);
+    assert.deepEqual(fake.consentScrolls.filter(x => x.direction === 'down').map(x=>x.identityRead), ['workspace','workspace']);
+    assert.equal(fake.clicks.filter(x=>x==='connect').length, 2);
+    assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length, 1);
+    assert.equal(fake.clicks.filter(x=>x==='appOpen').length, 1);
+    assert.equal(fake.keyboardDismissals.length, restoreConsentKeyboard ? 2 : 0);
+  }
+});
+
+test('Firefox missing settled Connect stops within the original ten-second lookup budget without an auth mutation', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, missingSettledConnect: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await assert.rejects(browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length, 0);
+  assert.equal(fake.writes.filter(([key])=>key==='mfaCode').length, 0);
+  assert.ok(fake.consentScrolls.filter(x=>x.direction==='down').length <= 3);
+  assert.ok(fake.waits.at(-1).timeout <= 10000);
+  assert.equal(fake.elapsed() - fake.waits.at(-1).start, 10000);
+});
+
+test('Firefox consent keyboard dismissal fails closed without replaying an unknown acknowledgement', async t => {
+  browserEnvironment(t);
+  const failure = new Error('UNIT_KEYBOARD_ACK_UNKNOWN');
+  const fake = firefoxDouble(t, false, { consent: true, restoreConsentKeyboard: true, keyboardDismissFailure: failure });
+  await assert.rejects(browserLogin(fake.context), error=>error === failure);
+  assert.equal(fake.keyboardDismissals.length, 1);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length, 0);
+});
+
+test('Firefox settled consent recovery never scrolls down or reconnects after a changed MFA identity or PKCE', async t => {
+  browserEnvironment(t);
+  for (const options of [{ wrongAfterMfa: true }, { changedAfterMfa: true }]) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, ...options });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    await assert.rejects(browserLogin(fake.context), /WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE|BROWSER_HANDOFF_CHANGED/);
+    assert.equal(fake.clicks.filter(x => x === 'connect').length, 1);
+    assert.equal(fake.consentScrolls.filter(x => x.direction === 'down' && x.verified).length, 0);
+    assert.equal(fake.clicks.includes('appOpen'), false);
+  }
+});
+
+test('Firefox retained consent keyboard rejects a failed dismissal before identity scrolling or Connect', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, restoreConsentKeyboard: true, keyboardStuck: true });
+  await assert.rejects(browserLogin(fake.context), /FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED/);
+  assert.equal(fake.keyboardDismissals.length, 1);
+  assert.equal(fake.swipes.length, 0);
+  assert.equal(fake.clicks.includes('connect'), false);
+});
+
+test('Firefox settled lookup cannot dispatch a gesture after its async geometry outlives the outer wait', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  const {driver} = fake.context, originalRect = driver.getWindowRect.bind(driver), originalWait = driver.waitUntil.bind(driver);
+  let resolveGeometry, enteredGeometry, lateCallback;
+  const geometryStarted = new Promise(resolve => { enteredGeometry = resolve; });
+  const geometry = new Promise(resolve => { resolveGeometry = resolve; });
+  const settled = () => fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key === 'workspace';
+  driver.getWindowRect = async () => {
+    if (settled()) { enteredGeometry(); return geometry; }
+    return originalRect();
+  };
+  driver.waitUntil = async (callback, options) => {
+    if (!settled() || options.timeoutMsg !== 'NATIVE_CONTROL_NOT_VISIBLE') return originalWait(callback, options);
+    lateCallback = callback();
+    await geometryStarted;
+    throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+  };
+  await assert.rejects(browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  const before = fake.records.length;
+  resolveGeometry({width:400,height:800});
+  await lateCallback;
+  assert.equal(fake.records.length, before, 'EXPIRED_CALLBACK_MUST_NOT_START_ANOTHER_COMMAND');
+  assert.deepEqual(fake.consentScrolls.map(x=>x.direction), ['up']);
+  assert.equal(fake.clicks.includes('connect'), false);
+});
+
+test('Firefox settled visibility and swipe failures preserve the original error without another command', async t => {
+  browserEnvironment(t);
+  for (const boundary of ['visibility', 'gesture']) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    const {driver} = fake.context, query = driver.$$.bind(driver), perform = driver.performActions.bind(driver);
+    const failure = new Error('UNIT_SETTLED_'+boundary.toUpperCase()+'_ACK_UNKNOWN');
+    let attempts = 0, recordsAtFailure;
+    const settled = () => fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key === 'workspace';
+    driver.$$ = async value => {
+      if (boundary === 'visibility' && settled()) { attempts++; recordsAtFailure = fake.records.length; throw failure; }
+      return query(value);
+    };
+    driver.performActions = async value => {
+      if (boundary === 'gesture' && settled()) { attempts++; recordsAtFailure = fake.records.length; throw failure; }
+      return perform(value);
+    };
+    await assert.rejects(browserLogin(fake.context), error=>error===failure);
+    assert.equal(attempts, 1);
+    assert.equal(fake.records.length, recordsAtFailure);
+    assert.equal(fake.clicks.includes('connect'), false);
+  }
+});
+
+
+test('Firefox late consent IME and delayed accessibility settle inside both original Connect lookup bounds', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, {consent:true, consentViewportScroll:true, restoreKeyboardAfterWorkspace:true, keyboardTreeDelayMs:450});
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.keyboardDismissals.length,2);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length,2);
+  assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length,1);
+  assert.equal(fake.clicks.filter(x=>x==='appOpen').length,1);
+  const steps=fake.records.filter(x=>x.type==='browser_step');
+  for(const index of steps.map((x,i)=>x.key==='consent-keyboard'?i:-1).filter(x=>x>=0)) {
+    assert.equal(steps.slice(0,index).filter(x=>x.action==='read').at(-1).key,'workspace');
+  }
+});
+
+test('Firefox recurring consent IME cannot trigger a second dismissal or Connect click', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t,false,{consent:true,consentViewportScroll:true,restoreKeyboardAfterWorkspace:true,recurringConsentKeyboard:true});
+  t.mock.method(Date,'now',()=>fake.elapsed());
+  await assert.rejects(browserLogin(fake.context),/FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED/);
+  assert.equal(fake.keyboardDismissals.length,1);
+  assert.equal(fake.clicks.includes('connect'),false);
+});
+
+test('Firefox settled gesture releases acknowledged input after outer expiry without a later lookup or click', async t => {
+  browserEnvironment(t);
+  const fake=firefoxDouble(t,false,{consent:true,consentViewportScroll:true});
+  t.mock.method(Date,'now',()=>fake.elapsed());
+  const {driver}=fake.context,perform=driver.performActions.bind(driver),wait=driver.waitUntil.bind(driver);
+  let resolveGesture,enteredGesture,lateCallback,releases=0;
+  const gestureStarted=new Promise(resolve=>{enteredGesture=resolve;});
+  const gesture=new Promise(resolve=>{resolveGesture=resolve;});
+  const settled=()=>fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key==='workspace';
+  driver.performActions=async value=>{await perform(value);if(settled()){enteredGesture();await gesture;}};
+  driver.releaseActions=async()=>{releases++;};
+  driver.waitUntil=async(callback,options)=>{
+    if(!settled()||options.timeoutMsg!=='NATIVE_CONTROL_NOT_VISIBLE')return wait(callback,options);
+    lateCallback=callback();await gestureStarted;throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+  };
+  await assert.rejects(browserLogin(fake.context),/NATIVE_CONTROL_NOT_VISIBLE/);
+  const before=fake.records.length,beforeReleases=releases;
+  resolveGesture();await lateCallback;
+  assert.equal(releases,beforeReleases+1);
+  assert.equal(fake.records.length,before);
+  assert.equal(fake.clicks.includes('connect'),false);
 });

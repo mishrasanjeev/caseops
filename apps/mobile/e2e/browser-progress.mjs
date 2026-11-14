@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 const keys = new Set(['sign-in', 'browser-context', 'firefox-context', 'fullBrowser', 'ios-consent', 'handoff', 'login-result', 'identity', 'native-return',
   'urlOpen', 'urlValue', 'urlClose', 'urlEditor', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact', 'workspace',
-  'connect', 'appOpen', 'mfaCode', 'mfaSubmit', 'mfaVerified', 'useAnotherAccount', 'signInLink',
+  'connect', 'consent-keyboard', 'appOpen', 'mfaCode', 'mfaSubmit', 'mfaVerified', 'useAnotherAccount', 'signInLink',
   'prepare-ready', 'conversion-confirmation', 'prepare-0', 'prepare-1', 'prepare-2', 'afterConnect-0', 'afterConnect-1']);
 const actions = new Set(['find', 'check', 'wait', 'click', 'fill', 'read', 'dismiss', 'switch-context']);
 
