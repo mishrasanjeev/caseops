@@ -810,9 +810,19 @@ def _build_messages(
             parts.append(f"- CITATION: {ident}")
             if doc.title:
                 parts.append(f"  TITLE: {doc.title[:200]}")
-            if doc.summary:
-                excerpt = doc.summary.strip().splitlines()[0][:300]
-                parts.append(f"  EXCERPT: {excerpt}")
+            # A summary often starts with a heading; retain reasoning on later
+            # lines within the original excerpt budget, never just the heading.
+            summary = " ".join((doc.summary or "").split())
+            if summary:
+                parts.append(f"  EXCERPT: {summary[:300]}")
+                if len(summary) > 300:
+                    parts.append(
+                        "  [Summary excerpt truncated; do not infer omitted reasoning.]"
+                    )
+            else:
+                parts.append(
+                    "  EXCERPT: [No authority summary supplied; do not infer its holding.]"
+                )
         if uncitable:
             parts.append(
                 f"(Additional {len(uncitable)} retrieved document(s) lack a "
@@ -1219,8 +1229,16 @@ def _retrieve_for_draft(
 def _augment_summary_with_findings(base: str | None, findings: list[DraftFinding]) -> str | None:
     if not findings:
         return base
-    lines = [f"[{f.severity.upper()}] {f.code}: {f.message}" for f in findings]
+    # Keep actionable blockers ahead of warnings when the bounded field clips.
+    # Python's stable sort preserves the original order within each group.
+    ordered = sorted(findings, key=lambda finding: finding.severity != "blocker")
+    lines = [f"[{f.severity.upper()}] {f.code}: {f.message}" for f in ordered]
     suffix = "Review findings:\n" + "\n".join(lines)
+    # Model prose can fill the entire field; reserve space for deterministic
+    # findings first while retaining the UI's trailing-findings wire format.
+    if base and len(base) + 2 + len(suffix) > _SUMMARY_MAX_LEN:
+        prose_budget = max(0, _SUMMARY_MAX_LEN - len(suffix) - 2)
+        base = (base[:prose_budget - 3].rstrip() + "...") if prose_budget >= 4 else None
     if not base:
         combined = suffix
     else:
@@ -1512,7 +1530,7 @@ def generate_ip_draft_version(
         ),
     )
     surviving, verified_count = _verify_version_citations(session, response.citations)
-    findings = run_validators(response.body, surviving)
+    findings = run_validators(response.body, surviving, template_type=draft.template_type)
     findings.extend(check_adverse_treatment(session, surviving))
     generated_at = datetime.now(UTC).isoformat()
     template_manifest = {
@@ -1741,7 +1759,7 @@ def generate_draft_version(
             len(response.citations),
         )
 
-    findings = run_validators(response.body, surviving)
+    findings = run_validators(response.body, surviving, template_type=draft.template_type)
     # PG-006 Phase 1B — add the adverse-treatment finding (DB-backed,
     # so it's a separate call from the pure-function validator suite).
     findings.extend(check_adverse_treatment(session, surviving))
@@ -1941,7 +1959,7 @@ def _edit_loaded_draft_version(
         previous_citations = []
     candidate_citations = _citations_still_present(edited_body, previous_citations)
     surviving, verified_count = _verify_version_citations(session, candidate_citations)
-    findings = run_validators(edited_body, surviving)
+    findings = run_validators(edited_body, surviving, template_type=draft.template_type)
     findings.extend(check_adverse_treatment(session, surviving))
     summary = _augment_summary_with_findings(
         "Manual edit saved as a new revision. Prior approval, if any, was "

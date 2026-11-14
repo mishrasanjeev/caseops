@@ -247,9 +247,8 @@ def run_validators(
 ) -> list[DraftFinding]:
     """Run the full validator suite over a generated draft.
 
-    `template_type` is optional for backward compatibility with the
-    drafting service, which still calls `run_validators(body,
-    surviving)` without the kwarg. When supplied, procedural-only
+    `template_type` is optional for generic consumers. When supplied,
+    the existing document-type findings are included and procedural-only
     templates skip the `citation.no_inline_anchors` heuristic — those
     documents are statutory recitals + verification, not legal
     arguments, so the no-inline-anchors signal is a false positive.
@@ -264,6 +263,21 @@ def run_validators(
             if f.code != "citation.no_inline_anchors"
         ]
     findings.extend(citation_findings)
+    if template_type:
+        from caseops_api.schemas.drafting_templates import DraftTemplateType
+        from caseops_api.services.draft_type_validators import validate_draft_by_type
+
+        try:
+            template = DraftTemplateType(template_type)
+        except ValueError:
+            # IP and custom templates retain their separate validation path.
+            return findings
+        for finding in validate_draft_by_type(template_type=template, body=body).findings:
+            findings.append(DraftFinding(
+                code=f"template.{finding.rule}",
+                severity="blocker" if finding.severity == "error" else finding.severity,
+                message=finding.message,
+            ))
     return findings
 
 

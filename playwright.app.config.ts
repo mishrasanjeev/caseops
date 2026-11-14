@@ -38,6 +38,7 @@ export default defineConfig({
     /query-states\.spec\.ts/,
     /personas\.spec\.ts/,
     /drafting\.spec\.ts/,
+    /draft-quality20261114\.spec\.ts$/,
     /baad-appeal\.spec\.ts/,
     /oc-portal\.spec\.ts/,
     /portal-invite-access\.spec\.ts/,
@@ -159,6 +160,7 @@ export default defineConfig({
       grep: /\[mobile\]/,
       testMatch: [
         /mobile-responsive\.spec\.ts/,
+        /draft-quality20261114\.spec\.ts$/,
         /ram-2026-10-22-bugs\.spec\.ts$/,
         /ram-2026-10-22-drafting\.spec\.ts$/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
