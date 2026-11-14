@@ -1,5 +1,23 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: PR621 Lint And Governance Consumer Repairs
+
+The owner's immediate-patch request resumes621 and adds AI drafting-quality
+and official IP India search/source-format acceptance. These do not authorize
+invented legal material, paid automated probes, native/MacBook edits or waived
+release gates. Draft quality is not established by font rendering alone.
+
+At fec37f677, CI43578433184 fails15Ruff diagnostics in the new Teams PG module
+and one backend shard10case: governance still asserts14reviewed fonts although
+the manifest now has18. Fix fixture registration via an explicit source-module
+binding (same decorated fixture), format that new module, and update the exact
+governance count/name to18. All original positive/negative governance controls
+remain. Whole API Ruff now passes;94focused cases pass with282phases/0F/0S;
+all four intended modules were collected/executed. PG discovery remains44cases,
+not execution of the reformatted file. Evidence: primary outputs/bugs5-20261111/
+ci621-components-*. Prior failed hosted/local results remain retained. Fresh
+complete CI and full local/release/production acceptance remain required.
+
 ## November14: Follow-Up Upload Inventory Count Reconciled
 
 Draft PR621/3e9c15efb first failed its Native Cloud Build web-upload gate. Local

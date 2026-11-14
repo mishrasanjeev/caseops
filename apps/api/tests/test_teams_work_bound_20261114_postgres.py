@@ -1,4 +1,5 @@
 """PostgreSQL regression candidates for the narrow zero-dependency repair."""
+
 from __future__ import annotations
 
 import json
@@ -26,15 +27,16 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.teams import TeamUpdateRequest
 from caseops_api.services import teams
 from caseops_api.services.matter_access import can_stably_access_ip_docket
+from tests import test_team_membership_safety_postgres as team_safety
 from tests.test_postgres_validation import _ip_race_context, _seed_company, _seed_matter
 from tests.test_team_membership_safety_postgres import (
     _pid,
     _run_writer,
     _wait_on,
-    team_fixture,  # noqa: F401
 )
 
 pytestmark = pytest.mark.postgres
+team_fixture = team_safety.team_fixture
 
 _UNRELATED_DOCKET_COUNT = 10_000
 _UNUSED_TEAM_QUERY_BUDGET = 40
@@ -53,12 +55,17 @@ def _mutate(session, context, identity, mutation):
     _company_id, _actor_id, team_id, member_id, row_id = identity
     if mutation == "remove":
         return teams.remove_team_member(
-            session, context=context, team_id=team_id,
-            membership_id=member_id, expected_team_membership_id=row_id,
+            session,
+            context=context,
+            team_id=team_id,
+            membership_id=member_id,
+            expected_team_membership_id=row_id,
         )
     if mutation == "deactivate":
         return teams.update_team(
-            session, context=context, team_id=team_id,
+            session,
+            context=context,
+            team_id=team_id,
             payload=TeamUpdateRequest(is_active=False),
         )
     assert mutation == "delete"
@@ -68,7 +75,9 @@ def _mutate(session, context, identity, mutation):
 @pytest.mark.parametrize("mutation", ["remove", "deactivate", "delete"])
 @pytest.mark.parametrize("scoping_enabled", [False, True], ids=["unscoped", "scoped"])
 def test_unused_team_does_not_load_tenant_ip_roles_at_production_scale(
-    team_fixture, mutation, scoping_enabled,
+    team_fixture,
+    mutation,
+    scoping_enabled,
 ):
     company_id, actor_id, team_id, member_id, row_id = team_fixture
     factory = get_session_factory()
@@ -76,34 +85,72 @@ def test_unused_team_does_not_load_tenant_ip_roles_at_production_scale(
         company = seed.get(Company, company_id)
         assert company is not None
         company.team_scoping_enabled = scoping_enabled
-        seed.execute(insert(IpDocketRecord), [
-            {
-                "id": str(uuid4()), "company_id": company_id,
-                "record_type": "trademark", "title": f"Unrelated docket {index}",
-                "primary_identifier": f"UNRELATED-{index}", "status": "active",
-                "is_active": True, "restricted": False,
-                "created_by_membership_id": actor_id,
-            }
-            for index in range(_UNRELATED_DOCKET_COUNT)
-        ])
+        seed.execute(
+            insert(IpDocketRecord),
+            [
+                {
+                    "id": str(uuid4()),
+                    "company_id": company_id,
+                    "record_type": "trademark",
+                    "title": f"Unrelated docket {index}",
+                    "primary_identifier": f"UNRELATED-{index}",
+                    "status": "active",
+                    "is_active": True,
+                    "restricted": False,
+                    "created_by_membership_id": actor_id,
+                }
+                for index in range(_UNRELATED_DOCKET_COUNT)
+            ],
+        )
         seed.commit()
 
     with factory() as precondition:
-        assert precondition.scalar(select(func.count()).select_from(IpDocketRecord).where(
-            IpDocketRecord.company_id == company_id,
-            IpDocketRecord.matter_id.is_(None),
-            IpDocketRecord.is_active.is_(True),
-            IpDocketRecord.status == "active",
-        )) == _UNRELATED_DOCKET_COUNT
-        assert precondition.scalar(select(func.count()).select_from(Matter).where(
-            Matter.company_id == company_id, Matter.team_id == team_id,
-        )) == 0
-        assert precondition.scalar(select(func.count()).select_from(MatterAccessGrant).where(
-            MatterAccessGrant.company_id == company_id, MatterAccessGrant.team_id == team_id,
-        )) == 0
-        assert precondition.scalar(select(func.count()).select_from(EthicalWall).where(
-            EthicalWall.company_id == company_id, EthicalWall.excluded_team_id == team_id,
-        )) == 0
+        assert (
+            precondition.scalar(
+                select(func.count())
+                .select_from(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.matter_id.is_(None),
+                    IpDocketRecord.is_active.is_(True),
+                    IpDocketRecord.status == "active",
+                )
+            )
+            == _UNRELATED_DOCKET_COUNT
+        )
+        assert (
+            precondition.scalar(
+                select(func.count())
+                .select_from(Matter)
+                .where(
+                    Matter.company_id == company_id,
+                    Matter.team_id == team_id,
+                )
+            )
+            == 0
+        )
+        assert (
+            precondition.scalar(
+                select(func.count())
+                .select_from(MatterAccessGrant)
+                .where(
+                    MatterAccessGrant.company_id == company_id,
+                    MatterAccessGrant.team_id == team_id,
+                )
+            )
+            == 0
+        )
+        assert (
+            precondition.scalar(
+                select(func.count())
+                .select_from(EthicalWall)
+                .where(
+                    EthicalWall.company_id == company_id,
+                    EthicalWall.excluded_team_id == team_id,
+                )
+            )
+            == 0
+        )
         assert precondition.get(TeamMembership, row_id).membership_id == member_id
 
     statements: list[str] = []
@@ -156,23 +203,42 @@ def test_unused_team_does_not_load_tenant_ip_roles_at_production_scale(
             assert team is not None and team.is_active is False
             assert membership is not None
         assert read.get(Company, company_id).team_scoping_enabled is scoping_enabled
-        assert read.scalar(select(func.count()).select_from(IpDocketRecord).where(
-            IpDocketRecord.company_id == company_id, IpDocketRecord.status == "active",
-        )) == _UNRELATED_DOCKET_COUNT
+        assert (
+            read.scalar(
+                select(func.count())
+                .select_from(IpDocketRecord)
+                .where(
+                    IpDocketRecord.company_id == company_id,
+                    IpDocketRecord.status == "active",
+                )
+            )
+            == _UNRELATED_DOCKET_COUNT
+        )
         action = {
             "remove": "team_membership.removed",
-            "deactivate": "team.updated", "delete": "team.deleted",
+            "deactivate": "team.updated",
+            "delete": "team.deleted",
         }[mutation]
-        assert read.scalar(select(func.count()).select_from(AuditEvent).where(
-            AuditEvent.company_id == company_id, AuditEvent.action == action,
-            AuditEvent.target_id == (row_id if mutation == "remove" else team_id),
-        )) == 1
+        assert (
+            read.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.company_id == company_id,
+                    AuditEvent.action == action,
+                    AuditEvent.target_id == (row_id if mutation == "remove" else team_id),
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.parametrize("mutation", ["remove", "deactivate", "delete"])
 @pytest.mark.parametrize("access_path", ["matter_team", "matter_team_grant", "ip_team_grant"])
 def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
-    team_fixture, mutation, access_path,
+    team_fixture,
+    mutation,
+    access_path,
 ):
     company_id, actor_id, team_id, member_id, row_id = team_fixture
     factory = get_session_factory()
@@ -188,8 +254,12 @@ def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
             matter.restricted_access = access_path == "matter_team_grant"
             seed.flush()
         docket = IpDocketRecord(
-            company_id=company_id, matter_id=matter_id, record_type="trademark",
-            title="Affected role docket", status="active", is_active=True,
+            company_id=company_id,
+            matter_id=matter_id,
+            record_type="trademark",
+            title="Affected role docket",
+            status="active",
+            is_active=True,
             restricted=access_path == "ip_team_grant",
             created_by_membership_id=actor_id,
         )
@@ -197,18 +267,26 @@ def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
         seed.flush()
         docket_id = docket.id
         task = MatterTask(
-            company_id=company_id, ip_docket_id=docket_id,
-            title="Retained operational responsibility", status="todo", priority="high",
-            owner_membership_id=member_id, created_by_membership_id=actor_id,
+            company_id=company_id,
+            ip_docket_id=docket_id,
+            title="Retained operational responsibility",
+            status="todo",
+            priority="high",
+            owner_membership_id=member_id,
+            created_by_membership_id=actor_id,
         )
         seed.add(task)
         if access_path != "matter_team":
             grant = MatterAccessGrant(
-                company_id=company_id, team_id=team_id,
+                company_id=company_id,
+                team_id=team_id,
                 matter_id=matter_id if access_path == "matter_team_grant" else None,
                 ip_docket_id=docket_id if access_path == "ip_team_grant" else None,
-                access_level="member", reason="Team-only durable access fixture.",
-                granted_by_membership_id=actor_id, effective_from=None, expires_at=None,
+                access_level="member",
+                reason="Team-only durable access fixture.",
+                granted_by_membership_id=actor_id,
+                effective_from=None,
+                expires_at=None,
             )
             seed.add(grant)
             seed.flush()
@@ -226,7 +304,9 @@ def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
         task_before = precondition.get(MatterTask, task_id)
         assert task_before is not None and task_before.status == "todo"
         retained_task = (
-            task_before.owner_membership_id, task_before.status, task_before.updated_at,
+            task_before.owner_membership_id,
+            task_before.status,
+            task_before.updated_at,
         )
 
     deletion_makes_matter_firmwide = mutation == "delete" and access_path == "matter_team"
@@ -251,7 +331,9 @@ def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
             assert read.get(Matter, matter_id).team_id is None
             context = _ip_race_context(read, company_id=company_id, membership_id=member_id)
             assert can_stably_access_ip_docket(
-                read, context=context, docket=read.get(IpDocketRecord, docket_id),
+                read,
+                context=context,
+                docket=read.get(IpDocketRecord, docket_id),
             )
         else:
             assert read.get(Team, team_id).is_active is True
@@ -262,27 +344,44 @@ def test_team_work_scope_preserves_linked_and_unlinked_responsibilities(
         assert docket.is_active is True and docket.status == "active"
         if grant_id is not None:
             assert read.get(MatterAccessGrant, grant_id).revoked_at is None
-        assert read.scalar(select(func.count()).select_from(AuditEvent).where(
-            AuditEvent.company_id == company_id,
-            AuditEvent.action.in_(["team_membership.removed", "team.updated", "team.deleted"]),
-            AuditEvent.target_id.in_([row_id, team_id]),
-        )) == int(deletion_makes_matter_firmwide)
+        assert read.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action.in_(["team_membership.removed", "team.updated", "team.deleted"]),
+                AuditEvent.target_id.in_([row_id, team_id]),
+            )
+        ) == int(deletion_makes_matter_firmwide)
 
 
 def _seed_unlinked_role_dockets(session, identity, *, count):
     company_id, actor_id, _team_id, member_id, _row_id = identity
-    dockets = [IpDocketRecord(
-        company_id=company_id, record_type="trademark", title=f"Role docket {index}",
-        status="active", is_active=True, restricted=False,
-        created_by_membership_id=actor_id,
-    ) for index in range(count)]
+    dockets = [
+        IpDocketRecord(
+            company_id=company_id,
+            record_type="trademark",
+            title=f"Role docket {index}",
+            status="active",
+            is_active=True,
+            restricted=False,
+            created_by_membership_id=actor_id,
+        )
+        for index in range(count)
+    ]
     session.add_all(dockets)
     session.flush()
     for docket in dockets:
-        session.add(MatterTask(
-            company_id=company_id, ip_docket_id=docket.id, title="Live role",
-            status="todo", owner_membership_id=member_id, created_by_membership_id=actor_id,
-        ))
+        session.add(
+            MatterTask(
+                company_id=company_id,
+                ip_docket_id=docket.id,
+                title="Live role",
+                status="todo",
+                owner_membership_id=member_id,
+                created_by_membership_id=actor_id,
+            )
+        )
     session.flush()
     return [docket.id for docket in dockets]
 
@@ -290,7 +389,8 @@ def _seed_unlinked_role_dockets(session, identity, *, count):
 def _team_acl_dependency(kind, *, company_id, team_id, docket_id, state):
     now = datetime.now(UTC)
     fields = {
-        "company_id": company_id, "ip_docket_id": docket_id,
+        "company_id": company_id,
+        "ip_docket_id": docket_id,
         "effective_from": now - timedelta(days=2),
         "expires_at": now - timedelta(days=1) if state == "expired" else None,
         "revoked_at": now - timedelta(days=1) if state == "revoked" else None,
@@ -308,15 +408,25 @@ def _team_acl_dependency(kind, *, company_id, team_id, docket_id, state):
 @pytest.mark.parametrize("state", ["revoked", "expired", "future"])
 @pytest.mark.parametrize("kind", ["grant", "wall"])
 def test_historical_and_future_unlinked_acl_dependencies_keep_the_full_fence(
-    team_fixture, monkeypatch, mutation, state, kind,
+    team_fixture,
+    monkeypatch,
+    mutation,
+    state,
+    kind,
 ):
     company_id, actor_id, team_id, _member_id, _row_id = team_fixture
     factory = get_session_factory()
     with factory() as seed:
         docket_ids = _seed_unlinked_role_dockets(seed, team_fixture, count=2)
-        seed.add(_team_acl_dependency(
-            kind, company_id=company_id, team_id=team_id, docket_id=docket_ids[0], state=state,
-        ))
+        seed.add(
+            _team_acl_dependency(
+                kind,
+                company_id=company_id,
+                team_id=team_id,
+                docket_id=docket_ids[0],
+                state=state,
+            )
+        )
         seed.commit()
 
     visited = []
@@ -337,14 +447,24 @@ def test_historical_and_future_unlinked_acl_dependencies_keep_the_full_fence(
     # the second docket with no dependency on this team, at all three stages.
     assert visited == sorted(docket_ids) * 3
     with factory() as read:
-        assert read.scalar(select(func.count()).select_from(MatterTask).where(
-            MatterTask.ip_docket_id.in_(docket_ids), MatterTask.status == "todo",
-        )) == 2
+        assert (
+            read.scalar(
+                select(func.count())
+                .select_from(MatterTask)
+                .where(
+                    MatterTask.ip_docket_id.in_(docket_ids),
+                    MatterTask.status == "todo",
+                )
+            )
+            == 2
+        )
 
 
 @pytest.mark.parametrize("mutation", ["remove", "deactivate", "delete"])
 def test_zero_dependency_is_rechecked_at_all_three_locked_checkpoints(
-    team_fixture, monkeypatch, mutation,
+    team_fixture,
+    monkeypatch,
+    mutation,
 ):
     company_id, actor_id, team_id, _member_id, _row_id = team_fixture
     factory = get_session_factory()
@@ -376,8 +496,11 @@ def test_zero_dependency_is_rechecked_at_all_three_locked_checkpoints(
         finally:
             event.remove(connection, "before_cursor_execute", observe_sql)
         session.commit()
-    assert observations == [set(), {"companies", "company_memberships", "users", "teams"},
-                            {"companies", "company_memberships", "users", "teams"}]
+    assert observations == [
+        set(),
+        {"companies", "company_memberships", "users", "teams"},
+        {"companies", "company_memberships", "users", "teams"},
+    ]
 
 
 @pytest.mark.parametrize("kind", ["matter", "grant", "wall"])
@@ -395,23 +518,38 @@ def test_dependency_existence_is_tenant_qualified_on_postgres(team_fixture, kind
             seed.get(Matter, matter_id).team_id = other_team_id
         else:
             docket = IpDocketRecord(
-                company_id=other_company, record_type="trademark", title="Other tenant target",
-                status="active", is_active=True, restricted=False,
+                company_id=other_company,
+                record_type="trademark",
+                title="Other tenant target",
+                status="active",
+                is_active=True,
+                restricted=False,
             )
             seed.add(docket)
             seed.flush()
-            seed.add(_team_acl_dependency(
-                kind, company_id=other_company, team_id=other_team_id,
-                docket_id=docket.id, state="revoked",
-            ))
+            seed.add(
+                _team_acl_dependency(
+                    kind,
+                    company_id=other_company,
+                    team_id=other_team_id,
+                    docket_id=docket.id,
+                    state="revoked",
+                )
+            )
         seed.commit()
     with factory() as read:
         assert teams._team_has_access_dependencies(
-            read, company_id=other_company, team_id=other_team_id,
+            read,
+            company_id=other_company,
+            team_id=other_team_id,
         )
         assert not teams._team_has_access_dependencies(read, company_id=company_id, team_id=team_id)
-        assert not teams._team_has_access_dependencies(read, company_id=company_id, team_id=other_team_id)
-        assert not teams._team_has_access_dependencies(read, company_id=other_company, team_id=team_id)
+        assert not teams._team_has_access_dependencies(
+            read, company_id=company_id, team_id=other_team_id
+        )
+        assert not teams._team_has_access_dependencies(
+            read, company_id=other_company, team_id=team_id
+        )
 
 
 @pytest.mark.parametrize("kind", ["matter", "grant", "wall"])
@@ -431,16 +569,23 @@ def test_new_dependency_committed_before_team_lock_cannot_escape_recheck(team_fi
             # A valid raw fixture writer tests the Team FK boundary without an
             # actor Membership FK obscuring it. Production ACL writers also
             # serialize at Company. Revoked rows still count as dependencies.
-            holder.add(_team_acl_dependency(
-                kind, company_id=company_id, team_id=team_id,
-                docket_id=docket_id, state="revoked",
-            ))
+            holder.add(
+                _team_acl_dependency(
+                    kind,
+                    company_id=company_id,
+                    team_id=team_id,
+                    docket_id=docket_id,
+                    state="revoked",
+                )
+            )
         holder.flush()
         holder_pid = _pid(holder)
         future = pool.submit(_run_writer, factory, team_fixture, ready, "fenced_remove")
         try:
             _wait_on(
-                holder.get_bind(), waiter=ready.get(timeout=5), holder=holder_pid,
+                holder.get_bind(),
+                waiter=ready.get(timeout=5),
+                holder=holder_pid,
                 sql_fragment="for update of teams",
             )
             holder.commit()
@@ -452,12 +597,22 @@ def test_new_dependency_committed_before_team_lock_cannot_escape_recheck(team_fi
     with factory() as read:
         assert read.get(TeamMembership, row_id) is not None
         assert teams._team_has_access_dependencies(read, company_id=company_id, team_id=team_id)
-        assert read.scalar(select(func.count()).select_from(MatterTask).where(
-            MatterTask.ip_docket_id == docket_id, MatterTask.status == "todo",
-        )) == 1
+        assert (
+            read.scalar(
+                select(func.count())
+                .select_from(MatterTask)
+                .where(
+                    MatterTask.ip_docket_id == docket_id,
+                    MatterTask.status == "todo",
+                )
+            )
+            == 1
+        )
 
 
-def test_negative_dependency_exists_uses_real_indexes_amid_other_team_history(team_fixture, request):
+def test_negative_dependency_exists_uses_real_indexes_amid_other_team_history(
+    team_fixture, request
+):
     company_id, actor_id, team_id, _member_id, _row_id = team_fixture
     factory = get_session_factory()
     with factory() as seed:
@@ -466,35 +621,72 @@ def test_negative_dependency_exists_uses_real_indexes_amid_other_team_history(te
         seed.flush()
         other_team_id = other_team.id
         docket = IpDocketRecord(
-            company_id=company_id, record_type="trademark", title="History target",
-            status="active", is_active=True, restricted=False, created_by_membership_id=actor_id,
+            company_id=company_id,
+            record_type="trademark",
+            title="History target",
+            status="active",
+            is_active=True,
+            restricted=False,
+            created_by_membership_id=actor_id,
         )
         seed.add(docket)
         seed.flush()
         now = datetime.now(UTC)
-        seed.execute(insert(Matter), [
-            {"id": str(uuid4()), "company_id": company_id, "team_id": other_team_id,
-             "title": f"Other-team matter {index}", "matter_code": f"OTHER-{index}",
-             "client_name": "Synthetic history", "status": "active", "practice_area": "commercial",
-             "forum_level": "high_court", "is_active": True, "restricted_access": False}
-            for index in range(_UNRELATED_DOCKET_COUNT)
-        ])
-        for model, subject in [(MatterAccessGrant, "team_id"), (EthicalWall, "excluded_team_id")]:
-            seed.execute(insert(model), [
-                {"id": str(uuid4()), "company_id": company_id, subject: other_team_id,
-                 "ip_docket_id": docket.id, "effective_from": now - timedelta(days=2),
-                 "revoked_at": now - timedelta(days=1), "reason": f"Retained history {index}"}
+        seed.execute(
+            insert(Matter),
+            [
+                {
+                    "id": str(uuid4()),
+                    "company_id": company_id,
+                    "team_id": other_team_id,
+                    "title": f"Other-team matter {index}",
+                    "matter_code": f"OTHER-{index}",
+                    "client_name": "Synthetic history",
+                    "status": "active",
+                    "practice_area": "commercial",
+                    "forum_level": "high_court",
+                    "is_active": True,
+                    "restricted_access": False,
+                }
                 for index in range(_UNRELATED_DOCKET_COUNT)
-            ])
+            ],
+        )
+        for model, subject in [(MatterAccessGrant, "team_id"), (EthicalWall, "excluded_team_id")]:
+            seed.execute(
+                insert(model),
+                [
+                    {
+                        "id": str(uuid4()),
+                        "company_id": company_id,
+                        subject: other_team_id,
+                        "ip_docket_id": docket.id,
+                        "effective_from": now - timedelta(days=2),
+                        "revoked_at": now - timedelta(days=1),
+                        "reason": f"Retained history {index}",
+                    }
+                    for index in range(_UNRELATED_DOCKET_COUNT)
+                ],
+            )
         seed.commit()
 
     plans = []
     with factory() as session:
-        for model, subject in [(Matter, Matter.team_id), (MatterAccessGrant, MatterAccessGrant.team_id),
-                               (EthicalWall, EthicalWall.excluded_team_id)]:
-            assert session.scalar(select(func.count()).select_from(model).where(
-                model.company_id == company_id, subject == other_team_id,
-            )) == _UNRELATED_DOCKET_COUNT
+        for model, subject in [
+            (Matter, Matter.team_id),
+            (MatterAccessGrant, MatterAccessGrant.team_id),
+            (EthicalWall, EthicalWall.excluded_team_id),
+        ]:
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(
+                        model.company_id == company_id,
+                        subject == other_team_id,
+                    )
+                )
+                == _UNRELATED_DOCKET_COUNT
+            )
         for table in ["matters", "matter_access_grants", "ethical_walls"]:
             session.execute(text(f"ANALYZE {table}"))
 
@@ -506,18 +698,28 @@ def test_negative_dependency_exists_uses_real_indexes_amid_other_team_history(te
 
         event.listen(session, "do_orm_execute", retain_statement)
         try:
-            assert not teams._team_has_access_dependencies(session, company_id=company_id, team_id=team_id)
+            assert not teams._team_has_access_dependencies(
+                session, company_id=company_id, team_id=team_id
+            )
         finally:
             event.remove(session, "do_orm_execute", retain_statement)
         assert len(statements) == 3
         for statement, table, index in zip(
-            statements, ["matters", "matter_access_grants", "ethical_walls"],
-            ["ix_matters_team_id", "ix_matter_access_grants_team_id", "ix_ethical_walls_excluded_team_id"],
+            statements,
+            ["matters", "matter_access_grants", "ethical_walls"],
+            [
+                "ix_matters_team_id",
+                "ix_matter_access_grants_team_id",
+                "ix_ethical_walls_excluded_team_id",
+            ],
             strict=True,
         ):
-            sql = str(statement.compile(
-                dialect=session.get_bind().dialect, compile_kwargs={"literal_binds": True},
-            ))
+            sql = str(
+                statement.compile(
+                    dialect=session.get_bind().dialect,
+                    compile_kwargs={"literal_binds": True},
+                )
+            )
             plan = session.scalar(text(f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}"))
             plans.append(plan)
             nodes = []
@@ -539,14 +741,21 @@ def test_negative_dependency_exists_uses_real_indexes_amid_other_team_history(te
     request.node.user_properties.append(("team_dependency_explain_plans", json.dumps(plans)))
 
 
-def test_global_scoping_keeps_the_unfiltered_roleless_linked_parent_fence(team_fixture, monkeypatch):
+def test_global_scoping_keeps_the_unfiltered_roleless_linked_parent_fence(
+    team_fixture, monkeypatch
+):
     company_id, actor_id, _team_id, _member_id, _row_id = team_fixture
     factory = get_session_factory()
     with factory() as seed:
         matter_id = _seed_matter(seed, company_id)
         docket = IpDocketRecord(
-            company_id=company_id, matter_id=matter_id, record_type="trademark",
-            title="Roleless global fence", status="active", is_active=True, restricted=False,
+            company_id=company_id,
+            matter_id=matter_id,
+            record_type="trademark",
+            title="Roleless global fence",
+            status="active",
+            is_active=True,
+            restricted=False,
             created_by_membership_id=actor_id,
         )
         seed.add(docket)

@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Before publishing a regression-heavy repair or starting a long acceptance
+  run, execute the repository's normal whole-API lint gate as well as focused
+  tests. Re-export imported pytest fixtures through an explicit module binding
+  when argument names would otherwise redefine an unused import; do not mask
+  lint errors with broad ignores. A font-pack change must cover governance-gate
+  manifest consumers as well as PDF, public notices and upload inventories.
+
 - Cross-process source fidelity requires explicit UTF-8 byte decoding and an
   input-buffer hash, not the Windows console locale. A locale-decoded JSON
   pipe can turn an unsupported source character into supported mojibake and

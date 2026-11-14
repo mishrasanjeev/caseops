@@ -1,5 +1,17 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: PR621 Propagation Still Requires Whole Gates
+
+QG verification remains NO-GO, not production-certified. New Teams regressions
+had15lint findings despite earlier focused PG passes, and the governance test
+retained the old14-font count. Explicit same-fixture binding, normal formatting
+and strict18-font acceptance repair those consumers. Whole-API Ruff and94focused
+cases now pass;44PG cases are collected, not replayed by that collection. No
+allowlist, lifecycle/access fence, model/provider isolation or deadline changes.
+The owner's drafting quality and official IP India content/format requirements
+are separately under review; schema validity, links and pinned fonts cannot
+establish legal suitability, searchable official content or a completed filing.
+
 ## November14: Upload Required-Set Consumer Was Missed
 
 PR621/3e9c15efb's native upload gate failed the stale71-path cardinality after
